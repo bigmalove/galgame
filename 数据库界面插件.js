@@ -1,0 +1,8569 @@
+/**
+ * Galgame 界面插件 - SillyTavern 酒馆助手脚本
+ * 功能：嵌入式视觉小说界面、立绘系统、对话解析
+ * 版本：2.0.0
+ */
+
+(function () {
+  'use strict';
+
+  // ============================================
+  // 常量定义
+  // ============================================
+  const SCRIPT_ID = 'galgame-ui-plugin';
+  const SCRIPT_NAME = 'Galgame界面插件';
+  const VERSION = '2.2.0';
+  const DB_NAME = 'GalgameUIPluginDB';
+  const DB_VERSION = 2;
+  const STORE_SPRITES = 'sprites';
+  const STORE_BACKGROUNDS = 'backgrounds';
+
+  // 样式主题常量 (Cyber Pop)
+  const THEME = {
+    white: '#ffffff',
+    dark: '#2b2e38',
+    accent: '#00d2ff',
+    accentSub: '#ff0055',
+    bgOverlay: 'rgba(255, 255, 255, 0.95)',
+    fontMain: "'Noto Sans SC', sans-serif",
+    fontEng: "'Barlow', sans-serif",
+  };
+
+  // 世界书配置
+  const WORLDBOOK_NAME = 'galgame界面插件';
+  const COT_ENTRY_NAME = 'Galgame输出格式规范';
+
+  /**
+   * 动态生成Galgame COT模板
+   * 从数据库获取已上传的背景场景名称，注入到模板中
+   */
+  async function generateCOTTemplate() {
+    // 获取所有已上传的背景场景名称
+    let sceneNames = [];
+    try {
+      const backgrounds = await getAllBackgrounds();
+      sceneNames = backgrounds.map(bg => bg.sceneName);
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 获取场景列表失败:`, e);
+    }
+
+    // 构建场景列表说明
+    const sceneListText =
+      sceneNames.length > 0
+        ? `可用场景列表: ${sceneNames.join(', ')}\n- **严重警告**: 必须严格从上述列表中选择场景，严禁使用列表之外的名称，严禁自创地点。`
+        : `（暂无可用场景，请在插件设置中上传背景图片后使用）`;
+
+    // 构建示例中的场景名
+    const exampleScene = sceneNames.length > 0 ? sceneNames[0] : '场景名';
+
+    return `# Galgame 输出格式规范
+
+本角色卡配合专用前端面板，输出将被解析为Galgame视觉小说界面。
+
+## 输出格式要求
+- 字数控制: 500-700字
+- 分句数量: 15-25个p标签
+- 显示风格: galgame逐句显示
+
+## 标签系统
+
+### 分句标签
+- 格式: \`<p>内容</p>\`
+- 长度: 50-70字
+- 用途: 对话和旁白
+
+### 对话格式（含表情）
+- 格式: \`<p>角色名: "对话内容"<表情名></p>\`
+- 表情标签紧跟在对话内容后面
+- 表情列表: 默认, 微笑, 生气, 难过, 惊讶, 嘲讽, 害羞, 思考, 大笑, 搞怪
+
+### 旁白格式
+- 格式: \`<p>旁白内容</p>\`
+- 无需表情标签
+
+### 背景音乐 (BGM)
+- **格式**: \`<bgm>当前bgm:歌名</bgm>\`
+- **使用规则**:
+  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
+  - **纯音乐**: 必须使用适合当前场景的galgame的 "OST" 或 "BGM" ，**严禁**推荐人声歌曲。
+  - **时机**:
+    - 场景切换时。
+    - 剧情发生重大转折时。
+    - 情感基调剧烈变化时。
+  - **示例**:
+    - 日常场景: \`<bgm>日常 轻松 OST</bgm>\`
+    - 战斗开始: \`<bgm>Boss战 激昂 BGM</bgm>\`
+    - 悲剧时刻: \`<bgm>Sadness Piano OST</bgm>\`
+
+### 背景标签 (场景环境强制)
+- 格式: \`<background scene="场景名" />\`
+- **使用规则**:
+  - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
+  - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
+  - **持续监测**: 必须时刻关注剧情中的地点变化，一旦发生移动立即更新背景。
+  - **宁滥勿缺**: 如果不确定当前背景是否正确，请再次输出背景标签以确保同步。
+- ${sceneListText}
+
+## 输出结构示例
+\`\`\`
+<maintext>
+  <background scene="${exampleScene}" />
+
+  <p>第一句旁白描述。</p>
+  <p>角色名: "这是角色的对话内容。"<微笑></p>
+  <bgm>日常 轻松 OST</bgm>
+  <p>继续旁白描述。</p>
+  <p>角色名: "表情变化了！"<惊讶></p>
+  <p>角色名: "又说了一句。"<思考></p>
+
+</maintext>
+\`\`\`
+
+## 重要提醒
+1. 角色说话时必须使用格式: \`角色名: "对话内容"<表情名>\`
+2. 表情标签直接跟在对话引号后面，无空格
+3. 旁白不需要表情标签
+4. maintext标签包裹所有游戏内容
+5. **背景场景必须使用已配置的场景名称**
+`;
+  }
+
+  // 顶层窗口引用
+  const topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+  const $ = topWindow.jQuery || window.jQuery;
+
+  // 状态
+  let db = null;
+  const characterSprites = new Map(); // characterId_expression -> blobUrl
+  const sceneBackgrounds = new Map(); // sceneName -> blobUrl
+  const messageSegmentState = new Map(); // mesId -> { currentIndex, segments, parsedContent }
+
+  // 选项面板状态
+  let lastGalgameOptionHash = null; // 上一次选项内容的Hash指纹
+  let galgameChoicesVisible = false; // 选项面板是否可见
+  let pendingOptions = null; // 待选择的选项（用于提示按钮重新打开）
+
+  // 设置存储键
+  const SETTINGS_STORAGE_KEY = `${SCRIPT_ID}_settings`;
+  const CHAR_ENABLED_STORAGE_KEY = `${SCRIPT_ID}_char_enabled`;
+
+  // 默认设置 (全局)
+  const DEFAULT_SETTINGS = {
+    // 文本显示
+    fontSize: 18, // 14-24px
+    dialogOpacity: 0.95, // 0.5-1.0
+    // 自动播放
+    autoPlaySpeed: 2, // 1-8秒
+    // 显示设置
+    showSprites: true, // 显示立绘
+    hideOtherFloors: true, // 沉浸模式（隐藏其他楼层）
+    fullscreenMode: false, // 全屏模式
+    // 立绘设置
+    spriteScale: 100, // 立绘大小 50-150%
+    spriteBottomOffset: 20, // 立绘底部偏移 0-50%
+    spriteSpacing: 20, // 立绘间距 0-20%
+    // 说话者效果
+    speakerGlow: true, // 说话者光晕效果
+    speakerBubble: true, // 漫画式气泡指示器
+    // 快捷键
+    spaceKeyNext: true, // 空格键��一句
+    enterKeyNext: true, // 回车键下一句
+    // 快进设置
+    skipSpeed: 0.05, // 快进速度 (秒)
+    ctrlKeySkip: true, // 长按Ctrl快进
+  };
+
+  // 当前设置 (全局)
+  let settings = { ...DEFAULT_SETTINGS };
+
+  // ============================================
+  // BGM 管理器 (Music.js 集成)
+  // ============================================
+  const BGMManager = {
+    audio: new Audio(),
+    currentKeyword: null, // 当前播放的关键词
+    currentTrack: null, // { Name, Singer, Url, ... }
+    cache: new Map(), // keyword -> track info
+    isLoaded: false,
+    volume: 0.5,
+    isPlaying: false,
+
+    async init() {
+      // 恢复音量设置
+      const savedVol = localStorage.getItem(`${SCRIPT_ID}_bgm_volume`);
+      if (savedVol !== null) {
+        this.volume = parseFloat(savedVol);
+        this.audio.volume = this.volume;
+      }
+
+      // 加载外部库
+      if (!globalThis.Music) {
+        await this.loadExternalScript('https://drive.baibai.cv/f/ZKEBuW/Music.js');
+      }
+      this.isLoaded = true;
+      console.log(`[${SCRIPT_NAME}] BGMManager 初始化完成`);
+
+      this.audio.addEventListener('ended', () => {
+        // 循环播放
+        this.audio.currentTime = 0;
+        this.audio.play().catch(e => console.warn('BGM Replay failed:', e));
+      });
+
+      this.audio.addEventListener('error', e => {
+        console.error('BGM Error:', e);
+        showToast('BGM播放出错');
+        this.isPlaying = false;
+        this.updateUI();
+      });
+    },
+
+    loadExternalScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    },
+
+    async play(keyword) {
+      if (!this.isLoaded || !keyword) return;
+      if (this.currentKeyword === keyword && this.isPlaying) return; // 已经在播了
+
+      // 优化关键词：如果没有 OST 或 BGM，且不是指名道姓的歌，就追加 OST
+      let searchQuery = keyword;
+      if (!/ost|bgm|piano|orchestra/i.test(searchQuery)) {
+        searchQuery += ' OST';
+      }
+
+      console.log(`[${SCRIPT_NAME}] BGM 搜索: ${searchQuery}`);
+      this.currentKeyword = keyword;
+
+      // 检查缓存
+      let track = this.cache.get(searchQuery);
+
+      if (!track) {
+        showToast(`正在搜索BGM: ${keyword}...`);
+        try {
+          // 调用 Music.js (可能会失败，需要 try-catch)
+          track = await globalThis.Music.SearchMusic(searchQuery);
+        } catch (e) {
+          console.error('Music.SearchMusic error:', e);
+        }
+
+        if (track && track.Url) {
+          this.cache.set(searchQuery, track);
+        } else {
+          showToast(`未找到BGM: ${keyword}`);
+          return;
+        }
+      }
+
+      if (track && track.Url) {
+        this.currentTrack = track;
+        this.audio.src = track.Url;
+        this.audio.volume = this.volume;
+        try {
+          await this.audio.play();
+          this.isPlaying = true;
+          console.log(`[${SCRIPT_NAME}] Current Track:`, track);
+          showToast(`播放BGM: ${track.Name || track.name || keyword}`);
+        } catch (e) {
+          console.warn('播放失败（可能是需要交互）:', e);
+          this.isPlaying = false;
+        }
+        this.updateUI();
+      }
+    },
+
+    pause() {
+      this.audio.pause();
+      this.isPlaying = false;
+      this.updateUI();
+    },
+
+    resume() {
+      if (this.audio.src) {
+        this.audio.play().catch(e => console.error(e));
+        this.isPlaying = true;
+        this.updateUI();
+      }
+    },
+
+    setVolume(vol) {
+      this.volume = Math.max(0, Math.min(1, vol));
+      this.audio.volume = this.volume;
+      localStorage.setItem(`${SCRIPT_ID}_bgm_volume`, this.volume);
+    },
+
+    // UI 更新回调 (将被 overwrite)
+    updateUI() {},
+  };
+
+  // 每个角色卡的开关状态 { charId: boolean }
+  let charEnabledMap = {};
+
+  // 获取当前角色卡ID
+  function getCurrentCharId() {
+    try {
+      const ctx = topWindow.SillyTavern?.getContext?.();
+      if (ctx?.characterId !== undefined) {
+        return String(ctx.characterId);
+      }
+    } catch (e) {}
+    return 'default';
+  }
+
+  // 加载全局设置
+  function loadSettings() {
+    try {
+      const saved = topWindow.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        settings = { ...DEFAULT_SETTINGS, ...parsed };
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 加载设置失败:`, e);
+    }
+
+    // 加载角色卡开关状态
+    try {
+      const savedChar = topWindow.localStorage.getItem(CHAR_ENABLED_STORAGE_KEY);
+      if (savedChar) {
+        charEnabledMap = JSON.parse(savedChar);
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 加载角色开关状态失败:`, e);
+    }
+  }
+
+  // 保存全局设置
+  function saveSettings() {
+    try {
+      topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 保存设置失败:`, e);
+    }
+  }
+
+  // 保存角色卡开关状态
+  function saveCharEnabled() {
+    try {
+      topWindow.localStorage.setItem(CHAR_ENABLED_STORAGE_KEY, JSON.stringify(charEnabledMap));
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 保存角色开关状态失败:`, e);
+    }
+  }
+
+  // 获取当前角色卡的开关状态
+  function isCurrentCharEnabled() {
+    const charId = getCurrentCharId();
+    return charEnabledMap[charId] === true;
+  }
+
+  // 设置当前角色卡的开关状态
+  function setCurrentCharEnabled(enabled) {
+    const charId = getCurrentCharId();
+    charEnabledMap[charId] = enabled;
+    saveCharEnabled();
+  }
+
+  // 兼容旧变量
+  let isEnabled = false;
+  let hideOtherFloors = false;
+
+  // 快进状态
+  let isSkipping = false;
+  let skipTimer = null;
+
+  // ============================================
+  // 数据库集成 - 从AutoCardUpdaterAPI获取角色列表
+  // ============================================
+  function getCharacterListFromDatabase() {
+    const characters = [];
+
+    try {
+      // 1. 首先尝试从当前角色卡获取角色名
+      const charName =
+        topWindow.SillyTavern?.getContext?.()?.characters?.[topWindow.SillyTavern?.getContext?.()?.characterId]?.name;
+      if (charName) {
+        characters.push({
+          id: 'current_char',
+          name: charName,
+          type: '当前角色',
+          source: '角色卡',
+        });
+        console.log(`[${SCRIPT_NAME}] 从角色卡获取: ${charName}`);
+      }
+
+      // 2. 尝试获取AutoCardUpdaterAPI
+      const api = topWindow.AutoCardUpdaterAPI;
+      if (!api || typeof api.exportTableAsJson !== 'function') {
+        console.log(`[${SCRIPT_NAME}] AutoCardUpdaterAPI 未找到或未初始化`);
+        return characters;
+      }
+
+      const tableData = api.exportTableAsJson();
+      if (!tableData || typeof tableData !== 'object') {
+        console.log(`[${SCRIPT_NAME}] 表格数据为空`);
+        return characters;
+      }
+
+      // 主角相关表名和列名变体
+      const protagonistSheets = ['主角信息', '主角', '玩家信息', 'User', 'user', '用户'];
+      const protagonistNameCols = ['人物名称', '姓名', '名字', '角色名', 'name', 'Name'];
+
+      // NPC相关表名和列名变体
+      const npcSheets = ['重要人物表', '重要人物', 'NPC', 'npc', '角色列表', '人物列表'];
+      const npcNameCols = ['姓名', '人物名称', '角色名', '名字', 'name', 'Name'];
+
+      // 遍历所有表格查找角色信息
+      Object.keys(tableData).forEach(sheetKey => {
+        if (!sheetKey.startsWith('sheet_')) return;
+
+        const sheet = tableData[sheetKey];
+        const sheetName = sheet?.name || '';
+        const content = sheet?.content || [];
+
+        if (content.length < 2) return;
+
+        const headers = content[0] || [];
+
+        // 查找名称列
+        const findNameColumn = cols => {
+          for (const col of cols) {
+            const idx = headers.indexOf(col);
+            if (idx !== -1) return idx;
+          }
+          return -1;
+        };
+
+        // 检查是否是主角表
+        if (protagonistSheets.includes(sheetName)) {
+          const nameColIndex = findNameColumn(protagonistNameCols);
+          if (nameColIndex !== -1) {
+            for (let i = 1; i < content.length; i++) {
+              const row = content[i];
+              const name = row?.[nameColIndex];
+              if (name && typeof name === 'string' && name.trim()) {
+                characters.push({
+                  id: `protagonist_${i}`,
+                  name: name.trim(),
+                  type: '主角',
+                  source: sheetName,
+                });
+              }
+            }
+          }
+        }
+
+        // 检查是否是NPC表
+        if (npcSheets.includes(sheetName)) {
+          const nameColIndex = findNameColumn(npcNameCols);
+          if (nameColIndex !== -1) {
+            for (let i = 1; i < content.length; i++) {
+              const row = content[i];
+              const name = row?.[nameColIndex];
+              if (name && typeof name === 'string' && name.trim()) {
+                // 避免重复
+                if (!characters.find(c => c.name === name.trim())) {
+                  characters.push({
+                    id: `npc_${i}`,
+                    name: name.trim(),
+                    type: 'NPC',
+                    source: sheetName,
+                  });
+                }
+              }
+            }
+          }
+        }
+      });
+
+      console.log(
+        `[${SCRIPT_NAME}] 从数据库获取到 ${characters.length} 个角色:`,
+        characters.map(c => c.name),
+      );
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 获取角色列表失败:`, e);
+    }
+
+    return characters;
+  }
+
+  // ============================================
+  // IndexedDB 立绘存储
+  // ============================================
+  function initDB() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        db = request.result;
+        console.log(`[${SCRIPT_NAME}] IndexedDB 初始化成功`);
+        resolve(db);
+      };
+
+      request.onupgradeneeded = event => {
+        const database = event.target.result;
+        // 立绘存储
+        if (!database.objectStoreNames.contains(STORE_SPRITES)) {
+          const store = database.createObjectStore(STORE_SPRITES, { keyPath: 'id' });
+          store.createIndex('characterId', 'characterId', { unique: false });
+          store.createIndex('expression', 'expression', { unique: false });
+        }
+        // 背景存储
+        if (!database.objectStoreNames.contains(STORE_BACKGROUNDS)) {
+          const bgStore = database.createObjectStore(STORE_BACKGROUNDS, { keyPath: 'id' });
+          bgStore.createIndex('sceneName', 'sceneName', { unique: true });
+        }
+      };
+    });
+  }
+
+  // 保存立绘
+  async function saveSprite(characterId, expression, imageBlob) {
+    if (!db) await initDB();
+
+    return new Promise((resolve, reject) => {
+      const id = `${characterId}_${expression}`;
+      const transaction = db.transaction([STORE_SPRITES], 'readwrite');
+      const store = transaction.objectStore(STORE_SPRITES);
+
+      const data = {
+        id,
+        characterId,
+        expression,
+        imageBlob,
+        lastModified: new Date().toISOString(),
+      };
+
+      const request = store.put(data);
+      request.onsuccess = () => {
+        // 更新缓存
+        // ★ 使用 topWindow.URL
+        const blobUrl = (topWindow.URL || URL).createObjectURL(imageBlob);
+        characterSprites.set(id, blobUrl);
+        console.log(`[${SCRIPT_NAME}] 立绘已保存: ${id}`);
+        resolve(blobUrl);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // 获取立绘 (带默认表情回退)
+  async function getSprite(characterId, expression) {
+    if (!characterId) {
+      console.log(`[${SCRIPT_NAME}] getSprite: 角色名为空`);
+      return null;
+    }
+
+    const id = `${characterId}_${expression}`;
+    console.log(`[${SCRIPT_NAME}] getSprite 查询: ${id}`);
+
+    // 先查缓存
+    if (characterSprites.has(id)) {
+      console.log(`[${SCRIPT_NAME}] getSprite 缓存命中: ${id}`);
+      return characterSprites.get(id);
+    }
+
+    if (!db) await initDB();
+
+    // 查询主表情
+    const result = await new Promise(resolve => {
+      const transaction = db.transaction([STORE_SPRITES], 'readonly');
+      const store = transaction.objectStore(STORE_SPRITES);
+      const request = store.get(id);
+
+      request.onsuccess = () => {
+        if (request.result && request.result.imageBlob) {
+          // ★ 使用 topWindow.URL
+          const blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
+          characterSprites.set(id, blobUrl);
+          console.log(`[${SCRIPT_NAME}] getSprite 找到: ${id}`);
+          resolve(blobUrl);
+        } else {
+          console.log(`[${SCRIPT_NAME}] getSprite 未找到: ${id}`);
+          resolve(null);
+        }
+      };
+      request.onerror = () => {
+        console.log(`[${SCRIPT_NAME}] getSprite 查询错误: ${id}`);
+        resolve(null);
+      };
+    });
+
+    if (result) return result;
+
+    // 回退到默认表情 (在新事务中)
+    if (expression !== '默认') {
+      const fallbackId = `${characterId}_默认`;
+      console.log(`[${SCRIPT_NAME}] getSprite 尝试回退: ${fallbackId}`);
+
+      // 先查缓存
+      if (characterSprites.has(fallbackId)) {
+        console.log(`[${SCRIPT_NAME}] getSprite 回退缓存命中: ${fallbackId}`);
+        return characterSprites.get(fallbackId);
+      }
+
+      // 新事务查询
+      return new Promise(resolve => {
+        const transaction = db.transaction([STORE_SPRITES], 'readonly');
+        const store = transaction.objectStore(STORE_SPRITES);
+        const request = store.get(fallbackId);
+
+        request.onsuccess = () => {
+          if (request.result && request.result.imageBlob) {
+            // ★ 使用 topWindow.URL
+            const blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
+            characterSprites.set(fallbackId, blobUrl);
+            console.log(`[${SCRIPT_NAME}] getSprite 回退找到: ${fallbackId}`);
+            resolve(blobUrl);
+          } else {
+            console.log(`[${SCRIPT_NAME}] getSprite 回退也未找到: ${fallbackId}`);
+            resolve(null);
+          }
+        };
+        request.onerror = () => resolve(null);
+      });
+    }
+
+    return null;
+  }
+
+  // 获取角色所有立绘
+  async function getCharacterSprites(characterId) {
+    if (!db) await initDB();
+
+    return new Promise(resolve => {
+      const transaction = db.transaction([STORE_SPRITES], 'readonly');
+      const store = transaction.objectStore(STORE_SPRITES);
+      const index = store.index('characterId');
+      const request = index.getAll(characterId);
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => resolve([]);
+    });
+  }
+
+  // 删除立绘
+  async function deleteSprite(characterId, expression) {
+    if (!db) await initDB();
+
+    const id = `${characterId}_${expression}`;
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_SPRITES], 'readwrite');
+      const store = transaction.objectStore(STORE_SPRITES);
+      const request = store.delete(id);
+
+      request.onsuccess = () => {
+        if (characterSprites.has(id)) {
+          // ★ 使用 topWindow.URL
+          (topWindow.URL || URL).revokeObjectURL(characterSprites.get(id));
+          characterSprites.delete(id);
+        }
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // 加载所有立绘到缓存
+  async function loadAllSpritesToCache() {
+    if (!db) await initDB();
+
+    return new Promise(resolve => {
+      const transaction = db.transaction([STORE_SPRITES], 'readonly');
+      const store = transaction.objectStore(STORE_SPRITES);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const sprites = request.result || [];
+        sprites.forEach(sprite => {
+          if (sprite.imageBlob) {
+            // ★ 使用 topWindow.URL
+            const blobUrl = (topWindow.URL || URL).createObjectURL(sprite.imageBlob);
+            characterSprites.set(sprite.id, blobUrl);
+          }
+        });
+        console.log(`[${SCRIPT_NAME}] 已加载 ${sprites.length} 个立绘到缓存`);
+        resolve();
+      };
+      request.onerror = () => resolve();
+    });
+  }
+
+  // ============================================
+  // 背景图片存储
+  // ============================================
+
+  // 保存背景图片
+  async function saveBackground(sceneName, imageBlob) {
+    if (!db) await initDB();
+
+    return new Promise((resolve, reject) => {
+      const id = sceneName;
+      const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
+      const store = transaction.objectStore(STORE_BACKGROUNDS);
+
+      const data = {
+        id,
+        sceneName,
+        imageBlob,
+        lastModified: new Date().toISOString(),
+      };
+
+      const request = store.put(data);
+      request.onsuccess = () => {
+        // ★ 使用 topWindow.URL
+        const blobUrl = (topWindow.URL || URL).createObjectURL(imageBlob);
+        sceneBackgrounds.set(id, blobUrl);
+        console.log(`[${SCRIPT_NAME}] 背景已保存: ${id}`);
+        resolve(blobUrl);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // 获取背景图片
+  async function getBackground(sceneName) {
+    if (!sceneName) return null;
+
+    // 先查缓存
+    if (sceneBackgrounds.has(sceneName)) {
+      return sceneBackgrounds.get(sceneName);
+    }
+
+    if (!db) await initDB();
+
+    return new Promise(resolve => {
+      const transaction = db.transaction([STORE_BACKGROUNDS], 'readonly');
+      const store = transaction.objectStore(STORE_BACKGROUNDS);
+      const request = store.get(sceneName);
+
+      request.onsuccess = () => {
+        if (request.result && request.result.imageBlob) {
+          // ★ 使用 topWindow.URL 确保 Blob URL 在正确的窗口上下文中创建
+          const blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
+          sceneBackgrounds.set(sceneName, blobUrl);
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 背景 Blob URL 创建成功: ${sceneName}`);
+          resolve(blobUrl);
+        } else {
+          resolve(null);
+        }
+      };
+      request.onerror = () => resolve(null);
+    });
+  }
+
+  // 删除背景图片
+  async function deleteBackground(sceneName) {
+    if (!db) await initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
+      const store = transaction.objectStore(STORE_BACKGROUNDS);
+      const request = store.delete(sceneName);
+
+      request.onsuccess = () => {
+        if (sceneBackgrounds.has(sceneName)) {
+          // ★ 使用 topWindow.URL
+          (topWindow.URL || URL).revokeObjectURL(sceneBackgrounds.get(sceneName));
+          sceneBackgrounds.delete(sceneName);
+        }
+        console.log(`[${SCRIPT_NAME}] 背景已删除: ${sceneName}`);
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // 获取所有背景图片
+  async function getAllBackgrounds() {
+    if (!db) await initDB();
+
+    return new Promise(resolve => {
+      const transaction = db.transaction([STORE_BACKGROUNDS], 'readonly');
+      const store = transaction.objectStore(STORE_BACKGROUNDS);
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => resolve([]);
+    });
+  }
+
+  // 加载所有背景到缓存
+  async function loadAllBackgroundsToCache() {
+    if (!db) await initDB();
+
+    return new Promise(resolve => {
+      const transaction = db.transaction([STORE_BACKGROUNDS], 'readonly');
+      const store = transaction.objectStore(STORE_BACKGROUNDS);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const backgrounds = request.result || [];
+        backgrounds.forEach(bg => {
+          if (bg.imageBlob) {
+            // ★ 使用 topWindow.URL
+            const blobUrl = (topWindow.URL || URL).createObjectURL(bg.imageBlob);
+            sceneBackgrounds.set(bg.id, blobUrl);
+          }
+        });
+        console.log(`[${SCRIPT_NAME}] 已加载 ${backgrounds.length} 个背景到缓存`);
+        resolve();
+      };
+      request.onerror = () => resolve();
+    });
+  }
+
+  // ============================================
+  // 立绘管理器 - 多角色、动画、特效
+  // ============================================
+  const SpriteManager = {
+    // 当前显示的角色 { characterId: { slot: 'left'|'center'|'right', element: jQuery, expression: string } }
+    activeCharacters: new Map(),
+    // 当前说话者
+    currentSpeaker: null,
+    // 主角名称（从数据库获取）
+    protagonistName: null,
+    // 角色出场顺序队列（用于4+角色时的替换）
+    characterQueue: [],
+    // 当前场景
+    currentScene: null,
+
+    // 表情到情绪的映射（仅保留动画效果，移除滤镜效果）
+    emotionMap: {
+      生气: 'angry', // 抖动动画
+      惊讶: 'surprised', // 弹跳动画
+      // 以下表情不添加特效，避免出戏
+      难过: null,
+      害羞: null,
+      大笑: null,
+      嘲讽: null,
+      微笑: null,
+      搞怪: null,
+      思考: null,
+      默认: null,
+    },
+
+    // 初始化 - 获取主角名称
+    init() {
+      this.protagonistName = this.getProtagonistName();
+      console.log(`[${SCRIPT_NAME}] SpriteManager 初始化, 主角: ${this.protagonistName || '未识别'}`);
+    },
+
+    // 从数据库获取主角名称（优先使用SillyTavern用户名）
+    getProtagonistName() {
+      try {
+        // 1. 优先尝试从 SillyTavern 获取用户名
+        const stContext = topWindow.SillyTavern?.getContext?.();
+        if (stContext?.name1) {
+          console.log(`[${SCRIPT_NAME}] 主角名称来自SillyTavern: ${stContext.name1}`);
+          return stContext.name1;
+        }
+
+        // 2. 尝试从数据库表格获取
+        const api = topWindow.AutoCardUpdaterAPI;
+        if (!api || typeof api.exportTableAsJson !== 'function') {
+          console.log(`[${SCRIPT_NAME}] AutoCardUpdaterAPI 不可用，无法从数据库读取主角`);
+          return null;
+        }
+
+        const tableData = api.exportTableAsJson();
+        if (!tableData) return null;
+
+        const protagonistSheets = ['主角信息', '主角', '玩家信息', 'User', 'user', '用户'];
+        const nameCols = ['人物名称', '姓名', '名字', '角色名', 'name', 'Name'];
+
+        for (const sheetKey of Object.keys(tableData)) {
+          if (!sheetKey.startsWith('sheet_')) continue;
+          const sheet = tableData[sheetKey];
+          const sheetName = sheet?.name || '';
+          const content = sheet?.content || [];
+
+          if (!protagonistSheets.includes(sheetName) || content.length < 2) continue;
+
+          const headers = content[0] || [];
+          for (const col of nameCols) {
+            const idx = headers.indexOf(col);
+            if (idx !== -1 && content[1]?.[idx]) {
+              const name = content[1][idx].trim();
+              console.log(`[${SCRIPT_NAME}] 主角名称来自数据库(${sheetName}): ${name}`);
+              return name;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 获取主角名称失败:`, e);
+      }
+      console.log(`[${SCRIPT_NAME}] 未能识别主角名称`);
+      return null;
+    },
+
+    // 判断角色是否是主角
+    isProtagonist(characterId) {
+      return this.protagonistName && characterId === this.protagonistName;
+    },
+
+    // 分配角色槽位（只支持2个角色：左侧和右侧）
+    assignSlot(characterId) {
+      // 主角固定左侧
+      if (this.isProtagonist(characterId)) {
+        return 'left';
+      }
+
+      // 检查现有槽位
+      const usedSlots = new Set();
+      this.activeCharacters.forEach(info => {
+        usedSlots.add(info.slot);
+      });
+
+      // 非主角分配右侧
+      if (!usedSlots.has('right')) return 'right';
+      // 如果没有主角，可以使用左侧
+      if (!usedSlots.has('left') && !this.protagonistName) return 'left';
+
+      // 槽位已满，需要替换
+      return null;
+    },
+
+    // 移除最早出场的非主角角色
+    removeOldestNonProtagonist() {
+      for (let i = 0; i < this.characterQueue.length; i++) {
+        const charId = this.characterQueue[i];
+        if (!this.isProtagonist(charId) && this.activeCharacters.has(charId)) {
+          const info = this.activeCharacters.get(charId);
+          const exitClass = info.slot === 'left' ? 'exiting-left' : 'exiting-right';
+
+          // 播放退场动画
+          if (info.element) {
+            info.element
+              .removeClass('speaking silent entering-left entering-center entering-right')
+              .addClass(exitClass);
+            // 动画结束后移除元素
+            setTimeout(() => {
+              info.element.remove();
+            }, 400);
+          }
+
+          this.activeCharacters.delete(charId);
+          this.characterQueue.splice(i, 1);
+          return info.slot;
+        }
+      }
+      return 'center'; // 默认返回中间
+    },
+
+    // 更新立绘显示
+    async updateSprite($overlay, characterId, expression) {
+      if (!characterId) {
+        // 旁白 - 暗化所有角色
+        this.setSpeaker(null);
+        return;
+      }
+
+      const spriteUrl = await getSprite(characterId, expression);
+      let slot = null;
+      let isNewCharacter = false;
+
+      // 检查角色是否已在场
+      if (this.activeCharacters.has(characterId)) {
+        // 更新表达式
+        const info = this.activeCharacters.get(characterId);
+        slot = info.slot;
+
+        // 检查表情是否变化
+        if (info.expression !== expression) {
+          info.expression = expression;
+          // 触发表情切换动画
+          await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false);
+        }
+      } else {
+        // 新角色入场
+        isNewCharacter = true;
+        slot = this.assignSlot(characterId);
+
+        if (!slot) {
+          // 需要替换旧角色
+          slot = this.removeOldestNonProtagonist();
+        }
+
+        // 添加到队列和活跃列表
+        this.characterQueue.push(characterId);
+        this.activeCharacters.set(characterId, {
+          slot,
+          expression,
+          element: null,
+        });
+
+        await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, true);
+      }
+
+      // 设置当前说话者
+      this.setSpeaker(characterId);
+
+      // 应用情绪特效
+      this.applyEmotionEffect(characterId, expression);
+    },
+
+    // 更新/创建角色立绘元素
+    async updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, isEntering) {
+      const $charLayer = $overlay.find('.gal-layer-character');
+      let $slot = $charLayer.find(`.gal-char-slot.slot-${slot}`);
+
+      // 如果槽位不存在，创建它
+      if (!$slot.length) {
+        $slot = $(`<div class="gal-char-slot slot-${slot}"></div>`);
+        $charLayer.append($slot);
+        // 重新排序
+        const $slots = $charLayer.find('.gal-char-slot').sort((a, b) => {
+          const order = { left: 1, center: 2, right: 3 };
+          const aSlot = $(a).hasClass('slot-left') ? 'left' : $(a).hasClass('slot-center') ? 'center' : 'right';
+          const bSlot = $(b).hasClass('slot-left') ? 'left' : $(b).hasClass('slot-center') ? 'center' : 'right';
+          return order[aSlot] - order[bSlot];
+        });
+        $charLayer.append($slots);
+      }
+
+      const enterClass = isEntering ? `entering-${slot}` : 'expression-change';
+      const emotion = this.emotionMap[expression] || '';
+      const emotionAttr = emotion ? `data-emotion="${emotion}"` : '';
+
+      let spriteHtml;
+      if (spriteUrl) {
+        spriteHtml = `
+          <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}>
+            <img class="gal-char-img" src="${spriteUrl}" alt="${characterId}">
+          </div>
+        `;
+      } else {
+        spriteHtml = `
+          <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}>
+            <div class="gal-char-placeholder" title="点击上传立绘">
+              <i class="fa-solid fa-user-plus"></i>
+              <span>添加立绘</span>
+            </div>
+          </div>
+        `;
+      }
+
+      $slot.html(spriteHtml);
+
+      // 更新引用
+      const info = this.activeCharacters.get(characterId);
+      if (info) {
+        info.element = $slot.find('.gal-char-container');
+      }
+
+      // 移除入场动画类（延迟）
+      if (isEntering) {
+        setTimeout(() => {
+          $slot.find('.gal-char-container').removeClass(enterClass);
+        }, 500);
+      }
+    },
+
+    // 设置当前说话者
+    setSpeaker(speakerId) {
+      this.currentSpeaker = speakerId;
+
+      this.activeCharacters.forEach((info, charId) => {
+        if (info.element) {
+          if (speakerId === null) {
+            // 旁白时，所有角色都暗化
+            info.element.removeClass('speaking').addClass('silent');
+          } else if (charId === speakerId) {
+            info.element.removeClass('silent').addClass('speaking');
+          } else {
+            info.element.removeClass('speaking').addClass('silent');
+          }
+        }
+      });
+    },
+
+    // 应用情绪特效
+    applyEmotionEffect(characterId, expression) {
+      const info = this.activeCharacters.get(characterId);
+      if (!info || !info.element) return;
+
+      const emotion = this.emotionMap[expression] || '';
+
+      // 移除旧的情绪属性
+      info.element.removeAttr('data-emotion');
+
+      // 应用新的情绪
+      if (emotion) {
+        info.element.attr('data-emotion', emotion);
+      }
+    },
+
+    // 查找最佳匹配的场景
+    findBestMatchScene(sceneName) {
+      if (!sceneName) return null;
+      if (sceneBackgrounds.has(sceneName)) return sceneName;
+
+      // 模糊匹配策略
+      let bestMatch = null;
+      let maxLength = 0;
+      const scenes = Array.from(sceneBackgrounds.keys());
+
+      // 1. 尝试去除括号后的名称匹配
+      const cleanName = sceneName.replace(/\s*[\(（].*?[\)）]/g, '').trim();
+
+      for (const knownScene of scenes) {
+        // 去除已知场景的括号
+        const cleanKnown = knownScene.replace(/\s*[\(（].*?[\)）]/g, '').trim();
+
+        // 策略A: 只要去除括号后的核心词相同
+        if (cleanName && cleanKnown && cleanName === cleanKnown) {
+          return knownScene; // 优先返回
+        }
+
+        // 策略B: 包含关系
+        if (knownScene.includes(sceneName) || sceneName.includes(knownScene)) {
+          // 记录最长的匹配（通常更准确）
+          const len = Math.min(knownScene.length, sceneName.length);
+          if (len > maxLength) {
+            maxLength = len;
+            bestMatch = knownScene;
+          }
+        }
+      }
+
+      return bestMatch || sceneName;
+    },
+
+    // 应用场景色调和背景图片
+    async applySceneTint($overlay, scene) {
+      // 尝试自动修正场景名
+      const originalScene = scene;
+      if (scene) {
+        scene = this.findBestMatchScene(scene);
+        if (originalScene !== scene) {
+          console.log(`[${SCRIPT_NAME}] [自动修正] 场景幻觉修正: "${originalScene}" -> "${scene}"`);
+        }
+      }
+
+      if (this.currentScene === scene) return;
+      this.currentScene = scene;
+
+      const $charLayer = $overlay.find('.gal-layer-character');
+      const $bgLayer = $overlay.find('.gal-layer-bg');
+
+      // 移除旧的场景类
+      $charLayer.removeClass('scene-night scene-indoor scene-outdoor');
+
+      if (!scene) {
+        // 重置为默认背景
+        $bgLayer.css({
+          'background-image': '',
+          'background-size': '',
+          'background-position': '',
+        });
+        return;
+      }
+
+      // 尝试获取场景背景图片
+      console.log(`[${SCRIPT_NAME}] [DEBUG] applySceneTint 被调用，场景: "${scene}"`);
+      const bgUrl = await getBackground(scene);
+      console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 返回: ${bgUrl ? '有图片URL' : 'null/undefined'}`);
+      if (bgUrl) {
+        // 应用背景图片
+        $bgLayer.addClass('has-bg').css({
+          'background-image': `url(${bgUrl})`,
+          'background-size': 'cover',
+          'background-position': 'center',
+        });
+        console.log(`[${SCRIPT_NAME}] 应用背景成功: ${scene}, URL: ${bgUrl.substring(0, 50)}...`);
+      } else {
+        // 没有背景图片，使用默认渐变
+        $bgLayer.removeClass('has-bg').css({
+          'background-image': '',
+          'background-size': '',
+          'background-position': '',
+        });
+      }
+
+      // 根据场景名称判断色调（用于立绘滤镜）
+      const sceneLower = scene.toLowerCase();
+      if (sceneLower.includes('夜') || sceneLower.includes('night') || sceneLower.includes('晚')) {
+        $charLayer.addClass('scene-night');
+      } else if (
+        sceneLower.includes('室内') ||
+        sceneLower.includes('indoor') ||
+        sceneLower.includes('房间') ||
+        sceneLower.includes('屋')
+      ) {
+        $charLayer.addClass('scene-indoor');
+      }
+    },
+
+    // 清除所有立绘
+    clearAll($overlay) {
+      this.activeCharacters.clear();
+      this.characterQueue = [];
+      this.currentSpeaker = null;
+      this.currentScene = null;
+
+      if ($overlay) {
+        $overlay.find('.gal-layer-character').empty();
+      }
+    },
+
+    // 重置（切换消息时）
+    reset($overlay) {
+      this.clearAll($overlay);
+    },
+  };
+
+  // ============================================
+  // 消息解析器
+  // ============================================
+  function parseGalgameContent(html) {
+    // 移除 <think> 和 <thinking> 标签块 (深度思考内容)
+    // 1. 先移除闭合的块
+    html = html.replace(/<(think|thinking)>[\s\S]*?<\/\1>/gi, '');
+    // 2. 移除未闭合的块 (流式输出时) - 从标签开始直到结尾
+    html = html.replace(/<(think|thinking)>[\s\S]*$/gi, '');
+
+    const result = {
+      segments: [], // { type: 'narration'|'dialogue', speaker: string|null, text: string, expression: string|null }
+      currentBackground: null, // { scene }
+      bgm: null, // { keyword }
+      options: [], // { id, text }
+    };
+
+    // 先移除 highlight.js 添加的 <code> 和 <pre> 包裹标签
+    const cleanedHtml = html
+      .replace(/<pre[^>]*>/gi, '')
+      .replace(/<\/pre>/gi, '')
+      .replace(/<code[^>]*>/gi, '')
+      .replace(/<\/code>/gi, '');
+
+    // 提取 <maintext> 内容（如果有）
+    // 改进：支持流式输出中尚未闭合的 <maintext>
+    let content = cleanedHtml;
+    const maintextMatch = cleanedHtml.match(/<maintext>([\s\S]*?)<\/maintext>/i);
+
+    if (maintextMatch) {
+      content = maintextMatch[1];
+    } else {
+      // 尝试匹配未闭合的 (流式输出)
+      const maintextStart = cleanedHtml.match(/<maintext>([\s\S]*)$/i);
+      if (maintextStart) {
+        content = maintextStart[1];
+      }
+    }
+
+    // 解析背景标签
+    const backgroundMatch = content.match(/<background\s+scene="([^"]+)"\s*\/?>/i);
+    console.log(`[${SCRIPT_NAME}] [DEBUG] 背景标签正则匹配结果:`, backgroundMatch);
+    if (backgroundMatch) {
+      result.currentBackground = {
+        scene: backgroundMatch[1],
+      };
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景场景: "${backgroundMatch[1]}"`);
+    } else {
+      // console.log(`[${SCRIPT_NAME}] [DEBUG] 未匹配到背景标签`);
+    }
+
+    // 解析 BGM 标签 <bgm>关键词</bgm>
+    const bgmMatch = content.match(/<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i);
+    if (bgmMatch) {
+      result.bgm = {
+        keyword: bgmMatch[1].replace(' - ', ' ').trim(), // 简单清洗
+      };
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到 BGM: "${result.bgm.keyword}"`);
+    }
+
+    // 解析所有 <option> 标签
+    const optionRegex = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
+    let optionMatch;
+    while ((optionMatch = optionRegex.exec(content)) !== null) {
+      result.options.push({
+        id: optionMatch[1],
+        text: optionMatch[2].trim(),
+      });
+    }
+
+    // 表情列表（用于匹配）
+    const expressionNames = ['默认', '微笑', '生气', '难过', '惊讶', '嘲讽', '害羞', '思考', '大笑', '搞怪'];
+    const expressionPattern = expressionNames.join('|');
+
+    // Helper: 解析单个文本段落
+    function parseSegmentText(text) {
+      if (!text) return null;
+      text = text.trim();
+      if (!text) return null;
+
+      // 移除 highlight.js 添加的 <span> 标签但保留内容
+      text = text.replace(/<span[^>]*>/gi, '').replace(/<\/span>/gi, '');
+
+      // 移除 <q> 标签但保留其内容
+      text = text.replace(/<q>([^<]*)<\/q>/gi, '$1');
+      text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, '$1');
+      text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, '$1');
+
+      // 提取表情标签（格式: <表情名>）
+      let expression = null;
+      const expressionTagRegex = new RegExp(`<(${expressionPattern})>`, 'i');
+      const exprMatch = text.match(expressionTagRegex);
+      if (exprMatch) {
+        expression = exprMatch[1];
+        // 移除表情标签
+        text = text.replace(expressionTagRegex, '').trim();
+      }
+
+      // 检查是否是对话
+      // 格式1: 角色名: "对话内容" (带引号)
+      // 格式2: 角色名: 对话内容 (不带引号，冒号后直接是内容)
+      // 支持中英文冒号和各种引号
+      let dialogueMatch = text.match(/^([^:：]{1,20})[：:]\s*["\"「『](.+)["\"\"」』]$/);
+
+      // 如果没匹配到带引号的，尝试不带引号的格式
+      if (!dialogueMatch) {
+        dialogueMatch = text.match(/^([^:：]{1,20})[：:]\s*(.+)$/);
+      }
+
+      if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
+        const speaker = dialogueMatch[1].trim();
+        const dialogue = dialogueMatch[2].trim();
+        // 说话者名字不应该太长（超过20字符可能是解析错误）
+        if (speaker.length <= 20 && speaker.length > 0) {
+          return {
+            type: 'dialogue',
+            speaker: speaker,
+            text: dialogue,
+            expression: expression || '默认', // 对话默认使用"默认"表情
+          };
+        }
+      }
+
+      // 默认为旁白
+      return {
+        type: 'narration',
+        speaker: null,
+        text: text,
+        expression: null,
+      };
+    }
+
+    // 解析所有已闭合的 <p> 标签
+    const pTagRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+    let match;
+    let lastIndex = 0;
+    while ((match = pTagRegex.exec(content)) !== null) {
+      lastIndex = pTagRegex.lastIndex;
+      const seg = parseSegmentText(match[1]);
+      if (seg) result.segments.push(seg);
+    }
+
+    // ★ 关键修复：尝试匹配末尾未闭合的 <p> 标签 (支持流式输出)
+    const remainingText = content.substring(lastIndex);
+    const unclosedPMatch = remainingText.match(/<p[^>]*>([\s\S]*)$/i);
+    if (unclosedPMatch) {
+      const rawContent = unclosedPMatch[1];
+      // 只有当有实质内容时才添加
+      if (rawContent && rawContent.trim()) {
+        const seg = parseSegmentText(rawContent);
+        if (seg) {
+          result.segments.push(seg);
+        }
+      }
+    }
+
+    // 如果没有 <p> 标签，尝试直接解析纯文本
+    if (result.segments.length === 0) {
+      const plainText = content.replace(/<[^>]+>/g, '').trim();
+      if (plainText) {
+        result.segments.push({
+          type: 'narration',
+          speaker: null,
+          text: plainText,
+          expression: null,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  // ============================================
+  // 样式注入
+  // ============================================
+  const STYLES_INJECTED_FLAG = `${SCRIPT_ID}_styles_injected`;
+
+  function injectStyles() {
+    const targetDoc = topWindow.document;
+    if (topWindow[STYLES_INJECTED_FLAG]) return;
+    topWindow[STYLES_INJECTED_FLAG] = true;
+
+    // 注入字体
+    const fontLink = targetDoc.createElement('link');
+    fontLink.href =
+      'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Barlow:ital,wght@0,400;0,800;1,600&display=swap';
+    fontLink.rel = 'stylesheet';
+    (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
+
+    const css = `
+      /* ═══════════════════════════════════════════════════════════════
+         Galgame 界面插件 - Cyber Pop 全屏沉浸式主题
+         ═══════════════════════════════════════════════════════════════ */
+
+      /* 全局Galgame界面层 - 默认内联模式（在#chat内） */
+      #gal-global-overlay {
+        position: relative !important;
+        width: 100% !important;
+        min-height: 500px;
+        height: 70vh;
+        max-height: 800px;
+        display: none;
+        background: #f0f2f5 !important;
+        font-family: ${THEME.fontMain};
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        margin: 10px 0;
+      }
+
+      #gal-global-overlay.active {
+        display: block !important;
+      }
+
+      /* 拖拽手柄样式 */
+      .gal-draggable-handle {
+        cursor: move;
+        user-select: none;
+      }
+
+      /* 全屏模式 - 使用!important确保覆盖 */
+      #gal-global-overlay.fullscreen {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-height: none !important;
+        min-height: 100vh !important;
+        z-index: 99999 !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+      }
+
+      /* 隐藏非Galgame消息楼层 */
+      #chat > .mes.gal-hidden {
+        display: none !important;
+      }
+
+      /* 全屏切换按钮 */
+      .gal-fullscreen-btn {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        z-index: 100;
+        background: rgba(43, 46, 56, 0.9);
+        color: ${THEME.accent};
+        border: 2px solid ${THEME.accent};
+        padding: 10px 18px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+        font-family: ${THEME.fontEng};
+        border-radius: 4px;
+      }
+
+      .gal-fullscreen-btn:hover {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+      }
+
+      .gal-fullscreen-btn i {
+        font-size: 1rem;
+      }
+
+      /* BGM 悬浮小组件 */
+      .gal-bgm-widget {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        z-index: 100;
+        background: rgba(43, 46, 56, 0.85);
+        backdrop-filter: blur(5px);
+        padding: 8px 15px;
+        border-radius: 20px;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.85rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
+        max-width: 40px; /* 默认收起 */
+        overflow: hidden;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .gal-bgm-widget:hover, .gal-bgm-widget.active {
+          max-width: 300px;
+          background: rgba(43, 46, 56, 0.95);
+      }
+
+      .gal-bgm-icon {
+          color: ${THEME.accent};
+          animation: galSpin 4s linear infinite;
+          animation-play-state: paused;
+          font-size: 1.1rem;
+          min-width: 20px;
+          text-align: center;
+      }
+
+      .gal-bgm-widget.playing .gal-bgm-icon {
+          animation-play-state: running;
+      }
+
+      @keyframes galSpin { 100% { transform: rotate(360deg); } }
+
+      .gal-bgm-info {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.2;
+          overflow: hidden;
+          margin-right: 5px;
+      }
+
+      .gal-bgm-title {
+          font-weight: bold;
+          font-size: 0.8rem;
+          color: ${THEME.accent};
+      }
+
+      .gal-bgm-ctrl {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+      }
+
+      .gal-bgm-btn {
+          background: none;
+          border: none;
+          color: #fff;
+          cursor: pointer;
+          font-size: 0.9rem;
+          padding: 0;
+          width: 20px;
+      }
+      .gal-bgm-btn:hover { color: ${THEME.accent}; }
+
+      .gal-bgm-slider {
+          width: 60px;
+          height: 4px;
+          -webkit-appearance: none;
+          background: rgba(255,255,255,0.3);
+          border-radius: 2px;
+          outline: none;
+      }
+      .gal-bgm-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 10px; height: 10px;
+          background: #fff;
+          border-radius: 50%;
+          cursor: pointer;
+      }
+
+      /* 主容器 - 全屏沉浸式 */
+      .gal-game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background: #f0f2f5;
+        font-family: ${THEME.fontMain};
+        overflow: hidden;
+      }
+
+      /* 背景层 */
+      .gal-layer-bg {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        z-index: 0;
+        background: linear-gradient(135deg, #e8eef5 0%, #f5f5f5 100%);
+        overflow: hidden;
+      }
+
+      .gal-layer-bg::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-image: radial-gradient(#ccc 1px, transparent 1px);
+        background-size: 20px 20px;
+        opacity: 0.3;
+        pointer-events: none;
+      }
+
+      /* 有背景图片时隐藏默认点阵图案 */
+      .gal-layer-bg.has-bg::before {
+        display: none;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         立绘动画关键帧
+         ═══════════════════════════════════════════════════════════════ */
+      @keyframes galSpriteSlideInLeft {
+        from { transform: translateX(-100px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes galSpriteSlideInRight {
+        from { transform: translateX(100px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes galSpriteSlideInCenter {
+        from { transform: translateY(50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes galSpriteSlideOutLeft {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(-100px); opacity: 0; }
+      }
+      @keyframes galSpriteSlideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100px); opacity: 0; }
+      }
+      @keyframes galSpriteBreathing {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+      }
+      @keyframes galSpriteShake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-5px); }
+        40% { transform: translateX(5px); }
+        60% { transform: translateX(-3px); }
+        80% { transform: translateX(3px); }
+      }
+      @keyframes galSpriteBounce {
+        0% { transform: scale(1); }
+        30% { transform: scale(1.15); }
+        50% { transform: scale(0.95); }
+        70% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+      @keyframes galSpriteExpressionChange {
+        0% { opacity: 0.7; transform: scale(0.98); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+
+      /* 立绘层 - 多角色布局 (左/中/右) */
+      .gal-layer-character {
+        position: absolute;
+        bottom: 35%;
+        left: 0;
+        width: 100%;
+        height: 55%;
+        z-index: 5;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        pointer-events: none;
+        padding: 0 3%;
+        gap: 2%;
+      }
+
+      /* 多角色槽位 */
+      .gal-char-slot {
+        position: relative;
+        flex: 0 0 30%;
+        max-width: 30%;
+        height: 100%;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        pointer-events: auto;
+      }
+      .gal-char-slot.slot-left { order: 1; }
+      .gal-char-slot.slot-right { order: 2; }
+
+      .gal-char-container {
+        position: relative;
+        max-height: 100%;
+        /* --base-scale removed to allow inheritance */
+        --state-scale: 1;
+        /* scale moved to .gal-char-img to avoid conflict with transform animations on container */
+        transform-origin: bottom center;
+        max-width: 100%;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        filter: drop-shadow(0 10px 30px rgba(0,0,0,0.4));
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                    filter 0.3s ease,
+                    opacity 0.3s ease;
+        pointer-events: auto;
+        cursor: pointer;
+        animation: galSpriteBreathing 4s ease-in-out infinite;
+      }
+
+      /* 入场动画 */
+      .gal-char-container.entering-left { animation: galSpriteSlideInLeft 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
+      .gal-char-container.entering-center { animation: galSpriteSlideInCenter 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
+      .gal-char-container.entering-right { animation: galSpriteSlideInRight 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
+
+      /* 退场动画 */
+      .gal-char-container.exiting-left { animation: galSpriteSlideOutLeft 0.4s ease-in forwards; pointer-events: none; }
+      .gal-char-container.exiting-right { animation: galSpriteSlideOutRight 0.4s ease-in forwards; pointer-events: none; }
+
+      /* 表情切换动画 */
+      .gal-char-container.expression-change { animation: galSpriteExpressionChange 0.3s ease-out; }
+
+      /* 说话者状态 - 基础样式 */
+      .gal-char-container.speaking {
+        --state-scale: 1.05;
+        z-index: 10;
+        filter: drop-shadow(0 15px 40px rgba(0,0,0,0.5));
+        position: relative;
+      }
+
+      .gal-char-container.silent {
+        --state-scale: 0.95;
+        filter: drop-shadow(0 5px 15px rgba(0,0,0,0.3));
+        z-index: 4;
+      }
+
+      /* 说话者光晕效果 - 仅在启用时生效 */
+      @keyframes speakingGlow {
+        0%, 100% {
+          filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.7))
+                  drop-shadow(0 0 15px rgba(255, 180, 0, 0.5))
+                  drop-shadow(0 15px 30px rgba(0,0,0,0.4));
+        }
+        50% {
+          filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.9))
+                  drop-shadow(0 0 30px rgba(255, 180, 0, 0.7))
+                  drop-shadow(0 15px 30px rgba(0,0,0,0.4));
+        }
+      }
+
+      .gal-layer-character.glow-enabled .gal-char-container.speaking {
+        animation: speakingGlow 2s ease-in-out infinite, galSpriteBreathing 4s ease-in-out infinite;
+      }
+
+      /* 漫画式对话气泡指示器 - 仅在启用时生效 */
+      @keyframes bubbleBounce {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-8px) scale(1.1); }
+      }
+
+      .gal-layer-character.bubble-enabled .gal-char-container.speaking::before {
+        content: '💬';
+        position: absolute;
+        top: -10px;
+        right: 10%;
+        font-size: 2.5rem;
+        z-index: 100;
+        animation: bubbleBounce 1s ease-in-out infinite;
+        filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
+      }
+
+      /* 情绪特效 - 仅保留动画，移除滤镜 */
+      .gal-char-container[data-emotion="angry"] {
+        animation: galSpriteShake 0.4s ease-in-out 2, galSpriteBreathing 4s ease-in-out 0.8s infinite;
+      }
+      .gal-char-container[data-emotion="surprised"] {
+        animation: galSpriteBounce 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite;
+      }
+
+
+      /* 场景色调 */
+      .gal-layer-character.scene-night {
+        filter: hue-rotate(-10deg) brightness(0.85) saturate(0.9);
+      }
+      .gal-layer-character.scene-night .gal-char-container {
+        filter: drop-shadow(0 10px 30px rgba(0,0,100,0.5));
+      }
+      .gal-layer-character.scene-indoor {
+        filter: sepia(0.08) brightness(1.02);
+      }
+      .gal-layer-character.scene-indoor .gal-char-container {
+        filter: drop-shadow(0 10px 30px rgba(100,50,0,0.3));
+      }
+
+      .gal-char-img {
+        max-height: 100%;
+        max-width: 100%;
+        height: auto;
+        width: auto;
+        object-fit: contain;
+        object-position: bottom center;
+        /* Apply scale here to avoid conflict with container animations */
+        transform: scale(calc(var(--base-scale, 1) * var(--state-scale)));
+        transform-origin: bottom center;
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+
+      .gal-char-placeholder {
+        width: 200px;
+        height: 350px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(240,240,240,0.9) 100%);
+        border: 4px dashed #ccc;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #999;
+        gap: 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+        pointer-events: auto;
+      }
+
+      .gal-char-placeholder:hover {
+        border-color: ${THEME.accent};
+        color: ${THEME.accent};
+      }
+
+      .gal-char-placeholder i {
+        font-size: 4rem;
+      }
+
+      .gal-char-placeholder span {
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      /* 对话框层 - 底部悬浮 */
+      .gal-dialog-layer {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 92%;
+        max-width: 1000px;
+        z-index: 30;
+        pointer-events: auto;
+      }
+
+      /* 名字标签 */
+      .gal-name-badge {
+        position: absolute;
+        top: -22px;
+        left: 0;
+        background: ${THEME.dark};
+        color: ${THEME.accent};
+        padding: 8px 35px 8px 25px;
+        font-size: 1.4rem;
+        font-weight: 900;
+        font-family: ${THEME.fontEng};
+        transform: skewX(-15deg);
+        z-index: 35;
+        box-shadow: 5px 5px 0 rgba(0,0,0,0.2);
+      }
+
+      .gal-name-badge span {
+        display: block;
+        transform: skewX(15deg);
+      }
+
+      .gal-narrator-label {
+        background: #666;
+        color: #fff;
+      }
+
+      /* 生成中状态指示器 */
+      .gal-generating-status {
+        position: absolute;
+        top: -60px;
+        left: 50%;
+        transform: translateX(-50%) scale(0.8);
+        background: linear-gradient(135deg, ${THEME.accent} 0%, #ff6b9d 100%);
+        color: #fff;
+        padding: 8px 20px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        opacity: 0;
+        transition: all 0.3s ease;
+        pointer-events: none;
+        z-index: 50;
+      }
+
+      .gal-generating-status.show {
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+      }
+
+      /* 交互栏 - 对话框上方右侧 */
+      .gal-interaction-bar {
+        position: absolute;
+        top: -50px;
+        right: 0;
+        display: flex;
+        gap: 12px;
+        z-index: 35;
+      }
+
+      .gal-action-btn {
+        padding: 10px 25px;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        transform: skewX(-15deg);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        border: 2px solid transparent;
+        box-shadow: 5px 5px 0 rgba(0,0,0,0.2);
+        font-family: ${THEME.fontMain};
+      }
+
+      .gal-action-btn span, .gal-action-btn i {
+        transform: skewX(15deg);
+      }
+
+      .gal-action-btn.btn-reroll {
+        background: ${THEME.white};
+        color: ${THEME.dark};
+        border-color: ${THEME.dark};
+      }
+
+      .gal-action-btn.btn-reroll:hover {
+        background: ${THEME.dark};
+        color: ${THEME.accent};
+        transform: skewX(-15deg) translateY(-3px);
+        box-shadow: 5px 8px 0 ${THEME.accent};
+      }
+
+      .gal-action-btn.btn-free {
+        background: ${THEME.accentSub};
+        color: #fff;
+        border-color: ${THEME.accentSub};
+      }
+
+      .gal-action-btn.btn-free:hover {
+        background: ${THEME.dark};
+        color: ${THEME.accentSub};
+        border-color: ${THEME.dark};
+        transform: skewX(-15deg) translateY(-3px);
+        box-shadow: 5px 8px 0 ${THEME.accentSub};
+      }
+
+      /* 文本主面板 */
+      .gal-text-panel {
+        background: rgba(255, 255, 255, 0.95);
+        width: 100%;
+        min-height: 180px;
+        padding: 35px 50px 55px 50px;
+        border-radius: 0 35px 0 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        position: relative;
+        border-bottom: 6px solid ${THEME.accent};
+        background-image: linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, 0.1) 95%, rgba(0, 210, 255, 0.1) 100%);
+        background-size: 20px 20px;
+      }
+
+      .gal-dialog-text {
+        font-size: 1.25rem;
+        line-height: 1.9;
+        color: #333;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
+
+      /* 底部工具栏 */
+      .gal-bottom-toolbar {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        display: flex;
+        align-items: flex-end;
+      }
+
+      .gal-footer-btn {
+        background: transparent;
+        color: #888;
+        padding: 8px 20px;
+        font-family: ${THEME.fontEng};
+        font-weight: 700;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+        border-top: 3px solid transparent;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 45px;
+      }
+
+      .gal-footer-btn:hover {
+        color: ${THEME.dark};
+        background: rgba(0, 210, 255, 0.1);
+        border-top-color: ${THEME.accent};
+      }
+
+      .gal-footer-btn-next {
+        background: ${THEME.dark};
+        color: #fff;
+        font-size: 1.1rem;
+        padding: 8px 35px;
+        height: 50px;
+        clip-path: polygon(15% 0, 100% 0, 100% 100%, 0% 100%);
+        margin-left: 8px;
+        border: none;
+      }
+
+      .gal-footer-btn-next:hover {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+        padding-right: 45px;
+      }
+
+      /* 进度指示器 */
+      .gal-progress-indicator {
+        font-family: ${THEME.fontEng};
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #888;
+        padding: 8px 15px;
+        display: flex;
+        align-items: center;
+        height: 45px;
+      }
+
+      /* 导航按钮样式 */
+      .gal-nav-btn {
+        background: ${THEME.dark};
+        color: #fff;
+        border: none;
+        padding: 8px 18px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .gal-nav-btn:hover {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+      }
+
+      .gal-nav-btn.active {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+        box-shadow: 0 0 10px ${THEME.accent};
+      }
+
+      /* AUTO 播放中状态 */
+      .gal-auto-playing {
+        background: ${THEME.accentSub} !important;
+        animation: galPulse 1s infinite;
+      }
+
+      @keyframes galPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+
+      /* 自由输入弹窗 */
+      .gal-input-modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: galFadeIn 0.2s ease;
+      }
+
+      @keyframes galFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .gal-input-box {
+        background: ${THEME.white};
+        border: 3px solid ${THEME.dark};
+        box-shadow: 10px 10px 0 rgba(0,0,0,0.15);
+        width: 90%;
+        max-width: 500px;
+        padding: 25px;
+      }
+
+      .gal-input-title {
+        font-family: ${THEME.fontEng};
+        font-size: 1.3rem;
+        font-weight: 800;
+        color: ${THEME.dark};
+        margin-bottom: 15px;
+        transform: skewX(-5deg);
+      }
+
+      .gal-input-title span {
+        transform: skewX(5deg);
+        display: block;
+      }
+
+      .gal-input-field {
+        width: 100%;
+        border: 2px solid ${THEME.dark};
+        padding: 12px 15px;
+        font-size: 1rem;
+        font-family: ${THEME.fontMain};
+        resize: vertical;
+        min-height: 80px;
+        box-sizing: border-box;
+      }
+
+      .gal-input-field:focus {
+        outline: none;
+        border-color: ${THEME.accent};
+        box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.2);
+      }
+
+      .gal-input-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      /* Toast 通知 */
+      .gal-toast {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        padding: 12px 25px;
+        font-weight: 600;
+        transform: skewX(-5deg);
+        box-shadow: 5px 5px 0 ${THEME.accent};
+        z-index: 100000;
+        animation: galToastIn 0.3s ease;
+      }
+
+      .gal-toast span {
+        display: block;
+        transform: skewX(5deg);
+      }
+
+      @keyframes galToastIn {
+        from { opacity: 0; transform: skewX(-5deg) translateY(20px); }
+        to { opacity: 1; transform: skewX(-5deg) translateY(0); }
+      }
+
+      /* 立绘配置弹窗 */
+      .gal-config-modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(6px);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .gal-config-panel {
+        background: ${THEME.white};
+        border: 3px solid ${THEME.dark};
+        box-shadow: 12px 12px 0 rgba(0,0,0,0.2);
+        width: 90%;
+        max-width: 700px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .gal-config-header {
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        padding: 15px 25px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .gal-config-title {
+        font-family: ${THEME.fontEng};
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: ${THEME.accent};
+      }
+
+      .gal-config-close {
+        background: transparent;
+        border: 2px solid ${THEME.white};
+        color: ${THEME.white};
+        width: 32px;
+        height: 32px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+      }
+
+      .gal-config-close:hover {
+        background: ${THEME.accentSub};
+        border-color: ${THEME.accentSub};
+      }
+
+      .gal-config-body {
+        padding: 25px;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .gal-sprite-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+      }
+
+      .gal-sprite-card {
+        border: 2px solid #eee;
+        padding: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .gal-sprite-card:hover {
+        border-color: ${THEME.accent};
+        box-shadow: 0 4px 12px rgba(0, 210, 255, 0.15);
+      }
+
+      /* 立绘预览图 - 固定2:3长宽比 */
+      .gal-sprite-preview {
+        width: 100%;
+        aspect-ratio: 2 / 3;
+        object-fit: cover;
+        object-position: top center;
+        background: #f9f9f9;
+        border-radius: 4px;
+        margin-bottom: 8px;
+      }
+
+      /* 立绘裁剪工具 */
+      .gal-crop-container {
+        position: relative;
+        width: 100%;
+        overflow: visible;
+        background: #1a1a2e;
+        border-radius: 8px;
+      }
+
+      .gal-crop-canvas-wrapper {
+        position: relative;
+        width: 100%;
+        height: 380px;
+        overflow: hidden;
+        cursor: move;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a2e;
+        border-radius: 8px 8px 0 0;
+      }
+
+      #gal-crop-canvas {
+        display: block;
+      }
+
+      .gal-crop-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+      }
+
+      .gal-crop-frame {
+        position: absolute;
+        border: 3px solid ${THEME.accent};
+        box-shadow: 0 0 0 9999px rgba(0,0,0,0.6);
+        pointer-events: none;
+      }
+
+      .gal-crop-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        padding: 12px 20px;
+        background: rgba(0,0,0,0.8);
+        border-radius: 0 0 8px 8px;
+      }
+
+      .gal-crop-controls .gal-crop-btn {
+        padding: 8px 16px;
+        min-width: 60px;
+        font-size: 0.9rem;
+      }
+
+      .gal-crop-zoom-slider {
+        width: 150px;
+        accent-color: ${THEME.accent};
+      }
+
+      .gal-crop-zoom-label {
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        min-width: 45px;
+      }
+
+      .gal-crop-btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s;
+      }
+
+      .gal-crop-btn.reset {
+        background: #666;
+        color: #fff;
+      }
+
+      .gal-crop-btn.reset:hover {
+        background: #888;
+      }
+
+      /* 批量上传网格 */
+      .gal-batch-upload-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 5px;
+      }
+
+      .gal-batch-upload-card {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        transition: all 0.2s;
+        background: #fafafa;
+      }
+
+      .gal-batch-upload-card:hover {
+        border-color: ${THEME.accent};
+        background: rgba(0, 210, 255, 0.05);
+      }
+
+      .gal-batch-upload-card.has-image {
+        border-style: solid;
+        border-color: ${THEME.accent};
+      }
+
+      .gal-batch-upload-card .expression-label {
+        font-weight: 700;
+        color: ${THEME.dark};
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+      }
+
+      .gal-batch-upload-card .upload-preview {
+        width: 100%;
+        aspect-ratio: 2 / 3;
+        background: #eee;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+
+      .gal-batch-upload-card .upload-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+      }
+
+      .gal-batch-upload-card .upload-preview i {
+        font-size: 2rem;
+        color: #bbb;
+      }
+
+      .gal-batch-upload-card .upload-preview:hover i {
+        color: ${THEME.accent};
+      }
+
+      .gal-batch-upload-card .remove-btn {
+        background: ${THEME.accentSub};
+        color: #fff;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        cursor: pointer;
+        display: none;
+      }
+
+      .gal-batch-upload-card.has-image .remove-btn {
+        display: inline-block;
+      }
+
+      .gal-sprite-label {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: ${THEME.dark};
+        line-height: 1.3;
+      }
+
+      .gal-sprite-label small {
+        font-weight: 400;
+        color: #888;
+      }
+
+      /* 上传卡片 */
+      .gal-upload-card {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #999;
+        min-height: 120px;
+      }
+
+      .gal-upload-card:hover {
+        border-color: ${THEME.accent};
+        color: ${THEME.accent};
+        background: rgba(0, 210, 255, 0.05);
+      }
+
+      .gal-upload-card i {
+        font-size: 2rem;
+      }
+
+      .gal-action-btn.primary {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+        border-color: ${THEME.accent};
+      }
+
+      .gal-action-btn.primary:hover {
+        background: ${THEME.dark};
+        color: ${THEME.accent};
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         选项面板 - 从骰子系统监控并重新渲染
+         ═══════════════════════════════════════════════════════════════ */
+
+      /* 选项层 - 全屏覆盖（无模糊背景） */
+      #gal-layer-choices {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 10050;
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 15px;
+        padding: 20px;
+      }
+
+      #gal-layer-choices.active {
+        display: flex;
+        animation: galFadeIn 0.3s ease;
+      }
+
+      /* 选项标题 */
+      .gal-choices-title {
+        font-family: ${THEME.fontEng};
+        font-size: 1.2rem;
+        font-weight: 900;
+        color: ${THEME.white};
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 8px;
+        transform: skewX(-10deg);
+      }
+
+      .gal-choices-title span {
+        display: block;
+        transform: skewX(10deg);
+      }
+
+      /* 选项卡片 - 缩小字体，自适应宽度 */
+      .gal-choice-card {
+        background: ${THEME.white};
+        color: ${THEME.dark};
+        padding: 12px 30px;
+        min-width: 200px;
+        max-width: 90%;
+        width: auto;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        border: 2px solid ${THEME.dark};
+        box-shadow: 6px 6px 0 rgba(0,0,0,0.15);
+        transform: skewX(-8deg);
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: relative;
+        overflow: hidden;
+        word-break: break-word;
+      }
+
+      .gal-choice-card span {
+        display: block;
+        transform: skewX(8deg);
+      }
+
+      .gal-choice-card:hover {
+        background: ${THEME.accent};
+        color: #fff;
+        border-color: ${THEME.dark};
+        transform: skewX(-8deg) translate(-3px, -3px);
+        box-shadow: 9px 9px 0 ${THEME.dark};
+      }
+
+      .gal-choice-card::after {
+        content: '';
+        display: none;
+      }
+
+      /* 关闭提示 */
+      .gal-choices-hint {
+        font-size: 0.8rem;
+        color: rgba(255,255,255,0.7);
+        margin-top: 15px;
+      }
+
+      /* 进度条容器 */
+      .gal-progress-container {
+        flex: 1;
+        height: 6px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 3px;
+        margin: 0 10px;
+        overflow: hidden;
+        position: relative;
+        min-width: 60px;
+      }
+
+      /* 进度条滑块 */
+      .gal-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, ${THEME.accent} 0%, #00a8cc 100%);
+        width: 0%;
+        border-radius: 3px;
+        transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 0 10px ${THEME.accent};
+      }
+
+      /* 待选择提示按钮 - 在工具栏内 */
+      .gal-pending-choices-btn {
+        background: linear-gradient(135deg, ${THEME.accentSub} 0%, #cc0044 100%);
+        color: #fff !important;
+        padding: 8px 16px;
+        font-weight: 700;
+        font-size: 0.85rem;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        animation: galPendingPulse 2s infinite;
+        transition: all 0.2s;
+        border: none;
+        height: 45px;
+        margin-right: 5px;
+      }
+
+      .gal-pending-choices-btn:hover {
+        filter: brightness(1.1);
+      }
+
+      .gal-pending-choices-btn.show {
+        display: flex;
+      }
+
+      @keyframes galPendingPulse {
+        0%, 100% { box-shadow: inset 0 0 10px rgba(255,255,255,0.2); }
+        50% { box-shadow: inset 0 0 20px rgba(255,255,255,0.4); }
+      }
+
+      /* Galgame 开启按钮 (注入到消息中) */
+      .gal-open-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 8px;
+        background: transparent;
+        color: ${THEME.accent};
+        border: 1px solid ${THEME.accent};
+        border-radius: 4px;
+        font-size: 0.75rem;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: all 0.2s;
+        margin-left: 5px;
+        font-family: ${THEME.fontMain};
+      }
+
+      .gal-open-btn:hover {
+        opacity: 1;
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+      }
+
+      /* 历史记录模态框 */
+      .gal-history-modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.85);
+        backdrop-filter: blur(5px);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: galFadeIn 0.3s ease;
+      }
+
+      .gal-history-panel {
+        background: ${THEME.white};
+        border: 2px solid ${THEME.accent};
+        box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
+        width: 80%;
+        max-width: 800px;
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .gal-history-header {
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid ${THEME.accent};
+      }
+
+      .gal-history-title {
+        font-family: ${THEME.fontMain};
+        font-size: 1.2rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .gal-history-close {
+        background: transparent;
+        border: none;
+        color: #aaa;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: color 0.2s;
+        line-height: 1;
+      }
+
+      .gal-history-close:hover {
+        color: ${THEME.accent};
+      }
+
+      .gal-history-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+
+      .gal-history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+
+      .gal-history-item {
+        background: #fff;
+        padding: 0;
+        border-radius: 8px;
+        border: 1px solid #eee;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        transition: all 0.2s;
+        overflow: hidden;
+        margin-bottom: 10px;
+      }
+
+      .gal-history-item:hover {
+        box-shadow: 0 8px 20px rgba(0, 210, 255, 0.15);
+        transform: translateY(-2px);
+        border-color: ${THEME.accent};
+      }
+
+      .gal-history-header-row {
+        background: #f8f9fa;
+        padding: 10px 20px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .gal-history-info-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .gal-history-index {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        font-family: ${THEME.fontEng};
+      }
+
+      .gal-history-time {
+        color: #666;
+        font-size: 0.9rem;
+        font-weight: 600;
+        font-family: ${THEME.fontMain};
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .gal-history-time i {
+        font-size: 0.8rem;
+        color: #999;
+      }
+
+      .gal-history-content {
+        padding: 20px;
+        font-size: 1.05rem;
+        line-height: 1.8;
+        color: #333;
+        white-space: pre-wrap;
+        text-align: justify;
+      }
+
+      .gal-history-empty {
+        text-align: center;
+        padding: 50px;
+        color: #999;
+        font-style: italic;
+      }
+
+    `;
+
+    const styleEl = targetDoc.createElement('style');
+    styleEl.id = `${SCRIPT_ID}-styles`;
+    styleEl.textContent = css;
+    (targetDoc.head || targetDoc.documentElement).appendChild(styleEl);
+
+    console.log(`[${SCRIPT_NAME}] 样式已注入`);
+  }
+
+  // ============================================
+  // UI 渲染 - 全局覆盖层架构
+  // ============================================
+
+  // 当前显示的消息ID
+  let currentDisplayMesId = null;
+
+  /**
+   * 创建或获取全局Galgame覆盖层
+   */
+  function ensureGlobalOverlay() {
+    const targetDoc = topWindow.document;
+    let $overlay = $(targetDoc).find('#gal-global-overlay');
+
+    if (!$overlay.length) {
+      const overlayHtml = `
+        <div id="gal-global-overlay">
+          <!-- 全屏切换按钮 -->
+          <button class="gal-fullscreen-btn" data-action="toggle-fullscreen" title="切换全屏">
+            <i class="fa-solid fa-expand"></i>
+            <span>全屏</span>
+          </button>
+
+          <div class="gal-game-container">
+            <!-- 背景层 -->
+            <div class="gal-layer-bg"></div>
+
+            <!-- 立绘层 - 由SpriteManager动态管理 -->
+            <div class="gal-layer-character${settings.speakerGlow ? ' glow-enabled' : ''}${settings.speakerBubble ? ' bubble-enabled' : ''}"></div>
+
+            <!-- 对话框层 -->
+            <div class="gal-dialog-layer">
+              <div class="gal-name-badge">
+                <span>旁白</span>
+              </div>
+
+              <div class="gal-interaction-bar">
+                <button class="gal-action-btn btn-reroll" data-action="reroll" title="重新生成">
+                  <i class="fa-solid fa-rotate-right"></i>
+                  <span>重绘当前</span>
+                </button>
+                <button class="gal-action-btn btn-free" data-action="free-input" title="自由输入">
+                  <i class="fa-regular fa-keyboard"></i>
+                  <span>自由对话</span>
+                </button>
+              </div>
+
+              <div class="gal-text-panel">
+                <p class="gal-dialog-text"></p>
+
+                <div class="gal-bottom-toolbar">
+                  <button class="gal-footer-btn" data-action="log" title="查看历史">
+                    <i class="fa-solid fa-list-ul"></i> LOG
+                  </button>
+                  <button class="gal-footer-btn" data-action="close-mode" title="退出 Galgame 模式">
+                    <i class="fa-solid fa-power-off"></i> CLOSE
+                  </button>
+                  <button class="gal-footer-btn" data-action="config" title="设置">
+                    <i class="fa-solid fa-gear"></i> CONFIG
+                  </button>
+                  <button class="gal-footer-btn gal-nav-btn" data-action="prev" title="上一段">
+                    <i class="fa-solid fa-chevron-left"></i> PREV
+                  </button>
+                  <div class="gal-progress-container">
+                    <div class="gal-progress-bar"></div>
+                  </div>
+                  <button class="gal-footer-btn gal-nav-btn" data-action="auto" title="自动播放">
+                    <i class="fa-solid fa-play"></i> AUTO
+                  </button>
+                  <button class="gal-footer-btn gal-nav-btn" data-action="skip" title="按住快进 (Ctrl)">
+                    <i class="fa-solid fa-forward"></i> SKIP
+                  </button>
+                  <button class="gal-pending-choices-btn" data-action="show-choices" title="有待选择的选项">
+                    <i class="fa-solid fa-list-check"></i> 选项
+                  </button>
+                  <button class="gal-footer-btn-next" data-action="next" title="下一段">
+                    NEXT <i class="fa-solid fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // 插入到 #chat 容器末尾（内联模式）
+      const $chat = $(targetDoc).find('#chat');
+      if ($chat.length) {
+        $chat.append(overlayHtml);
+      } else {
+        // 回退：如果找不到 #chat，插入到 body
+        $(targetDoc.body).append(overlayHtml);
+      }
+      $overlay = $(targetDoc).find('#gal-global-overlay');
+    }
+
+    return $overlay;
+  }
+
+  /**
+   * 显示全局Galgame覆盖层
+   */
+  function showGlobalOverlay() {
+    const $overlay = ensureGlobalOverlay();
+    $overlay.addClass('active');
+    console.log(`[${SCRIPT_NAME}] 显示全局Galgame覆盖层`);
+  }
+
+  /**
+   * 隐藏全局Galgame覆盖层
+   */
+  function hideGlobalOverlay() {
+    const targetDoc = topWindow.document;
+    $(targetDoc).find('#gal-global-overlay').removeClass('active');
+    console.log(`[${SCRIPT_NAME}] 隐藏全局Galgame覆盖层`);
+  }
+
+  /**
+   * 切换全局覆盖层显示状态
+   */
+  function toggleGlobalOverlay() {
+    const $overlay = ensureGlobalOverlay();
+    if ($overlay.hasClass('active')) {
+      hideGlobalOverlay();
+    } else {
+      showGlobalOverlay();
+    }
+  }
+
+  /**
+   * 切换全屏模式（使用浏览器Fullscreen API实现真正全屏）
+   */
+  async function toggleFullscreen() {
+    const overlay = topWindow.document.getElementById('gal-global-overlay');
+    const $btn = $(overlay).find('[data-action="toggle-fullscreen"]');
+
+    // 判断当前是否处于全屏状态
+    const isCurrentlyFullscreen =
+      topWindow.document.fullscreenElement ||
+      topWindow.document.webkitFullscreenElement ||
+      topWindow.document.mozFullScreenElement ||
+      topWindow.document.msFullscreenElement;
+
+    if (isCurrentlyFullscreen) {
+      // 退出全屏
+      try {
+        if (topWindow.document.exitFullscreen) {
+          await topWindow.document.exitFullscreen();
+        } else if (topWindow.document.webkitExitFullscreen) {
+          await topWindow.document.webkitExitFullscreen();
+        } else if (topWindow.document.mozCancelFullScreen) {
+          await topWindow.document.mozCancelFullScreen();
+        } else if (topWindow.document.msExitFullscreen) {
+          await topWindow.document.msExitFullscreen();
+        }
+        $(overlay).removeClass('fullscreen');
+        $btn.html('<i class="fa-solid fa-expand"></i><span>全屏</span>');
+        console.log(`[${SCRIPT_NAME}] 退出全屏模式`);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 退出全屏失败:`, e);
+      }
+    } else {
+      // 进入全屏
+      try {
+        if (overlay.requestFullscreen) {
+          await overlay.requestFullscreen();
+        } else if (overlay.webkitRequestFullscreen) {
+          await overlay.webkitRequestFullscreen();
+        } else if (overlay.mozRequestFullScreen) {
+          await overlay.mozRequestFullScreen();
+        } else if (overlay.msRequestFullscreen) {
+          await overlay.msRequestFullscreen();
+        }
+        $(overlay).addClass('fullscreen');
+        $btn.html('<i class="fa-solid fa-compress"></i><span>退出</span>');
+        console.log(`[${SCRIPT_NAME}] 进入全屏模式`);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 进入全屏失败:`, e);
+        showToast('全屏请求失败，请检查浏览器权限');
+      }
+    }
+  }
+
+  // 监听全屏变化事件，同步按钮状态
+  function setupFullscreenChangeListener() {
+    const handleFullscreenChange = () => {
+      const overlay = topWindow.document.getElementById('gal-global-overlay');
+      if (!overlay) return;
+
+      const $btn = $(overlay).find('[data-action="toggle-fullscreen"]');
+      const isFullscreen =
+        topWindow.document.fullscreenElement ||
+        topWindow.document.webkitFullscreenElement ||
+        topWindow.document.mozFullScreenElement ||
+        topWindow.document.msFullscreenElement;
+
+      if (isFullscreen) {
+        $(overlay).addClass('fullscreen');
+        $btn.html('<i class="fa-solid fa-compress"></i><span>退出</span>');
+      } else {
+        $(overlay).removeClass('fullscreen');
+        $btn.html('<i class="fa-solid fa-expand"></i><span>全屏</span>');
+      }
+    };
+
+    topWindow.document.addEventListener('fullscreenchange', handleFullscreenChange);
+    topWindow.document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    topWindow.document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    topWindow.document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+  }
+
+  // ============================================
+  // 历史记录功能
+  // ============================================
+
+  // 从数据库获取历史记录
+  function getHistoryFromDatabase() {
+    try {
+      const api = topWindow.AutoCardUpdaterAPI;
+      if (!api || typeof api.exportTableAsJson !== 'function') {
+        console.log(`[${SCRIPT_NAME}] AutoCardUpdaterAPI 不可用`);
+        return [];
+      }
+
+      const tableData = api.exportTableAsJson();
+      if (!tableData) return [];
+
+      // 查找 "总结表"
+      let summarySheet = null;
+      for (const sheetKey of Object.keys(tableData)) {
+        if (!sheetKey.startsWith('sheet_')) continue;
+        const sheet = tableData[sheetKey];
+        if (sheet.name === '总结表') {
+          summarySheet = sheet;
+          break;
+        }
+      }
+
+      if (!summarySheet || !summarySheet.content || summarySheet.content.length < 2) {
+        console.log(`[${SCRIPT_NAME}] 未找到总结表或表为空`);
+        return [];
+      }
+
+      const headers = summarySheet.content[0];
+      const content = summarySheet.content;
+
+      console.log(`[${SCRIPT_NAME}] 总结表表头:`, headers);
+
+      // 查找列索引
+      let indexCol = -1;
+      let timeCol = -1;
+      let contentCol = -1;
+
+      // 常见列名匹配
+      const indexKeywords = ['索引', '编码', 'index', 'id', '序号', '编号'];
+      const timeKeywords = ['时间', '跨度', '日期', 'time', 'date', 'duration'];
+      const contentKeywords = ['纪要', '总结', '内容', '文本', 'summary', 'content', 'text', '剧情', '故事'];
+
+      headers.forEach((header, idx) => {
+        if (!header) return;
+        const h = String(header).toLowerCase().trim();
+
+        if (indexCol === -1 && indexKeywords.some(k => h === k || h.includes(k))) {
+          indexCol = idx;
+        }
+
+        if (timeCol === -1 && timeKeywords.some(k => h === k || h.includes(k))) {
+          timeCol = idx;
+        }
+
+        if (contentCol === -1 && contentKeywords.some(k => h === k || h.includes(k))) {
+          contentCol = idx;
+        }
+      });
+
+      // 如果未找到内容列，尝试智能推断：寻找平均长度最长的列
+      if (contentCol === -1) {
+        console.log(`[${SCRIPT_NAME}] 未能通过表头识别内容列，尝试分析数据内容...`);
+
+        // 采样前5行数据
+        let maxAvgLength = 0;
+        let bestCol = -1;
+
+        // 遍历所有列
+        for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+          // 跳过已识别的索引列
+          if (colIdx === indexCol) continue;
+
+          let totalLen = 0;
+          let count = 0;
+
+          for (let rowIdx = 1; rowIdx < Math.min(content.length, 6); rowIdx++) {
+            const cell = content[rowIdx][colIdx];
+            if (cell && typeof cell === 'string') {
+              totalLen += cell.length;
+              count++;
+            }
+          }
+
+          const avgLen = count > 0 ? totalLen / count : 0;
+          if (avgLen > maxAvgLength) {
+            maxAvgLength = avgLen;
+            bestCol = colIdx;
+          }
+        }
+
+        if (bestCol !== -1) {
+          contentCol = bestCol;
+          console.log(`[${SCRIPT_NAME}] 自动推断内容列为索引: ${contentCol} (平均长度: ${maxAvgLength})`);
+        }
+      }
+
+      // 最后的后备方案：如果有至少2列，取第2列作为内容；否则取第1列
+      if (contentCol === -1) {
+        if (headers.length >= 2) {
+          contentCol = 1;
+          if (indexCol === 1) contentCol = 0; // 避免冲突
+        } else {
+          contentCol = 0;
+        }
+      }
+
+      // 确保索引列不是内容列
+      if (indexCol === -1 && contentCol !== 0) {
+        indexCol = 0;
+      }
+
+      // 如果找不到时间列，但有至少3列，且内容列是第3列(2)或之后，尝试用前一列作为时间列
+      if (timeCol === -1 && headers.length >= 3 && contentCol >= 1 && contentCol !== indexCol) {
+        // 简单启发式：如果内容列是2，时间列可能是1
+        timeCol = contentCol - 1;
+        if (timeCol === indexCol) timeCol = -1; // 避免冲突
+      }
+
+      console.log(`[${SCRIPT_NAME}] 最终使用列 - 索引: ${indexCol}, 时间: ${timeCol}, 内容: ${contentCol}`);
+
+      const history = [];
+      // 从第1行开始遍历（跳过表头）
+      for (let i = 1; i < content.length; i++) {
+        const row = content[i];
+        if (!row) continue;
+
+        const text = row[contentCol];
+        const idx = indexCol !== -1 ? row[indexCol] : '';
+        const time = timeCol !== -1 ? row[timeCol] : '';
+
+        if (text) {
+          history.push({
+            index: idx,
+            time: time,
+            content: text,
+          });
+        }
+      }
+
+      return history;
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 获取历史记录失败:`, e);
+      return [];
+    }
+  }
+
+  // 显示历史记录模态框
+  function showHistoryModal(historyData) {
+    // 移除已存在的模态框
+    $('#gal-history-modal').remove();
+
+    const $modal = $(`<div id="gal-history-modal" class="gal-history-modal"></div>`);
+
+    let listHtml = '';
+    if (!historyData || historyData.length === 0) {
+      listHtml = '<div class="gal-history-empty">暂无历史记录</div>';
+    } else {
+      listHtml = '<div class="gal-history-list">';
+      historyData.forEach(item => {
+        listHtml += `
+          <div class="gal-history-item">
+            <div class="gal-history-header-row">
+              <div class="gal-history-info-group">
+                ${item.index ? `<span class="gal-history-index">#${item.index}</span>` : ''}
+                ${item.time ? `<span class="gal-history-time"><i class="fa-regular fa-clock"></i> ${item.time}</span>` : ''}
+              </div>
+            </div>
+            <div class="gal-history-content">${item.content}</div>
+          </div>
+        `;
+      });
+      listHtml += '</div>';
+    }
+
+    const modalHtml = `
+      <div class="gal-history-panel">
+        <div class="gal-history-header">
+          <div class="gal-history-title">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>剧情回顾</span>
+          </div>
+          <button class="gal-history-close">&times;</button>
+        </div>
+        <div class="gal-history-body">
+          ${listHtml}
+        </div>
+      </div>
+    `;
+
+    $modal.html(modalHtml);
+    $('body').append($modal);
+
+    // 绑定关闭事件
+    $modal.find('.gal-history-close').on('click', function () {
+      $modal.fadeOut(200, function () {
+        $(this).remove();
+      });
+    });
+
+    // 点击遮罩层关闭
+    $modal.on('click', function (e) {
+      if (e.target === this) {
+        $modal.fadeOut(200, function () {
+          $(this).remove();
+        });
+      }
+    });
+
+    // 自动滚动到底部
+    const $body = $modal.find('.gal-history-body');
+    $body.scrollTop($body[0].scrollHeight);
+  }
+
+  /**
+   * 更新全局覆盖层的内容
+   */
+  async function updateGlobalOverlayContent(mesId, parsedContent) {
+    const $overlay = ensureGlobalOverlay();
+    const segments = parsedContent.segments;
+
+    // 获取或初始化当前消息的段落状态
+    let state = messageSegmentState.get(String(mesId));
+    if (!state) {
+      state = { currentIndex: 0, segments: segments, parsedContent: parsedContent };
+      messageSegmentState.set(String(mesId), state);
+    } else {
+      state.segments = segments;
+      state.parsedContent = parsedContent;
+    }
+
+    // 重置 SpriteManager（仅当切换到新消息时，防止流式输出导致重复入场动画）
+    if (currentDisplayMesId !== mesId) {
+      SpriteManager.reset($overlay);
+    }
+
+    currentDisplayMesId = mesId;
+
+    // 显示当前索引的段落
+    const currentIndex = Math.min(state.currentIndex, segments.length - 1);
+    const displaySegment = segments[currentIndex] || { type: 'narration', text: '' };
+
+    const displayText = displaySegment.text || '';
+    const speaker = displaySegment.speaker;
+    const isNarration = displaySegment.type === 'narration';
+
+    const progressText = `${currentIndex + 1}/${segments.length}`;
+
+    // 更新UI元素
+    const $nameBadge = $overlay.find('.gal-name-badge');
+    $nameBadge.find('span').text(speaker || '旁白');
+    if (isNarration) {
+      $nameBadge.addClass('gal-narrator-label');
+    } else {
+      $nameBadge.removeClass('gal-narrator-label');
+    }
+
+    $overlay.find('.gal-dialog-text').text(displayText);
+    // 计算百分比
+    const total = segments.length;
+    // 确保至少有1个，避免除以0
+    const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
+    $overlay.find('.gal-progress-bar').css('width', `${progressPercent}%`);
+
+    // 使用 SpriteManager 更新立绘（支持多角色、动画）
+    const expression = displaySegment.expression || '默认';
+    await SpriteManager.updateSprite($overlay, speaker, expression);
+
+    // 应用场景色调和背景
+    if (parsedContent.currentBackground?.scene) {
+      await SpriteManager.applySceneTint($overlay, parsedContent.currentBackground.scene);
+    }
+
+    // 更新NEXT按钮状态
+    const $nextBtn = $overlay.find('[data-action="next"]');
+
+    // ★ 再次尝试获取下一段，直接判断是否真的有下一段内容
+    // 这是最可靠的判断方式，不依赖于索引计算
+    const hasNextSegment = !!segments[currentIndex + 1];
+
+    if (!hasNextSegment) {
+      $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+    } else {
+      $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
+    }
+
+    // 存储mesId到容器
+    $overlay.find('.gal-game-container').attr('data-mes-id', mesId);
+
+    console.log(`[${SCRIPT_NAME}] 更新全局覆盖层内容: mesId=${mesId}, 段落=${currentIndex + 1}/${segments.length}`);
+  }
+
+  /**
+   * 获取最后一条AI消息的内容并更新覆盖层
+   */
+  async function refreshOverlayFromLastAiMessage() {
+    if (!isEnabled) return;
+
+    // 找到最后一条AI消息
+    const $allMes = $('#chat > .mes');
+    let $lastAiMes = null;
+
+    $allMes.each(function () {
+      if ($(this).attr('is_user') !== 'true') {
+        $lastAiMes = $(this);
+      }
+    });
+
+    if (!$lastAiMes || !$lastAiMes.length) {
+      console.log(`[${SCRIPT_NAME}] 未找到AI消息`);
+      return;
+    }
+
+    const mesId = $lastAiMes.attr('mesid');
+
+    // ★ 优先从 SillyTavern chat 数组获取原始消息（保留自定义标签）
+    let contentToProcess = getRawMessageContent(mesId);
+
+    // 回退到 DOM 内容
+    if (!contentToProcess) {
+      const $mesText = $lastAiMes.find('.mes_text');
+      const html = $mesText.html();
+      if (!html) return;
+      contentToProcess = decodeHtml(html);
+    }
+
+    const hasGalTags = /<(p|sprite|maintext|background)[^>]*>/i.test(contentToProcess);
+
+    if (!hasGalTags) {
+      console.log(`[${SCRIPT_NAME}] 最后AI消息不包含Galgame标签`);
+      return;
+    }
+
+    const parsed = parseGalgameContent(contentToProcess);
+    if (parsed.segments.length === 0) return;
+
+    // 更新覆盖层内容
+    await updateGlobalOverlayContent(mesId, parsed);
+
+    // 显示覆盖层
+    showGlobalOverlay();
+  }
+
+  // 保留旧函数名以兼容
+  async function renderGalgameMessage(mesId, parsedContent) {
+    await updateGlobalOverlayContent(mesId, parsedContent);
+    showGlobalOverlay();
+  }
+
+  // 设置全局事件监听器 (委托模式)
+  function setupGlobalEventListeners() {
+    console.log(`[${SCRIPT_NAME}] 设置全局事件委托...`);
+    const doc = topWindow.document;
+
+    // 自由输入
+    $(doc).on('click', '#gal-global-overlay [data-action="free-input"]', function (e) {
+      e.stopPropagation();
+      showFreeInputModal();
+    });
+
+    // 重新Roll
+    $(doc).on('click', '#gal-global-overlay [data-action="reroll"]', function (e) {
+      e.stopPropagation();
+      triggerReroll();
+    });
+
+    // 退出 Galgame 模式 (CLOSE 按钮)
+    $(doc).on('click', '#gal-global-overlay [data-action="close-mode"]', async function (e) {
+      e.stopPropagation();
+      isEnabled = false;
+      setCurrentCharEnabled(false);
+      updateButtonState();
+
+      await disableWorldbookGlobally();
+      restoreOriginalViews();
+      showToast('Galgame 模式已关闭');
+    });
+
+    // 进入 Galgame 模式 (消息上的按钮)
+    $(doc).on('click', '.gal-open-btn', async function (e) {
+      e.stopPropagation();
+      const $btn = $(this);
+      const $mes = $btn.closest('.mes');
+      const mesId = $mes.attr('mesid');
+
+      if (!mesId) return;
+
+      isEnabled = true;
+      setCurrentCharEnabled(true);
+      updateButtonState();
+
+      // 先更新UI，再异步加载世界书
+      showToast('正在开启 Galgame 模式...');
+
+      try {
+        await injectCOTToWorldbook();
+        await enableWorldbookGlobally();
+      } catch (err) {
+        console.error('Galgame模式开启出错:', err);
+      }
+
+      // 尝试渲染被点击的消息
+      let contentToProcess = getRawMessageContent(mesId);
+      if (!contentToProcess) {
+        const $mesText = $mes.find('.mes_text');
+        contentToProcess = decodeHtml($mesText.html());
+      }
+
+      if (contentToProcess) {
+        const parsed = parseGalgameContent(contentToProcess);
+        if (parsed.segments.length > 0) {
+          await updateGlobalOverlayContent(mesId, parsed);
+          showGlobalOverlay();
+          if (settings.hideOtherFloors) hideNonLastFloors();
+          showToast('Galgame 模式已开启');
+        } else {
+          applyGalgameMode();
+          if (settings.hideOtherFloors) hideNonLastFloors();
+          showToast('Galgame 模式已开启 (当前消息无内容)');
+        }
+      } else {
+        applyGalgameMode();
+        if (settings.hideOtherFloors) hideNonLastFloors();
+        showToast('Galgame 模式已开启');
+      }
+    });
+
+    // 快进按钮 (SKIP) - 按下开始，松开停止
+    $(doc).on('mousedown touchstart', '#gal-global-overlay [data-action="skip"]', function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+      startSkipping();
+    });
+
+    $(doc).on('mouseup touchend mouseleave', '#gal-global-overlay [data-action="skip"]', function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+      stopSkipping();
+    });
+
+    // 全屏切换
+    $(doc).on('click', '#gal-global-overlay [data-action="toggle-fullscreen"]', function (e) {
+      e.stopPropagation();
+      toggleFullscreen();
+    });
+
+    // 设置按钮
+    $(doc).on('click', '#gal-global-overlay [data-action="config"]', function (e) {
+      e.stopPropagation();
+      showSettingsPanel();
+    });
+
+    // LOG按钮
+    $(doc).on('click', '#gal-global-overlay [data-action="log"]', function (e) {
+      e.stopPropagation();
+      const history = getHistoryFromDatabase();
+      showHistoryModal(history);
+    });
+
+    // 待选择选项按钮
+    $(doc).on('click', '#gal-global-overlay [data-action="show-choices"]', function (e) {
+      e.stopPropagation();
+      if (pendingOptions && pendingOptions.length > 0) {
+        renderGalgameChoices(pendingOptions);
+      } else {
+        showToast('当前没有待选择的选项');
+      }
+    });
+
+    // NEXT按钮
+    $(doc).on('click', '#gal-global-overlay [data-action="next"]', function (e) {
+      e.stopPropagation();
+      const $overlay = $('#gal-global-overlay');
+      const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
+      const state = messageSegmentState.get(String(mesId));
+
+      if (!state) return;
+
+      const nextSegment = state.segments[state.currentIndex + 1];
+
+      if (nextSegment) {
+        state.currentIndex++;
+        updateOverlaySegmentDisplay(state);
+      } else {
+        showToast('已是最后一段');
+      }
+    });
+
+    // PREV按钮
+    $(doc).on('click', '#gal-global-overlay [data-action="prev"]', function (e) {
+      e.stopPropagation();
+      const $overlay = $('#gal-global-overlay');
+      const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
+      const state = messageSegmentState.get(String(mesId));
+
+      if (!state) return;
+
+      if (state.currentIndex > 0) {
+        state.currentIndex--;
+        updateOverlaySegmentDisplay(state);
+      } else {
+        showToast('已是第一段');
+      }
+    });
+
+    // AUTO按钮
+    $(doc).on('click', '#gal-global-overlay [data-action="auto"]', function (e) {
+      e.stopPropagation();
+      const $btn = $(this);
+      const $overlay = $('#gal-global-overlay');
+      const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
+
+      let timer = $btn.data('auto-timer');
+
+      if (timer) {
+        clearInterval(timer);
+        $btn.data('auto-timer', null);
+        $btn.html('<i class="fa-solid fa-play"></i> AUTO');
+        $btn.removeClass('gal-auto-playing');
+      } else {
+        $btn.html('<i class="fa-solid fa-pause"></i> STOP');
+        $btn.addClass('gal-auto-playing');
+
+        timer = setInterval(() => {
+          const state = messageSegmentState.get(String(mesId));
+          if (!state) {
+            clearInterval(timer);
+            return;
+          }
+
+          const hasNext = !!state.segments[state.currentIndex + 1];
+
+          if (hasNext) {
+            state.currentIndex++;
+            updateOverlaySegmentDisplay(state);
+          } else {
+            clearInterval(timer);
+            $btn.data('auto-timer', null);
+            $btn.html('<i class="fa-solid fa-play"></i> AUTO');
+            $btn.removeClass('gal-auto-playing');
+          }
+        }, settings.autoPlaySpeed * 1000);
+
+        $btn.data('auto-timer', timer);
+      }
+    });
+
+    // 点击立绘占位符上传
+    $(doc).on('click', '#gal-global-overlay .gal-char-placeholder', function (e) {
+      e.stopPropagation();
+      // 从父元素 .gal-char-container 获取角色名称
+      const $container = $(this).closest('.gal-char-container');
+      const character = $container.data('character') || 'default';
+      const expression = $container.data('expression') || '默认';
+      showSpriteUploadDialog(character, expression);
+    });
+
+    // 双击立绘修改
+    $(doc).on('dblclick', '#gal-global-overlay .gal-char-img', function (e) {
+      e.stopPropagation();
+      // 从父元素 .gal-char-container 获取角色名称和表情
+      const $container = $(this).closest('.gal-char-container');
+      const character = $container.data('character') || 'default';
+      const expression = $container.data('expression') || '默认';
+      showSpriteUploadDialog(character, expression);
+    });
+  }
+
+  /**
+   * 更新覆盖层的段落显示
+   */
+  async function updateOverlaySegmentDisplay(state) {
+    const $overlay = $('#gal-global-overlay');
+    const currentIndex = state.currentIndex;
+    const segment = state.segments[currentIndex];
+
+    if (!segment) return;
+
+    const speaker = segment.speaker;
+    const isNarration = segment.type === 'narration';
+
+    // 更新名字和样式
+    const $nameBadge = $overlay.find('.gal-name-badge');
+    $nameBadge.find('span').text(speaker || '旁白');
+    if (isNarration) {
+      $nameBadge.addClass('gal-narrator-label');
+    } else {
+      $nameBadge.removeClass('gal-narrator-label');
+    }
+
+    // 更新文本和进度
+    $overlay.find('.gal-dialog-text').text(segment.text || '');
+
+    // 进度条展示进度
+    const total = state.segments.length;
+    const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
+    $overlay.find('.gal-progress-bar').css('width', `${progressPercent}%`);
+
+    // 更新NEXT按钮
+    // 只有当完全是最后一段时才显示END
+    const isEnd = currentIndex >= total - 1;
+    const $nextBtn = $overlay.find('[data-action="next"]');
+
+    if (isEnd) {
+      $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+
+      // ★ 自动弹出选项：如果是最后一段，且有待选选项
+      if (pendingOptions && pendingOptions.length > 0 && !galgameChoicesVisible) {
+        console.log(`[${SCRIPT_NAME}] 已翻页到末尾，自动弹出选项面板`);
+        renderGalgameChoices(pendingOptions);
+      }
+    } else {
+      $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
+    }
+
+    // 使用 SpriteManager 更新立绘（支持多角色、动画、情绪）
+    const expression = segment.expression || '默认';
+    await SpriteManager.updateSprite($overlay, speaker, expression);
+
+    // 应用场景色调和背景（如果有背景信息）
+    if (state.parsedContent?.currentBackground?.scene) {
+      await SpriteManager.applySceneTint($overlay, state.parsedContent.currentBackground.scene);
+    }
+  }
+
+  // 保留旧的updateSegmentDisplay函数用于兼容，但调用新的覆盖层更新函数
+  async function updateSegmentDisplay($container, state) {
+    await updateOverlaySegmentDisplay(state);
+  }
+
+  // ============================================
+  // 交互功能
+  // ============================================
+  function showFreeInputModal() {
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-free-input-modal">
+        <div class="gal-input-box">
+          <div class="gal-input-title"><span>自由输入</span></div>
+          <textarea class="gal-input-field" id="gal-free-input-text" placeholder="输入你想说的话..."></textarea>
+          <div class="gal-input-actions">
+            <button class="gal-action-btn" id="gal-input-cancel">
+              <span>取消</span>
+            </button>
+            <button class="gal-action-btn primary" id="gal-input-send">
+              <i class="fa-solid fa-paper-plane"></i>
+              <span>发送</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    $(topWindow.document.body).append(modalHtml);
+
+    const $modal = $('#gal-free-input-modal');
+    const $input = $('#gal-free-input-text');
+
+    makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
+
+    $input.focus();
+
+    $('#gal-input-cancel').on('click', () => $modal.remove());
+
+    $modal.on('click', function (e) {
+      if (e.target === this) $modal.remove();
+    });
+
+    $('#gal-input-send').on('click', () => {
+      const text = $input.val().trim();
+      if (text) {
+        sendUserMessage(text);
+        $modal.remove();
+      }
+    });
+
+    $input.on('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        $('#gal-input-send').click();
+      }
+    });
+  }
+
+  function sendUserMessage(text) {
+    // 使用酒馆的发送功能
+    const $sendTextarea = $('#send_textarea');
+    const $sendButton = $('#send_but');
+
+    if ($sendTextarea.length && $sendButton.length) {
+      $sendTextarea.val(text);
+      $sendButton.click();
+      showToast('消息已发送');
+    } else {
+      console.error(`[${SCRIPT_NAME}] 未找到发送按钮`);
+    }
+  }
+
+  // 重绘锁定标记，防止重绘时误触发选项面板
+  let isRerolling = false;
+
+  function triggerReroll() {
+    // ★ 设置重绘锁定，防止误触发选项面板 ★
+    isRerolling = true;
+
+    // ★ 立即隐藏选项面板 ★
+    hideGalgameChoices();
+    lastGalgameOptionHash = null;
+    currentDisplayMesId = null; // 强制重置显示ID
+
+    // ★ 先清除当前消息的段落状态，这样重新生成后会从第1段开始 ★
+    const $lastMes = $('.mes.last_mes');
+    if ($lastMes.length) {
+      const mesId = $lastMes.attr('mesid');
+      if (mesId) {
+        messageSegmentState.delete(String(mesId));
+        console.log(`[${SCRIPT_NAME}] 已清除消息 ${mesId} 的段落状态，准备重新生成`);
+      }
+    }
+
+    // 触发重新生成
+    const $swipeRight = $('.mes.last_mes .swipe_right');
+    if ($swipeRight.length) {
+      $swipeRight.click();
+      showToast('正在重新生成...');
+    } else {
+      // 尝试使用 SillyTavern API
+      try {
+        if (topWindow.SillyTavern && topWindow.SillyTavern.Generate) {
+          topWindow.SillyTavern.Generate('swipe');
+          showToast('正在重新生成...');
+        }
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 重新生成失败:`, e);
+        showToast('重新生成失败');
+        isRerolling = false; // 失败时解除锁定
+      }
+    }
+
+    // ★ 延迟解除锁定（等待重绘完成后的 DOM 稳定）★
+    setTimeout(() => {
+      isRerolling = false;
+      console.log(`[${SCRIPT_NAME}] 重绘锁定已解除`);
+    }, 3000);
+  }
+
+  // 预定义表情列表（全局常量）
+  const EXPRESSION_LIST = ['默认', '微笑', '生气', '难过', '惊讶', '嘲讽', '害羞', '思考', '大笑', '搞怪'];
+
+  // 固定的立绘长宽比 2:3
+  const SPRITE_ASPECT_RATIO = 2 / 3;
+
+  /**
+   * 图片裁剪工具类
+   */
+  class ImageCropper {
+    constructor(aspectRatio = SPRITE_ASPECT_RATIO) {
+      this.aspectRatio = aspectRatio;
+      this.image = null;
+      this.imageLoaded = false;
+      this.canvas = null;
+      this.ctx = null;
+      this.scale = 1;
+      this.minScale = 0.1;
+      this.maxScale = 3;
+      this.offsetX = 0;
+      this.offsetY = 0;
+      this.isDragging = false;
+      this.lastX = 0;
+      this.lastY = 0;
+      this.cropWidth = 0;
+      this.cropHeight = 0;
+    }
+
+    loadImage(source) {
+      return new Promise((resolve, reject) => {
+        this.image = new Image();
+        this.image.onload = () => {
+          this.imageLoaded = true;
+          console.log(`[Galgame界面插件] 图片加载完成: ${this.image.width}x${this.image.height}`);
+          // 如果已经绑定了 canvas，立即计算并渲染
+          if (this.canvas) {
+            this.calculateInitialScale();
+            this.render();
+          }
+          resolve(this.image);
+        };
+        this.image.onerror = e => {
+          console.error('[Galgame界面插件] 图片加载失败:', e);
+          reject(e);
+        };
+
+        if (source instanceof File) {
+          const reader = new FileReader();
+          reader.onload = e => {
+            this.image.src = e.target.result;
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(source);
+        } else if (typeof source === 'string') {
+          this.image.src = source;
+        }
+      });
+    }
+
+    calculateInitialScale() {
+      if (!this.canvas || !this.image || !this.imageLoaded) {
+        console.log('[Galgame界面插件] calculateInitialScale: 条件不满足', {
+          canvas: !!this.canvas,
+          image: !!this.image,
+          imageLoaded: this.imageLoaded,
+        });
+        return;
+      }
+
+      // ★ 直接使用 canvas 的尺寸，确保有有效值 ★
+      const containerWidth = this.canvas.width > 0 ? this.canvas.width : 500;
+      const containerHeight = this.canvas.height > 0 ? this.canvas.height : 320;
+
+      console.log(`[Galgame界面插件] 容器尺寸: ${containerWidth}x${containerHeight}`);
+
+      // 计算裁剪框尺寸（基于容器）
+      this.cropHeight = containerHeight * 0.8;
+      this.cropWidth = this.cropHeight * this.aspectRatio;
+
+      if (this.cropWidth > containerWidth * 0.8) {
+        this.cropWidth = containerWidth * 0.8;
+        this.cropHeight = this.cropWidth / this.aspectRatio;
+      }
+
+      console.log(`[Galgame界面插件] 裁剪框尺寸: ${this.cropWidth}x${this.cropHeight}`);
+
+      // 计算最小缩放：确保图片至少覆盖裁剪区域
+      const scaleToFitWidth = this.cropWidth / this.image.width;
+      const scaleToFitHeight = this.cropHeight / this.image.height;
+      this.minScale = Math.max(scaleToFitWidth, scaleToFitHeight);
+
+      // 初始缩放：让图片刚好覆盖裁剪区域
+      this.scale = this.minScale * 1.2;
+      this.maxScale = Math.max(this.minScale * 5, 3);
+
+      console.log(
+        `[Galgame界面插件] 缩放范围: ${this.minScale.toFixed(3)} - ${this.maxScale.toFixed(3)}, 当前: ${this.scale.toFixed(3)}`,
+      );
+
+      // 居中
+      this.offsetX = 0;
+      this.offsetY = 0;
+    }
+
+    attachToCanvas(canvasElement) {
+      this.canvas = canvasElement;
+      this.ctx = this.canvas.getContext('2d');
+      this.setupEventListeners();
+
+      // 如果图片已加载，立即计算并渲染
+      if (this.imageLoaded) {
+        this.calculateInitialScale();
+        this.render();
+      }
+    }
+
+    setupEventListeners() {
+      const wrapper = this.canvas.parentElement;
+
+      wrapper.addEventListener('mousedown', e => {
+        this.isDragging = true;
+        this.lastX = e.clientX;
+        this.lastY = e.clientY;
+        wrapper.style.cursor = 'grabbing';
+      });
+
+      wrapper.addEventListener('mousemove', e => {
+        if (!this.isDragging) return;
+        const dx = e.clientX - this.lastX;
+        const dy = e.clientY - this.lastY;
+        this.offsetX += dx;
+        this.offsetY += dy;
+        this.lastX = e.clientX;
+        this.lastY = e.clientY;
+        this.constrainOffset();
+        this.render();
+      });
+
+      wrapper.addEventListener('mouseup', () => {
+        this.isDragging = false;
+        wrapper.style.cursor = 'move';
+      });
+
+      wrapper.addEventListener('mouseleave', () => {
+        this.isDragging = false;
+        wrapper.style.cursor = 'move';
+      });
+
+      // 触摸支持
+      wrapper.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) {
+          this.isDragging = true;
+          this.lastX = e.touches[0].clientX;
+          this.lastY = e.touches[0].clientY;
+        }
+      });
+
+      wrapper.addEventListener('touchmove', e => {
+        if (!this.isDragging || e.touches.length !== 1) return;
+        e.preventDefault();
+        const dx = e.touches[0].clientX - this.lastX;
+        const dy = e.touches[0].clientY - this.lastY;
+        this.offsetX += dx;
+        this.offsetY += dy;
+        this.lastX = e.touches[0].clientX;
+        this.lastY = e.touches[0].clientY;
+        this.constrainOffset();
+        this.render();
+      });
+
+      wrapper.addEventListener('touchend', () => {
+        this.isDragging = false;
+      });
+    }
+
+    setScale(newScale) {
+      this.scale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+      this.constrainOffset();
+      this.render();
+    }
+
+    constrainOffset() {
+      if (!this.image) return;
+
+      const scaledWidth = this.image.width * this.scale;
+      const scaledHeight = this.image.height * this.scale;
+
+      // 限制偏移，确保图片始终覆盖裁剪区域
+      const maxOffsetX = (scaledWidth - this.cropWidth) / 2;
+      const maxOffsetY = (scaledHeight - this.cropHeight) / 2;
+
+      this.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, this.offsetX));
+      this.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, this.offsetY));
+    }
+
+    reset() {
+      this.calculateInitialScale();
+      this.render();
+    }
+
+    render() {
+      if (!this.ctx || !this.image || !this.imageLoaded) {
+        console.log('[Galgame界面插件] render: 条件不满足', {
+          ctx: !!this.ctx,
+          image: !!this.image,
+          imageLoaded: this.imageLoaded,
+        });
+        return;
+      }
+
+      // ★ 直接使用 canvas 的尺寸，不依赖 wrapper ★
+      const containerWidth = this.canvas.width || 500;
+      const containerHeight = this.canvas.height || 320;
+
+      console.log('[Galgame界面插件] render: 使用尺寸', containerWidth, 'x', containerHeight);
+
+      // 确保裁剪框尺寸已计算
+      if (this.cropWidth === 0 || this.cropHeight === 0) {
+        this.calculateInitialScale();
+      }
+
+      // 清空画布
+      this.ctx.fillStyle = '#1a1a2e';
+      this.ctx.fillRect(0, 0, containerWidth, containerHeight);
+
+      // 绘制图片
+      const scaledWidth = this.image.width * this.scale;
+      const scaledHeight = this.image.height * this.scale;
+      const drawX = (containerWidth - scaledWidth) / 2 + this.offsetX;
+      const drawY = (containerHeight - scaledHeight) / 2 + this.offsetY;
+
+      this.ctx.drawImage(this.image, drawX, drawY, scaledWidth, scaledHeight);
+
+      // 绘制裁剪框遮罩
+      const cropX = (containerWidth - this.cropWidth) / 2;
+      const cropY = (containerHeight - this.cropHeight) / 2;
+
+      // 半透明遮罩
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      // 上
+      this.ctx.fillRect(0, 0, containerWidth, cropY);
+      // 下
+      this.ctx.fillRect(0, cropY + this.cropHeight, containerWidth, containerHeight - cropY - this.cropHeight);
+      // 左
+      this.ctx.fillRect(0, cropY, cropX, this.cropHeight);
+      // 右
+      this.ctx.fillRect(cropX + this.cropWidth, cropY, containerWidth - cropX - this.cropWidth, this.cropHeight);
+
+      // 裁剪框边框
+      this.ctx.strokeStyle = '#00d2ff';
+      this.ctx.lineWidth = 3;
+      this.ctx.strokeRect(cropX, cropY, this.cropWidth, this.cropHeight);
+
+      // 角落标记
+      const cornerSize = 15;
+      this.ctx.lineWidth = 4;
+      // 左上
+      this.ctx.beginPath();
+      this.ctx.moveTo(cropX, cropY + cornerSize);
+      this.ctx.lineTo(cropX, cropY);
+      this.ctx.lineTo(cropX + cornerSize, cropY);
+      this.ctx.stroke();
+      // 右上
+      this.ctx.beginPath();
+      this.ctx.moveTo(cropX + this.cropWidth - cornerSize, cropY);
+      this.ctx.lineTo(cropX + this.cropWidth, cropY);
+      this.ctx.lineTo(cropX + this.cropWidth, cropY + cornerSize);
+      this.ctx.stroke();
+      // 左下
+      this.ctx.beginPath();
+      this.ctx.moveTo(cropX, cropY + this.cropHeight - cornerSize);
+      this.ctx.lineTo(cropX, cropY + this.cropHeight);
+      this.ctx.lineTo(cropX + cornerSize, cropY + this.cropHeight);
+      this.ctx.stroke();
+      // 右下
+      this.ctx.beginPath();
+      this.ctx.moveTo(cropX + this.cropWidth - cornerSize, cropY + this.cropHeight);
+      this.ctx.lineTo(cropX + this.cropWidth, cropY + this.cropHeight);
+      this.ctx.lineTo(cropX + this.cropWidth, cropY + this.cropHeight - cornerSize);
+      this.ctx.stroke();
+    }
+
+    getCroppedBlob(outputWidth = 400) {
+      return new Promise(resolve => {
+        const outputHeight = outputWidth / this.aspectRatio;
+
+        const outputCanvas = document.createElement('canvas');
+        outputCanvas.width = outputWidth;
+        outputCanvas.height = outputHeight;
+        const outputCtx = outputCanvas.getContext('2d');
+
+        // ★ 直接使用 canvas 的尺寸 ★
+        const containerWidth = this.canvas.width || 500;
+        const containerHeight = this.canvas.height || 320;
+
+        const scaledWidth = this.image.width * this.scale;
+        const scaledHeight = this.image.height * this.scale;
+        const drawX = (containerWidth - scaledWidth) / 2 + this.offsetX;
+        const drawY = (containerHeight - scaledHeight) / 2 + this.offsetY;
+
+        const cropX = (containerWidth - this.cropWidth) / 2;
+        const cropY = (containerHeight - this.cropHeight) / 2;
+
+        // 计算源图片裁剪区域
+        const srcX = (cropX - drawX) / this.scale;
+        const srcY = (cropY - drawY) / this.scale;
+        const srcWidth = this.cropWidth / this.scale;
+        const srcHeight = this.cropHeight / this.scale;
+
+        outputCtx.drawImage(this.image, srcX, srcY, srcWidth, srcHeight, 0, 0, outputWidth, outputHeight);
+
+        outputCanvas.toBlob(blob => resolve(blob), 'image/png', 1);
+      });
+    }
+  }
+
+  // 立绘上传对话框（带裁剪功能）
+  function showSpriteUploadDialog(characterId, expression) {
+    const expressionOptions = EXPRESSION_LIST.map(
+      e =>
+        `<option value="${e}" ${e === expression || (expression === 'neutral' && e === '默认') ? 'selected' : ''}>${e}</option>`,
+    ).join('');
+
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-sprite-upload-modal">
+        <div class="gal-input-box" style="max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 25px;">
+          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem;"><span>上传角色立绘</span></div>
+
+          <div style="margin-bottom: 15px; display: flex; gap: 15px;">
+            <div style="flex: 1;">
+              <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
+                <i class="fa-solid fa-user"></i> 角色名称
+              </label>
+              <input type="text" id="gal-sprite-character" value="${characterId || ''}"
+                     placeholder="输入角色名"
+                     style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 4px;">
+            </div>
+            <div style="flex: 1;">
+              <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
+                <i class="fa-solid fa-face-smile"></i> 表情类型
+              </label>
+              <select id="gal-sprite-expression"
+                      style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; cursor: pointer; box-sizing: border-box; border-radius: 4px;">
+                ${expressionOptions}
+              </select>
+            </div>
+          </div>
+
+          <div class="gal-upload-tabs" style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
+            <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
+            <div class="gal-upload-tab" data-target="remote" style="padding: 8px 15px; cursor: pointer; color: #888;">远程链接</div>
+          </div>
+
+          <div id="gal-upload-local" class="gal-upload-pane">
+            <input type="file" id="gal-sprite-file" accept="image/*" style="display: none;">
+            <!-- 未选择图片时显示上传区 -->
+            <div class="gal-upload-card" id="gal-upload-trigger" style="margin-bottom: 15px; min-height: 200px;">
+              <i class="fa-solid fa-cloud-arrow-up" style="font-size: 3.5rem;"></i>
+              <span style="font-size: 1.2rem; margin-top: 10px;">点击选择立绘图片</span>
+              <small style="color: #999; margin-top: 8px; font-size: 0.9rem;">支持 PNG / JPG / GIF / WebP</small>
+              <small style="color: ${THEME.accent}; margin-top: 4px; font-size: 0.9rem;">立绘将自动裁剪为 2:3 比例</small>
+            </div>
+          </div>
+
+          <div id="gal-upload-remote" class="gal-upload-pane" style="display: none;">
+            <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px dashed #ccc; text-align: center; min-height: 160px; display: flex; flex-direction: column; justify-content: center;">
+              <div style="margin-bottom: 15px;">
+                <input type="text" id="gal-sprite-remote-url" placeholder="输入图片 URL (https://...)"
+                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+              </div>
+              <button class="gal-action-btn" id="gal-sprite-fetch-btn" style="width: 100%;">
+                <i class="fa-solid fa-download"></i> 获取图片
+              </button>
+            </div>
+          </div>
+
+          <!-- 选择图片后显示裁剪区 -->
+          <div id="gal-crop-area" style="display: none;">
+            <div class="gal-crop-container">
+              <div class="gal-crop-canvas-wrapper" id="gal-crop-wrapper">
+                <canvas id="gal-crop-canvas"></canvas>
+              </div>
+              <div class="gal-crop-controls">
+                <button class="gal-crop-btn reset" id="gal-crop-reset" title="重置位置">
+                  <i class="fa-solid fa-undo"></i> 重置
+                </button>
+                <input type="range" id="gal-crop-zoom" class="gal-crop-zoom-slider" min="10" max="300" value="100" style="width: 180px;">
+                <span class="gal-crop-zoom-label" id="gal-zoom-value" style="min-width: 50px; font-size: 0.95rem;">100%</span>
+                <button class="gal-crop-btn" id="gal-change-image" style="background: ${THEME.accent}; color: ${THEME.dark};" title="更换图片">
+                  <i class="fa-solid fa-image"></i> 换图
+                </button>
+              </div>
+            </div>
+            <p style="text-align: center; color: #666; font-size: 0.85rem; margin: 8px 0 12px 0;">
+              <i class="fa-solid fa-hand-pointer"></i> 拖动图片调整位置，滑块调整缩放
+            </p>
+          </div>
+
+          <div class="gal-input-actions" style="display: flex; gap: 15px; margin-top: 15px;">
+            <button class="gal-action-btn" id="gal-upload-cancel" style="flex: 1; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
+              <span>取消</span>
+            </button>
+            <button class="gal-action-btn" id="gal-batch-upload-btn" style="flex: 1; background: #666; color: #fff; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
+              <i class="fa-solid fa-images"></i>
+              <span>批量上传</span>
+            </button>
+            <button class="gal-action-btn primary" id="gal-upload-confirm" style="flex: 1; min-height: 48px; padding: 12px 16px; font-size: 1rem;" disabled>
+              <i class="fa-solid fa-check"></i>
+              <span>保存立绘</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    $(topWindow.document.body).append(modalHtml);
+
+    const $modal = $('#gal-sprite-upload-modal');
+    makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
+
+    const $fileInput = $('#gal-sprite-file');
+    const $confirmBtn = $('#gal-upload-confirm');
+    const $uploadTrigger = $('#gal-upload-trigger');
+    const $cropArea = $('#gal-crop-area');
+    const $zoomSlider = $('#gal-crop-zoom');
+    const $zoomValue = $('#gal-zoom-value');
+
+    let cropper = null;
+
+    // 点击上传区或换图按钮
+    $uploadTrigger.on('click', () => $fileInput.click());
+    $('#gal-change-image').on('click', () => $fileInput.click());
+    $('#gal-upload-cancel').on('click', () => $modal.remove());
+
+    // 批量上传按钮
+    $('#gal-batch-upload-btn').on('click', () => {
+      const charName = $('#gal-sprite-character').val().trim();
+      $modal.remove();
+      showBatchUploadDialog(charName || characterId);
+    });
+
+    // Tab 切换
+    $modal.find('.gal-upload-tab').on('click', function () {
+      const target = $(this).data('target');
+      $modal
+        .find('.gal-upload-tab')
+        .removeClass('active')
+        .css({ fontWeight: 'normal', color: '#888', borderBottom: 'none' });
+      $(this)
+        .addClass('active')
+        .css({ fontWeight: 'bold', color: THEME.dark, borderBottom: `2px solid ${THEME.accent}` });
+
+      $modal.find('.gal-upload-pane').hide();
+      $modal.find(`#gal-upload-${target}`).show();
+    });
+
+    // 远程图片获取
+    $('#gal-sprite-fetch-btn').on('click', async function () {
+      const url = $('#gal-sprite-remote-url').val().trim();
+      if (!url) return showToast('请输入图片链接');
+
+      $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 获取中...');
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('网络请求失败');
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) throw new Error('链接不是有效的图片');
+
+        // 模拟文件选择
+        const file = new File([blob], 'remote_image.png', { type: blob.type });
+
+        // 触发处理逻辑 (复用 existing logic)
+        // 我们需要手动调用处理函数，因为 programmatic FileList 赋值给 input 比较麻烦
+        handleFileSelect(file);
+      } catch (e) {
+        showToast('获取失败: ' + e.message);
+      } finally {
+        $(this).prop('disabled', false).html('<i class="fa-solid fa-download"></i> 获取图片');
+      }
+    });
+
+    $modal.on('click', function (e) {
+      if (e.target === this) $modal.remove();
+    });
+
+    // 封装文件处理逻辑
+    async function handleFileSelect(file) {
+      if (!file) return;
+      console.log('[Galgame界面插件] 开始处理图片:', file.name, file.type, file.size);
+
+      // 先隐藏上传区，显示裁剪区
+      $modal.find('.gal-upload-tabs, .gal-upload-pane').hide();
+      $cropArea.show();
+      $confirmBtn.prop('disabled', false);
+
+      // 获取 canvas
+      const canvas = topWindow.document.getElementById('gal-crop-canvas');
+
+      if (!canvas) {
+        console.error('[Galgame界面插件] 未找到裁剪 canvas');
+        showToast('裁剪区域初始化失败');
+        return;
+      }
+
+      // ★★★ 关键修复：使用固定尺寸，不依赖 DOM 计算 ★★★
+      const CANVAS_WIDTH = 640;
+      const CANVAS_HEIGHT = 380;
+
+      // 设置 canvas 像素尺寸
+      canvas.width = CANVAS_WIDTH;
+      canvas.height = CANVAS_HEIGHT;
+
+      console.log('[Galgame界面插件] Canvas 尺寸已设置:', CANVAS_WIDTH, 'x', CANVAS_HEIGHT);
+
+      // ★★★ 先加载图片，再创建裁剪器 ★★★
+      const img = new Image();
+
+      const imageLoadPromise = new Promise((resolve, reject) => {
+        img.onload = () => {
+          console.log('[Galgame界面插件] 图片已加载，原始尺寸:', img.width, 'x', img.height);
+          resolve(img);
+        };
+        img.onerror = e => {
+          console.error('[Galgame界面插件] 图片加载错误:', e);
+          reject(e);
+        };
+      });
+
+      // 读取文件为 DataURL
+      const reader = new FileReader();
+      reader.onload = e => {
+        img.src = e.target.result;
+      };
+      reader.onerror = e => {
+        console.error('[Galgame界面插件] 文件读取错误:', e);
+        showToast('文件读取失败');
+      };
+      reader.readAsDataURL(file);
+
+      // 等待图片加载
+      try {
+        await imageLoadPromise;
+      } catch (e) {
+        showToast('图片加载失败，请重试');
+        return;
+      }
+
+      // ★★★ 直接在 canvas 上绘制，不使用复杂的裁剪器类 ★★★
+      const ctx = canvas.getContext('2d');
+
+      // 计算裁剪框尺寸 (2:3 比例)
+      const cropHeight = CANVAS_HEIGHT * 0.85;
+      const cropWidth = cropHeight * SPRITE_ASPECT_RATIO;
+      const cropX = (CANVAS_WIDTH - cropWidth) / 2;
+      const cropY = (CANVAS_HEIGHT - cropHeight) / 2;
+
+      // 计算图片初始缩放（确保覆盖裁剪区域）
+      const scaleToFitWidth = cropWidth / img.width;
+      const scaleToFitHeight = cropHeight / img.height;
+      let scale = Math.max(scaleToFitWidth, scaleToFitHeight) * 1.1;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      // 渲染函数
+      function renderCrop() {
+        // 清空
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // 绘制图片
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const drawX = (CANVAS_WIDTH - scaledWidth) / 2 + offsetX;
+        const drawY = (CANVAS_HEIGHT - scaledHeight) / 2 + offsetY;
+        ctx.drawImage(img, drawX, drawY, scaledWidth, scaledHeight);
+
+        // 绘制遮罩
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, 0, CANVAS_WIDTH, cropY); // 上
+        ctx.fillRect(0, cropY + cropHeight, CANVAS_WIDTH, CANVAS_HEIGHT - cropY - cropHeight); // 下
+        ctx.fillRect(0, cropY, cropX, cropHeight); // 左
+        ctx.fillRect(cropX + cropWidth, cropY, CANVAS_WIDTH - cropX - cropWidth, cropHeight); // 右
+
+        // 绘制裁剪框边框
+        ctx.strokeStyle = '#00d2ff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(cropX, cropY, cropWidth, cropHeight);
+      }
+
+      // 初始渲染
+      renderCrop();
+      console.log('[Galgame界面插件] 图片已渲染到 canvas');
+
+      // 拖动事件
+      let isDragging = false;
+      let lastX = 0,
+        lastY = 0;
+
+      canvas.onmousedown = e => {
+        isDragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+      };
+
+      canvas.onmousemove = e => {
+        if (!isDragging) return;
+        const dx = e.clientX - lastX;
+        const dy = e.clientY - lastY;
+        offsetX += dx;
+        offsetY += dy;
+        lastX = e.clientX;
+        lastY = e.clientY;
+
+        // 限制偏移
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const maxOffsetX = (scaledWidth - cropWidth) / 2;
+        const maxOffsetY = (scaledHeight - cropHeight) / 2;
+        offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offsetX));
+        offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offsetY));
+
+        renderCrop();
+      };
+
+      canvas.onmouseup = () => {
+        isDragging = false;
+        canvas.style.cursor = 'move';
+      };
+
+      canvas.onmouseleave = () => {
+        isDragging = false;
+        canvas.style.cursor = 'move';
+      };
+
+      // 缩放滑块
+      const minScale = Math.max(scaleToFitWidth, scaleToFitHeight);
+      const maxScale = minScale * 5;
+
+      $zoomSlider.attr('min', Math.round(minScale * 100));
+      $zoomSlider.attr('max', Math.round(maxScale * 100));
+      $zoomSlider.val(Math.round(scale * 100));
+      $zoomValue.text(Math.round(scale * 100) + '%');
+
+      $zoomSlider.off('input').on('input', function () {
+        scale = parseInt($(this).val()) / 100;
+        scale = Math.max(minScale, Math.min(maxScale, scale));
+        $zoomValue.text(Math.round(scale * 100) + '%');
+
+        // 限制偏移
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        const maxOffsetX = (scaledWidth - cropWidth) / 2;
+        const maxOffsetY = (scaledHeight - cropHeight) / 2;
+        offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offsetX));
+        offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offsetY));
+
+        renderCrop();
+      });
+
+      // 重置按钮
+      $('#gal-crop-reset')
+        .off('click')
+        .on('click', () => {
+          scale = Math.max(scaleToFitWidth, scaleToFitHeight) * 1.1;
+          offsetX = 0;
+          offsetY = 0;
+          $zoomSlider.val(Math.round(scale * 100));
+          $zoomValue.text(Math.round(scale * 100) + '%');
+          renderCrop();
+        });
+
+      // 保存裁剪器状态供确认按钮使用
+      cropper = {
+        getCroppedBlob: (outputWidth = 400) => {
+          return new Promise(resolve => {
+            const outputHeight = outputWidth / SPRITE_ASPECT_RATIO;
+            const outputCanvas = document.createElement('canvas');
+            outputCanvas.width = outputWidth;
+            outputCanvas.height = outputHeight;
+            const outputCtx = outputCanvas.getContext('2d');
+
+            const scaledWidth = img.width * scale;
+            const scaledHeight = img.height * scale;
+            const drawX = (CANVAS_WIDTH - scaledWidth) / 2 + offsetX;
+            const drawY = (CANVAS_HEIGHT - scaledHeight) / 2 + offsetY;
+
+            // 计算源图片裁剪区域
+            const srcX = (cropX - drawX) / scale;
+            const srcY = (cropY - drawY) / scale;
+            const srcWidth = cropWidth / scale;
+            const srcHeight = cropHeight / scale;
+
+            outputCtx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, outputWidth, outputHeight);
+            outputCanvas.toBlob(blob => resolve(blob), 'image/png', 1);
+          });
+        },
+      };
+
+      console.log('[Galgame界面插件] 裁剪器就绪');
+    }
+
+    // 文件选择后初始化裁剪器
+    $fileInput.on('change', function () {
+      const file = this.files[0];
+      if (!file) return;
+      handleFileSelect(file);
+    });
+
+    // 缩放滑块
+    $zoomSlider.on('input', function () {
+      const scale = parseInt($(this).val()) / 100;
+      if (cropper) {
+        cropper.setScale(scale);
+        $zoomValue.text(Math.round(cropper.scale * 100) + '%');
+      }
+    });
+
+    // 重置按钮
+    $('#gal-crop-reset').on('click', () => {
+      if (cropper) {
+        cropper.reset();
+        $zoomSlider.val(Math.round(cropper.scale * 100));
+        $zoomValue.text(Math.round(cropper.scale * 100) + '%');
+      }
+    });
+
+    // 确认保存
+    $confirmBtn.on('click', async function () {
+      if (!cropper) return;
+
+      const charName = $('#gal-sprite-character').val().trim();
+      const expr = $('#gal-sprite-expression').val();
+
+      if (!charName) {
+        showToast('请输入角色名称');
+        return;
+      }
+
+      try {
+        $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 处理中...');
+
+        const croppedBlob = await cropper.getCroppedBlob(400);
+        await saveSprite(charName, expr, croppedBlob);
+
+        showToast(`已保存: ${charName} - ${expr}`);
+        $modal.remove();
+        refreshGalgameViews();
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 保存立绘失败:`, e);
+        showToast('保存失败');
+        $(this).prop('disabled', false).html('<i class="fa-solid fa-check"></i><span>保存立绘</span>');
+      }
+    });
+  }
+
+  /**
+   * 批量上传立绘对话框 - 智能网格切分模式
+   * 支持上传一张包含多个表情的大图，自动切分成各个表情立绘
+   */
+  function showBatchUploadDialog(characterId) {
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-batch-upload-modal">
+        <div class="gal-input-box" style="max-width: 900px; width: 95%; max-height: 95vh; overflow-y: auto; padding: 20px;">
+          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.3rem;">
+            <span><i class="fa-solid fa-grid-2"></i> 智能批量上传立绘</span>
+          </div>
+
+          <div style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+              <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+                <i class="fa-solid fa-user"></i> 角色名称
+              </label>
+              <input type="text" id="gal-batch-character" value="${characterId || ''}"
+                     placeholder="输入角色名"
+                     style="width: 100%; padding: 10px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 4px;">
+            </div>
+          </div>
+
+          <div class="gal-upload-tabs" style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
+            <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
+            <div class="gal-upload-tab" data-target="remote" style="padding: 8px 15px; cursor: pointer; color: #888;">远程链接</div>
+          </div>
+
+          <div id="gal-upload-local" class="gal-upload-pane">
+            <input type="file" id="gal-grid-file-input" accept="image/*" style="display: none;">
+            <div id="gal-grid-upload-area" class="gal-upload-card" style="margin-bottom: 15px; min-height: 180px; cursor: pointer;">
+              <i class="fa-solid fa-images" style="font-size: 3rem;"></i>
+              <span style="font-size: 1.1rem; margin-top: 10px;">点击上传表情合集图</span>
+              <small style="color: #888; margin-top: 5px;">支持包含多个表情的大图（如3x3、2x5等排列）</small>
+              <small style="color: ${THEME.accent}; margin-top: 3px;">上传后可调整网格切分</small>
+            </div>
+          </div>
+
+          <div id="gal-upload-remote" class="gal-upload-pane" style="display: none;">
+            <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px dashed #ccc; text-align: center; min-height: 180px; display: flex; flex-direction: column; justify-content: center;">
+              <div style="margin-bottom: 15px;">
+                <input type="text" id="gal-batch-remote-url" placeholder="输入图片 URL (https://...)"
+                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+              </div>
+              <button class="gal-action-btn" id="gal-batch-fetch-btn" style="width: 100%;">
+                <i class="fa-solid fa-download"></i> 获取图片
+              </button>
+            </div>
+          </div>
+
+          <!-- 网格预览区域（上传后显示）-->
+          <div id="gal-grid-preview-area" style="display: none;">
+            <div style="background: #1a1a2e; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+              <!-- 网格设置 -->
+              <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 15px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <label style="color: #fff; font-weight: 600; font-size: 0.9rem;">行数:</label>
+                  <button class="gal-grid-btn" data-action="row-dec">−</button>
+                  <span id="gal-grid-rows" style="color: ${THEME.accent}; font-weight: 700; min-width: 30px; text-align: center; font-size: 1.1rem;">2</span>
+                  <button class="gal-grid-btn" data-action="row-inc">+</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <label style="color: #fff; font-weight: 600; font-size: 0.9rem;">列数:</label>
+                  <button class="gal-grid-btn" data-action="col-dec">−</button>
+                  <span id="gal-grid-cols" style="color: ${THEME.accent}; font-weight: 700; min-width: 30px; text-align: center; font-size: 1.1rem;">3</span>
+                  <button class="gal-grid-btn" data-action="col-inc">+</button>
+                </div>
+                <div style="margin-left: auto; display: flex; gap: 8px;">
+                  <button class="gal-crop-btn" id="gal-grid-change-image" style="background: #666; color: #fff;">
+                    <i class="fa-solid fa-image"></i> 换图
+                  </button>
+                  <button class="gal-crop-btn" id="gal-grid-auto-detect" style="background: ${THEME.accent}; color: ${THEME.dark};">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> 自动检测
+                  </button>
+                </div>
+              </div>
+
+              <!-- 图片预览与网格线 -->
+              <div id="gal-grid-canvas-container" style="position: relative; width: 100%; overflow: hidden; border-radius: 6px; background: #000;">
+                <canvas id="gal-grid-canvas" style="display: block; max-width: 100%; margin: 0 auto;"></canvas>
+              </div>
+            </div>
+
+            <!-- 表情映射区域 -->
+            <div style="margin-bottom: 15px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-weight: 700; color: ${THEME.dark};">
+                  <i class="fa-solid fa-tags"></i> 表情映射
+                </span>
+                <small style="color: #888;">点击格子可修改表情名称，留空表示跳过</small>
+              </div>
+              <div id="gal-grid-mapping" class="gal-grid-mapping-container"></div>
+            </div>
+          </div>
+
+          <div class="gal-input-actions" style="display: flex; gap: 12px; margin-top: 15px;">
+            <button class="gal-action-btn" id="gal-batch-cancel" style="flex: 1; min-height: 48px;">
+              <span>取消</span>
+            </button>
+            <button class="gal-action-btn primary" id="gal-batch-confirm" style="flex: 2; min-height: 48px;" disabled>
+              <i class="fa-solid fa-save"></i>
+              <span>保存所有立绘</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        .gal-grid-btn {
+          width: 32px;
+          height: 32px;
+          border: none;
+          border-radius: 4px;
+          background: ${THEME.accent};
+          color: ${THEME.dark};
+          font-size: 1.2rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .gal-grid-btn:hover {
+          background: #fff;
+          transform: scale(1.1);
+        }
+        .gal-grid-mapping-container {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+          gap: 10px;
+          max-height: 200px;
+          overflow-y: auto;
+          padding: 5px;
+        }
+        .gal-grid-cell {
+          border: 2px solid #ddd;
+          border-radius: 6px;
+          padding: 8px;
+          text-align: center;
+          background: #fafafa;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .gal-grid-cell:hover {
+          border-color: ${THEME.accent};
+          background: rgba(0, 210, 255, 0.1);
+        }
+        .gal-grid-cell.active {
+          border-color: ${THEME.accent};
+          background: rgba(0, 210, 255, 0.15);
+        }
+        .gal-grid-cell.skipped {
+          opacity: 0.5;
+          background: #eee;
+        }
+        .gal-grid-cell-preview {
+          width: 100%;
+          aspect-ratio: 2 / 3;
+          background: #ddd;
+          border-radius: 4px;
+          margin-bottom: 5px;
+          overflow: hidden;
+        }
+        .gal-grid-cell-preview img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .gal-grid-cell-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: ${THEME.dark};
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .gal-grid-cell-input {
+          width: 100%;
+          border: 1px solid #ccc;
+          border-radius: 3px;
+          padding: 3px 5px;
+          font-size: 0.75rem;
+          text-align: center;
+          box-sizing: border-box;
+        }
+        .gal-grid-cell-input:focus {
+          outline: none;
+          border-color: ${THEME.accent};
+        }
+      </style>
+    `;
+
+    $(topWindow.document.body).append(modalHtml);
+
+    const $modal = $('#gal-batch-upload-modal');
+    makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
+
+    const $fileInput = $('#gal-grid-file-input');
+    const $uploadArea = $('#gal-grid-upload-area');
+    const $previewArea = $('#gal-grid-preview-area');
+    const $confirmBtn = $('#gal-batch-confirm');
+    const $canvas = $('#gal-grid-canvas')[0];
+    const ctx = $canvas.getContext('2d');
+
+    let loadedImage = null;
+    let gridRows = 2;
+    let gridCols = 3;
+    let cellMappings = []; // [{row, col, expression, skip}]
+
+    // Tab 切换
+    $modal.find('.gal-upload-tab').on('click', function () {
+      const target = $(this).data('target');
+      $modal
+        .find('.gal-upload-tab')
+        .removeClass('active')
+        .css({ fontWeight: 'normal', color: '#888', borderBottom: 'none' });
+      $(this)
+        .addClass('active')
+        .css({ fontWeight: 'bold', color: THEME.dark, borderBottom: `2px solid ${THEME.accent}` });
+
+      $modal.find('.gal-upload-pane').hide();
+      $modal.find(`#gal-upload-${target}`).show();
+    });
+
+    // 点击上传区域
+    $uploadArea.on('click', () => $fileInput.click());
+    $('#gal-grid-change-image').on('click', () => $fileInput.click());
+
+    // 处理文件选择
+    function handleFileSelect(file) {
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          loadedImage = img;
+
+          // 智能检测网格（基于图片尺寸猜测）
+          autoDetectGrid(img);
+
+          // 显示预览
+          $modal.find('.gal-upload-tabs, .gal-upload-pane').hide();
+          $previewArea.show();
+          $confirmBtn.prop('disabled', false);
+
+          renderGridPreview();
+          updateMappingUI();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // 远程图片获取
+    $('#gal-batch-fetch-btn').on('click', async function () {
+      const url = $('#gal-batch-remote-url').val().trim();
+      if (!url) return showToast('请输入图片链接');
+
+      $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 获取中...');
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('网络请求失败');
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) throw new Error('链接不是有效的图片');
+
+        // 模拟文件选择
+        const file = new File([blob], 'remote_grid.png', { type: blob.type });
+        handleFileSelect(file);
+      } catch (e) {
+        showToast('获取失败: ' + e.message);
+      } finally {
+        $(this).prop('disabled', false).html('<i class="fa-solid fa-download"></i> 获取图片');
+      }
+    });
+
+    // 文件选择
+    $fileInput.on('change', function () {
+      const file = this.files[0];
+      if (!file) return;
+      handleFileSelect(file);
+    });
+
+    // 自动检测网格
+    function autoDetectGrid(img) {
+      const ratio = img.width / img.height;
+
+      // 基于图片比例和常见布局猜测
+      if (ratio > 2.5) {
+        // 非常宽的图，可能是单行多列
+        gridRows = 1;
+        gridCols = Math.round(ratio * 1.5);
+      } else if (ratio > 1.8) {
+        // 宽图，可能是2行
+        gridRows = 2;
+        gridCols = Math.round(ratio * 2);
+      } else if (ratio > 1.2) {
+        // 接近正方形偏宽
+        gridRows = 2;
+        gridCols = 3;
+      } else if (ratio > 0.8) {
+        // 接近正方形
+        gridRows = 3;
+        gridCols = 3;
+      } else {
+        // 高图
+        gridRows = Math.round(3 / ratio);
+        gridCols = 2;
+      }
+
+      // 限制范围
+      gridRows = Math.max(1, Math.min(5, gridRows));
+      gridCols = Math.max(1, Math.min(6, gridCols));
+
+      updateGridDisplay();
+    }
+
+    // 更新网格显示
+    function updateGridDisplay() {
+      $('#gal-grid-rows').text(gridRows);
+      $('#gal-grid-cols').text(gridCols);
+    }
+
+    // 渲染网格预览
+    function renderGridPreview() {
+      if (!loadedImage) return;
+
+      const container = $('#gal-grid-canvas-container');
+      const maxWidth = container.width() || 800;
+      const maxHeight = 400;
+
+      // 计算缩放
+      const scale = Math.min(maxWidth / loadedImage.width, maxHeight / loadedImage.height, 1);
+      const displayWidth = loadedImage.width * scale;
+      const displayHeight = loadedImage.height * scale;
+
+      $canvas.width = displayWidth;
+      $canvas.height = displayHeight;
+
+      // 绘制图片
+      ctx.drawImage(loadedImage, 0, 0, displayWidth, displayHeight);
+
+      // 绘制网格线
+      ctx.strokeStyle = THEME.accent;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+
+      const cellWidth = displayWidth / gridCols;
+      const cellHeight = displayHeight / gridRows;
+
+      // 垂直线
+      for (let i = 1; i < gridCols; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cellWidth, 0);
+        ctx.lineTo(i * cellWidth, displayHeight);
+        ctx.stroke();
+      }
+
+      // 水平线
+      for (let i = 1; i < gridRows; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, i * cellHeight);
+        ctx.lineTo(displayWidth, i * cellHeight);
+        ctx.stroke();
+      }
+
+      // 绘制单元格编号
+      ctx.setLineDash([]);
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      let cellIndex = 0;
+      for (let row = 0; row < gridRows; row++) {
+        for (let col = 0; col < gridCols; col++) {
+          const x = col * cellWidth + cellWidth / 2;
+          const y = row * cellHeight + cellHeight / 2;
+
+          // 绘制编号背景
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.beginPath();
+          ctx.arc(x, y, 15, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 绘制编号
+          ctx.fillStyle = '#fff';
+          ctx.fillText(String(cellIndex + 1), x, y);
+
+          cellIndex++;
+        }
+      }
+    }
+
+    // 更新映射UI
+    function updateMappingUI() {
+      const $container = $('#gal-grid-mapping');
+      $container.empty();
+
+      const totalCells = gridRows * gridCols;
+      cellMappings = [];
+
+      // 预设表情列表
+      const defaultExpressions = [...EXPRESSION_LIST];
+
+      for (let i = 0; i < totalCells; i++) {
+        const row = Math.floor(i / gridCols);
+        const col = i % gridCols;
+        const defaultExpr = defaultExpressions[i] || '';
+
+        cellMappings.push({
+          row,
+          col,
+          expression: defaultExpr,
+          skip: !defaultExpr,
+        });
+
+        // 创建单元格预览（使用下拉选择框）
+        const $cell = $(`
+          <div class="gal-grid-cell ${!defaultExpr ? 'skipped' : ''}" data-index="${i}">
+            <div class="gal-grid-cell-preview" id="gal-cell-preview-${i}"></div>
+            <select class="gal-grid-cell-select" data-index="${i}">
+              <option value="">-- 跳过 --</option>
+            </select>
+          </div>
+        `);
+
+        $container.append($cell);
+
+        // 绘制单元格预览
+        setTimeout(() => renderCellPreview(i), 50);
+      }
+
+      // 初始化所有下拉框选项
+      updateAllSelectOptions();
+
+      // 表情选择事件
+      $container.find('.gal-grid-cell-select').on('change', function () {
+        const index = parseInt($(this).data('index'));
+        const newValue = $(this).val();
+
+        cellMappings[index].expression = newValue;
+        cellMappings[index].skip = !newValue;
+
+        const $cell = $(this).closest('.gal-grid-cell');
+        if (!newValue) {
+          $cell.addClass('skipped');
+        } else {
+          $cell.removeClass('skipped');
+        }
+
+        // 更新所有下拉框的可选项（排除已选择的）
+        updateAllSelectOptions();
+      });
+    }
+
+    // 更新所有下拉框的选项（排除已被其他格子选中的表情）
+    function updateAllSelectOptions() {
+      // 收集已使用的表情
+      const usedExpressions = new Set();
+      cellMappings.forEach(m => {
+        if (m.expression) {
+          usedExpressions.add(m.expression);
+        }
+      });
+
+      // 更新每个下拉框
+      $('#gal-grid-mapping .gal-grid-cell-select').each(function () {
+        const index = parseInt($(this).data('index'));
+        const currentValue = cellMappings[index].expression;
+        const $select = $(this);
+
+        // 保存当前选中值
+        const savedValue = currentValue;
+
+        // 清空并重建选项
+        $select.empty();
+        $select.append('<option value="">-- 跳过 --</option>');
+
+        // 添加所有表情选项
+        EXPRESSION_LIST.forEach(expr => {
+          // 显示条件：未被其他格子使用 或者 是当前格子选中的值
+          if (!usedExpressions.has(expr) || expr === currentValue) {
+            const selected = expr === savedValue ? 'selected' : '';
+            $select.append(`<option value="${expr}" ${selected}>${expr}</option>`);
+          }
+        });
+      });
+    }
+
+    // 渲染单元格预览
+    function renderCellPreview(index) {
+      if (!loadedImage) return;
+
+      const mapping = cellMappings[index];
+      if (!mapping) return;
+
+      const cellWidth = loadedImage.width / gridCols;
+      const cellHeight = loadedImage.height / gridRows;
+
+      const sx = mapping.col * cellWidth;
+      const sy = mapping.row * cellHeight;
+
+      // 创建临时canvas提取单元格图像
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = cellWidth;
+      tempCanvas.height = cellHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      tempCtx.drawImage(loadedImage, sx, sy, cellWidth, cellHeight, 0, 0, cellWidth, cellHeight);
+
+      // 显示预览
+      const $preview = $(`#gal-cell-preview-${index}`);
+      $preview.html(`<img src="${tempCanvas.toDataURL()}" alt="Cell ${index + 1}">`);
+    }
+
+    // 网格调整按钮
+    $modal.find('.gal-grid-btn').on('click', function () {
+      const action = $(this).data('action');
+
+      switch (action) {
+        case 'row-inc':
+          if (gridRows < 5) gridRows++;
+          break;
+        case 'row-dec':
+          if (gridRows > 1) gridRows--;
+          break;
+        case 'col-inc':
+          if (gridCols < 6) gridCols++;
+          break;
+        case 'col-dec':
+          if (gridCols > 1) gridCols--;
+          break;
+      }
+
+      updateGridDisplay();
+      renderGridPreview();
+      updateMappingUI();
+    });
+
+    // 自动检测按钮
+    $('#gal-grid-auto-detect').on('click', () => {
+      if (loadedImage) {
+        autoDetectGrid(loadedImage);
+        renderGridPreview();
+        updateMappingUI();
+        showToast('已重新检测网格');
+      }
+    });
+
+    // 取消
+    $('#gal-batch-cancel').on('click', () => $modal.remove());
+    $modal.on('click', function (e) {
+      if (e.target === this) $modal.remove();
+    });
+
+    // 保存所有
+    $('#gal-batch-confirm').on('click', async function () {
+      const charName = $('#gal-batch-character').val().trim();
+      if (!charName) {
+        showToast('请输入角色名称');
+        return;
+      }
+
+      if (!loadedImage) {
+        showToast('请先上传图片');
+        return;
+      }
+
+      // 检查有效映射
+      const validMappings = cellMappings.filter(m => !m.skip && m.expression);
+      if (validMappings.length === 0) {
+        showToast('请至少设置一个表情名称');
+        return;
+      }
+
+      $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 处理中...');
+
+      const cellWidth = loadedImage.width / gridCols;
+      const cellHeight = loadedImage.height / gridRows;
+
+      let savedCount = 0;
+      let failedCount = 0;
+
+      for (const mapping of validMappings) {
+        try {
+          // 提取单元格图像
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = cellWidth;
+          tempCanvas.height = cellHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+
+          const sx = mapping.col * cellWidth;
+          const sy = mapping.row * cellHeight;
+
+          tempCtx.drawImage(loadedImage, sx, sy, cellWidth, cellHeight, 0, 0, cellWidth, cellHeight);
+
+          // 转换为2:3比例的立绘
+          const outputWidth = 400;
+          const outputHeight = 600;
+          const outputCanvas = document.createElement('canvas');
+          outputCanvas.width = outputWidth;
+          outputCanvas.height = outputHeight;
+          const outputCtx = outputCanvas.getContext('2d');
+
+          // 计算裁剪区域（居中裁剪为2:3）
+          const srcAspect = cellWidth / cellHeight;
+          const dstAspect = 2 / 3;
+
+          let cropWidth, cropHeight, cropX, cropY;
+
+          if (srcAspect > dstAspect) {
+            // 源图更宽，裁剪宽度
+            cropHeight = cellHeight;
+            cropWidth = cellHeight * dstAspect;
+            cropX = (cellWidth - cropWidth) / 2;
+            cropY = 0;
+          } else {
+            // 源图更高，裁剪高度
+            cropWidth = cellWidth;
+            cropHeight = cellWidth / dstAspect;
+            cropX = 0;
+            cropY = (cellHeight - cropHeight) / 2;
+          }
+
+          // 从原始图像直接裁剪
+          outputCtx.drawImage(
+            loadedImage,
+            sx + cropX,
+            sy + cropY,
+            cropWidth,
+            cropHeight,
+            0,
+            0,
+            outputWidth,
+            outputHeight,
+          );
+
+          // 保存
+          const blob = await new Promise(resolve => outputCanvas.toBlob(resolve, 'image/png', 1));
+          await saveSprite(charName, mapping.expression, blob);
+
+          savedCount++;
+          console.log(`[${SCRIPT_NAME}] 已保存: ${charName} - ${mapping.expression}`);
+        } catch (e) {
+          console.error(`[${SCRIPT_NAME}] 保存 ${mapping.expression} 失败:`, e);
+          failedCount++;
+        }
+      }
+
+      if (failedCount > 0) {
+        showToast(`保存完成: ${savedCount} 成功, ${failedCount} 失败`);
+      } else {
+        showToast(`已保存 ${savedCount} 张立绘`);
+      }
+
+      $modal.remove();
+      refreshGalgameViews();
+    });
+  }
+
+  // ============================================
+  // 资源导入导出管理器 (Asset IO Manager)
+  // ============================================
+  const AssetIO = {
+    jszip: null,
+
+    // 加载 JSZip 库
+    async loadJSZip() {
+      if (this.jszip) return this.jszip;
+      if (window.JSZip) {
+        this.jszip = window.JSZip;
+        return this.jszip;
+      }
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        script.onload = () => {
+          this.jszip = window.JSZip;
+          console.log(`[${SCRIPT_NAME}] JSZip 加载成功`);
+          resolve(this.jszip);
+        };
+        script.onerror = () => reject(new Error('JSZip load failed'));
+        document.head.appendChild(script);
+      });
+    },
+
+    // 导出所有资源为 ZIP
+    async exportAllAssets() {
+      try {
+        showToast('正在准备导出...');
+        const zip = new (await this.loadJSZip())();
+
+        // 导出立绘
+        const sprites = await getAllSprites();
+        const spritesFolder = zip.folder('sprites');
+        for (const s of sprites) {
+          if (s.imageBlob) {
+            // 命名格式: 角色名_表情.png (根据MIME类型决定后缀)
+            const ext = s.imageBlob.type.split('/')[1] || 'png';
+            // 文件名清理，替换非法字符
+            const safeChar = s.characterId.replace(/[\\/:*?"<>|]/g, '');
+            const safeExpr = s.expression.replace(/[\\/:*?"<>|]/g, '');
+            spritesFolder.file(`${safeChar}_${safeExpr}.${ext}`, s.imageBlob);
+          }
+        }
+
+        // 导出背景
+        const backgrounds = await getAllBackgrounds();
+        const bgFolder = zip.folder('backgrounds');
+        for (const bg of backgrounds) {
+          if (bg.imageBlob) {
+            const ext = bg.imageBlob.type.split('/')[1] || 'png';
+            const safeScene = bg.sceneName.replace(/[\\/:*?"<>|]/g, '');
+            bgFolder.file(`${safeScene}.${ext}`, bg.imageBlob);
+          }
+        }
+
+        showToast('正在压缩打包...');
+        const content = await zip.generateAsync({ type: 'blob' });
+
+        // 下载文件
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `galgame_assets_${new Date().toISOString().slice(0, 10)}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('导出成功！');
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
+        showToast('导出失败: ' + e.message);
+      }
+    },
+
+    // 批量导入文件 (File List)
+    async importFiles(fileList) {
+      let successCount = 0;
+      let failCount = 0;
+      showToast('开始导入...');
+
+      for (const file of fileList) {
+        try {
+          // 检查是否在文件夹中 (webkitRelativePath)
+          const path = file.webkitRelativePath || file.name;
+          const isSpriteFolder = path.includes('sprites/');
+          const isBgFolder = path.includes('backgrounds/');
+
+          let imported = false;
+
+          // 1. 根据文件夹判断
+          if (isSpriteFolder) {
+            await this.importAsSprite(file);
+            imported = true;
+          } else if (isBgFolder) {
+            await this.importAsBackground(file);
+            imported = true;
+          }
+          // 2. 根据文件名格式判断 (Name_Expression.ext)
+          else if (file.name.includes('_')) {
+            await this.importAsSprite(file);
+            imported = true;
+          }
+          // 3. 默认为背景 (Label.ext)
+          else {
+            await this.importAsBackground(file);
+            imported = true;
+          }
+
+          if (imported) successCount++;
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] 导入文件 ${file.name} 失败:`, e);
+          failCount++;
+        }
+      }
+
+      showToast(`导入完成: ${successCount} 成功, ${failCount} 失败`);
+      return successCount > 0;
+    },
+
+    // 导入为立绘
+    async importAsSprite(file) {
+      // 解析文件名: Name_Expression.ext
+      // 移除路径前缀
+      const fileName = file.name.split('/').pop();
+      const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+
+      // 查找分隔符
+      const parts = nameWithoutExt.split('_');
+      if (parts.length >= 2) {
+        // 假设最后一个部分是表情，前面的是角色名（可能包含下划线）
+        const expression = parts.pop();
+        const characterId = parts.join('_');
+
+        if (characterId && expression) {
+          await saveSprite(characterId, expression, file);
+          console.log(`[${SCRIPT_NAME}] 导入立绘: ${characterId} - ${expression}`);
+          return;
+        }
+      }
+
+      // 如果解析失败或不符合格式，抛出异常或作为默认处理
+      throw new Error('文件名格式不匹配 Name_Expression.ext');
+    },
+
+    // 导入为背景
+    async importAsBackground(file) {
+      const fileName = file.name.split('/').pop();
+      const sceneName = fileName.substring(0, fileName.lastIndexOf('.'));
+
+      if (sceneName) {
+        await saveBackground(sceneName, file);
+        console.log(`[${SCRIPT_NAME}] 导入背景: ${sceneName}`);
+      }
+    },
+
+    // 从 GitHub 导入
+    async importFromGitHub(repoUrl) {
+      try {
+        // 解析 URL
+        // 支持格式: https://github.com/user/repo/tree/main/path
+        // 或 user/repo
+
+        let owner,
+          repo,
+          path = '';
+        let branch = 'main';
+
+        if (repoUrl.startsWith('http')) {
+          const urlObj = new URL(repoUrl);
+          const parts = urlObj.pathname.split('/').filter(p => p);
+          if (parts.length >= 2) {
+            owner = parts[0];
+            repo = parts[1];
+            if (parts[2] === 'tree' || parts[2] === 'blob') {
+              branch = parts[3];
+              path = parts.slice(4).join('/');
+            }
+          }
+        } else {
+          const parts = repoUrl.split('/');
+          if (parts.length >= 2) {
+            owner = parts[0];
+            repo = parts[1];
+            if (parts.length > 2) path = parts.slice(2).join('/');
+          }
+        }
+
+        if (!owner || !repo) {
+          throw new Error('无效的 GitHub 仓库地址');
+        }
+
+        showToast(`正在获取文件列表: ${owner}/${repo}...`);
+
+        // 使用 GitHub API 获取内容
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
+
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('路径不是一个目录');
+
+        // 过滤图片文件
+        const imageFiles = data.filter(item => item.type === 'file' && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
+
+        if (imageFiles.length === 0) {
+          showToast('该目录下没有找到图片文件');
+          return;
+        }
+
+        if (!confirm(`找到 ${imageFiles.length} 张图片，是否开始导入？`)) return;
+
+        let count = 0;
+        for (const item of imageFiles) {
+          showToast(`正在下载 (${count + 1}/${imageFiles.length}): ${item.name}`);
+          try {
+            // 下载图片 Blob
+            // 使用 download_url (raw content)
+            const imgRes = await fetch(item.download_url);
+            const blob = await imgRes.blob();
+            // 构造成 File 对象以复用逻辑
+            const file = new File([blob], item.name, { type: blob.type });
+
+            // 复用导入逻辑
+            // 如果 path 包含 sprites/ 或 backgrounds/ 可以传递 context，但这里简单起见只看文件名
+            // 或者我们可以检查 path
+            let imported = false;
+
+            // 简单的路径判断 (如果是递归获取可以更准，但这里只获取了一层)
+            // 我们可以尝试在文件名判断前加逻辑
+
+            if (item.name.includes('_')) {
+              await this.importAsSprite(file);
+              imported = true;
+            } else {
+              await this.importAsBackground(file);
+              imported = true;
+            }
+
+            if (imported) count++;
+          } catch (e) {
+            console.error(`下载/导入 ${item.name} 失败:`, e);
+          }
+        }
+
+        showToast(`GitHub 导入完成，共 ${count} 张图片`);
+        return true;
+      } catch (e) {
+        console.error('GitHub Import Error:', e);
+        showToast('GitHub 导入失败: ' + e.message);
+        return false;
+      }
+    },
+  };
+
+  /**
+   * 资源管理器模态框 - 统一管理立绘和背景
+   * @param {string} activeTab - 可选，激活的标签页 'sprites' 或 'backgrounds'
+   */
+  async function showAssetManagerModal(activeTab = 'sprites') {
+    // 获取所有立绘数据
+    const allSprites = await getAllSprites();
+    // 获取所有背景数据
+    const allBackgrounds = await getAllBackgrounds();
+    // 获取数据库角色列表
+    const dbCharacters = getCharacterListFromDatabase();
+
+    // 按角色分组数据 { sprites: [], type: '', source: '' }
+    const charactersData = new Map();
+
+    // 1. 先把所有有立绘的角色加进去
+    allSprites.forEach(sprite => {
+      if (!charactersData.has(sprite.characterId)) {
+        charactersData.set(sprite.characterId, {
+          sprites: [],
+          type: '自定义',
+          source: '本地',
+        });
+      }
+      charactersData.get(sprite.characterId).sprites.push(sprite);
+    });
+
+    // 2. 遍历数据库角色，合并进去
+    dbCharacters.forEach(char => {
+      const charName = char.name;
+      if (!charactersData.has(charName)) {
+        // 没有立绘的角色
+        charactersData.set(charName, {
+          sprites: [],
+          type: char.type,
+          source: char.source,
+        });
+      } else {
+        // 已有立绘的角色，更新类型信息
+        const info = charactersData.get(charName);
+        info.type = char.type;
+        info.source = char.source;
+      }
+    });
+
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-asset-manager-modal">
+        <div class="gal-input-box" style="max-width: 900px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+          <!-- 标题栏 -->
+          <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
+                <span><i class="fa-solid fa-folder-open"></i> 资源管理器</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="gal-action-btn" id="gal-asset-export" title="导出为ZIP包" style="padding: 6px 12px; font-size: 0.9rem;">
+                  <i class="fa-solid fa-file-export"></i> 导出
+                </button>
+                <button class="gal-action-btn" id="gal-asset-import" title="导入文件夹" style="padding: 6px 12px; font-size: 0.9rem;">
+                  <i class="fa-solid fa-folder-plus"></i> 导入
+                </button>
+                <button class="gal-action-btn" id="gal-asset-github" title="从GitHub导入" style="padding: 6px 12px; font-size: 0.9rem; background: #24292e; color: #fff; border-color: #24292e;">
+                  <i class="fa-brands fa-github"></i> GitHub
+                </button>
+              </div>
+            </div>
+            <input type="file" id="gal-asset-import-input" multiple webkitdirectory style="display: none;">
+          </div>
+
+          <!-- Tab 标签 -->
+          <div class="gal-tab-header" style="display: flex; border-bottom: 2px solid #e0e0e0; padding: 0 25px; flex-shrink: 0;">
+            <button class="gal-tab-btn ${activeTab === 'sprites' ? 'active' : ''}" data-tab="sprites">
+              <i class="fa-solid fa-user"></i> 立绘管理
+            </button>
+            <button class="gal-tab-btn ${activeTab === 'backgrounds' ? 'active' : ''}" data-tab="backgrounds">
+              <i class="fa-solid fa-image"></i> 背景管理
+            </button>
+          </div>
+
+          <!-- Tab 内容区 -->
+          <div class="gal-tab-content" style="flex: 1; overflow-y: auto; padding: 20px 25px;">
+            <!-- 立绘管理 Tab -->
+            <div class="gal-tab-pane ${activeTab === 'sprites' ? 'active' : ''}" data-pane="sprites" style="${activeTab !== 'sprites' ? 'display: none;' : ''}">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <span style="font-weight: 700; color: ${THEME.dark};">
+                  已保存 ${allSprites.length} 个立绘，共 ${charactersData.size} 个角色
+                </span>
+                <button class="gal-action-btn primary" id="gal-add-sprite-btn" style="padding: 8px 16px;">
+                  <i class="fa-solid fa-plus"></i> <span>添加立绘</span>
+                </button>
+              </div>
+
+              ${
+                charactersData.size === 0
+                  ? `
+                <div style="text-align: center; padding: 40px; color: #999;">
+                  <i class="fa-solid fa-images" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                  <p>暂无角色数据，请确保已加载数据库脚本或点击上方按钮添加</p>
+                </div>
+              `
+                  : `
+                <div class="gal-character-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;">
+                  ${Array.from(charactersData.entries())
+                    .map(([charId, info]) => {
+                      const sprites = info.sprites;
+                      // 优先显示默认表情，否则显示第一个
+                      const defaultSprite = sprites.find(s => s.expression === '默认') || sprites[0];
+                      const avatarUrl = defaultSprite?.imageBlob ? URL.createObjectURL(defaultSprite.imageBlob) : '';
+                      const typeLabel =
+                        info.type && info.type !== '自定义'
+                          ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${info.type}</span>`
+                          : '';
+
+                      return `
+                    <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s;">
+                      <div class="gal-character-avatar" style="aspect-ratio: 1 / 1; background: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
+                        ${avatarUrl ? `<img src="${avatarUrl}" alt="${charId}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
+                        ${sprites.length === 0 ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 0.7rem; padding: 2px; text-align: center;">无立绘</div>' : ''}
+                      </div>
+                      <div style="padding: 10px; text-align: center;">
+                        <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">
+                          ${charId}
+                        </div>
+                        <div style="margin-top: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;">
+                           ${typeLabel}
+                           <span style="font-size: 0.75rem; color: #888;">${sprites.length} 个表情</span>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                    })
+                    .join('')}
+                </div>
+              `
+              }
+            </div>
+
+            <!-- 背景管理 Tab -->
+            <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <span style="font-weight: 700; color: ${THEME.dark};">
+                  已保存 ${allBackgrounds.length} 个背景
+                </span>
+                <button class="gal-action-btn primary" id="gal-add-bg-btn" style="padding: 8px 16px;">
+                  <i class="fa-solid fa-plus"></i> <span>添加背景</span>
+                </button>
+              </div>
+
+              ${
+                allBackgrounds.length === 0
+                  ? `
+                <div style="text-align: center; padding: 40px; color: #999;">
+                  <i class="fa-solid fa-panorama" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                  <p>暂无背景，点击上方按钮添加</p>
+                  <small style="color: #bbb;">背景图将根据 &lt;background scene="场景名" /&gt; 标签自动匹配</small>
+                </div>
+              `
+                  : `
+                <div class="gal-bg-grid">
+                  ${allBackgrounds
+                    .map(
+                      bg => `
+                    <div class="gal-bg-card" data-scene="${bg.sceneName}">
+                      <div class="gal-bg-preview">
+                        ${bg.imageBlob ? `<img src="${URL.createObjectURL(bg.imageBlob)}" alt="${bg.sceneName}">` : ''}
+                      </div>
+                      <div class="gal-bg-label">${bg.sceneName}</div>
+                      <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="删除">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
+                  `,
+                    )
+                    .join('')}
+                </div>
+              `
+              }
+            </div>
+          </div>
+
+          <!-- 底部按钮 -->
+          <div style="padding: 15px 25px; border-top: 1px solid #e0e0e0; flex-shrink: 0;">
+            <button class="gal-action-btn" id="gal-asset-close" style="width: 100%; min-height: 44px;">
+              <span>关闭</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        .gal-tab-btn {
+          padding: 12px 20px;
+          border: none;
+          background: transparent;
+          font-size: 1rem;
+          font-weight: 600;
+          color: #666;
+          cursor: pointer;
+          border-bottom: 3px solid transparent;
+          margin-bottom: -2px;
+          transition: all 0.2s;
+        }
+        .gal-tab-btn:hover {
+          color: ${THEME.accent};
+        }
+        .gal-tab-btn.active {
+          color: ${THEME.accent};
+          border-bottom-color: ${THEME.accent};
+        }
+        .gal-character-card:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+        }
+        .gal-sprite-group {
+          margin-bottom: 20px;
+          background: #f8f9fa;
+          border-radius: 8px;
+          padding: 15px;
+        }
+        .gal-sprite-group-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+        .gal-char-name {
+          font-weight: 700;
+          font-size: 1.1rem;
+          color: ${THEME.dark};
+        }
+        .gal-sprite-count {
+          font-size: 0.85rem;
+          color: #888;
+        }
+        .gal-sprite-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+          gap: 12px;
+        }
+        .gal-sprite-card {
+          position: relative;
+          background: #fff;
+          border-radius: 6px;
+          overflow: hidden;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+          transition: transform 0.2s;
+        }
+        .gal-sprite-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .gal-sprite-preview {
+          aspect-ratio: 2 / 3;
+          background: #eee;
+          overflow: hidden;
+        }
+        .gal-sprite-preview img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .gal-sprite-label {
+          padding: 6px;
+          text-align: center;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: ${THEME.dark};
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .gal-sprite-delete {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          width: 24px;
+          height: 24px;
+          border: none;
+          border-radius: 50%;
+          background: rgba(255,0,85,0.9);
+          color: #fff;
+          font-size: 0.7rem;
+          cursor: pointer;
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+        .gal-sprite-card:hover .gal-sprite-delete {
+          opacity: 1;
+        }
+        .gal-bg-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+          gap: 15px;
+        }
+        .gal-bg-card {
+          position: relative;
+          background: #fff;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          transition: transform 0.2s;
+        }
+        .gal-bg-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+        .gal-bg-preview {
+          aspect-ratio: 16 / 9;
+          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          overflow: hidden;
+        }
+        .gal-bg-preview img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .gal-bg-label {
+          padding: 10px;
+          text-align: center;
+          font-size: 0.9rem;
+          font-weight: 600;
+          color: ${THEME.dark};
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .gal-bg-delete {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 28px;
+          height: 28px;
+          border: none;
+          border-radius: 50%;
+          background: rgba(255,0,85,0.9);
+          color: #fff;
+          font-size: 0.8rem;
+          cursor: pointer;
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+        .gal-bg-card:hover .gal-bg-delete {
+          opacity: 1;
+        }
+      </style>
+    `;
+
+    $(topWindow.document.body).append(modalHtml);
+    const $modal = $('#gal-asset-manager-modal');
+    makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title').parent());
+
+    // 根据 activeTab 参数切换到正确的标签页
+    if (activeTab && activeTab !== 'sprites') {
+      $modal.find('.gal-tab-btn').removeClass('active');
+      $modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).addClass('active');
+      $modal.find('.gal-tab-pane').hide();
+      $modal.find(`.gal-tab-pane[data-pane="${activeTab}"]`).show();
+    }
+
+    // Tab 切换
+    $modal.find('.gal-tab-btn').on('click', function () {
+      const tab = $(this).data('tab');
+      $modal.find('.gal-tab-btn').removeClass('active');
+      $(this).addClass('active');
+      $modal.find('.gal-tab-pane').hide();
+      $modal.find(`.gal-tab-pane[data-pane="${tab}"]`).show();
+    });
+
+    // 关闭
+    $('#gal-asset-close').on('click', () => $modal.remove());
+    $modal.on('click', function (e) {
+      if (e.target === this) $modal.remove();
+    });
+
+    // 添加立绘
+    $('#gal-add-sprite-btn').on('click', () => {
+      $modal.remove();
+      showSpriteUploadDialog('', '默认');
+    });
+
+    // 添加背景
+    $('#gal-add-bg-btn').on('click', () => {
+      $modal.remove();
+      showBackgroundUploadDialog();
+    });
+
+    // 点击角色卡片打开该角色的立绘编辑弹窗
+    $modal.find('.gal-character-card').on('click', function () {
+      const charId = $(this).data('char');
+      $modal.remove();
+      showCharacterSpritesModal(charId);
+    });
+
+    // 删除背景
+    $modal.find('.gal-bg-delete').on('click', async function (e) {
+      e.stopPropagation();
+      const scene = $(this).data('scene');
+      if (confirm(`确定删除背景「${scene}」吗？`)) {
+        await deleteBackground(scene);
+        showToast(`已删除背景: ${scene}`);
+        // 自动更新世界书中的场景列表
+        if (isEnabled) {
+          injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 更新世界书失败:`, e));
+        }
+        $modal.remove();
+        showAssetManagerModal('backgrounds'); // 刷新，保持在背景标签页
+      }
+    });
+
+    // 导出按钮
+    $('#gal-asset-export').on('click', () => AssetIO.exportAllAssets());
+
+    // 导入按钮
+    $('#gal-asset-import').on('click', () => $('#gal-asset-import-input').click());
+
+    // 导入文件变更
+    $('#gal-asset-import-input').on('change', async function () {
+      if (this.files.length > 0) {
+        const success = await AssetIO.importFiles(this.files);
+        if (success) {
+          $modal.remove();
+          showAssetManagerModal(activeTab); // 刷新
+        }
+        // 清空 input 防止重复选择不触发
+        $(this).val('');
+      }
+    });
+
+    // GitHub 导入按钮
+    $('#gal-asset-github').on('click', async () => {
+      const url = prompt('请输入 GitHub 仓库地址 (例如: user/repo 或 https://github.com/user/repo/tree/main/path):');
+      if (url) {
+        const success = await AssetIO.importFromGitHub(url.trim());
+        if (success) {
+          $modal.remove();
+          showAssetManagerModal(activeTab);
+        }
+      }
+    });
+  }
+
+  /**
+   * 角色立绘编辑弹窗 - 显示指定角色的所有立绘，支持编辑和删除
+   * @param {string} characterId - 角色ID
+   */
+  async function showCharacterSpritesModal(characterId) {
+    // 获取该角色的所有立绘
+    const allSprites = await getAllSprites();
+    const characterSpritesData = allSprites.filter(s => s.characterId === characterId);
+
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-character-sprites-modal">
+        <div class="gal-input-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+          <!-- 标题栏 -->
+          <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;">
+            <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
+              <span><i class="fa-solid fa-user"></i> ${characterId} 的立绘管理</span>
+            </div>
+          </div>
+
+          <!-- 立绘列表 -->
+          <div style="flex: 1; overflow-y: auto; padding: 20px 25px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+              <span style="font-weight: 700; color: ${THEME.dark};">
+                共 ${characterSpritesData.length} 个表情
+              </span>
+              <button class="gal-action-btn primary" id="gal-char-add-sprite-btn" style="padding: 8px 16px;">
+                <i class="fa-solid fa-plus"></i> <span>添加表情</span>
+              </button>
+            </div>
+
+            ${
+              characterSpritesData.length === 0
+                ? `
+              <div style="text-align: center; padding: 40px; color: #999;">
+                <i class="fa-solid fa-images" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                <p>该角色暂无立绘，点击上方按钮添加</p>
+              </div>
+            `
+                : `
+              <div class="gal-sprite-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px;">
+                ${characterSpritesData
+                  .map(
+                    s => `
+                  <div class="gal-sprite-card" data-char="${s.characterId}" data-expr="${s.expression}" style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer;">
+                    <div class="gal-sprite-preview" style="aspect-ratio: 2 / 3; background: #eee; overflow: hidden;">
+                      ${s.imageBlob ? `<img src="${URL.createObjectURL(s.imageBlob)}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">` : ''}
+                    </div>
+                    <div class="gal-sprite-label" style="padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.expression}</div>
+                    <button class="gal-sprite-delete-btn" data-char="${s.characterId}" data-expr="${s.expression}" title="删除" style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; opacity: 0; transition: opacity 0.2s;">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </div>
+                `,
+                  )
+                  .join('')}
+              </div>
+            `
+            }
+          </div>
+
+          <!-- 底部按钮 -->
+          <div style="padding: 15px 25px; border-top: 1px solid #e0e0e0; flex-shrink: 0; display: flex; gap: 10px;">
+            <button class="gal-action-btn" id="gal-char-sprites-back" style="flex: 1; min-height: 44px;">
+              <i class="fa-solid fa-arrow-left"></i> <span>返回</span>
+            </button>
+            <button class="gal-action-btn" id="gal-char-sprites-close" style="flex: 1; min-height: 44px;">
+              <span>关闭</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style>
+        #gal-character-sprites-modal .gal-sprite-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        #gal-character-sprites-modal .gal-sprite-card:hover .gal-sprite-delete-btn {
+          opacity: 1;
+        }
+      </style>
+    `;
+
+    $(topWindow.document.body).append(modalHtml);
+    const $modal = $('#gal-character-sprites-modal');
+    makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title').parent());
+
+    // 关闭
+    $('#gal-char-sprites-close').on('click', () => $modal.remove());
+    $modal.on('click', function (e) {
+      if (e.target === this) $modal.remove();
+    });
+
+    // 返回资源管理器
+    $('#gal-char-sprites-back').on('click', () => {
+      $modal.remove();
+      showAssetManagerModal();
+    });
+
+    // 添加表情
+    $('#gal-char-add-sprite-btn').on('click', () => {
+      $modal.remove();
+      showSpriteUploadDialog(characterId, '默认');
+    });
+
+    // 点击立绘卡片编辑
+    $modal.find('.gal-sprite-card').on('click', function (e) {
+      if ($(e.target).closest('.gal-sprite-delete-btn').length) return; // 忽略删除按钮点击
+      const charId = $(this).data('char');
+      const expr = $(this).data('expr');
+      $modal.remove();
+      showSpriteUploadDialog(charId, expr);
+    });
+
+    // 删除立绘
+    $modal.find('.gal-sprite-delete-btn').on('click', async function (e) {
+      e.stopPropagation();
+      const charId = $(this).data('char');
+      const expr = $(this).data('expr');
+      if (confirm(`确定删除 ${charId} 的「${expr}」表情吗？`)) {
+        await deleteSprite(charId, expr);
+        showToast(`已删除: ${charId} - ${expr}`);
+        $modal.remove();
+        showCharacterSpritesModal(charId); // 刷新
+      }
+    });
+  }
+
+  // 获取所有立绘
+  async function getAllSprites() {
+    if (!db) await initDB();
+
+    return new Promise(resolve => {
+      const transaction = db.transaction([STORE_SPRITES], 'readonly');
+      const store = transaction.objectStore(STORE_SPRITES);
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => resolve([]);
+    });
+  }
+
+  /**
+   * 背景上传对话框
+   */
+  function showBackgroundUploadDialog() {
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-bg-upload-modal">
+        <div class="gal-input-box" style="max-width: 600px; width: 90%; padding: 25px;">
+          <div class="gal-input-title" style="margin-bottom: 20px; font-size: 1.3rem;">
+            <span><i class="fa-solid fa-panorama"></i> 上传背景图片</span>
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+              <i class="fa-solid fa-tag"></i> 场景名称
+            </label>
+            <input type="text" id="gal-bg-scene-name" placeholder="例如：教室、公园、卧室"
+                   style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 6px;">
+            <small style="color: #888; display: block; margin-top: 5px;">
+              场景名需与 &lt;background scene="场景名" /&gt; 标签匹配
+            </small>
+          </div>
+
+          <input type="file" id="gal-bg-file" accept="image/*" style="display: none;">
+
+          <div class="gal-upload-card" id="gal-bg-upload-trigger" style="margin-bottom: 15px; min-height: 150px;">
+            <i class="fa-solid fa-cloud-arrow-up" style="font-size: 2.5rem;"></i>
+            <span style="font-size: 1rem; margin-top: 8px;">点击选择背景图片</span>
+            <small style="color: #999;">推荐比例 16:9</small>
+          </div>
+
+          <div id="gal-bg-preview-area" style="display: none; margin-bottom: 15px;">
+            <img id="gal-bg-preview-img" style="width: 100%; border-radius: 8px; max-height: 250px; object-fit: contain;">
+          </div>
+
+          <div class="gal-input-actions" style="display: flex; gap: 12px;">
+            <button class="gal-action-btn" id="gal-bg-cancel" style="flex: 1; min-height: 44px;">
+              <span>取消</span>
+            </button>
+            <button class="gal-action-btn primary" id="gal-bg-confirm" style="flex: 1; min-height: 44px;" disabled>
+              <i class="fa-solid fa-save"></i> <span>保存背景</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    $(topWindow.document.body).append(modalHtml);
+    const $modal = $('#gal-bg-upload-modal');
+    const $fileInput = $('#gal-bg-file');
+    makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
+
+    const $confirmBtn = $('#gal-bg-confirm');
+    let selectedFile = null;
+
+    // Tab 切换
+    $modal.find('.gal-upload-tab').on('click', function () {
+      const target = $(this).data('target');
+      $modal
+        .find('.gal-upload-tab')
+        .removeClass('active')
+        .css({ fontWeight: 'normal', color: '#888', borderBottom: 'none' });
+      $(this)
+        .addClass('active')
+        .css({ fontWeight: 'bold', color: THEME.dark, borderBottom: `2px solid ${THEME.accent}` });
+
+      $modal.find('.gal-upload-pane').hide();
+      $modal.find(`#gal-upload-${target}`).show();
+    });
+
+    // 远程图片获取
+    $('#gal-bg-fetch-btn').on('click', async function () {
+      const url = $('#gal-bg-remote-url').val().trim();
+      if (!url) return showToast('请输入图片链接');
+
+      $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 获取中...');
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('网络请求失败');
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) throw new Error('链接不是有效的图片');
+
+        // 模拟文件选择
+        const file = new File([blob], 'remote_bg.png', { type: blob.type });
+        selectedFile = file;
+
+        // 显示预览
+        const reader = new FileReader();
+        reader.onload = e => {
+          $('#gal-bg-preview-img').attr('src', e.target.result);
+          // 隐藏所有上传面板，显示预览
+          $modal.find('.gal-upload-tabs, .gal-upload-pane').hide();
+          $('#gal-bg-preview-area').show();
+          updateConfirmState();
+        };
+        reader.readAsDataURL(file);
+      } catch (e) {
+        showToast('获取失败: ' + e.message);
+      } finally {
+        $(this).prop('disabled', false).html('<i class="fa-solid fa-download"></i> 获取图片');
+      }
+    });
+
+    $('#gal-bg-upload-trigger').on('click', () => $fileInput.click());
+    $('#gal-bg-cancel').on('click', () => $modal.remove());
+    $modal.on('click', function (e) {
+      if (e.target === this) $modal.remove();
+    });
+
+    $fileInput.on('change', function () {
+      const file = this.files[0];
+      if (!file) return;
+
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        $('#gal-bg-preview-img').attr('src', e.target.result);
+        $('#gal-bg-upload-trigger').hide();
+        $('#gal-bg-preview-area').show();
+        $confirmBtn.prop('disabled', false);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    $confirmBtn.on('click', async function () {
+      const sceneName = $('#gal-bg-scene-name').val().trim();
+      if (!sceneName) {
+        showToast('请输入场景名称');
+        return;
+      }
+      if (!selectedFile) {
+        showToast('请选择图片');
+        return;
+      }
+
+      $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 保存中...');
+
+      try {
+        await saveBackground(sceneName, selectedFile);
+        showToast(`背景已保存: ${sceneName}`);
+        // 自动更新世界书中的场景列表
+        if (isEnabled) {
+          injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 更新世界书失败:`, e));
+        }
+        $modal.remove();
+        showAssetManagerModal('backgrounds');
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 保存背景失败:`, e);
+        showToast('保存失败');
+        $(this).prop('disabled', false).html('<i class="fa-solid fa-save"></i> <span>保存背景</span>');
+      }
+    });
+  }
+
+  function showToast(message) {
+    const $existing = $('.gal-toast');
+    if ($existing.length) $existing.remove();
+
+    const $toast = $(`<div class="gal-toast"><span>${message}</span></div>`);
+    $(topWindow.document.body).append($toast);
+
+    setTimeout(() => $toast.fadeOut(300, () => $toast.remove()), 2500);
+  }
+
+  // ============================================
+  // 消息监听与自动渲染
+  // ============================================
+  const messageContentDebounceTimers = new Map();
+
+  function setupMessageObserver() {
+    // 初始化 BGM
+    BGMManager.init();
+
+    const chatContainer = topWindow.document.querySelector('#chat');
+    if (!chatContainer) {
+      console.warn(`[${SCRIPT_NAME}] 未找到 #chat 容器`);
+      return;
+    }
+
+    // 主Observer：监听新消息添加
+    const chatObserver = new MutationObserver(mutations => {
+      mutations.forEach(mutation => {
+        mutation.addedNodes.forEach(node => {
+          if (node.nodeType === 1 && node.classList?.contains('mes')) {
+            // 延迟处理，确保消息内容已加载
+            setTimeout(() => {
+              processNewMessage(node);
+              injectGalgameButton(node);
+            }, 200);
+
+            // 为新消息设置内容变化监听
+            setupMessageContentObserver(node);
+          }
+        });
+      });
+    });
+
+    chatObserver.observe(chatContainer, { childList: true, subtree: false });
+
+    // 为已存在的消息也设置内容监听并注入按钮
+    chatContainer.querySelectorAll('.mes').forEach(mes => {
+      setupMessageContentObserver(mes);
+      injectGalgameButton(mes);
+    });
+
+    console.log(`[${SCRIPT_NAME}] 消息监听器已启动`);
+  }
+
+  // 监听单个消息的内容变化（用于流式输出完成后触发渲染）
+  function setupMessageContentObserver(mesNode) {
+    const mesText = mesNode.querySelector('.mes_text');
+    if (!mesText) return;
+
+    const mesId = mesNode.getAttribute('mesid');
+    if (!mesId) return;
+
+    // 避免重复设置Observer
+    if (mesNode.hasAttribute('data-gal-observer')) return;
+    mesNode.setAttribute('data-gal-observer', 'true');
+
+    const contentObserver = new MutationObserver(mutations => {
+      // 使用防抖机制，避免频繁触发
+      if (messageContentDebounceTimers.has(mesId)) {
+        clearTimeout(messageContentDebounceTimers.get(mesId));
+      }
+
+      const timerId = setTimeout(() => {
+        messageContentDebounceTimers.delete(mesId);
+        // 消息内容变化后重新处理
+        if (isEnabled) {
+          processNewMessage(mesNode);
+        }
+      }, 50); // 50ms防抖，提高流式响应速度
+
+      messageContentDebounceTimers.set(mesId, timerId);
+    });
+
+    contentObserver.observe(mesText, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  }
+
+  // HTML 解码
+  function decodeHtml(html) {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = html;
+    return txt.value;
+  }
+
+  /**
+   * 从 SillyTavern 的聊天数组中获取原始消息内容
+   * 这样可以避免浏览器 HTML 解析器删除自定义标签（如 <background>）
+   * @param {string|number} mesId 消息 ID
+   * @returns {string|null} 原始消息内容
+   */
+  function getRawMessageContent(mesId) {
+    try {
+      const ctx = topWindow.SillyTavern?.getContext?.();
+      if (ctx && ctx.chat && Array.isArray(ctx.chat)) {
+        const messageIndex = parseInt(mesId, 10);
+        if (!isNaN(messageIndex) && ctx.chat[messageIndex]) {
+          const rawContent = ctx.chat[messageIndex].mes;
+          if (rawContent) {
+            console.log(`[${SCRIPT_NAME}] [DEBUG] 从 chat 数组获取消息 ${mesId} 的原始内容`);
+            return rawContent;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 获取原始消息失败:`, e);
+    }
+    return null;
+  }
+
+  function processNewMessage(mesNode) {
+    // 注入开启按钮 (无论是否开启模式)
+    if (typeof injectGalgameButton === 'function') {
+      injectGalgameButton(mesNode);
+    }
+
+    if (!isEnabled) return;
+
+    const $mes = $(mesNode);
+    const isUser = $mes.attr('is_user') === 'true';
+    if (isUser) return; // 只处理AI消息
+
+    const mesId = $mes.attr('mesid');
+
+    // ★ 优先从 SillyTavern chat 数组获取原始消息（保留自定义标签）
+    let contentToProcess = getRawMessageContent(mesId);
+
+    // 回退到 DOM 内容
+    if (!contentToProcess) {
+      const $mesText = $mes.find('.mes_text');
+      const html = $mesText.html();
+      if (!html) return;
+      contentToProcess = decodeHtml(html);
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 回退到 DOM 内容`);
+    }
+
+    // 检查是否包含 Galgame 格式标签
+    const hasGalTags = /<(p|sprite|maintext|background)[^>]*>/i.test(contentToProcess);
+
+    if (!hasGalTags) return;
+
+    // 解析内容
+    const parsed = parseGalgameContent(contentToProcess);
+    if (parsed.segments.length === 0) return;
+
+    // 检查是否需要重置状态（如重新生成）
+    let state = messageSegmentState.get(String(mesId));
+
+    if (!state) {
+      state = { currentIndex: 0, segments: parsed.segments, parsedContent: parsed };
+      messageSegmentState.set(String(mesId), state);
+      console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 初始化状态`);
+    } else {
+      const oldSegmentsCount = state.segments.length;
+      state.segments = parsed.segments;
+      state.parsedContent = parsed;
+      // 关键修复：不要轻易限制 currentIndex。
+      // 在流式生成中，currentIndex 可能会因为 parsed.segments.length 暂时变小（解析波动）而被强制拉回。
+      // 我们只在确实超过范围时才限制。
+      if (state.currentIndex >= parsed.segments.length) {
+        state.currentIndex = parsed.segments.length - 1;
+      }
+      // state.currentIndex = Math.min(state.currentIndex, parsed.segments.length - 1);
+      console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 更新: ${oldSegmentsCount} -> ${parsed.segments.length} 段`);
+    }
+
+    // 检查是否是最后一条AI消息
+    // 防止旧消息的 MutationObserver 触发导致界面切回旧内容
+    const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
+
+    if (isLastAi) {
+      // 更新全局覆盖层内容
+      updateGlobalOverlayContent(mesId, parsed);
+
+      showGlobalOverlay();
+
+      // ★ 确保在显示后强制应用最新设置 (解决刷新后位置/间距重置问题)
+      // 使用 setTimeout 确保 DOM 渲染后再应用样式
+      requestAnimationFrame(() => {
+        applySettingsToUI();
+      });
+
+      // BGM处理 (新增)
+      if (parsed.bgm && parsed.bgm.keyword) {
+        BGMManager.play(parsed.bgm.keyword);
+      }
+
+      // 渲染 BGM 下拉条 (如果还没渲染)
+      renderBGMWidget();
+
+      // 独立处理隐藏楼层（性能优化）
+      if (hideOtherFloors) {
+        setTimeout(hideNonLastFloors, 100);
+      }
+    } else {
+      console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 不是最后一条AI消息，跳过全局UI更新`);
+    }
+  }
+
+  // 显示生成中状态
+  function showGeneratingStatus($container, text) {
+    let $status = $container.find('.gal-generating-status');
+    if (!$status.length) {
+      $status = $(`<div class="gal-generating-status"></div>`);
+      $container.find('.gal-dialog-layer').prepend($status);
+    }
+    $status.text(text).addClass('show');
+    setTimeout(() => $status.removeClass('show'), 2000);
+  }
+
+  function refreshGalgameViews() {
+    $('.gal-message-container').each(function () {
+      const mesId = $(this).data('mes-id');
+      const $mes = $(`.mes[mesid="${mesId}"]`);
+      const $mesText = $mes.find('.mes_text');
+      const originalHtml = $mesText.attr('data-gal-original');
+
+      if (originalHtml) {
+        // 同样需要解码，因为 originalHtml 可能是转义过的
+        const decodedHtml = decodeHtml(originalHtml);
+        const parsed = parseGalgameContent(decodedHtml);
+
+        if (parsed.segments.length > 0) {
+          renderGalgameMessage(mesId, parsed);
+        }
+      }
+    });
+  }
+
+  // ============================================
+  // 世界书注入功能
+  // ============================================
+
+  /**
+   * 检查世界书是否存在
+   */
+  async function checkWorldbookExists(worldbookName) {
+    try {
+      const names = getWorldbookNames();
+      return names.includes(worldbookName);
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 检查世界书失败:`, e);
+      return false;
+    }
+  }
+
+  /**
+   * 注入COT到世界书
+   * 如果世界书不存在则创建，如果条目不存在则添加
+   */
+  async function injectCOTToWorldbook() {
+    try {
+      // 动态生成COT模板（包含最新的场景列表）
+      const cotTemplate = await generateCOTTemplate();
+      const exists = await checkWorldbookExists(WORLDBOOK_NAME);
+
+      if (!exists) {
+        // 创建新世界书并添加条目
+        console.log(`[${SCRIPT_NAME}] 创建世界书: ${WORLDBOOK_NAME}`);
+
+        const cotEntry = {
+          name: COT_ENTRY_NAME,
+          enabled: true,
+          content: cotTemplate,
+          strategy: {
+            type: 'constant', // 蓝灯 - 常驻
+            keys: [],
+            keys_secondary: { logic: 'and_any', keys: [] },
+            scan_depth: 'same_as_global',
+          },
+          position: {
+            type: 'at_depth', // D0 系统
+            role: 'system',
+            depth: 0,
+            order: 100,
+          },
+          probability: 100,
+          recursion: {
+            prevent_incoming: false,
+            prevent_outgoing: false,
+            delay_until: null,
+          },
+          effect: {
+            sticky: null,
+            cooldown: null,
+            delay: null,
+          },
+        };
+
+        await createOrReplaceWorldbook(WORLDBOOK_NAME, [cotEntry]);
+        console.log(`[${SCRIPT_NAME}] 世界书创建成功`);
+        showToast('已创建Galgame格式规范世界书');
+      } else {
+        // 世界书存在，检查并更新条目
+        console.log(`[${SCRIPT_NAME}] 更新世界书: ${WORLDBOOK_NAME}`);
+
+        let worldbook;
+        try {
+          worldbook = await getWorldbook(WORLDBOOK_NAME);
+        } catch (getError) {
+          // 世界书已被删除但 getWorldbookNames 缓存未更新，重新创建
+          console.log(`[${SCRIPT_NAME}] 世界书获取失败，可能已被删除，重新创建: ${WORLDBOOK_NAME}`);
+
+          const cotEntry = {
+            name: COT_ENTRY_NAME,
+            enabled: true,
+            content: cotTemplate,
+            strategy: {
+              type: 'constant',
+              keys: [],
+              keys_secondary: { logic: 'and_any', keys: [] },
+              scan_depth: 'same_as_global',
+            },
+            position: {
+              type: 'at_depth', // D0 系统
+              role: 'system',
+              depth: 0,
+              order: 100,
+            },
+            probability: 100,
+            recursion: {
+              prevent_incoming: false,
+              prevent_outgoing: false,
+              delay_until: null,
+            },
+            effect: {
+              sticky: null,
+              cooldown: null,
+              delay: null,
+            },
+          };
+
+          await createOrReplaceWorldbook(WORLDBOOK_NAME, [cotEntry]);
+          console.log(`[${SCRIPT_NAME}] 世界书已重新创建`);
+          showToast('已重新创建Galgame格式规范世界书');
+          return true;
+        }
+        const existingEntry = worldbook.find(e => e.name === COT_ENTRY_NAME);
+
+        if (existingEntry) {
+          // 更新现有条目
+          await updateWorldbookWith(WORLDBOOK_NAME, entries => {
+            return entries.map(entry => {
+              if (entry.name === COT_ENTRY_NAME) {
+                return { ...entry, content: cotTemplate };
+              }
+              return entry;
+            });
+          });
+          console.log(`[${SCRIPT_NAME}] 条目已更新`);
+          showToast('Galgame格式规范已更新');
+        } else {
+          // 添加新条目
+          const cotEntry = {
+            name: COT_ENTRY_NAME,
+            enabled: true,
+            content: cotTemplate,
+            strategy: {
+              type: 'constant',
+              keys: [],
+              keys_secondary: { logic: 'and_any', keys: [] },
+              scan_depth: 'same_as_global',
+            },
+            position: {
+              type: 'at_depth', // D0 系统
+              role: 'system',
+              depth: 0,
+              order: 100,
+            },
+            probability: 100,
+            recursion: {
+              prevent_incoming: false,
+              prevent_outgoing: false,
+              delay_until: null,
+            },
+            effect: {
+              sticky: null,
+              cooldown: null,
+              delay: null,
+            },
+          };
+
+          await createWorldbookEntries(WORLDBOOK_NAME, [cotEntry]);
+          console.log(`[${SCRIPT_NAME}] 条目已添加`);
+          showToast('Galgame格式规范已添加到世界书');
+        }
+      }
+
+      return true;
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 注入COT失败:`, e);
+      return false;
+    }
+  }
+
+  /**
+   * 全局开启世界书
+   */
+  async function enableWorldbookGlobally() {
+    try {
+      const globalWorldbooks = getGlobalWorldbookNames();
+
+      // 检查是否已全局开启
+      if (globalWorldbooks.includes(WORLDBOOK_NAME)) {
+        console.log(`[${SCRIPT_NAME}] 世界书已全局开启`);
+        return true;
+      }
+
+      // 添加到全局世界书
+      const newGlobal = [...globalWorldbooks, WORLDBOOK_NAME];
+      await rebindGlobalWorldbooks(newGlobal);
+
+      console.log(`[${SCRIPT_NAME}] 世界书已全局开启`);
+      return true;
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 全局开启世界书失败:`, e);
+      return false;
+    }
+  }
+
+  /**
+   * 全局关闭世界书
+   */
+  async function disableWorldbookGlobally() {
+    try {
+      const globalWorldbooks = getGlobalWorldbookNames();
+
+      // 检查是否已开启
+      if (!globalWorldbooks.includes(WORLDBOOK_NAME)) {
+        console.log(`[${SCRIPT_NAME}] 世界书未开启，无需关闭`);
+        return true;
+      }
+
+      // 从全局世界书移除
+      const newGlobal = globalWorldbooks.filter(name => name !== WORLDBOOK_NAME);
+      await rebindGlobalWorldbooks(newGlobal);
+
+      console.log(`[${SCRIPT_NAME}] 世界书已全局关闭`);
+      return true;
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 全局关闭世界书失败:`, e);
+      return false;
+    }
+  }
+
+  // ============================================
+  // 选项面板 - 监控骰子系统并渲染到Galgame UI
+  // ============================================
+
+  /**
+   * 创建或获取选项面板容器
+   */
+  function ensureChoicesLayer() {
+    const targetDoc = topWindow.document;
+    let $layer = $(targetDoc).find('#gal-layer-choices');
+
+    if (!$layer.length) {
+      const layerHtml = `
+        <div id="gal-layer-choices">
+          <div class="gal-choices-title"><span>请选择行动</span></div>
+          <div class="gal-choices-container"></div>
+          <div class="gal-choices-hint">点击空白处关闭</div>
+        </div>
+      `;
+      $(targetDoc.body).append(layerHtml);
+      $layer = $(targetDoc).find('#gal-layer-choices');
+
+      // 点击空白处关闭（标记为用户主动关闭）
+      $layer.on('click', function (e) {
+        if (e.target === this) {
+          hideGalgameChoices(true);
+        }
+      });
+    }
+
+    return $layer;
+  }
+
+  /**
+   * 渲染选项到Galgame选项面板
+   * @param {Array<{text: string, value: string}>} options 选项列表
+   */
+  function renderGalgameChoices(options) {
+    if (!options || options.length === 0) {
+      hideGalgameChoices(false);
+      return;
+    }
+
+    // 保存当前选项用于提示按钮重新打开
+    pendingOptions = options;
+
+    // ★ 常驻显示：只要有选项，就显示按钮
+    $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+
+    const $layer = ensureChoicesLayer();
+    const $container = $layer.find('.gal-choices-container');
+
+    // 清空并重新渲染选项
+    $container.empty();
+
+    options.forEach((opt, idx) => {
+      const $card = $(`
+        <div class="gal-choice-card" data-option-index="${idx}" data-option-value="${encodeURIComponent(opt.value)}">
+          <span>${opt.text}</span>
+        </div>
+      `);
+
+      $card.on('click', function (e) {
+        e.stopPropagation();
+        const value = decodeURIComponent($(this).data('option-value'));
+        handleChoiceSelection(value);
+      });
+
+      $container.append($card);
+    });
+
+    // 显示面板
+    $layer.addClass('active');
+    galgameChoicesVisible = true;
+
+    console.log(`[${SCRIPT_NAME}] 渲染 ${options.length} 个选项到Galgame选项面板`);
+  }
+
+  /**
+   * 显示工具栏内的待选择提示按钮
+   */
+  function showPendingChoicesButton() {
+    if (!pendingOptions || pendingOptions.length === 0) return;
+
+    // 在所有Galgame容器的工具栏中显示按钮
+    $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+    console.log(`[${SCRIPT_NAME}] 显示待选择提示按钮`);
+  }
+
+  /**
+   * 隐藏工具栏内的待选择提示按钮
+   */
+  function hidePendingChoicesButton() {
+    $('.gal-game-container .gal-pending-choices-btn').removeClass('show');
+    // 注意：这里不要清空 pendingOptions，因为可能是只是暂时隐藏（虽然目前的逻辑是用户选了才隐藏）
+    // 但按照“用户选择了”的逻辑，pendingOptions 确实应该清空
+    pendingOptions = null;
+    console.log(`[${SCRIPT_NAME}] 隐藏待选择提示按钮`);
+  }
+
+  /**
+   * 隐藏Galgame选项面板
+   * @param {boolean} userDismissed - 是否是用户主动关闭（点击空白处）
+   */
+  function hideGalgameChoices(userDismissed = false) {
+    const targetDoc = topWindow.document;
+    $(targetDoc).find('#gal-layer-choices').removeClass('active');
+    galgameChoicesVisible = false;
+
+    // 如果还有选项，确保按钮是显示的
+    if (pendingOptions && pendingOptions.length > 0) {
+      showPendingChoicesButton();
+    }
+  }
+
+  /**
+   * 处理选项选择
+   * @param {string} optionValue 选中的选项值
+   */
+  function handleChoiceSelection(optionValue) {
+    console.log(`[${SCRIPT_NAME}] 用户选择了选项: ${optionValue}`);
+
+    // 隐藏选项面板
+    const targetDoc = topWindow.document;
+    $(targetDoc).find('#gal-layer-choices').removeClass('active');
+    galgameChoicesVisible = false;
+
+    // 隐藏按钮（因为已经选了）
+    hidePendingChoicesButton();
+
+    // 将选项填入输入框并自动发送
+    const $textarea = $(topWindow.document).find('#send_textarea');
+    const $sendButton = $(topWindow.document).find('#send_but');
+
+    if ($textarea.length) {
+      // 构建玩家选择的格式（与骰子系统的 smartInsertToTextarea 兼容）
+      const playerChoice = `<user>${optionValue}。`;
+
+      // 获取当前输入框内容
+      const currentVal = ($textarea.val() || '').trim();
+
+      // 如果输入框为空，直接填入
+      if (!currentVal) {
+        $textarea.val(playerChoice).trigger('input').trigger('change');
+      } else {
+        // 追加到现有内容
+        $textarea
+          .val(currentVal + ' ' + playerChoice)
+          .trigger('input')
+          .trigger('change');
+      }
+
+      showToast(`已选择: ${optionValue.substring(0, 20)}${optionValue.length > 20 ? '...' : ''}`);
+
+      // ★ 自动触发发送 ★
+      if ($sendButton.length) {
+        setTimeout(() => {
+          $sendButton.click();
+          console.log(`[${SCRIPT_NAME}] 已自动触发发送`);
+        }, 100);
+      }
+    }
+  }
+
+  /**
+   * 监控骰子系统的选项面板 (改：监控数据库表格)
+   */
+  function setupOptionsPanelObserver() {
+    // 移除旧的 MutationObserver，改为定时轮询
+    setInterval(() => {
+      if (!isEnabled) return; // 只在Galgame模式开启时处理
+      checkAndRenderOptions();
+    }, 1000); // 每秒检查一次
+
+    // 初始检查一次
+    setTimeout(checkAndRenderOptions, 500);
+
+    console.log(`[${SCRIPT_NAME}] 选项表监控已启动 (轮询模式)`);
+  }
+
+  /**
+   * 检查骰子系统选项表格并渲染到Galgame UI
+   */
+  function checkAndRenderOptions() {
+    if (!isEnabled) return;
+
+    // 从数据库获取选项
+    const options = getOptionsFromDatabase();
+
+    if (options.length === 0) {
+      // 如果没有选项了，且当前显示着，则隐藏
+      if (galgameChoicesVisible) {
+        // 只有当数据库里的选项真没了（比如被清空了），才自动隐藏面板
+        // 但要注意，如果用户自己关了面板，这里不应该反复调用 hide
+        hideGalgameChoices(false);
+      }
+      // 如果按钮显示着，也要隐藏
+      if (pendingOptions) {
+        hidePendingChoicesButton();
+      }
+
+      lastGalgameOptionHash = null;
+      return;
+    }
+
+    // 生成选项内容的Hash指纹
+    const currentOptionHash = options.map(o => o.value).join('|||');
+
+    // 判断选项是否发生实质变化
+    const optionChanged = currentOptionHash !== lastGalgameOptionHash;
+
+    if (optionChanged) {
+      // 选项内容发生了实质变化
+      console.log(`[${SCRIPT_NAME}] 检测到新选项，更新缓存并显示提示按钮`);
+
+      // 更新全局变量
+      pendingOptions = options;
+
+      // ★ 确保UI已初始化，否则找不到按钮 ★
+      ensureGlobalOverlay();
+
+      // 确保按钮显示（闪烁）
+      $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+
+      // 判断是否需要立即弹出
+      let shouldPopup = false;
+
+      if (galgameChoicesVisible) {
+        // 如果面板本身就开着，当然要刷新内容
+        shouldPopup = true;
+      } else {
+        // 如果面板没开，检查是否在 Galgame 的最后一段
+        const $overlay = $('#gal-global-overlay');
+        if ($overlay.length && $overlay.hasClass('active')) {
+          // ★ 关键修复：使用 .attr()
+          const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
+          if (mesId) {
+            const state = messageSegmentState.get(String(mesId));
+            // 如果当前已经在最后一段，则弹出
+            // 修复逻辑：使用 length - 1 判断
+            if (state && state.currentIndex >= state.segments.length - 1) {
+              shouldPopup = true;
+            }
+          }
+        }
+      }
+
+      if (shouldPopup) {
+        renderGalgameChoices(options);
+      }
+    } else {
+      // 选项没变，确保按钮状态正确（防止被误删）
+      if (pendingOptions && pendingOptions.length > 0) {
+        ensureGlobalOverlay(); // 确保UI存在
+        $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+      }
+    }
+
+    // 更新缓存
+    lastGalgameOptionHash = currentOptionHash;
+  }
+
+  // 辅助：从数据库获取选项
+  function getOptionsFromDatabase() {
+    const options = [];
+    try {
+      const api = topWindow.AutoCardUpdaterAPI;
+      if (!api || typeof api.exportTableAsJson !== 'function') {
+        // 降低日志频率，只在找不到API时偶尔打印，或者干脆不打印以免刷屏
+        // console.log(`[${SCRIPT_NAME}] AutoCardUpdaterAPI 未就绪`);
+        return [];
+      }
+
+      const tableData = api.exportTableAsJson();
+      if (!tableData) return [];
+
+      // 调试：打印所有表名 (仅在检测到表格时打印一次，避免刷屏？不，这里是调试，先打印出来)
+      // 为了调试，我们使用一个全局标记来防止无限刷屏，但每隔几秒允许打印一次
+      if (!window._galDebugTimer || Date.now() - window._galDebugTimer > 5000) {
+        console.log(
+          `[${SCRIPT_NAME}] [DEBUG] 数据库所有表名:`,
+          Object.values(tableData).map(s => s.name),
+        );
+        window._galDebugTimer = Date.now();
+      }
+
+      // 查找选项表
+      const optionSheetNames = ['选项表', '行动选项'];
+      let targetSheet = null;
+
+      for (const sheetKey of Object.keys(tableData)) {
+        if (!sheetKey.startsWith('sheet_')) continue;
+        const sheet = tableData[sheetKey];
+        // 精确匹配
+        if (optionSheetNames.includes(sheet.name)) {
+          targetSheet = sheet;
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 找到目标选项表: ${sheet.name}, 行数: ${sheet.content.length}`);
+          break;
+        }
+      }
+
+      if (!targetSheet) {
+        // console.log(`[${SCRIPT_NAME}] 未找到名称为 [${optionSheetNames.join(', ')}] 的表格`);
+        return [];
+      }
+
+      if (!targetSheet.content || targetSheet.content.length < 2) {
+        console.log(`[${SCRIPT_NAME}] 选项表 [${targetSheet.name}] 内容为空或只有表头`);
+        return [];
+      }
+
+      const headers = targetSheet.content[0] || [];
+      const content = targetSheet.content;
+
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 选项表头:`, headers);
+
+      // 查找列索引
+      const findCol = names => {
+        for (const name of names) {
+          const idx = headers.indexOf(name);
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      };
+
+      const textCols = ['选项内容', '选项文本', '内容', 'Text', 'text', 'Caption', 'caption'];
+      const valueCols = ['选项值', '实际值', 'Value', 'value', 'Command', 'command'];
+
+      const textIdx = findCol(textCols);
+      const valueIdx = findCol(valueCols);
+
+      // ★★★ 策略1：标准纵向表格（每行一个选项） ★★★
+      // 条件：找到列名，或者有合理的行数（大于2行）
+      // 注意：如果表头本身就是选项（textIdx==-1），且行数很少，可能是横向表
+      // 修改判断条件：只有当确实找到了列名，或者行数明显较多时，才优先用纵向
+      let useVertical = false;
+      if (textIdx !== -1) {
+        useVertical = true;
+      } else if (content.length > 2) {
+        // 行数多，且没有明显的横向特征（表头不含“选项”）
+        // 但如果表头全是“选项一”，“选项二”，那即使行数多也可能是横向的（虽然不太可能）
+        useVertical = true;
+      }
+
+      if (useVertical) {
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 使用纵向解析模式`);
+
+        // 如果没找到特定列名，尝试使用第1列作为内容，第2列作为值（如果存在）
+        const fallbackTextIdx = 0;
+        const fallbackValueIdx = 1;
+
+        const effectiveTextIdx = textIdx !== -1 ? textIdx : fallbackTextIdx;
+
+        // 如果没有值列，就用文本列
+        let effectiveValueIdx = valueIdx;
+        if (effectiveValueIdx === -1) {
+          effectiveValueIdx = headers.length > 1 && textIdx === -1 ? fallbackValueIdx : effectiveTextIdx;
+        }
+
+        for (let i = 1; i < content.length; i++) {
+          const row = content[i];
+          if (!row) continue;
+
+          const text = row[effectiveTextIdx];
+          if (text && typeof text === 'string' && text.trim()) {
+            let value = text;
+            if (effectiveValueIdx !== -1 && row[effectiveValueIdx]) {
+              value = row[effectiveValueIdx];
+            }
+            options.push({ text: text.trim(), value: value.toString().trim() });
+          }
+        }
+      }
+      // ★★★ 策略2：横向表格（每列一个选项） ★★★
+      else {
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 尝试横向解析模式`);
+
+        const dataRow = content[1];
+
+        headers.forEach((header, idx) => {
+          if (!header) return; // 跳过 null
+
+          const headerStr = String(header);
+          // 检查表头是否包含“选项”相关字样
+          // 或者，如果是“行动选项”表，我们默认所有非空表头都是选项
+          let isOptionCol = headerStr.includes('选项') || headerStr.includes('Option');
+
+          if (!isOptionCol && targetSheet.name === '行动选项') {
+            // 排除明显不是选项的列（如ID）
+            if (headerStr.toLowerCase() !== 'id') {
+              isOptionCol = true;
+            }
+          }
+
+          if (isOptionCol) {
+            let text = headerStr; // 默认使用表头作为文本
+            let value = headerStr; // 默认使用表头作为值
+
+            // 如果有数据行，尝试从数据行获取
+            if (dataRow && dataRow[idx]) {
+              const cellVal = String(dataRow[idx]).trim();
+              if (cellVal) {
+                text = cellVal;
+                value = cellVal;
+              }
+            }
+
+            options.push({ text, value });
+          }
+        });
+      }
+
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 解析出 ${options.length} 个选项`);
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 获取选项失败:`, e);
+    }
+    return options;
+  }
+
+  // ============================================
+  // BGM UI 组件渲染
+  // ============================================
+  function renderBGMWidget() {
+    // 检查是否已存在
+    let $widget = $('#gal-global-overlay .gal-bgm-widget');
+    if ($widget.length > 0) return;
+
+    const widgetHtml = `
+        <div class="gal-bgm-widget" title="点击展开音乐控制">
+            <div class="gal-bgm-icon"><i class="fa-solid fa-compact-disc"></i></div>
+            <div class="gal-bgm-info" style="display:none;">
+                <div class="gal-bgm-title">No Music</div>
+            </div>
+            <div class="gal-bgm-ctrl" style="display:none;">
+               <button class="gal-bgm-btn btn-prev"><i class="fa-solid fa-backward-step"></i></button>
+               <button class="gal-bgm-btn btn-play"><i class="fa-solid fa-play"></i></button>
+               <button class="gal-bgm-btn btn-next"><i class="fa-solid fa-forward-step"></i></button>
+               <input type="range" class="gal-bgm-slider" min="0" max="1" step="0.05" value="${BGMManager.volume}">
+            </div>
+        </div>
+      `;
+
+    $('#gal-global-overlay').append(widgetHtml);
+    $widget = $('#gal-global-overlay .gal-bgm-widget');
+
+    // 事件绑定
+    $widget.on('click', function (e) {
+      // 点击非控件区域切换展开
+      if (!$(e.target).closest('.gal-bgm-btn, .gal-bgm-slider').length) {
+        const isActive = $(this).toggleClass('active').hasClass('active');
+        $(this).find('.gal-bgm-info, .gal-bgm-ctrl').toggle(isActive);
+
+        // 稍微自动收起
+        if (isActive) {
+          setTimeout(() => {
+            if (!$(this).is(':hover')) {
+              $(this).removeClass('active').find('.gal-bgm-info, .gal-bgm-ctrl').hide();
+            }
+          }, 5000);
+        }
+      }
+    });
+
+    $widget.find('.btn-play').on('click', function (e) {
+      e.stopPropagation();
+      // 优先使用 audio 的实际状态判断，解决状态不同步导致无法暂停/播放的问题
+      if (!BGMManager.audio.paused) {
+        BGMManager.pause();
+      } else {
+        BGMManager.resume();
+      }
+    });
+
+    $widget
+      .find('.gal-bgm-slider')
+      .on('input', function (e) {
+        e.stopPropagation();
+        BGMManager.setVolume(parseFloat(this.value));
+      })
+      .on('click', e => e.stopPropagation());
+
+    // 更新UI函数绑定
+    BGMManager.updateUI = function () {
+      const $w = $('#gal-global-overlay .gal-bgm-widget');
+      if (!$w.length) return;
+
+      $w.toggleClass('playing', this.isPlaying);
+      $w.find('.btn-play i').attr('class', this.isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play');
+
+      if (this.currentTrack) {
+        const trackName =
+          this.currentTrack.Name ||
+          this.currentTrack.name ||
+          this.currentTrack.Song ||
+          this.currentTrack.song ||
+          this.currentTrack.Title ||
+          this.currentTrack.title ||
+          this.currentKeyword;
+        $w.find('.gal-bgm-title').text(trackName);
+        // 添加 title 属性显示更多信息
+        const singer = this.currentTrack.Singer || this.currentTrack.singer || '';
+        if (singer) {
+          $w.find('.gal-bgm-title').attr('title', `${trackName} - ${singer}`);
+        }
+      } else if (this.currentKeyword) {
+        $w.find('.gal-bgm-title').text('Searching: ' + this.currentKeyword);
+      }
+    };
+
+    // 初始更新
+    BGMManager.updateUI();
+  }
+
+  // ============================================
+  // 全局函数暴露
+
+  // ============================================
+  const exposeScope = [window];
+  if (topWindow && topWindow !== window) {
+    exposeScope.push(topWindow);
+  }
+
+  exposeScope.forEach(scope => {
+    try {
+      scope.galUI = {
+        enable: () => {
+          isEnabled = true;
+          showToast('Galgame界面已启用');
+        },
+        disable: () => {
+          isEnabled = false;
+          showToast('Galgame界面已禁用');
+        },
+        isEnabled: () => isEnabled,
+        parseContent: parseGalgameContent,
+        saveSprite,
+        getSprite,
+        deleteSprite,
+        showConfig: () => showSpriteConfigModal(),
+        refresh: refreshGalgameViews,
+        toast: showToast,
+        // 选项面板控制
+        showChoices: renderGalgameChoices,
+        hideChoices: hideGalgameChoices,
+        checkOptions: checkAndRenderOptions,
+      };
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 无法暴露全局函数:`, e);
+    }
+  });
+
+  // 立绘配置面板
+  async function showSpriteConfigModal() {
+    // 获取所有立绘
+    if (!db) await initDB();
+
+    // 从数据库获取角色列表
+    const dbCharacters = getCharacterListFromDatabase();
+
+    const transaction = db.transaction([STORE_SPRITES], 'readonly');
+    const store = transaction.objectStore(STORE_SPRITES);
+    const request = store.getAll();
+
+    request.onsuccess = async () => {
+      const sprites = request.result || [];
+
+      // 构建角色列表HTML
+      let charactersHtml = '';
+      if (dbCharacters.length > 0) {
+        charactersHtml = `
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: ${THEME.accent}; margin-bottom: 15px; font-family: ${THEME.fontEng};">
+              <i class="fa-solid fa-users"></i> 从数据库加载的角色 (${dbCharacters.length})
+            </h4>
+            <div class="gal-sprite-grid">
+              ${dbCharacters
+                .map(char => {
+                  // 查找该角色是否有立绘（优先检查默认表情）
+                  const spriteKey = `${char.name}_默认`;
+                  const hasSprite = characterSprites.has(spriteKey);
+                  const blobUrl = characterSprites.get(spriteKey) || '';
+
+                  return `
+                  <div class="gal-sprite-card ${hasSprite ? '' : 'no-sprite'}"
+                       data-character="${char.name}"
+                       data-type="${char.type}"
+                       style="border-color: ${hasSprite ? THEME.accent : '#ccc'};">
+                    ${
+                      hasSprite
+                        ? `<img class="gal-sprite-preview" src="${blobUrl}" alt="${char.name}">`
+                        : `<div class="gal-sprite-preview" style="display: flex; align-items: center; justify-content: center; color: #aaa;">
+                           <i class="fa-solid fa-user-plus" style="font-size: 2rem;"></i>
+                         </div>`
+                    }
+                    <div class="gal-sprite-label">
+                      ${char.name}<br>
+                      <small style="color: ${char.type === '主角' ? THEME.accentSub : THEME.accent};">${char.type}</small>
+                    </div>
+                  </div>
+                `;
+                })
+                .join('')}
+            </div>
+          </div>
+          <div style="border-top: 2px solid #eee; margin: 20px 0;"></div>
+        `;
+      } else {
+        charactersHtml = `
+          <div style="padding: 30px; text-align: center; color: #888; background: #f5f5f5; margin-bottom: 20px; border-radius: 8px;">
+            <i class="fa-solid fa-database" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
+            <p style="margin: 0;">未检测到数据库角色数据</p>
+            <small>请确保 神·数据库 脚本已加载并包含角色信息</small>
+          </div>
+        `;
+      }
+
+      // 获取所有背景
+      const backgrounds = await getAllBackgrounds();
+      const backgroundsHtml =
+        backgrounds.length > 0
+          ? backgrounds
+              .map(bg => {
+                const blobUrl = sceneBackgrounds.get(bg.id) || '';
+                return `
+          <div class="gal-bg-card" data-scene="${bg.sceneName}">
+            <img class="gal-bg-preview" src="${blobUrl}" alt="${bg.sceneName}">
+            <div class="gal-bg-label">${bg.sceneName}</div>
+            <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="删除">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        `;
+              })
+              .join('')
+          : `
+        <div style="grid-column: 1/-1; padding: 40px; text-align: center; color: #888;">
+          <i class="fa-solid fa-image" style="font-size: 2.5rem; margin-bottom: 10px; display: block;"></i>
+          <p>暂无背景图片</p>
+          <small>点击上方按钮添加背景</small>
+        </div>
+      `;
+
+      const modalHtml = `
+        <div class="gal-config-modal" id="gal-config-modal">
+          <div class="gal-config-panel" style="max-width: 850px;">
+            <div class="gal-config-header">
+              <div class="gal-config-title"><i class="fa-solid fa-images"></i> 资源管理</div>
+              <button class="gal-config-close" id="gal-config-close">
+                <i class="fa-solid fa-times"></i>
+              </button>
+            </div>
+
+            <!-- Tab 切换 -->
+            <div class="gal-tab-header">
+              <button class="gal-tab-btn active" data-tab="sprites">
+                <i class="fa-solid fa-user"></i> 立绘管理
+              </button>
+              <button class="gal-tab-btn" data-tab="backgrounds">
+                <i class="fa-solid fa-panorama"></i> 背景管理
+              </button>
+            </div>
+
+            <div class="gal-config-body">
+              <!-- 立绘管理 Tab -->
+              <div class="gal-tab-content active" data-tab="sprites">
+                ${charactersHtml}
+
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                  <button class="gal-action-btn" id="gal-add-sprite" style="flex: 1; padding: 12px;">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>添加单个立绘</span>
+                  </button>
+                  <button class="gal-action-btn primary" id="gal-batch-add-sprite" style="flex: 1; padding: 12px;">
+                    <i class="fa-solid fa-images"></i>
+                    <span>批量添加（全表情）</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 背景管理 Tab -->
+              <div class="gal-tab-content" data-tab="backgrounds">
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                  <button class="gal-action-btn primary" id="gal-add-background" style="flex: 1; padding: 12px;">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>添加背景图片</span>
+                  </button>
+                </div>
+                <div class="gal-bg-grid">
+                  ${backgroundsHtml}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <style>
+          .gal-tab-header {
+            display: flex;
+            background: #f5f5f5;
+            border-bottom: 2px solid #eee;
+          }
+          .gal-tab-btn {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            background: transparent;
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+          }
+          .gal-tab-btn:hover {
+            color: ${THEME.dark};
+            background: rgba(0, 210, 255, 0.1);
+          }
+          .gal-tab-btn.active {
+            color: ${THEME.dark};
+            background: #fff;
+            border-bottom: 3px solid ${THEME.accent};
+          }
+          .gal-tab-content {
+            display: none;
+          }
+          .gal-tab-content.active {
+            display: block;
+          }
+          .gal-bg-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+          }
+          .gal-bg-card {
+            position: relative;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.2s;
+          }
+          .gal-bg-card:hover {
+            border-color: ${THEME.accent};
+            box-shadow: 0 4px 12px rgba(0, 210, 255, 0.15);
+          }
+          .gal-bg-preview {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            object-fit: cover;
+            display: block;
+          }
+          .gal-bg-label {
+            padding: 10px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: ${THEME.dark};
+            text-align: center;
+            background: #fafafa;
+          }
+          .gal-bg-delete {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 0, 85, 0.9);
+            color: #fff;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .gal-bg-card:hover .gal-bg-delete {
+            opacity: 1;
+          }
+          .gal-bg-delete:hover {
+            background: ${THEME.accentSub};
+            transform: scale(1.1);
+          }
+        </style>
+      `;
+
+      $(topWindow.document.body).append(modalHtml);
+
+      const $modal = $('#gal-config-modal');
+      makeDraggable($modal.find('.gal-config-panel'), $modal.find('.gal-config-header'));
+
+      $('#gal-config-close').on('click', () => $modal.remove());
+      $modal.on('click', function (e) {
+        if (e.target === this) $modal.remove();
+      });
+
+      // 点击数据库角色卡片上传立绘
+      $modal.find('.gal-sprite-card[data-character]').on('click', function () {
+        const charName = $(this).data('character');
+        $modal.remove();
+        showBatchUploadDialog(charName);
+      });
+
+      // 手动添加立绘
+      // 手动添加立绘（单个）
+      $('#gal-add-sprite').on('click', () => {
+        $modal.remove();
+        showSpriteUploadDialog('default', '默认');
+      });
+
+      // 批量添加立绘按钮
+      $('#gal-batch-add-sprite').on('click', () => {
+        $modal.remove();
+        showBatchUploadDialog('');
+      });
+
+      // Tab 切换事件
+      $modal.find('.gal-tab-btn').on('click', function () {
+        const tab = $(this).data('tab');
+        $modal.find('.gal-tab-btn').removeClass('active');
+        $(this).addClass('active');
+        $modal.find('.gal-tab-content').removeClass('active');
+        $modal.find(`.gal-tab-content[data-tab="${tab}"]`).addClass('active');
+      });
+
+      // 添加背景按钮
+      $('#gal-add-background').on('click', () => {
+        $modal.remove();
+        showBackgroundUploadDialog();
+      });
+
+      // 删除背景按钮
+      $modal.find('.gal-bg-delete').on('click', async function (e) {
+        e.stopPropagation();
+        const sceneName = $(this).data('scene');
+        if (confirm(`确定删除背景「${sceneName}」吗？`)) {
+          await deleteBackground(sceneName);
+          showToast(`已删除背景: ${sceneName}`);
+          $modal.remove();
+          showSpriteConfigModal();
+        }
+      });
+    };
+  }
+
+  // ============================================
+  // 背景上传对��框
+  // ============================================
+  function showBackgroundUploadDialog() {
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-bg-upload-modal">
+        <div class="gal-input-box" style="max-width: 600px; width: 90%;">
+          <div class="gal-input-title">
+            <span><i class="fa-solid fa-panorama"></i> 添加背景图片</span>
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+              <i class="fa-solid fa-tag"></i> 场景名称
+            </label>
+            <input type="text" id="gal-bg-scene-name" placeholder="如：教室、公园、夜晚街道"
+                   style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 4px;">
+            <small style="color: #888; margin-top: 5px; display: block;">场景名称需与 AI 输出的 &lt;background scene="xxx" /&gt; 标签中的 xxx 一致</small>
+          </div>
+
+          <div id="gal-bg-upload-area" class="gal-upload-card" style="margin-bottom: 15px; min-height: 180px; cursor: pointer;">
+            <i class="fa-solid fa-image" style="font-size: 3rem;"></i>
+            <span style="margin-top: 10px;">点击上传背景图片</span>
+            <small style="color: #888;">建议使用 16:9 比例的图片</small>
+          </div>
+          <input type="file" id="gal-bg-file-input" accept="image/*" style="display: none;">
+
+          <div id="gal-bg-preview-container" style="display: none; margin-bottom: 15px;">
+            <img id="gal-bg-preview-img" style="width: 100%; border-radius: 8px; border: 2px solid ${THEME.accent};">
+          </div>
+
+          <div class="gal-input-actions" style="display: flex; gap: 12px;">
+            <button class="gal-action-btn" id="gal-bg-cancel" style="flex: 1;">
+              <span>取消</span>
+            </button>
+            <button class="gal-action-btn primary" id="gal-bg-confirm" style="flex: 1;" disabled>
+              <i class="fa-solid fa-save"></i>
+              <span>保存背景</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    $(topWindow.document.body).append(modalHtml);
+
+    const $modal = $('#gal-bg-upload-modal');
+    makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
+
+    const $fileInput = $('#gal-bg-file-input');
+    const $uploadArea = $('#gal-bg-upload-area');
+    const $previewContainer = $('#gal-bg-preview-container');
+    const $previewImg = $('#gal-bg-preview-img');
+    const $confirmBtn = $('#gal-bg-confirm');
+    const $sceneNameInput = $('#gal-bg-scene-name');
+
+    let selectedFile = null;
+
+    // 点击上传区域
+    $uploadArea.on('click', () => $fileInput.click());
+
+    // 文件选择
+    $fileInput.on('change', function () {
+      const file = this.files[0];
+      if (!file) return;
+
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        $previewImg.attr('src', e.target.result);
+        $uploadArea.hide();
+        $previewContainer.show();
+        updateConfirmState();
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 点击预览图可以重新选择
+    $previewContainer.on('click', () => $fileInput.click());
+
+    // 场景名称输入
+    $sceneNameInput.on('input', updateConfirmState);
+
+    function updateConfirmState() {
+      const hasFile = selectedFile !== null;
+      const hasName = $sceneNameInput.val().trim() !== '';
+      $confirmBtn.prop('disabled', !(hasFile && hasName));
+    }
+
+    // 取消
+    $('#gal-bg-cancel').on('click', () => {
+      $modal.remove();
+      showSpriteConfigModal();
+    });
+    $modal.on('click', function (e) {
+      if (e.target === this) {
+        $modal.remove();
+        showSpriteConfigModal();
+      }
+    });
+
+    // 保存
+    $('#gal-bg-confirm').on('click', async function () {
+      const sceneName = $sceneNameInput.val().trim();
+      if (!sceneName || !selectedFile) return;
+
+      $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 保存中...');
+
+      try {
+        // 转换为 Blob
+        const blob = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const arrayBuffer = reader.result;
+            resolve(new Blob([arrayBuffer], { type: selectedFile.type }));
+          };
+          reader.readAsArrayBuffer(selectedFile);
+        });
+
+        await saveBackground(sceneName, blob);
+        showToast(`背景已保存: ${sceneName}`);
+        $modal.remove();
+        showSpriteConfigModal();
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 保存背景失败:`, e);
+        showToast('保存失败');
+        $(this).prop('disabled', false).html('<i class="fa-solid fa-save"></i><span>保存背景</span>');
+      }
+    });
+  }
+
+  // ============================================
+  // 设置面板
+  // ============================================
+  function showSettingsPanel() {
+    const existingPanel = $('#gal-settings-panel');
+    if (existingPanel.length) {
+      existingPanel.remove();
+      return;
+    }
+
+    const panelHtml = `
+      <div class="gal-config-modal" id="gal-settings-panel">
+        <div class="gal-config-panel" style="max-width: 520px; max-height: 90vh; overflow-y: auto;">
+          <div class="gal-config-header">
+            <div class="gal-config-title"><i class="fa-solid fa-gamepad"></i> Galgame 设置</div>
+            <button class="gal-config-close" id="gal-settings-close">
+              <i class="fa-solid fa-times"></i>
+            </button>
+          </div>
+          <div class="gal-config-body" style="padding: 24px;">
+
+            <!-- 主开关 -->
+            <div style="text-align: center; margin-bottom: 24px;">
+              <button id="gal-main-toggle" class="${isEnabled ? 'gal-toggle-on' : 'gal-toggle-off'}"
+                      style="padding: 14px 40px; font-size: 1.1rem; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; gap: 10px;">
+                <i class="fa-solid ${isEnabled ? 'fa-toggle-on' : 'fa-toggle-off'}" style="font-size: 1.3rem;"></i>
+                <span>${isEnabled ? 'Galgame 模式已开启' : 'Galgame 模式已关闭'}</span>
+              </button>
+              <p style="margin-top: 8px; font-size: 0.8rem; color: #999;">当前角色卡独立设置</p>
+            </div>
+
+            <div class="gal-settings-divider"></div>
+
+            <!-- 📝 文本显示 -->
+            <div class="gal-settings-section">
+              <div class="gal-settings-section-title">
+                <i class="fa-solid fa-font"></i> 文本显示
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">字体大小</span>
+                <div class="gal-settings-control">
+                  <input type="range" id="gal-font-size" min="14" max="24" step="1" value="${settings.fontSize}">
+                  <span class="gal-range-value" id="gal-font-size-value">${settings.fontSize}px</span>
+                </div>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">对话框透明度</span>
+                <div class="gal-settings-control">
+                  <input type="range" id="gal-dialog-opacity" min="50" max="100" step="5" value="${Math.round(settings.dialogOpacity * 100)}">
+                  <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round(settings.dialogOpacity * 100)}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="gal-settings-divider"></div>
+
+            <!-- ▶️ 自动播放 -->
+            <div class="gal-settings-section">
+              <div class="gal-settings-section-title">
+                <i class="fa-solid fa-play"></i> 自动播放
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">播放间隔</span>
+                <div class="gal-settings-control">
+                  <input type="range" id="gal-auto-speed" min="1" max="8" step="0.5" value="${settings.autoPlaySpeed}">
+                  <span class="gal-range-value" id="gal-auto-speed-value">${settings.autoPlaySpeed}秒</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="gal-settings-divider"></div>
+
+            <!-- 🖼️ 显示设置 -->
+            <div class="gal-settings-section">
+              <div class="gal-settings-section-title">
+                <i class="fa-solid fa-display"></i> 显示设置
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">显示立绘</span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-show-sprites" ${settings.showSprites ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">沉浸模式 <small style="color:#999;">(隐藏其他楼层)</small></span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-hide-floors" ${settings.hideOtherFloors ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="gal-settings-divider"></div>
+
+            <!-- 🖼️ 立绘设置 -->
+            <div class="gal-settings-section">
+              <div class="gal-settings-section-title">
+                <i class="fa-solid fa-user"></i> 立绘设置
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">立绘大小</span>
+                <div class="gal-settings-control">
+                  <input type="range" id="gal-sprite-scale" min="50" max="150" step="5" value="${settings.spriteScale}">
+                  <span class="gal-range-value" id="gal-sprite-scale-value">${settings.spriteScale}%</span>
+                </div>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">垂直位置 <small style="color:#999;">(底部偏移)</small></span>
+                <div class="gal-settings-control">
+                  <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${settings.spriteBottomOffset}">
+                  <span class="gal-range-value" id="gal-sprite-bottom-value">${settings.spriteBottomOffset}%</span>
+                </div>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">立绘间距 <small style="color:#999;">(左右距离)</small></span>
+                <div class="gal-settings-control">
+                  <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings.spriteSpacing}">
+                  <span class="gal-range-value" id="gal-sprite-spacing-value">${settings.spriteSpacing}%</span>
+                </div>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">说话者光晕 <small style="color:#999;">(轮廓发光)</small></span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-speaker-glow" ${settings.speakerGlow ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">气泡指示器 <small style="color:#999;">(漫画风格)</small></span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-speaker-bubble" ${settings.speakerBubble ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="gal-settings-divider"></div>
+
+            <!-- ⌨️ 快捷键 -->
+            <div class="gal-settings-section">
+              <div class="gal-settings-section-title">
+                <i class="fa-solid fa-keyboard"></i> 快捷键
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">空格键 → 下一句</span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-space-next" ${settings.spaceKeyNext ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">回车键 → 下一句</span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-enter-next" ${settings.enterKeyNext ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">Ctrl长按 → 快进</span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-ctrl-skip" ${settings.ctrlKeySkip ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="gal-settings-divider"></div>
+
+            <!-- ⏩ 快进设置 -->
+            <div class="gal-settings-section">
+              <div class="gal-settings-section-title">
+                <i class="fa-solid fa-forward"></i> 快进设置
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">快进速度</span>
+                <div class="gal-settings-control">
+                  <input type="range" id="gal-skip-speed" min="0.01" max="0.2" step="0.01" value="${settings.skipSpeed}">
+                  <span class="gal-range-value" id="gal-skip-speed-value">${settings.skipSpeed}s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="gal-settings-divider"></div>
+
+            <!-- 功能按钮组 -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;">
+              <button class="gal-panel-btn" id="gal-open-sprite-manager">
+                <i class="fa-solid fa-images"></i>
+                <span>立绘管理</span>
+              </button>
+              <button class="gal-panel-btn secondary" id="gal-refresh-views">
+                <i class="fa-solid fa-sync"></i>
+                <span>刷新视图</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <style>
+        .gal-toggle-on {
+          background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);
+          color: #fff;
+          box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4);
+        }
+        .gal-toggle-off {
+          background: #e0e0e0;
+          color: #666;
+        }
+        .gal-toggle-on:hover, .gal-toggle-off:hover {
+          transform: scale(1.02);
+        }
+
+        .gal-settings-divider {
+          border-top: 1px solid #e0e0e0;
+          margin: 16px 0;
+        }
+
+        .gal-settings-section {
+          margin-bottom: 8px;
+        }
+
+        .gal-settings-section-title {
+          font-weight: 700;
+          font-size: 0.95rem;
+          color: ${THEME.dark};
+          margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .gal-settings-section-title i {
+          color: ${THEME.accent};
+        }
+
+        .gal-settings-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px 0;
+          border-bottom: 1px solid #f0f0f0;
+        }
+
+        .gal-settings-row:last-child {
+          border-bottom: none;
+        }
+
+        .gal-settings-label {
+          font-size: 0.9rem;
+          color: #444;
+        }
+
+        .gal-settings-control {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .gal-settings-control input[type="range"] {
+          width: 120px;
+          accent-color: ${THEME.accent};
+        }
+
+        .gal-range-value {
+          min-width: 45px;
+          text-align: right;
+          font-weight: 600;
+          font-size: 0.85rem;
+          color: ${THEME.accent};
+        }
+
+        /* Toggle Switch */
+        .gal-switch {
+          position: relative;
+          display: inline-block;
+          width: 48px;
+          height: 26px;
+        }
+
+        .gal-switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+
+        .gal-switch-slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background-color: #ccc;
+          transition: 0.3s;
+          border-radius: 26px;
+        }
+
+        .gal-switch-slider:before {
+          position: absolute;
+          content: "";
+          height: 20px;
+          width: 20px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          transition: 0.3s;
+          border-radius: 50%;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .gal-switch input:checked + .gal-switch-slider {
+          background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);
+        }
+
+        .gal-switch input:checked + .gal-switch-slider:before {
+          transform: translateX(22px);
+        }
+
+        .gal-panel-btn {
+          padding: 14px;
+          background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);
+          color: #fff;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 700;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          transition: all 0.2s;
+        }
+
+        .gal-panel-btn.secondary {
+          background: linear-gradient(135deg, #666 0%, #444 100%);
+        }
+
+        .gal-panel-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .gal-panel-btn i {
+          font-size: 1.3rem;
+        }
+      </style>
+    `;
+
+    $(topWindow.document.body).append(panelHtml);
+
+    const $panel = $('#gal-settings-panel');
+    makeDraggable($panel.find('.gal-config-panel'), $panel.find('.gal-config-header'));
+
+    // 关闭
+    $('#gal-settings-close').on('click', () => $panel.remove());
+    $panel.on('click', function (e) {
+      if (e.target === this) $panel.remove();
+    });
+
+    // 主开关
+    $('#gal-main-toggle').on('click', async function () {
+      isEnabled = !isEnabled;
+      setCurrentCharEnabled(isEnabled); // 保存到角色卡独立存储
+      updateButtonState();
+
+      if (isEnabled) {
+        $(this).removeClass('gal-toggle-off').addClass('gal-toggle-on');
+        $(this).html('<i class="fa-solid fa-toggle-on" style="font-size: 1.3rem;"></i><span>Galgame 模式已开启</span>');
+
+        await injectCOTToWorldbook();
+        await enableWorldbookGlobally();
+        applyGalgameMode();
+        if (settings.hideOtherFloors) hideNonLastFloors();
+        showToast('Galgame 模式已开启');
+      } else {
+        $(this).removeClass('gal-toggle-on').addClass('gal-toggle-off');
+        $(this).html(
+          '<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame 模式已关闭</span>',
+        );
+
+        await disableWorldbookGlobally();
+        restoreOriginalViews();
+        showToast('Galgame 模式已关闭');
+      }
+    });
+
+    // 滑块设置
+    $('#gal-font-size').on('input', function () {
+      settings.fontSize = parseInt($(this).val());
+      $('#gal-font-size-value').text(settings.fontSize + 'px');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    $('#gal-dialog-opacity').on('input', function () {
+      settings.dialogOpacity = parseInt($(this).val()) / 100;
+      $('#gal-dialog-opacity-value').text(Math.round(settings.dialogOpacity * 100) + '%');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    $('#gal-auto-speed').on('input', function () {
+      settings.autoPlaySpeed = parseFloat($(this).val());
+      $('#gal-auto-speed-value').text(settings.autoPlaySpeed + '秒');
+      saveSettings();
+    });
+
+    // 开关设置
+    $('#gal-show-sprites').on('change', function () {
+      settings.showSprites = $(this).is(':checked');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    $('#gal-hide-floors').on('change', function () {
+      settings.hideOtherFloors = $(this).is(':checked');
+      hideOtherFloors = settings.hideOtherFloors;
+      if (settings.enabled) {
+        if (settings.hideOtherFloors) {
+          hideNonLastFloors();
+        } else {
+          showAllFloors();
+        }
+      }
+      saveSettings();
+    });
+
+    $('#gal-space-next').on('change', function () {
+      settings.spaceKeyNext = $(this).is(':checked');
+      saveSettings();
+    });
+
+    $('#gal-enter-next').on('change', function () {
+      settings.enterKeyNext = $(this).is(':checked');
+      saveSettings();
+    });
+
+    $('#gal-ctrl-skip').on('change', function () {
+      settings.ctrlKeySkip = $(this).is(':checked');
+      saveSettings();
+    });
+
+    $('#gal-skip-speed').on('input', function () {
+      settings.skipSpeed = parseFloat($(this).val());
+      $('#gal-skip-speed-value').text(settings.skipSpeed + 's');
+      saveSettings();
+    });
+
+    // 立绘设置滑块
+    $('#gal-sprite-scale').on('input', function () {
+      settings.spriteScale = parseInt($(this).val());
+      $('#gal-sprite-scale-value').text(settings.spriteScale + '%');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    $('#gal-sprite-bottom').on('input', function () {
+      settings.spriteBottomOffset = parseInt($(this).val());
+      $('#gal-sprite-bottom-value').text(settings.spriteBottomOffset + '%');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    $('#gal-sprite-spacing').on('input', function () {
+      settings.spriteSpacing = parseInt($(this).val());
+      $('#gal-sprite-spacing-value').text(settings.spriteSpacing + '%');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    // 说话者效果开关
+    $('#gal-speaker-glow').on('change', function () {
+      settings.speakerGlow = $(this).is(':checked');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    $('#gal-speaker-bubble').on('change', function () {
+      settings.speakerBubble = $(this).is(':checked');
+      applySettingsToUI();
+      saveSettings();
+    });
+
+    // 立绘管理
+    $('#gal-open-sprite-manager').on('click', () => {
+      $panel.remove();
+      showAssetManagerModal();
+    });
+
+    // 刷新视图
+    $('#gal-refresh-views').on('click', () => {
+      if (settings.enabled) {
+        applyGalgameMode();
+        if (settings.hideOtherFloors) hideNonLastFloors();
+        showToast('视图已刷新');
+      } else {
+        showToast('请先开启 Galgame 模式');
+      }
+    });
+  }
+
+  // 应用设置到 UI
+  function applySettingsToUI() {
+    // 字体大小
+    $('.gal-dialog-text').css('font-size', settings.fontSize + 'px');
+
+    // 对话框透明度
+    $('.gal-dialog-layer').css('background', `rgba(255, 255, 255, ${settings.dialogOpacity})`);
+
+    // 立绘显示/隐藏
+    if (settings.showSprites) {
+      $('.gal-layer-character').show();
+    } else {
+      $('.gal-layer-character').hide();
+    }
+
+    // 立绘位置和大小设置
+    // ★ 使用 .attr('style') 强制覆盖，避免 jQuery .css() 可能被其他机制干扰
+    // 同时保留其他样式
+    const $charLayer = $('.gal-layer-character');
+    $charLayer.css({
+      bottom: settings.spriteBottomOffset + '%',
+      gap: settings.spriteSpacing + '%',
+    });
+    // 单独设置 CSS 变量
+    $charLayer.get(0)?.style.setProperty('--base-scale', settings.spriteScale / 100);
+
+    // 说话者光晕效果
+    if (settings.speakerGlow) {
+      $('.gal-layer-character').addClass('glow-enabled');
+    } else {
+      $('.gal-layer-character').removeClass('glow-enabled');
+    }
+
+    // 漫画式气泡指示器
+    if (settings.speakerBubble) {
+      $('.gal-layer-character').addClass('bubble-enabled');
+    } else {
+      $('.gal-layer-character').removeClass('bubble-enabled');
+    }
+  }
+
+  // 应用 Galgame 模式
+  function applyGalgameMode() {
+    // 找到最后一条AI消息并检查是否有Galgame内容
+    let hasValidGalgameContent = false;
+    const $allMes = $('#chat > .mes');
+    let $lastAiMes = null;
+
+    $allMes.each(function () {
+      if ($(this).attr('is_user') !== 'true') {
+        $lastAiMes = $(this);
+      }
+    });
+
+    if ($lastAiMes && $lastAiMes.length) {
+      const $mesText = $lastAiMes.find('.mes_text');
+      const html = $mesText.html();
+      if (html) {
+        const decodedHtml = decodeHtml(html);
+        const hasGalTags = /<(p|sprite|maintext)[^>]*>/i.test(decodedHtml);
+        if (hasGalTags) {
+          const parsed = parseGalgameContent(decodedHtml);
+          if (parsed.segments.length > 0) {
+            hasValidGalgameContent = true;
+          }
+        }
+      }
+    }
+
+    // 如果最后的AI消息没有Galgame内容，隐藏覆盖层
+    if (!hasValidGalgameContent) {
+      hideGlobalOverlay();
+      console.log(`[${SCRIPT_NAME}] 最后的AI消息不包含Galgame格式，隐藏覆盖层`);
+      return;
+    }
+
+    // 处理最后一条AI消息（只处理最后一条，避免不必要的开销）
+    if ($lastAiMes && $lastAiMes.length) {
+      processNewMessage($lastAiMes[0]);
+    }
+
+    // 强制隐藏其他楼层 - Galgame 模式必须只显示最后一条
+    hideNonLastFloors();
+
+    // 应用立绘设置（位置、大小等）
+    applySettingsToUI();
+  }
+
+  // 恢复原始视图
+  function restoreOriginalViews() {
+    // 隐藏全局覆盖层
+    hideGlobalOverlay();
+
+    // 仅移除不在全局覆盖层内的 Galgame 容器（如果有遗留的嵌入式容器）
+    $('.gal-game-container')
+      .not('#gal-global-overlay .gal-game-container')
+      .each(function () {
+        const mesId = $(this).data('mes-id');
+        const $mes = $(`.mes[mesid="${mesId}"]`);
+        const $mesText = $mes.find('.mes_text');
+
+        // 显示原始内容
+        $mesText.show();
+
+        // 移除 Galgame 容器
+        $(this).remove();
+      });
+
+    // 确保所有文本显示（防止异常）
+    $('.mes_text').show();
+
+    showAllFloors();
+  }
+
+  // 隐藏非最后楼层（使用CSS类确保!important生效）
+  function hideNonLastFloors() {
+    const $allMes = $('#chat > .mes');
+
+    // 找到最后一条AI消息
+    let $lastAiMes = null;
+    $allMes.each(function () {
+      if ($(this).attr('is_user') !== 'true') {
+        $lastAiMes = $(this);
+      }
+    });
+
+    // 隐藏所有消息楼层（包括最后一条AI消息，因为内容显示在覆盖层中）
+    $allMes.each(function () {
+      $(this).addClass('gal-hidden');
+    });
+
+    console.log(`[${SCRIPT_NAME}] 已隐藏 ${$allMes.length} 个消息楼层`);
+  }
+
+  // 显示所有楼层
+  function showAllFloors() {
+    $('#chat > .mes').removeClass('gal-hidden');
+    console.log(`[${SCRIPT_NAME}] 已显示所有消息楼层`);
+  }
+
+  /**
+   * 向消息中注入 Galgame 开启按钮
+   */
+  function injectGalgameButton(mesNode) {
+    const $mes = $(mesNode);
+    // 只给 AI 消息添加
+    if ($mes.attr('is_user') === 'true') return;
+
+    // 检查是否已存在
+    if ($mes.find('.gal-open-btn').length) return;
+
+    // 尝试插入到 mes_buttons (位于消息底部或侧边的按钮组)
+    const $buttons = $mes.find('.mes_buttons');
+
+    const btnHtml = `<div class="gal-open-btn" title="进入 Galgame 模式">Galgame</div>`;
+
+    if ($buttons.length) {
+      $buttons.prepend(btnHtml); // 插入到前面
+    } else {
+      // Fallback: 插入到 mes_text 后面
+      $mes.append(`<div style="display:flex; justify-content:flex-end; margin-top:5px;">${btnHtml}</div>`);
+    }
+  }
+
+  // ============================================
+  // 初始化
+  // ============================================
+  function addMenuButton() {
+    const $existingBtn = $(`#${SCRIPT_ID}-btn`);
+    if ($existingBtn.length) $existingBtn.remove();
+
+    const $btn = $(`
+      <div id="${SCRIPT_ID}-btn" class="menu_button" title="${SCRIPT_NAME} 设置"
+           style="transform: skewX(-5deg); border: 2px solid; box-shadow: 3px 3px 0 rgba(0,0,0,0.2);">
+        <i class="fa-solid fa-gamepad" style="transform: skewX(5deg);"></i>
+        <span style="transform: skewX(5deg);">Galgame</span>
+      </div>
+    `);
+
+    $btn.on('click', e => {
+      e.stopPropagation();
+      showSettingsPanel();
+    });
+
+    // 添加到菜单
+    if ($('#extensionsMenu').length) {
+      $('#extensionsMenu').append($btn);
+      console.log(`[${SCRIPT_NAME}] 按钮已添加到扩展菜单`);
+    } else if ($('#top-bar').length) {
+      $('#top-bar').append($btn);
+      console.log(`[${SCRIPT_NAME}] 按钮已添加到顶部菜单`);
+    }
+
+    updateButtonState();
+  }
+
+  function updateButtonState() {
+    const $btn = $(`#${SCRIPT_ID}-btn`);
+    if (isEnabled) {
+      $btn.css('background', THEME.accent);
+      $btn.css('color', THEME.dark);
+    } else {
+      $btn.css('background', '');
+      $btn.css('color', '');
+    }
+  }
+
+  async function init() {
+    console.log(`[${SCRIPT_NAME}] v${VERSION} 开始初始化...`);
+
+    try {
+      // 加载设置
+      loadSettings();
+      isEnabled = isCurrentCharEnabled(); // 使用角色卡独立状态
+      hideOtherFloors = settings.hideOtherFloors;
+
+      await initDB();
+      await loadAllSpritesToCache();
+      await loadAllBackgroundsToCache();
+      SpriteManager.init(); // 初始化立绘管理器（获取主角名称）
+      injectStyles();
+
+      // 延迟添加按钮和启动监听器
+      setTimeout(() => {
+        // ★ 延迟后重新检查角色卡状态（此时角色卡应该已加载）
+        isEnabled = isCurrentCharEnabled();
+        console.log(`[${SCRIPT_NAME}] 当前角色ID: ${getCurrentCharId()}, Galgame模式: ${isEnabled ? '开' : '关'}`);
+
+        addMenuButton();
+        setupMessageObserver();
+        setupGlobalEventListeners(); // 替换为全局事件监听
+        setupKeyboardShortcuts();
+        setupOptionsPanelObserver(); // 启动选项面板监控
+        setupFullscreenChangeListener(); // 监听全屏变化事件
+
+        // 扫描现有消息注入按钮
+        $('#chat > .mes').each(function () {
+          if (typeof injectGalgameButton === 'function') {
+            injectGalgameButton(this);
+          }
+        });
+
+        // 如果开启则自动应用，并确保世界书存在
+        if (isEnabled) {
+          // 每次加载时检查并确保世界书存在（异步执行，不阻塞UI）
+          injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 世界书注入失败:`, e));
+          enableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 世界书全局开启失败:`, e));
+
+          applyGalgameMode();
+          if (settings.hideOtherFloors) hideNonLastFloors();
+        }
+
+        // 使用SillyTavern官方事件监听消息完成
+        if (typeof topWindow.eventOn === 'function' && topWindow.tavern_events) {
+          topWindow.eventOn(topWindow.tavern_events.MESSAGE_RECEIVED, messageId => {
+            console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件触发, messageId: ${messageId}`);
+            if (!isEnabled) return;
+
+            // 延迟处理确保DOM更新
+            setTimeout(() => {
+              const mesNode = topWindow.document.querySelector(`.mes[mesid="${messageId}"]`);
+              if (mesNode) {
+                processNewMessage(mesNode);
+              }
+            }, 200);
+          });
+          console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件监听已注册`);
+
+          // 监听角色卡切换，更新开关状态
+          topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, () => {
+            const newEnabled = isCurrentCharEnabled();
+            if (newEnabled !== isEnabled) {
+              isEnabled = newEnabled;
+              updateButtonState();
+              console.log(`[${SCRIPT_NAME}] 角色卡切换，Galgame模式: ${isEnabled ? '开' : '关'}`);
+
+              if (isEnabled) {
+                applyGalgameMode();
+                if (settings.hideOtherFloors) hideNonLastFloors();
+              } else {
+                restoreOriginalViews();
+              }
+            }
+          });
+          console.log(`[${SCRIPT_NAME}] CHAT_CHANGED 事件监听已注册`);
+        }
+      }, 1500); // 增加延迟确保角色卡已加载
+
+      console.log(`[${SCRIPT_NAME}] v${VERSION} 初始化完成`);
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 初始化失败:`, e);
+    }
+  }
+
+  // 快进功能
+  function startSkipping() {
+    if (isSkipping) return;
+    isSkipping = true;
+
+    const $btn = $('#gal-global-overlay [data-action="skip"]');
+    $btn.addClass('active');
+
+    const doSkip = () => {
+      if (!isSkipping) return;
+
+      // ★ 关键修复：使用 .attr()
+      const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
+      const state = messageSegmentState.get(String(mesId));
+
+      console.log(
+        `[${SCRIPT_NAME}] [DEBUG] 快进中: mesId=${mesId}, index=${state?.currentIndex}, total=${state?.segments?.length}`,
+      );
+
+      if (!state) {
+        console.warn(`[${SCRIPT_NAME}] [DEBUG] 快进停止: 找不到状态`);
+        stopSkipping();
+        return;
+      }
+
+      // 尝试预判下一段是否存在
+      const hasNext = !!state.segments[state.currentIndex + 1];
+
+      if (hasNext) {
+        state.currentIndex++;
+        updateOverlaySegmentDisplay(state);
+        skipTimer = setTimeout(doSkip, settings.skipSpeed * 1000);
+      } else {
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 快进停止: 已到最后`);
+        stopSkipping();
+        showToast('已快进到最后');
+      }
+    };
+
+    doSkip();
+  }
+
+  function stopSkipping() {
+    isSkipping = false;
+    if (skipTimer) {
+      clearTimeout(skipTimer);
+      skipTimer = null;
+    }
+    $('#gal-global-overlay [data-action="skip"]').removeClass('active');
+  }
+
+  // 键盘快捷键
+  function setupKeyboardShortcuts() {
+    $(topWindow.document).on('keydown', function (e) {
+      if (!isEnabled) return;
+
+      // 如果正在输入框内，不触发快捷键
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+        return;
+      }
+
+      // Ctrl键快进
+      if (e.key === 'Control' && settings.ctrlKeySkip) {
+        startSkipping();
+      }
+
+      // 空格键
+      if (e.code === 'Space' && settings.spaceKeyNext) {
+        e.preventDefault();
+        triggerNextSegment();
+      }
+
+      // 回车键
+      if (e.code === 'Enter' && settings.enterKeyNext) {
+        e.preventDefault();
+        triggerNextSegment();
+      }
+    });
+
+    $(topWindow.document).on('keyup', function (e) {
+      if (e.key === 'Control' && settings.ctrlKeySkip) {
+        stopSkipping();
+      }
+    });
+
+    console.log(`[${SCRIPT_NAME}] 快捷键监听已启动`);
+  }
+
+  // 触发下一段 (找到最后一个可见的 Galgame 容器)
+  function triggerNextSegment() {
+    const $lastContainer = $('.gal-game-container:visible').last();
+    if (!$lastContainer.length) return;
+
+    const $nextBtn = $lastContainer.find('[data-action="next"]');
+    if ($nextBtn.length) {
+      $nextBtn.trigger('click');
+    }
+  }
+
+  // 通用拖拽功能
+  function makeDraggable($element, $handle) {
+    $handle.addClass('gal-draggable-handle');
+
+    let isDragging = false;
+    let startX, startY, initialLeft, initialTop;
+
+    $handle.on('mousedown touchstart', function (e) {
+      // 排除关闭按钮等交互元素
+      if ($(e.target).closest('button, input, a, .gal-config-close, .close').length) return;
+
+      e.preventDefault();
+      isDragging = true;
+
+      const evt = e.type === 'touchstart' ? e.touches[0] : e;
+      startX = evt.clientX;
+      startY = evt.clientY;
+
+      const offset = $element.offset();
+      // 获取相对于窗口的位置
+      initialLeft = offset.left;
+      initialTop = offset.top;
+
+      // 转换为 fixed 定位，保持当前视觉位置不变
+      $element.css({
+        position: 'fixed',
+        margin: 0,
+        left: initialLeft - $(topWindow).scrollLeft(),
+        top: initialTop - $(topWindow).scrollTop(),
+        transform: 'none', // 清除可能存在的transform居中
+      });
+    });
+
+    $(topWindow).on('mousemove touchmove', function (e) {
+      if (!isDragging) return;
+      e.preventDefault(); // 防止滚动
+
+      const evt = e.type === 'touchmove' ? e.touches[0] : e;
+      const dx = evt.clientX - startX;
+      const dy = evt.clientY - startY;
+
+      $element.css({
+        left: initialLeft - $(topWindow).scrollLeft() + dx,
+        top: initialTop - $(topWindow).scrollTop() + dy,
+      });
+    });
+
+    $(topWindow).on('mouseup touchend', function () {
+      isDragging = false;
+    });
+  }
+
+  // 启动
+  if ($ && topWindow.document.readyState === 'complete') {
+    init();
+  } else {
+    topWindow.addEventListener('load', init);
+  }
+})();

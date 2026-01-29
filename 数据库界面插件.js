@@ -41,6 +41,26 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     const COT_ENTRY_NAME = 'Galgame输出格式规范';
     // 预设表情列表
     const EXPRESSION_LIST = ['默认', '微笑', '生气', '难过', '惊讶', '嘲讽', '害羞', '思考', '大笑', '搞怪'];
+    // 表情到英文文生图tag的映射
+    const EXPRESSION_TAG_MAP = {
+        '默认': 'neutral expression, looking at viewer',
+        '微笑': 'smile, happy, gentle expression',
+        '生气': 'angry, furrowed brows, intense eyes',
+        '难过': 'sad, tears, sorrowful expression',
+        '惊讶': 'surprised, wide eyes, open mouth',
+        '嘲讽': 'smirk, condescending, mocking expression',
+        '害羞': 'blush, shy, embarrassed, looking away',
+        '思考': 'thinking, hand on chin, contemplative',
+        '大笑': 'laughing, open mouth, closed eyes, very happy',
+        '搞怪': 'playful, wink, tongue out, silly face',
+    };
+
+    // 获取表情对应的英文tag（支持自定义表情回退到默认）
+    function getExpressionTag(expressionName) {
+        return EXPRESSION_TAG_MAP[expressionName] || `${expressionName} expression`;
+    }
+
+
     /**
      * 动态生成Galgame COT模板
      * 从数据库获取已上传的背景场景名称，注入到模板中
@@ -56,17 +76,30 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             catch (e) {
                 console.warn(`[${SCRIPT_NAME}] 获取场景列表失败:`, e);
             }
-            
+
             // 获取完整表情列表（预设 + 自定义）
             const allExpressions = getAllExpressions();
             const expressionListText = allExpressions.join(', ');
 
             // 构建场景列表说明
-            const sceneListText = sceneNames.length > 0
-                ? `可用场景列表: ${sceneNames.join(', ')}\n- **严重警告**: 必须严格从上述列表中选择场景，严禁使用列表之外的名称，严禁自创地点。`
-                : `（暂无可用场景，请在插件设置中上传背景图片后使用）`;
+            let sceneListText = '';
+            if (settings.realTimeBackgroundGen) {
+                 sceneListText = sceneNames.length > 0
+                    ? `可用场景列表: ${sceneNames.join(', ')}\n- **优先使用**: 如果上述列表中有适合当前情节的场景，请优先使用。\n- **生成新场景**: 如果**完全没有**适合的场景，请生成新场景。格式: \`<background scene="新场景名"><bgimg>visual tags, scenery, indoors/outdoors, details...</bgimg>\`。`
+                    : `（暂无可用场景，请直接使用生成格式创建新场景：\`<background scene="新场景名"><bgimg>visual tags, scenery, indoors/outdoors, details...</bgimg>\`）`;
+            } else {
+                 sceneListText = sceneNames.length > 0
+                    ? `可用场景列表: ${sceneNames.join(', ')}\n- **严重警告**: 必须严格从上述列表中选择场景，严禁使用列表之外的名称，严禁自创地点。`
+                    : `（暂无可用场景，请在插件设置中上传背景图片后使用）`;
+            }
+
             // 构建示例中的场景名
             const exampleScene = sceneNames.length > 0 ? sceneNames[0] : '场景名';
+            
+            const extraRule = settings.realTimeBackgroundGen 
+                ? `5. **场景生成**: 遇到新场景时，必须使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式，TAGS必须是英文单词，逗号分隔。`
+                : `5. **背景场景必须使用已配置的场景名称**`;
+
             return `# Galgame 输出格式规范
 
 本角色卡配合专用前端面板，输出将被解析为Galgame视觉小说界面。
@@ -135,7 +168,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 2. 表情标签直接跟在对话引号后面，无空格
 3. 旁白不需要表情标签
 4. maintext标签包裹所有游戏内容
-5. **背景场景必须使用已配置的场景名称**
+${extraRule}
 `;
         });
     }
@@ -158,6 +191,22 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     // 自定义HTML存储键
     const CUSTOM_LOCATION_HTML_KEY = `${SCRIPT_ID}_custom_location_html`;
     const CUSTOM_TIME_HTML_KEY = `${SCRIPT_ID}_custom_time_html`;
+    // ComfyUI 相关存储键
+    const COMFYUI_SETTINGS_KEY = `${SCRIPT_ID}_comfyui_settings`;
+    const COMFY_WORKFLOWS_KEY = `${SCRIPT_ID}_comfy_workflows`;
+    const CHAR_APPEARANCE_PROMPTS_KEY = `${SCRIPT_ID}_char_appearance_prompts`;
+
+    // ComfyUI 默认设置
+    const DEFAULT_COMFYUI_SETTINGS = {
+        apiUrl: 'http://127.0.0.1:8188',
+        defaultCharWorkflow: 'default_char',
+        defaultBgWorkflow: 'default_bg',
+        steps: 20,
+        cfgScale: 7,
+        width: 512,
+        height: 768,
+        negativePrompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers',
+    };
     // 默认设置 (全局)
     const DEFAULT_SETTINGS = {
         // 文本显示
@@ -184,6 +233,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         ctrlKeySkip: true, // 长按Ctrl快进
         // 智能检测
         smartDetection: false, // 是否智能检测内容才显示界面
+        // ComfyUI 设置
+        comfyui: Object.assign({}, DEFAULT_COMFYUI_SETTINGS),
+        // ComfyUI
+        defaultCheckpoint: '', // 默认模型
+        realTimeBackgroundGen: false, // 实时背景生成
     };
     // 当前设置 (全局)
     let settings = Object.assign({}, DEFAULT_SETTINGS);
@@ -198,6 +252,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         isLoaded: false,
         volume: 0.5,
         isPlaying: false,
+        
+        // 追踪正在生成的场景，避免重复触发
+        generatingScenes: new Set(),
         init() {
             return __awaiter(this, void 0, void 0, function* () {
                 // 恢复音量设置
@@ -372,6 +429,509 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     }
 
     // ============================================
+    // ComfyUI 状态与辅助函数
+    // ============================================
+
+    // 获取所有角色的外貌提示词 { characterId: promptText }
+    function getCharAppearancePrompts() {
+        try {
+            const saved = topWindow.localStorage.getItem(CHAR_APPEARANCE_PROMPTS_KEY);
+            if (saved) return JSON.parse(saved);
+        } catch (e) { console.warn(`[${SCRIPT_NAME}] 加载角色外貌提示词失败:`, e); }
+        return {};
+    }
+
+    function saveCharAppearancePrompts(prompts) {
+        try {
+            topWindow.localStorage.setItem(CHAR_APPEARANCE_PROMPTS_KEY, JSON.stringify(prompts));
+        } catch (e) { console.warn(`[${SCRIPT_NAME}] 保存角色外貌提示词失败:`, e); }
+    }
+
+    // 获取单个角色的外貌提示词
+    function getCharAppearancePrompt(characterId) {
+        // 如果是 'current_char'，尝试获取真实名字
+        if (characterId === 'current_char') {
+            const list = getCharacterListFromDatabase();
+            const current = list.find(c => c.id === 'current_char');
+            if (current) characterId = current.name;
+        }
+        const prompts = getCharAppearancePrompts();
+        return prompts[characterId] || '';
+    }
+
+    // 设置单个角色的外貌提示词
+    function setCharAppearancePrompt(characterId, promptText) {
+        const prompts = getCharAppearancePrompts();
+        prompts[characterId] = promptText;
+        saveCharAppearancePrompts(prompts);
+    }
+
+    // 获取 ComfyUI 设置 (合并默认值)
+    function getComfyUISettings() {
+        if (!settings.comfyui) {
+            settings.comfyui = Object.assign({}, DEFAULT_COMFYUI_SETTINGS);
+        }
+        return settings.comfyui;
+    }
+
+    function saveComfyUISettings(newSettings) {
+        settings.comfyui = newSettings;
+        saveSettings();
+    }
+
+    // 获取保存的工作流列表 { id: { name, json } }
+    function getComfyWorkflows() {
+        try {
+            const saved = topWindow.localStorage.getItem(COMFY_WORKFLOWS_KEY);
+            if (saved) return JSON.parse(saved);
+        } catch (e) { console.warn(`[${SCRIPT_NAME}] 加载工作流失败:`, e); }
+        return {};
+    }
+
+    function saveComfyWorkflows(workflows) {
+        try {
+            topWindow.localStorage.setItem(COMFY_WORKFLOWS_KEY, JSON.stringify(workflows));
+        } catch (e) { console.warn(`[${SCRIPT_NAME}] 保存工作流失败:`, e); }
+    }
+
+    // ============================================
+    // ComfyUI API 核心
+    // ============================================
+
+    // 尝试使用 GM_xmlhttpRequest (如果环境支持，如油猴或特定的加载器)
+    function gmFetch(url, options = {}) {
+        return new Promise((resolve, reject) => {
+            if (typeof GM_xmlhttpRequest === 'undefined') {
+                reject(new Error('GM_xmlhttpRequest is not defined'));
+                return;
+            }
+            GM_xmlhttpRequest({
+                method: options.method || 'GET',
+                url: url,
+                headers: options.headers || {},
+                data: options.body || undefined,
+                timeout: 60000,
+                onload: (response) => {
+                    resolve({
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        statusText: response.statusText,
+                        text: () => Promise.resolve(response.responseText),
+                        json: () => Promise.resolve(JSON.parse(response.responseText)),
+                        blob: () => Promise.resolve(new Blob([response.response], { type: 'image/png' })) // 简化的 Blob 处理
+                    });
+                },
+                onerror: (error) => reject(new Error(error.error || 'Network Error')),
+                ontimeout: () => reject(new Error('Timeout'))
+            });
+        });
+    }
+
+    // 智能 Fetch: 优先尝试各种特权 Fetch 以绕过 CORS
+    const safeFetch = async (url, options = {}) => {
+        // 1. 尝试直接使用 GM_xmlhttpRequest (如果当前是油猴脚本)
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+            console.log(`[${SCRIPT_NAME}] 使用原生 GM_xmlhttpRequest 请求: ${url}`);
+            return gmFetch(url, options);
+        }
+
+        // 3. 普通 Fetch (受 CORS 限制)
+        return fetch(url, options);
+    };
+
+    const ComfyUIAPI = {
+        // 获取 ST 请求头
+        getHeaders() {
+            if (typeof SillyTavern !== 'undefined' && typeof SillyTavern.getRequestHeaders === 'function') {
+                return { ...SillyTavern.getRequestHeaders(), 'Content-Type': 'application/json' };
+            }
+            return { 'Content-Type': 'application/json' };
+        },
+
+        // ST 后端代理请求助手
+        async stFetch(endpoint, body) {
+            console.log(`[${SCRIPT_NAME}] Proxy Request: ${endpoint}`, body);
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                 const errText = await response.text();
+                 throw new Error(`SillyTavern Proxy Error (${response.status}): ${errText}`);
+            }
+            return response;
+        },
+
+        // 检查连接 (通过尝试获取采样器)
+        async checkConnection() {
+            const s = getComfyUISettings();
+            const baseUrl = s.apiUrl.replace(/\/$/, '');
+            try {
+                // 使用 /api/sd/comfy/samplers 作为连接测试
+                await this.stFetch('/api/sd/comfy/samplers', { url: baseUrl });
+                return true;
+            } catch (e) {
+                console.error(`[${SCRIPT_NAME}] ComfyUI连接失败 (Proxy):`, e);
+                return false;
+            }
+        },
+
+        // 生成简易 workflow 用于兜底 (SDXL Turbo 风格)
+        buildDefaultWorkflow(positive, negative, width, height, steps, cfg) {
+            return {
+                "3": {
+                    "inputs": {
+                        "seed": "%seed%",
+                        "steps": steps,
+                        "cfg": cfg,
+                        "sampler_name": "euler_ancestral",
+                        "scheduler": "normal",
+                        "denoise": 1,
+                        "model": ["4", 0],
+                        "positive": ["6", 0],
+                        "negative": ["7", 0],
+                        "latent_image": ["5", 0]
+                    },
+                    "class_type": "KSampler"
+                },
+                "4": {
+                    "inputs": { "ckpt_name": "your_model_here.safetensors" },
+                    "class_type": "CheckpointLoaderSimple"
+                },
+                "5": {
+                    "inputs": { "width": width, "height": height, "batch_size": 1 },
+                    "class_type": "EmptyLatentImage"
+                },
+                "6": {
+                    "inputs": { "text": "%prompt%", "clip": ["4", 1] },
+                    "class_type": "CLIPTextEncode"
+                },
+                "7": {
+                    "inputs": { "text": "%negative%", "clip": ["4", 1] },
+                    "class_type": "CLIPTextEncode"
+                },
+                "8": {
+                    "inputs": { "samples": ["3", 0], "vae": ["4", 2] },
+                    "class_type": "VAEDecode"
+                },
+                "9": {
+                    "inputs": { "filename_prefix": "GalgameGen", "images": ["8", 0] },
+                    "class_type": "SaveImage"
+                }
+            };
+        },
+
+        // 辅助：识别文本节点
+        isTextNode(node) {
+            if (!node) return false;
+            const type = node.class_type;
+            // 兼容各种常见的文本编码节点
+            return type === 'CLIPTextEncode' || type === 'CLIPTextEncodeSDXL' || 
+                   type === 'ShowText' || type === 'PrimitiveNode' || 
+                   (type && type.includes('TextEncode'));
+        },
+
+        // 辅助：查找采样器节点
+        findSamplerNodes(workflow) {
+            const samplers = [];
+            for (const id in workflow) {
+                const node = workflow[id];
+                if (node.class_type && (
+                    node.class_type.includes('Sampler') || // KSampler, KSamplerAdvanced...
+                    node.class_type === 'KModel' ||       // 某些变体
+                    node.class_type === 'Samplers'
+                )) {
+                     samplers.push({ id, node });
+                }
+            }
+            return samplers;
+        },
+
+        // 辅助：从节点输入反向追踪源头
+        traceBackInput(workflow, nodeId, inputName) {
+             const node = workflow[nodeId];
+             if (!node || !node.inputs || !node.inputs[inputName]) return null;
+             
+             const link = node.inputs[inputName];
+             // ComfyUI Link 格式: ["nodeId", slotIndex]
+             if (!Array.isArray(link) || link.length < 1) return null;
+             
+             const sourceId = link[0];
+             const sourceNode = workflow[sourceId];
+             if (!sourceNode) return null;
+
+             return { id: sourceId, node: sourceNode };
+        },
+
+        // 注入提示词到任何 workflow
+        injectPromptsToWorkflow(workflow, positive, negative, seed) {
+            // =========================================================
+            // Stage 1: 变量替换模式 (Variable Replacement)
+            // =========================================================
+            // 参考 temp_script.js 的实现，优先支持 %prompt% 等占位符
+            
+            let workflowStr = JSON.stringify(workflow);
+            let hasVariables = false;
+            
+            const replacements = {
+                '%prompt%': positive,
+                '%negative%': negative,
+                '%seed%': seed
+            };
+            
+            // 检查是否存在占位符
+            for (const key in replacements) {
+                if (workflowStr.includes(key)) {
+                    hasVariables = true;
+                    break;
+                }
+            }
+            
+            if (hasVariables) {
+                console.log(`[${SCRIPT_NAME}] 使用变量替换模式注提示词 (%params%)`);
+                
+                // 特殊处理 seed: 将 "%seed%" 替换为 数字 (即去掉双引号)
+                // 这样生成的 JSON 中 seed 就是数字类型而不是字符串 "12345"
+                if (workflowStr.includes('"%seed%"')) {
+                     workflowStr = workflowStr.split('"%seed%"').join(seed);
+                }
+
+                for (const [key, value] of Object.entries(replacements)) {
+                    if (key === '%seed%') continue; // seed 已处理
+
+                    // 安全转义处理：如果 value 是字符串，需要转义引号和反斜杠以保证 JSON 有效性
+                    const safeValue = typeof value === 'string' ? 
+                        value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') : 
+                        value;
+                        
+                    // 全局替换
+                    workflowStr = workflowStr.split(key).join(safeValue);
+                }
+                
+                try {
+                    const newWorkflow = JSON.parse(workflowStr);
+                    // 原地清空并更新，保留原始对象引用
+                    for (const k in workflow) delete workflow[k];
+                    Object.assign(workflow, newWorkflow);
+                    
+                    return { workflow, posNodeFound: true, negNodeFound: true };
+                } catch (e) {
+                    console.error(`[${SCRIPT_NAME}] 变量替换后 JSON 解析失败:`, e);
+                    // 解析失败则回退到后续模式
+                }
+            }
+
+            // =========================================================
+            // Stage 2: 智能拓扑追踪 (Smart Topology Tracing)
+            // =========================================================
+            console.log(`[${SCRIPT_NAME}] 尝试智能拓扑追踪注入...`);
+            let posNodeFound = false;
+            let negNodeFound = false;
+            
+            const samplers = this.findSamplerNodes(workflow);
+            if (samplers.length > 0) {
+                console.log(`[${SCRIPT_NAME}] 找到 ${samplers.length} 个采样器节点`);
+                
+                // 辅助递归函数：寻找真正的文本输入源
+                const findTextSource = (nodeId, depth = 0) => {
+                    if (depth > 10) return null; // 防止死循环
+                    const node = workflow[nodeId];
+                    if (!node) return null;
+
+                    // 1. 如果当前节点就是文本节点，返回它
+                    if (this.isTextNode(node)) return nodeId;
+
+                    // 2. 如果是中间节点 (如 ConditioningCombine, LoraLoader 等)，尝试追踪其输入
+                    const inputsToCheck = ['conditioning', 'conditioning_1', 'conditioning_2', 'clip', 'samples']; 
+                    for (const inputName of inputsToCheck) {
+                        const source = this.traceBackInput(workflow, nodeId, inputName);
+                        if (source) {
+                            const res = findTextSource(source.id, depth + 1);
+                            if (res) return res;
+                        }
+                    }
+                    return null;
+                };
+
+                for (const { id: samplerId, node: samplerNode } of samplers) {
+                    // 注入种子
+                    if (samplerNode.inputs) {
+                        if (samplerNode.inputs.seed !== undefined) samplerNode.inputs.seed = seed;
+                        if (samplerNode.inputs.noise_seed !== undefined) samplerNode.inputs.noise_seed = seed;
+                    }
+
+                    // 追踪 Positive
+                    const posSource = this.traceBackInput(workflow, samplerId, 'positive');
+                    if (posSource) {
+                        const targetId = findTextSource(posSource.id);
+                        if (targetId && workflow[targetId].inputs) {
+                            workflow[targetId].inputs.text = positive;
+                            console.log(`[${SCRIPT_NAME}] 自动追踪并注入 Positive -> Node ${targetId}`);
+                            posNodeFound = true;
+                        }
+                    }
+
+                    // 追踪 Negative
+                    const negSource = this.traceBackInput(workflow, samplerId, 'negative');
+                    if (negSource) {
+                         const targetId = findTextSource(negSource.id);
+                         if (targetId && workflow[targetId].inputs) {
+                            workflow[targetId].inputs.text = negative;
+                            console.log(`[${SCRIPT_NAME}] 自动追踪并注入 Negative -> Node ${targetId}`);
+                            negNodeFound = true;
+                         }
+                    }
+                }
+            }
+
+            if (posNodeFound || negNodeFound) {
+                 return { workflow, posNodeFound, negNodeFound };
+            }
+
+            // =========================================================
+            // Stage 3: 旧版启发式兜底 (Legacy Fallback)
+            // =========================================================
+             console.log(`[${SCRIPT_NAME}] 拓扑追踪失败，使用列表顺序兜底...`);
+
+            // 1. 尝试查找 CLIPTextEncode (手动查找，不再依赖 textNodes 数组构建逻辑)
+            const textNodes = [];
+            for (const id in workflow) {
+                if (this.isTextNode(workflow[id])) {
+                    textNodes.push(workflow[id]);
+                }
+                // 注入随机种子 (兜底)
+                if (workflow[id].inputs && (workflow[id].inputs.seed !== undefined || workflow[id].inputs.noise_seed !== undefined)) {
+                     if (typeof workflow[id].inputs.seed === 'number') workflow[id].inputs.seed = seed;
+                }
+            }
+
+            if (textNodes.length >= 1) {
+                textNodes[0].inputs.text = positive;
+                posNodeFound = true;
+            }
+            if (textNodes.length >= 2) {
+                textNodes[1].inputs.text = negative;
+                negNodeFound = true;
+            }
+
+            return { workflow, posNodeFound, negNodeFound };
+        },
+
+        // 获取可用模型列表 (通过 ST 代理)
+        async getModels(baseUrl) {
+             try {
+                console.log(`[${SCRIPT_NAME}] 正在获取模型列表 (Proxy)...`);
+                // ST API: /api/sd/comfy/models
+                const response = await this.stFetch('/api/sd/comfy/models', { url: baseUrl });
+                const rawData = await response.json(); 
+                
+                // 兼容处理：ST 有时返回字符串数组，有时可能返回对象数组 (如果安装了某些插件)
+                // 统一转换为字符串数组 (filenames)
+                const models = rawData.map(m => {
+                    if (typeof m === 'string') return m;
+                    if (m && typeof m === 'object') return m.value || m.title || m.filename || m.name || JSON.stringify(m);
+                    return String(m);
+                });
+
+                console.log(`[${SCRIPT_NAME}] 获取到 ${models.length} 个模型`);
+                return models;
+             } catch (e) {
+                console.error(`[${SCRIPT_NAME}] 获取模型列表异常 (Proxy):`, e);
+                return [];
+             }
+        },
+
+        // 执行生成 (通过 ST 代理)
+        async generate(workflowJson, promptText, negativeText, extraSettings = {}) {
+            const s = getComfyUISettings();
+            const baseUrl = s.apiUrl.replace(/\/$/, '');
+            const seed = Math.floor(Math.random() * 10000000000000);
+            const { checkpointOverride } = extraSettings; // 支持从外部传入模型名称
+
+            // 格式检查：防止用户使用 UI 格式的 JSON
+            if (workflowJson.nodes && Array.isArray(workflowJson.nodes) && workflowJson.version !== undefined) {
+                console.error(`[${SCRIPT_NAME}] 错误: 检测到 UI 格式 Workflow`);
+                throw new Error("格式错误: 检测到您使用的是 'Save' 保存的 UI 格式 JSON。请在 ComfyUI 设置中开启 'Enable Dev mode Options'，然后使用 'Save (API Format)' 按钮保存 Workflow。");
+            }
+            // 简单的 API 格式检查 (必须是对象且没有 nodes 数组)
+            if (typeof workflowJson !== 'object' || Array.isArray(workflowJson)) {
+                 throw new Error("格式错误: Workflow 必须是 API 格式的 JSON 对象 (Key 为节点ID)。");
+            }
+            
+            let finalWorkflow = JSON.parse(JSON.stringify(workflowJson)); // Deep clone
+            
+            // 查找模型加载节点
+            let checkpointNode = null;
+            for (const id in finalWorkflow) {
+                const node = finalWorkflow[id];
+                if ((node.class_type === 'CheckpointLoaderSimple' || node.class_type === 'CheckpointLoader') && node.inputs) {
+                    checkpointNode = node;
+                    break;
+                }
+            }
+            
+            // 1. 如果指定了 override，强制替换
+            if (checkpointOverride && checkpointNode) {
+                 console.log(`[${SCRIPT_NAME}] 使用指定模型覆盖: ${checkpointOverride}`);
+                 checkpointNode.inputs.ckpt_name = checkpointOverride;
+            } 
+            // 2. 否则检查是否有占位符需要自动修复
+            else if (checkpointNode && checkpointNode.inputs.ckpt_name === 'your_model_here.safetensors') {
+                console.log(`[${SCRIPT_NAME}] 检测到占位符模型，尝试自动替换...`);
+                try {
+                    const models = await this.getModels(baseUrl); // 使用代理获取
+                    if (models && models.length > 0) {
+                         // 查找 SDXL 模型 (不区分大小写)
+                         const sdxl = models.find(m => (typeof m === 'string' && m.toLowerCase().includes('sdxl')));
+                         checkpointNode.inputs.ckpt_name = sdxl || models[0];
+                         console.log(`[${SCRIPT_NAME}] 自动替换模型为: ${checkpointNode.inputs.ckpt_name}`);
+                    } else {
+                        throw new Error("模型列表为空");
+                    }
+                } catch (e) {
+                    console.error(`[${SCRIPT_NAME}] 自动替换失败:`, e);
+                }
+            }
+
+            // 注入提示词 (in-place modification)
+            this.injectPromptsToWorkflow(finalWorkflow, promptText, negativeText, seed);
+            
+            // 发送请求 (通过 ST 代理)
+            const clientId = 'galgame_client_' + Date.now();
+            console.log(`[${SCRIPT_NAME}] 发送生成请求到 Proxy /api/sd/comfy/generate...`);
+            
+            // 构造 ST代理 需要的 Prompt 结构
+            const comfyPrompt = {
+                client_id: clientId,
+                prompt: finalWorkflow
+            };
+
+            const response = await this.stFetch('/api/sd/comfy/generate', {
+                url: baseUrl,
+                prompt: JSON.stringify(comfyPrompt) // ST 要求 prompt 字段是 JSON 字符串
+            });
+
+            const result = await response.json();
+            
+            // ST 代理直接返回 Base64 数据
+            if (result.data) {
+                const base64Data = result.data.split(',').pop(); // 确保去掉 data:image/png;base64, 前缀
+                // 转换为 Blob
+                const byteCharacters = atob(base64Data);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                return new Blob([byteArray], { type: 'image/png' });
+            } else {
+                throw new Error("SillyTavern代理返回了空数据");
+            }
+        }
+    };
+
+    // ============================================
     // 自定义表情管理
     // ============================================
 
@@ -401,32 +961,32 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     function addCustomExpression(name) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!name || typeof name !== 'string') return false;
-            
+
             const trimmedName = name.trim();
             if (!trimmedName) return false;
-            
+
             // 检查是否与预设表情重复
             if (EXPRESSION_LIST.includes(trimmedName)) {
                 showToast(`"${trimmedName}" 是预设表情，无需添加`);
                 return false;
             }
-            
+
             const customs = getCustomExpressions();
-            
+
             // 检查是否已存在
             if (customs.includes(trimmedName)) {
                 showToast(`"${trimmedName}" 已存在`);
                 return false;
             }
-            
+
             customs.push(trimmedName);
             saveCustomExpressions(customs);
-            
+
             // 自动更新 COT
             if (isEnabled) {
                 yield injectCOTToWorldbook();
             }
-            
+
             showToast(`已添加表情: ${trimmedName}`);
             return true;
         });
@@ -437,20 +997,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         return __awaiter(this, void 0, void 0, function* () {
             const customs = getCustomExpressions();
             const index = customs.indexOf(name);
-            
+
             if (index === -1) {
                 showToast(`"${name}" 不存在`);
                 return false;
             }
-            
+
             customs.splice(index, 1);
             saveCustomExpressions(customs);
-            
+
             // 自动更新 COT
             if (isEnabled) {
                 yield injectCOTToWorldbook();
             }
-            
+
             showToast(`已删除表情: ${name}`);
             return true;
         });
@@ -597,7 +1157,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 console.log(`[${SCRIPT_NAME}] 表格数据为空`);
                 return result;
             }
-            
+
             // 打印所有表名，用于调试
             const availableSheets = Object.values(tableData).map(s => `${s.name}(${s.uid})`).join(', ');
             console.log(`[${SCRIPT_NAME}] 可用表格: ${availableSheets}`);
@@ -615,7 +1175,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 
             // 遍历所有表格查找全局数据表
             let targetSheet = null;
-            
+
             // 策略1: 优先通过 UID 查找
             for (const key of Object.keys(tableData)) {
                 if (tableData[key]?.uid === 'sheet_global_data') {
@@ -624,7 +1184,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     break;
                 }
             }
-            
+
             // 策略2: 如果UID未找到，通过名称查找
             if (!targetSheet) {
                  for (const key of Object.keys(tableData)) {
@@ -642,7 +1202,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 if (content.length >= 2) {
                     const headers = content[0] || [];
                     const dataRow = content[1] || []; // 数据在第二行
-                    
+
                     console.log(`[${SCRIPT_NAME}] 全局表头:`, headers);
                     console.log(`[${SCRIPT_NAME}] 全局数据:`, dataRow);
 
@@ -650,10 +1210,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     for (const [field, columnNames] of Object.entries(columnMappings)) {
                         for (const colName of columnNames) {
                             // 模糊匹配列名（去除空格）
-                            const colIndex = headers.findIndex(h => 
+                            const colIndex = headers.findIndex(h =>
                                 h && String(h).trim() === colName
                             );
-                            
+
                             if (colIndex !== -1 && dataRow[colIndex]) {
                                 result[field] = String(dataRow[colIndex]).trim();
                                 break;
@@ -666,7 +1226,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             } else {
                  console.log(`[${SCRIPT_NAME}] 未找到全局数据表`);
             }
-            
+
             console.log(`[${SCRIPT_NAME}] 最终获取地点时间结果:`, result);
 
         } catch (e) {
@@ -686,10 +1246,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         const $timeText = $('#gal-time-text');
         const $locationBar = $('#gal-location-bar');
         const $timeBar = $('#gal-time-bar');
-        
+
         // 检查数据是否有效 (简单的有效性检查: 是否所有字段都为空)
         const isEmpty = !data.primaryRegion && !data.secondaryRegion && !data.detailedLocation && !data.currentTime;
-        
+
         if (isEmpty && retryCount < 10) {
             console.log(`[${SCRIPT_NAME}] 全局数据为空，将在 1秒后重试 (${retryCount + 1}/10)...`);
             setTimeout(() => updateLocationTimeDisplay(retryCount + 1), 1000);
@@ -715,7 +1275,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 
         // 自动缩小过长文字
         // 允许的文字最大宽度 = 容器最大宽度 - padding(30) - icon(20) - buffer(10)
-        autoShrinkText($locationText, 290); 
+        autoShrinkText($locationText, 290);
         autoShrinkText($timeText, 200);
 
         console.log(`[${SCRIPT_NAME}] 更新地点时间显示: ${locationText} | ${timeText}`);
@@ -739,13 +1299,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             const scale = maxWidth / actualWidth;
             // 最小缩放到 0.5，保证可读性
             const finalScale = Math.max(0.5, scale);
-            
+
             $element.css({
                 'transform': `scaleX(${finalScale})`,
                 'transform-origin': 'left center',
                 'width': `${actualWidth}px` // 锁定宽度，防止布局坍塌
             });
-            
+
             // 如果缩放后依然超出（因为有最小缩放限制），则让父容器 overflow:hidden 截断
         }
     }
@@ -821,21 +1381,21 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         return __awaiter(this, void 0, void 0, function* () {
             if (!spritesList || spritesList.length === 0) return;
             if (!db) yield initDB();
-            
+
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([STORE_SPRITES], 'readwrite');
                 const store = transaction.objectStore(STORE_SPRITES);
-                
+
                 transaction.oncomplete = () => {
                     console.log(`[${SCRIPT_NAME}] 批量保存立绘完成: ${spritesList.length} 个`);
                     resolve();
                 };
-                
+
                 transaction.onerror = (event) => {
                     console.error(`[${SCRIPT_NAME}] 批量保存立绘失败:`, event.target.error);
                     reject(event.target.error);
                 };
-                
+
                 spritesList.forEach(item => {
                     const id = `${item.characterId}_${item.expression}`;
                     const data = {
@@ -847,7 +1407,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                         lastModified: new Date().toISOString(),
                     };
                     store.put(data);
-                    
+
                     // 更新缓存
                     let blobUrl;
                     if (item.imageUrl) {
@@ -1060,21 +1620,21 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         return __awaiter(this, void 0, void 0, function* () {
             if (!backgroundsList || backgroundsList.length === 0) return;
             if (!db) yield initDB();
-            
+
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
                 const store = transaction.objectStore(STORE_BACKGROUNDS);
-                
+
                 transaction.oncomplete = () => {
                     console.log(`[${SCRIPT_NAME}] 批量保存背景完成: ${backgroundsList.length} 个`);
                     resolve();
                 };
-                
+
                 transaction.onerror = (event) => {
                     console.error(`[${SCRIPT_NAME}] 批量保存背景失败:`, event.target.error);
                     reject(event.target.error);
                 };
-                
+
                 backgroundsList.forEach(item => {
                     const id = item.sceneName;
                     const data = {
@@ -1085,7 +1645,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                         lastModified: new Date().toISOString(),
                     };
                     store.put(data);
-                    
+
                     // 更新缓存
                     let blobUrl;
                     if (item.imageUrl) {
@@ -1095,6 +1655,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     }
                     if (blobUrl) {
                         sceneBackgrounds.set(id, blobUrl);
+                        console.log(`[${SCRIPT_NAME}] [DEBUG] saveBackgroundsBatch 更新缓存: "${id}" URL: ${blobUrl.substring(0, 50)}... keys=${sceneBackgrounds.size}`);
                     }
                 });
             });
@@ -1105,8 +1666,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         return __awaiter(this, void 0, void 0, function* () {
             if (!sceneName)
                 return null;
+            // [DEBUG]
+            console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 查缓存: "${sceneName}" (len=${sceneName.length}). CacheSize: ${sceneBackgrounds.size}`);
+            // if (sceneBackgrounds.size < 10) console.log(`[${SCRIPT_NAME}] [DEBUG] Cache Keys:`, Array.from(sceneBackgrounds.keys()));
+            
             // 先查缓存
             if (sceneBackgrounds.has(sceneName)) {
+                console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 命中缓存: "${sceneName}"`);
                 return sceneBackgrounds.get(sceneName);
             }
             if (!db)
@@ -1518,12 +2084,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     return;
                 }
                 // 尝试获取场景背景图片
-                console.log(`[${SCRIPT_NAME}] [DEBUG] applySceneTint 被调用，场景: "${scene}"`);
+                console.log(`[${SCRIPT_NAME}] [DEBUG] applySceneTint 被调用，场景: "${scene}" (len=${scene.length})`);
+                // console.log(`[${SCRIPT_NAME}] [DEBUG] 当前Cache Keys:`, Array.from(sceneBackgrounds.keys()));
                 const bgUrl = yield getBackground(scene);
                 console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 返回: ${bgUrl ? '有图片URL' : 'null/undefined'}`);
                 if (bgUrl) {
                     // 应用背景图片
-                    $bgLayer.addClass('has-bg').css({
+                    $bgLayer.addClass('has-bg').removeClass('generating-bg').empty().css({
                         'background-image': `url(${bgUrl})`,
                         'background-size': 'cover',
                         'background-position': 'center',
@@ -1531,12 +2098,27 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     console.log(`[${SCRIPT_NAME}] 应用背景成功: ${scene}, URL: ${bgUrl.substring(0, 50)}...`);
                 }
                 else {
-                    // 没有背景图片，使用默认渐变
-                    $bgLayer.removeClass('has-bg').css({
-                        'background-image': '',
-                        'background-size': '',
-                        'background-position': '',
-                    });
+                    // 检查是否正在生成
+                    if (typeof BGMManager !== 'undefined' && BGMManager.generatingScenes.has(scene)) {
+                        $bgLayer.removeClass('has-bg').addClass('generating-bg').css({
+                            'background-image': '',
+                            'background-size': '',
+                            'background-position': '',
+                        });
+                        $bgLayer.html(`
+                            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:rgba(255,255,255,0.8);font-size:1.5rem;text-shadow:0 2px 5px rgba(0,0,0,0.8);display:flex;flex-direction:column;align-items:center;gap:10px;">
+                                <i class="fa-solid fa-paintbrush fa-spin" style="font-size: 2rem;"></i>
+                                <span style="font-family: sans-serif; letter-spacing: 1px;">Generating Scene...</span>
+                            </div>
+                        `);
+                    } else {
+                        // 没有背景图片，使用默认渐变
+                        $bgLayer.removeClass('has-bg generating-bg').empty().css({
+                            'background-image': '',
+                            'background-size': '',
+                            'background-position': '',
+                        });
+                    }
                 }
                 // 根据场景名称判断色调（用于立绘滤镜）
                 const sceneLower = scene.toLowerCase();
@@ -1605,16 +2187,26 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             }
         }
         // 解析背景标签
-        const backgroundMatch = content.match(/<background\s+scene="([^"]+)"\s*\/?>/i);
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 背景标签正则匹配结果:`, backgroundMatch);
+        const backgroundMatch = content.match(/<background\s+scene="([^"]+)"\s*[\/]?>/i);
+        // console.log(`[${SCRIPT_NAME}] [DEBUG] 背景标签正则匹配结果:`, backgroundMatch);
+        
+        // 解析生图标签 <bgimg>TAGS</bgimg>
+        // 允许 <bgimg> 在 <background> 内部或外部，只要都在 content 里
+        const bgimgMatch = content.match(/<bgimg>(.*?)<\/bgimg>/i);
+
         if (backgroundMatch) {
             result.currentBackground = {
                 scene: backgroundMatch[1],
             };
+            // 如果存在生图标签，标记为需要生成
+            if (bgimgMatch && bgimgMatch[1]) {
+                result.currentBackground.generationTags = bgimgMatch[1].trim();
+                console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景生成请求: "${backgroundMatch[1]}" Tags: "${bgimgMatch[1]}"`);
+            }
             console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景场景: "${backgroundMatch[1]}"`);
         }
         else {
-            console.log(`[${SCRIPT_NAME}] [DEBUG] 未匹配到背景标签`);
+            // console.log(`[${SCRIPT_NAME}] [DEBUG] 未匹配到背景标签`);
         }
         // 解析 BGM 标签 <bgm>关键词</bgm>
         const bgmMatch = content.match(/<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i);
@@ -2439,7 +3031,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         background: rgba(255, 255, 255, 0.95);
         width: 100%;
         height: 250px; /* 固定高度 */
-        overflow-y: hidden; /* 内容过多时滚动 */  
+        overflow-y: hidden; /* 内容过多时滚动 */
         padding: 40px 60px 70px 60px;
         border-radius: 0 40px 0 0;
         box-shadow: 0 10px 30px rgba(0,0,0,0.15);
@@ -3110,14 +3702,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         display: none;
         align-items: center !important;
         gap: 6px !important;
-        animation: galPendingPulse 2s infinite !important;
-        transition: all 0.2s !important;
         border: 2px solid ${THEME.dark} !important;
         height: 45px !important;
         margin-right: 5px !important;
-        border-radius: 0 !important; /* 强制去圆角 */
-        transform: skewX(-10deg) !important;
-        box-shadow: 3px 3px 0 rgba(0,0,0,0.1) !important;
+        border-radius: 0 !important;
+        transform: skewX(-10deg);
+      }
+
+      .gal-pending-choices-btn.show {
+        display: flex !important;
+        -webkit-animation: galPendingPulse 2s ease-in-out infinite !important;
+        animation: galPendingPulse 2s ease-in-out infinite !important;
       }
 
       .gal-pending-choices-btn i, .gal-pending-choices-btn span {
@@ -3130,14 +3725,59 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         box-shadow: 5px 5px 0 rgba(0,0,0,0.2) !important;
       }
 
-      .gal-pending-choices-btn.show {
-        display: flex !important;
+      @-webkit-keyframes galPendingPulse {
+        0%, 100% {
+            box-shadow:
+                inset 0 0 15px rgba(255,255,255,0.3),
+                0 0 15px rgba(255, 215, 0, 0.6),
+                0 0 25px rgba(255, 215, 0, 0.4),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1);
+        }
+        50% {
+            box-shadow:
+                inset 0 0 30px rgba(255,255,255,0.6),
+                0 0 30px rgba(255, 215, 0, 0.8),
+                0 0 50px rgba(255, 215, 0, 0.5),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1.25);
+        }
       }
 
       @keyframes galPendingPulse {
-        0% { box-shadow: 0 0 0 0 rgba(255, 0, 85, 0.7); transform: skewX(-10deg) scale(1); }
-        70% { box-shadow: 0 0 0 10px rgba(255, 0, 85, 0); transform: skewX(-10deg) scale(1.05); }
-        100% { box-shadow: 0 0 0 0 rgba(255, 0, 85, 0); transform: skewX(-10deg) scale(1); }
+        0%, 100% {
+            box-shadow:
+                inset 0 0 15px rgba(255,255,255,0.3),
+                0 0 15px rgba(255, 215, 0, 0.6),
+                0 0 25px rgba(255, 215, 0, 0.4),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1);
+        }
+        50% {
+            box-shadow:
+                inset 0 0 30px rgba(255,255,255,0.6),
+                0 0 30px rgba(255, 215, 0, 0.8),
+                0 0 50px rgba(255, 215, 0, 0.5),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1.25);
+        }
+      }
+
+      .gal-pending-choices-btn.gal-new-option-highlight {
+        -webkit-animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
+        animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
+      }
+
+      @-webkit-keyframes galNewOptionPop {
+        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
+        50% { transform: skewX(-10deg) scale(1.1); }
+        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
+      }
+
+      @keyframes galNewOptionPop {
+        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
+        50% { transform: skewX(-10deg) scale(1.1); }
+        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
       }
 
       /* Galgame 开启按钮 (注入到消息中) */
@@ -3782,6 +4422,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
      */
     function updateGlobalOverlayContent(mesId, parsedContent) {
         return __awaiter(this, void 0, void 0, function* () {
+            console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
             var _a;
             const $overlay = ensureGlobalOverlay();
             const segments = parsedContent.segments;
@@ -3842,10 +4483,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             }
             // 存储mesId到容器
             $overlay.find('.gal-game-container').attr('data-mes-id', mesId);
-            
+
             // 更新地点时间显示
             updateLocationTimeDisplay();
-            
+
             console.log(`[${SCRIPT_NAME}] 更新全局覆盖层内容: mesId=${mesId}, 段落=${currentIndex + 1}/${segments.length}`);
         });
     }
@@ -3928,7 +4569,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         $(doc).on('mousedown touchstart', '#gal-global-overlay [data-action="prev"]', function (e) {
             e.stopPropagation();
             e.preventDefault();
-            
+
             // 开始3秒计时
             rewindHoldTimer = setTimeout(() => {
                 startRewinding();
@@ -3938,13 +4579,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         $(doc).on('mouseup touchend mouseleave', '#gal-global-overlay [data-action="prev"]', function (e) {
             e.stopPropagation();
             e.preventDefault();
-            
+
             // 清除3秒计时器
             if (rewindHoldTimer) {
                 clearTimeout(rewindHoldTimer);
                 rewindHoldTimer = null;
             }
-            
+
             // 如果正在快退则停止
             if (isRewinding) {
                 stopRewinding();
@@ -3972,7 +4613,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 isEnabled = false;
                 setCurrentCharEnabled(false);
                 updateButtonState();
-                
+
                 // 2. 停止可能正在进行的自动播放
                  $('#gal-global-overlay [data-action="auto"]').each(function() {
                     const timer = $(this).data('auto-timer');
@@ -3986,7 +4627,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 
                 // 4. 恢复视图
                 restoreOriginalViews();
-                
+
+                // 5. 延迟滚动到最后一条消息
+                setTimeout(() => {
+                    const $lastMes = $('#chat > .mes').last();
+                    if ($lastMes.length) {
+                        $lastMes[0].scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }
+                }, 150);
+
                 showToast('Galgame 模式已关闭');
             });
         });
@@ -4593,6 +5242,78 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             });
         }
     }
+
+    /**
+     * 角色外貌提示词编辑弹窗
+     * @param {string} characterId - 角色ID
+     * @param {Function} onSave - 保存后回调
+     */
+    function showCharAppearancePromptEditor(characterId, onSave) {
+        const currentPrompt = getCharAppearancePrompt(characterId);
+
+        const modalHtml = `
+            <div class="gal-input-modal" id="gal-appearance-prompt-modal">
+                <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
+                    <div class="gal-input-title" style="margin-bottom: 20px;">
+                        <span><i class="fa-solid fa-palette"></i> ${characterId} 的外貌提示词</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+                            角色外观描述 (用于AI绘图)
+                        </label>
+                        <textarea id="gal-appearance-prompt-input" 
+                                  placeholder="例如: 1girl, long white hair, blue eyes, school uniform, slender figure..."
+                                  style="width: 100%; height: 150px; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; resize: vertical; box-sizing: border-box;">${currentPrompt}</textarea>
+                        <small style="color: #888; margin-top: 5px; display: block;">
+                            此提示词将作为文生图时的基础外观描述，放在最终提示词的最前面。
+                        </small>
+                    </div>
+
+                    <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: ${THEME.dark};">
+                            <i class="fa-solid fa-lightbulb"></i> 提示词建议
+                        </div>
+                        <div style="font-size: 0.85rem; color: #666; line-height: 1.6;">
+                            • 性别/人数: 1girl, 1boy, solo<br>
+                            • 发型发色: long hair, short hair, black hair, blonde<br>
+                            • 眼睛: blue eyes, red eyes, heterochromia<br>
+                            • 服装: school uniform, dress, casual clothes<br>
+                            • 体型: slender, petite, tall, muscular
+                        </div>
+                    </div>
+
+                    <div class="gal-input-actions" style="display: flex; gap: 12px;">
+                        <button class="gal-action-btn" id="gal-appearance-cancel" style="flex: 1; min-height: 44px;">
+                            <span>取消</span>
+                        </button>
+                        <button class="gal-action-btn primary" id="gal-appearance-save" style="flex: 1; min-height: 44px;">
+                            <i class="fa-solid fa-save"></i>
+                            <span>保存</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        $(topWindow.document.body).append(modalHtml);
+        const $modal = $('#gal-appearance-prompt-modal');
+        makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
+
+        $('#gal-appearance-cancel').on('click', () => $modal.remove());
+        $modal.on('click', function(e) {
+            if (e.target === this) $modal.remove();
+        });
+
+        $('#gal-appearance-save').on('click', function() {
+            const newPrompt = $('#gal-appearance-prompt-input').val().trim();
+            setCharAppearancePrompt(characterId, newPrompt);
+            showToast(`已保存 ${characterId} 的外貌提示词`);
+            $modal.remove();
+            if (typeof onSave === 'function') onSave(newPrompt);
+        });
+    }
+
     // 立绘上传对话框（带裁剪功能）
     function showSpriteUploadDialog(characterId, expression, onCloseCallback) {
         // 动态获取表情列表（预设 + 自定义）
@@ -4626,6 +5347,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
           <div class="gal-upload-tabs" style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
             <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
             <div class="gal-upload-tab" data-target="remote" style="padding: 8px 15px; cursor: pointer; color: #888;">远程链接</div>
+            <div class="gal-upload-tab" data-target="comfyui" style="padding: 8px 15px; cursor: pointer; color: #888;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> 本地文生图
+            </div>
           </div>
 
           <div id="gal-upload-local" class="gal-upload-pane">
@@ -4649,6 +5373,80 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 <i class="fa-solid fa-download"></i> 获取图片
               </button>
             </div>
+          </div>
+
+          <div id="gal-upload-comfyui" class="gal-upload-pane" style="display: none;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; color: #fff; margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 1.5rem;"></i>
+                        <span style="font-weight: 700; font-size: 1.1rem;">ComfyUI 文生图</span>
+                    </div>
+                    <div style="font-size: 0.85rem; opacity: 0.9;">
+                        使用本地ComfyUI自动生成角色立绘
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: 700; display: block; margin-bottom: 5px;">工作流</label>
+                        <select id="gal-comfy-wf-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-weight: 700; display: block; margin-bottom: 5px;">Checkpoint 模型</label>
+                        <select id="gal-comfy-checkpoint-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                             <option value="">(加载中...)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 外貌提示词预览/编辑 -->
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-weight: 700; color: ${THEME.dark};">
+                            <i class="fa-solid fa-user"></i> 角色外貌基础提示词
+                        </label>
+                        <button class="gal-action-btn" id="gal-edit-appearance-btn" style="padding: 4px 10px; font-size: 0.8rem;">
+                            <i class="fa-solid fa-pen"></i> 编辑
+                        </button>
+                    </div>
+                    <div id="gal-appearance-preview" style="background: #f5f5f5; padding: 10px; border-radius: 6px; font-size: 0.85rem; color: #666; min-height: 40px; border: 1px dashed #ddd;">
+                        ${getCharAppearancePrompt(characterId) || '<i style="color: #999;">未设置，点击右侧按钮添加</i>'}
+                    </div>
+                </div>
+
+                <!-- 当前表情预览 -->
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+                        <i class="fa-solid fa-face-smile"></i> 当前表情: <span id="gal-comfyui-expr-label" style="color: ${THEME.accent};">${expression}</span>
+                    </label>
+                    <div style="background: #e8f4fc; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; color: #0066cc;">
+                        <i class="fa-solid fa-arrow-right"></i> 
+                        将生成: <code id="gal-comfyui-expr-tag">${getExpressionTag(expression)}</code>
+                    </div>
+                </div>
+
+                <!-- 额外描述 -->
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+                        <i class="fa-solid fa-plus"></i> 额外描述 (可选)
+                    </label>
+                    <textarea id="gal-comfyui-extra-prompt" 
+                              placeholder="添加额外的场景、姿势、光照描述..."
+                              style="width: 100%; height: 60px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; resize: vertical; box-sizing: border-box;"></textarea>
+                </div>
+
+                <!-- 生成按钮 -->
+                <button class="gal-action-btn primary" id="gal-comfyui-generate-btn" style="width: 100%; min-height: 50px; justify-content: center; font-size: 1.1rem;">
+                    <i class="fa-solid fa-sparkles"></i>
+                    <span>生成立绘</span>
+                </button>
+
+                <!-- 生成结果预览区 -->
+                <div id="gal-comfyui-result" style="display: none; margin-top: 15px;">
+                    <div style="text-align: center;">
+                        <img id="gal-comfyui-preview-img" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 2px solid ${THEME.accent};">
+                    </div>
+                </div>
           </div>
 
           <!-- 选择图片后显示裁剪区 -->
@@ -4702,7 +5500,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 
         // 点击上传区域
         $uploadTrigger.on('click', () => $fileInput.click());
-        
+
         // 更换图片
         $('#gal-change-image').on('click', () => $fileInput.click());
 
@@ -4766,6 +5564,144 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     $(this).prop('disabled', false).html('<i class="fa-solid fa-download"></i> 获取图片');
                 }
             });
+        });
+
+        // ===================================
+        // ComfyUI 事件绑定
+        // ===================================
+
+        // 填充模型下拉框
+        async function initComfyUICheckpointSelect() {
+            const $sel = $('#gal-comfy-checkpoint-select');
+            const cs = getComfyUISettings();
+            
+            try {
+                const models = await ComfyUIAPI.getModels(cs.apiUrl);
+                $sel.empty();
+                $sel.append('<option value="">-- 使用 Workflow默认 --</option>');
+                
+                models.forEach(m => {
+                    $sel.append(`<option value="${m}">${m}</option>`);
+                });
+                
+                if (cs.defaultCheckpoint) {
+                    $sel.val(cs.defaultCheckpoint);
+                }
+            } catch (e) {
+                console.error(`[${SCRIPT_NAME}] 加载模型失败:`, e);
+                $sel.html('<option value="">(加载失败)</option>');
+            }
+        }
+        initComfyUICheckpointSelect();
+
+        // 填充工作流下拉框
+        function initComfyUIWorkflowSelect() {
+            const $sel = $('#gal-comfy-wf-select');
+            const workflows = getComfyWorkflows();
+            const cs = getComfyUISettings();
+            
+            $sel.empty();
+            $sel.append('<option value="default_char">内置 SDXL Turbo</option>');
+            
+            Object.keys(workflows).forEach(id => {
+               $sel.append(`<option value="${id}">${workflows[id].name}</option>`); 
+            });
+            
+            if (cs.defaultCharWorkflow) {
+                $sel.val(cs.defaultCharWorkflow);
+            }
+        }
+        initComfyUIWorkflowSelect();
+
+        // 编辑外貌提示词按钮
+        $('#gal-edit-appearance-btn').on('click', () => {
+            const charName = $('#gal-sprite-character').val().trim() || characterId;
+            showCharAppearancePromptEditor(charName, (newPrompt) => {
+                // 更新预览
+                $('#gal-appearance-preview').html(newPrompt || '<i style="color: #999;">未设置，点击右侧按钮添加</i>');
+            });
+        });
+
+        // 表情选择变化时更新文生图Tab中的显示
+        $('#gal-sprite-expression').on('change', function() {
+            const expr = $(this).val();
+            $('#gal-comfyui-expr-label').text(expr);
+            $('#gal-comfyui-expr-tag').text(getExpressionTag(expr));
+        });
+
+        // ComfyUI 生成按钮
+        $('#gal-comfyui-generate-btn').on('click', async function() {
+            const charName = $('#gal-sprite-character').val().trim();
+            const expr = $('#gal-sprite-expression').val();
+            const extraPrompt = $('#gal-comfyui-extra-prompt').val().trim();
+            const wfId = $('#gal-comfy-wf-select').val();
+            const checkpointOverride = $('#gal-comfy-checkpoint-select').val(); // 获取选择的模型
+
+            if (!charName) {
+                showToast('请先输入角色名称');
+                return;
+            }
+
+            // 检查是否有外貌提示词
+            const appearancePrompt = getCharAppearancePrompt(charName);
+            if (!appearancePrompt) {
+                if (!confirm('尚未设置角色外貌提示词，生成的图片可能不符合角色特征。\n是否继续生成？\n（建议先点击"编辑"按钮设置外貌描述）')) {
+                    return;
+                }
+            }
+
+            $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 生成中...');
+            $('#gal-comfyui-result').hide();
+            
+            // 准备提示词
+            const positive = [
+                appearancePrompt,
+                getExpressionTag(expr),
+                extraPrompt,
+                'masterpiece, best quality, highres' 
+            ].filter(p => p && p.trim()).join(', ');
+            
+            const cs = getComfyUISettings();
+            const negative = cs.negativePrompt || DEFAULT_COMFYUI_SETTINGS.negativePrompt;
+            
+            // 准备 Workflow
+            let workflow;
+            if (wfId === 'default_char' || !wfId) {
+                workflow = ComfyUIAPI.buildDefaultWorkflow(positive, negative, 512, 768, 20, 7);
+            } else {
+                const workflows = getComfyWorkflows();
+                const stored = workflows[wfId];
+                if (stored) {
+                    workflow = stored.json; // 使用存储的 workflow
+                } else {
+                    workflow = ComfyUIAPI.buildDefaultWorkflow(positive, negative, 512, 768, 20, 7);
+                }
+            }
+
+            try {
+                // 如果是自定义Workflow，传入纯提示词，由 API 内部处理注入
+                // 但 API.generate 需要的是 workflowJson 和 promptText 用于注入
+                // 这里逻辑稍微调整：如果用了自定义Workflow，我们传 undefined 或特殊的标识给 buildDefaultWorkflow，
+                // 或者 API.generate 直接接收 workflow 对象。
+                // 现在的 ComfyUIAPI.generate 接收 (workflowJson, promptText, negativeText, extraSettings)
+                
+                const blob = await ComfyUIAPI.generate(workflow, positive, negative, { checkpointOverride });
+                
+                // 转换为 File 对象，复用 handleFileSelect 逻辑进入裁剪界面
+                const fileName = `comfyui_gen_${Date.now()}.png`;
+                const file = new File([blob], fileName, { type: 'image/png' });
+                
+                // 调用文件处理逻辑 (进入裁剪)
+                handleFileSelect(file);
+                
+                showToast('立绘生成成功！请在上方裁剪区域调整后保存');
+
+            } catch (e) {
+                console.error(`[${SCRIPT_NAME}] ComfyUI生成失败:`, e);
+                showToast('生成失败: ' + e.message);
+            } finally {
+                $(this).prop('disabled', false).html('<i class="fa-solid fa-sparkles"></i><span>生成立绘</span>');
+            }
         });
         $modal.on('click', function (e) {
             if (e.target === this) {
@@ -5027,7 +5963,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
           <div class="gal-input-title" style="padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0;">
             <span><i class="fa-solid fa-grid-2"></i> 智能批量上传立绘</span>
           </div>
-          
+
           <div style="display: flex; flex: 1; overflow: hidden;">
             <!-- Sidebar -->
             <div class="gal-batch-sidebar" style="width: 240px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column;">
@@ -5060,7 +5996,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                         <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
                         <div class="gal-upload-tab" data-target="remote" style="padding: 8px 15px; cursor: pointer; color: #888;">远程链接</div>
                     </div>
-                    
+
                     <div id="gal-upload-local" class="gal-upload-pane">
                         <input type="file" id="gal-grid-file-input" accept="image/*" style="display: none;">
                         <div id="gal-grid-upload-area" class="gal-upload-card" style="margin-bottom: 15px; min-height: 180px; cursor: pointer;">
@@ -5113,7 +6049,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                                 <canvas id="gal-grid-canvas" style="display: block; max-width: 100%; margin: 0 auto;"></canvas>
                               </div>
                           </div>
-                      
+
                           <!-- Mapping -->
                           <div style="margin-bottom: 15px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -5274,7 +6210,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 allChars.unshift({ name: characterId, type: '自定义', source: '本次' });
             }
             const filtered = allChars.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()));
-            
+
             filtered.forEach(char => {
                 const isActive = $('#gal-batch-character').val() === char.name;
                 const hasSprites = existingChars.has(char.name);
@@ -5296,11 +6232,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             });
         };
         renderSidebar();
-        
+
         $('#gal-batch-search-char').on('input', function() {
             renderSidebar($(this).val());
         });
-        
+
         $('#gal-batch-add-char').on('click', () => {
             const name = prompt('请输入新角色名称:');
             if (name && name.trim()) {
@@ -5720,7 +6656,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 else {
                     showToast(`已保存 ${savedCount} 张立绘`);
                 }
-                
+
                 // 重置UI允许继续上传
                 loadedImage = null;
                 $previewArea.hide();
@@ -5729,9 +6665,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 $modal.find('.gal-upload-pane').hide();
                 $modal.find(`#gal-upload-${activeTab}`).show();
                 $fileInput.val('');
-                
+
                 $(this).prop('disabled', true).html('<i class="fa-solid fa-save"></i> <span>保存所有立绘</span>');
-                
+
                 refreshGalgameViews();
             });
         });
@@ -6173,7 +7109,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             });
         },
     };
-    
+
     /**
      * 显示远程ZIP导入对话框
      */
@@ -6185,12 +7121,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 <div class="gal-input-title" style="margin-bottom: 20px;">
                 <span><i class="fa-solid fa-cloud-arrow-down"></i> 远程压缩包导入</span>
                 </div>
-                
+
                 <div style="margin-bottom: 15px;">
                 <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
                     <i class="fa-solid fa-link"></i> ZIP 文件链接
                 </label>
-                <input type="text" id="gal-remote-zip-url" 
+                <input type="text" id="gal-remote-zip-url"
                         placeholder="https://example.com/assets.zip"
                         style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 6px;">
                 <small style="color: #888; margin-top: 5px; display: block;">
@@ -6198,7 +7134,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     <strong style="color: #e74c3c;">限制：最大 5GB</strong>
                 </small>
                 </div>
-                
+
                 <div class="gal-input-actions" style="display: flex; gap: 12px;">
                 <button class="gal-action-btn" id="gal-remote-zip-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
                     <span>取消</span>
@@ -6211,17 +7147,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             </div>
             </div>
         `;
-        
+
         $(topWindow.document.body).append(dialogHtml);
         const $dialog = $('#gal-remote-zip-dialog');
         makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
-        
+
         // 关闭
         $('#gal-remote-zip-cancel').on('click', () => $dialog.remove());
         $dialog.on('click', function(e) {
             if (e.target === this) $dialog.remove();
         });
-        
+
         // 确认下载
         $('#gal-remote-zip-confirm').on('click', function() {
             return __awaiter(this, void 0, void 0, function* () {
@@ -6230,13 +7166,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     showToast('请输入ZIP文件链接');
                     return;
                 }
-                
+
                 // 简单的URL验证
                 if (!url.startsWith('http://') && !url.startsWith('https://')) {
                     showToast('请输入有效的 HTTP/HTTPS 链接');
                     return;
                 }
-                
+
                 $dialog.remove();
                 yield importFromRemoteZip(url);
             });
@@ -6254,7 +7190,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 isCancelled = true;
                 showToast('导入已手动取消');
             });
-            
+
             try {
                 const JSZip = yield AssetIO.loadJSZip();
                 const zip = yield JSZip.loadAsync(file, {
@@ -6265,21 +7201,21 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                         progressController.update(percent, `解压中... ${percent}%`);
                     }
                 });
-                
+
                 if (isCancelled) {
                     progressController.close();
                     return;
                 }
 
                 yield processZipContents(zip, progressController, () => isCancelled);
-                
+
                 if (!isCancelled) {
                     progressController.close();
                     showToast('ZIP导入完成！');
                 } else {
                     progressController.close();
                 }
-                
+
             } catch (e) {
                 progressController.close();
                 if (isCancelled) return;
@@ -6302,47 +7238,47 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         return __awaiter(this, void 0, void 0, function* () {
             const abortController = new AbortController();
             let isCancelled = false;
-            
+
             const progressController = showImportProgress('正在下载远程文件...', () => {
                 isCancelled = true;
                 abortController.abort();
                 showToast('下载已取消');
             });
-            
+
             try {
                 // 使用 fetch 下载，支持进度
                 const response = yield fetch(url, { signal: abortController.signal });
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-                
+
                 // 检查 Content-Length
                 const contentLength = response.headers.get('Content-Length');
                 const MAX_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
-                
+
                 if (contentLength && parseInt(contentLength) > MAX_SIZE) {
                     throw new Error(`文件大小 ${(parseInt(contentLength) / 1024 / 1024 / 1024).toFixed(2)} GB 超过 5GB 限制`);
                 }
-                
+
                 // 流式下载并显示进度
                 const reader = response.body.getReader();
                 const chunks = [];
                 let receivedLength = 0;
                 const totalLength = contentLength ? parseInt(contentLength) : 0;
-                
+
                 while (true) {
                     const { done, value } = yield reader.read();
                     if (done) break;
-                    
+
                     chunks.push(value);
                     receivedLength += value.length;
-                    
+
                     // 二次检查大小
                     if (receivedLength > MAX_SIZE) {
                         throw new Error('下载的文件大小超过 5GB 限制');
                     }
-                    
+
                     // 更新进度
                     if (totalLength > 0) {
                         const percent = Math.round((receivedLength / totalLength) * 100);
@@ -6354,7 +7290,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                         progressController.update(-1, `下载中: ${downloaded} MB`);
                     }
                 }
-                
+
                 if (isCancelled) {
                     progressController.close();
                     return;
@@ -6363,20 +7299,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 // 合并chunks为Blob
                 const blob = new Blob(chunks);
                 progressController.update(100, '下载完成，开始解压...');
-                
+
                 // 解压
                 const JSZip = yield AssetIO.loadJSZip();
                 const zip = yield JSZip.loadAsync(blob);
-                
+
                 yield processZipContents(zip, progressController, () => isCancelled);
-                
+
                 if (!isCancelled) {
                     progressController.close();
                     showToast('远程ZIP导入完成！');
                 } else {
                     progressController.close();
                 }
-                
+
             } catch (e) {
                 progressController.close();
                 if (e.name === 'AbortError' || isCancelled) return;
@@ -6402,45 +7338,45 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             // 验证必须存在 sprites 或 backgrounds 目录
             const hasSpritesDir = Object.keys(zip.files).some(path => path.startsWith('sprites/'));
             const hasBackgroundsDir = Object.keys(zip.files).some(path => path.startsWith('backgrounds/'));
-            
+
             if (!hasSpritesDir && !hasBackgroundsDir) {
                 throw new Error('ZIP包格式错误：必须包含 sprites/ 或 backgrounds/ 目录');
             }
-            
+
             const imageFiles = [];
-            
+
             // 收集所有图片文件
             zip.forEach((relativePath, zipEntry) => {
                 if (zipEntry.dir) return;
-                
+
                 // 检查是否在正确的目录中
                 const isSprite = relativePath.startsWith('sprites/');
                 const isBackground = relativePath.startsWith('backgrounds/');
-                
+
                 if (!isSprite && !isBackground) return;
-                
+
                 // 检查是否是图片文件
                 const ext = relativePath.split('.').pop().toLowerCase();
                 if (!['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) return;
-                
+
                 imageFiles.push({
                     path: relativePath,
                     entry: zipEntry,
                     type: isSprite ? 'sprite' : 'background'
                 });
             });
-            
+
             if (imageFiles.length === 0) {
                 throw new Error('ZIP包中未找到有效的图片文件');
             }
-            
+
             progressController.update(0, `准备导入 ${imageFiles.length} 个文件...`);
-            
+
             // 批量处理配置
             const BATCH_SIZE = 50;
             let successCount = 0;
             let failedItems = [];
-            
+
             // 分批处理
             for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
                 if (isCancelledCheck && isCancelledCheck()) {
@@ -6451,13 +7387,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 const batch = imageFiles.slice(i, i + BATCH_SIZE);
                 const spriteBatch = [];
                 const backgroundBatch = [];
-                
+
                 // 并行解压当前批次
                 yield Promise.all(batch.map((item) => __awaiter(this, void 0, void 0, function* () {
                     try {
                         const blob = yield item.entry.async('blob');
                         const fileName = item.path.split('/').pop();
-                        
+
                         if (item.type === 'sprite') {
                             const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
                             const parts = nameWithoutExt.split('_');
@@ -6475,7 +7411,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                         failedItems.push({ path: item.path, error: e.message });
                     }
                 })));
-                
+
                 // 批量保存到数据库
                 if (spriteBatch.length > 0) {
                     yield saveSpritesBatch(spriteBatch);
@@ -6483,15 +7419,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 if (backgroundBatch.length > 0) {
                     yield saveBackgroundsBatch(backgroundBatch);
                 }
-                
+
                 successCount += spriteBatch.length + backgroundBatch.length;
-                
+
                 // 更新进度
                 const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
                 const percent = Math.round((processed / imageFiles.length) * 100);
                 progressController.update(percent, `导入中: ${processed}/${imageFiles.length} (批量模式)`);
             }
-            
+
             // 如果有失败项，显示详细错误
             if (failedItems.length > 0) {
                 showImportError([
@@ -6499,7 +7435,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     '部分文件导入失败，请检查详情...'
                 ]);
             }
-            
+
             console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}`);
         });
     }
@@ -6513,7 +7449,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     function showImportProgress(initialText, onCancel) {
         // 移除可能存在的旧进度条
         $('.gal-import-progress-overlay').remove();
-        
+
         const html = `
             <div class="gal-import-progress-overlay">
             <div class="gal-import-progress-box">
@@ -6531,10 +7467,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             </div>
             </div>
         `;
-        
+
         $(topWindow.document.body).append(html);
         const $overlay = $('.gal-import-progress-overlay');
-        
+
         // 绑定取消事件
         if (onCancel) {
             $overlay.find('#gal-import-cancel-btn').on('click', onCancel);
@@ -6586,28 +7522,28 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     function showImportError(messages) {
         // 移除旧的错误对话框
         $('#gal-import-error-dialog').remove();
-        
+
         const errorHtml = `
             <div class="gal-input-modal" id="gal-import-error-dialog">
             <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
                 <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c;">
                 <span><i class="fa-solid fa-circle-exclamation"></i> 导入出错</span>
                 </div>
-                
+
                 <div style="background: #fdf2f2; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 20px; max-height: 300px; overflow-y: auto;">
                 ${messages.map(msg => `<div style="margin-bottom: 5px; color: #721c24; font-size: 0.9rem; white-space: pre-wrap;">${msg}</div>`).join('')}
                 </div>
-                
+
                 <button class="gal-action-btn" id="gal-import-error-close" style="width: 100%; min-height: 44px; justify-content: center;">
                 <span>关闭</span>
                 </button>
             </div>
             </div>
         `;
-        
+
         $(topWindow.document.body).append(errorHtml);
         const $dialog = $('#gal-import-error-dialog');
-        
+
         $('#gal-import-error-close').on('click', () => $dialog.remove());
         $dialog.on('click', function(e) {
             if (e.target === this) $dialog.remove();
@@ -6672,7 +7608,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 <button class="gal-action-btn" id="gal-asset-export-remote" title="导出远程资源包(含JSON)" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
                   <i class="fa-solid fa-cloud-upload"></i> 远程包
                 </button>
-  
+
                 <!-- 导入下拉菜单 -->
                 <div class="gal-import-dropdown" style="position: relative;">
                     <button class="gal-action-btn" id="gal-import-dropdown-btn" title="导入资源" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
@@ -6790,7 +7726,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 <span style="font-weight: 700; color: ${THEME.dark};">
                   已保存 ${allBackgrounds.length} 个背景
                 </span>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <div style="display: flex; align-items: center; margin-right: 10px;" title="开启后，当AI输出的场景在库中不存在时，将自动调用ComfyUI生成">
+                       <span style="font-size: 0.9rem; color: ${THEME.dark}; margin-right: 8px; font-weight: 600;">实时生成</span>
+                       <label class="gal-switch" style="transform: scale(0.8); margin-bottom: 0;">
+                          <input type="checkbox" id="gal-realtime-bg-gen" ${settings.realTimeBackgroundGen ? 'checked' : ''}>
+                          <span class="gal-switch-slider"></span>
+                       </label>
+                  </div>
                   <button class="gal-action-btn" id="gal-batch-bg-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;">
                     <i class="fa-solid fa-cloud-arrow-up"></i> <span>批量上传</span>
                   </button>
@@ -6838,14 +7781,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
                             <i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> 地点状态栏 - 自定义内容 HTML
                         </label>
-                        <textarea id="gal-custom-location-html" placeholder="<div>自定义地点介绍...</div>" 
+                        <textarea id="gal-custom-location-html" placeholder="<div>自定义地点介绍...</div>"
                             style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY) || ''}</textarea>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
                             <i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> 时间状态栏 - 自定义内容 HTML
                         </label>
-                        <textarea id="gal-custom-time-html" placeholder="<div>自定义时间介绍...</div>" 
+                        <textarea id="gal-custom-time-html" placeholder="<div>自定义时间介绍...</div>"
                             style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY) || ''}</textarea>
                     </div>
                     <div style="text-align: right;">
@@ -7141,6 +8084,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 if (e.target === this)
                     $modal.remove();
             });
+            // 实时生成开关
+            $modal.find('#gal-realtime-bg-gen').on('change', async function() {
+                settings.realTimeBackgroundGen = $(this).is(':checked');
+                saveSettings();
+                // 立即更新规则
+                if (isEnabled) {
+                    await injectCOTToWorldbook();
+                }
+                showToast(settings.realTimeBackgroundGen ? '已开启实时背景生成（实验性）' : '已关闭实时背景生成');
+            });
+
             // 批量上传按钮
         $('#gal-batch-upload-btn').on('click', () => {
             $modal.remove();
@@ -7233,7 +8187,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             $modal.find('.gal-import-item').on('click', function() {
                 const action = $(this).data('action');
                 $('#gal-import-menu').hide(); // 关闭菜单
-                
+
                 switch(action) {
                 case 'import-local-zip':
                     $('#gal-asset-import-zip-input').click();
@@ -7255,7 +8209,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 return __awaiter(this, void 0, void 0, function* () {
                     const file = this.files[0];
                     if (!file) return;
-                    
+
                     // 验证文件大小 (5GB = 5 * 1024 * 1024 * 1024 bytes)
                     const MAX_SIZE = 5 * 1024 * 1024 * 1024;
                     if (file.size > MAX_SIZE) {
@@ -7263,7 +8217,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     $(this).val('');
                     return;
                     }
-                    
+
                     yield importFromZipFile(file);
                     $(this).val('');
                     $modal.remove();
@@ -7574,6 +8528,119 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         }
         return null;
     }
+    async function handleRealTimeBackgroundGeneration(sceneName, tags) {
+        if (!settings.realTimeBackgroundGen) return;
+        if (BGMManager.generatingScenes.has(sceneName)) return;
+
+        // 检查场景是否已存在
+        try {
+            const backgrounds = await getAllBackgrounds();
+            if (backgrounds.some(bg => bg.sceneName === sceneName)) {
+                return; // 已存在，无需生成
+            }
+        } catch (e) {
+            console.error(`[${SCRIPT_NAME}] 检查背景存在失败:`, e);
+        }
+
+        console.log(`[${SCRIPT_NAME}] 触发实时背景生成: ${sceneName}, Tags: ${tags}`);
+        BGMManager.generatingScenes.add(sceneName);
+        showToast(`正在生成新场景: ${sceneName}...`);
+
+        const $bgLayer = $('#gal-global-overlay .gal-bg-layer');
+        if ($bgLayer.length) {
+             $bgLayer.addClass('generating-bg').removeClass('has-bg').css('background-image', '');
+             if ($bgLayer.find('.gal-generating-indicator').length === 0) {
+                 $bgLayer.append('<div class="gal-generating-indicator" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.5); color: white; font-size: 1.5rem; z-index: 10;"><i class="fa-solid fa-spinner fa-spin" style="margin-right: 10px;"></i> 场景生成中...</div>');
+             }
+        }
+
+        // 异步执行生成，不阻塞UI
+        (async () => {
+            try {
+                // 获取工作流配置
+                const workflowId = settings.comfyui.defaultBgWorkflow;
+                const allWorkflows = getComfyWorkflows();
+                let targetWorkflow = null;
+
+                if (workflowId && allWorkflows[workflowId]) {
+                    targetWorkflow = allWorkflows[workflowId];
+                } else if (workflowId) {
+                     // 尝试按名称查找
+                     targetWorkflow = Object.values(allWorkflows).find(w => w.name === workflowId);
+                } else {
+                    // 默认查找 default_bg
+                    targetWorkflow = Object.values(allWorkflows).find(w => w.name === 'default_bg');
+                }
+
+                if (!targetWorkflow || !targetWorkflow.json) {
+                     throw new Error(`未找到默认背景生成工作流: ${workflowId || 'default_bg'}。请在设置-ComfyUI中配置。`);
+                }
+
+                // 构造提示词: 加上一些质量词
+                const positive = `${tags}, (high quality, masterpiece, best quality, 4k, 8k:1.2), no humans`;
+                const negative = settings.comfyui.negativePrompt || 'nsfw, lowres, bad anatomy, bad hands, text, error';
+                const seed = Math.floor(Math.random() * 10000000000);
+
+                const blob = await ComfyUIAPI.generate(targetWorkflow.json, positive, negative, seed);
+                
+                if (blob) {
+                    // 保存背景
+                    // 构造 File 对象
+                    const file = new File([blob], `${sceneName}.png`, { type: 'image/png' });
+                    await saveBackgroundsBatch([{ sceneName: sceneName, imageBlob: blob }]);
+                    
+                    const newUrl = URL.createObjectURL(blob);
+                    if (typeof sceneBackgrounds !== 'undefined') {
+                        console.log(`[${SCRIPT_NAME}] [DEBUG] 实时生成后手动更新缓存: "${sceneName}" URL: ${newUrl.substring(0, 50)}...`);
+                        sceneBackgrounds.set(sceneName, newUrl);
+                        console.log(`[${SCRIPT_NAME}] [DEBUG] Cache check after set: has("${sceneName}") = ${sceneBackgrounds.has(sceneName)}`);
+                    }
+
+                    console.log(`[${SCRIPT_NAME}] 场景生成并保存成功: ${sceneName}`);
+                    showToast(`场景「${sceneName}」生成完成！`);
+
+                    const $bgLayer = $('#gal-global-overlay .gal-bg-layer');
+                    $bgLayer.find('.gal-generating-indicator').remove();
+                    
+                    // 刷新世界书（如果需要）
+                    if (isEnabled) {
+                         injectCOTToWorldbook();
+                    }
+                    
+                    // 如果当前正处于该场景（显示为生成中），则尝试刷新背景显示
+                    // 这需要 updateGlobalOverlayContent 或 renderGalgameUI 能够感知
+                    // 简单的做法是重新处理当前最后一条消息
+                    const $lastMes = $('#chat > .mes').last();
+                    console.log(`[${SCRIPT_NAME}] [DEBUG] 尝试刷新UI. LastMes ID: ${$lastMes.attr('mesid')}`);
+                    if ($lastMes.length) {
+                        const mesId = $lastMes.attr('mesid');
+                        const state = messageSegmentState.get(String(mesId));
+                        // console.log(`[${SCRIPT_NAME}] [DEBUG] State found:`, !!state);
+                        if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
+                            // ★ 关键修复: 强制重置当前场景记录，否则 applySceneTint 会因为 scene 没变而直接 return
+                            if (typeof SpriteManager !== 'undefined') {
+                                SpriteManager.currentScene = null;
+                            }
+                            console.log(`[${SCRIPT_NAME}] [DEBUG] 强制刷新UI: ${sceneName}`);
+                            
+                            // 强制刷新
+                            updateGlobalOverlayContent(mesId, state.parsedContent);
+                        } else {
+                             // console.log(`[${SCRIPT_NAME}] [DEBUG] 场景不匹配或状态为空...`);
+                        }
+                    }
+                } else {
+                    throw new Error('生成的图片数据为空');
+                }
+            } catch (e) {
+                console.error(`[${SCRIPT_NAME}] 实时背景生成失败:`, e);
+                showToast(`场景「${sceneName}」生成失败`);
+            } finally {
+                BGMManager.generatingScenes.delete(sceneName);
+            }
+        })();
+    }
+
     function processNewMessage(mesNode) {
         // 注入开启按钮 (无论是否开启模式)
         if (typeof injectGalgameButton === 'function') {
@@ -7602,8 +8669,45 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         // 如果开启了智能检测，且没有标签，则直接忽略
         if (settings.smartDetection && !hasGalTags)
             return;
+        // ★ 流式输出检查：如果没有完整的 </p> 标签，显示生成中提示
+        const hasClosedP = /<\/p>/i.test(contentToProcess);
+        if (!hasClosedP) {
+            console.log(`[${SCRIPT_NAME}] 流式输出中，等待完整内容...`);
+            // 构造"生成中"的临时解析结果
+            const loadingParsed = {
+                segments: [{
+                    type: 'narration',
+                    speaker: null,
+                    text: '生成中...',
+                    expression: null,
+                }],
+                currentBackground: null,
+                bgm: null,
+                options: [],
+            };
+            // 检查是否是最后一条AI消息
+            const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
+            if (isLastAi) {
+                updateGlobalOverlayContent(mesId, loadingParsed);
+                showGlobalOverlay();
+                // ★ 流式输出时保持选项按钮状态
+                if (pendingOptions && pendingOptions.length > 0) {
+                    $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+                }
+            }
+            return;
+        }
         // 解析内容
         let parsed = parseGalgameContent(contentToProcess);
+
+        // ★ 实时背景生成处理
+        if (settings.realTimeBackgroundGen && parsed.currentBackground && parsed.currentBackground.generationTags) {
+            console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 handleRealTimeBackgroundGeneration`);
+            handleRealTimeBackgroundGeneration(parsed.currentBackground.scene, parsed.currentBackground.generationTags);
+        }
+
+        console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed.segments.length}`);
+
         // 如果未解析出段落（即没有Galgame格式），但智能检测关闭，尝试强制解析
         if (parsed.segments.length === 0) {
             if (!settings.smartDetection && contentToProcess && contentToProcess.trim().length > 0) {
@@ -7980,15 +9084,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     function showPendingChoicesButton() {
         if (!pendingOptions || pendingOptions.length === 0)
             return;
-        // 在所有Galgame容器的工具栏中显示按钮
-        $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+        // 在所有Galgame容器的工具栏中显示按钮 -> 改为只在全局覆盖层显示，确保准确
+        $('#gal-global-overlay .gal-pending-choices-btn').addClass('show');
         console.log(`[${SCRIPT_NAME}] 显示待选择提示按钮`);
     }
     /**
      * 隐藏工具栏内的待选择提示按钮
      */
     function hidePendingChoicesButton() {
-        $('.gal-game-container .gal-pending-choices-btn').removeClass('show');
+        $('#gal-global-overlay .gal-pending-choices-btn').removeClass('show');
         // 注意：这里不要清空 pendingOptions，因为可能是只是暂时隐藏（虽然目前的逻辑是用户选了才隐藏）
         // 但按照“用户选择了”的逻辑，pendingOptions 确实应该清空
         pendingOptions = null;
@@ -8018,7 +9122,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         $(targetDoc).find('#gal-layer-choices').removeClass('active');
         galgameChoicesVisible = false;
         // 隐藏按钮（因为已经选了）
-        hidePendingChoicesButton();
+        // hidePendingChoicesButton(); // ★ 用户要求保留按钮显示
         // 将选项填入输入框并自动发送
         const $textarea = $(topWindow.document).find('#send_textarea');
         const $sendButton = $(topWindow.document).find('#send_but');
@@ -8070,6 +9174,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             return;
         // 从数据库获取选项
         const options = getOptionsFromDatabase();
+        if (Math.random() < 0.05) { // 偶尔打印一下，避免刷屏，确认心跳
+             console.log(`[${SCRIPT_NAME}] [DEBUG] checkAndRenderOptions 心跳 - 选项数: ${options.length}`);
+        }
         if (options.length === 0) {
             // 如果没有选项了，且当前显示着，则隐藏
             if (galgameChoicesVisible) {
@@ -8086,17 +9193,31 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         }
         // 生成选项内容的Hash指纹
         const currentOptionHash = options.map(o => o.value).join('|||');
+
+        // ★ 始终更新全局变量并显示按钮 (只要有选项存在)
+        pendingOptions = options;
+        ensureGlobalOverlay();
+        const $btn = $('#gal-global-overlay .gal-pending-choices-btn');
+        if ($btn.length === 0) {
+            console.warn(`[${SCRIPT_NAME}] [DEBUG] 警告: 找不到选项按钮元素!`);
+        } else {
+             // 强制移除 display: none (如果内联样式导致)
+             $btn.css('display', 'flex');
+             $btn.addClass('show');
+             // console.log(`[${SCRIPT_NAME}] [DEBUG] 尝试显示选项按钮, 选项数: ${options.length}`);
+        }
+        
         // 判断选项是否发生实质变化
         const optionChanged = currentOptionHash !== lastGalgameOptionHash;
         if (optionChanged) {
             // 选项内容发生了实质变化
             console.log(`[${SCRIPT_NAME}] 检测到新选项，更新缓存并显示提示按钮`);
-            // 更新全局变量
-            pendingOptions = options;
-            // ★ 确保UI已初始化，否则找不到按钮 ★
-            ensureGlobalOverlay();
-            // 确保按钮显示（闪烁）
-            $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+             
+            // 添加强调动画类，3秒后移除
+            $('#gal-global-overlay .gal-pending-choices-btn').addClass('gal-new-option-highlight');
+            setTimeout(() => {
+                $('#gal-global-overlay .gal-pending-choices-btn').removeClass('gal-new-option-highlight');
+            }, 3000);
             // 判断是否需要立即弹出
             let shouldPopup = false;
             if (galgameChoicesVisible) {
@@ -8190,19 +9311,34 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             const valueCols = ['选项值', '实际值', 'Value', 'value', 'Command', 'command'];
             const textIdx = findCol(textCols);
             const valueIdx = findCol(valueCols);
-            // ★★★ 策略1：标准纵向表格（每行一个选项） ★★★
-            // 条件：找到列名，或者有合理的行数（大于2行）
-            // 注意：如果表头本身就是选项（textIdx==-1），且行数很少，可能是横向表
-            // 修改判断条件：只有当确实找到了列名，或者行数明显较多时，才优先用纵向
+            // ★★★ 策略检测 ★★★
+            // 1. 检查是否存在明确的 Text/Value 列 (垂直模式强特征)
+            // 2. 检查表头是否包含多个 "选项"/"Option" (水平模式强特征)
+            // 3. 回退策略：如果行数多且没有水平特征 -> 垂直
+            
             let useVertical = false;
+            let useHorizontal = false;
+
+            // 检查水平特征
+            let optionHeaderCount = 0;
+            headers.forEach(h => {
+                const s = String(h);
+                if (s.includes('选项') || s.includes('Option')) optionHeaderCount++;
+            });
+            // 如果是“行动选项”表，且表头不是 Text/Value，通常每一列都是选项
+            if (targetSheet.name === '行动选项' && textIdx === -1 && valueIdx === -1) {
+                // 只要不是 id 列，都算
+                optionHeaderCount = headers.filter(h => String(h).toLowerCase() !== 'id').length;
+            }
+
             if (textIdx !== -1) {
                 useVertical = true;
-            }
-            else if (content.length > 2) {
-                // 行数多，且没有明显的横向特征（表头不含“选项”）
-                // 但如果表头全是“选项一”，“选项二”，那即使行数多也可能是横向的（虽然不太可能）
+            } else if (optionHeaderCount > 0) {
+                useHorizontal = true;
+            } else if (content.length > 2) {
                 useVertical = true;
             }
+
             if (useVertical) {
                 // console.log(`[${SCRIPT_NAME}] [DEBUG] 使用纵向解析模式`);
                 // 如果没找到特定列名，尝试使用第1列作为内容，第2列作为值（如果存在）
@@ -8228,37 +9364,50 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     }
                 }
             }
-            // ★★★ 策略2：横向表格（每列一个选项） ★★★
+            // ★★★ 策略2：横向表格（每列一个选项，支持多行合并） ★★★
             else {
-                // console.log(`[${SCRIPT_NAME}] [DEBUG] 尝试横向解析模式`);
-                const dataRow = content[1];
-                headers.forEach((header, idx) => {
-                    if (!header)
-                        return; // 跳过 null
-                    const headerStr = String(header);
-                    // 检查表头是否包含“选项”相关字样
-                    // 或者，如果是“行动选项”表，我们默认所有非空表头都是选项
-                    let isOptionCol = headerStr.includes('选项') || headerStr.includes('Option');
-                    if (!isOptionCol && targetSheet.name === '行动选项') {
-                        // 排除明显不是选项的列（如ID）
-                        if (headerStr.toLowerCase() !== 'id') {
-                            isOptionCol = true;
-                        }
-                    }
-                    if (isOptionCol) {
-                        let text = headerStr; // 默认使用表头作为文本
-                        let value = headerStr; // 默认使用表头作为值
-                        // 如果有数据行，尝试从数据行获取
-                        if (dataRow && dataRow[idx]) {
-                            const cellVal = String(dataRow[idx]).trim();
-                            if (cellVal) {
-                                text = cellVal;
-                                value = cellVal;
+                // console.log(`[${SCRIPT_NAME}] [DEBUG] 使用横向解析模式 (多行合并)`);
+                // 遍历每一行数据 (从第1行开始)
+                for (let i = 1; i < content.length; i++) {
+                    const dataRow = content[i];
+                    if (!dataRow) continue;
+
+                    headers.forEach((header, idx) => {
+                        if (!header)
+                            return; // 跳过 null
+                        const headerStr = String(header);
+                        // 检查表头是否包含“选项”相关字样
+                        // 或者，如果是“行动选项”表，我们默认所有非空表头都是选项
+                        let isOptionCol = headerStr.includes('选项') || headerStr.includes('Option');
+                        if (!isOptionCol && targetSheet.name === '行动选项') {
+                            // 排除明显不是选项的列（如ID）
+                            if (headerStr.toLowerCase() !== 'id') {
+                                isOptionCol = true;
                             }
                         }
-                        options.push({ text, value });
-                    }
-                });
+                        if (isOptionCol) {
+                            let text = headerStr; // 默认使用表头作为文本
+                            let value = headerStr; // 默认使用表头作为值
+                            // 如果有数据行，尝试从数据行获取
+                            if (dataRow && dataRow[idx]) {
+                                const cellVal = String(dataRow[idx]).trim();
+                                if (cellVal) {
+                                    text = cellVal;
+                                    value = cellVal;
+                                    // 只有当单元格有值时才添加
+                                    options.push({ text, value });
+                                }
+                                // 如果单元格为空，则忽略该列的这一行（不使用表头作为默认值，因为多行模式下通常意味着该行该列没选项）
+                            } else {
+                                // 如果是第1行且为空，旧逻辑可能会用表头。但在多行模式下，建议严格一点：只有有值才算选项。
+                                // 除非只有1行数据？保留旧逻辑的一点点兼容性：
+                                // 如果只有1行数据，且单元格为空，是否要用表头？
+                                // 用户现在的需求是“表格生成了两行”，说明是填了值的。
+                                // 所以这里改为：只添加有值的单元格。
+                            }
+                        }
+                    });
+                }
             }
             // console.log(`[${SCRIPT_NAME}] [DEBUG] 解析出 ${options.length} 个选项`);
         }
@@ -8684,7 +9833,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
           <div class="gal-input-title" style="padding: 15px 25px; border-bottom: 1px solid #eee; flex-shrink: 0; margin: 0;">
             <span><i class="fa-solid fa-images"></i> 批量上传背景</span>
           </div>
-          
+
           <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
               <!-- 初始上传界面 -->
               <div id="gal-batch-step-1" style="flex: 1; overflow-y: auto; padding: 25px;">
@@ -8692,7 +9841,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                       <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
                       <div class="gal-upload-tab" data-target="remote" style="padding: 8px 15px; cursor: pointer; color: #888;">远程链接</div>
                   </div>
-                  
+
                   <div id="gal-upload-local" class="gal-upload-pane">
                       <input type="file" id="gal-batch-file-input" multiple accept="image/*" style="display: none;">
                       <div class="gal-upload-card" id="gal-batch-upload-trigger" style="min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed #ccc; border-radius: 8px; cursor: pointer;">
@@ -8705,7 +9854,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                   <div id="gal-upload-remote" class="gal-upload-pane" style="display: none;">
                       <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; border: 1px dashed #ccc;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px;">输入图片链接（一行一个）</label>
-                        <textarea id="gal-batch-remote-urls" placeholder="https://example.com/bg1.jpg&#10;https://example.com/bg2.png" 
+                        <textarea id="gal-batch-remote-urls" placeholder="https://example.com/bg1.jpg&#10;https://example.com/bg2.png"
                                   style="width: 100%; height: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-family: monospace; resize: vertical;"></textarea>
                         <button class="gal-action-btn" id="gal-batch-fetch-remote-btn" style="width: 100%; margin-top: 10px; justify-content: center;">
                           <i class="fa-solid fa-download"></i> 解析并获取图片
@@ -8721,7 +9870,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                           <!-- JS生成网格项 -->
                       </div>
                   </div>
-                  
+
                   <!-- 分页控制 -->
                   <div style="padding: 10px 20px; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: center; align-items: center; gap: 15px; flex-shrink: 0;">
                       <button class="gal-action-btn" id="gal-batch-prev-page" disabled><i class="fa-solid fa-chevron-left"></i> 上一页</button>
@@ -9050,6 +10199,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
           <div class="gal-upload-tabs" style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
             <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
             <div class="gal-upload-tab" data-target="remote" style="padding: 8px 15px; cursor: pointer; color: #888;">远程链接</div>
+            <div class="gal-upload-tab" data-target="comfyui" style="padding: 8px 15px; cursor: pointer; color: #888;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI 生成
+            </div>
           </div>
 
           <div id="gal-upload-local" class="gal-upload-pane">
@@ -9071,6 +10223,39 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 <i class="fa-solid fa-download"></i> 获取图片
               </button>
             </div>
+          </div>
+
+          <div id="gal-upload-comfyui" class="gal-upload-pane" style="display: none;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; color: #fff; margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <i class="fa-solid fa-panorama" style="font-size: 1.5rem;"></i>
+                        <span style="font-weight: 700; font-size: 1.1rem;">ComfyUI 场景生成</span>
+                    </div>
+                    <div style="font-size: 0.85rem; opacity: 0.9;">
+                        使用本地ComfyUI生成背景图片
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: 700; display: block; margin-bottom: 5px;">工作流</label>
+                        <select id="gal-bg-comfy-wf-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></select>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+                        <i class="fa-solid fa-pen-paintbrush"></i> 场景描述
+                    </label>
+                    <textarea id="gal-bg-comfyui-prompt" 
+                              placeholder="例如: empty classroom, sunset, windows, desks and chairs, no humans..."
+                              style="width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; resize: vertical; box-sizing: border-box;"></textarea>
+                </div>
+
+                <button class="gal-action-btn primary" id="gal-bg-comfyui-generate-btn" style="width: 100%; min-height: 50px; justify-content: center; font-size: 1.1rem;">
+                    <i class="fa-solid fa-image"></i>
+                    <span>生成背景</span>
+                </button>
           </div>
 
           <div id="gal-bg-preview-container" style="display: none; margin-bottom: 15px;">
@@ -9148,6 +10333,94 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 }
             });
         });
+
+        // ===================================
+        // ComfyUI 背景生成逻辑
+        // ===================================
+
+        // 初始化 Workflow 下拉
+        function initComfyUIBgWorkflowSelect() {
+            const $sel = $('#gal-bg-comfy-wf-select');
+            const workflows = getComfyWorkflows();
+            const cs = getComfyUISettings();
+            
+            $sel.empty();
+            $sel.append('<option value="default_bg">内置 SDXL Turbo</option>');
+            
+            Object.keys(workflows).forEach(id => {
+               $sel.append(`<option value="${id}">${workflows[id].name}</option>`); 
+            });
+            
+            if (cs.defaultBgWorkflow) {
+                $sel.val(cs.defaultBgWorkflow);
+            }
+        }
+        initComfyUIBgWorkflowSelect();
+
+        $('#gal-bg-comfyui-generate-btn').on('click', async function() {
+            const prompt = $('#gal-bg-comfyui-prompt').val().trim();
+            const wfId = $('#gal-bg-comfy-wf-select').val();
+
+            if (!prompt) {
+                showToast('请输入场景描述');
+                return;
+            }
+
+            $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 生成中...');
+            
+            const positive = [
+                prompt,
+                'scenery, background, no humans, masterpiece, best quality, highres' 
+            ].join(', ');
+            
+            const cs = getComfyUISettings();
+            const negative = cs.negativePrompt || DEFAULT_COMFYUI_SETTINGS.negativePrompt;
+            
+            let workflow;
+            if (wfId === 'default_bg' || !wfId) {
+                workflow = ComfyUIAPI.buildDefaultWorkflow(positive, negative, 1280, 720, 20, 7); // 16:9 默认
+            } else {
+                const workflows = getComfyWorkflows();
+                const stored = workflows[wfId];
+                if (stored) {
+                    workflow = stored.json;
+                } else {
+                    workflow = ComfyUIAPI.buildDefaultWorkflow(positive, negative, 1280, 720, 20, 7);
+                }
+            }
+
+            try {
+                const blob = await ComfyUIAPI.generate(workflow, positive, negative);
+                
+                // 模拟文件选择逻辑，复用 existing logic
+                const file = new File([blob], 'generated_bg.png', { type: blob.type });
+                selectedFile = file;
+                
+                // 显示预览
+                const reader = new FileReader();
+                reader.onload = e => {
+                    $previewImg.attr('src', e.target.result);
+                    $modal.find('.gal-upload-tabs, .gal-upload-pane').hide();
+                    $previewContainer.show();
+                    updateConfirmState();
+                    // 自动填入场景名建议（如果为空）
+                    if (!$sceneNameInput.val()) {
+                         $sceneNameInput.val(prompt.split(',')[0].substring(0, 10));
+                         updateConfirmState();
+                    }
+                };
+                reader.readAsDataURL(file);
+                
+                showToast('背景生成成功！');
+
+            } catch (e) {
+                console.error(`[${SCRIPT_NAME}] ComfyUI生成失败:`, e);
+                showToast('生成失败: ' + e.message);
+            } finally {
+                $(this).prop('disabled', false).html('<i class="fa-solid fa-image"></i><span>生成背景</span>');
+            }
+        });
+
         // 点击上传区域
         $uploadArea.on('click', () => $fileInput.click());
         // 文件选择
@@ -9435,6 +10708,75 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 
             <div class="gal-settings-divider"></div>
 
+            <!-- 🎨 ComfyUI 文生图设置 -->
+            <div class="gal-settings-section">
+              <div class="gal-settings-section-title">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI 文生图
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">API 地址 (您必须在启动 ComfyUI 时加上以下参数： --enable-cors-header)</span>
+                <div class="gal-settings-control">
+                  <input type="text" id="gal-comfyui-url" 
+                         value="${getComfyUISettings().apiUrl}" 
+                         placeholder="http://127.0.0.1:8188"
+                         style="width: 180px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                </div>
+              </div>
+
+              <div class="gal-settings-row">
+                <button class="gal-action-btn" id="gal-comfyui-test" style="width: 100%; justify-content: center; padding: 10px;">
+                  <i class="fa-solid fa-plug"></i> 测试连接
+                </button>
+              </div>
+
+              <!-- 工作流管理 -->
+              <div class="gal-settings-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                 <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="gal-settings-label" style="font-weight: 700;">工作流管理 (.json)</span>
+                    <input type="file" id="gal-comfy-import-input" accept=".json" style="display: none;">
+                    <button class="gal-action-btn" id="gal-comfy-import-btn" style="padding: 4px 10px; font-size: 0.8rem;">
+                        <i class="fa-solid fa-file-import"></i> 导入 JSON
+                    </button>
+                 </div>
+                 <div id="gal-workflow-list" style="max-height: 120px; overflow-y: auto; background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 8px;">
+                    <div style="text-align: center; color: #999; font-size: 0.85rem; padding: 10px;">暂无导入的工作流</div>
+                 </div>
+              </div>
+
+               <div class="gal-settings-row">
+                <span class="gal-settings-label">默认角色 Workflow</span>
+                <select id="gal-comfy-def-char" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="default_char">内置 SDXL Turbo</option>
+                </select>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">默认 Checkpoint 模型</span>
+                <select id="gal-comfy-def-checkpoint" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">(加载中...)</option>
+                </select>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">默认背景 Workflow</span>
+                <select id="gal-comfy-def-bg" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="default_bg">内置 SDXL Turbo</option>
+                </select>
+              </div>
+
+
+
+              <div class="gal-settings-row" style="flex-direction: column; align-items: stretch;">
+                <span class="gal-settings-label" style="margin-bottom: 8px;">负面提示词</span>
+                <textarea id="gal-comfyui-negative" 
+                          placeholder="lowres, bad anatomy..."
+                          style="width: 100%; height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea>
+              </div>
+
+
+            <div class="gal-settings-divider"></div>
+
             <!-- 功能按钮组 -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;">
               <button class="gal-panel-btn" id="gal-open-sprite-manager">
@@ -9627,6 +10969,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                     $(this).html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame 模式已关闭</span>');
                     yield disableWorldbookGlobally();
                     restoreOriginalViews();
+                    // 延迟滚动到最后一条消息
+                    setTimeout(() => {
+                        const $lastMes = $('#chat > .mes').last();
+                        if ($lastMes.length) {
+                            $lastMes[0].scrollIntoView({ behavior: 'smooth', block: 'end' });
+                        }
+                    }, 150);
                     showToast('Galgame 模式已关闭');
                 }
             });
@@ -9740,6 +11089,144 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             else {
                 showToast('请先开启 Galgame 模式');
             }
+        });
+
+        // ComfyUI 设置绑定
+        $('#gal-comfyui-url').on('change', function() {
+            const cs = getComfyUISettings();
+            cs.apiUrl = $(this).val().trim();
+            saveComfyUISettings(cs);
+        });
+
+
+
+        $('#gal-comfyui-negative').on('change', function() {
+            const cs = getComfyUISettings();
+            cs.negativePrompt = $(this).val();
+            saveComfyUISettings(cs);
+        });
+
+        $('#gal-comfyui-test').on('click', async function() {
+            $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 测试中...');
+            const ok = await ComfyUIAPI.checkConnection();
+            $(this).prop('disabled', false).html('<i class="fa-solid fa-plug"></i> 测试连接');
+            showToast(ok ? 'ComfyUI 连接成功！' : 'ComfyUI 连接失败，请检查地址和CORS设置');
+        });
+
+        // 工作流管理逻辑
+        function renderWorkflowList() {
+            const workflows = getComfyWorkflows();
+            const $list = $('#gal-workflow-list');
+            const $selChar = $('#gal-comfy-def-char');
+            const $selBg = $('#gal-comfy-def-bg');
+            const cs = getComfyUISettings();
+
+            $list.empty();
+            $selChar.html('<option value="default_char">内置 SDXL Turbo</option>');
+            $selBg.html('<option value="default_bg">内置 SDXL Turbo</option>');
+
+            const keys = Object.keys(workflows);
+            if (keys.length === 0) {
+                $list.html('<div style="text-align: center; color: #999; font-size: 0.85rem; padding: 10px;">暂无导入的工作流</div>');
+            } else {
+                keys.forEach(id => {
+                    const wf = workflows[id];
+                    const $item = $(`
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px; border-bottom: 1px solid #eee; font-size: 0.9rem;">
+                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px;" title="${wf.name}">${wf.name}</span>
+                            <i class="fa-solid fa-trash" style="color: #ff4d4d; cursor: pointer; padding: 4px;" title="删除"></i>
+                        </div>
+                    `);
+                    $item.find('.fa-trash').on('click', () => {
+                        if (confirm(`确定要删除工作流 "${wf.name}" 吗？`)) {
+                            delete workflows[id];
+                            saveComfyWorkflows(workflows);
+                            renderWorkflowList();
+                        }
+                    });
+                    $list.append($item);
+                    
+                    // 下拉选项
+                    $selChar.append(`<option value="${id}">${wf.name}</option>`);
+                    $selBg.append(`<option value="${id}">${wf.name}</option>`);
+                });
+            }
+            
+            // 恢复选中状态
+            $selChar.val(cs.defaultCharWorkflow || 'default_char');
+            $selChar.val(cs.defaultCharWorkflow || 'default_char');
+            $selBg.val(cs.defaultBgWorkflow || 'default_bg');
+        }
+
+        renderWorkflowList();
+
+        // 加载模型列表 (Populate Checkpoints)
+        async function loadCheckpointsToSelect() {
+            const $sel = $('#gal-comfy-def-checkpoint');
+            const cs = getComfyUISettings();
+            const baseUrl = cs.apiUrl;
+            
+            try {
+                const models = await ComfyUIAPI.getModels(baseUrl);
+                $sel.empty();
+                $sel.append('<option value="">-- 使用 Workflow默认 --</option>');
+                
+                models.forEach(m => {
+                    $sel.append(`<option value="${m}">${m}</option>`);
+                });
+                
+                if (cs.defaultCheckpoint) {
+                    $sel.val(cs.defaultCheckpoint);
+                }
+            } catch (e) {
+                console.error(`[${SCRIPT_NAME}] 加载模型失败:`, e);
+                $sel.html('<option value="">(加载失败)</option>');
+            }
+        }
+        loadCheckpointsToSelect();
+
+        // 绑定 Checkpoint 变更
+        $('#gal-comfy-def-checkpoint').on('change', function() {
+            const cs = getComfyUISettings();
+            cs.defaultCheckpoint = $(this).val();
+            saveComfyUISettings(cs);
+        });
+
+        // 导入
+        $('#gal-comfy-import-btn').on('click', () => $('#gal-comfy-import-input').click());
+        $('#gal-comfy-import-input').on('change', function() {
+            const file = this.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    const name = file.name.replace('.json', '');
+                    const id = 'wf_' + Date.now();
+                    const workflows = getComfyWorkflows();
+                    workflows[id] = { name, json };
+                    saveComfyWorkflows(workflows);
+                    renderWorkflowList();
+                    showToast(`已导入工作流: ${name}`);
+                } catch(err) {
+                    showToast('无效的 JSON 文件');
+                    console.error(err);
+                }
+                $(this).val(''); // 重置
+            };
+            reader.readAsText(file);
+        });
+
+        // 默认工作流变更
+        $('#gal-comfy-def-char').on('change', function() {
+            const cs = getComfyUISettings();
+            cs.defaultCharWorkflow = $(this).val();
+            saveComfyUISettings(cs);
+        });
+        $('#gal-comfy-def-bg').on('change', function() {
+            const cs = getComfyUISettings();
+            cs.defaultBgWorkflow = $(this).val();
+            saveComfyUISettings(cs);
         });
     }
     // 应用设置到 UI
@@ -9872,8 +11359,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     }
     // 显示所有楼层
     function showAllFloors() {
-        $('#chat > .mes').removeClass('gal-hidden');
-        console.log(`[${SCRIPT_NAME}] 已显示所有消息楼层`);
+        const $allMes = $('#chat > .mes');
+        // 强制移除隐藏类
+        $allMes.each(function() {
+            $(this).removeClass('gal-hidden');
+            // 确保内联样式也被清除
+            $(this).css('display', '');
+        });
+        console.log(`[${SCRIPT_NAME}] 已显示所有消息楼层，共 ${$allMes.length} 个`);
     }
     /**
      * 向消息中注入 Galgame 开启按钮
@@ -9896,7 +11389,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 </div>
             </div>
         `;
-        
+
         // 查找 mes_block 并追加到末尾
         const $mesBlock = $mes.find('.mes_block');
         if ($mesBlock.length) {
@@ -10058,7 +11551,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
             // ★ 关键修复：使用 .attr()
             const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
             const state = messageSegmentState.get(String(mesId));
-            console.log(`[${SCRIPT_NAME}] [DEBUG] 快进中: mesId=${mesId}, index=${state === null || state === void 0 ? void 0 : state.currentIndex}, total=${(_a = state === null || state === void 0 ? void 0 : state.segments) === null || _a === void 0 ? void 0 : _a.length}`);
+            // console.log(`[${SCRIPT_NAME}] [DEBUG] 快进中: mesId=${mesId}, index=${state === null || state === void 0 ? void 0 : state.currentIndex}, total=${(_a = state === null || state === void 0 ? void 0 : state.segments) === null || _a === void 0 ? void 0 : _a.length}`);
             if (!state) {
                 console.warn(`[${SCRIPT_NAME}] [DEBUG] 快进停止: 找不到状态`);
                 stopSkipping();
@@ -10093,21 +11586,21 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         if (isRewinding) return;
         isRewinding = true;
         showToast('快速回退中...');
-        
+
         const $btn = $('#gal-global-overlay [data-action="prev"]');
         $btn.addClass('active');
-        
+
         const doRewind = () => {
             if (!isRewinding) return;
-            
+
             const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
             const state = messageSegmentState.get(String(mesId));
-            
+
             if (!state) {
                 stopRewinding();
                 return;
             }
-            
+
             if (state.currentIndex > 0) {
                 state.currentIndex--;
                 updateOverlaySegmentDisplay(state);
@@ -10117,7 +11610,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 showToast('已回退到开头');
             }
         };
-        
+
         doRewind();
     }
 
@@ -10134,7 +11627,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
         const state = messageSegmentState.get(String(mesId));
         if (!state) return;
-        
+
         if (state.currentIndex > 0) {
             state.currentIndex--;
             updateOverlaySegmentDisplay(state);
@@ -10146,7 +11639,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     function showCustomPopupPanel(title, htmlContent) {
         // 移除已存在的
         $('#gal-custom-popup').remove();
-        
+
         const $popup = $(`
             <div id="gal-custom-popup" class="gal-input-modal">
                 <div class="gal-input-box" style="max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
@@ -10160,9 +11653,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
                 </div>
             </div>
         `);
-        
+
         $(topWindow.document.body).append($popup);
-        
+
         // 关闭事件
         $popup.find('.gal-popup-close').on('click', () => $popup.remove());
         $popup.on('click', function(e) {

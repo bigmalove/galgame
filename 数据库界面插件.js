@@ -79,6 +79,79 @@ const __awaiter =
     搞怪: 'playful, wink, tongue out, silly face',
   };
 
+  // 表情到TTS emotion的映射（中文emotion）
+  const EXPRESSION_EMOTION_MAP = {
+    默认: '中性',
+    微笑: '开心',
+    生气: '生气',
+    难过: '悲伤',
+    惊讶: '惊讶',
+    嘲讽: '冷漠',
+    害羞: '害羞',
+    思考: '中性',
+    大笑: '激动',
+    搞怪: '撒娇',
+  };
+
+  // 可用的TTS emotion列表（供用户选择）
+  const TTS_EMOTION_LIST = [
+    '中性',
+    '开心',
+    '悲伤',
+    '生气',
+    '惊讶',
+    '恐惧',
+    '厌恶',
+    '激动',
+    '冷漠',
+    '沮丧',
+    '撒娇',
+    '害羞',
+    '安慰',
+    '鼓励',
+    '咆哮',
+    '焦急',
+    '温柔',
+    '讲故事',
+    '自然讲述',
+    '情感电台',
+    '磁性',
+    '广告营销',
+    '气泡音',
+    '低语',
+    '新闻播报',
+    '娱乐八卦',
+    '方言',
+    '对话',
+    '闲聊',
+    '温暖',
+    '深情',
+    '权威',
+  ];
+
+  // 会话级角色音色缓存（角色名 -> 音色名）
+  const sessionVoiceCache = new Map();
+
+  /**
+   * 获取表情对应的TTS emotion
+   * @param {string} expressionName - 表情名称
+   * @returns {string} emotion名称
+   */
+  function getExpressionEmotion(expressionName) {
+    // 1. 检查预设映射
+    if (EXPRESSION_EMOTION_MAP[expressionName]) {
+      return EXPRESSION_EMOTION_MAP[expressionName];
+    }
+    // 2. 检查自定义表情的emotion配置
+    const customExpressions = getCustomExpressions();
+    const custom = customExpressions.find(e => e.name === expressionName);
+    if (custom && custom.emotion) {
+      return custom.emotion;
+    }
+    // 3. 默认返回中性
+    return '中性';
+  }
+
   // 获取表情对应的英文tag（支持自定义表情回退到默认）
   function getExpressionTag(expressionName) {
     return EXPRESSION_TAG_MAP[expressionName] || `${expressionName} expression`;
@@ -100,6 +173,7 @@ const __awaiter =
   const RE_MAINTEXT_UNCLOSED = /<maintext>([\s\S]*)$/i;
   const RE_BACKGROUND = /<background\s+scene="([^"]+)"\s*[\/]?>/i;
   const RE_BGIMG = /<bgimg>(.*?)<\/bgimg>/i;
+  const RE_WHIMG = /<whimg>(.*?)<\/whimg>/i;
   const RE_BGM = /<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i;
   const RE_OPTION = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
   const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
@@ -274,7 +348,62 @@ const __awaiter =
 
       // 构建场景列表说明
       let sceneListText = '';
-      if (settings.realTimeBackgroundGen) {
+      const useWallhaven = settings.wallhaven?.enabled;
+
+      if (useWallhaven) {
+        // Wallhaven 壁纸搜索模式
+        const ws = settings.wallhaven;
+
+        // 根据图片分类提供不同的标签建议
+        let categoryHint = '';
+        switch (ws.category) {
+          case 'anime':
+            categoryHint = '使用动漫风格关键词，如: anime style, illustration, digital art';
+            break;
+          case 'people':
+            categoryHint = '使用人物相关关键词，如: portrait, cosplay, model';
+            break;
+          case 'general':
+            categoryHint = '使用通用壁纸关键词，如: landscape, nature, architecture';
+            break;
+          case 'all':
+            categoryHint = '可使用任意风格关键词';
+            break;
+        }
+
+        // 根据背景模式（纯场景 vs 角色为主）提供不同指导
+        let modeHint = '';
+        if (ws.sceneMode) {
+          modeHint = `⚠️ **纯场景模式已开启**：请侧重描述环境/风景/建筑，避免人物相关词汇
+- 推荐: scenery, landscape, background, environment, architecture, nature
+- 避免: girl, boy, character, person, people`;
+        } else {
+          modeHint = `📌 **角色模式已开启**：可以包含人物相关关键词
+- 推荐: anime girl, character, portrait, cosplay, 配合场景背景词`;
+        }
+
+        // 自定义标签提示
+        let customTagHint = '';
+        if (ws.customTags && ws.customTags.length > 0) {
+          customTagHint = `\n- **用户自定义标签(优先级最高)**: ${ws.customTags.join(', ')}`;
+        }
+
+        sceneListText = `**Wallhaven 壁纸搜索模式**: 当场景变化时，输出英文关键词供搜索匹配壁纸。
+
+${modeHint}
+- **生成格式**: \`<background scene="场景中文名"><whimg>english, tags, separated, by, commas</whimg>\`
+- **分类建议**: ${categoryHint}
+- **标签要求**:
+  - 必须使用英文关键词，逗号分隔
+  - **3-6个核心关键词即可**，过多会导致搜索失败
+  - 优先使用通用、常见的英文词汇
+  - 包含: 场景类型(forest/city/room)、时间(night/day)、氛围(dark/cozy)、风格(anime/fantasy)${customTagHint}
+- **推荐标签组合**:
+  - 森林夜晚: \`<background scene="月光森林"><whimg>forest, night, moonlight, dark, fantasy</whimg>\`
+  - 都市雨夜: \`<background scene="霓虹街道"><whimg>city, rain, night, neon, cyberpunk</whimg>\`
+  - 室内场景: \`<background scene="温馨卧室"><whimg>bedroom, cozy, interior, morning</whimg>\`
+  - 古代书房: \`<background scene="古典书房"><whimg>study, ancient, interior, candlelight</whimg>\``;
+      } else if (settings.realTimeBackgroundGen) {
         sceneListText =
           sceneNames.length > 0
             ? `**实时场景生成模式**: 当剧情进入新场景时，根据当前具体情节生成新场景。\n- **判断标准**: 如果图库中的场景名称与当前剧情时间、地点、氛围完全匹配，则可复用；否则必须生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>visual tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）\n- **TAG要求**: 英文逗号分隔，包含风格、光线、氛围、细节等\n可用场景列表: ${sceneNames.join(', ')}`
@@ -301,51 +430,36 @@ const __awaiter =
       const ttsEnabled = getTTSEnabled();
 
       if (ttsEnabled) {
-        // TTS启用时：使用配音格式（表情在开头）
+        // TTS启用时：使用简化配音格式
         return `# Galgame 输出格式规范
 
 本角色卡配合专用前端面板，输出将被解析为Galgame视觉小说界面。
 
 ## 输出格式要求
-- 字数控制: 500-700字
-- 分句数量: 15-25个p标签
-- 显示风格: galgame逐句显示
+- 分句字数: 不大于70字
 
 ## 标签系统
 
-### 分句标签
-- 格式: \`<p>内容</p>\`
-- 长度: 50-70字
-- 用途: 对话和旁白
-
 ### 对话格式（含配音）
-- **格式**: \`<p tts="speaker=音色名;emotion=情绪"><表情名>角色名: "对话内容"</p>\`
-- **表情标签**放在对话开头，紧跟在 \`<p tts="...">\` 后面
+- **格式**: \`<p>角色名[表情]: "对话内容"</p>\`
 - **表情列表**: ${expressionListText}
-- **可用音色列表**: ${ttsVoiceListText}
-- **TTS使用规则**:
-  - **仅角色对话**: 旁白不需要 tts 属性和表情标签
-  - **音色 (speaker)**: **必须**从上方可用音色列表中选择
-    - 若角色有绑定音色（见下方），**必须**使用绑定的音色
-    - 若无绑定，根据角色性格匹配合适的音色（如温柔角色用"桃夭"，成熟角色用"顾姐"）
-  - **情感 (emotion)**: 支持中文或英文
-    - 中文: 开心、悲伤、生气、惊讶、恐惧、厌恶、激动、冷漠、中性、沮丧、撒娇、害羞、安慰、鼓励、咆哮、焦急、温柔、讲故事、自然讲述、情感电台、磁性、广告营销、气泡音、低语、新闻播报、娱乐八卦、方言、对话、闲聊、温暖、深情、权威
-    - 英文: happy, sad, angry, surprised, fear, hate, excited, coldness, neutral, depressed, lovey-dovey, shy, comfort, tension, tender, storytelling, radio, magnetic, advertising, vocal-fry, asmr, news, entertainment, dialect, chat, warm, affectionate, authoritative
-  - **语气提示 (context)**: 可选，如"用更委屈的语气"、"放慢一点，压低音量"
-  - **标点辅助**: ……拖长、犹豫；！有力、激动；？疑问、上扬；～撒娇、轻快
-- **示例**:
-  - \`<p tts="speaker=桃夭;emotion=温柔"><微笑>少女: "你好呀～"</p>\`
-  - \`<p tts="speaker=夜枭;emotion=authority"><生气>将军: "退下！"</p>\`
-  - \`<p tts="speaker=顾姐;emotion=asmr;context=贴在耳边轻声"><害羞>姐姐: "来嘛……陪我喝一杯～"</p>\`
-  - \`<p tts="speaker=可莉;emotion=开心"><大笑>女孩: "太好啦！"</p>\`
+- **可用音色**: ${ttsVoiceListText}
+- **音色规则**:
+  - **已绑定音色的角色**: 直接写 \`角色名[表情]\`，系统自动使用绑定音色
+  - **新角色首次出现**: 写 \`角色名[表情,音色]\` 指定合适的音色
+  - **同一角色后续对话**: 可省略音色，系统自动沿用
 ${charVoiceBindingText}
+- **示例**:
+  - \`<p>少女[微笑]: "你好呀～"</p>\` （已绑定音色或后续对话）
+  - \`<p>将军[生气,夜枭]: "退下！"</p>\` （新角色首次出现，指定音色）
+  - \`<p>姐姐[害羞]: "来嘛……陪我喝一杯～"</p>\`
 
 ### 旁白格式
 - 格式: \`<p>旁白内容</p>\`
-- 无需TTS属性和表情标签
+- 无需表情和音色
 
 ### 背景音乐 (BGM)
-- **格式**: \`<bgm>当前bgm:歌名</bgm>\`
+- **格式**: \`<bgm>歌曲名</bgm>\`
 - **使用规则**:
   - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
   - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
@@ -357,7 +471,6 @@ ${charVoiceBindingText}
 - **使用规则**:
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
-  - **持续监测**: 必须时刻关注剧情中的地点变化，一旦发生移动立即更新背景。
 - ${sceneListText}
 
 ## 输出结构示例
@@ -366,22 +479,21 @@ ${charVoiceBindingText}
   <background scene="${exampleScene}" />
   <bgimg>rainy night, neon lights, wet pavement reflections, cyberpunk city, dark atmosphere, street lamps, urban scenery, night scene, detailed background</bgimg>
 
-  <p>第一句旁白描述。</p>
-  <p tts="emotion=开心"><微笑>角色名: "这是角色的对话内容。"</p>
-  <bgm>日常 轻松 OST</bgm>
-  <p>继续旁白描述。</p>
-  <p tts="speaker=角色名;emotion=惊讶"><惊讶>角色名: "表情变化了！"</p>
-  <p tts="emotion=温柔;context=轻声细语"><思考>角色名: "又说了一句。"</p>
+  <p>夜色深沉，街灯在雨中摇曳。</p>
+  <p>少女[微笑,桃夭]: "你终于来了～"</p>
+  <bgm>歌曲名</bgm>
+  <p>她撑着伞，静静地站在那里。</p>
+  <p>少女[惊讶]: "下这么大的雨，你怎么不带伞？"</p>
+  <p>少女[难过]: "会感冒的……"</p>
 
 </maintext>
 \`\`\`
 
 ## 重要提醒
-1. 角色说话时必须使用格式: \`<p tts="..."><表情名>角色名: "对话内容"</p>\`
-2. 表情标签放在对话开头，紧跟在 \`<p tts="...">\` 后面
-3. 旁白不需要表情标签和TTS属性
-4. maintext标签包裹所有游戏内容
-5. 每个对话段落独立配置TTS，情绪转折点另起新段落
+1. 对话格式: \`<p>角色名[表情]: "对话"</p>\` 或 \`<p>角色名[表情,音色]: "对话"</p>\`
+2. 旁白格式: \`<p>旁白内容</p>\`（无需任何标记）
+3. 新角色首次出现时指定音色，后续自动沿用
+4. maintext标签包裹
 ${extraRule}
 `;
       } else {
@@ -391,16 +503,9 @@ ${extraRule}
 本角色卡配合专用前端面板，输出将被解析为Galgame视觉小说界面。
 
 ## 输出格式要求
-- 字数控制: 500-700字
-- 分句数量: 15-25个p标签
-- 显示风格: galgame逐句显示
+- 每段字数: 不大于70字
 
 ## 标签系统
-
-### 分句标签
-- 格式: \`<p>内容</p>\`
-- 长度: 50-70字
-- 用途: 对话和旁白
 
 ### 对话格式（含表情）
 - 格式: \`<p>角色名: "对话内容"<表情名></p>\`
@@ -416,7 +521,7 @@ ${extraRule}
 - 无需表情标签
 
 ### 背景音乐 (BGM)
-- **格式**: \`<bgm>当前bgm:歌名</bgm>\`
+- **格式**: \`<bgm>歌曲名</bgm>\`
 - **使用规则**:
   - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
   - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
@@ -428,7 +533,6 @@ ${extraRule}
 - **使用规则**:
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
-  - **持续监测**: 必须时刻关注剧情中的地点变化，一旦发生移动立即更新背景。
 - ${sceneListText}
 
 ## 输出结构示例
@@ -439,7 +543,7 @@ ${extraRule}
 
   <p>第一句旁白描述。</p>
   <p>角色名: "这是角色的对话内容。"<微笑></p>
-  <bgm>日常 轻松 OST</bgm>
+  <bgm>歌曲名</bgm>
   <p>继续旁白描述。</p>
   <p>角色名: "表情变化了！"<惊讶></p>
   <p>角色名: "又说了一句。"<思考></p>
@@ -451,7 +555,7 @@ ${extraRule}
 1. 角色说话时必须使用格式: \`角色名: "对话内容"<表情名>\`
 2. 表情标签直接跟在对话引号后面，无空格
 3. 旁白不需要表情标签
-4. maintext标签包裹所有游戏内容
+4. maintext标签包裹
 ${extraRule}
 `;
       }
@@ -538,20 +642,15 @@ ${extraRule}
         useWorldbooks: false, // false=使用默认, true=启用自定义(可指定或不使用)
         worldbooks: [], // 空数组表示不使用任何世界书，有内容则使用指定世界书
       },
-      promptConfig: {
-        systemPrompt: `你是Galgame文本格式化工具。你的唯一任务是将原始文本转换为Galgame XML格式。
-
-【核心规则 - 必须遵守】
-1. 只做格式转换，绝对禁止续写、扩展或添加任何新剧情
-2. 原文的每一句话都必须保留，不得删减或改写内容
-3. 只添加XML格式标签，不添加任何原文没有的对话或旁白
-4. 输入多少内容，输出就是多少内容（加上格式标签）
-
-【再次强调】
-这是格式化任务，不是创作任务。你收到的文本已经是完整的，不需要也不允许继续写下去。`,
-        temperature: 0.7,
-        topP: 0.9,
-      },
+    },
+    // Wallhaven 壁纸设置
+    wallhaven: {
+      enabled: false, // 是否启用 Wallhaven 背景
+      purity: 'sfw', // 安全级别: 'sfw' | 'sketchy'
+      sceneMode: true, // 背景模式: true=纯场景, false=角色为主
+      category: 'anime', // 图片分类: 'anime' | 'all' | 'people' | 'general'
+      customTags: [], // 自定义标签列表
+      apiKey: '', // 可选 API Key
     },
   };
   // 加强模式状态
@@ -573,6 +672,17 @@ ${extraRule}
   };
   // 当前设置 (全局)
   let settings = Object.assign({}, DEFAULT_SETTINGS);
+  // 第二次生成使用的系统提示词（硬编码，不缓存到localStorage）
+  const SYSTEM_PROMPT_FOR_SECOND_GENERATE = `你是Galgame文本格式化工具。你的唯一任务是将原始文本转换为Galgame 格式。
+
+【核心规则 - 必须遵守】
+1. 只做格式转换，绝对禁止续写、扩展或添加任何新剧情
+2. 原文的每一句话都必须保留，不得删减或改写内容
+3. 不添加任何原文没有的对话或旁白
+4. 输入多少内容，输出就是多少内容（加上格式标签）
+
+【再次强调】
+这是格式化任务，不是创作任务。你收到的文本已经是完整的，不需要也不允许继续写下去。`;
   // ============================================
   // BGM 管理器 (Music.js 集成)
   // ============================================
@@ -910,6 +1020,11 @@ ${extraRule}
       const saved = topWindow.localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        // 移除已废弃的 promptConfig（systemPrompt 现在使用硬编码常量，不再缓存）
+        if (parsed.enhancedMode && parsed.enhancedMode.promptConfig) {
+          delete parsed.enhancedMode.promptConfig;
+          console.log(`[${SCRIPT_NAME}] 已清除缓存中的自定义 systemPrompt`);
+        }
         settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
       }
     } catch (e) {
@@ -1373,7 +1488,7 @@ ${extraRule}
           return String(m);
         });
 
-        console.log(`[${SCRIPT_NAME}] 获取到 ${models.length} 个模型`);
+      consconsole.log(`[${SCRIPT_NAME}] 获取到 ${models.length} 个模型`);
         return models;
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] 获取模型列表异常 (Proxy):`, e);
@@ -1473,15 +1588,184 @@ ${extraRule}
   };
 
   // ============================================
+  // Wallhaven API (壁纸搜索)
+  // ============================================
+  const WallhavenAPI = {
+    baseUrl: 'https://wallhaven.cc/api/v1',
+    cache: new Map(), // 搜索结果缓存: query -> results
+    lastRequestTime: 0, // 上次请求时间
+    minRequestInterval: 1400, // 最小请求间隔 (ms) = 60s/45 ≈ 1.33s
+
+    // 获取 Wallhaven 设置
+    getSettings() {
+      return settings.wallhaven || {};
+    },
+
+    // 构建搜索参数
+    buildSearchQuery(tags, options = {}) {
+      const ws = this.getSettings();
+      let queryParts = [];
+
+      // 自定义标签（最高权重）
+      if (ws.customTags && ws.customTags.length > 0) {
+        ws.customTags.slice(0, 3).forEach(tag => queryParts.push(`+${tag}`));
+      }
+
+      // AI 生成的标签 - 限制数量，选择最重要的
+      if (tags && tags.length > 0) {
+        // 过滤掉过于具体或长的标签，优先选择核心场景词
+        const filteredTags = tags
+          .map(t => t.trim())
+          .filter(t => t.length > 0 && t.length < 30) // 过滤过长标签
+          .slice(0, 6); // 最多取6个标签
+        queryParts.push(...filteredTags);
+      }
+
+      // 背景模式排除词
+      if (ws.sceneMode) {
+        queryParts.push('-girl', '-people');
+      }
+
+      // 分类映射: anime=010, general=100, people=001, all=111
+      const categoryMap = {
+        anime: '010',
+        general: '100',
+        people: '001',
+        all: '111',
+      };
+
+      // 安全级别: sfw=100, sketchy=110
+      const purityMap = {
+        sfw: '100',
+        sketchy: '110',
+      };
+
+      return {
+        q: queryParts.join(' '),
+        categories: categoryMap[ws.category] || '010',
+        purity: purityMap[ws.purity] || '100',
+        sorting: 'favorites',
+        order: 'desc',
+        apikey: ws.apiKey || undefined,
+      };
+    },
+
+    // 节流：等待到可以发起下一个请求
+    async throttle() {
+      const now = Date.now();
+      const elapsed = now - this.lastRequestTime;
+      if (elapsed < this.minRequestInterval) {
+        await new Promise(r => setTimeout(r, this.minRequestInterval - elapsed));
+      }
+      this.lastRequestTime = Date.now();
+    },
+
+    // 搜索壁纸
+    async search(tags) {
+      const ws = this.getSettings();
+      if (!ws.enabled) return null;
+
+      // 第一次搜索：使用完整标签
+      let result = await this._doSearch(tags);
+      if (result) return result;
+
+      // 第二次搜索：简化标签（只取前3个核心词）
+      if (tags.length > 3) {
+        console.log(`[${SCRIPT_NAME}] Wallhaven: 简化标签重试...`);
+        result = await this._doSearch(tags.slice(0, 3));
+        if (result) return result;
+      }
+
+      // 第三次搜索：只取第一个核心词 + 通用场景词
+      if (tags.length > 0) {
+        console.log(`[${SCRIPT_NAME}] Wallhaven: 使用最简标签重试...`);
+        const minimalTags = [tags[0], 'scenery', 'background'];
+        result = await this._doSearch(minimalTags);
+        if (result) return result;
+      }
+
+      console.warn(`[${SCRIPT_NAME}] Wallhaven: 所有搜索尝试均未找到匹配图片`);
+      return null;
+    },
+
+    // 执行实际搜索请求
+    async _doSearch(tags) {
+      const params = this.buildSearchQuery(tags);
+      const cacheKey = JSON.stringify(params);
+
+      // 检查缓存
+      if (this.cache.has(cacheKey)) {
+        console.log(`[${SCRIPT_NAME}] Wallhaven: 使用缓存结果`);
+        return this.selectImage(this.cache.get(cacheKey));
+      }
+
+      await this.throttle();
+
+      try {
+        // 直接请求 Wallhaven API
+        const queryString = Object.entries(params)
+          .filter(([k, v]) => v !== undefined)
+          .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+          .join('&');
+
+        const apiUrl = `${this.baseUrl}/search?${queryString}`;
+        console.log(`[${SCRIPT_NAME}] Wallhaven: 搜索 ${apiUrl}`);
+
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+          throw new Error(`Wallhaven API 错误: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.data && data.data.length > 0) {
+          this.cache.set(cacheKey, data.data);
+          return this.selectImage(data.data);
+        }
+
+        return null;
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] Wallhaven 搜索失败:`, e);
+        return null;
+      }
+    },
+
+    // 从结果中选择图片（按收藏量 + 随机）
+    selectImage(results) {
+      if (!results || results.length === 0) return null;
+
+      // 取前 10 张高收藏量的，随机选一张
+      const top = results.slice(0, Math.min(10, results.length));
+      const selected = top[Math.floor(Math.random() * top.length)];
+
+      console.log(`[${SCRIPT_NAME}] Wallhaven: 选中图片 ${selected.id}, 收藏: ${selected.favorites}`);
+      return selected.path; // 返回完整图片 URL
+    },
+
+    // 清除缓存
+    clearCache() {
+      this.cache.clear();
+    },
+  };
+
+  // ============================================
   // 自定义表情管理
   // ============================================
 
-  // 获取自定义表情列表
+  // 获取自定义表情列表（兼容旧格式，返回对象数组）
+  // 新格式: [{name: '傲娇', emotion: '撒娇'}, ...]
+  // 旧格式: ['傲娇', ...] -> 自动转换为 [{name: '傲娇', emotion: null}, ...]
   function getCustomExpressions() {
     try {
       const saved = topWindow.localStorage.getItem(CUSTOM_EXPRESSIONS_STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        // 兼容旧格式：字符串数组转对象数组
+        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+          return parsed.map(name => ({ name, emotion: null }));
+        }
+        return parsed;
       }
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] 加载自定义表情失败:`, e);
@@ -1499,7 +1783,7 @@ ${extraRule}
   }
 
   // 添加自定义表情（自动更新COT）
-  function addCustomExpression(name) {
+  function addCustomExpression(name, emotion = null) {
     return __awaiter(this, void 0, void 0, function* () {
       if (!name || typeof name !== 'string') return false;
 
@@ -1515,12 +1799,12 @@ ${extraRule}
       const customs = getCustomExpressions();
 
       // 检查是否已存在
-      if (customs.includes(trimmedName)) {
+      if (customs.find(e => e.name === trimmedName)) {
         showToast(`"${trimmedName}" 已存在`);
         return false;
       }
 
-      customs.push(trimmedName);
+      customs.push({ name: trimmedName, emotion: emotion || null });
       saveCustomExpressions(customs);
 
       // 自动更新 COT
@@ -1533,11 +1817,35 @@ ${extraRule}
     });
   }
 
+  // 更新自定义表情的emotion（自动更新COT）
+  function updateCustomExpressionEmotion(name, emotion) {
+    return __awaiter(this, void 0, void 0, function* () {
+      const customs = getCustomExpressions();
+      const expr = customs.find(e => e.name === name);
+
+      if (!expr) {
+        showToast(`"${name}" 不存在`);
+        return false;
+      }
+
+      expr.emotion = emotion || null;
+      saveCustomExpressions(customs);
+
+      // 自动更新 COT
+      if (isEnabled) {
+        yield injectCOTToWorldbook();
+      }
+
+      showToast(`已更新表情「${name}」的TTS情绪`);
+      return true;
+    });
+  }
+
   // 删除自定义表情（自动更新COT）
   function removeCustomExpression(name) {
     return __awaiter(this, void 0, void 0, function* () {
       const customs = getCustomExpressions();
-      const index = customs.indexOf(name);
+      const index = customs.findIndex(e => e.name === name);
 
       if (index === -1) {
         showToast(`"${name}" 不存在`);
@@ -1557,10 +1865,10 @@ ${extraRule}
     });
   }
 
-  // 获取完整表情列表（预设 + 自定义）
+  // 获取完整表情列表（预设 + 自定义，返回名称数组）
   function getAllExpressions() {
     const customs = getCustomExpressions();
-    return [...EXPRESSION_LIST, ...customs];
+    return [...EXPRESSION_LIST, ...customs.map(e => e.name)];
   }
   // 兼容旧变量
   let isEnabled = false;
@@ -2324,7 +2632,7 @@ ${extraRule}
           const backgrounds = request.result || [];
           backgrounds.forEach(bg => {
             if (bg.imageUrl) {
-            letceneBackgrounds.set(bg.id, bg.imageUrl);
+              letceneBackgrounds.set(bg.id, bg.imageUrl);
             } else if (bg.imageBlob) {
               // ★ 使用 topWindow.URL
               const blobUrl = (topWindow.URL || URL).createObjectURL(bg.imageBlob);
@@ -2346,7 +2654,7 @@ ${extraRule}
     activeCharacters: new Map(),
     // 当前说话者
     currentSpeaker: null,
-    // 主角名称（从数据库获取）
+    //let名称（从数据库获取）
     protagonistName: null,
     // 角色出场顺序队列（用于4+角色时的替换）
     characterQueue: [],
@@ -2723,9 +3031,130 @@ ${extraRule}
     },
   };
   // ============================================
+  // 简化格式预处理器
+  // ============================================
+
+  // 非法标签清理正则（清除AI自创的标签）
+  const RE_ILLEGAL_TAGS = [
+    /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
+    /<system_ui_display[^>]*>[\s\S]*?<\/system_ui_display>/gi,
+    /<ui_panel[^>]*>[\s\S]*?<\/ui_panel>/gi,
+    /<status[^>]*>[\s\S]*?<\/status>/gi,
+    /<deep_breath[^>]*>[\s\S]*?<\/deep_breath>/gi,
+    /<div[^>]*>[\s\S]*?<\/div>/gi,
+    /<span[^>]*style[^>]*>[\s\S]*?<\/span>/gi,
+    /<!--[\s\S]*?-->/gi,
+    /<b>[\s\S]*?<\/b>/gi,
+    /<br\s*\/?>/gi,
+  ];
+
+  /**
+   * 清理AI自创的非法标签
+   */
+  function cleanIllegalTags(html) {
+    if (!html) return html;
+    let result = html;
+    for (const regex of RE_ILLEGAL_TAGS) {
+      result = result.replace(regex, '');
+    }
+    return result.replace(/\n{3,}/g, '\n\n');
+  }
+
+  /**
+   * 预处理简化格式，转换为标准TTS格式
+   * 简化格式: <p>角色名[表情]: "对话"</p> 或 <p>角色名[表情,音色]: "对话"</p>
+   * 转换为: [tts:speaker=音色;emotion=情绪]\n<p><表情>角色名: "对话"</p>
+   * @param {string} html - 原始HTML
+   * @returns {string} 转换后的HTML
+   */
+  function preprocessSimplifiedFormat(html) {
+    if (!html) return html;
+
+    // ★ 首先清理非法标签
+    html = cleanIllegalTags(html);
+
+    if (!getTTSEnabled()) return html;
+
+    // 匹配简化格式: <p>角色名[表情] 或 <p>角色名[表情,音色]
+    // 支持: 角色名[表情]: "对话" 或 角色名[表情,音色]: "对话"
+    const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*["\"「『](.+?)["\"」』]\s*<\/p>/gi;
+
+    let result = html;
+    let match;
+    const regex = new RegExp(simplifiedPattern.source, 'gi');
+
+    while ((match = regex.exec(html)) !== null) {
+      const fullMatch = match[0];
+      const speaker = match[1].trim();
+      const bracketContent = match[2].trim();
+      const dialogue = match[3].trim();
+
+      // 解析方括号内容: [表情] 或 [表情,音色]
+      const parts = bracketContent.split(',').map(s => s.trim());
+      const expression = parts[0]; // 第一个是表情
+      const specifiedVoice = parts[1] || null; // 第二个是音色（可选）
+
+      // 获取emotion（从表情映射）
+      const emotion = getExpressionEmotion(expression);
+
+      // 获取音色（优先级：指定音色 > 角色绑定 > 会话缓存 > null）
+      let voice = null;
+
+      // 1. 检查是否指定了音色
+      if (specifiedVoice) {
+        voice = specifiedVoice;
+        // 缓存到会话
+        sessionVoiceCache.set(speaker, specifiedVoice);
+      } else {
+        // 2. 检查角色绑定音色
+        const boundVoice = getCharTTSVoice(speaker);
+        if (boundVoice) {
+          voice = boundVoice;
+        } else {
+          // 3. 检查会话缓存
+          if (sessionVoiceCache.has(speaker)) {
+            voice = sessionVoiceCache.get(speaker);
+          }
+        }
+      }
+
+      // 构建TTS标签
+      let ttsTag = '[tts:';
+      const ttsParts = [];
+      if (voice) ttsParts.push(`speaker=${voice}`);
+      ttsParts.push(`emotion=${emotion}`);
+      ttsTag += ttsParts.join(';') + ']';
+
+      // 构建新格式: [tts:...]\n<p><表情>角色名: "对话"</p>
+      const newFormat = `${ttsTag}\n<p><${expression}>${speaker}: "${dialogue}"</p>`;
+
+      result = result.replace(fullMatch, newFormat);
+    }
+
+    return result;
+  }
+
+  /**
+   * 获取角色绑定的TTS音色
+   * @param {string} characterName - 角色名
+   * @returns {string|null} 音色名或null
+   */
+  function getCharTTSVoice(characterName) {
+    try {
+      const voiceMap = JSON.parse(localStorage.getItem(CHAR_TTS_VOICE_KEY) || '{}');
+      return voiceMap[characterName] || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ============================================
   // 消息解析器
   // ============================================
   function parseGalgameContent(html, messageId) {
+    // ★ 预处理简化格式
+    html = preprocessSimplifiedFormat(html);
+
     // 加强模式：优先使用格式化版本
     if (settings.enhancedMode?.enabled && messageId) {
       const formatData = getFormattedContent(messageId);
@@ -2781,6 +3210,9 @@ ${extraRule}
     // 允许 <bgimg> 在 <background> 内部或外部，只要都在 content 里
     const bgimgMatch = content.match(RE_BGIMG);
 
+    // 解析 Wallhaven 标签 <whimg>TAGS</whimg>
+    const whimgMatch = content.match(RE_WHIMG);
+
     if (backgroundMatch) {
       result.currentBackground = {
         scene: backgroundMatch[1],
@@ -2789,6 +3221,11 @@ ${extraRule}
       if (bgimgMatch && bgimgMatch[1]) {
         result.currentBackground.generationTags = bgimgMatch[1].trim();
         console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景生成请求: "${backgroundMatch[1]}" Tags: "${bgimgMatch[1]}"`);
+      }
+      // 如果存在 Wallhaven 标签，记录标签
+      if (whimgMatch && whimgMatch[1]) {
+        result.currentBackground.wallhavenTags = whimgMatch[1].trim();
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到 Wallhaven 标签: "${backgroundMatch[1]}" Tags: "${whimgMatch[1]}"`);
       }
       console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景场景: "${backgroundMatch[1]}"`);
     } else {
@@ -3389,6 +3826,17 @@ ${extraRule}
         }
       });
 
+      // 生成开始/结束事件监听（用于显示生成中特效）
+      eventOn(tavern_events.GENERATION_STARTED, () => {
+        // 只在Galgame模式开启且覆盖层显示时显示生成中
+        // 已移除"AI正在生成回复..."特效
+      });
+
+      eventOn(tavern_events.GENERATION_ENDED, () => {
+        // 隐藏生成中指示器
+        hideGeneratingIndicator();
+      });
+
       worldbookInjectionListenerRegistered = true;
       console.log(`[${SCRIPT_NAME}] 世界书按需附加监听器已注册`);
     } else {
@@ -3440,9 +3888,28 @@ ${extraRule}
             return;
           }
 
+          // 仅处理 assistant 消息，避免用户消息或系统消息误触发
+          if (message.role && message.role !== 'assistant') {
+            console.log(`[${SCRIPT_NAME}] 加强模式: 非 assistant 消息，跳过`);
+            return;
+          }
+
+          // 已存在格式化版本时不再触发第二次生成
+          const existingFormatted = getFormattedContent(messageId);
+          if (existingFormatted) {
+            console.log(`[${SCRIPT_NAME}] 加强模式: 已存在格式化 swipe，跳过`);
+            return;
+          }
+
           const firstResult = message.swipes?.[message.swipe_id] || message.message;
           if (!firstResult || !firstResult.trim()) {
             console.warn(`[${SCRIPT_NAME}] 加强模式: 消息内容为空`);
+            return;
+          }
+
+          // 当前内容已是 COT 格式，跳过
+          if (isCotFormatted(firstResult)) {
+            console.log(`[${SCRIPT_NAME}] 加强模式: 当前内容已是 COT 格式，跳过`);
             return;
           }
 
@@ -3585,12 +4052,16 @@ ${extraRule}
         // 标记这是第二次生成，防止循环触发
         enhancedModeState.isSecondGeneration = true;
 
+        // 更新生成中状态显示
+        updateGeneratingStatus('正在进行格式化转换...');
+
         // ★ 获取目标消息并添加空 swipe
         const msgs = getChatMessages(numericMessageId, { include_swipes: true });
         if (!msgs || !msgs[0]) {
           throw new Error('无法获取目标消息');
         }
         const msg = msgs[0];
+        const originalSwipeId = typeof msg.swipe_id === 'number' ? msg.swipe_id : 0;
         const currentSwipes = msg.swipes || [msg.message];
         const newSwipes = [...currentSwipes, ''];
         const newSwipeId = newSwipes.length - 1;
@@ -3617,7 +4088,9 @@ ${extraRule}
         }
 
         // ★ 调用 generate 进行第二次生成（流式）
-        const systemPrompt = config.promptConfig.systemPrompt;
+        // 使用用户配置的预设（已通过 /preset 切换），同时通过 injects 注入 CoT 和格式化指令
+        const cotTemplate = await generateCOTTemplate();
+        const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}\n\n${cotTemplate}`;
         const userPrompt = `请将以下内容转换为标准Galgame格式：\n\n${firstResult}`;
 
         // 保存提示词信息供查看
@@ -3629,13 +4102,10 @@ ${extraRule}
         };
         console.log(`[${SCRIPT_NAME}] 加强模式: 已保存提示词信息`);
 
-        // 使用 generateRaw 自定义提示词顺序，确保 systemPrompt 被正确发送
-        const formattedResult = await generateRaw({
+        // 使用 generate 应用用户预设，通过 injects 注入格式化指令
+        const formattedResult = await generate({
           user_input: userPrompt,
-          ordered_prompts: [
-            { role: 'system', content: systemPrompt },
-            'user_input',
-          ],
+          injects: [{ role: 'system', content: systemPrompt }],
           should_silence: true,
           should_stream: true,
           max_chat_history: 0,
@@ -3662,6 +4132,28 @@ ${extraRule}
 
             await setChatMessages([finalUpdateData], { refresh: 'affected' });
             console.log(`[${SCRIPT_NAME}] 加强模式: 已最终更新 swipe[${newSwipeId}]`);
+          }
+        }
+
+        // 第二次生成完成后切回原始 swipe，避免影响后续楼层生成
+        // 但先手动显示格式化内容给用户看
+        if (originalSwipeId !== newSwipeId) {
+          const currentMsgs = getChatMessages(numericMessageId, { include_swipes: true });
+          if (currentMsgs && currentMsgs[0]) {
+            const switchData = { ...currentMsgs[0] };
+            switchData.swipe_id = originalSwipeId;
+            await setChatMessages([switchData], { refresh: 'affected' });
+            console.log(`[${SCRIPT_NAME}] 加强模式: 已切回原始 swipe[${originalSwipeId}]，AI历史保持原始`);
+          }
+        }
+
+        // ★ 关键：即使切回了原始 swipe，仍手动显示格式化内容
+        // 这样用户看到的是格式化版本，但AI历史是原始版本
+        if (formattedResult) {
+          const parsedFormatted = parseGalgameContent(formattedResult);
+          if (parsedFormatted.segments.length > 0) {
+            await updateGlobalOverlayContent(numericMessageId, parsedFormatted);
+            console.log(`[${SCRIPT_NAME}] 加强模式: 已显示格式化内容给用户`);
           }
         }
 
@@ -4640,6 +5132,80 @@ ${extraRule}
       .gal-tts-loading i {
         font-size: 1rem;
         color: ${THEME.accent};
+      }
+
+      /* 生成中特效 - 动态打字机效果 */
+      .gal-generating-indicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 20px 40px;
+        background: rgba(255, 255, 255, 0.98);
+        border: 3px solid ${THEME.accent};
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 210, 255, 0.3);
+        z-index: 20;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+      }
+
+      .gal-generating-indicator.active {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .gal-generating-indicator .gal-gen-icon {
+        font-size: 2.5rem;
+        color: ${THEME.accent};
+        animation: galGenPulse 1.5s ease-in-out infinite;
+      }
+
+      .gal-generating-indicator .gal-gen-text {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: ${THEME.dark};
+        letter-spacing: 0.05em;
+      }
+
+      .gal-generating-indicator .gal-gen-status {
+        font-size: 0.85rem;
+        color: #666;
+        max-width: 280px;
+        text-align: center;
+        min-height: 1.2em;
+      }
+
+      .gal-generating-indicator .gal-gen-dots {
+        display: flex;
+        gap: 6px;
+        margin-top: 4px;
+      }
+
+      .gal-generating-indicator .gal-gen-dot {
+        width: 8px;
+        height: 8px;
+        background: ${THEME.accent};
+        border-radius: 50%;
+        animation: galGenDotBounce 1.4s ease-in-out infinite both;
+      }
+
+      .gal-generating-indicator .gal-gen-dot:nth-child(1) { animation-delay: -0.32s; }
+      .gal-generating-indicator .gal-gen-dot:nth-child(2) { animation-delay: -0.16s; }
+
+      @keyframes galGenPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+      }
+
+      @keyframes galGenDotBounce {
+        0%, 80%, 100% { transform: scale(0); }
+        40% { transform: scale(1); }
       }
 
       /* 底部工具栏 - 两端对齐，紧凑布局 */
@@ -5674,7 +6240,7 @@ ${extraRule}
   function ensureGlobalOverlay() {
     const targetDoc = topWindow.document;
     let $overlay = $(targetDoc).find('#gal-global-overlay');
-    console.log(`[${SCRIPT_NAME}] ensureGlobalOverlay: 覆盖层存在=${$overlay.length > 0}`);
+    //console.log(`[${SCRIPT_NAME}] ensureGlobalOverlay: 覆盖层存在=${$overlay.length > 0}`);
     if (!$overlay.length) {
       const overlayHtml = `
         <div id="gal-global-overlay">
@@ -5722,6 +6288,18 @@ ${extraRule}
 
               <div class="gal-text-panel">
                 <p class="gal-dialog-text"></p>
+
+                <!-- 生成中特效指示器 -->
+                <div class="gal-generating-indicator" id="gal-generating-indicator">
+                  <i class="fa-solid fa-wand-magic-sparkles gal-gen-icon"></i>
+                  <span class="gal-gen-text">生成中</span>
+                  <span class="gal-gen-status" id="gal-gen-status">正在初始化...</span>
+                  <div class="gal-gen-dots">
+                    <span class="gal-gen-dot"></span>
+                    <span class="gal-gen-dot"></span>
+                    <span class="gal-gen-dot"></span>
+                  </div>
+                </div>
 
                 <div class="gal-bottom-toolbar">
                   <button class="gal-footer-btn" data-action="log" title="查看历史">
@@ -5791,12 +6369,12 @@ ${extraRule}
    * 显示全局Galgame覆盖层
    */
   function showGlobalOverlay() {
-    console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 开始显示`);
+    //console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 开始显示`);
     const $overlay = ensureGlobalOverlay();
-    console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 获取到覆盖层元素=${$overlay.length > 0}`);
+    //console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 获取到覆盖层元素=${$overlay.length > 0}`);
     if ($overlay.length) {
       $overlay.addClass('active');
-      console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 已添加active类, 当前类名=${$overlay.attr('class')}`);
+      //console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 已添加active类, 当前类名=${$overlay.attr('class')}`);
     } else {
       console.error(`[${SCRIPT_NAME}] showGlobalOverlay: 无法获取覆盖层元素！`);
     }
@@ -5809,6 +6387,50 @@ ${extraRule}
     $(targetDoc).find('#gal-global-overlay').removeClass('active');
     console.log(`[${SCRIPT_NAME}] 隐藏全局Galgame覆盖层`);
   }
+  /**
+   * 显示生成中指示器
+   * @param {string} statusText - 状态文本，显示在生成中下方
+   */
+  function showGeneratingIndicator(statusText = '正在生成内容...') {
+    const $overlay = $('#gal-global-overlay');
+    if ($overlay.length === 0) return;
+
+    const $indicator = $overlay.find('#gal-generating-indicator');
+    const $status = $overlay.find('#gal-gen-status');
+
+    if ($indicator.length) {
+      $status.text(statusText);
+      $indicator.addClass('active');
+    }
+  }
+
+  /**
+   * 隐藏生成中指示器
+   */
+  function hideGeneratingIndicator() {
+    const $overlay = $('#gal-global-overlay');
+    if ($overlay.length === 0) return;
+
+    const $indicator = $overlay.find('#gal-generating-indicator');
+    if ($indicator.length) {
+      $indicator.removeClass('active');
+    }
+  }
+
+  /**
+   * 更新生成中状态文本
+   * @param {string} statusText - 新的状态文本
+   */
+  function updateGeneratingStatus(statusText) {
+    const $overlay = $('#gal-global-overlay');
+    if ($overlay.length === 0) return;
+
+    const $status = $overlay.find('#gal-gen-status');
+    if ($status.length) {
+      $status.text(statusText);
+    }
+  }
+
   /**
    * 切换全局覆盖层显示状态
    */
@@ -5926,7 +6548,7 @@ ${extraRule}
       }
       const headers = summarySheet.content[0];
       const content = summarySheet.content;
-      console.log(`[${SCRIPT_NAME}] 总结表表头:`, headers);
+      //console.log(`[${SCRIPT_NAME}] 总结表表头:`, headers);
       // 查找列索引
       let indexCol = -1;
       let timeCol = -1;
@@ -5997,7 +6619,7 @@ ${extraRule}
         timeCol = contentCol - 1;
         if (timeCol === indexCol) timeCol = -1; // 避免冲突
       }
-      console.log(`[${SCRIPT_NAME}] 最终使用列 - 索引: ${indexCol}, 时间: ${timeCol}, 内容: ${contentCol}`);
+      //console.log(`[${SCRIPT_NAME}] 最终使用列 - 索引: ${indexCol}, 时间: ${timeCol}, 内容: ${contentCol}`);
       const history = [];
       // 从第1行开始遍历（跳过表头）
       for (let i = 1; i < content.length; i++) {
@@ -6061,7 +6683,7 @@ ${extraRule}
     `;
     $modal.html(modalHtml);
     $('body').append($modal);
-    // 绑定关闭事件
+    //let关闭事件
     $modal.find('.gal-history-close').on('click', function () {
       $modal.fadeOut(200, function () {
         $(this).remove();
@@ -6174,8 +6796,12 @@ ${extraRule}
         return;
       }
       const mesId = $lastAiMes.attr('mesid');
-      // ★ 优先从 SillyTavern chat 数组获取原始消息（保留自定义标签）
-      let contentToProcess = getRawMessageContent(mesId);
+      // ★ 优先获取格式化版本（加强模式生成的 swipe）
+      let contentToProcess = getFormattedSwipeContent(mesId);
+      if (!contentToProcess) {
+        // 如果没有格式化版本，尝试获取原始内容
+        contentToProcess = getRawMessageContent(mesId);
+      }
       // 回退到 DOM 内容
       if (!contentToProcess) {
         const $mesText = $lastAiMes.find('.mes_text');
@@ -6189,7 +6815,9 @@ ${extraRule}
         return;
       }
       const parsed = parseGalgameContent(contentToProcess);
-      if (parsed.segments.length === 0) return;
+      if (parsed.segments.length === 0) {
+        return;
+      }
       // 更新覆盖层内容
       yield updateGlobalOverlayContent(mesId, parsed);
       // 显示覆盖层
@@ -6340,34 +6968,29 @@ ${extraRule}
           console.error('Galgame模式开启出错:', err);
         }
         // 尝试渲染被点击的消息
-        let contentToProcess = getRawMessageContent(mesId);
+        // ★ 优先获取格式化版本（加强模式生成的 swipe）
+        let contentToProcess = getFormattedSwipeContent(mesId);
+        if (!contentToProcess) {
+          // 如果没有格式化版本，尝试获取原始内容
+          contentToProcess = getRawMessageContent(mesId);
+        }
         if (!contentToProcess) {
           const $mesText = $mes.find('.mes_text');
           contentToProcess = decodeHtml($mesText.html());
         }
-        console.log(`[${SCRIPT_NAME}] 按钮点击处理: contentToProcess长度=${contentToProcess ? contentToProcess.length : 0}`);
+        //console.log(`[${SCRIPT_NAME}] 按钮点击处理: contentToProcess长度=${contentToProcess ? contentToProcess.length : 0}`);
         if (contentToProcess) {
           const parsed = parseGalgameContent(contentToProcess);
-          console.log(`[${SCRIPT_NAME}] 按钮点击处理: 解析出${parsed.segments.length}个段落`);
+          //console.log(`[${SCRIPT_NAME}] 按钮点击处理: 解析出${parsed.segments.length}个段落`);
           if (parsed.segments.length > 0) {
-            console.log(`[${SCRIPT_NAME}] 按钮点击处理: 调用updateGlobalOverlayContent和showGlobalOverlay`);
+            //console.log(`[${SCRIPT_NAME}] 按钮点击处理: 调用updateGlobalOverlayContent和showGlobalOverlay`);
             yield updateGlobalOverlayContent(mesId, parsed);
             showGlobalOverlay();
             if (settings.hideOtherFloors) hideNonLastFloors();
             showToast('Galgame 模式已开启');
-          } else {
-            console.log(`[${SCRIPT_NAME}] 按钮点击处理: 无段落，强制显示空界面`);
-            // 强制显示界面，即使没有内容
-            showGlobalOverlay();
-            if (settings.hideOtherFloors) hideNonLastFloors();
-            showToast('Galgame 模式已开启 (当前消息无内容)');
           }
         } else {
-          console.log(`[${SCRIPT_NAME}] 按钮点击处理: 无内容，强制显示空界面`);
-          // 强制显示界面，即使没有内容
-          showGlobalOverlay();
           if (settings.hideOtherFloors) hideNonLastFloors();
-          showToast('Galgame 模式已开启');
         }
       });
     });
@@ -6517,7 +7140,7 @@ ${extraRule}
         $btn.data('auto-timer', timer);
       }
     });
-    // 点击立绘占位符上传
+    //let立绘占位符上传
     $(doc).on('click', '#gal-global-overlay .gal-char-placeholder', function (e) {
       e.stopPropagation();
       // 从父元素 .gal-char-container 获取角色名称
@@ -6549,7 +7172,7 @@ ${extraRule}
       const speaker = segment.speaker;
       const isNarration = segment.type === 'narration';
       // 更新名字和样式
-      const letmeBadge = $overlay.find('.gal-name-badge');
+      const $nameBadge = $overlay.find('.gal-name-badge');
       $nameBadge.find('span').text(speaker || '旁白');
       if (isNarration) {
         $nameBadge.addClass('gal-narrator-label');
@@ -6670,17 +7293,20 @@ ${extraRule}
         console.log(`[${SCRIPT_NAME}] 已清除消息 ${mesId} 的段落状态，准备重新生成`);
       }
     }
-    // 触发重新生成
-    const $swipeRight = $('.mes.last_mes .swipe_right');
-    if ($swipeRight.length) {
-      $swipeRight.click();
+    // 触发重新生成（点击酒馆原生“重新生成”按钮，避免新增 swipe）
+    const $regenerate = $(topWindow.document).find('#option_regenerate');
+    if ($regenerate.length) {
+      $regenerate.click();
       showToast('正在重新生成...');
     } else {
-      // 尝试使用 SillyTavern API
+      // 兜底：尝试使用 SillyTavern API（不传 swipe，保持重绘当前）
       try {
         if (topWindow.SillyTavern && topWindow.SillyTavern.Generate) {
-          topWindow.SillyTavern.Generate('swipe');
+          topWindow.SillyTavern.Generate();
           showToast('正在重新生成...');
+        } else {
+          console.warn(`[${SCRIPT_NAME}] 未找到 #option_regenerate`);
+          showToast('未找到重新生成按钮');
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] 重新生成失败:`, e);
@@ -8415,9 +9041,10 @@ ${extraRule}
    */
   function showCustomExpressionManager(onCloseCallback) {
     const customExpressions = getCustomExpressions();
+    const emotionOptions = TTS_EMOTION_LIST.map(e => `<option value="${e}">${e}</option>`).join('');
     const modalHtml = `
             <div class="gal-input-modal" id="gal-expression-manager-modal">
-                <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
+                <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
                     <div class="gal-input-title" style="margin-bottom: 20px;">
                         <span><i class="fa-solid fa-face-smile"></i> 管理表情标签</span>
                     </div>
@@ -8426,22 +9053,27 @@ ${extraRule}
                             预设表情 (不可编辑)
                         </label>
                         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
-                            ${EXPRESSION_LIST.map(e => `<span class="gal-tag gal-preset-tag">${e}</span>`).join('')}
+                            ${EXPRESSION_LIST.map(e => `<span class="gal-tag gal-preset-tag" title="TTS情绪: ${EXPRESSION_EMOTION_MAP[e]}">${e}</span>`).join('')}
                         </div>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
                             自定义表情
                         </label>
-                        <div id="gal-custom-expressions-list" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; min-height: 40px; border: 1px dashed #ddd; padding: 10px; border-radius: 6px;">
+                        <div id="gal-custom-expressions-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; min-height: 40px; border: 1px dashed #ddd; padding: 10px; border-radius: 6px;">
                             ${
                               customExpressions.length > 0
                                 ? customExpressions
                                     .map(
                                       e => `
-                                <span class="gal-tag gal-custom-tag" data-expr="${e}">
-                                    ${e} <i class="fa-solid fa-xmark gal-remove-expr" title="删除"></i>
-                                </span>
+                                <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
+                                    <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
+                                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff;">
+                                        <option value="">TTS情绪: 自动(中性)</option>
+                                        ${TTS_EMOTION_LIST.map(em => `<option value="${em}" ${e.emotion === em ? 'selected' : ''}>${em}</option>`).join('')}
+                                    </select>
+                                    <i class="fa-solid fa-xmark gal-remove-expr" title="删除" style="cursor: pointer; color: #999; padding: 5px;"></i>
+                                </div>
                             `,
                                     )
                                     .join('')
@@ -8476,20 +9108,19 @@ ${extraRule}
                 .gal-preset-tag {
                     background: #e9ecef;
                     color: #495057;
+                    cursor: help;
                 }
                 .gal-custom-tag {
                     background: ${THEME.accent};
                     color: ${THEME.dark};
                 }
-                .gal-remove-expr {
-                    margin-left: 8px;
-                    cursor: pointer;
-                    font-size: 0.75rem;
-                    opacity: 0.7;
-                }
                 .gal-remove-expr:hover {
-                    opacity: 1;
-                    color: #e74c3c;
+                    color: #e74c3c !important;
+                }
+                .gal-custom-expr-row {
+                    background: #f8f9fa;
+                    padding: 8px 12px;
+                    border-radius: 6px;
                 }
             </style>
         `;
@@ -8507,10 +9138,15 @@ ${extraRule}
           currentCustomExpressions
             .map(
               e => `
-                    <span class="gal-tag gal-custom-tag" data-expr="${e}">
-                        ${e} <i class="fa-solid fa-xmark gal-remove-expr" title="删除"></i>
-                    </span>
-                `,
+                <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
+                    <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
+                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff;">
+                        <option value="">TTS情绪: 自动(中性)</option>
+                        ${TTS_EMOTION_LIST.map(em => `<option value="${em}" ${e.emotion === em ? 'selected' : ''}>${em}</option>`).join('')}
+                    </select>
+                    <i class="fa-solid fa-xmark gal-remove-expr" title="删除" style="cursor: pointer; color: #999; padding: 5px;"></i>
+                </div>
+            `,
             )
             .join(''),
         );
@@ -8519,24 +9155,31 @@ ${extraRule}
       }
     };
 
+    // 添加表情
     $('#gal-add-expression-btn').on('click', () => {
       const newExpr = $('#gal-new-expression-input').val().trim();
       if (newExpr) {
         addCustomExpression(newExpr);
         $('#gal-new-expression-input').val('');
         renderCustomExpressions();
-        showToast(`已添加表情: ${newExpr}`);
       }
     });
 
+    // 更新emotion
+    $('#gal-custom-expressions-list').on('change', '.gal-expr-emotion-select', function () {
+      const exprName = $(this).attr('data-expr');
+      const newEmotion = $(this).val();
+      updateCustomExpressionEmotion(exprName, newEmotion);
+    });
+
+    // 删除表情
     $('#gal-custom-expressions-list').on('click', '.gal-remove-expr', function () {
-      // 使用 attr 确保取到的是字符串，避免 jQuery data() 自动类型转换导致无法匹配
-      const exprToRemove = $(this).parent().attr('data-expr');
+      // 使用 closest 获取父级 row 的 data-expr
+      const exprToRemove = $(this).closest('.gal-custom-expr-row').attr('data-expr');
       if (confirm(`确定删除自定义表情「${exprToRemove}」吗？\n注意：这不会删除已使用该表情的立绘。`)) {
         removeCustomExpression(exprToRemove).then(success => {
           if (success) {
             renderCustomExpressions();
-            // showToast 已在 removeCustomExpression 中调用
           }
         });
       }
@@ -9147,7 +9790,8 @@ ${extraRule}
         // 批量保存到数据库
         if (spriteBatch.length > 0) {
           yield saveSpritesBatch(spriteBatch);
-        }cons
+        }
+        cons;
         if (backgroundBatch.length > 0) {
           yield saveBackgroundsBatch(backgroundBatch);
         }
@@ -9514,6 +10158,73 @@ ${extraRule}
                 </div>
               `
               }
+
+              <!-- Wallhaven 壁纸设置 -->
+              <div class="gal-wallhaven-settings" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-images" style="color: #00d9ff; font-size: 1.2rem;"></i>
+                    <span style="font-weight: 700; color: #fff; font-size: 1.1rem;">Wallhaven 壁纸搜索</span>
+                  </div>
+                  <label class="gal-realtime-switch">
+                    <input type="checkbox" id="gal-wallhaven-enabled" ${settings.wallhaven?.enabled ? 'checked' : ''}>
+                    <span class="gal-realtime-slider"></span>
+                  </label>
+                </div>
+
+                <div style="font-size: 0.8rem; color: #8892b0; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                  ⚠️ 仅供学习研究使用。所有图片版权归原作者及 Wallhaven 所有。
+                </div>
+
+                <!-- 图片分类 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片分类</label>
+                  <select id="gal-wallhaven-category" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;">
+                    <option value="anime" ${settings.wallhaven?.category === 'anime' ? 'selected' : ''}>动漫漫画</option>
+                    <option value="all" ${settings.wallhaven?.category === 'all' ? 'selected' : ''}>全部类型</option>
+                    <option value="people" ${settings.wallhaven?.category === 'people' ? 'selected' : ''}>人物写真</option>
+                    <option value="general" ${settings.wallhaven?.category === 'general' ? 'selected' : ''}>综合壁纸</option>
+                  </select>
+                </div>
+
+                <!-- 安全级别 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">安全级别</label>
+                  <select id="gal-wallhaven-purity" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;">
+                    <option value="sfw" ${settings.wallhaven?.purity === 'sfw' ? 'selected' : ''}>SFW (安全)</option>
+                    <option value="sketchy" ${settings.wallhaven?.purity === 'sketchy' ? 'selected' : ''}>Sketchy (略敏感)</option>
+                  </select>
+                </div>
+
+                <!-- 背景模式 -->
+                <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <label style="color: #ccd6f6; font-size: 0.9rem;">背景图模式（纯场景）</label>
+                    <div style="font-size: 0.75rem; color: #8892b0;">开启：只搜环境背景 | 关闭：搜人物/角色</div>
+                  </div>
+                  <label class="gal-realtime-switch">
+                    <input type="checkbox" id="gal-wallhaven-scenemode" ${settings.wallhaven?.sceneMode !== false ? 'checked' : ''}>
+                    <span class="gal-realtime-slider"></span>
+                  </label>
+                </div>
+
+                <!-- 自定义标签 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">自定义标签（提升匹配精度）</label>
+                  <input type="text" id="gal-wallhaven-customtags" placeholder="例如: cosplay, landscape, 4k"
+                         value="${(settings.wallhaven?.customTags || []).join(', ')}"
+                         style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;">
+                  <div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">多个标签用逗号分隔，优先级最高</div>
+                </div>
+
+                <!-- API Key (可选) -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key（可选）</label>
+                  <input type="password" id="gal-wallhaven-apikey" placeholder="留空使用公开 API"
+                         value="${settings.wallhaven?.apiKey || ''}"
+                         style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;">
+                </div>
+              </div>
             </div>
 
             <!-- 自定义模块 Tab -->
@@ -9834,6 +10545,55 @@ ${extraRule}
           await injectCOTToWorldbook();
         }
         showToast(settings.realTimeBackgroundGen ? '已开启实时背景生成（实验性）' : '已关闭实时背景生成');
+      });
+
+      // Wallhaven 设置事件
+      $modal.find('#gal-wallhaven-enabled').on('change', async function () {
+        if (!settings.wallhaven) settings.wallhaven = {};
+        settings.wallhaven.enabled = $(this).is(':checked');
+        saveSettings();
+        // 立即更新规则
+        if (isEnabled) {
+          await injectCOTToWorldbook();
+        }
+        showToast(settings.wallhaven.enabled ? '已开启 Wallhaven 壁纸搜索' : '已关闭 Wallhaven 壁纸搜索');
+      });
+
+      $modal.find('#gal-wallhaven-category').on('change', async function () {
+        if (!settings.wallhaven) settings.wallhaven = {};
+        settings.wallhaven.category = $(this).val();
+        saveSettings();
+        if (isEnabled) {
+          await injectCOTToWorldbook();
+        }
+      });
+
+      $modal.find('#gal-wallhaven-purity').on('change', function () {
+        if (!settings.wallhaven) settings.wallhaven = {};
+        settings.wallhaven.purity = $(this).val();
+        saveSettings();
+      });
+
+      $modal.find('#gal-wallhaven-scenemode').on('change', async function () {
+        if (!settings.wallhaven) settings.wallhaven = {};
+        settings.wallhaven.sceneMode = $(this).is(':checked');
+        saveSettings();
+        if (isEnabled) {
+          await injectCOTToWorldbook();
+        }
+      });
+
+      $modal.find('#gal-wallhaven-customtags').on('change', function () {
+        if (!settings.wallhaven) settings.wallhaven = {};
+        const tags = $(this).val();
+        settings.wallhaven.customTags = tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [];
+        saveSettings();
+      });
+
+      $modal.find('#gal-wallhaven-apikey').on('change', function () {
+        if (!settings.wallhaven) settings.wallhaven = {};
+        settings.wallhaven.apiKey = $(this).val();
+        saveSettings();
       });
 
       // 批量上传按钮
@@ -10329,6 +11089,34 @@ ${extraRule}
     }
     return null;
   }
+
+  /**
+   * 获取消息的格式化版本内容（加强模式生成的 swipe）
+   * 优先返回包含 Galgame 标签的 swipe 内容
+   * @param {string|number} mesId 消息 ID
+   * @returns {string|null} 格式化后的消息内容，如果没有则返回 null
+   */
+  function getFormattedSwipeContent(mesId) {
+    try {
+      const messages = getChatMessages(parseInt(mesId, 10), { include_swipes: true });
+      if (!messages || !messages[0]) return null;
+
+      const msg = messages[0];
+      const swipes = msg.swipes || [msg.message];
+
+      // 遍历所有 swipe，找到包含 Galgame 标签的内容
+      for (let i = 0; i < swipes.length; i++) {
+        const swipeContent = swipes[i];
+        if (swipeContent && /<(p|sprite|maintext|background)[^>]*>/i.test(swipeContent)) {
+          console.log(`[${SCRIPT_NAME}] 找到格式化 swipe[${i}] 用于消息 ${mesId}`);
+          return swipeContent;
+        }
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 获取格式化 swipe 失败:`, e);
+    }
+    return null;
+  }
   async function handleRealTimeBackgroundGeneration(sceneName, tags) {
     if (!settings.realTimeBackgroundGen) return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
@@ -10466,6 +11254,68 @@ ${extraRule}
     })();
   }
 
+  // ============================================
+  // Wallhaven 背景搜索处理
+  // ============================================
+  function handleWallhavenBackgroundSearch(sceneName, tags) {
+    if (!settings.wallhaven?.enabled) return;
+    if (BGMManager.generatingScenes.has(sceneName)) return;
+
+    // 检查场景是否已存在缓存
+    if (sceneBackgrounds.has(sceneName)) {
+      console.log(`[${SCRIPT_NAME}] Wallhaven: 场景「${sceneName}」已存在缓存，跳过搜索`);
+      return;
+    }
+
+    BGMManager.generatingScenes.add(sceneName);
+
+    (async () => {
+      try {
+        console.log(`[${SCRIPT_NAME}] Wallhaven: 开始搜索场景「${sceneName}」标签: ${tags}`);
+
+        // 解析标签
+        const tagList = tags.split(',').map(t => t.trim()).filter(t => t);
+
+        // 搜索 Wallhaven
+        const imageUrl = await WallhavenAPI.search(tagList);
+
+        if (imageUrl) {
+          // 将图片 URL 存入缓存
+          sceneBackgrounds.set(sceneName, imageUrl);
+          console.log(`[${SCRIPT_NAME}] Wallhaven: 场景「${sceneName}」背景已缓存: ${imageUrl.substring(0, 50)}...`);
+
+          // 如果当前正处于该场景，刷新背景显示
+          const $lastMes = $('#chat > .mes').last();
+          if ($lastMes.length) {
+            const mesId = $lastMes.attr('mesid');
+            const state = messageSegmentState.get(String(mesId));
+            if (
+              state &&
+              state.parsedContent &&
+              state.parsedContent.currentBackground &&
+              state.parsedContent.currentBackground.scene === sceneName
+            ) {
+              // 强制重置当前场景记录
+              if (typeof SpriteManager !== 'undefined') {
+                SpriteManager.currentScene = null;
+              }
+              console.log(`[${SCRIPT_NAME}] Wallhaven: 强制刷新UI: ${sceneName}`);
+              updateGlobalOverlayContent(mesId, state.parsedContent);
+            }
+          }
+
+          showToast(`场景「${sceneName}」Wallhaven 背景已应用`);
+        } else {
+          console.warn(`[${SCRIPT_NAME}] Wallhaven: 未找到匹配图片: ${tags}`);
+        }
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] Wallhaven 背景搜索失败:`, e);
+      } finally {
+        BGMManager.generatingScenes.delete(sceneName);
+      }
+    })();
+  }
+
   function processNewMessage(mesNode) {
     // 注入开启按钮 (无论是否开启模式)
     if (typeof injectGalgameButton === 'function') {
@@ -10476,8 +11326,12 @@ ${extraRule}
     const isUser = $mes.attr('is_user') === 'true';
     if (isUser) return; // 只处理AI消息
     const mesId = $mes.attr('mesid');
-    // ★ 优先从 SillyTavern chat 数组获取原始消息（保留自定义标签）
-    let contentToProcess = getRawMessageContent(mesId);
+    // ★ 优先获取格式化版本（加强模式生成的 swipe）
+    let contentToProcess = getFormattedSwipeContent(mesId);
+    if (!contentToProcess) {
+      // 如果没有格式化版本，尝试获取原始内容
+      contentToProcess = getRawMessageContent(mesId);
+    }
     // 回退到 DOM 内容
     if (!contentToProcess) {
       const $mesText = $mes.find('.mes_text');
@@ -10523,10 +11377,16 @@ ${extraRule}
     // 解析内容
     let parsed = parseGalgameContent(contentToProcess);
 
-    // ★ 实时背景生成处理
+    // ★ 实时背景生成处理 (ComfyUI)
     if (settings.realTimeBackgroundGen && parsed.currentBackground && parsed.currentBackground.generationTags) {
       console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 handleRealTimeBackgroundGeneration`);
       handleRealTimeBackgroundGeneration(parsed.currentBackground.scene, parsed.currentBackground.generationTags);
+    }
+
+    // ★ Wallhaven 壁纸搜索处理
+    if (settings.wallhaven?.enabled && parsed.currentBackground && parsed.currentBackground.wallhavenTags) {
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 Wallhaven 背景搜索`);
+      handleWallhavenBackgroundSearch(parsed.currentBackground.scene, parsed.currentBackground.wallhavenTags);
     }
 
     console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed.segments.length}`);
@@ -10534,7 +11394,7 @@ ${extraRule}
     // 如果未解析出段落（即没有Galgame格式），但智能检测关闭，尝试强制解析
     if (parsed.segments.length === 0) {
       if (!settings.smartDetection && contentToProcess && contentToProcess.trim().length > 0) {
-        console.log(`[${SCRIPT_NAME}] 智能检测关闭，尝试以普通模式解析`);
+        //console.log(`[${SCRIPT_NAME}] 智能检测关闭，尝试以普通模式解析`);
         // 构造一个简单的 parsed 对象，将整个内容作为一段旁白
         parsed = {
           segments: [
@@ -10570,7 +11430,7 @@ ${extraRule}
         state.currentIndex = parsed.segments.length - 1;
       }
       // state.currentIndex = Math.min(state.currentIndex, parsed.segments.length - 1);
-      console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 更新: ${oldSegmentsCount} -> ${parsed.segments.length} 段`);
+      //console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 更新: ${oldSegmentsCount} -> ${parsed.segments.length} 段`);
     }
     // 检查是否是最后一条AI消息
     // 防止旧消息的 MutationObserver 触发导致界面切回旧内容
@@ -10889,7 +11749,7 @@ ${extraRule}
     // 显示面板
     $layer.addClass('active');
     galgameChoicesVisible = true;
-    console.log(`[${SCRIPT_NAME}] 渲染 ${options.length} 个选项到Galgame选项面板`);
+    //console.log(`[${SCRIPT_NAME}] 渲染 ${options.length} 个选项到Galgame选项面板`);
   }
   /**
    * 显示工具栏内的待选择提示按钮
@@ -11737,7 +12597,7 @@ ${extraRule}
               color: white;
               border: none;
               border-radius: 50%;
-              width: 24px;
+    cons        width: 24px;
               height: 24px;
               cursor: pointer;
               display: flex;
@@ -13452,7 +14312,9 @@ ${extraRule}
         $lastAiMes = $(this);
       }
     });
-    console.log(`[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}, 智能检测=${settings.smartDetection ? '开' : '关'}`);
+    console.log(
+      `[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}, 智能检测=${settings.smartDetection ? '开' : '关'}`,
+    );
     if ($lastAiMes && $lastAiMes.length) {
       const $mesText = $lastAiMes.find('.mes_text');
       const html = $mesText.html();
@@ -13551,12 +14413,12 @@ ${extraRule}
     const mesId = $mes.attr('mesid');
     // 只给 AI 消息添加
     if ($mes.attr('is_user') === 'true') {
-      console.log(`[${SCRIPT_NAME}] 跳过用户消息 ${mesId}`);
+      //console.log(`[${SCRIPT_NAME}] 跳过用户消息 ${mesId}`);
       return;
     }
     // 检查是否已存在
     if ($mes.find('.gal-open-btn').length) {
-      console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 已存在按钮，跳过`);
+      //console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 已存在按钮，跳过`);
       return;
     }
     console.log(`[${SCRIPT_NAME}] 正在给消息 ${mesId} 注入按钮`);
@@ -13682,7 +14544,11 @@ ${extraRule}
                 const mesNode = topWindow.document.querySelector(`.mes[mesid="${messageId}"]`);
                 if (mesNode) {
                   // 检查内容是否包含Galgame标签
-                  let content = getRawMessageContent(messageId);
+                  // ★ 优先获取格式化版本（加强模式生成的 swipe）
+                  let content = getFormattedSwipeContent(messageId);
+                  if (!content) {
+                    content = getRawMessageContent(messageId);
+                  }
                   if (!content) {
                     const $mesText = $(mesNode).find('.mes_text');
                     content = decodeHtml($mesText.html() || '');
@@ -13754,7 +14620,7 @@ ${extraRule}
         updateOverlaySegmentDisplay(state);
         skipTimer = setTimeout(doSkip, settings.skipSpeed * 1000);
       } else {
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 快进停止: 已到最后`);
+        //console.log(`[${SCRIPT_NAME}] [DEBUG] 快进停止: 已到最后`);
         stopSkipping();
         showToast('已快进到最后');
       }

@@ -4436,7 +4436,1987 @@ ${extraRule}
       fontLink.rel = 'stylesheet';
       (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
     }
-    const css = `__CSS_PLACEHOLDER__`;
+    const css = `
+      /* ═══════════════════════════════════════════════════════════════
+         Galgame 界面插件 - Cyber Pop 全屏沉浸式主题
+         ═══════════════════════════════════════════════════════════════ */
+
+      /* 全局Galgame界面层 - 默认内联模式（在#chat内） */
+      #gal-global-overlay {
+        position: relative !important;
+        width: 100% !important;
+        min-height: 500px;
+        height: 70vh;
+        max-height: 800px;
+        display: none;
+        background: #f0f2f5 !important;
+        font-family: ${THEME.fontMain};
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        margin: 10px 0;
+        /* 为内部绝对定位元素提供定位上下文 */
+        contain: layout;
+      }
+
+      #gal-global-overlay.active {
+        display: block !important;
+      }
+
+      /* 拖拽手柄样式 */
+      .gal-draggable-handle {
+        cursor: move;
+        user-select: none;
+      }
+
+      /* 全屏模式 - 使用!important确保覆盖 */
+      #gal-global-overlay.fullscreen {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-height: none !important;
+        min-height: 100vh !important;
+        z-index: 99999 !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+      }
+
+      /* 隐藏非Galgame消息楼层 */
+      #chat > .mes.gal-hidden {
+        display: none !important;
+      }
+
+      /* 全屏切换按钮 */
+      .gal-fullscreen-btn {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        z-index: 100;
+        background: rgba(43, 46, 56, 0.9);
+        color: ${THEME.accent};
+        border: 2px solid ${THEME.accent};
+        padding: 10px 18px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+        font-family: ${THEME.fontEng};
+        border-radius: 4px;
+      }
+
+      .gal-fullscreen-btn:hover {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+      }
+
+      .gal-fullscreen-btn i {
+        font-size: 1rem;
+      }
+
+      /* 地点时间状态栏容器 */
+      .gal-status-bar-container {
+        position: absolute;
+        top: 15px;
+        right: 120px; /* 在全屏按钮左侧 */
+        z-index: 100;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      /* 地点状态栏 */
+      .gal-location-bar {
+        background: rgba(43, 46, 56, 0.9);
+        color: #fff;
+        padding: 0 15px;
+        height: 30px;
+        line-height: 30px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 210, 255, 0.5);
+        white-space: nowrap;
+        max-width: 350px;
+        overflow: hidden; /* 父容器裁剪，防止溢出 */
+        display: flex;
+        align-items: center;
+      }
+
+      .gal-location-bar i {
+        color: ${THEME.accent};
+        margin-right: 8px;
+        font-size: 0.9rem;
+        flex-shrink: 0; /* 图标不许缩小 */
+      }
+
+      .gal-location-text {
+        /* 移除省略号，以便脚本计算真实宽度 */
+        white-space: nowrap;
+        transform-origin: left center;
+        display: inline-block;
+      }
+
+      /* 时间状态栏 */
+      .gal-time-bar {
+        background: rgba(43, 46, 56, 0.9);
+        color: #fff;
+        padding: 0 15px;
+        height: 30px;
+        line-height: 30px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 0, 85, 0.5);
+        white-space: nowrap;
+        max-width: 260px; /* 增加一点宽度限制 */
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        /* justify-content: center;  移除居中，改为左对齐配合 padding/margin，方便缩放计算 */
+      }
+
+      .gal-time-bar i {
+        color: ${THEME.accentSub};
+        margin-right: 8px;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+      }
+
+      .gal-time-text {
+        white-space: nowrap;
+        transform-origin: left center;
+        display: inline-block;
+      }
+
+      /* 文字自动缩小效果 */
+      .gal-status-bar-container .auto-shrink {
+        display: inline-block;
+        transform-origin: left center;
+      }
+
+      /* 全屏模式下调整位置 */
+      #gal-global-overlay.fullscreen .gal-status-bar-container {
+        right: 130px;
+      }
+
+      /* BGM 悬浮小组件 */
+      .gal-bgm-widget {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        z-index: 100;
+        background: rgba(43, 46, 56, 0.85);
+        backdrop-filter: blur(5px);
+        padding: 8px 15px;
+        border-radius: 20px;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.85rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
+        max-width: 40px; /* 默认收起 */
+        overflow: hidden;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .gal-bgm-widget:hover, .gal-bgm-widget.active {
+          max-width: 300px;
+          background: rgba(43, 46, 56, 0.95);
+      }
+
+      .gal-bgm-icon {
+          color: ${THEME.accent};
+          animation: galSpin 4s linear infinite;
+          animation-play-state: paused;
+          font-size: 1.1rem;
+          min-width: 20px;
+          text-align: center;
+      }
+
+      .gal-bgm-widget.playing .gal-bgm-icon {
+          animation-play-state: running;
+      }
+
+      @keyframes galSpin { 100% { transform: rotate(360deg); } }
+
+      .gal-bgm-info {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.2;
+          overflow: hidden;
+          margin-right: 5px;
+      }
+
+      .gal-bgm-title {
+          font-weight: bold;
+          font-size: 0.8rem;
+          color: ${THEME.accent};
+      }
+
+      .gal-bgm-ctrl {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+      }
+
+      .gal-bgm-btn {
+          background: none;
+          border: none;
+          color: #fff;
+          cursor: pointer;
+          font-size: 0.9rem;
+          padding: 0;
+          width: 20px;
+      }
+      .gal-bgm-btn:hover { color: ${THEME.accent}; }
+
+      .gal-bgm-slider {
+          width: 60px;
+          height: 4px;
+          -webkit-appearance: none;
+          background: rgba(255,255,255,0.3);
+          border-radius: 2px;
+          outline: none;
+      }
+      .gal-bgm-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 10px; height: 10px;
+          background: #fff;
+          border-radius: 50%;
+          cursor: pointer;
+      }
+
+      /* 主容器 - 全屏沉浸式 */
+      .gal-game-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background: #f0f2f5;
+        font-family: ${THEME.fontMain};
+        overflow: hidden;
+        /* 自适应缩放支持：以中心为基准点进行缩放 */
+        transform-origin: center center;
+        will-change: transform;
+      }
+
+      /* 背景层 */
+      .gal-layer-bg {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        z-index: 0;
+        background: linear-gradient(135deg, #e8eef5 0%, #f5f5f5 100%);
+        overflow: hidden;
+      }
+
+      .gal-layer-bg::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-image: radial-gradient(#ccc 1px, transparent 1px);
+        background-size: 20px 20px;
+        opacity: 0.3;
+        pointer-events: none;
+      }
+
+      /* 有背景图片时隐藏默认点阵图案 */
+      .gal-layer-bg.has-bg::before {
+        display: none;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         背景生成中特效 - 高性能纯CSS动画
+         ═══════════════════════════════════════════════════════════════ */
+      .gal-layer-bg.generating-bg {
+        background: linear-gradient(-45deg, #1a1a2e, #16213e, #0f3460, #1a1a2e);
+        background-size: 400% 400%;
+        animation: galGenGradient 3s ease infinite;
+      }
+
+      /* 流动渐变背景动画 */
+      @keyframes galGenGradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
+      /* 扫描线效果 */
+      .gal-layer-bg.generating-bg::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(0, 210, 255, 0.03) 2px,
+          rgba(0, 210, 255, 0.03) 4px
+        );
+        animation: galGenScanline 8s linear infinite;
+        pointer-events: none;
+      }
+
+      @keyframes galGenScanline {
+        0% { transform: translateY(-100%); }
+        100% { transform: translateY(100%); }
+      }
+
+      /* 生成指示器容器 */
+      .gal-gen-indicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        z-index: 20;
+        padding: 40px 60px;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        border: 1px solid rgba(0, 210, 255, 0.3);
+        box-shadow:
+          0 0 40px rgba(0, 210, 255, 0.2),
+          inset 0 0 40px rgba(0, 210, 255, 0.05);
+        animation: galGenPulse 2s ease-in-out infinite;
+      }
+
+      @keyframes galGenPulse {
+        0%, 100% {
+          box-shadow:
+            0 0 40px rgba(0, 210, 255, 0.2),
+            0 0 80px rgba(0, 210, 255, 0.1),
+            inset 0 0 40px rgba(0, 210, 255, 0.05);
+        }
+        50% {
+          box-shadow:
+            0 0 60px rgba(0, 210, 255, 0.4),
+            0 0 120px rgba(0, 210, 255, 0.2),
+            inset 0 0 60px rgba(0, 210, 255, 0.1);
+        }
+      }
+
+      /* 环形加载动画 - 多层 */
+      .gal-gen-rings {
+        position: relative;
+        width: 80px;
+        height: 80px;
+      }
+
+      .gal-gen-rings::before,
+      .gal-gen-rings::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+        border: 3px solid transparent;
+      }
+
+      .gal-gen-rings::before {
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-top-color: #00d2ff;
+        border-right-color: rgba(0, 210, 255, 0.3);
+        animation: galGenSpin 1.5s linear infinite;
+      }
+
+      .gal-gen-rings::after {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        border-bottom-color: #ff0055;
+        border-left-color: rgba(255, 0, 85, 0.3);
+        animation: galGenSpin 1s linear infinite reverse;
+      }
+
+      @keyframes galGenSpin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      /* 中心图标 */
+      .gal-gen-icon {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 1.5rem;
+        color: #00d2ff;
+        animation: galGenIconPulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes galGenIconPulse {
+        0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        50% { opacity: 0.7; transform: translate(-50%, -50%) scale(0.9); }
+      }
+
+      /* 文字区域 */
+      .gal-gen-text {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .gal-gen-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #fff;
+        text-shadow: 0 0 20px rgba(0, 210, 255, 0.8);
+        letter-spacing: 2px;
+        font-family: ${THEME.fontEng};
+      }
+
+      .gal-gen-scene {
+        font-size: 0.95rem;
+        color: rgba(255, 255, 255, 0.8);
+        max-width: 200px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* 进度点 */
+      .gal-gen-dots {
+        display: flex;
+        gap: 6px;
+        margin-top: 5px;
+      }
+
+      .gal-gen-dot {
+        width: 6px;
+        height: 6px;
+        background: #00d2ff;
+        border-radius: 50%;
+        animation: galGenDot 1.4s ease-in-out infinite;
+      }
+
+      .gal-gen-dot:nth-child(2) { animation-delay: 0.2s; }
+      .gal-gen-dot:nth-child(3) { animation-delay: 0.4s; }
+
+      @keyframes galGenDot {
+        0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+        40% { transform: scale(1); opacity: 1; box-shadow: 0 0 10px #00d2ff; }
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         立绘动画关键帧
+         ═══════════════════════════════════════════════════════════════ */
+      @keyframes galSpriteSlideInLeft {
+        from { transform: translateX(-100px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes galSpriteSlideInRight {
+        from { transform: translateX(100px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes galSpriteSlideInCenter {
+        from { transform: translateY(50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes galSpriteSlideOutLeft {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(-100px); opacity: 0; }
+      }
+      @keyframes galSpriteSlideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100px); opacity: 0; }
+      }
+      @keyframes galSpriteBreathing {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+      }
+      @keyframes galSpriteShake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-5px); }
+        40% { transform: translateX(5px); }
+        60% { transform: translateX(-3px); }
+        80% { transform: translateX(3px); }
+      }
+      @keyframes galSpriteBounce {
+        0% { transform: scale(1); }
+        30% { transform: scale(1.15); }
+        50% { transform: scale(0.95); }
+        70% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+      @keyframes galSpriteExpressionChange {
+        0% { opacity: 0.7; transform: scale(0.98); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+
+      /* 立绘层 - 多角色布局 (左/中/右) */
+      .gal-layer-character {
+        position: absolute;
+        bottom: 35%;
+        left: 0;
+        width: 100%;
+        height: 55%;
+        z-index: 5;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        pointer-events: none;
+        padding: 0 3%;
+        gap: 2%;
+      }
+
+      /* 多角色槽位 */
+      .gal-char-slot {
+        position: relative;
+        flex: 0 0 30%;
+        max-width: 30%;
+        height: 100%;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        pointer-events: auto;
+      }
+      .gal-char-slot.slot-left { order: 1; }
+      .gal-char-slot.slot-right { order: 2; }
+
+      .gal-char-container {
+        position: relative;
+        max-height: 100%;
+        /* --base-scale removed to allow inheritance */
+        --state-scale: 1;
+        /* scale moved to .gal-char-img to avoid conflict with transform animations on container */
+        transform-origin: bottom center;
+        max-width: 100%;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        filter: drop-shadow(0 10px 30px rgba(0,0,0,0.4));
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+                    filter 0.3s ease,
+                    opacity 0.3s ease;
+        pointer-events: auto;
+        cursor: pointer;
+        animation: galSpriteBreathing 4s ease-in-out infinite;
+      }
+
+      /* 入场动画 */
+      .gal-char-container.entering-left { animation: galSpriteSlideInLeft 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
+      .gal-char-container.entering-center { animation: galSpriteSlideInCenter 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
+      .gal-char-container.entering-right { animation: galSpriteSlideInRight 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
+
+      /* 退场动画 */
+      .gal-char-container.exiting-left { animation: galSpriteSlideOutLeft 0.4s ease-in forwards; pointer-events: none; }
+      .gal-char-container.exiting-right { animation: galSpriteSlideOutRight 0.4s ease-in forwards; pointer-events: none; }
+
+      /* 表情切换动画 */
+      .gal-char-container.expression-change { animation: galSpriteExpressionChange 0.3s ease-out; }
+
+      /* 说话者状态 - 基础样式 */
+      .gal-char-container.speaking {
+        --state-scale: 1.05;
+        z-index: 10;
+        filter: drop-shadow(0 15px 40px rgba(0,0,0,0.5));
+        position: relative;
+      }
+
+      .gal-char-container.silent {
+        --state-scale: 0.95;
+        filter: drop-shadow(0 5px 15px rgba(0,0,0,0.3));
+        z-index: 4;
+      }
+
+      /* 说话者光晕效果 - 仅在启用时生效 */
+      @keyframes speakingGlow {
+        0%, 100% {
+          filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.7))
+                  drop-shadow(0 0 15px rgba(255, 180, 0, 0.5))
+                  drop-shadow(0 15px 30px rgba(0,0,0,0.4));
+        }
+        50% {
+          filter: drop-shadow(0 0 15px rgba(255, 215, 0, 0.9))
+                  drop-shadow(0 0 30px rgba(255, 180, 0, 0.7))
+                  drop-shadow(0 15px 30px rgba(0,0,0,0.4));
+        }
+      }
+
+      .gal-layer-character.glow-enabled .gal-char-container.speaking {
+        animation: speakingGlow 2s ease-in-out infinite, galSpriteBreathing 4s ease-in-out infinite;
+      }
+
+      /* 漫画式对话气泡指示器 - 仅在启用时生效 */
+      @keyframes bubbleBounce {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-8px) scale(1.1); }
+      }
+
+      .gal-layer-character.bubble-enabled .gal-char-container.speaking::before {
+        content: '💬';
+        position: absolute;
+        top: -10px;
+        right: 10%;
+        font-size: 2.5rem;
+        z-index: 100;
+        animation: bubbleBounce 1s ease-in-out infinite;
+        filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.5));
+      }
+
+      /* 情绪特效 - 仅保留动画，移除滤镜 */
+      .gal-char-container[data-emotion="angry"] {
+        animation: galSpriteShake 0.4s ease-in-out 2, galSpriteBreathing 4s ease-in-out 0.8s infinite;
+      }
+      .gal-char-container[data-emotion="surprised"] {
+        animation: galSpriteBounce 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite;
+      }
+
+
+      /* 场景色调 */
+      .gal-layer-character.scene-night {
+        filter: hue-rotate(-10deg) brightness(0.85) saturate(0.9);
+      }
+      .gal-layer-character.scene-night .gal-char-container {
+        filter: drop-shadow(0 10px 30px rgba(0,0,100,0.5));
+      }
+      .gal-layer-character.scene-indoor {
+        filter: sepia(0.08) brightness(1.02);
+      }
+      .gal-layer-character.scene-indoor .gal-char-container {
+        filter: drop-shadow(0 10px 30px rgba(100,50,0,0.3));
+      }
+
+      .gal-char-img {
+        max-height: 100%;
+        max-width: 100%;
+        height: auto;
+        width: auto;
+        object-fit: contain;
+        object-position: bottom center;
+        /* Apply scale here to avoid conflict with container animations */
+        transform: scale(calc(var(--base-scale, 1) * var(--state-scale)));
+        transform-origin: bottom center;
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+
+      .gal-char-placeholder {
+        width: 200px;
+        height: 350px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(240,240,240,0.9) 100%);
+        border: 4px dashed #ccc;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #999;
+        gap: 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+        pointer-events: auto;
+      }
+
+      .gal-char-placeholder:hover {
+        border-color: ${THEME.accent};
+        color: ${THEME.accent};
+      }
+
+      .gal-char-placeholder i {
+        font-size: 4rem;
+      }
+
+      .gal-char-placeholder span {
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      /* 对话框层 - 底部悬浮 */
+      .gal-dialog-layer {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 92%;
+        max-width: 1000px;
+        z-index: 30;
+        pointer-events: auto;
+      }
+
+      /* 名字标签 */
+      .gal-name-badge {
+        position: absolute;
+        top: -22px;
+        left: 0;
+        background: ${THEME.dark};
+        color: ${THEME.accent};
+        padding: 8px 35px 8px 25px;
+        font-size: 1.4rem;
+        font-weight: 900;
+        font-family: ${THEME.fontEng};
+        transform: skewX(-15deg);
+        z-index: 35;
+        box-shadow: 5px 5px 0 rgba(0,0,0,0.2);
+      }
+
+      .gal-name-badge span {
+        display: block;
+        transform: skewX(15deg);
+      }
+
+      .gal-narrator-label {
+        background: #666;
+        color: #fff;
+      }
+
+      /* 生成中状态指示器 */
+      .gal-generating-status {
+        position: absolute;
+        top: -60px;
+        left: 50%;
+        transform: translateX(-50%) scale(0.8);
+        background: linear-gradient(135deg, ${THEME.accent} 0%, #ff6b9d 100%);
+        color: #fff;
+        padding: 8px 20px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        opacity: 0;
+        transition: all 0.3s ease;
+        pointer-events: none;
+        z-index: 50;
+      }
+
+      .gal-generating-status.show {
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+      }
+
+      /* 交互栏 - 对话框上方右侧 */
+      .gal-interaction-bar {
+        position: absolute;
+        top: -55px;
+        right: 0;
+        display: flex;
+        gap: 15px;
+        z-index: 35;
+      }
+
+      .gal-action-btn {
+        padding: 12px 30px;
+        font-weight: 700;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transform: skewX(-15deg);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        border: 2px solid transparent;
+        box-shadow: 5px 5px 0 rgba(0,0,0,0.2);
+        font-family: ${THEME.fontMain};
+        /* 修复默认样式 - 确保按钮可见 */
+        background: ${THEME.white};
+        color: ${THEME.dark};
+        border-color: ${THEME.dark};
+      }
+
+      .gal-action-btn span, .gal-action-btn i {
+        transform: skewX(15deg);
+      }
+
+      /* 基础悬停效果 */
+      .gal-action-btn:hover {
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        transform: skewX(-15deg) translateY(-3px);
+        box-shadow: 5px 8px 0 rgba(0,0,0,0.3);
+      }
+
+      .gal-action-btn.btn-reroll {
+        background: ${THEME.white};
+        color: ${THEME.dark};
+        border-color: ${THEME.dark};
+      }
+
+      .gal-action-btn.btn-reroll:hover {
+        background: ${THEME.dark};
+        color: ${THEME.accent};
+        transform: skewX(-15deg) translateY(-3px);
+        box-shadow: 5px 8px 0 ${THEME.accent};
+      }
+
+      .gal-action-btn.btn-free {
+        background: ${THEME.accentSub};
+        color: #fff;
+        border-color: ${THEME.accentSub};
+      }
+
+      .gal-action-btn.btn-free:hover {
+        background: ${THEME.dark};
+        color: ${THEME.accentSub};
+        border-color: ${THEME.dark};
+        transform: skewX(-15deg) translateY(-3px);
+        box-shadow: 5px 8px 0 ${THEME.accentSub};
+      }
+
+      /* 文本主面板 */
+      .gal-text-panel {
+        background: rgba(255, 255, 255, 0.95);
+        width: 100%;
+        height: 250px; /* 固定高度 */
+        overflow-y: hidden; /* 内容过多时滚动 */
+        padding: 40px 60px 70px 60px;
+        border-radius: 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        position: relative;
+        border-bottom: 6px solid ${THEME.accent};
+        background-image: linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, 0.1) 95%, rgba(0, 210, 255, 0.1) 100%);
+        background-size: 20px 20px;
+      }
+
+      .gal-dialog-text {
+        font-size: 1.25rem;
+        line-height: 1.9;
+        color: #333;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+      }
+
+      /* TTS 加载指示器 */
+      .gal-tts-loading {
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background: rgba(0, 210, 255, 0.15);
+        border: 2px solid ${THEME.accent};
+        border-radius: 20px;
+        color: ${THEME.accent};
+        font-size: 0.85rem;
+        font-weight: 600;
+        opacity: 0;
+        transform: translateY(-10px);
+        transition: all 0.3s ease;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      .gal-tts-loading.active {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .gal-tts-loading i {
+        font-size: 1rem;
+        color: ${THEME.accent};
+      }
+
+      /* 生成中特效 - 动态打字机效果 */
+      .gal-generating-indicator {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 20px 40px;
+        background: rgba(255, 255, 255, 0.98);
+        border: 3px solid ${THEME.accent};
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 210, 255, 0.3);
+        z-index: 20;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+      }
+
+      .gal-generating-indicator.active {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .gal-generating-indicator .gal-gen-icon {
+        font-size: 2.5rem;
+        color: ${THEME.accent};
+        animation: galGenPulse 1.5s ease-in-out infinite;
+      }
+
+      .gal-generating-indicator .gal-gen-text {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: ${THEME.dark};
+        letter-spacing: 0.05em;
+      }
+
+      .gal-generating-indicator .gal-gen-status {
+        font-size: 0.85rem;
+        color: #666;
+        max-width: 280px;
+        text-align: center;
+        min-height: 1.2em;
+      }
+
+      .gal-generating-indicator .gal-gen-dots {
+        display: flex;
+        gap: 6px;
+        margin-top: 4px;
+      }
+
+      .gal-generating-indicator .gal-gen-dot {
+        width: 8px;
+        height: 8px;
+        background: ${THEME.accent};
+        border-radius: 50%;
+        animation: galGenDotBounce 1.4s ease-in-out infinite both;
+      }
+
+      .gal-generating-indicator .gal-gen-dot:nth-child(1) { animation-delay: -0.32s; }
+      .gal-generating-indicator .gal-gen-dot:nth-child(2) { animation-delay: -0.16s; }
+
+      @keyframes galGenPulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+      }
+
+      @keyframes galGenDotBounce {
+        0%, 80%, 100% { transform: scale(0); }
+        40% { transform: scale(1); }
+      }
+
+      /* 底部工具栏 - 两端对齐，紧凑布局 */
+      .gal-bottom-toolbar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        padding: 0 30px; /* 恢复适中的内边距 */
+        box-sizing: border-box;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        pointer-events: none;
+        z-index: 100;
+      }
+
+      .gal-bottom-toolbar > * {
+        pointer-events: auto;
+      }
+
+      /* 左侧按钮组容器 */
+      .gal-toolbar-left, .gal-toolbar-right {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px; /* 减小间距 */
+      }
+
+      /* 普通按钮 - 缩小尺寸 */
+      .gal-footer-btn {
+        background: rgba(255, 255, 255, 0.9) !important;
+        color: ${THEME.dark} !important;
+        padding: 0 12px !important; /* 减小内边距 */
+        font-family: ${THEME.fontEng} !important;
+        font-weight: 800 !important;
+        font-size: 0.85rem !important; /* 减小字号 */
+        cursor: pointer !important;
+        transition: all 0.2s !important;
+        border: 2px solid ${THEME.dark} !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        height: 36px !important; /* 减小高度 */
+        transform: skewX(-10deg) !important;
+        box-shadow: 2px 2px 0 rgba(0,0,0,0.1) !important;
+        border-radius: 0 !important;
+      }
+
+      .gal-footer-btn i, .gal-footer-btn span {
+        transform: skewX(10deg) !important;
+      }
+
+      .gal-footer-btn:hover {
+        background: ${THEME.dark} !important;
+        color: #fff !important;
+        transform: skewX(-10deg) translateY(-2px) !important;
+        box-shadow: 4px 4px 0 rgba(0,0,0,0.2) !important;
+      }
+
+      /* NEXT 按钮 - 保持醒目但在此基础上微调 */
+      .gal-footer-btn-next {
+        background: ${THEME.dark} !important;
+        color: #fff !important;
+        font-size: 1.3rem !important; /* 稍微减小字号 */
+        font-weight: 800 !important;
+        padding: 0 40px !important;
+        height: 55px !important; /* 稍微减小高度以适配 */
+        min-width: 140px !important;
+        border-radius: 0 !important;
+        border: 2px solid ${THEME.dark} !important;
+        margin-left: 15px !important;
+        margin-right: 0 !important; /* 移除额外的右边距 */
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 10px !important;
+        white-space: nowrap !important;
+        line-height: 1 !important;
+        box-shadow: 4px 4px 0 rgba(0,0,0,0.2) !important;
+        flex-shrink: 0 !important;
+        clip-path: polygon(25px 0, 100% 0, 100% 100%, 0% 100%) !important;
+        transition: all 0.2s ease !important;
+        transform: none !important;
+      }
+
+      .gal-footer-btn-next:hover {
+        background: ${THEME.accent} !important;
+        color: ${THEME.dark} !important;
+        padding-right: 50px !important;
+        transform: translateY(-2px) !important;
+      }
+
+      .gal-footer-btn-next i {
+        font-size: 1.1rem !important;
+        margin: 0 !important;
+      }
+
+      /* 进度指示器 */
+      .gal-progress-indicator {
+        font-family: ${THEME.fontEng};
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #888;
+        padding: 6px 10px;
+        display: flex;
+        align-items: center;
+        height: 36px;
+      }
+
+      /* 导航按钮 (PREV, AUTO, SKIP) - 统一样式 */
+      .gal-nav-btn {
+        /* 使用与 .gal-footer-btn 相同的样式 */
+      }
+
+      .gal-nav-btn.active {
+        background: ${THEME.accent} !important;
+        color: ${THEME.dark} !important;
+        box-shadow: inset 1px 1px 3px rgba(0,0,0,0.2) !important;
+      }
+
+      /* AUTO 播放中状态 */
+      .gal-auto-playing {
+        background: ${THEME.accentSub} !important;
+        color: #fff !important;
+        border-color: ${THEME.accentSub} !important;
+        animation: galPulse 1s infinite;
+      }
+
+      @keyframes galPulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.8; }
+      }
+
+      /* 自由输入弹窗 */
+      .gal-input-modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: galFadeIn 0.2s ease;
+      }
+
+      @keyframes galFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .gal-input-box {
+        background: ${THEME.white};
+        border: 3px solid ${THEME.dark};
+        box-shadow: 10px 10px 0 rgba(0,0,0,0.15);
+        width: 90%;
+        max-width: 500px;
+        padding: 25px;
+      }
+
+      .gal-input-title {
+        font-family: ${THEME.fontEng};
+        font-size: 1.3rem;
+        font-weight: 800;
+        color: ${THEME.dark};
+        margin-bottom: 15px;
+        transform: skewX(-5deg);
+      }
+
+      .gal-input-title span {
+        transform: skewX(5deg);
+        display: block;
+      }
+
+      .gal-input-field {
+        width: 100%;
+        border: 2px solid ${THEME.dark};
+        padding: 12px 15px;
+        font-size: 1rem;
+        font-family: ${THEME.fontMain};
+        resize: vertical;
+        min-height: 80px;
+        box-sizing: border-box;
+      }
+
+      .gal-input-field:focus {
+        outline: none;
+        border-color: ${THEME.accent};
+        box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.2);
+      }
+
+      .gal-input-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      /* Toast 通知 */
+      .gal-toast {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        padding: 12px 25px;
+        font-weight: 600;
+        transform: skewX(-5deg);
+        box-shadow: 5px 5px 0 ${THEME.accent};
+        z-index: 100000;
+        animation: galToastIn 0.3s ease;
+      }
+
+      .gal-toast span {
+        display: block;
+        transform: skewX(5deg);
+      }
+
+      @keyframes galToastIn {
+        from { opacity: 0; transform: skewX(-5deg) translateY(20px); }
+        to { opacity: 1; transform: skewX(-5deg) translateY(0); }
+      }
+
+      /* 立绘配置弹窗 */
+      .gal-config-modal {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(6px);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .gal-config-panel {
+        background: ${THEME.white};
+        border: 3px solid ${THEME.dark};
+        box-shadow: 12px 12px 0 rgba(0,0,0,0.2);
+        width: 90%;
+        max-width: 700px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .gal-config-header {
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        padding: 15px 25px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .gal-config-title {
+        font-family: ${THEME.fontEng};
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: ${THEME.accent};
+      }
+
+      .gal-config-close {
+        background: transparent;
+        border: 2px solid ${THEME.white};
+        color: ${THEME.white};
+        width: 32px;
+        height: 32px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+      }
+
+      .gal-config-close:hover {
+        background: ${THEME.accentSub};
+        border-color: ${THEME.accentSub};
+      }
+
+      .gal-config-body {
+        padding: 25px;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .gal-sprite-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+      }
+
+      .gal-sprite-card {
+        border: 2px solid #eee;
+        padding: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .gal-sprite-card:hover {
+        border-color: ${THEME.accent};
+        box-shadow: 0 4px 12px rgba(0, 210, 255, 0.15);
+      }
+
+      /* 立绘预览图 - 固定2:3长宽比 */
+      .gal-sprite-preview {
+        width: 100%;
+        aspect-ratio: 2 / 3;
+        object-fit: cover;
+        object-position: top center;
+        background: #f9f9f9;
+        border-radius: 4px;
+        margin-bottom: 8px;
+      }
+
+      /* 立绘裁剪工具 */
+      .gal-crop-container {
+        position: relative;
+        width: 100%;
+        overflow: visible;
+        background: #1a1a2e;
+        border-radius: 8px;
+      }
+
+      .gal-crop-canvas-wrapper {
+        position: relative;
+        width: 100%;
+        height: 380px;
+        overflow: hidden;
+        cursor: move;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a2e;
+        border-radius: 8px 8px 0 0;
+      }
+
+      #gal-crop-canvas {
+        display: block;
+      }
+
+      .gal-crop-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+      }
+
+      .gal-crop-frame {
+        position: absolute;
+        border: 3px solid ${THEME.accent};
+        box-shadow: 0 0 0 9999px rgba(0,0,0,0.6);
+        pointer-events: none;
+      }
+
+      .gal-crop-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        padding: 12px 20px;
+        background: rgba(0,0,0,0.8);
+        border-radius: 0 0 8px 8px;
+      }
+
+      .gal-crop-controls .gal-crop-btn {
+        padding: 8px 16px;
+        min-width: 60px;
+        font-size: 0.9rem;
+      }
+
+      .gal-crop-zoom-slider {
+        width: 150px;
+        accent-color: ${THEME.accent};
+      }
+
+      .gal-crop-zoom-label {
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        min-width: 45px;
+      }
+
+      .gal-crop-btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.2s;
+      }
+
+      .gal-crop-btn.reset {
+        background: #666;
+        color: #fff;
+      }
+
+      .gal-crop-btn.reset:hover {
+        background: #888;
+      }
+
+      /* 批量上传网格 */
+      .gal-batch-upload-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 5px;
+      }
+
+      .gal-batch-upload-card {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        transition: all 0.2s;
+        background: #fafafa;
+      }
+
+      .gal-batch-upload-card:hover {
+        border-color: ${THEME.accent};
+        background: rgba(0, 210, 255, 0.05);
+      }
+
+      .gal-batch-upload-card.has-image {
+        border-style: solid;
+        border-color: ${THEME.accent};
+      }
+
+      .gal-batch-upload-card .expression-label {
+        font-weight: 700;
+        color: ${THEME.dark};
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+      }
+
+      .gal-batch-upload-card .upload-preview {
+        width: 100%;
+        aspect-ratio: 2 / 3;
+        background: #eee;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        overflow: hidden;
+        margin-bottom: 8px;
+      }
+
+      .gal-batch-upload-card .upload-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+      }
+
+      .gal-batch-upload-card .upload-preview i {
+        font-size: 2rem;
+        color: #bbb;
+      }
+
+      .gal-batch-upload-card .upload-preview:hover i {
+        color: ${THEME.accent};
+      }
+
+      .gal-batch-upload-card .remove-btn {
+        background: ${THEME.accentSub};
+        color: #fff;
+        border: none;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        cursor: pointer;
+        display: none;
+      }
+
+      .gal-batch-upload-card.has-image .remove-btn {
+        display: inline-block;
+      }
+
+      .gal-sprite-label {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: ${THEME.dark};
+        line-height: 1.3;
+      }
+
+      .gal-sprite-label small {
+        font-weight: 400;
+        color: #888;
+      }
+
+      /* 上传卡片 */
+      .gal-upload-card {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #999;
+        min-height: 120px;
+      }
+
+      .gal-upload-card:hover {
+        border-color: ${THEME.accent};
+        color: ${THEME.accent};
+        background: rgba(0, 210, 255, 0.05);
+      }
+
+      .gal-upload-card i {
+        font-size: 2rem;
+      }
+
+      .gal-action-btn.primary {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+        border-color: ${THEME.accent};
+      }
+
+      .gal-action-btn.primary:hover {
+        background: ${THEME.dark};
+        color: ${THEME.accent};
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         选项面板 - 从骰子系统监控并重新渲染
+         ═══════════════════════════════════════════════════════════════ */
+
+      /* 选项层 - 全屏覆盖（无模糊背景） */
+      #gal-layer-choices {
+        position: fixed !important;
+        top: 0 !important; left: 0 !important;
+        width: 100% !important; height: 100% !important;
+        background: rgba(0, 0, 0, 0.4) !important;
+        z-index: 2147483647 !important;
+        display: none;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 15px;
+        padding: 20px;
+      }
+
+      #gal-layer-choices.active {
+        display: flex;
+        animation: galFadeIn 0.3s ease;
+      }
+
+      /* 选项标题 */
+      .gal-choices-title {
+        font-family: ${THEME.fontEng};
+        font-size: 1.2rem;
+        font-weight: 900;
+        color: ${THEME.white};
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 8px;
+        transform: skewX(-10deg);
+      }
+
+      .gal-choices-title span {
+        display: block;
+        transform: skewX(10deg);
+      }
+
+      /* 选项卡片 - 缩小字体，自适应宽度 */
+      .gal-choice-card {
+        background: ${THEME.white};
+        color: ${THEME.dark};
+        padding: 12px 30px;
+        min-width: 200px;
+        max-width: 90%;
+        width: auto;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        border: 2px solid ${THEME.dark};
+        box-shadow: 6px 6px 0 rgba(0,0,0,0.15);
+        transform: skewX(-8deg);
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        position: relative;
+        overflow: hidden;
+        word-break: break-word;
+      }
+
+      .gal-choice-card span {
+        display: block;
+        transform: skewX(8deg);
+      }
+
+      .gal-choice-card:hover {
+        background: ${THEME.accent};
+        color: #fff;
+        border-color: ${THEME.dark};
+        transform: skewX(-8deg) translate(-3px, -3px);
+        box-shadow: 9px 9px 0 ${THEME.dark};
+      }
+
+      .gal-choice-card::after {
+        content: '';
+        display: none;
+      }
+
+      /* 关闭提示 */
+      .gal-choices-hint {
+        font-size: 0.8rem;
+        color: rgba(255,255,255,0.7);
+        margin-top: 15px;
+      }
+
+      /* 进度条容器 */
+      .gal-progress-container {
+        flex: 1;
+        height: 6px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 3px;
+        margin: 0 10px;
+        overflow: hidden;
+        position: relative;
+        min-width: 60px;
+      }
+
+      /* 进度条滑块 */
+      .gal-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, ${THEME.accent} 0%, #00a8cc 100%);
+        width: 0%;
+        border-radius: 3px;
+        transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 0 10px ${THEME.accent};
+      }
+
+      /* 待选择提示按钮 - 在工具栏内 */
+      .gal-pending-choices-btn {
+        background: linear-gradient(135deg, ${THEME.accentSub} 0%, #cc0044 100%) !important;
+        color: #fff !important;
+        padding: 0 20px !important;
+        font-weight: 700 !important;
+        font-size: 0.85rem !important;
+        cursor: pointer !important;
+        display: none;
+        align-items: center !important;
+        gap: 6px !important;
+        border: 2px solid ${THEME.dark} !important;
+        height: 45px !important;
+        margin-right: 5px !important;
+        border-radius: 0 !important;
+        transform: skewX(-10deg);
+      }
+
+      .gal-pending-choices-btn.show {
+        display: flex !important;
+        -webkit-animation: galPendingPulse 2s ease-in-out infinite !important;
+        animation: galPendingPulse 2s ease-in-out infinite !important;
+      }
+
+      .gal-pending-choices-btn i, .gal-pending-choices-btn span {
+        transform: skewX(10deg) !important;
+      }
+
+      .gal-pending-choices-btn:hover {
+        filter: brightness(1.1) !important;
+        transform: skewX(-10deg) translateY(-2px) !important;
+        box-shadow: 5px 5px 0 rgba(0,0,0,0.2) !important;
+      }
+
+      @-webkit-keyframes galPendingPulse {
+        0%, 100% {
+            box-shadow:
+                inset 0 0 15px rgba(255,255,255,0.3),
+                0 0 15px rgba(255, 215, 0, 0.6),
+                0 0 25px rgba(255, 215, 0, 0.4),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1);
+        }
+        50% {
+            box-shadow:
+                inset 0 0 30px rgba(255,255,255,0.6),
+                0 0 30px rgba(255, 215, 0, 0.8),
+                0 0 50px rgba(255, 215, 0, 0.5),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1.25);
+        }
+      }
+
+      @keyframes galPendingPulse {
+        0%, 100% {
+            box-shadow:
+                inset 0 0 15px rgba(255,255,255,0.3),
+                0 0 15px rgba(255, 215, 0, 0.6),
+                0 0 25px rgba(255, 215, 0, 0.4),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1);
+        }
+        50% {
+            box-shadow:
+                inset 0 0 30px rgba(255,255,255,0.6),
+                0 0 30px rgba(255, 215, 0, 0.8),
+                0 0 50px rgba(255, 215, 0, 0.5),
+                3px 3px 0 rgba(0,0,0,0.1);
+            filter: brightness(1.25);
+        }
+      }
+
+      .gal-pending-choices-btn.gal-new-option-highlight {
+        -webkit-animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
+        animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
+      }
+
+      @-webkit-keyframes galNewOptionPop {
+        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
+        50% { transform: skewX(-10deg) scale(1.1); }
+        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
+      }
+
+      @keyframes galNewOptionPop {
+        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
+        50% { transform: skewX(-10deg) scale(1.1); }
+        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
+      }
+
+      /* Galgame 开启按钮 (注入到消息中) */
+      .gal-open-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 8px;
+        background: transparent;
+        color: ${THEME.accent};
+        border: 1px solid ${THEME.accent};
+        border-radius: 4px;
+        font-size: 0.75rem;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: all 0.2s;
+        margin-left: 5px;
+        font-family: ${THEME.fontMain};
+      }
+
+      .gal-open-btn:hover {
+        opacity: 1;
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+      }
+
+      /* 历史记录模态框 */
+      .gal-history-modal {
+        position: fixed !important;
+        top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+        background: rgba(0,0,0,0.85) !important;
+        backdrop-filter: blur(5px) !important;
+        z-index: 2147483647 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: galFadeIn 0.3s ease;
+      }
+
+      .gal-history-panel {
+        background: ${THEME.white};
+        border: 2px solid ${THEME.accent};
+        box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
+        width: 80%;
+        max-width: 800px;
+        height: 80vh;
+        display: flex;
+        flex-direction: column;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .gal-history-header {
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid ${THEME.accent};
+      }
+
+      .gal-history-title {
+        font-family: ${THEME.fontMain};
+        font-size: 1.2rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .gal-history-close {
+        background: transparent;
+        border: none;
+        color: #aaa;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: color 0.2s;
+        line-height: 1;
+      }
+
+      .gal-history-close:hover {
+        color: ${THEME.accent};
+      }
+
+      .gal-history-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+
+      .gal-history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+
+      .gal-history-item {
+        background: #fff;
+        padding: 0;
+        border-radius: 8px;
+        border: 1px solid #eee;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        transition: all 0.2s;
+        overflow: hidden;
+        margin-bottom: 10px;
+      }
+
+      .gal-history-item:hover {
+        box-shadow: 0 8px 20px rgba(0, 210, 255, 0.15);
+        transform: translateY(-2px);
+        border-color: ${THEME.accent};
+      }
+
+      .gal-history-header-row {
+        background: #f8f9fa;
+        padding: 10px 20px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .gal-history-info-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .gal-history-index {
+        background: ${THEME.accent};
+        color: ${THEME.dark};
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        font-family: ${THEME.fontEng};
+      }
+
+      .gal-history-time {
+        color: #666;
+        font-size: 0.9rem;
+        font-weight: 600;
+        font-family: ${THEME.fontMain};
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .gal-history-time i {
+        font-size: 0.8rem;
+        color: #999;
+      }
+
+      .gal-history-content {
+        padding: 20px;
+        font-size: 1.05rem;
+        line-height: 1.8;
+        color: #333;
+        white-space: pre-wrap;
+        text-align: justify;
+      }
+
+      .gal-history-empty {
+        text-align: center;
+        padding: 50px;
+        color: #999;
+        font-style: italic;
+      }
+
+      .galgame-database-container {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        z-index: 2147483647 !important;
+        display: none;
+      }
+
+      /* 2024-01-26 更新样式 */
+      .gal-open-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 16px;
+          background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);
+          color: #fff;
+          border: none;
+          border-radius: 20px;
+          font-size: 0.85rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+          box-shadow: 0 2px 8px rgba(0, 210, 255, 0.3);
+      }
+
+      .gal-open-btn:hover {
+          transform: scale(1.05);
+          box-shadow: 0 4px 15px rgba(0, 210, 255, 0.5);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         背景管理实时生成开关 - 美化版
+         ═══════════════════════════════════════════════════════════════ */
+      .gal-realtime-toggle-wrapper {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px;
+      }
+
+      .gal-realtime-label {
+        font-size: 0.9rem !important;
+        color: #2b2e38 !important;
+        font-weight: 600 !important;
+        white-space: nowrap;
+      }
+
+      .gal-realtime-switch {
+        position: relative;
+        display: inline-block;
+        width: 52px;
+        height: 28px;
+        flex-shrink: 0;
+      }
+
+      .gal-realtime-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+
+      .gal-realtime-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(145deg, #d0d0d0 0%, #b8b8b8 100%);
+        transition: all 0.3s ease;
+        border-radius: 28px;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+      }
+
+      .gal-realtime-slider::before {
+        content: "";
+        position: absolute;
+        height: 22px;
+        width: 22px;
+        left: 3px;
+        bottom: 3px;
+        background: linear-gradient(145deg, #ffffff 0%, #f5f5f5 100%);
+        transition: transform 0.3s ease;
+        border-radius: 50%;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        z-index: 2;
+      }
+
+      .gal-realtime-slider::after {
+        content: "OFF";
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 9px;
+        font-weight: 700;
+        color: #666;
+        z-index: 1;
+      }
+
+      .gal-realtime-switch input:checked + .gal-realtime-slider {
+        background: linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.accentSub} 100%);
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 12px rgba(0, 210, 255, 0.4);
+      }
+
+      .gal-realtime-switch input:checked + .gal-realtime-slider::before {
+        transform: translateX(24px);
+      }
+
+      .gal-realtime-switch input:checked + .gal-realtime-slider::after {
+        content: "ON";
+        left: 8px;
+        right: auto;
+        color: rgba(255,255,255,0.95);
+      }
+`;
     const styleEl = targetDoc.createElement('style');
     styleEl.id = `${SCRIPT_ID}-styles`;
     styleEl.textContent = css;

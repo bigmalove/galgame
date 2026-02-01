@@ -29,11 +29,11 @@ if (!fs.existsSync(JS_SOURCE)) {
 const css = fs.readFileSync(CSS_FILE, 'utf8');
 let js = fs.readFileSync(JS_SOURCE, 'utf8');
 
-// 处理 CSS：转义特殊字符
+// 处理 CSS：转义特殊字符（保留 ${} 模板语法）
 const processedCss = css
   .replace(/\\/g, '\\\\')    // 转义反斜杠
-  .replace(/`/g, '\\`')      // 转义反引号
-  .replace(/\$/g, '\\$');    // 转义 $ 符号
+  .replace(/`/g, '\\`');     // 转义反引号
+  // 注意：不转义 $ 符号，保留 ${THEME.xxx} 模板变量
 
 // 替换占位符
 if (!js.includes('__CSS_PLACEHOLDER__')) {

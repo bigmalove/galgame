@@ -3,7 +3,7 @@
 /**
  * Galgame 界面插件 - SillyTavern 酒馆助手脚本
  * 功能：嵌入式视觉小说界面、立绘系统、对话解析
- * 版本：2.0.0
+ * 版本：2.2.0
  */
 const __awaiter =
   (this && this.__awaiter) ||
@@ -60,6 +60,7 @@ const __awaiter =
     fontMain: "'Noto Sans SC', sans-serif",
     fontEng: "'Barlow', sans-serif",
   };
+  const BG_TRANSITION_MS = 450;
 
   // ============================================
   // 统一状态管理器 (GalgameStore)
@@ -926,6 +927,7 @@ ${extraRule}
             console.error('Music.SearchMusic error:', e);
           }
           if (track && track.Url) {
+            if (this.cache.size >= 20) this.cache.delete(this.cache.keys().next().value);
             this.cache.set(searchQuery, track);
           } else {
             showToast(`未找到BGM: ${keyword}`);
@@ -1168,7 +1170,9 @@ ${extraRule}
       if ((ctx === null || ctx === void 0 ? void 0 : ctx.characterId) !== undefined) {
         return String(ctx.characterId);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 获取当前角色ID失败:`, e);
+    }
     return 'default';
   }
   // 加载全局设置
@@ -1645,7 +1649,7 @@ ${extraRule}
           return String(m);
         });
 
-      console.log(`[${SCRIPT_NAME}] 获取到 ${models.length} 个模型`);
+        console.log(`[${SCRIPT_NAME}] 获取到 ${models.length} 个模型`);
         return models;
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] 获取模型列表异常 (Proxy):`, e);
@@ -1944,6 +1948,7 @@ ${extraRule}
           if (response.ok) {
             const data = await response.json();
             if (data.data && data.data.length > 0) {
+              if (this.cache.size >= 20) this.cache.delete(this.cache.keys().next().value);
               this.cache.set(cacheKey, data.data);
               return this.selectImage(data.data);
             }
@@ -1958,6 +1963,7 @@ ${extraRule}
           try {
             const proxyData = await SillyTavern.get(apiUrl);
             if (proxyData && proxyData.data && proxyData.data.length > 0) {
+              if (this.cache.size >= 20) this.cache.delete(this.cache.keys().next().value);
               this.cache.set(cacheKey, proxyData.data);
               return this.selectImage(proxyData.data);
             }
@@ -1985,7 +1991,8 @@ ${extraRule}
             if (response.ok) {
               const data = await response.json();
               if (data.data && data.data.length > 0) {
-                this.cache.set(cacheKey, data.data);
+                if (this.cache.size >= 20) this.cache.delete(this.cache.keys().next().value);
+              this.cache.set(cacheKey, data.data);
                 return this.selectImage(data.data);
               }
             }
@@ -2919,6 +2926,42 @@ ${extraRule}
       });
     });
   }
+
+  function ensureBackgroundLayers($bgLayer) {
+    if (!$bgLayer || !$bgLayer.length) return { $base: $(), $front: $() };
+    let $base = $bgLayer.find('.gal-bg-base');
+    let $front = $bgLayer.find('.gal-bg-front');
+    if (!$base.length) {
+      $bgLayer.prepend('<div class="gal-bg-layer gal-bg-base"></div>');
+      $base = $bgLayer.find('.gal-bg-base');
+    }
+    if (!$front.length) {
+      $bgLayer.append('<div class="gal-bg-layer gal-bg-front"></div>');
+      $front = $bgLayer.find('.gal-bg-front');
+    }
+    return { $base, $front };
+  }
+
+  function clearBackgroundLayers($bgLayer) {
+    const { $base, $front } = ensureBackgroundLayers($bgLayer);
+    $base.css('background-image', '');
+    $front.removeClass('is-active').css('background-image', '');
+  }
+
+  function setBackgroundWithTransition($bgLayer, bgUrl) {
+    const { $base, $front } = ensureBackgroundLayers($bgLayer);
+    $bgLayer.find('.gal-gen-indicator').remove();
+    $front.removeClass('is-active').css('background-image', `url(${bgUrl})`);
+    if ($front[0]) void $front[0].offsetHeight;
+    const token = `${Date.now()}_${Math.random()}`;
+    $bgLayer.data('bgTransitionToken', token);
+    $front.addClass('is-active');
+    setTimeout(() => {
+      if ($bgLayer.data('bgTransitionToken') !== token) return;
+      $base.css('background-image', `url(${bgUrl})`);
+      $front.removeClass('is-active').css('background-image', '');
+    }, BG_TRANSITION_MS);
+  }
   // ============================================
   // 立绘管理器 - 多角色、动画、特效
   // ============================================
@@ -3217,11 +3260,9 @@ ${extraRule}
         $charLayer.removeClass('scene-night scene-indoor scene-outdoor');
         if (!scene) {
           // 重置为默认背景
-          $bgLayer.css({
-            'background-image': '',
-            'background-size': '',
-            'background-position': '',
-          });
+          $bgLayer.removeClass('has-bg generating-bg');
+          $bgLayer.find('.gal-gen-indicator').remove();
+          clearBackgroundLayers($bgLayer);
           return;
         }
         // 尝试获取场景背景图片
@@ -3230,26 +3271,17 @@ ${extraRule}
         const bgUrl = yield getBackground(scene);
         console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 返回: ${bgUrl ? '有图片URL' : 'null/undefined'}`);
         if (bgUrl) {
-          // 应用背景图片
-          $bgLayer
-            .addClass('has-bg')
-            .removeClass('generating-bg')
-            .empty()
-            .css({
-              'background-image': `url(${bgUrl})`,
-              'background-size': 'cover',
-              'background-position': 'center',
-            });
+          // 应用背景图片（淡入+微缩放）
+          $bgLayer.addClass('has-bg').removeClass('generating-bg');
+          setBackgroundWithTransition($bgLayer, bgUrl);
           console.log(`[${SCRIPT_NAME}] 应用背景成功: ${scene}, URL: ${bgUrl.substring(0, 50)}...`);
         } else {
           // 检查是否正在生成
           if (typeof BGMManager !== 'undefined' && BGMManager.generatingScenes.has(scene)) {
-            $bgLayer.removeClass('has-bg').addClass('generating-bg').css({
-              'background-image': '',
-              'background-size': '',
-              'background-position': '',
-            });
-            $bgLayer.html(`
+            $bgLayer.removeClass('has-bg').addClass('generating-bg');
+            clearBackgroundLayers($bgLayer);
+            if ($bgLayer.find('.gal-gen-indicator').length === 0) {
+              $bgLayer.append(`
                             <div class="gal-gen-indicator">
                                 <div class="gal-gen-rings">
                                     <i class="fa-solid fa-paintbrush gal-gen-icon"></i>
@@ -3265,13 +3297,12 @@ ${extraRule}
                                 </div>
                             </div>
                         `);
+            }
           } else {
             // 没有背景图片，使用默认渐变
-            $bgLayer.removeClass('has-bg generating-bg').empty().css({
-              'background-image': '',
-              'background-size': '',
-              'background-position': '',
-            });
+            $bgLayer.removeClass('has-bg generating-bg');
+            $bgLayer.find('.gal-gen-indicator').remove();
+            clearBackgroundLayers($bgLayer);
           }
         }
         // 根据场景名称判断色调（用于立绘滤镜）
@@ -3346,11 +3377,12 @@ ${extraRule}
     // ★ 首先清理非法标签
     html = cleanIllegalTags(html);
 
-    if (!getTTSEnabled()) return html;
+    // if (!getTTSEnabled()) return html;
 
     // 匹配简化格式: <p>角色名[表情] 或 <p>角色名[表情,音色]
     // 支持: 角色名[表情]: "对话" 或 角色名[表情,音色]: "对话"
-    const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*["\"「『](.+?)["\"」』]\s*<\/p>/gi;
+    // 更新：支持换行符 ([\s\S]+?)
+    const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*["“\"'「『（(]([\s\S]+?)["”\"'」』）)]\s*<\/p>/gi;
 
     let result = html;
     let match;
@@ -3581,10 +3613,11 @@ ${extraRule}
       // 格式1: 角色名: "对话内容" (带引号)
       // 格式2: 角色名: 对话内容 (不带引号，冒号后直接是内容)
       // 支持中英文冒号和各种引号
-      let dialogueMatch = text.match(/^([^:：]{1,20})[：:]\s*["\"「『](.+)["\"\"」』]$/);
+      // 修复：使用 [\s\S] 支持换行，增加中文引号支持，放宽开头限制(兼容可能未清理干净的标签)
+      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["“\"'「『（(]([\s\S]+)["”\"'」』）)]\s*$/);
       // 如果没匹配到带引号的，尝试不带引号的格式
       if (!dialogueMatch) {
-        dialogueMatch = text.match(/^([^:：]{1,20})[：:]\s*(.+)$/);
+        dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
       }
       if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
         const speaker = dialogueMatch[1].trim();
@@ -4530,7 +4563,7 @@ ${extraRule}
         max-height: 50rem;
         display: none;
         background: transparent !important;
-        font-family: ${THEME.fontMain};
+        font-family: 'Noto Sans SC', sans-serif;
         border-radius: 0.75rem;
         overflow: visible;
         margin: 0.625rem 0;
@@ -4591,7 +4624,7 @@ ${extraRule}
         align-items: center;
         gap: 0.5rem;
         transition: all 0.2s;
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
         border-radius: 0.25rem;
         transform: scale(max(var(--ui-scale), 0.85));
         transform-origin: top right;
@@ -4791,7 +4824,7 @@ ${extraRule}
         width: 100%;
         height: 100%;
         background: transparent;
-        font-family: ${THEME.fontMain};
+        font-family: 'Noto Sans SC', sans-serif;
         overflow: hidden;
         border-radius: 0.75rem;
         box-shadow: 0 0.25rem 1.25rem rgba(0,0,0,0.1);
@@ -4815,6 +4848,46 @@ ${extraRule}
         z-index: 0;
         background: #f0f2f5;
         overflow: hidden;
+      }
+
+      /* 背景切换层（双层交叉淡入） */
+      .gal-bg-layer {
+        position: absolute;
+        inset: 0;
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: center;
+        opacity: 1;
+        transform: scale(1);
+        transition: opacity 0.45s ease, transform 0.45s ease;
+        will-change: opacity, transform;
+      }
+
+      .gal-bg-front {
+        opacity: 0;
+        transform: scale(1.03);
+      }
+
+      .gal-bg-front.is-active {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .gal-layer-bg.generating-bg .gal-bg-layer {
+        opacity: 0 !important;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .gal-bg-layer {
+          transition: none !important;
+          transform: none !important;
+        }
+        .gal-bg-front {
+          opacity: 0;
+        }
+        .gal-bg-front.is-active {
+          opacity: 1;
+        }
       }
 
       /* 游戏内容层 */
@@ -4985,7 +5058,7 @@ ${extraRule}
         color: #fff;
         text-shadow: 0 0 1.25rem rgba(0, 210, 255, 0.8);
         letter-spacing: 0.125rem;
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
       }
 
       .gal-gen-scene {
@@ -5285,7 +5358,7 @@ ${extraRule}
         padding: 0.5rem 2.188rem 0.5rem 1.563rem;
         font-size: 1.4rem;
         font-weight: 900;
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
         transform: skewX(-15deg) scale(var(--ui-scale));
         transform-origin: bottom left;
         z-index: 35;
@@ -5350,7 +5423,7 @@ ${extraRule}
         transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         border: 0.125rem solid transparent;
         box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-        font-family: ${THEME.fontMain};
+        font-family: 'Noto Sans SC', sans-serif;
         /* 修复默认样式 - 确保按钮可见 */
         background: ${THEME.white};
         color: ${THEME.dark};
@@ -5640,7 +5713,7 @@ ${extraRule}
 
       /* 进度指示器 */
       .gal-progress-indicator {
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
         font-size: 0.85rem;
         font-weight: 700;
         color: #888;
@@ -5702,7 +5775,7 @@ ${extraRule}
       }
 
       .gal-input-title {
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
         font-size: 1.3rem;
         font-weight: 800;
         color: ${THEME.dark};
@@ -5720,7 +5793,7 @@ ${extraRule}
         border: 0.125rem solid ${THEME.dark};
         padding: 0.75rem 0.938rem;
         font-size: 1rem;
-        font-family: ${THEME.fontMain};
+        font-family: 'Noto Sans SC', sans-serif;
         resize: vertical;
         min-height: 5rem;
         box-sizing: border-box;
@@ -5777,6 +5850,18 @@ ${extraRule}
         justify-content: center;
       }
 
+      /* 远程压缩导入进度遮罩层 - 强制置顶显示 */
+      .gal-import-progress-overlay {
+        z-index: 2147483647 !important;
+      }
+
+      /* 移动端：进度框下移，避免过靠上 */
+      @media screen and (max-width: 48rem) {
+        .gal-import-progress-box {
+          transform: translateY(8vh);
+        }
+      }
+
       .gal-config-panel {
         background: ${THEME.white};
         border: none !important;
@@ -5800,7 +5885,7 @@ ${extraRule}
       }
 
       .gal-config-title {
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
         font-size: 1.2rem;
         font-weight: 800;
         color: ${THEME.accent};
@@ -6084,8 +6169,9 @@ ${extraRule}
       /* 选项层 - 全屏覆盖（无模糊背景） */
       #gal-layer-choices {
         position: fixed !important;
-        top: 0 !important; left: 0 !important;
-        width: 100% !important; height: 100% !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
         background: rgba(0, 0, 0, 0.4) !important;
         z-index: 2147483647 !important;
         display: none;
@@ -6101,9 +6187,22 @@ ${extraRule}
         animation: galFadeIn 0.3s ease;
       }
 
+      .gal-choices-container {
+        width: 100%;
+        max-width: 32rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        max-height: calc(100vh - 10rem);
+        overflow-y: auto;
+        padding: 0 0.5rem;
+        box-sizing: border-box;
+      }
+
       /* 选项标题 */
       .gal-choices-title {
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
         font-size: 1.2rem;
         font-weight: 900;
         color: ${THEME.white};
@@ -6295,7 +6394,7 @@ ${extraRule}
         opacity: 0.6;
         transition: all 0.2s;
         margin-left: 0.313rem;
-        font-family: ${THEME.fontMain};
+        font-family: 'Noto Sans SC', sans-serif;
       }
 
       .gal-open-btn:hover {
@@ -6341,7 +6440,7 @@ ${extraRule}
       }
 
       .gal-history-title {
-        font-family: ${THEME.fontMain};
+        font-family: 'Noto Sans SC', sans-serif;
         font-size: 1.2rem;
         font-weight: 700;
         display: flex;
@@ -6415,14 +6514,14 @@ ${extraRule}
         border-radius: 0.25rem;
         font-size: 0.8rem;
         font-weight: 700;
-        font-family: ${THEME.fontEng};
+        font-family: 'Barlow', sans-serif;
       }
 
       .gal-history-time {
         color: #666;
         font-size: 0.9rem;
         font-weight: 600;
-        font-family: ${THEME.fontMain};
+        font-family: 'Noto Sans SC', sans-serif;
         display: flex;
         align-items: center;
         gap: 0.375rem;
@@ -6706,10 +6805,99 @@ ${extraRule}
             background: rgba(255,255,255,0.95);
             backdrop-filter: blur(0.625rem);
             border-bottom: 1px solid rgba(0,0,0,0.05) !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            gap: 0.5rem !important;
         }
         #gal-asset-manager-modal .gal-input-title {
             font-size: 1.1rem !important;
             font-weight: 700 !important;
+            margin-right: auto !important; /* 标题占据左侧剩余空间 */
+        }
+
+        /* 修复：移动端显示实时生成开关 - 防止被压缩 */
+        #gal-asset-manager-modal .gal-realtime-toggle-wrapper {
+            display: flex !important;
+            align-items: center !important;
+            margin-left: 0 !important;
+            transform: scale(0.85);
+            transform-origin: left center;
+            flex-shrink: 0 !important; /* 关键：禁止被flex挤压消失 */
+            min-width: fit-content;
+            margin-right: 0.25rem;
+        }
+
+        /* === 修复 V6：回归 Flexbox 布局，放弃 Grid === */
+
+        /* 1. 顶部容器：作为块级元素，允许内部元素自然堆叠 */
+        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child {
+            display: block !important;
+            height: auto !important;
+            padding-bottom: 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+            border-bottom: 1px solid rgba(0,0,0,0.05) !important;
+        }
+
+        /* 隐藏"已保存XX背景"文字 */
+        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child > span {
+            display: none !important;
+        }
+
+        /* 2. 按钮组容器：Flex 布局，强制换行 */
+        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child > div {
+            width: 100% !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            justify-content: space-between !important;
+            gap: 0.625rem !important;
+            position: static !important;
+        }
+
+        /* 3. 实时生成开关容器：强制独占一行 */
+        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] .gal-realtime-toggle-wrapper {
+            flex: 0 0 100% !important; /* 宽度 100%，禁止压缩/放大 */
+            width: 100% !important;
+            order: -1 !important;      /* 排序第一 */
+
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important; /* 居中对齐 */
+
+            background: rgba(0,0,0,0.03) !important;
+            border-radius: 0.5rem;
+            padding: 0.5rem !important;
+            margin: 0 !important;
+            height: auto !important;
+            min-height: 2.5rem !important; /* 确保有足够高度 */
+
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 10 !important;
+        }
+
+        /* 开关内的文字 */
+        #gal-asset-manager-modal .gal-realtime-label {
+            display: inline-block !important;
+            font-size: 0.9rem !important;
+            color: #444 !important;
+            margin-right: 0.625rem !important;
+            font-weight: bold !important;
+        }
+
+        /* 开关控件本身 */
+        #gal-asset-manager-modal .gal-realtime-switch {
+            display: inline-block !important;
+            transform: scale(1) !important; /* 保持原始大小 */
+            margin: 0 !important;
+        }
+
+        /* 4. 两个大按钮：各占一半宽度（减去间隙） */
+        #gal-batch-bg-upload-btn,
+        #gal-add-bg-btn {
+            flex: 1 1 45% !important; /* 弹性宽度 */
+            width: auto !important;
+            margin: 0 !important;
         }
 
         /* ����С��ť��Բ�λ� */
@@ -6763,9 +6951,11 @@ ${extraRule}
 
         /* 3. ���Ĳ������������� */
         /* �������õ�ͳ���ı� */
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child > span,
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child .gal-realtime-toggle-wrapper {
+        #gal-asset-manager-modal .gal-tab-pane > div:first-child > span {
             display: none !important;
+        }
+        #gal-asset-manager-modal .gal-tab-pane > div:first-child .gal-realtime-toggle-wrapper {
+            display: flex !important;
         }
         
         /* ��ť�������� */
@@ -7237,15 +7427,43 @@ ${extraRule}
         /* 1. BGM组件触控优化 */
         .gal-bgm-widget {
             top: 3.75rem !important; /* 下移，避开左上角状态栏(如果移过去)或左侧区域 */
-            max-width: 2.5rem !important; /* 默认收起 */
+            padding: 0.375rem 0.625rem !important;
+            gap: 0.375rem !important;
+            font-size: 0.72rem !important;
+            border-radius: 1rem !important;
+            max-width: 2.125rem !important; /* 默认收起 */
             transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        .gal-bgm-icon {
+            font-size: 0.95rem !important;
+            min-width: 1rem !important;
+        }
+
+        .gal-bgm-title {
+            font-size: 0.7rem !important;
+        }
+
+        .gal-bgm-btn {
+            font-size: 0.8rem !important;
+            width: 1rem !important;
+        }
+
+        .gal-bgm-slider {
+            width: 3rem !important;
+            height: 0.188rem !important;
+        }
+
+        .gal-bgm-slider::-webkit-slider-thumb {
+            width: 0.5rem !important;
+            height: 0.5rem !important;
         }
 
         /* 允许点击/长按展开 */
         .gal-bgm-widget:active,
         .gal-bgm-widget:focus-within,
         .gal-bgm-widget.active {
-            max-width: 15rem !important;
+            max-width: 12rem !important;
             background: rgba(43, 46, 56, 0.98) !important;
         }
 
@@ -7310,6 +7528,29 @@ ${extraRule}
         .gal-history-modal,
         #gal-layer-choices {
             z-index: 2147483647 !important; /* Max Int 32 */
+        }
+
+        #gal-layer-choices {
+            justify-content: flex-start !important;
+            align-items: stretch !important;
+            padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
+            padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
+            height: 100dvh !important;
+            max-height: 100dvh !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .gal-choices-container {
+            max-height: none !important;
+            overflow-y: visible !important;
+            overflow-x: visible !important;
+            padding: 0 0.75rem !important;
+        }
+
+        .gal-choice-card {
+            max-width: 100% !important;
+            width: 100% !important;
         }
 
         /* 确保全屏覆盖层在弹窗之下但在其他元素之上 */
@@ -7450,19 +7691,19 @@ ${extraRule}
     .gal-mobile-menu {
         display: none;
         position: absolute;
-        bottom: 3.5rem; /* 位于 CONFIG 按钮上方 */
-        left: 50%;      /* 相对定位修正 */
-        transform: translateX(-50%); /* 居中修正，具体由JS控制或CSS定位 */
-        background: rgba(30, 30, 30, 0.95);
-        border: 1px solid var(--primary-color);
-        border-radius: 0.5rem;
+        bottom: calc(100% + 0.5rem); /* 始终位于 CONFIG 按钮上方 */
+        left: 0.5rem; /* 与 CONFIG 按钮对齐 */
+        transform: none;
+        background: rgba(255, 255, 255, 0.95);
+        border: 0.125rem solid ${THEME.dark};
+        border-radius: 0;
         padding: 0.5rem;
         flex-direction: column;
         gap: 0.5rem;
-        z-index: 9999;
-        min-width: 8rem;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        backdrop-filter: blur(5px);
+        z-index: 120;
+        min-width: 9rem;
+        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
+        backdrop-filter: blur(0.25rem);
     }
 
     .gal-mobile-menu.active {
@@ -7473,19 +7714,25 @@ ${extraRule}
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        color: white;
-        background: transparent;
-        border: none;
-        border-radius: 0.25rem;
+        padding: 0.5rem 0.875rem;
+        color: ${THEME.dark};
+        background: ${THEME.white};
+        border: 0.125rem solid ${THEME.dark};
+        border-radius: 0;
         cursor: pointer;
         text-align: left;
-        font-size: 0.9rem;
-        transition: background 0.2s;
+        font-size: 0.85rem;
+        font-weight: 700;
+        font-family: 'Barlow', sans-serif;
+        transition: all 0.2s;
+        box-shadow: 0.188rem 0.188rem 0 rgba(0,0,0,0.12);
     }
 
     .gal-mobile-menu .gal-menu-btn:hover {
-        background: rgba(255, 255, 255, 0.1);
+        background: ${THEME.dark};
+        color: ${THEME.white};
+        transform: translateY(-0.125rem);
+        box-shadow: 0.25rem 0.25rem 0 rgba(0,0,0,0.2);
     }
 
     .gal-mobile-menu .gal-menu-btn i {
@@ -7535,7 +7782,10 @@ ${extraRule}
 
           <div class="gal-game-container">
             <!-- 背景层 - 填满整个容器（不缩放） -->
-            <div class="gal-layer-bg"></div>
+            <div class="gal-layer-bg">
+              <div class="gal-bg-layer gal-bg-base"></div>
+              <div class="gal-bg-layer gal-bg-front"></div>
+            </div>
 
             <!-- 游戏内容层 - 负责缩放 -->
             <div class="gal-game-content">
@@ -8437,12 +8687,21 @@ ${extraRule}
         $('#gal-mobile-menu').removeClass('active');
     }
 
+    // 判断是否处于“按钮适配移动端”状态（仅此时才显示上拉菜单）
+    function isMobileMenuMode() {
+      const $logBtn = $('#gal-global-overlay .gal-footer-btn[data-action="log"]');
+      if ($logBtn.length) {
+        return !$logBtn.is(':visible');
+      }
+      return !!(window.matchMedia && window.matchMedia('(max-width: 48rem)').matches);
+    }
+
     // 设置按钮 (兼移动端菜单触发器)
     $(doc).on('click', '#gal-global-overlay [data-action="config"]', function (e) {
       e.stopPropagation();
 
-      // 移动端逻辑：切换上拉菜单
-      if (window.innerWidth <= 768) {
+      // 仅在“按钮适配移动端”时切换上拉菜单
+      if (isMobileMenuMode()) {
           const $menu = $('#gal-mobile-menu');
           if ($menu.hasClass('active')) {
               $menu.removeClass('active');
@@ -8452,7 +8711,8 @@ ${extraRule}
           return;
       }
 
-      // 桌面端逻辑：直接打开设置
+      // 非移动端：确保关闭上拉菜单并直接打开设置
+      closeMobileMenu();
       console.log(`[${SCRIPT_NAME}] 点击设置按钮`);
       showToast('正在打开设置...');
       showSettingsPanel();
@@ -11106,6 +11366,7 @@ ${extraRule}
         const chunks = [];
         let receivedLength = 0;
         const totalLength = contentLength ? parseInt(contentLength) : 0;
+        let lastProgressUpdate = 0;
 
         while (true) {
           const { done, value } = yield reader.read();
@@ -11119,15 +11380,22 @@ ${extraRule}
             throw new Error('下载的文件大小超过 5GB 限制');
           }
 
-          // 更新进度
+          // 更新进度（节流，减少 UI 刷新开销）
+          const now = Date.now();
           if (totalLength > 0) {
             const percent = Math.round((receivedLength / totalLength) * 100);
             const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
             const total = (totalLength / 1024 / 1024).toFixed(1);
-            progressController.update(percent, `下载中: ${downloaded} MB / ${total} MB`);
+            if (now - lastProgressUpdate > 200 || percent === 100) {
+              progressController.update(percent, `下载中: ${downloaded} MB / ${total} MB`);
+              lastProgressUpdate = now;
+            }
           } else {
             const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
-            progressController.update(-1, `下载中: ${downloaded} MB`);
+            if (now - lastProgressUpdate > 200) {
+              progressController.update(-1, `下载中: ${downloaded} MB`);
+              lastProgressUpdate = now;
+            }
           }
         }
 
@@ -11572,7 +11840,7 @@ ${extraRule}
                 </span>
                 <div style="display: flex; gap: 10px; align-items: center;">
                   <div class="gal-realtime-toggle-wrapper" title="开启后，当AI输出的场景在库中不存在时，将自动调用ComfyUI生成">
-                       <span class="gal-realtime-label">实时生成</span>
+                       <span class="gal-realtime-label">ComfyUI 文生图实时生成背景</span>
                        <label class="gal-realtime-switch">
                           <input type="checkbox" id="gal-realtime-bg-gen" ${settings.realTimeBackgroundGen ? 'checked' : ''}>
                           <span class="gal-realtime-slider"></span>
@@ -12651,7 +12919,8 @@ ${extraRule}
 
     const $bgLayer = $('#gal-global-overlay .gal-layer-bg');
     if ($bgLayer.length) {
-      $bgLayer.addClass('generating-bg').removeClass('has-bg').css('background-image', '');
+      $bgLayer.addClass('generating-bg').removeClass('has-bg');
+      clearBackgroundLayers($bgLayer);
       if ($bgLayer.find('.gal-gen-indicator').length === 0) {
         $bgLayer.append(`
                      <div class="gal-gen-indicator">
@@ -14256,7 +14525,9 @@ ${extraRule}
                 const pathname = urlObj.pathname;
                 const filename = pathname.substring(pathname.lastIndexOf('/') + 1);
                 if (filename) name = filename.replace(/\.[^/.]+$/, '');
-              } catch (e) {}
+              } catch (e) {
+                console.warn(`[${SCRIPT_NAME}] 解析URL文件名失败:`, e);
+              }
               batchItems.push({
                 file: blob, // Blob 也可以像 File 一样处理
                 name: name,
@@ -14386,7 +14657,9 @@ ${extraRule}
         if (isEnabled) {
           try {
             yield injectCOTToWorldbook();
-          } catch (e) {}
+          } catch (e) {
+            console.error(`[${SCRIPT_NAME}] 批量保存后更新世界书失败:`, e);
+          }
         }
         if (failCount === 0) {
           showToast(`成功批量保存 ${batchItems.length} 张背景！`);

@@ -8518,12 +8518,22 @@ ${extraRule}
                 <span><i class="fa-solid fa-folder-open"></i> 资源管理器</span>
               </div>
               <div style="display: flex; gap: 8px;">
-                <button class="gal-action-btn" id="gal-asset-export" title="导出为ZIP包" style="padding: 6px 12px; font-size: 0.9rem;">
-                  <i class="fa-solid fa-file-export"></i> <span>导出</span>
-                </button>
-                <button class="gal-action-btn" id="gal-asset-export-remote" title="导出远程资源包(含JSON)" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
-                  <i class="fa-solid fa-cloud-upload"></i> <span>远程包</span>
-                </button>
+                <!-- 导出下拉菜单 -->
+                <div class="gal-export-dropdown" style="position: relative;">
+                    <button class="gal-action-btn" id="gal-export-dropdown-btn" title="导出资源" style="padding: 6px 12px; font-size: 0.9rem;">
+                    <i class="fa-solid fa-file-export"></i> <span>导出</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+                    </button>
+                    <div class="gal-export-menu" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 200px; overflow: hidden;">
+                    <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                        <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i>
+                        <span>导出本地压缩包</span>
+                    </div>
+                    <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
+                        <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i>
+                        <span>导出远程资源包</span>
+                    </div>
+                    </div>
+                </div>
 
                 <!-- 导入下拉菜单 -->
                 <div class="gal-import-dropdown" style="position: relative;">
@@ -9237,33 +9247,62 @@ ${extraRule}
         });
       });
       // 导出按钮
-      $('#gal-asset-export').on('click', () => AssetIO.exportAllAssets());
-      // 远程包导出按钮
-      $('#gal-asset-export-remote').on('click', () => {
-        const input = prompt(
-          '请输入 GitHub 仓库信息 (格式: 用户名/仓库名) 或 完整URL前缀\n\n如果输入 用户名/仓库名 (如 Baibai/GalgamePlugin)，程序将自动生成 jsDelivr CDN 加速链接。\n\n也可以直接输入完整的 URL 前缀。',
-        );
-        if (!input) return;
-        let baseUrl = input.trim();
-        // 检测是否为 user/repo 格式 (不含 http 且包含一个斜杠)
-        if (!baseUrl.startsWith('http') && baseUrl.indexOf('/') > 0 && baseUrl.split('/').length === 2) {
-          // 是 GitHub 简写格式
-          const branch = prompt('请输入分支名或版本号 (例如 main, master, v1.0):', 'main');
-          if (!branch) return;
-          const cleanRepo = baseUrl.replace('.git', '');
-          // 构建 jsDelivr 链接: https://cdn.jsdelivr.net/gh/user/repo@branch/
-          baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
-          if (!confirm(`确认生成以下 CDN 链接前缀的配置吗？\n${baseUrl}`)) {
-            return;
-          }
-        }
-        AssetIO.exportAllAssets(baseUrl);
+      // ========== 导出下拉菜单逻辑 ==========
+
+      // 切换导出下拉菜单显示
+      $('#gal-export-dropdown-btn').on('click', function (e) {
+        e.stopPropagation();
+        $('#gal-import-menu').hide(); // 确保导入菜单关闭
+        const $menu = $('#gal-export-menu');
+        $menu.toggle();
       });
+
+      // 点击页面其他区域关闭下拉菜单
+      $(topWindow.document).on('click.galMenus', function (e) {
+        if (!$(e.target).closest('.gal-export-dropdown').length) {
+          $('#gal-export-menu').hide();
+        }
+        // 原有的导入菜单关闭逻辑会在下方被合并或保留，这里只需要处理导出菜单即可，
+        // 但为了代码整洁，建议合并处理，或者让它们各自独立处理。
+        // 下方的导入菜单逻辑里已经有 $(topWindow.document).on('click.galImportMenu'...)
+        // 这里我们只添加导出菜单的关闭逻辑
+      });
+
+      // 导出菜单项点击事件
+      $modal.find('.gal-export-item').on('click', function () {
+        const action = $(this).data('action');
+        $('#gal-export-menu').hide(); // 关闭菜单
+
+        if (action === 'export-local') {
+            AssetIO.exportAllAssets();
+        } else if (action === 'export-remote') {
+            const input = prompt(
+              '请输入 GitHub 仓库信息 (格式: 用户名/仓库名) 或 完整URL前缀\n\n如果输入 用户名/仓库名 (如 Baibai/GalgamePlugin)，程序将自动生成 jsDelivr CDN 加速链接。\n\n也可以直接输入完整的 URL 前缀。',
+            );
+            if (!input) return;
+            let baseUrl = input.trim();
+            // 检测是否为 user/repo 格式 (不含 http 且包含一个斜杠)
+            if (!baseUrl.startsWith('http') && baseUrl.indexOf('/') > 0 && baseUrl.split('/').length === 2) {
+              // 是 GitHub 简写格式
+              const branch = prompt('请输入分支名或版本号 (例如 main, master, v1.0):', 'main');
+              if (!branch) return;
+              const cleanRepo = baseUrl.replace('.git', '');
+              // 构建 jsDelivr 链接: https://cdn.jsdelivr.net/gh/user/repo@branch/
+              baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
+              if (!confirm(`确认生成以下 CDN 链接前缀的配置吗？\n${baseUrl}`)) {
+                return;
+              }
+            }
+            AssetIO.exportAllAssets(baseUrl);
+        }
+      });
+
       // ========== 导入下拉菜单逻辑 ==========
 
       // 切换下拉菜单显示
       $('#gal-import-dropdown-btn').on('click', function (e) {
         e.stopPropagation();
+        $('#gal-export-menu').hide(); // 确保导出菜单关闭
         const $menu = $('#gal-import-menu');
         $menu.toggle();
       });

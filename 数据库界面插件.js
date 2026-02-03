@@ -848,6 +848,7 @@ ${extraRule}
   const BGMManager = {
     audio: new Audio(),
     currentKeyword: null, // 当前播放的关键词
+    pendingKeyword: null, // 用户暂停期间待播放的关键词
     currentTrack: null, // { Name, Singer, Url, ... }
     cache: new Map(), // keyword -> track info
     isLoaded: false,
@@ -902,6 +903,7 @@ ${extraRule}
         if (!this.isLoaded || !keyword) return;
         // 如果用户手动暂停了BGM，不再自动播放新的BGM
         if (this.userPaused) {
+          this.pendingKeyword = keyword;
           console.log(`[${SCRIPT_NAME}] BGM被用户暂停，跳过播放: ${keyword}`);
           return;
         }
@@ -955,13 +957,19 @@ ${extraRule}
       this.updateUI();
     },
     resume() {
+      this.userPaused = false; // 用户手动恢复播放，重置标志
+      localStorage.setItem(`${SCRIPT_ID}_bgm_user_paused`, '0');
+      if (this.pendingKeyword) {
+        const keyword = this.pendingKeyword;
+        this.pendingKeyword = null;
+        this.play(keyword);
+        return;
+      }
       if (this.audio.src) {
         this.audio.play().catch(e => console.error(e));
         this.isPlaying = true;
-        this.userPaused = false; // 用户手动恢复播放，重置标志
-        localStorage.setItem(`${SCRIPT_ID}_bgm_user_paused`, '0');
-        this.updateUI();
       }
+      this.updateUI();
     },
     setVolume(vol) {
       this.volume = Math.max(0, Math.min(1, vol));
@@ -1016,25 +1024,15 @@ ${extraRule}
      * 显示TTS加载指示器
      */
     showLoadingIndicator() {
-      const $overlay = $('#gal-global-overlay');
-      if ($overlay.length === 0) return;
-
-      let $indicator = $overlay.find('.gal-tts-loading');
-      if ($indicator.length === 0) {
-        $indicator = $(
-          '<div class="gal-tts-loading"><i class="fa-solid fa-volume-high fa-bounce"></i><span>配音中...</span></div>',
-        );
-        $overlay.find('.gal-text-panel').append($indicator);
-      }
-      $indicator.addClass('active');
+      // 直接给正在说话的角色添加 TTS 激活状态类，利用 CSS 修改气泡样式
+      $('.gal-char-container.speaking').addClass('tts-active');
     },
 
     /**
      * 隐藏TTS加载指示器
      */
     hideLoadingIndicator() {
-      const $overlay = $('#gal-global-overlay');
-      $overlay.find('.gal-tts-loading').removeClass('active');
+      $('.gal-char-container').removeClass('tts-active');
     },
 
     /**
@@ -4565,7 +4563,7 @@ ${extraRule}
             <!-- 游戏内容层 - 负责缩放 -->
             <div class="gal-game-content">
               <!-- 立绘层 - 由SpriteManager动态管理 -->
-              <div class="gal-layer-character${settings.speakerGlow ? ' glow-enabled' : ''}${settings.speakerBubble ? ' bubble-enabled' : ''}"></div>
+              <div class="gal-layer-character${settings.speakerGlow ? ' glow-enabled' : ''}${settings.speakerBubble ? ' bubble-enabled' : ''}${getTTSEnabled() ? ' tts-mode-enabled' : ''}"></div>
 
               <!-- 对话框层 -->
             <div class="gal-dialog-layer">
@@ -4600,29 +4598,42 @@ ${extraRule}
                 </div>
 
                 <div class="gal-bottom-toolbar">
+                  <!-- 移动端上拉菜单 (Config Popup) -->
+                  <div class="gal-mobile-menu" id="gal-mobile-menu">
+                    <button class="gal-menu-btn" data-action="open-settings">
+                        <i class="fa-solid fa-gear"></i> 设置
+                    </button>
+                    <button class="gal-menu-btn" data-action="log">
+                        <i class="fa-solid fa-list-ul"></i> 历史
+                    </button>
+                    <button class="gal-menu-btn" data-action="close-mode">
+                        <i class="fa-solid fa-power-off"></i> 退出
+                    </button>
+                  </div>
+
                   <button class="gal-footer-btn" data-action="log" title="查看历史">
-                    <i class="fa-solid fa-list-ul"></i> LOG
+                    <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
                   </button>
                   <button class="gal-footer-btn" data-action="close-mode" title="退出 Galgame 模式">
-                    <i class="fa-solid fa-power-off"></i> CLOSE
+                    <i class="fa-solid fa-power-off"></i> <span class="gal-btn-text">CLOSE</span>
                   </button>
                   <button class="gal-footer-btn" data-action="config" title="设置">
-                    <i class="fa-solid fa-gear"></i> CONFIG
+                    <i class="fa-solid fa-gear"></i> <span class="gal-btn-text">CONFIG</span>
                   </button>
                   <button class="gal-footer-btn gal-nav-btn" data-action="prev" title="上一段">
-                    <i class="fa-solid fa-chevron-left"></i> PREV
+                    <i class="fa-solid fa-chevron-left"></i> <span class="gal-btn-text">PREV</span>
                   </button>
                   <button class="gal-footer-btn gal-nav-btn" data-action="auto" title="自动播放">
-                    <i class="fa-solid fa-play"></i> AUTO
+                    <i class="fa-solid fa-play"></i> <span class="gal-btn-text">AUTO</span>
                   </button>
                   <button class="gal-footer-btn gal-nav-btn" data-action="skip" title="按住快进 (Ctrl)">
-                    <i class="fa-solid fa-forward"></i> SKIP
+                    <i class="fa-solid fa-forward"></i> <span class="gal-btn-text">SKIP</span>
                   </button>
                   <button class="gal-pending-choices-btn" data-action="show-choices" title="有待选择的选项">
-                    <i class="fa-solid fa-list-check"></i> 选项
+                    <i class="fa-solid fa-list-check"></i> <span class="gal-btn-text">选项</span>
                   </button>
                   <button class="gal-footer-btn-next" data-action="next" title="下一段">
-                    NEXT <i class="fa-solid fa-chevron-right"></i>
+                    <span class="gal-btn-text">NEXT</span> <i class="fa-solid fa-chevron-right"></i>
                   </button>
                 </div>
               </div>
@@ -4679,6 +4690,7 @@ ${extraRule}
     const overlay = targetDoc.getElementById('gal-global-overlay');
     if (!overlay) return;
 
+    // 全屏模式下不进行缩放计算，强制为 1
     if (overlay.classList.contains('fullscreen')) {
       overlay.style.setProperty('--ui-scale', '1');
       return;
@@ -4884,21 +4896,29 @@ ${extraRule}
     topWindow.document.addEventListener('mozfullscreenchange', handleFullscreenChange);
     topWindow.document.addEventListener('MSFullscreenChange', handleFullscreenChange);
   }
-  // 检测是否为移动端，只在明确是移动端时启用图标-only模式
+
+  function getFullscreenElement() {
+    return (
+      topWindow.document.fullscreenElement ||
+      topWindow.document.webkitFullscreenElement ||
+      topWindow.document.mozFullScreenElement ||
+      topWindow.document.msFullscreenElement ||
+      null
+    );
+  }
+
+  function getModalMountRoot() {
+    const fullscreenElement = getFullscreenElement();
+    return fullscreenElement || topWindow.document.body;
+  }
+  // 移除小屏逻辑：不再自动切换 mobile-mode / icon-only
   function adjustToolbarForSpace() {
     const overlay = topWindow.document.getElementById('gal-global-overlay');
     if (!overlay) return;
-    // 只通过 userAgent 明确检测手机/平板
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    // 小屏幕且是移动设备才算移动端
-    const isMobile = isMobileDevice && window.innerWidth <= 1024;
-    // 强制移除或添加 icon-only 类
-    if (isMobile) {
-      overlay.classList.add('icon-only');
-    } else {
-      overlay.classList.remove('icon-only');
-    }
+    overlay.classList.remove('mobile-mode');
+    overlay.classList.remove('icon-only');
   }
+
   // 监听窗口大小变化，自动调整游戏内容缩放
   function setupGameContentResizeListener() {
     let resizeTimer = null;
@@ -5106,7 +5126,7 @@ ${extraRule}
       </div>
     `;
     $modal.html(modalHtml);
-    $('body').append($modal);
+    $(getModalMountRoot()).append($modal);
     //let关闭事件
     $modal.find('.gal-history-close').on('click', function () {
       $modal.fadeOut(200, function () {
@@ -5434,35 +5454,54 @@ ${extraRule}
       e.stopPropagation();
       toggleFullscreen();
     });
-    // 设置按钮
+
+    // 辅助函数：关闭移动端菜单
+    function closeMobileMenu() {
+        $('#gal-mobile-menu').removeClass('active');
+    }
+
+    // 设置按钮 (兼移动端菜单触发器)
     $(doc).on('click', '#gal-global-overlay [data-action="config"]', function (e) {
       e.stopPropagation();
+
+      // 移动端逻辑：切换上拉菜单
+      if (window.innerWidth <= 768) {
+          const $menu = $('#gal-mobile-menu');
+          if ($menu.hasClass('active')) {
+              $menu.removeClass('active');
+          } else {
+              $menu.addClass('active');
+          }
+          return;
+      }
+
+      // 桌面端逻辑：直接打开设置
       console.log(`[${SCRIPT_NAME}] 点击设置按钮`);
       showToast('正在打开设置...');
       showSettingsPanel();
-      // Debug Styles
-      setTimeout(() => {
-        const $panel = $('#gal-settings-panel');
-        if ($panel.length) {
-            const el = $panel[0];
-            const style = window.getComputedStyle(el);
-            const rect = el.getBoundingClientRect();
-            console.log(`[DEBUG] Settings Panel:
-                Z-Index: ${style.zIndex}
-                Display: ${style.display}
-                Visibility: ${style.visibility}
-                Opacity: ${style.opacity}
-                Position: ${style.position}
-                Rect: Top=${rect.top}, Left=${rect.left}, Width=${rect.width}, Height=${rect.height}
-                Overlay Z-Index: ${$('#gal-global-overlay').css('z-index')}
-            `);
-            showToast(`Debug: Z=${style.zIndex}, Rect=${Math.round(rect.width)}x${Math.round(rect.height)}`);
-        } else {
-            console.error('[DEBUG] Settings Panel not found in DOM!');
-            showToast('Debug: Panel not found!');
-        }
-      }, 500);
     });
+
+    // 移动端菜单 - 打开设置
+    $(doc).on('click', '#gal-global-overlay [data-action="open-settings"]', function (e) {
+      e.stopPropagation();
+      closeMobileMenu();
+      showToast('正在打开设置...');
+      showSettingsPanel();
+    });
+
+    // 移动端菜单 - 点击任意菜单项自动关闭菜单
+    $(doc).on('click', '#gal-mobile-menu .gal-menu-btn', function (e) {
+        // 注意：不要阻止冒泡，否则无法触发 log/close-mode 的通用处理函数
+        closeMobileMenu();
+    });
+
+    // 点击外部关闭菜单
+    $(doc).on('click', function (e) {
+        if (!$(e.target).closest('#gal-mobile-menu, [data-action="config"]').length) {
+            closeMobileMenu();
+        }
+    });
+
     // LOG按钮
     $(doc).on('click', '#gal-global-overlay [data-action="log"]', function (e) {
       e.stopPropagation();
@@ -10985,7 +11024,7 @@ ${extraRule}
           }
         </style>
       `;
-          $(topWindow.document.body).append(modalHtml);
+          $(getModalMountRoot()).append(modalHtml);
           const $modal = $('#gal-config-modal');
           // makeDraggable($modal.find('.gal-config-panel'), $modal.find('.gal-config-header'));
           $('#gal-config-close').on('click', () => $modal.remove());
@@ -12306,7 +12345,7 @@ ${extraRule}
         }
       </style>
     `;
-      $(topWindow.document.body).append(panelHtml);
+      $(getModalMountRoot()).append(panelHtml);
       const $panel = $('#gal-settings-panel');
       // makeDraggable($panel.find('.gal-config-panel'), $panel.find('.gal-config-header'));
       // 关闭
@@ -12655,6 +12694,15 @@ ${extraRule}
       $('#gal-tts-enabled').on('change', function () {
         const enabled = $(this).is(':checked');
         setTTSEnabled(enabled);
+
+        // ★ 实时更新界面类名
+        const $charLayer = $('.gal-layer-character');
+        if (enabled) {
+          $charLayer.addClass('tts-mode-enabled');
+        } else {
+          $charLayer.removeClass('tts-mode-enabled');
+        }
+
         // 重新注入COT到世界书
         injectCOTToWorldbook().then(() => {
           showToast(enabled ? 'TTS已启用，COT已更新' : 'TTS已关闭，COT已更新');

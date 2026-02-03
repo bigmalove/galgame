@@ -3059,7 +3059,7 @@ ${extraRule}
       // 非主角分配右侧
       if (!usedSlots.has('right')) return 'right';
       // 如果没有主角，可以使用左侧
-      if (!usedSlots.has('left') && !this.protagonistName) return 'left';
+      if (!usedSlots.has('left')) return 'left';
       // 槽位已满，需要替换
       return null;
     },

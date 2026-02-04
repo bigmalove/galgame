@@ -3460,8 +3460,8 @@ ${extraRule}
     // ★ 预处理简化格式
     html = preprocessSimplifiedFormat(html);
 
-    // 加强模式：优先使用格式化版本
-    if (settings.enhancedMode?.enabled && messageId) {
+    // 加强模式：优先使用格式化版本（仅在Galgame模式开启时生效）
+    if (isEnabled && settings.enhancedMode?.enabled && messageId) {
       const formatData = getFormattedContent(messageId);
       if (formatData) {
         console.log(`[${SCRIPT_NAME}] 使用格式化版本 (swipe ${formatData.formattedIndex})`);
@@ -4162,9 +4162,9 @@ ${extraRule}
       eventOn(tavern_events.GENERATION_ENDED, async messageId => {
         console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件, messageId=${messageId}`);
 
-        // 检查是否启用加强模式
-        if (!settings.enhancedMode?.enabled) {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 未启用，跳过`);
+        // 检查是否启用加强模式（仅在Galgame模式开启时生效）
+        if (!isEnabled || !settings.enhancedMode?.enabled) {
+          console.log(`[${SCRIPT_NAME}] 加强模式: 未启用或Galgame模式关闭，跳过`);
           return;
         }
 
@@ -8332,7 +8332,6 @@ ${extraRule}
         if (spriteBatch.length > 0) {
           yield saveSpritesBatch(spriteBatch);
         }
-        cons;
         if (backgroundBatch.length > 0) {
           yield saveBackgroundsBatch(backgroundBatch);
         }
@@ -11282,7 +11281,7 @@ ${extraRule}
               color: white;
               border: none;
               border-radius: 50%;
-    cons        width: 24px;
+              width: 24px;
               height: 24px;
               cursor: pointer;
               display: flex;
@@ -13002,8 +13001,7 @@ ${extraRule}
   }
   // 应用 Galgame 模式
   function applyGalgameMode() {
-    // 找到最后一条AI消息并检查是否有Galgame内容
-    let hasValidGalgameContent = false;
+    // 找到最后一条AI消息
     const $allMes = $('#chat > .mes');
     let $lastAiMes = null;
     $allMes.each(function () {
@@ -13012,38 +13010,8 @@ ${extraRule}
       }
     });
     console.log(
-      `[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}, 智能检测=${settings.smartDetection ? '开' : '关'}`,
+      `[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}`,
     );
-    if ($lastAiMes && $lastAiMes.length) {
-      const $mesText = $lastAiMes.find('.mes_text');
-      const html = $mesText.html();
-      console.log(`[${SCRIPT_NAME}] applyGalgameMode: 消息内容长度=${html ? html.length : 0}`);
-      if (html) {
-        const decodedHtml = decodeHtml(html);
-        const hasGalTags = /<(p|sprite|maintext)[^>]*>/i.test(decodedHtml);
-        console.log(`[${SCRIPT_NAME}] applyGalgameMode: 有Galgame标签=${hasGalTags}`);
-        if (hasGalTags) {
-          const parsed = parseGalgameContent(decodedHtml);
-          if (parsed.segments.length > 0) {
-            hasValidGalgameContent = true;
-          }
-        } else if (!settings.smartDetection) {
-          // 如果智能检测关闭（默认），且内容不为空，也强制显示
-          const textContent = decodedHtml.replace(/<[^>]+>/g, '').trim();
-          console.log(`[${SCRIPT_NAME}] applyGalgameMode: 智能检测关闭，文本长度=${textContent.length}`);
-          if (textContent.length > 0) {
-            hasValidGalgameContent = true;
-            console.log(`[${SCRIPT_NAME}] 智能检测已关闭，强制显示非Galgame格式内容`);
-          }
-        }
-      }
-    }
-    // 如果最后的AI消息没有Galgame内容，隐藏覆盖层
-    if (!hasValidGalgameContent) {
-      hideGlobalOverlay();
-      console.log(`[${SCRIPT_NAME}] 最后的AI消息不包含Galgame格式，隐藏覆盖层`);
-      return;
-    }
     // 处理最后一条AI消息（只处理最后一条，避免不必要的开销）
     if ($lastAiMes && $lastAiMes.length) {
       processNewMessage($lastAiMes[0]);

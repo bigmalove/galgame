@@ -47,9 +47,12 @@ const __awaiter =
   const SCRIPT_NAME = 'Galgame界面插件';
   const VERSION = '2.2.0';
   const DB_NAME = 'GalgameUIPluginDB';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const STORE_SPRITES = 'sprites';
   const STORE_BACKGROUNDS = 'backgrounds';
+  const STORE_IMAGE_PACKS = 'imagePacks';
+  const DEFAULT_PACK_ID = 'pack_default';
+  const DEFAULT_PACK_NAME = '未定义';
   // 样式主题常量 (Cyber Pop)
   const THEME = {
     white: '#ffffff',
@@ -61,6 +64,199 @@ const __awaiter =
     fontEng: "'Barlow', sans-serif",
   };
   const BG_TRANSITION_MS = 450;
+
+  // ============================================
+  // GSAP 立绘动画管理器
+  // ============================================
+  const SpriteAnimationManager = {
+    animations: new Map(),
+    gsap: null,
+    isLoading: false,
+    loadPromise: null,
+
+    // 动态加载GSAP库
+    loadGSAP() {
+      if (this.gsap) return Promise.resolve(this.gsap);
+      if (this.loadPromise) return this.loadPromise;
+
+      this.isLoading = true;
+      this.loadPromise = new Promise((resolve) => {
+        // 再次检查是否已存在
+        if (window.gsap) {
+          this.gsap = window.gsap;
+          this.isLoading = false;
+          console.log('[SpriteAnimationManager] 检测到GSAP:', this.gsap.version);
+          resolve(this.gsap);
+          return;
+        }
+
+        // 动态加载CDN
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js';
+        script.onload = () => {
+          this.gsap = window.gsap;
+          this.isLoading = false;
+          console.log('[SpriteAnimationManager] GSAP动态加载成功:', this.gsap.version);
+          resolve(this.gsap);
+        };
+        script.onerror = () => {
+          console.warn('[SpriteAnimationManager] GSAP CDN加载失败，使用CSS降级');
+          this.isLoading = false;
+          this.loadPromise = null;
+          resolve(null);
+        };
+        document.head.appendChild(script);
+      });
+      return this.loadPromise;
+    },
+
+    init() {
+      this.gsap = window.gsap || (typeof gsap !== 'undefined' ? gsap : null);
+      if (!this.gsap) {
+        console.log('[SpriteAnimationManager] GSAP未预装，正在从CDN加载...');
+        this.loadGSAP();
+        return false;
+      }
+      console.log('[SpriteAnimationManager] GSAP动画管理器已初始化:', this.gsap.version);
+      return true;
+    },
+
+    startBreathing(element, characterId) {
+      if (!this.gsap || !element) return;
+      this.stopBreathing(characterId);
+      const el = element instanceof jQuery ? element[0] : element;
+      const randomDelay = Math.random() * 0.5;
+      const tl = this.gsap.timeline({ repeat: -1, yoyo: true });
+      tl.to(el, {
+        y: -3, scaleY: 1.008, scaleX: 0.998, rotation: 0.3,
+        duration: 2 + Math.random() * 0.5, ease: "sine.inOut", delay: randomDelay
+      }).to(el, {
+        y: 0, scaleY: 1, scaleX: 1, rotation: -0.2,
+        duration: 2 + Math.random() * 0.5, ease: "sine.inOut"
+      });
+      this.animations.set(characterId, { ...(this.animations.get(characterId) || {}), breathing: tl });
+    },
+
+    stopBreathing(characterId) {
+      const anims = this.animations.get(characterId);
+      if (anims?.breathing) { anims.breathing.kill(); anims.breathing = null; }
+    },
+
+    playExpressionTransition(element, callback) {
+      if (!this.gsap || !element) { callback?.(); return; }
+      const el = element instanceof jQuery ? element[0] : element;
+      const tl = this.gsap.timeline({ onComplete: callback });
+      tl.to(el, { scale: 1.02, filter: "brightness(1.15)", duration: 0.1, ease: "power2.out" })
+        .to(el, { scale: 1, filter: "brightness(1)", duration: 0.25, ease: "elastic.out(1, 0.5)" });
+    },
+
+    playEmotionAnimation(element, emotion, characterId) {
+      if (!this.gsap || !element) return;
+      const el = element instanceof jQuery ? element[0] : element;
+      const anims = this.animations.get(characterId);
+      if (anims?.emotion) { anims.emotion.kill(); }
+      let emotionTl;
+      switch(emotion) {
+        case 'happy':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { y: -15, duration: 0.15, ease: "power2.out" })
+            .to(el, { y: 0, duration: 0.3, ease: "bounce.out" })
+            .to(el, { scale: 1.03, duration: 0.1 }, 0)
+            .to(el, { scale: 1, duration: 0.2 }, 0.25);
+          break;
+        case 'angry':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { x: -5, duration: 0.05 }).to(el, { x: 5, duration: 0.05 })
+            .to(el, { x: -4, duration: 0.05 }).to(el, { x: 4, duration: 0.05 })
+            .to(el, { x: -2, duration: 0.05 }).to(el, { x: 0, duration: 0.05 })
+            .to(el, { filter: "saturate(1.2) brightness(1.05)", duration: 0.1 }, 0)
+            .to(el, { filter: "saturate(1) brightness(1)", duration: 0.3 }, 0.3);
+          break;
+        case 'sad':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { y: 8, scale: 0.98, duration: 0.4, ease: "power2.out" })
+            .to(el, { rotation: -1, duration: 0.8, ease: "sine.inOut" })
+            .to(el, { rotation: 1, duration: 0.8, ease: "sine.inOut" })
+            .to(el, { y: 0, scale: 1, rotation: 0, duration: 0.5, ease: "power2.out" });
+          break;
+        case 'surprised':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { y: -10, scale: 1.08, duration: 0.12, ease: "power3.out" })
+            .to(el, { y: 0, scale: 1, duration: 0.4, ease: "elastic.out(1, 0.4)" });
+          break;
+        case 'shy':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { scale: 0.96, rotation: -3, duration: 0.2, ease: "power2.out" })
+            .to(el, { rotation: 2, duration: 0.3, ease: "sine.inOut" })
+            .to(el, { rotation: -1, duration: 0.25, ease: "sine.inOut" })
+            .to(el, { scale: 1, rotation: 0, duration: 0.3, ease: "power2.out" });
+          break;
+        case 'think':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { rotation: 5, y: -5, duration: 0.4, ease: "power2.out" })
+            .to(el, { y: -3, duration: 0.6, ease: "sine.inOut", yoyo: true, repeat: 1 })
+            .to(el, { rotation: 0, y: 0, duration: 0.3, ease: "power2.out" });
+          break;
+        case 'laugh':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { scale: 1.05, duration: 0.1 })
+            .to(el, { y: -3, duration: 0.08, yoyo: true, repeat: 5, ease: "none" })
+            .to(el, { scale: 1, y: 0, duration: 0.2, ease: "power2.out" });
+          break;
+        case 'mock':
+          emotionTl = this.gsap.timeline();
+          emotionTl.to(el, { scaleX: 1.03, rotation: -2, duration: 0.15 })
+            .to(el, { rotation: 2, duration: 0.2, ease: "sine.inOut" })
+            .to(el, { rotation: -1, duration: 0.15, ease: "sine.inOut" })
+            .to(el, { scaleX: 1, rotation: 0, duration: 0.2, ease: "power2.out" });
+          break;
+        default: return;
+      }
+      this.animations.set(characterId, { ...(this.animations.get(characterId) || {}), emotion: emotionTl });
+    },
+
+    playEnterAnimation(element, direction, characterId, callback) {
+      if (!this.gsap || !element) { callback?.(); return; }
+      const el = element instanceof jQuery ? element[0] : element;
+      const startX = direction === 'left' ? -150 : direction === 'right' ? 150 : 0;
+      const startY = direction === 'center' ? 50 : 0;
+      this.gsap.set(el, { x: startX, y: startY, opacity: 0, scale: 0.9 });
+      const tl = this.gsap.timeline({
+        onComplete: () => { this.startBreathing(el, characterId); callback?.(); }
+      });
+      tl.to(el, { x: 0, y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.2)" })
+        .to(el, { y: 3, duration: 0.08, ease: "power2.in" })
+        .to(el, { y: 0, duration: 0.15, ease: "power2.out" });
+    },
+
+    playExitAnimation(element, direction, characterId, callback) {
+      if (!this.gsap || !element) { callback?.(); return; }
+      const el = element instanceof jQuery ? element[0] : element;
+      this.stopBreathing(characterId);
+      const endX = direction === 'left' ? -150 : 150;
+      this.gsap.to(el, { x: endX, opacity: 0, scale: 0.85, duration: 0.4, ease: "power2.in", onComplete: callback });
+    },
+
+    setFocus(element, isSpeaking, characterId) {
+      if (!this.gsap || !element) return;
+      const el = element instanceof jQuery ? element[0] : element;
+      if (isSpeaking) {
+        this.gsap.to(el, { filter: "brightness(1.05)", scale: 1.02, duration: 0.3, ease: "power2.out" });
+      } else {
+        this.gsap.to(el, { filter: "brightness(0.7)", scale: 0.98, duration: 0.3, ease: "power2.out" });
+      }
+    },
+
+    cleanup(characterId) {
+      const anims = this.animations.get(characterId);
+      if (anims) {
+        anims.breathing?.kill(); anims.emotion?.kill(); anims.transition?.kill();
+        this.animations.delete(characterId);
+      }
+    },
+
+    cleanupAll() { this.animations.forEach((_, id) => this.cleanup(id)); this.animations.clear(); }
+  };
 
   const DEFAULT_BIG_BANANA_CONFIG = {
     enabled: false,
@@ -161,6 +357,13 @@ const __awaiter =
       originalWorldbooks: null,
     },
 
+    // ===== 图包状态 =====
+    imagePack: {
+      currentPackId: null,  // 当前活动图包ID
+      renderScope: 'current', // 'current' | 'all' - 默认仅当前图包
+      packs: [],            // 图包列表缓存
+    },
+
     // ===== 存储 Keys 统一定义 =====
     STORAGE_KEYS: {
       SETTINGS: `${SCRIPT_ID}_settings`,
@@ -175,6 +378,8 @@ const __awaiter =
       CHAR_APPEARANCE: `${SCRIPT_ID}_char_appearance_prompts`,
       BGM_VOLUME: `${SCRIPT_ID}_bgm_volume`,
       BGM_PAUSED: `${SCRIPT_ID}_bgm_user_paused`,
+      CURRENT_PACK: `${SCRIPT_ID}_current_pack`,
+      RENDER_SCOPE: `${SCRIPT_ID}_render_scope`,
     },
 
     // ===== 方法 =====
@@ -382,6 +587,7 @@ const __awaiter =
   const RE_BACKGROUND = /<background\s+scene="([^"]+)"\s*[\/]?>/i;
   const RE_BGIMG = /<bgimg>(.*?)<\/bgimg>/i;
   const RE_WHIMG = /<whimg>(.*?)<\/whimg>/i;
+  const RE_BNIMG = /<bnimg>([\s\S]*?)<\/bnimg>/i; // 大香蕉生图标签（支持多行自然语言）
   const RE_BGM = /<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i;
   const RE_OPTION = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
   const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
@@ -532,9 +738,56 @@ const __awaiter =
 
       // 构建场景列表说明
       let sceneListText = '';
+      const useBananaImageGen = settings.bananaImageGen?.enabled;
       const useWallhaven = settings.wallhaven?.enabled;
 
-      if (useWallhaven) {
+      if (useBananaImageGen) {
+        // 大香蕉生图模式（自然语言描述）
+        const bs = settings.bananaImageGen;
+
+        // 根据CG模式提供不同指导
+        let modeHint = '';
+        if (bs.cgMode) {
+          modeHint = `📌 **CG模式已开启**：请生成符合剧情的CG画面，必须包含人物（不是单纯背景）。
+- 必须包含：场景环境 + 人物外观/位置/姿态/表情/互动
+- 避免：只有背景、缺少人物`;
+        } else {
+          modeHint = `⚠️ **纯场景模式已开启**：请描述环境、风景、建筑等背景元素，不要描述人物。
+- 重点描述：场景类型、光线氛围、时间天气、建筑风格、环境细节
+- 避免描述：人物、角色、动作等`;
+        }
+
+        const customCot = (bs.cotTemplate || '').trim();
+        const customCotText = customCot ? `\n### 🍌 自定义COT（必须遵守）\n${customCot}\n` : '';
+
+        sceneListText = `**🍌 大香蕉 AI 生图模式**: 当场景变化时，使用自然语言描述画面，系统将调用 AI 生成对应背景图片。
+
+${modeHint}
+${customCotText}- **生成格式**: \`<background scene="场景中文名"><bnimg>自然语言画面描述</bnimg>\`
+- **描述语言**: 中文或英文均可，建议使用详细的自然语言描述
+
+### 🍌 大香蕉描述规范（必须遵守）
+使用**自然语言**描述你想要的画面，就像在向画师描述一幅画。
+
+**✅ 正确示例（自然语言描述）**:
+\`<background scene="月光森林"><bnimg>月光洒落的神秘森林，高大的古树林立，银白色的月光透过树叶缝隙照射下来，地面上铺满落叶，远处有淡淡的雾气弥漫，整体氛围宁静而神秘</bnimg>\`
+
+\`<background scene="现代都市夜景"><bnimg>繁华的现代都市夜晚，高楼大厦灯火通明，霓虹灯在雨后的街道上反射出五彩斑斓的光芒，天空中有淡淡的云层，远处是璀璨的城市天际线</bnimg>\`
+
+\`<background scene="日式庭院"><bnimg>精致的日式传统庭院，有枯山水、石灯笼和红色枫叶，一角有木质走廊，阳光温暖柔和，整体风格宁静雅致</bnimg>\`
+
+**描述要素建议**:
+1. **场景主体**: 是什么地方（森林、城市、房间、海边等）
+2. **光线时间**: 白天/夜晚、晴天/阴天、光线从哪来
+3. **氛围情绪**: 温馨/神秘/紧张/浪漫/压抑等
+4. **细节元素**: 具体的物品、植物、建筑特征等
+5. **风格画风**: 动漫风格/写实风格/奇幻风格等（可选）
+
+**场景描述示例**:
+- 古典书房 → "昏暗的古典书房，烛光摇曳，木质书架上摆满古籍，桌上散落着羽毛笔和羊皮纸，窗外是深邃的夜空"
+- 樱花小径 → "春日午后的樱花小径，粉色花瓣随风飘落，两旁是盛开的樱花树，阳光透过花枝洒下斑驳光影"
+- 废弃工厂 → "荒废多年的工业厂房，锈迹斑斑的机器静默矗立，破碎的玻璃窗透进灰暗的光线，地上杂草丛生"`;
+      } else if (useWallhaven) {
         // Wallhaven 壁纸搜索模式
         const ws = settings.wallhaven;
 
@@ -555,15 +808,15 @@ const __awaiter =
             break;
         }
 
-        // 根据背景模式（纯场景 vs 角色为主）提供不同指导
+        // 根据CG模式（纯场景 vs 允许人物）提供不同指导
         let modeHint = '';
-        if (ws.sceneMode) {
+        let appearanceHint = '';
+        if (ws.cgMode) {
+          modeHint = `📌 **CG模式已开启**：可以包含人物相关关键词，特别是动漫类角色`;
+        } else {
           modeHint = `⚠️ **纯场景模式已开启**：请侧重描述环境/风景/建筑，避免人物相关词汇
 - 推荐: scenery, landscape, background, environment, architecture, nature
 - 避免: girl, boy, character, person, people`;
-        } else {
-          modeHint = `📌 **角色模式已开启**：可以包含人物相关关键词
-- 推荐: anime girl, character, portrait, cosplay, 配合场景背景词`;
         }
 
         // 自定义标签提示
@@ -575,7 +828,7 @@ const __awaiter =
         sceneListText = `**Wallhaven 壁纸搜索模式**: 当场景变化时，输出英文关键词供搜索匹配壁纸。
 
 ${modeHint}
-- **生成格式**: \`<background scene="场景中文名"><whimg>tag1, tag2, tag3, tag4</whimg>\`
+${appearanceHint}- **生成格式**: \`<background scene="场景中文名"><whimg>tag1, tag2, tag3, tag4</whimg>\`
 - **分类建议**: ${categoryHint}
 
 ### ⚠️ Wallhaven 标签填写规范（必须遵守）
@@ -652,7 +905,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 本角色卡配合专用前端面板，输出将被解析为Galgame视觉小说界面。
 
 ## 输出格式要求
-- 分句字数: 不大于70字
+- 每个<p></p>的字数: 25-70字
 
 ## 标签系统
 
@@ -693,8 +946,6 @@ ${charVoiceBindingText}
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
-  <bgimg>rainy night, neon lights, wet pavement reflections, cyberpunk city, dark atmosphere, street lamps, urban scenery, night scene, detailed background</bgimg>
-
   <p>夜色深沉，街灯在雨中摇曳。</p>
   <p>少女[微笑,桃夭]: "你终于来了～"</p>
   <bgm>歌曲名</bgm>
@@ -755,8 +1006,6 @@ ${extraRule}
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
-  <bgimg>rainy night, neon lights, wet pavement reflections, cyberpunk city, dark atmosphere, street lamps, urban scenery, night scene, detailed background</bgimg>
-
   <p>第一句旁白描述。</p>
   <p>角色名: "这是角色的对话内容。"<微笑></p>
   <bgm>歌曲名</bgm>
@@ -796,6 +1045,13 @@ ${extraRule}
 
   // Storage Keys 已在兼容代理层定义（使用 GalgameStore.STORAGE_KEYS）
 
+  // ============================================
+  // NEXT 按钮动画状态（用于最后一段时显示生成中）
+  // ============================================
+  let isGeneratingResponse = false;
+  let nextBtnAnimationTimer = null;
+  const NEXT_BTN_ANIMATION_INTERVAL = 500; // 动画切换间隔(ms)
+
   // ComfyUI 默认设置
   const DEFAULT_COMFYUI_SETTINGS = {
     apiUrl: 'http://127.0.0.1:8188',
@@ -811,13 +1067,15 @@ ${extraRule}
   const DEFAULT_SETTINGS = {
     // 文本显示
     fontSize: 15, // 1-30 字体缩放系数
-    dialogOpacity: 0.95, // 0.5-1.0
+    dialogOpacity: 0.5, // 0-1.0 (对应透明度 100%-0%)
+    textEffect: 'none', // 文字特效: none | shadow | glow | stroke | glass | gradient | text-bg
     // 自动播放
     autoPlaySpeed: 2, // 1-8秒
     // 显示设置
     showSprites: true, // 显示立绘
     hideOtherFloors: true, // 沉浸模式（隐藏其他楼层）
     fullscreenMode: false, // 全屏模式
+    bgFillMode: 'cover', // 背景图填充方式: 'cover' | 'contain'
     // 立绘设置
     spriteScale: 100, // 立绘大小 50-150%
     spriteBottomOffset: 20, // 立绘底部偏移 0-50%
@@ -854,11 +1112,25 @@ ${extraRule}
         worldbooks: [], // 空数组表示不使用任何世界书，有内容则使用指定世界书
       },
     },
+    // 大香蕉生图模块设置（反代API生成背景）
+    bananaImageGen: {
+      enabled: false, // 是否启用大香蕉生图
+      proxyUrl: '', // 反代API地址
+      proxyApiKey: '', // 反代API Key
+      model: '', // 图片生成模型
+      cotTemplate: '', // 自定义COT（追加到生图规则）
+      defaultPromptPrefix: 'masterpiece, best quality, highres, ', // 默认提示词前缀
+      defaultPromptSuffix: '', // 默认提示词后缀（可选，留空使用内置纯背景后缀）
+      cgMode: false, // CG模式：true=包含人物的剧情CG, false=纯场景背景
+      cgImageSize: '1:1', // CG模式生成图片比例
+      characterAppearances: [], // 指定人物外观（最多3个）
+      autoSaveToLibrary: true, // 自动保存到背景库
+    },
     // Wallhaven 壁纸设置
     wallhaven: {
       enabled: false, // 是否启用 Wallhaven 背景
       purity: 'sfw', // 安全级别: 'sfw' | 'sketchy'
-      sceneMode: true, // 背景模式: true=纯场景, false=角色为主
+      cgMode: false, // CG模式：true=允许人物, false=纯场景
       category: 'anime', // 图片分类: 'anime' | 'all' | 'people' | 'general'
       customTags: [], // 自定义标签列表
       apiKey: '', // 可选 API Key
@@ -1222,6 +1494,25 @@ ${extraRule}
           console.log(`[${SCRIPT_NAME}] 已清除缓存中的自定义 systemPrompt`);
         }
         settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
+        // 兼容旧版 sceneMode -> cgMode
+        if (settings.bananaImageGen) {
+          if (settings.bananaImageGen.cgMode === undefined && settings.bananaImageGen.sceneMode !== undefined) {
+            settings.bananaImageGen.cgMode = !settings.bananaImageGen.sceneMode;
+          }
+          if (!Array.isArray(settings.bananaImageGen.characterAppearances)) {
+            settings.bananaImageGen.characterAppearances = [];
+          }
+          if (typeof settings.bananaImageGen.cotTemplate !== 'string') {
+            settings.bananaImageGen.cotTemplate = '';
+          }
+          delete settings.bananaImageGen.sceneMode;
+        }
+        if (settings.wallhaven) {
+          if (settings.wallhaven.cgMode === undefined && settings.wallhaven.sceneMode !== undefined) {
+            settings.wallhaven.cgMode = !settings.wallhaven.sceneMode;
+          }
+          delete settings.wallhaven.sceneMode;
+        }
       }
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] 加载设置失败:`, e);
@@ -1304,6 +1595,171 @@ ${extraRule}
     const prompts = getCharAppearancePrompts();
     prompts[characterId] = promptText;
     saveCharAppearancePrompts(prompts);
+  }
+
+  function getBananaCharacterAppearances() {
+    const list = settings.bananaImageGen?.characterAppearances;
+    return Array.isArray(list) ? list : [];
+  }
+
+  function setBananaCharacterAppearances(list) {
+    if (!settings.bananaImageGen) settings.bananaImageGen = {};
+    settings.bananaImageGen.characterAppearances = Array.isArray(list) ? list : [];
+    saveSettings();
+  }
+
+  function buildBananaAppearancePromptText() {
+    const list = getBananaCharacterAppearances().filter(a => a && (a.characterName || a.characterId));
+    if (list.length === 0) return '';
+    const lines = list.slice(0, 3).map(a => {
+      const name = a.characterName || a.characterId || '角色';
+      const expr = a.expression || '默认';
+      return `- ${name}（表情：${expr}）`;
+    });
+    return `\n角色外观参考（必须遵守）：\n${lines.join('\n')}`;
+  }
+
+  // 将立绘URL转换为base64格式（用于多模态API），并压缩图片
+  async function getSpriteAsBase64(characterId, expression) {
+    console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: 开始获取 ${characterId}_${expression}`);
+    try {
+      const spriteUrl = await getSprite(characterId, expression);
+      console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: getSprite返回 = ${spriteUrl ? spriteUrl.substring(0, 50) + '...' : 'null'}`);
+      if (!spriteUrl) {
+        console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: 未找到立绘 ${characterId}_${expression}`);
+        return null;
+      }
+
+      // 加载图片并压缩
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      const imageLoaded = await new Promise((resolve, reject) => {
+        img.onload = () => resolve(true);
+        img.onerror = reject;
+        img.src = spriteUrl;
+      });
+
+      // 压缩图片：限制最大尺寸为512px，使用JPEG格式
+      const maxSize = 512;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxSize || height > maxSize) {
+        if (width > height) {
+          height = Math.round(height * maxSize / width);
+          width = maxSize;
+        } else {
+          width = Math.round(width * maxSize / height);
+          height = maxSize;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // 转换为JPEG格式的base64，质量0.7
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: 压缩完成，原尺寸 ${img.width}x${img.height} -> ${width}x${height}，base64长度: ${compressedBase64.length}`);
+
+      return compressedBase64;
+    } catch (error) {
+      console.error(`[${SCRIPT_NAME}] getSpriteAsBase64 错误:`, error);
+      return null;
+    }
+  }
+
+  // 构建包含图片的多模态消息内容（实时获取立绘，不依赖缓存）
+  async function buildBananaAppearanceMultimodalContent(textPrompt) {
+    const list = getBananaCharacterAppearances().filter(a => a && (a.characterName || a.characterId));
+    console.log(`[${SCRIPT_NAME}] buildBananaAppearanceMultimodalContent: 角色列表 =`, JSON.stringify(list));
+    if (list.length === 0) {
+      // 没有角色外观配置，返回纯文本格式
+      console.log(`[${SCRIPT_NAME}] buildBananaAppearanceMultimodalContent: 无角色配置，返回纯文本`);
+      return textPrompt;
+    }
+
+    const contentParts = [{ type: 'text', text: textPrompt }];
+
+    for (const appearance of list.slice(0, 3)) {
+      const name = appearance.characterName || appearance.characterId;
+      const expr = appearance.expression || '默认';
+      console.log(`[${SCRIPT_NAME}] buildBananaAppearanceMultimodalContent: 处理角色 ${name}（${expr}）`);
+
+      // 实时获取立绘并转换为base64
+      const imageBase64 = await getSpriteAsBase64(name, expr);
+
+      if (imageBase64) {
+        contentParts.push({
+          type: 'image_url',
+          image_url: { url: imageBase64 }
+        });
+        console.log(`[${SCRIPT_NAME}] 已添加角色立绘到多模态消息: ${name}（${expr}），base64长度: ${imageBase64.length}`);
+      } else {
+        console.warn(`[${SCRIPT_NAME}] 无法获取角色立绘: ${name}（${expr}）`);
+      }
+    }
+
+    console.log(`[${SCRIPT_NAME}] buildBananaAppearanceMultimodalContent: 最终contentParts数量 = ${contentParts.length}`);
+    // 如果有图片，返回多模态格式；否则返回纯文本
+    return contentParts.length > 1 ? contentParts : textPrompt;
+  }
+
+  function renderBananaAppearanceList($modal) {
+    const list = getBananaCharacterAppearances();
+    const $list = $modal.find('#gal-banana-appearance-list');
+    const $empty = $modal.find('#gal-banana-appearance-empty');
+    if (!$list.length) return;
+    if (list.length === 0) {
+      $list.html('');
+      $empty.show();
+      return;
+    }
+    $empty.hide();
+    $list.html(
+      list
+        .map(a => {
+          const name = a.characterName || a.characterId || '角色';
+          const expr = a.expression || '默认';
+          const key = `${name}_${expr}`;
+          return `
+            <div class="gal-banana-appearance-card" data-char="${name}" data-expr="${expr}" style="background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 8px; color: #e5e7eb;">
+              <div style="aspect-ratio: 2 / 3; background: #0f172a; border-radius: 6px; overflow: hidden; margin-bottom: 6px; display: flex; align-items: center; justify-content: center;">
+                <img class="gal-banana-appearance-img" data-key="${key}" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                <div class="gal-banana-appearance-placeholder" style="font-size: 0.75rem; color: #64748b;">无立绘</div>
+              </div>
+              <div style="font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</div>
+              <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 6px;">表情：${expr}</div>
+              <button class="gal-banana-appearance-remove" data-char="${name}" style="width: 100%; padding: 4px 0; border-radius: 6px; background: #ef4444; color: #fff; border: none; cursor: pointer; font-size: 0.75rem;">移除</button>
+            </div>
+          `;
+        })
+        .join(''),
+    );
+    refreshBananaAppearancePreviews($modal);
+  }
+
+  async function refreshBananaAppearancePreviews($modal) {
+    const $cards = $modal.find('.gal-banana-appearance-card');
+    if (!$cards.length) return;
+    for (const card of $cards) {
+      const $card = $(card);
+      const charId = $card.attr('data-char');
+      const expr = $card.attr('data-expr') || '默认';
+      const url = await getSprite(charId, expr);
+      const $img = $card.find('.gal-banana-appearance-img');
+      const $placeholder = $card.find('.gal-banana-appearance-placeholder');
+      if (url) {
+        $img.attr('src', url).show();
+        $placeholder.hide();
+      } else {
+        $img.hide();
+        $placeholder.show();
+      }
+    }
   }
 
   // 获取 ComfyUI 设置 (合并默认值)
@@ -1850,8 +2306,8 @@ ${extraRule}
         }
       }
 
-      // 背景模式排除词
-      if (ws.sceneMode) {
+      // 纯场景模式排除词
+      if (!ws.cgMode) {
         queryParts.push('-girl', '-people', '-person');
       }
 
@@ -2504,6 +2960,9 @@ ${extraRule}
       };
       request.onupgradeneeded = event => {
         const database = event.target.result;
+        const transaction = event.target.transaction;
+        const oldVersion = event.oldVersion;
+
         // 立绘存储
         if (!database.objectStoreNames.contains(STORE_SPRITES)) {
           const store = database.createObjectStore(STORE_SPRITES, { keyPath: 'id' });
@@ -2515,13 +2974,85 @@ ${extraRule}
           const bgStore = database.createObjectStore(STORE_BACKGROUNDS, { keyPath: 'id' });
           bgStore.createIndex('sceneName', 'sceneName', { unique: true });
         }
+
+        // 版本3: 添加图包支持
+        if (oldVersion < 3) {
+          // 创建图包存储
+          if (!database.objectStoreNames.contains(STORE_IMAGE_PACKS)) {
+            database.createObjectStore(STORE_IMAGE_PACKS, { keyPath: 'id' });
+          }
+
+          // 为 sprites 添加 packId 索引
+          if (database.objectStoreNames.contains(STORE_SPRITES)) {
+            const spriteStore = transaction.objectStore(STORE_SPRITES);
+            if (!spriteStore.indexNames.contains('packId')) {
+              spriteStore.createIndex('packId', 'packId', { unique: false });
+            }
+          }
+
+          // 为 backgrounds 添加 packId 索引
+          if (database.objectStoreNames.contains(STORE_BACKGROUNDS)) {
+            const bgStore = transaction.objectStore(STORE_BACKGROUNDS);
+            if (!bgStore.indexNames.contains('packId')) {
+              bgStore.createIndex('packId', 'packId', { unique: false });
+            }
+          }
+
+          // 创建默认图包
+          const packStore = transaction.objectStore(STORE_IMAGE_PACKS);
+          const defaultPack = {
+            id: DEFAULT_PACK_ID,
+            name: DEFAULT_PACK_NAME,
+            createdAt: new Date().toISOString(),
+            isDefault: true
+          };
+          packStore.add(defaultPack);
+
+          // 迁移现有 sprites 数据
+          if (database.objectStoreNames.contains(STORE_SPRITES)) {
+            const spriteStore = transaction.objectStore(STORE_SPRITES);
+            const spriteRequest = spriteStore.openCursor();
+            spriteRequest.onsuccess = event => {
+              const cursor = event.target.result;
+              if (cursor) {
+                const sprite = cursor.value;
+                if (!sprite.packId) {
+                  sprite.packId = DEFAULT_PACK_ID;
+                  cursor.update(sprite);
+                }
+                cursor.continue();
+              }
+            };
+          }
+
+          // 迁移现有 backgrounds 数据
+          if (database.objectStoreNames.contains(STORE_BACKGROUNDS)) {
+            const bgStore = transaction.objectStore(STORE_BACKGROUNDS);
+            const bgRequest = bgStore.openCursor();
+            bgRequest.onsuccess = event => {
+              const cursor = event.target.result;
+              if (cursor) {
+                const bg = cursor.value;
+                if (!bg.packId) {
+                  bg.packId = DEFAULT_PACK_ID;
+                  cursor.update(bg);
+                }
+                cursor.continue();
+              }
+            };
+          }
+
+          console.log(`[${SCRIPT_NAME}] 数据库升级到版本3: 已添加图包支持并迁移现有数据`);
+        }
       };
     });
   }
   // 保存立绘
   function saveSprite(characterId_1, expression_1, imageBlob_1) {
-    return __awaiter(this, arguments, void 0, function* (characterId, expression, imageBlob, imageUrl = null) {
+    return __awaiter(this, arguments, void 0, function* (characterId, expression, imageBlob, imageUrl = null, packId = null) {
       if (!db) yield initDB();
+      // 如果未指定packId，使用当前图包
+      const targetPackId = packId || getCurrentPackId();
       return new Promise((resolve, reject) => {
         const id = `${characterId}_${expression}`;
 
@@ -2546,6 +3077,7 @@ ${extraRule}
           expression,
           imageBlob,
           imageUrl,
+          packId: targetPackId,
           lastModified: new Date().toISOString(),
         };
         const request = store.put(data);
@@ -2561,7 +3093,7 @@ ${extraRule}
           if (blobUrl) {
             characterSprites.set(id, blobUrl);
           }
-          console.log(`[${SCRIPT_NAME}] 立绘已保存: ${id}`);
+          console.log(`[${SCRIPT_NAME}] 立绘已保存: ${id} (图包: ${targetPackId})`);
           resolve(blobUrl);
         };
         request.onerror = () => reject(request.error);
@@ -2778,8 +3310,10 @@ ${extraRule}
   // ============================================
   // 保存背景图片
   function saveBackground(sceneName_1, imageBlob_1) {
-    return __awaiter(this, arguments, void 0, function* (sceneName, imageBlob, imageUrl = null) {
+    return __awaiter(this, arguments, void 0, function* (sceneName, imageBlob, imageUrl = null, packId = null) {
       if (!db) yield initDB();
+      // 如果未指定packId，使用当前图包
+      const targetPackId = packId || getCurrentPackId();
       return new Promise((resolve, reject) => {
         const id = sceneName;
         const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
@@ -2789,6 +3323,7 @@ ${extraRule}
           sceneName,
           imageBlob,
           imageUrl,
+          packId: targetPackId,
           lastModified: new Date().toISOString(),
         };
         const request = store.put(data);
@@ -2803,7 +3338,7 @@ ${extraRule}
           if (blobUrl) {
             sceneBackgrounds.set(id, blobUrl);
           }
-          console.log(`[${SCRIPT_NAME}] 背景已保存: ${id}`);
+          console.log(`[${SCRIPT_NAME}] 背景已保存: ${id} (图包: ${targetPackId})`);
           resolve(blobUrl);
         };
         request.onerror = () => reject(request.error);
@@ -2922,15 +3457,35 @@ ${extraRule}
       });
     });
   }
-  // 获取所有背景图片
-  function getAllBackgrounds() {
+  // 获取所有背景图片（支持图包过滤）
+  function getAllBackgrounds(packId = null, ignorePackFilter = false) {
     return __awaiter(this, void 0, void 0, function* () {
       if (!db) yield initDB();
       return new Promise(resolve => {
         const transaction = db.transaction([STORE_BACKGROUNDS], 'readonly');
         const store = transaction.objectStore(STORE_BACKGROUNDS);
         const request = store.getAll();
-        request.onsuccess = () => resolve(request.result || []);
+        request.onsuccess = () => {
+          let backgrounds = request.result || [];
+          // 如果不忽略图包过滤
+          if (!ignorePackFilter) {
+            const targetPackId = packId || getCurrentPackId();
+            const scope = getRenderScope();
+            if (scope === 'current') {
+              // 仅当前图包
+              backgrounds = backgrounds.filter(bg => bg.packId === targetPackId);
+            }
+            // scope === 'all' 时返回所有，但排序优先当前图包
+            else {
+              backgrounds.sort((a, b) => {
+                if (a.packId === targetPackId && b.packId !== targetPackId) return -1;
+                if (a.packId !== targetPackId && b.packId === targetPackId) return 1;
+                return 0;
+              });
+            }
+          }
+          resolve(backgrounds);
+        };
         request.onerror = () => resolve([]);
       });
     });
@@ -2959,6 +3514,352 @@ ${extraRule}
         };
         request.onerror = () => resolve();
       });
+    });
+  }
+
+  // ============================================
+  // 图包管理函数
+  // ============================================
+
+  /**
+   * 获取当前图包ID
+   * @returns {string} 当前图包ID
+   */
+  function getCurrentPackId() {
+    const saved = localStorage.getItem(GalgameStore.STORAGE_KEYS.CURRENT_PACK);
+    return saved || DEFAULT_PACK_ID;
+  }
+
+  /**
+   * 设置当前图包
+   * @param {string} packId - 图包ID
+   */
+  function setCurrentPack(packId) {
+    localStorage.setItem(GalgameStore.STORAGE_KEYS.CURRENT_PACK, packId);
+    GalgameStore.imagePack.currentPackId = packId;
+  }
+
+  /**
+   * 获取渲染范围设置
+   * @returns {string} 'current' | 'all'
+   */
+  function getRenderScope() {
+    const saved = localStorage.getItem(GalgameStore.STORAGE_KEYS.RENDER_SCOPE);
+    return saved || 'current';
+  }
+
+  /**
+   * 设置渲染范围
+   * @param {string} scope - 'current' | 'all'
+   */
+  function setRenderScope(scope) {
+    localStorage.setItem(GalgameStore.STORAGE_KEYS.RENDER_SCOPE, scope);
+    GalgameStore.imagePack.renderScope = scope;
+  }
+
+  /**
+   * 获取所有图包
+   * @returns {Promise<Array>} 图包列表
+   */
+  function getAllImagePacks() {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_IMAGE_PACKS], 'readonly');
+        const store = transaction.objectStore(STORE_IMAGE_PACKS);
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const packs = request.result || [];
+          GalgameStore.imagePack.packs = packs;
+          resolve(packs);
+        };
+        request.onerror = () => reject(request.error);
+      });
+    });
+  }
+
+  /**
+   * 获取默认图包
+   * @returns {Promise<Object|null>} 默认图包
+   */
+  function getDefaultPack() {
+    return __awaiter(this, void 0, void 0, function* () {
+      const packs = yield getAllImagePacks();
+      return packs.find(p => p.isDefault) || packs.find(p => p.id === DEFAULT_PACK_ID) || null;
+    });
+  }
+
+  /**
+   * 创建新图包
+   * @param {string} name - 图包名称
+   * @returns {Promise<Object>} 新创建的图包
+   */
+  function createImagePack(name) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      const newPack = {
+        id: `pack_${Date.now()}`,
+        name: name,
+        createdAt: new Date().toISOString(),
+        isDefault: false
+      };
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_IMAGE_PACKS], 'readwrite');
+        const store = transaction.objectStore(STORE_IMAGE_PACKS);
+        const request = store.add(newPack);
+        request.onsuccess = () => {
+          console.log(`[${SCRIPT_NAME}] 创建图包: ${name}`);
+          resolve(newPack);
+        };
+        request.onerror = () => reject(request.error);
+      });
+    });
+  }
+
+  /**
+   * 重命名图包
+   * @param {string} packId - 图包ID
+   * @param {string} newName - 新名称
+   * @returns {Promise<void>}
+   */
+  function renameImagePack(packId, newName) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      if (packId === DEFAULT_PACK_ID) {
+        throw new Error('不能重命名默认图包');
+      }
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_IMAGE_PACKS], 'readwrite');
+        const store = transaction.objectStore(STORE_IMAGE_PACKS);
+        const getRequest = store.get(packId);
+        getRequest.onsuccess = () => {
+          const pack = getRequest.result;
+          if (!pack) {
+            reject(new Error('图包不存在'));
+            return;
+          }
+          pack.name = newName;
+          const putRequest = store.put(pack);
+          putRequest.onsuccess = () => {
+            console.log(`[${SCRIPT_NAME}] 重命名图包: ${packId} -> ${newName}`);
+            resolve();
+          };
+          putRequest.onerror = () => reject(putRequest.error);
+        };
+        getRequest.onerror = () => reject(getRequest.error);
+      });
+    });
+  }
+
+  /**
+   * 删除图包（资源转移到默认图包）
+   * @param {string} packId - 图包ID
+   * @returns {Promise<void>}
+   */
+  function deleteImagePack(packId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      if (packId === DEFAULT_PACK_ID) {
+        throw new Error('不能删除默认图包');
+      }
+      // 先转移资源到默认图包
+      yield transferAllResourcesToDefaultPack(packId);
+      // 删除图包记录
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_IMAGE_PACKS], 'readwrite');
+        const store = transaction.objectStore(STORE_IMAGE_PACKS);
+        const request = store.delete(packId);
+        request.onsuccess = () => {
+          console.log(`[${SCRIPT_NAME}] 删除图包: ${packId}`);
+          // 如果删除的是当前图包，切换到默认图包
+          if (getCurrentPackId() === packId) {
+            setCurrentPack(DEFAULT_PACK_ID);
+          }
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+    });
+  }
+
+  /**
+   * 转移立绘到指定图包
+   * @param {Array<string>} spriteKeys - 立绘key列表 (characterId_expression)
+   * @param {string} targetPackId - 目标图包ID
+   * @returns {Promise<number>} 转移数量
+   */
+  function transferSpritesToPack(spriteKeys, targetPackId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      let count = 0;
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_SPRITES], 'readwrite');
+        const store = transaction.objectStore(STORE_SPRITES);
+        let processed = 0;
+        spriteKeys.forEach(key => {
+          const getRequest = store.get(key);
+          getRequest.onsuccess = () => {
+            const sprite = getRequest.result;
+            if (sprite) {
+              sprite.packId = targetPackId;
+              store.put(sprite);
+              count++;
+            }
+            processed++;
+            if (processed === spriteKeys.length) {
+              resolve(count);
+            }
+          };
+          getRequest.onerror = () => {
+            processed++;
+            if (processed === spriteKeys.length) {
+              resolve(count);
+            }
+          };
+        });
+        if (spriteKeys.length === 0) resolve(0);
+      });
+    });
+  }
+
+  /**
+   * 转移背景到指定图包
+   * @param {Array<string>} sceneNames - 场景名列表
+   * @param {string} targetPackId - 目标图包ID
+   * @returns {Promise<number>} 转移数量
+   */
+  function transferBackgroundsToPack(sceneNames, targetPackId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      let count = 0;
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
+        const store = transaction.objectStore(STORE_BACKGROUNDS);
+        let processed = 0;
+        sceneNames.forEach(sceneName => {
+          const getRequest = store.get(sceneName);
+          getRequest.onsuccess = () => {
+            const bg = getRequest.result;
+            if (bg) {
+              bg.packId = targetPackId;
+              store.put(bg);
+              count++;
+            }
+            processed++;
+            if (processed === sceneNames.length) {
+              resolve(count);
+            }
+          };
+          getRequest.onerror = () => {
+            processed++;
+            if (processed === sceneNames.length) {
+              resolve(count);
+            }
+          };
+        });
+        if (sceneNames.length === 0) resolve(0);
+      });
+    });
+  }
+
+  /**
+   * 将某图包的所有资源转移到默认图包
+   * @param {string} packId - 源图包ID
+   * @returns {Promise<{sprites: number, backgrounds: number}>} 转移数量
+   */
+  function transferAllResourcesToDefaultPack(packId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      let spriteCount = 0;
+      let bgCount = 0;
+
+      // 转移立绘
+      yield new Promise((resolve) => {
+        const transaction = db.transaction([STORE_SPRITES], 'readwrite');
+        const store = transaction.objectStore(STORE_SPRITES);
+        const request = store.openCursor();
+        request.onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (cursor) {
+            const sprite = cursor.value;
+            if (sprite.packId === packId) {
+              sprite.packId = DEFAULT_PACK_ID;
+              cursor.update(sprite);
+              spriteCount++;
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        request.onerror = () => resolve();
+      });
+
+      // 转移背景
+      yield new Promise((resolve) => {
+        const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
+        const store = transaction.objectStore(STORE_BACKGROUNDS);
+        const request = store.openCursor();
+        request.onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (cursor) {
+            const bg = cursor.value;
+            if (bg.packId === packId) {
+              bg.packId = DEFAULT_PACK_ID;
+              cursor.update(bg);
+              bgCount++;
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        request.onerror = () => resolve();
+      });
+
+      console.log(`[${SCRIPT_NAME}] 从图包 ${packId} 转移了 ${spriteCount} 个立绘和 ${bgCount} 个背景到默认图包`);
+      return { sprites: spriteCount, backgrounds: bgCount };
+    });
+  }
+
+  /**
+   * 获取图包的资源统计
+   * @param {string} packId - 图包ID
+   * @returns {Promise<{sprites: number, backgrounds: number}>} 资源数量
+   */
+  function getPackResourceCount(packId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      let spriteCount = 0;
+      let bgCount = 0;
+
+      // 统计立绘
+      yield new Promise((resolve) => {
+        const transaction = db.transaction([STORE_SPRITES], 'readonly');
+        const store = transaction.objectStore(STORE_SPRITES);
+        const index = store.index('packId');
+        const request = index.count(IDBKeyRange.only(packId));
+        request.onsuccess = () => {
+          spriteCount = request.result;
+          resolve();
+        };
+        request.onerror = () => resolve();
+      });
+
+      // 统计背景
+      yield new Promise((resolve) => {
+        const transaction = db.transaction([STORE_BACKGROUNDS], 'readonly');
+        const store = transaction.objectStore(STORE_BACKGROUNDS);
+        const index = store.index('packId');
+        const request = index.count(IDBKeyRange.only(packId));
+        request.onsuccess = () => {
+          bgCount = request.result;
+          resolve();
+        };
+        request.onerror = () => resolve();
+      });
+
+      return { sprites: spriteCount, backgrounds: bgCount };
     });
   }
 
@@ -3011,23 +3912,24 @@ ${extraRule}
     characterQueue: [],
     // 当前场景
     currentScene: null,
-    // 表情到情绪的映射（仅保留动画效果，移除滤镜效果）
+    // 表情到情绪的映射（GSAP动画效果）
     emotionMap: {
-      生气: 'angry', // 抖动动画
-      惊讶: 'surprised', // 弹跳动画
-      // 以下表情不添加特效，避免出戏
-      难过: null,
-      害羞: null,
-      大笑: null,
-      嘲讽: null,
-      微笑: null,
-      搞怪: null,
-      思考: null,
       默认: null,
+      微笑: 'happy',
+      生气: 'angry',
+      难过: 'sad',
+      惊讶: 'surprised',
+      嘲讽: 'mock',
+      害羞: 'shy',
+      思考: 'think',
+      大笑: 'laugh',
+      搞怪: 'happy',
     },
     // 初始化 - 获取主角名称
     init() {
       this.protagonistName = this.getProtagonistName();
+      // 初始化GSAP动画管理器
+      SpriteAnimationManager.init();
       console.log(`[${SCRIPT_NAME}] SpriteManager 初始化, 主角: ${this.protagonistName || '未识别'}`);
     },
     // 从数据库获取主角名称（优先使用SillyTavern用户名）
@@ -3185,7 +4087,9 @@ ${extraRule}
           });
           $charLayer.append($slots);
         }
-        const enterClass = isEntering ? `entering-${slot}` : 'expression-change';
+        // 使用GSAP时不需要CSS入场动画类
+        const useGSAP = SpriteAnimationManager.gsap !== null;
+        const enterClass = (!useGSAP && isEntering) ? `entering-${slot}` : '';
         const emotion = this.emotionMap[expression] || '';
         const emotionAttr = emotion ? `data-emotion="${emotion}"` : '';
         let spriteHtml;
@@ -3211,8 +4115,21 @@ ${extraRule}
         if (info) {
           info.element = $slot.find('.gal-char-container');
         }
-        // 移除入场动画类（延迟）
-        if (isEntering) {
+        // 使用GSAP动画
+        if (useGSAP && info && info.element) {
+          // 添加GSAP标记类，禁用CSS动画
+          info.element.addClass('gsap-animated');
+          if (isEntering) {
+            // 播放GSAP入场动画（包含呼吸效果启动）
+            SpriteAnimationManager.playEnterAnimation(info.element, slot, characterId);
+          } else {
+            // 表情切换时播放过渡动画，然后启动呼吸
+            SpriteAnimationManager.playExpressionTransition(info.element, () => {
+              SpriteAnimationManager.startBreathing(info.element, characterId);
+            });
+          }
+        } else if (!useGSAP && isEntering) {
+          // CSS降级：移除入场动画类（延迟）
           setTimeout(() => {
             $slot.find('.gal-char-container').removeClass(enterClass);
           }, 500);
@@ -3224,6 +4141,10 @@ ${extraRule}
       this.currentSpeaker = speakerId;
       this.activeCharacters.forEach((info, charId) => {
         if (info.element) {
+          const isSpeaking = speakerId !== null && charId === speakerId;
+          // 使用GSAP焦点动画
+          SpriteAnimationManager.setFocus(info.element, isSpeaking, charId);
+          // 保留CSS类用于样式兼容
           if (speakerId === null) {
             // 旁白时，所有角色都暗化
             info.element.removeClass('speaking').addClass('silent');
@@ -3245,6 +4166,8 @@ ${extraRule}
       // 应用新的情绪
       if (emotion) {
         info.element.attr('data-emotion', emotion);
+        // 使用GSAP播放情绪动画
+        SpriteAnimationManager.playEmotionAnimation(info.element, emotion, characterId);
       }
     },
     // 查找最佳匹配的场景
@@ -3315,24 +4238,6 @@ ${extraRule}
           if (typeof BGMManager !== 'undefined' && BGMManager.generatingScenes.has(scene)) {
             $bgLayer.removeClass('has-bg').addClass('generating-bg');
             clearBackgroundLayers($bgLayer);
-            if ($bgLayer.find('.gal-gen-indicator').length === 0) {
-              $bgLayer.append(`
-                            <div class="gal-gen-indicator">
-                                <div class="gal-gen-rings">
-                                    <i class="fa-solid fa-paintbrush gal-gen-icon"></i>
-                                </div>
-                                <div class="gal-gen-text">
-                                    <span class="gal-gen-title">GENERATING</span>
-                                    <span class="gal-gen-scene">${scene}</span>
-                                    <div class="gal-gen-dots">
-                                        <span class="gal-gen-dot"></span>
-                                        <span class="gal-gen-dot"></span>
-                                        <span class="gal-gen-dot"></span>
-                                    </div>
-                                </div>
-                            </div>
-                        `);
-            }
           } else {
             // 没有背景图片，使用默认渐变
             $bgLayer.removeClass('has-bg generating-bg');
@@ -3501,6 +4406,9 @@ ${extraRule}
       if (formatData) {
         console.log(`[${SCRIPT_NAME}] 使用格式化版本 (swipe ${formatData.formattedIndex})`);
         html = formatData.formatted;
+        // ★ 关键修复：清理格式化版本中的 <think> 污染
+        html = html.replace(RE_THINK_CLOSED, '');
+        html = html.replace(RE_THINK_UNCLOSED, '');
       }
     }
     // ★ 性能优化：检查缓存
@@ -3515,10 +4423,11 @@ ${extraRule}
     // 2. 移除未闭合的块 (流式输出时) - 从标签开始直到结尾
     html = html.replace(RE_THINK_UNCLOSED, '');
     const result = {
-      segments: [], // { type: 'narration'|'dialogue', speaker: string|null, text: string, expression: string|null }
+      segments: [], // { type: 'narration'|'dialogue', speaker: string|null, text: string, expression: string|null, backgroundScene: string|null }
       currentBackground: null, // { scene }
       bgm: null, // { keyword }
       options: [], // { id, text }
+      backgroundChanges: [], // ★ 段落级背景跟随：保存所有背景切换点
     };
     // 先移除 highlight.js 添加的 <code> 和 <pre> 包裹标签 - 使用预编译正则
     let cleanedHtml = html
@@ -3542,34 +4451,84 @@ ${extraRule}
         content = maintextStart[1];
       }
     }
-    // 解析背景标签 - 使用预编译正则
-    const backgroundMatch = content.match(RE_BACKGROUND);
-    // console.log(`[${SCRIPT_NAME}] [DEBUG] 背景标签正则匹配结果:`, backgroundMatch);
 
-    // 解析生图标签 <bgimg>TAGS</bgimg> - 使用预编译正则
-    // 允许 <bgimg> 在 <background> 内部或外部，只要都在 content 里
-    const bgimgMatch = content.match(RE_BGIMG);
+    // ★ 关键修复：找到 <maintext> 内第一个 Galgame 标签（<background> 或 <p>），从那里开始
+    const firstGalMatch = content.match(/<(background|p)\s/i);
+    if (firstGalMatch && firstGalMatch.index > 0) {
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 清理 <maintext> 前 ${firstGalMatch.index} 字符的污染内容`);
+      content = content.substring(firstGalMatch.index);
+    }
+    // ★ 段落级背景跟随：收集所有背景标签及其位置
+    const backgroundChanges = [];
+    const bgRegex = /<background\s+scene="([^"]+)"\s*[\/]?>/gi;
+    const bnimgRegex = /<bnimg>([\s\S]*?)<\/bnimg>/gi;
+    const bgimgRegex = /<bgimg>(.*?)<\/bgimg>/gi;
+    const whimgRegex = /<whimg>(.*?)<\/whimg>/gi;
 
-    // 解析 Wallhaven 标签 <whimg>TAGS</whimg>
-    const whimgMatch = content.match(RE_WHIMG);
-
-    if (backgroundMatch) {
-      result.currentBackground = {
-        scene: backgroundMatch[1],
+    // 收集所有背景标签
+    let bgMatch;
+    while ((bgMatch = bgRegex.exec(content)) !== null) {
+      const bgEndPos = bgMatch.index + bgMatch[0].length;
+      const bgInfo = {
+        position: bgMatch.index,
+        scene: bgMatch[1],
+        generationTags: null,
+        wallhavenTags: null,
+        bananaPrompt: null,
       };
-      // 如果存在生图标签，标记为需要生成
-      if (bgimgMatch && bgimgMatch[1]) {
-        result.currentBackground.generationTags = bgimgMatch[1].trim();
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景生成请求: "${backgroundMatch[1]}" Tags: "${bgimgMatch[1]}"`);
+
+      // 查找紧跟此背景的 bnimg (最多2000字符内)
+      bnimgRegex.lastIndex = bgEndPos;
+      const bnimgMatch = bnimgRegex.exec(content);
+      if (bnimgMatch && bnimgMatch.index < bgEndPos + 2000) {
+        bgInfo.bananaPrompt = bnimgMatch[1].trim();
       }
-      // 如果存在 Wallhaven 标签，记录标签
-      if (whimgMatch && whimgMatch[1]) {
-        result.currentBackground.wallhavenTags = whimgMatch[1].trim();
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到 Wallhaven 标签: "${backgroundMatch[1]}" Tags: "${whimgMatch[1]}"`);
+      bnimgRegex.lastIndex = 0; // 重置
+
+      // 查找紧跟此背景的 bgimg (最多200字符内)
+      bgimgRegex.lastIndex = bgEndPos;
+      const bgimgMatch = bgimgRegex.exec(content);
+      if (bgimgMatch && bgimgMatch.index < bgEndPos + 200) {
+        bgInfo.generationTags = bgimgMatch[1].trim();
       }
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景场景: "${backgroundMatch[1]}"`);
-    } else {
-      // console.log(`[${SCRIPT_NAME}] [DEBUG] 未匹配到背景标签`);
+      bgimgRegex.lastIndex = 0;
+
+      // 查找紧跟此背景的 whimg (最多200字符内)
+      whimgRegex.lastIndex = bgEndPos;
+      const whimgMatch = whimgRegex.exec(content);
+      if (whimgMatch && whimgMatch.index < bgEndPos + 200) {
+        bgInfo.wallhavenTags = whimgMatch[1].trim();
+      }
+      whimgRegex.lastIndex = 0;
+
+      backgroundChanges.push(bgInfo);
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到背景切换点[${bgMatch.index}]: "${bgInfo.scene}"`);
+    }
+
+    // 设置最终结果的整体背景为最后一个，并保存所有背景切换点
+    if (backgroundChanges.length > 0) {
+      const lastBg = backgroundChanges[backgroundChanges.length - 1];
+      result.currentBackground = {
+        scene: lastBg.scene,
+        generationTags: lastBg.generationTags,
+        wallhavenTags: lastBg.wallhavenTags,
+        bananaPrompt: lastBg.bananaPrompt,
+      };
+      result.backgroundChanges = backgroundChanges; // ★ 保存所有背景切换点供生成使用
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 消息包含 ${backgroundChanges.length} 个背景切换点，最终背景: "${lastBg.scene}"`);
+    }
+
+    // 辅助函数：获取指定位置之前最后一次出现的背景
+    function getBackgroundAtPosition(position) {
+      let bestBg = null;
+      for (const bg of backgroundChanges) {
+        if (bg.position <= position) {
+          if (!bestBg || bg.position > bestBg.position) {
+            bestBg = bg;
+          }
+        }
+      }
+      return bestBg;
     }
     // 解析 BGM 标签 <bgm>关键词</bgm> - 使用预编译正则
     const bgmMatch = content.match(RE_BGM);
@@ -3657,6 +4616,15 @@ ${extraRule}
       if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
         const speaker = dialogueMatch[1].trim();
         const dialogue = dialogueMatch[2].trim();
+        // 容错：如果说话者是"旁白"，则作为旁白处理
+        if (speaker === '旁白') {
+          return {
+            type: 'narration',
+            speaker: null,
+            text: dialogue,
+            expression: null,
+          };
+        }
         // 说话者名字不应该太长（超过20字符可能是解析错误）
         if (speaker.length <= 20 && speaker.length > 0) {
           const result = {
@@ -3680,7 +4648,7 @@ ${extraRule}
         expression: null,
       };
     }
-    // 解析所有已闭合的 <p> 标签（支持 tts 属性）
+    // 解析所有已闭合的 <p> 标签（支持 tts 属性），并为每个段落绑定对应背景
     const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
     let match;
     let lastIndex = 0;
@@ -3688,7 +4656,18 @@ ${extraRule}
       lastIndex = pTagRegex.lastIndex;
       const ttsConfig = match[1]; // 捕获 tts 属性值
       const seg = parseSegmentText(match[2], ttsConfig);
-      if (seg) result.segments.push(seg);
+      if (seg) {
+        // ★ 段落级背景跟随：为此段落绑定当前生效的背景
+        const bgAtThisPos = getBackgroundAtPosition(match.index);
+        if (bgAtThisPos) {
+          seg.backgroundScene = bgAtThisPos.scene;
+        }
+        // ★ DEBUG: 记录前3个段落的背景绑定
+        if (result.segments.length < 3) {
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${match.index} 背景:${seg.backgroundScene || 'null'} 文本:${seg.text.substring(0, 20)}...`);
+        }
+        result.segments.push(seg);
+      }
     }
     // ★ 关键修复：尝试匹配末尾未闭合的 <p> 标签 (支持流式输出，也支持 tts 属性)
     const remainingText = content.substring(lastIndex);
@@ -3700,6 +4679,11 @@ ${extraRule}
       if (rawContent && rawContent.trim()) {
         const seg = parseSegmentText(rawContent, ttsConfig);
         if (seg) {
+          // ★ 段落级背景跟随：为此段落绑定当前生效的背景
+          const bgAtThisPos = getBackgroundAtPosition(content.length - remainingText.length + unclosedPMatch.index);
+          if (bgAtThisPos) {
+            seg.backgroundScene = bgAtThisPos.scene;
+          }
           result.segments.push(seg);
         }
       }
@@ -3708,12 +4692,17 @@ ${extraRule}
     if (result.segments.length === 0) {
       const plainText = content.replace(/<[^>]+>/g, '').trim();
       if (plainText) {
-        result.segments.push({
+        const seg = {
           type: 'narration',
           speaker: null,
           text: plainText,
           expression: null,
-        });
+        };
+        // ★ 段落级背景跟随：为此段落绑定最后一个背景
+        if (backgroundChanges.length > 0) {
+          seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+        }
+        result.segments.push(seg);
       }
     }
     // ★ 新增逻辑：如果段落过长，进行切分
@@ -4167,11 +5156,19 @@ ${extraRule}
       eventOn(tavern_events.GENERATION_STARTED, () => {
         // 只在Galgame模式开启且覆盖层显示时显示生成中
         // 已移除"AI正在生成回复..."特效
+        isGeneratingResponse = true;
+        // 如果当前在最后一段，启动按钮动画
+        updateNextBtnForGeneratingState();
       });
 
       eventOn(tavern_events.GENERATION_ENDED, () => {
         // 隐藏生成中指示器
         hideGeneratingIndicator();
+        // 停止按钮动画
+        isGeneratingResponse = false;
+        stopNextBtnAnimation();
+        // 刷新按钮显示
+        refreshNextBtnDisplay();
       });
 
       worldbookInjectionListenerRegistered = true;
@@ -4638,6 +5635,9 @@ ${extraRule}
 
               <!-- 对话框层 -->
             <div class="gal-dialog-layer">
+              <button class="gal-sprite-toggle" title="显示/隐藏立绘">
+                <span class="gal-eye-icon">👁</span>
+              </button>
               <div class="gal-name-badge">
                 <span>旁白</span>
               </div>
@@ -4701,7 +5701,7 @@ ${extraRule}
                     <i class="fa-solid fa-forward"></i> <span class="gal-btn-text">SKIP</span>
                   </button>
                   <button class="gal-pending-choices-btn" data-action="show-choices" title="有待选择的选项">
-                    <i class="fa-solid fa-list-check"></i> <span class="gal-btn-text">选项</span>
+                    <i class="fa-solid fa-list-check" style="font-size:1.1rem"></i> <span class="gal-btn-text">选项</span>
                   </button>
                   <button class="gal-footer-btn-next" data-action="next" title="下一段">
                     <span class="gal-btn-text">NEXT</span> <i class="fa-solid fa-chevron-right"></i>
@@ -4872,6 +5872,93 @@ ${extraRule}
     const $status = $overlay.find('#gal-gen-status');
     if ($status.length) {
       $status.text(statusText);
+    }
+  }
+
+  // ============================================
+  // NEXT 按钮动画控制函数
+  // ============================================
+
+  /**
+   * 根据生成状态更新 NEXT 按钮显示
+   * 当在最后一段且正在生成时，显示动态省略号动画
+   */
+  function updateNextBtnForGeneratingState() {
+    const $overlay = $('#gal-global-overlay');
+    if ($overlay.length === 0) return;
+
+    const $nextBtn = $overlay.find('[data-action="next"]');
+    
+    // 获取当前显示的消息ID
+    const mesId = currentDisplayMesId;
+    if (!mesId) return;
+    
+    // 从 messageSegmentState 获取状态
+    const state = messageSegmentState.get(String(mesId));
+    if (!state) return;
+
+    // 检查是否在最后一段
+    const total = state.segments.length;
+    const currentIndex = state.currentIndex;
+    const isEnd = currentIndex >= total - 1;
+
+    // 只有在最后一段且正在生成时才显示动画
+    if (!isEnd || !isGeneratingResponse) return;
+
+    // 清除之前的定时器
+    stopNextBtnAnimation();
+
+    // 启动动画循环
+    let dotCount = 1;
+    nextBtnAnimationTimer = setInterval(() => {
+      const dots = '。'.repeat(dotCount);
+      $nextBtn.html(`${dots} <i class="fa-solid fa-spinner fa-spin"></i>`);
+      dotCount = (dotCount % 3) + 1; // 1->2->3->1
+    }, NEXT_BTN_ANIMATION_INTERVAL);
+  }
+
+  /**
+   * 停止 NEXT 按钮动画
+   */
+  function stopNextBtnAnimation() {
+    if (nextBtnAnimationTimer) {
+      clearInterval(nextBtnAnimationTimer);
+      nextBtnAnimationTimer = null;
+    }
+  }
+
+  /**
+   * 刷新 NEXT 按钮显示（根据当前状态）
+   */
+  function refreshNextBtnDisplay() {
+    const $overlay = $('#gal-global-overlay');
+    if ($overlay.length === 0) return;
+
+    const $nextBtn = $overlay.find('[data-action="next"]');
+    
+    // 获取当前显示的消息ID
+    const mesId = currentDisplayMesId;
+    if (!mesId) return;
+    
+    // 从 messageSegmentState 获取状态
+    const state = messageSegmentState.get(String(mesId));
+    if (!state) return;
+
+    const total = state.segments.length;
+    const currentIndex = state.currentIndex;
+    const isEnd = currentIndex >= total - 1;
+
+    if (isEnd) {
+      // 最后一段：检查是否正在生成
+      if (isGeneratingResponse) {
+        updateNextBtnForGeneratingState();
+      } else {
+        stopNextBtnAnimation();
+        $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+      }
+    } else {
+      stopNextBtnAnimation();
+      $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     }
   }
 
@@ -5230,9 +6317,17 @@ ${extraRule}
       if (!state) {
         state = { currentIndex: 0, segments: segments, parsedContent: parsedContent };
         messageSegmentState.set(String(mesId), state);
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 新建状态，段落数: ${segments.length}`);
       } else {
+        // ★ 关键修复：如果段落数量变化较大（>5），重置到第一段（可能是新消息）
+        const segmentCountDiff = Math.abs(state.segments.length - segments.length);
+        if (segmentCountDiff > 5) {
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 段落数变化较大 (${state.segments.length} -> ${segments.length})，重置到第一段`);
+          state.currentIndex = 0;
+        }
         state.segments = segments;
         state.parsedContent = parsedContent;
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 更新状态，当前索引: ${state.currentIndex}, 段落数: ${segments.length}`);
       }
       // 重置 SpriteManager（仅当切换到新消息时，防止流式输出导致重复入场动画）
       const isNewMessage = currentDisplayMesId !== mesId;
@@ -5264,9 +6359,11 @@ ${extraRule}
       // 使用 SpriteManager 更新立绘（支持多角色、动画）
       const expression = displaySegment.expression || '默认';
       yield SpriteManager.updateSprite($overlay, speaker, expression);
-      // 应用场景色调和背景
-      if ((_a = parsedContent.currentBackground) === null || _a === void 0 ? void 0 : _a.scene) {
-        yield SpriteManager.applySceneTint($overlay, parsedContent.currentBackground.scene);
+      // ★ 段落级背景跟随：优先使用段落绑定的背景，否则使用消息级别的背景
+      const sceneToApply = displaySegment.backgroundScene || ((_a = parsedContent.currentBackground) === null || _a === void 0 ? void 0 : _a.scene);
+      if (sceneToApply) {
+        yield SpriteManager.applySceneTint($overlay, sceneToApply);
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 应用背景场景: "${sceneToApply}" (段落 ${currentIndex + 1}/${segments.length})`);
       }
       // 更新NEXT按钮状态
       const $nextBtn = $overlay.find('[data-action="next"]');
@@ -5274,8 +6371,15 @@ ${extraRule}
       // 这是最可靠的判断方式，不依赖于索引计算
       const hasNextSegment = !!segments[currentIndex + 1];
       if (!hasNextSegment) {
-        $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+        // 最后一段：检查是否正在生成
+        if (isGeneratingResponse) {
+          updateNextBtnForGeneratingState();
+        } else {
+          stopNextBtnAnimation();
+          $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+        }
       } else {
+        stopNextBtnAnimation();
         $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
       }
       // 存储mesId到容器
@@ -5443,8 +6547,9 @@ ${extraRule}
           if (timer) clearInterval(timer);
         });
 
-        // 3. 世界书逻辑已改为按需附加，不再全局启用/禁用
-        console.log(`[${SCRIPT_NAME}] Galgame模式关闭（世界书按需附加）`);
+        // 3. 关闭世界书（覆盖层退出也同步取消全局启用）
+        yield disableWorldbookGlobally();
+        console.log(`[${SCRIPT_NAME}] Galgame模式关闭（已取消世界书全局启用）`);
 
         // 4. 恢复视图
         restoreOriginalViews();
@@ -5477,8 +6582,8 @@ ${extraRule}
         showToast('正在开启 Galgame 模式...');
         try {
           yield injectCOTToWorldbook();
-          // 世界书逻辑已改为按需附加，不再全局启用
-          console.log(`[${SCRIPT_NAME}] Galgame模式开启（世界书按需附加）`);
+          yield enableWorldbookGlobally();
+          console.log(`[${SCRIPT_NAME}] Galgame模式开启（已全局启用世界书）`);
         } catch (err) {
           console.error('Galgame模式开启出错:', err);
         }
@@ -5524,6 +6629,27 @@ ${extraRule}
     $(doc).on('click', '#gal-global-overlay [data-action="toggle-fullscreen"]', function (e) {
       e.stopPropagation();
       toggleFullscreen();
+    });
+
+    // 立绘显示/隐藏切换
+    $(doc).on('click', '#gal-global-overlay .gal-sprite-toggle', function (e) {
+      e.stopPropagation();
+      const $btn = $(this);
+      const $overlay = $('#gal-global-overlay');
+      const $characterLayer = $overlay.find('.gal-layer-character');
+
+      // 切换按钮和立绘层的隐藏状态
+      $btn.toggleClass('sprites-hidden');
+      $characterLayer.toggleClass('sprites-hidden');
+
+      // 更新按钮图标和提示
+      if ($btn.hasClass('sprites-hidden')) {
+        $btn.attr('title', '显示立绘');
+        $btn.find('.gal-eye-icon').text('🙈');
+      } else {
+        $btn.attr('title', '隐藏立绘');
+        $btn.find('.gal-eye-icon').text('👁');
+      }
     });
 
     // 辅助函数：关闭移动端菜单
@@ -5758,26 +6884,33 @@ ${extraRule}
       const isEnd = currentIndex >= total - 1;
       const $nextBtn = $overlay.find('[data-action="next"]');
       if (isEnd) {
-        $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+        // 最后一段：检查是否正在生成
+        if (isGeneratingResponse) {
+          // 正在生成时显示动态动画
+          updateNextBtnForGeneratingState();
+        } else {
+          // 未生成时显示 END
+          stopNextBtnAnimation();
+          $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+        }
         // ★ 自动弹出选项：如果是最后一段，且有待选选项
         if (pendingOptions && pendingOptions.length > 0 && !galgameChoicesVisible) {
           console.log(`[${SCRIPT_NAME}] 已翻页到末尾，自动弹出选项面板`);
           renderGalgameChoices(pendingOptions);
         }
       } else {
+        // 不是最后一段，恢复正常 NEXT
+        stopNextBtnAnimation();
         $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
       }
       // 使用 SpriteManager 更新立绘（支持多角色、动画、情绪）
       const expression = segment.expression || '默认';
       yield SpriteManager.updateSprite($overlay, speaker, expression);
-      // 应用场景色调和背景（如果有背景信息）
-      if (
-        (_b = (_a = state.parsedContent) === null || _a === void 0 ? void 0 : _a.currentBackground) === null ||
-        _b === void 0
-          ? void 0
-          : _b.scene
-      ) {
-        yield SpriteManager.applySceneTint($overlay, state.parsedContent.currentBackground.scene);
+      // ★ 段落级背景跟随：优先使用段落绑定的背景，否则使用消息级别的背景
+      const sceneToApply = segment.backgroundScene || ((_b = (_a = state.parsedContent) === null || _a === void 0 ? void 0 : _a.currentBackground) === null || _b === void 0 ? void 0 : _b.scene);
+      if (sceneToApply) {
+        yield SpriteManager.applySceneTint($overlay, sceneToApply);
+        console.log(`[${SCRIPT_NAME}] [DEBUG] updateOverlaySegmentDisplay 应用背景: "${sceneToApply}" (段落 ${currentIndex + 1}/${total})`);
       }
     });
   }
@@ -5792,7 +6925,7 @@ ${extraRule}
   // ============================================
   function showFreeInputModal() {
     const modalHtml = `
-      <div class="gal-input-modal" id="gal-free-input-modal">
+      <div class="gal-input-modal" id="gal-free-input-modal" style="z-index: 2147483647 !important;">
         <div class="gal-input-box">
           <div class="gal-input-title"><span>自由输入</span></div>
           <textarea class="gal-input-field" id="gal-free-input-text" placeholder="输入你想说的话..."></textarea>
@@ -5808,16 +6941,20 @@ ${extraRule}
         </div>
       </div>
     `;
-    $(topWindow.document.body).append(modalHtml);
-    const $modal = $('#gal-free-input-modal');
-    const $input = $('#gal-free-input-text');
+    // 修复：使用 getModalMountRoot() 确保在全屏模式下弹窗挂载到全屏元素内
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(modalHtml);
+    // 在全屏元素内挂载时，需要从 mountRoot 上下文中查找元素
+    const $modal = $(mountRoot).find('#gal-free-input-modal');
+    const $input = $(mountRoot).find('#gal-free-input-text');
     makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
     $input.focus();
-    $('#gal-input-cancel').on('click', () => $modal.remove());
+    // 从 modal 上下文中查找子元素，确保在全屏模式下也能正确绑定事件
+    $modal.find('#gal-input-cancel').on('click', () => $modal.remove());
     $modal.on('click', function (e) {
       if (e.target === this) $modal.remove();
     });
-    $('#gal-input-send').on('click', () => {
+    $modal.find('#gal-input-send').on('click', () => {
       const text = $input.val().trim();
       if (text) {
         sendUserMessage(text);
@@ -5827,7 +6964,7 @@ ${extraRule}
     $input.on('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        $('#gal-input-send').click();
+        $modal.find('#gal-input-send').click();
       }
     });
   }
@@ -6204,21 +7341,127 @@ ${extraRule}
             </div>
         `;
 
-    $(topWindow.document.body).append(modalHtml);
-    const $modal = $('#gal-appearance-prompt-modal');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-appearance-prompt-modal');
     makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
 
-    $('#gal-appearance-cancel').on('click', () => $modal.remove());
+    $modal.find('#gal-appearance-cancel').on('click', () => $modal.remove());
     $modal.on('click', function (e) {
       if (e.target === this) $modal.remove();
     });
 
-    $('#gal-appearance-save').on('click', function () {
-      const newPrompt = $('#gal-appearance-prompt-input').val().trim();
+    $modal.find('#gal-appearance-save').on('click', function () {
+      const newPrompt = $modal.find('#gal-appearance-prompt-input').val().trim();
       setCharAppearancePrompt(characterId, newPrompt);
       showToast(`已保存 ${characterId} 的外貌提示词`);
       $modal.remove();
       if (typeof onSave === 'function') onSave(newPrompt);
+    });
+  }
+
+  /**
+   * CG模式角色外观选择弹窗
+   * @param {Function} onSelect - 选择后回调({ characterId, characterName, expression })
+   */
+  function showBananaAppearancePicker(onSelect) {
+    return __awaiter(this, void 0, void 0, function* () {
+      $('#gal-banana-appearance-picker').remove();
+      const sprites = yield getAllSprites();
+      if (!sprites || sprites.length === 0) {
+        showToast('暂无可用立绘，请先上传立绘');
+        return;
+      }
+
+      const grouped = new Map();
+      sprites.forEach(s => {
+        const charId = s.characterId || '未知角色';
+        if (!grouped.has(charId)) grouped.set(charId, []);
+        grouped.get(charId).push(s);
+      });
+
+      const blobUrls = [];
+      const groupsHtml = Array.from(grouped.entries())
+        .map(([charId, list]) => {
+          const itemsHtml = list
+            .map(s => {
+              const preview = s.imageUrl || (s.imageBlob ? URL.createObjectURL(s.imageBlob) : '');
+              if (preview && preview.startsWith('blob:')) blobUrls.push(preview);
+              return `
+                <div class="gal-banana-appearance-item" data-char="${charId}" data-expr="${s.expression}" style="border: 1px solid #334155; border-radius: 8px; padding: 8px; background: #0f172a; cursor: pointer;">
+                  <div style="aspect-ratio: 2 / 3; background: #020617; border-radius: 6px; overflow: hidden; margin-bottom: 6px; display: flex; align-items: center; justify-content: center;">
+                    ${
+                      preview
+                        ? `<img src="${preview}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">`
+                        : `<div style="font-size: 0.75rem; color: #64748b;">无立绘</div>`
+                    }
+                  </div>
+                  <div style="font-size: 0.8rem; color: #e2e8f0;">${s.expression || '默认'}</div>
+                </div>
+              `;
+            })
+            .join('');
+
+          return `
+            <div style="margin-bottom: 16px;">
+              <div style="font-size: 0.9rem; font-weight: 700; color: #e2e8f0; margin-bottom: 8px;">${charId}</div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px;">
+                ${itemsHtml}
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+
+      const modalHtml = `
+        <div class="gal-input-modal" id="gal-banana-appearance-picker">
+          <div class="gal-input-box" style="max-width: 900px; width: 96%; max-height: 85vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+            <div class="gal-input-title" style="padding: 16px 20px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff;">
+              <span><i class="fa-solid fa-user"></i> 选择角色立绘（最多3个）</span>
+              <button id="gal-banana-appearance-close" style="background: transparent; color: #fff; border: none; cursor: pointer; font-size: 1.1rem;">
+                <i class="fa-solid fa-times"></i>
+              </button>
+            </div>
+            <div style="padding: 16px 20px; overflow-y: auto; background: #0b1220;">
+              ${groupsHtml}
+            </div>
+          </div>
+        </div>
+      `;
+
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(modalHtml);
+      const $modal = $(mountRoot).find('#gal-banana-appearance-picker');
+      makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
+
+      const cleanup = () => {
+        blobUrls.forEach(u => {
+          try {
+            URL.revokeObjectURL(u);
+          } catch (e) {}
+        });
+      };
+
+      $modal.on('click', function (e) {
+        if (e.target === this) {
+          cleanup();
+          $modal.remove();
+        }
+      });
+      $modal.find('#gal-banana-appearance-close').on('click', () => {
+        cleanup();
+        $modal.remove();
+      });
+
+      $modal.find('.gal-banana-appearance-item').on('click', function () {
+        const charId = $(this).attr('data-char');
+        const expr = $(this).attr('data-expr') || '默认';
+        if (typeof onSelect === 'function') {
+          onSelect({ characterId: charId, characterName: charId, expression: expr });
+        }
+        cleanup();
+        $modal.remove();
+      });
     });
   }
 
@@ -6421,22 +7664,23 @@ ${extraRule}
         </div>
       </div>
     `;
-    $(topWindow.document.body).append(modalHtml);
-    const $modal = $('#gal-sprite-upload-modal');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-sprite-upload-modal');
     makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
-    const $fileInput = $('#gal-sprite-file');
-    const $confirmBtn = $('#gal-upload-confirm');
-    const $uploadTrigger = $('#gal-upload-trigger');
-    const $cropArea = $('#gal-crop-area');
-    const $zoomSlider = $('#gal-crop-zoom');
-    const $zoomValue = $('#gal-zoom-value');
+    const $fileInput = $modal.find('#gal-sprite-file');
+    const $confirmBtn = $modal.find('#gal-upload-confirm');
+    const $uploadTrigger = $modal.find('#gal-upload-trigger');
+    const $cropArea = $modal.find('#gal-crop-area');
+    const $zoomSlider = $modal.find('#gal-crop-zoom');
+    const $zoomValue = $modal.find('#gal-zoom-value');
     let cropper = null;
 
     // 点击上传区域
     $uploadTrigger.on('click', () => $fileInput.click());
 
     // 更换图片
-    $('#gal-change-image').on('click', () => $fileInput.click());
+    $modal.find('#gal-change-image').on('click', () => $fileInput.click());
 
     // 统一关闭处理
     const handleClose = () => {
@@ -7120,14 +8364,15 @@ ${extraRule}
         }
       </style>
     `;
-    $(topWindow.document.body).append(modalHtml);
-    const $modal = $('#gal-batch-upload-modal');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-batch-upload-modal');
     makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
-    const $fileInput = $('#gal-grid-file-input');
-    const $uploadArea = $('#gal-grid-upload-area');
-    const $previewArea = $('#gal-grid-preview-area');
-    const $confirmBtn = $('#gal-batch-confirm');
-    const $canvas = $('#gal-grid-canvas')[0];
+    const $fileInput = $modal.find('#gal-grid-file-input');
+    const $uploadArea = $modal.find('#gal-grid-upload-area');
+    const $previewArea = $modal.find('#gal-grid-preview-area');
+    const $confirmBtn = $modal.find('#gal-batch-confirm');
+    const $canvas = $modal.find('#gal-grid-canvas')[0];
     const ctx = $canvas.getContext('2d');
     let loadedImage = null;
     let gridRows = 2;
@@ -7139,8 +8384,8 @@ ${extraRule}
     getAllSprites().then(sprites => {
       existingChars = new Set(sprites.map(s => s.characterId));
       // 如果侧边栏已经渲染，则刷新
-      if ($('#gal-batch-char-list').length > 0) {
-        const currentFilter = $('#gal-batch-search-char').val() || '';
+      if ($modal.find('#gal-batch-char-list').length > 0) {
+        const currentFilter = $modal.find('#gal-batch-search-char').val() || '';
         renderSidebar(currentFilter);
       }
     });
@@ -7693,13 +8938,14 @@ ${extraRule}
             </style>
         `;
 
-    $(topWindow.document.body).append(modalHtml);
-    const $modal = $('#gal-expression-manager-modal');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-expression-manager-modal');
     makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
 
     const renderCustomExpressions = () => {
       const currentCustomExpressions = getCustomExpressions();
-      const $list = $('#gal-custom-expressions-list');
+      const $list = $modal.find('#gal-custom-expressions-list');
       $list.empty();
       if (currentCustomExpressions.length > 0) {
         $list.html(
@@ -7776,12 +9022,25 @@ ${extraRule}
         const text = yield file.text();
         const json = JSON.parse(text);
         let count = 0;
+        const newExpressions = [];
         if (json.sprites) {
+          const allExpressions = getAllExpressions();
+          const customs = getCustomExpressions();
           for (const s of json.sprites) {
             if (s.characterId && s.expression && s.url) {
               yield saveSprite(s.characterId, s.expression, null, s.url);
               count++;
+              // 自动注册缺失的表情标签
+              const expr = s.expression;
+              if (!allExpressions.includes(expr) && !newExpressions.includes(expr) && !customs.find(e => e.name === expr)) {
+                newExpressions.push(expr);
+                customs.push({ name: expr, emotion: null });
+              }
             }
+          }
+          if (newExpressions.length > 0) {
+            saveCustomExpressions(customs);
+            console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(', ')}`);
           }
         }
         if (json.backgrounds) {
@@ -7838,8 +9097,8 @@ ${extraRule}
           };
           // 确保baseUrl以/结尾
           const baseUrl = remoteBaseUrl ? (remoteBaseUrl.endsWith('/') ? remoteBaseUrl : remoteBaseUrl + '/') : '';
-          // 导出立绘
-          const sprites = yield getAllSprites();
+          // 导出立绘（忽略图包过滤，导出所有）
+          const sprites = yield getAllSprites(null, true);
           const spritesFolder = zip.folder('sprites');
           for (const s of sprites) {
             if (s.imageBlob) {
@@ -7855,12 +9114,13 @@ ${extraRule}
                   characterId: s.characterId,
                   expression: s.expression,
                   url: `${baseUrl}sprites/${filename}`,
+                  packId: s.packId || DEFAULT_PACK_ID,
                 });
               }
             }
           }
-          // 导出背景
-          const backgrounds = yield getAllBackgrounds();
+          // 导出背景（忽略图包过滤，导出所有）
+          const backgrounds = yield getAllBackgrounds(null, true);
           const bgFolder = zip.folder('backgrounds');
           for (const bg of backgrounds) {
             if (bg.imageBlob) {
@@ -7872,6 +9132,7 @@ ${extraRule}
                 remoteConfig.backgrounds.push({
                   sceneName: bg.sceneName,
                   url: `${baseUrl}backgrounds/${filename}`,
+                  packId: bg.packId || DEFAULT_PACK_ID,
                 });
               }
             }
@@ -7955,6 +9216,17 @@ ${extraRule}
           if (characterId && expression) {
             yield saveSprite(characterId, expression, file);
             console.log(`[${SCRIPT_NAME}] 导入立绘: ${characterId} - ${expression}`);
+            // 自动注册缺失的表情标签
+            const allExpressions = getAllExpressions();
+            if (!allExpressions.includes(expression)) {
+              // 静默添加自定义表情（不显示toast，避免导入大量文件时刷屏）
+              const customs = getCustomExpressions();
+              if (!customs.find(e => e.name === expression)) {
+                customs.push({ name: expression, emotion: null });
+                saveCustomExpressions(customs);
+                console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${expression}`);
+              }
+            }
             return;
           }
         }
@@ -8097,20 +9369,21 @@ ${extraRule}
             </div>
         `;
 
-    $(topWindow.document.body).append(dialogHtml);
-    const $dialog = $('#gal-remote-zip-dialog');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(dialogHtml);
+    const $dialog = $(mountRoot).find('#gal-remote-zip-dialog');
     makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
 
     // 关闭
-    $('#gal-remote-zip-cancel').on('click', () => $dialog.remove());
+    $dialog.find('#gal-remote-zip-cancel').on('click', () => $dialog.remove());
     $dialog.on('click', function (e) {
       if (e.target === this) $dialog.remove();
     });
 
     // 确认下载
-    $('#gal-remote-zip-confirm').on('click', function () {
+    $dialog.find('#gal-remote-zip-confirm').on('click', function () {
       return __awaiter(this, void 0, void 0, function* () {
-        const url = $('#gal-remote-zip-url').val().trim();
+        const url = $dialog.find('#gal-remote-zip-url').val().trim();
         if (!url) {
           showToast('请输入ZIP文件链接');
           return;
@@ -8366,6 +9639,21 @@ ${extraRule}
         // 批量保存到数据库
         if (spriteBatch.length > 0) {
           yield saveSpritesBatch(spriteBatch);
+          // 自动注册缺失的表情标签
+          const allExpressions = getAllExpressions();
+          const customs = getCustomExpressions();
+          const newExpressions = [];
+          for (const sprite of spriteBatch) {
+            const expr = sprite.expression;
+            if (!allExpressions.includes(expr) && !newExpressions.includes(expr) && !customs.find(e => e.name === expr)) {
+              newExpressions.push(expr);
+              customs.push({ name: expr, emotion: null });
+            }
+          }
+          if (newExpressions.length > 0) {
+            saveCustomExpressions(customs);
+            console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(', ')}`);
+          }
         }
         if (backgroundBatch.length > 0) {
           yield saveBackgroundsBatch(backgroundBatch);
@@ -8419,8 +9707,9 @@ ${extraRule}
             </div>
         `;
 
-    $(topWindow.document.body).append(html);
-    const $overlay = $('.gal-import-progress-overlay');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(html);
+    const $overlay = $(mountRoot).find('.gal-import-progress-overlay');
 
     // 绑定取消事件
     if (onCancel) {
@@ -8492,10 +9781,11 @@ ${extraRule}
             </div>
         `;
 
-    $(topWindow.document.body).append(errorHtml);
-    const $dialog = $('#gal-import-error-dialog');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(errorHtml);
+    const $dialog = $(mountRoot).find('#gal-import-error-dialog');
 
-    $('#gal-import-error-close').on('click', () => $dialog.remove());
+    $dialog.find('#gal-import-error-close').on('click', () => $dialog.remove());
     $dialog.on('click', function (e) {
       if (e.target === this) $dialog.remove();
     });
@@ -8506,10 +9796,16 @@ ${extraRule}
    */
   function showAssetManagerModal() {
     return __awaiter(this, arguments, void 0, function* (activeTab = 'sprites') {
-      // 获取所有立绘数据
-      const allSprites = yield getAllSprites();
-      // 获取所有背景数据
-      const allBackgrounds = yield getAllBackgrounds();
+      // 获取所有图包
+      const allPacks = yield getAllImagePacks();
+      const currentPackId = getCurrentPackId();
+      const currentPack = allPacks.find(p => p.id === currentPackId) || allPacks.find(p => p.id === DEFAULT_PACK_ID);
+      const currentPackName = currentPack ? currentPack.name : '未定义';
+      const currentRenderScope = getRenderScope();
+      // 获取所有立绘数据（当前图包）
+      const allSprites = yield getAllSprites(currentPackId);
+      // 获取所有背景数据（当前图包）
+      const allBackgrounds = yield getAllBackgrounds(currentPackId);
       // 获取数据库角色列表
       const dbCharacters = getCharacterListFromDatabase();
       // 按角色分组数据 { sprites: [], type: '', source: '' }
@@ -8548,8 +9844,36 @@ ${extraRule}
           <!-- 标题栏 -->
           <div class="gal-asset-header">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
-                <span><i class="fa-solid fa-folder-open"></i> 资源管理器</span>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <!-- 图包选择器 -->
+                <div class="gal-pack-selector" style="position: relative;">
+                  <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="切换图包" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
+                    <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+                  </button>
+                  <div class="gal-pack-menu" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 180px; overflow: hidden;">
+                    ${allPacks.map(pack => `
+                      <div class="gal-pack-item ${pack.id === currentPackId ? 'active' : ''}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? 'background: #e9ecef; font-weight: 700;' : ''}">
+                        <span><i class="fa-solid fa-folder${pack.id === currentPackId ? '-open' : ''}" style="margin-right: 8px; color: ${pack.id === currentPackId ? '#6f42c1' : '#666'};"></i>${pack.name}</span>
+                        ${pack.isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">默认</span>' : ''}
+                      </div>
+                    `).join('')}
+                    <div style="border-top: 2px solid #eee;">
+                      <div class="gal-pack-item" id="gal-add-pack-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #28a745;">
+                        <i class="fa-solid fa-plus"></i> <span>新建图包</span>
+                      </div>
+                      <div class="gal-pack-item" id="gal-manage-packs-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #17a2b8;">
+                        <i class="fa-solid fa-cog"></i> <span>管理图包</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- 渲染范围切换 -->
+                <button class="gal-action-btn" id="gal-render-scope-btn" title="${currentRenderScope === 'current' ? '仅当前图包资源' : '搜索所有图包资源'}" style="padding: 6px 10px; font-size: 0.9rem; background: ${currentRenderScope === 'current' ? '#fd7e14' : '#20c997'}; color: #fff; border-color: ${currentRenderScope === 'current' ? '#fd7e14' : '#20c997'};">
+                  <i class="fa-solid ${currentRenderScope === 'current' ? 'fa-bullseye' : 'fa-globe'}"></i>
+                </button>
+                <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
+                  <span><i class="fa-solid fa-folder-open"></i> 资源管理器</span>
+                </div>
               </div>
               <div style="display: flex; gap: 8px;">
                 <!-- 导出下拉菜单 -->
@@ -8564,7 +9888,7 @@ ${extraRule}
                     </div>
                     <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
                         <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i>
-                        <span>导出远程资源包</span>
+                        <span>导出GitHub资源包</span>
                     </div>
                     </div>
                 </div>
@@ -8662,10 +9986,19 @@ ${extraRule}
                           ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${info.type}</span>`
                           : '';
                       return `
-                    <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s;">
+                    <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s; position: relative;">
                       <div class="gal-character-avatar" style="aspect-ratio: 1 / 1; background: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
                         ${avatarUrl ? `<img src="${avatarUrl}" alt="${charId}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
                         ${sprites.length === 0 ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 0.7rem; padding: 2px; text-align: center;">无立绘</div>' : ''}
+                        <!-- 角色操作按钮 -->
+                        <div class="gal-char-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s;">
+                          <button class="gal-char-transfer" data-char="${charId}" title="转移到其他图包" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(111, 66, 193, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;">
+                            <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                          </button>
+                          <button class="gal-char-delete" data-char="${charId}" title="删除角色" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220, 53, 69, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;">
+                            <i class="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
                       </div>
                       <div style="padding: 10px; text-align: center;">
                         <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">
@@ -8733,9 +10066,14 @@ ${extraRule}
                         }
                       </div>
                       <div class="gal-bg-label">${bg.sceneName}</div>
-                      <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="删除">
-                        <i class="fa-solid fa-trash"></i>
-                      </button>
+                      <div class="gal-bg-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
+                        <button class="gal-bg-transfer" data-scene="${bg.sceneName}" title="转移到其他图包" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(111, 66, 193, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">
+                          <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                        </button>
+                        <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="删除" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;">
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
                     </div>
                   `,
                     )
@@ -8743,6 +10081,151 @@ ${extraRule}
                 </div>
               `
               }
+
+              <!-- 大香蕉生图模块 -->
+              <div class="gal-banana-imagegen-settings" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #6b21a8;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-wand-magic-sparkles" style="color: #fbbf24; font-size: 1.2rem;"></i>
+                    <span style="font-weight: 700; color: #fff; font-size: 1.1rem;">🍌 大香蕉生图模块</span>
+                  </div>
+                  <label class="gal-realtime-switch">
+                    <input type="checkbox" id="gal-banana-enabled" ${settings.bananaImageGen?.enabled ? 'checked' : ''}>
+                    <span class="gal-realtime-slider"></span>
+                  </label>
+                </div>
+
+                <div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 15px; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 6px;">
+                  💡 通过反代 API 生成背景图片，生成后自动保存到背景库。参考 deepthink 插件的图片生成 Agent 配置。
+                </div>
+
+                <!-- 反代API地址 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API 地址</label>
+                  <input type="text" id="gal-banana-proxy-url" placeholder="http://localhost:8045 或其他反代地址"
+                         value="${settings.bananaImageGen?.proxyUrl || ''}"
+                         style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;">
+                </div>
+
+                <!-- 反代API Key -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API Key</label>
+                  <input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx"
+                         value="${settings.bananaImageGen?.proxyApiKey || ''}"
+                         style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;">
+                </div>
+
+                <!-- 模型选择 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片生成模型</label>
+                  <div style="display: flex; gap: 8px;">
+                    <select id="gal-banana-model" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">
+                      ${settings.bananaImageGen?.model ? `<option value="${settings.bananaImageGen.model}" selected>${settings.bananaImageGen.model}</option>` : '<option value="">点击刷新获取模型列表</option>'}
+                    </select>
+                    <button id="gal-banana-refresh-models" style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer;" title="刷新模型列表">
+                      <i class="fa-solid fa-sync"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- COT 自定义 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生图COT自定义</label>
+                  <textarea id="gal-banana-cot" placeholder="可填写额外规则（将追加到COT中）"
+                         style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 80px; resize: vertical;">${settings.bananaImageGen?.cotTemplate || ''}</textarea>
+                </div>
+
+                <!-- 提示词前缀 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词前缀</label>
+                  <input type="text" id="gal-banana-prompt-prefix" placeholder="masterpiece, best quality, highres, "
+                         value="${settings.bananaImageGen?.defaultPromptPrefix || 'masterpiece, best quality, highres, '}"
+                         style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">
+                </div>
+
+                <!-- 提示词后缀 -->
+                <div style="margin-bottom: 12px;">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词后缀</label>
+                  <input type="text" id="gal-banana-prompt-suffix" placeholder=", no humans, scenery, background"
+                         value="${settings.bananaImageGen?.defaultPromptSuffix || ''}"
+                         style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">
+                </div>
+
+                <!-- CG模式开关 -->
+                <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label>
+                    <div style="font-size: 0.75rem; color: #8892b0;">开启：生成包含人物的剧情CG | 关闭：生成纯场景背景</div>
+                  </div>
+                  <label class="gal-realtime-switch">
+                    <input type="checkbox" id="gal-banana-cgmode" ${settings.bananaImageGen?.cgMode ? 'checked' : ''}>
+                    <span class="gal-realtime-slider"></span>
+                  </label>
+                </div>
+
+                <!-- CG模式图片尺寸 -->
+                <div id="gal-banana-size-section" style="margin-bottom: 12px; display: ${settings.bananaImageGen?.cgMode ? 'block' : 'none'};">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生成图片比例</label>
+                  <select id="gal-banana-image-size" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; cursor: pointer;">
+                    <option value="1:1" ${settings.bananaImageGen?.cgImageSize === '1:1' || !settings.bananaImageGen?.cgImageSize ? 'selected' : ''}>1:1 (正方形)</option>
+                    <option value="16:9" ${settings.bananaImageGen?.cgImageSize === '16:9' ? 'selected' : ''}>16:9 (横屏)</option>
+                    <option value="9:16" ${settings.bananaImageGen?.cgImageSize === '9:16' ? 'selected' : ''}>9:16 (竖屏)</option>
+                    <option value="4:3" ${settings.bananaImageGen?.cgImageSize === '4:3' ? 'selected' : ''}>4:3 (横屏)</option>
+                    <option value="3:4" ${settings.bananaImageGen?.cgImageSize === '3:4' ? 'selected' : ''}>3:4 (竖屏)</option>
+                    <option value="21:9" ${settings.bananaImageGen?.cgImageSize === '21:9' ? 'selected' : ''}>21:9 (宽银幕)</option>
+                    <option value="3:2" ${settings.bananaImageGen?.cgImageSize === '3:2' ? 'selected' : ''}>3:2 (横屏)</option>
+                    <option value="2:3" ${settings.bananaImageGen?.cgImageSize === '2:3' ? 'selected' : ''}>2:3 (竖屏)</option>
+                  </select>
+                  <div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">选择生成CG图片的比例（实际尺寸由服务端决定）</div>
+                </div>
+
+                <!-- 指定人物外观（CG模式） -->
+                <div id="gal-banana-appearance-section" style="margin-bottom: 12px; display: ${settings.bananaImageGen?.cgMode ? 'block' : 'none'};">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label style="color: #ccd6f6; font-size: 0.9rem;">指定人物外观（最多3个）</label>
+                    <button id="gal-banana-appearance-add" style="padding: 6px 10px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer; font-size: 0.8rem;">
+                      <i class="fa-solid fa-plus"></i> 添加角色
+                    </button>
+                  </div>
+                  <div id="gal-banana-appearance-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div>
+                  <div id="gal-banana-appearance-empty" style="font-size: 0.75rem; color: #8892b0;">暂无已指定角色</div>
+                </div>
+
+                <!-- 自动保存到背景库 -->
+                <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <label style="color: #ccd6f6; font-size: 0.9rem;">自动保存到背景库</label>
+                    <div style="font-size: 0.75rem; color: #8892b0;">生成成功后自动添加到背景资源库</div>
+                  </div>
+                  <label class="gal-realtime-switch">
+                    <input type="checkbox" id="gal-banana-autosave" ${settings.bananaImageGen?.autoSaveToLibrary !== false ? 'checked' : ''}>
+                    <span class="gal-realtime-slider"></span>
+                  </label>
+                </div>
+
+                <!-- 手动生成按钮 -->
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(139,92,246,0.3);">
+                  <label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">手动生成背景</label>
+                  <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <input type="text" id="gal-banana-scene-name" placeholder="场景名称（如：教室、森林）"
+                           style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">
+                  </div>
+                  <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <textarea id="gal-banana-custom-prompt" placeholder="自定义提示词（可选，留空使用场景名称自动生成）"
+                           style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 60px; resize: vertical;"></textarea>
+                  </div>
+                  <button id="gal-banana-generate-btn" style="width: 100%; padding: 10px; border-radius: 6px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #1a1a2e; border: none; cursor: pointer; font-weight: 700; font-size: 0.95rem;">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> 生成背景图片
+                  </button>
+                  <div id="gal-banana-preview" style="margin-top: 10px; display: none;">
+                    <div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 5px;">生成预览：</div>
+                    <img id="gal-banana-preview-img" style="max-width: 100%; border-radius: 6px; border: 1px solid #6b21a8;">
+                    <button id="gal-banana-save-to-library" style="width: 100%; margin-top: 8px; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem;">
+                      <i class="fa-solid fa-save"></i> 保存到背景库
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <!-- Wallhaven 壁纸设置 -->
               <div class="gal-wallhaven-settings" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460;">
@@ -8781,14 +10264,14 @@ ${extraRule}
                   </select>
                 </div>
 
-                <!-- 背景模式 -->
+                <!-- CG模式 -->
                 <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
                   <div>
-                    <label style="color: #ccd6f6; font-size: 0.9rem;">背景图模式（纯场景）</label>
-                    <div style="font-size: 0.75rem; color: #8892b0;">开启：只搜环境背景 | 关闭：搜人物/角色</div>
+                    <label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label>
+                    <div style="font-size: 0.75rem; color: #8892b0;">开启：允许人物关键词 | 关闭：只搜环境背景</div>
                   </div>
                   <label class="gal-realtime-switch">
-                    <input type="checkbox" id="gal-wallhaven-scenemode" ${settings.wallhaven?.sceneMode !== false ? 'checked' : ''}>
+                    <input type="checkbox" id="gal-wallhaven-cgmode" ${settings.wallhaven?.cgMode ? 'checked' : ''}>
                     <span class="gal-realtime-slider"></span>
                   </label>
                 </div>
@@ -8912,6 +10395,15 @@ ${extraRule}
         .gal-character-card:hover {
           transform: translateY(-3px);
           box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+        }
+        .gal-character-card:hover .gal-char-actions {
+          opacity: 1 !important;
+        }
+        /* 移动端始终显示角色操作按钮 */
+        @media (max-width: 768px), (pointer: coarse) {
+          .gal-char-actions {
+            opacity: 1 !important;
+          }
         }
         .gal-sprite-group {
           margin-bottom: 20px;
@@ -9126,8 +10618,9 @@ ${extraRule}
         }
       </style>
     `;
-      $(topWindow.document.body).append(modalHtml);
-      const $modal = $('#gal-asset-manager-modal');
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(modalHtml);
+      const $modal = $(mountRoot).find('#gal-asset-manager-modal');
       // makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title').parent());
       // 根据 activeTab 参数切换到正确的标签页
       if (activeTab && activeTab !== 'sprites') {
@@ -9187,9 +10680,9 @@ ${extraRule}
         saveSettings();
       });
 
-      $modal.find('#gal-wallhaven-scenemode').on('change', async function () {
+      $modal.find('#gal-wallhaven-cgmode').on('change', async function () {
         if (!settings.wallhaven) settings.wallhaven = {};
-        settings.wallhaven.sceneMode = $(this).is(':checked');
+        settings.wallhaven.cgMode = $(this).is(':checked');
         saveSettings();
         if (isEnabled) {
           await injectCOTToWorldbook();
@@ -9231,6 +10724,382 @@ ${extraRule}
         showToast(`排行榜时间范围已设置为: ${$(this).find('option:selected').text()}`);
       });
 
+      // ============================================
+      // 大香蕉生图模块事件处理
+      // ============================================
+
+      // 大香蕉启用开关
+      $modal.find('#gal-banana-enabled').on('change', async function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.enabled = $(this).is(':checked');
+        saveSettings();
+        // 立即更新世界书COT规则
+        if (isEnabled) {
+          await injectCOTToWorldbook();
+        }
+        showToast(settings.bananaImageGen.enabled ? '已开启大香蕉生图模块' : '已关闭大香蕉生图模块');
+      });
+
+      // 反代API地址
+      $modal.find('#gal-banana-proxy-url').on('change', function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.proxyUrl = $(this).val().trim();
+        saveSettings();
+      });
+
+      // 反代API Key
+      $modal.find('#gal-banana-proxy-key').on('change', function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.proxyApiKey = $(this).val().trim();
+        saveSettings();
+      });
+
+      // 模型选择
+      $modal.find('#gal-banana-model').on('change', function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.model = $(this).val();
+        saveSettings();
+      });
+
+      // 生图COT自定义
+      $modal.find('#gal-banana-cot').on('change', async function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.cotTemplate = $(this).val();
+        saveSettings();
+        if (isEnabled) {
+          await injectCOTToWorldbook();
+        }
+      });
+
+      // 提示词前缀
+      $modal.find('#gal-banana-prompt-prefix').on('change', function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.defaultPromptPrefix = $(this).val();
+        saveSettings();
+      });
+
+      // 提示词后缀
+      $modal.find('#gal-banana-prompt-suffix').on('change', function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.defaultPromptSuffix = $(this).val();
+        saveSettings();
+      });
+
+      // CG模式
+      $modal.find('#gal-banana-cgmode').on('change', async function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.cgMode = $(this).is(':checked');
+        saveSettings();
+        $modal.find('#gal-banana-appearance-section').toggle(settings.bananaImageGen.cgMode === true);
+        $modal.find('#gal-banana-size-section').toggle(settings.bananaImageGen.cgMode === true);
+        if (isEnabled) {
+          await injectCOTToWorldbook();
+        }
+      });
+
+      // CG模式图片尺寸
+      $modal.find('#gal-banana-image-size').on('change', function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.cgImageSize = $(this).val();
+        saveSettings();
+      });
+
+      // 自动保存到背景库
+      $modal.find('#gal-banana-autosave').on('change', function () {
+        if (!settings.bananaImageGen) settings.bananaImageGen = {};
+        settings.bananaImageGen.autoSaveToLibrary = $(this).is(':checked');
+        saveSettings();
+      });
+
+      // CG模式角色外观
+      renderBananaAppearanceList($modal);
+      $modal.find('#gal-banana-appearance-add').on('click', function () {
+        showBananaAppearancePicker(async selection => {
+          const list = getBananaCharacterAppearances();
+          const name = selection.characterName || selection.characterId;
+          const expr = selection.expression || '默认';
+
+          const appearanceData = {
+            characterId: name,
+            characterName: name,
+            expression: expr
+            // 注意：不存储 imageBase64，生成时实时获取
+          };
+
+          const existingIndex = list.findIndex(a => (a.characterName || a.characterId) === name);
+          if (existingIndex >= 0) {
+            list[existingIndex] = appearanceData;
+          } else if (list.length >= 3) {
+            showToast('最多只能指定3个角色');
+            return;
+          } else {
+            list.push(appearanceData);
+          }
+          setBananaCharacterAppearances(list);
+          renderBananaAppearanceList($modal);
+          if (isEnabled) {
+            await injectCOTToWorldbook();
+          }
+        });
+      });
+
+      $modal.on('click', '.gal-banana-appearance-remove', async function () {
+        const charId = $(this).attr('data-char');
+        const list = getBananaCharacterAppearances().filter(a => (a.characterName || a.characterId) !== charId);
+        setBananaCharacterAppearances(list);
+        renderBananaAppearanceList($modal);
+        if (isEnabled) {
+          await injectCOTToWorldbook();
+        }
+      });
+
+      // 刷新模型列表按钮
+      $modal.find('#gal-banana-refresh-models').on('click', async function () {
+        const $btn = $(this);
+        const $select = $modal.find('#gal-banana-model');
+        const proxyUrl = $modal.find('#gal-banana-proxy-url').val().trim();
+        const proxyKey = $modal.find('#gal-banana-proxy-key').val().trim();
+
+        if (!proxyUrl) {
+          showToast('请先填写反代 API 地址');
+          return;
+        }
+
+        $btn.prop('disabled', true).find('i').addClass('fa-spin');
+
+        try {
+          // 自适应 URL 处理：如果用户已配置 /v1 则使用，否则自动添加
+          let baseUrl = proxyUrl.replace(/\/+$/, '');
+          if (!baseUrl.endsWith('/v1')) {
+            baseUrl = baseUrl + '/v1';
+          }
+          const modelsUrl = `${baseUrl}/models`;
+
+          const response = await fetch(modelsUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${proxyKey}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+          const models = data.data || [];
+
+          // 直接显示所有模型，不做过滤（用户自行选择支持图片生成的模型）
+          $select.html(models.map(m => `<option value="${m.id}">${m.id}</option>`).join(''));
+
+          if (models.length > 0) {
+            showToast(`获取到 ${models.length} 个模型`);
+          } else {
+            $select.html('<option value="">未找到可用模型</option>');
+            showToast('未找到可用模型');
+          }
+        } catch (e) {
+          console.error(`[${SCRIPT_NAME}] 获取大香蕉模型列表失败:`, e);
+          showToast(`获取模型列表失败: ${e.message}`);
+        } finally {
+          $btn.prop('disabled', false).find('i').removeClass('fa-spin');
+        }
+      });
+
+      // 生成背景图片按钮
+      $modal.find('#gal-banana-generate-btn').on('click', async function () {
+        const $btn = $(this);
+        const sceneName = $modal.find('#gal-banana-scene-name').val().trim();
+        const customPrompt = $modal.find('#gal-banana-custom-prompt').val().trim();
+        const proxyUrl = $modal.find('#gal-banana-proxy-url').val().trim();
+        const proxyKey = $modal.find('#gal-banana-proxy-key').val().trim();
+        const model = $modal.find('#gal-banana-model').val();
+        const promptPrefix = $modal.find('#gal-banana-prompt-prefix').val();
+        const promptSuffix = $modal.find('#gal-banana-prompt-suffix').val();
+        const cgMode = $modal.find('#gal-banana-cgmode').is(':checked');
+        const defaultSceneSuffix = ', no humans, scenery, background';
+        const autoSave = $modal.find('#gal-banana-autosave').is(':checked');
+
+        if (!sceneName) {
+          showToast('请输入场景名称');
+          return;
+        }
+
+        if (!proxyUrl) {
+          showToast('请先配置反代 API 地址');
+          return;
+        }
+
+        if (!model) {
+          showToast('请先选择图片生成模型');
+          return;
+        }
+
+        // 构建最终提示词
+        let finalPrompt = customPrompt || sceneName;
+        if (promptPrefix) {
+          finalPrompt = promptPrefix + finalPrompt;
+        }
+        if (!cgMode) {
+          const suffixToUse = promptSuffix || defaultSceneSuffix;
+          if (suffixToUse) {
+            finalPrompt = finalPrompt + suffixToUse;
+          }
+        }
+        if (cgMode) {
+          finalPrompt = finalPrompt + '\n请生成包含人物的剧情CG画面。';
+          // 不再添加文本描述，改为在多模态消息中发送立绘图片
+        }
+
+        $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 生成中...');
+
+        try {
+          // 自适应 URL 处理：如果用户已配置 /v1 则使用，否则不添加
+          let baseUrl = proxyUrl.replace(/\/+$/, '');
+          // 如果 URL 不以 /v1 结尾，自动添加
+          if (!baseUrl.endsWith('/v1')) {
+            baseUrl = baseUrl + '/v1';
+          }
+          const genUrl = `${baseUrl}/chat/completions`;
+
+          // 构建消息内容：CG模式下使用多模态格式（包含角色立绘图片）
+          let messageContent = finalPrompt;
+          if (cgMode) {
+            const appearances = getBananaCharacterAppearances();
+            console.log(`[${SCRIPT_NAME}] 大香蕉生图: cgMode = ${cgMode}, 角色数量 = ${appearances.length}`);
+            if (appearances.length > 0) {
+              console.log(`[${SCRIPT_NAME}] 大香蕉生图: 准备添加 ${appearances.length} 个角色立绘到多模态消息`);
+              messageContent = await buildBananaAppearanceMultimodalContent(finalPrompt);
+              if (Array.isArray(messageContent)) {
+                console.log(`[${SCRIPT_NAME}] 大香蕉生图: 已构建多模态消息，包含 ${messageContent.length - 1} 张图片`);
+              }
+            }
+          }
+
+          console.log(`[${SCRIPT_NAME}] 大香蕉生图: 发送请求到 ${genUrl}`);
+          console.log(`[${SCRIPT_NAME}] 大香蕉生图: 消息类型 = ${Array.isArray(messageContent) ? '多模态' : '纯文本'}`);
+
+          // 构建请求体
+          const requestBody = {
+            model: model,
+            messages: [{ role: 'user', content: messageContent }],
+            stream: false,
+          };
+
+          // CG模式下添加图片尺寸参数
+          if (cgMode) {
+            const imageSizeRatio = settings.bananaImageGen?.cgImageSize || '1:1';
+            const [ratioW, ratioH] = imageSizeRatio.split(':').map(Number);
+
+            // 根据比例计算实际像素尺寸（以1024为基准）
+            let width, height;
+            if (ratioW >= ratioH) {
+              width = 1024;
+              height = Math.round(1024 * ratioH / ratioW);
+            } else {
+              height = 1024;
+              width = Math.round(1024 * ratioW / ratioH);
+            }
+
+            requestBody.size = `${width}x${height}`;
+            requestBody.width = width;
+            requestBody.height = height;
+            console.log(`[${SCRIPT_NAME}] 大香蕉生图: 图片比例 = ${imageSizeRatio}, 实际尺寸 = ${width}x${height}`);
+          }
+
+          // 使用 chat/completions 端点（与 deepthink 一致）
+          const response = await fetch(genUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${proxyKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+          }
+
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content || '';
+
+          if (!content) {
+            throw new Error('未返回内容');
+          }
+
+          // 解析响应中的图片（参考 deepthink 的 parseImageFromResponse）
+          const imageUrl = parseBananaImageFromResponse(content, proxyUrl);
+
+          if (!imageUrl) {
+            throw new Error('未能从响应中解析到图片');
+          }
+
+          // 显示预览
+          $modal.find('#gal-banana-preview').show();
+          $modal.find('#gal-banana-preview-img').attr('src', imageUrl);
+
+          // 存储当前生成的图片信息，供保存按钮使用
+          $modal.find('#gal-banana-save-to-library').data('imageUrl', imageUrl);
+          $modal.find('#gal-banana-save-to-library').data('sceneName', sceneName);
+
+          console.log(`[${SCRIPT_NAME}] 大香蕉生图: 生成成功`);
+          showToast('背景图片生成成功，点击下方按钮可保存到背景库');
+
+        } catch (e) {
+          console.error(`[${SCRIPT_NAME}] 大香蕉生图失败:`, e);
+          showToast(`生成失败: ${e.message}`);
+        } finally {
+          $btn.prop('disabled', false).html('<i class="fa-solid fa-wand-magic-sparkles"></i> 生成背景图片');
+        }
+      });
+
+      // 保存到背景库按钮
+      $modal.find('#gal-banana-save-to-library').on('click', async function () {
+        const $btn = $(this);
+        const imageUrl = $btn.data('imageUrl');
+        const sceneName = $btn.data('sceneName');
+
+        if (!imageUrl || !sceneName) {
+          showToast('请先生成图片');
+          return;
+        }
+
+        $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 保存中...');
+
+        try {
+          // 如果是 base64，转换为 Blob
+          let imageBlob = null;
+          if (imageUrl.startsWith('data:')) {
+            const base64Data = imageUrl.split(',')[1];
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            imageBlob = new Blob([byteArray], { type: 'image/png' });
+          }
+
+          await saveBackground(sceneName, imageBlob, imageUrl);
+          sceneBackgrounds.set(sceneName, imageUrl);
+
+          // 更新世界书
+          if (isEnabled) {
+            injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 更新世界书失败:`, e));
+          }
+
+          showToast(`场景「${sceneName}」已保存到背景库`);
+          $btn.html('<i class="fa-solid fa-check"></i> 已保存');
+        } catch (e) {
+          console.error(`[${SCRIPT_NAME}] 大香蕉生图: 保存到背景库失败`, e);
+          showToast(`保存失败: ${e.message}`);
+          $btn.prop('disabled', false).html('<i class="fa-solid fa-save"></i> 保存到背景库');
+        }
+      });
+
       // 批量上传按钮
       $('#gal-batch-upload-btn').on('click', () => {
         $modal.remove();
@@ -9258,10 +11127,65 @@ ${extraRule}
         showBatchBackgroundUploadDialog(() => showAssetManagerModal('backgrounds'));
       });
       // 点击角色卡片打开该角色的立绘编辑弹窗
-      $modal.find('.gal-character-card').on('click', function () {
+      $modal.find('.gal-character-card').on('click', function (e) {
+        // 如果点击的是操作按钮，不打开编辑弹窗
+        if ($(e.target).closest('.gal-char-actions').length) {
+          return;
+        }
         const charId = $(this).data('char');
         $modal.remove();
         showCharacterSpritesModal(charId);
+      });
+      // 角色卡片悬停显示操作按钮
+      $modal.find('.gal-character-card').on('mouseenter', function () {
+        $(this).find('.gal-char-actions').css('opacity', '1');
+      }).on('mouseleave', function () {
+        $(this).find('.gal-char-actions').css('opacity', '0');
+      });
+      // 转移角色到其他图包
+      $modal.find('.gal-char-transfer').on('click', function (e) {
+        return __awaiter(this, void 0, void 0, function* () {
+          e.stopPropagation();
+          const charId = $(this).data('char');
+          // 获取该角色的所有立绘key
+          const allSprites = yield getAllSprites(null, true); // 忽略图包过滤
+          const charSprites = allSprites.filter(s => s.characterId === charId);
+          if (charSprites.length === 0) {
+            showToast('该角色没有立绘可转移', 'warning');
+            return;
+          }
+          const spriteKeys = charSprites.map(s => `${s.characterId}_${s.expression}`);
+          showTransferDialog('sprite', spriteKeys, () => {
+            $modal.remove();
+            showAssetManagerModal('sprites');
+          });
+        });
+      });
+      // 删除角色（删除该角色的所有立绘）
+      $modal.find('.gal-char-delete').on('click', function (e) {
+        return __awaiter(this, void 0, void 0, function* () {
+          e.stopPropagation();
+          const charId = $(this).data('char');
+          // 获取该角色的所有立绘
+          const allSprites = yield getAllSprites(null, true);
+          const charSprites = allSprites.filter(s => s.characterId === charId);
+          if (charSprites.length === 0) {
+            showToast('该角色没有立绘', 'warning');
+            return;
+          }
+          if (confirm(`确定删除角色「${charId}」的所有 ${charSprites.length} 个立绘吗？此操作不可恢复！`)) {
+            for (const sprite of charSprites) {
+              yield deleteSprite(sprite.characterId, sprite.expression);
+            }
+            showToast(`已删除角色「${charId}」的 ${charSprites.length} 个立绘`);
+            // 自动更新世界书
+            if (isEnabled) {
+              injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 更新世界书失败:`, e));
+            }
+            $modal.remove();
+            showAssetManagerModal('sprites');
+          }
+        });
       });
       // 删除背景
       $modal.find('.gal-bg-delete').on('click', function (e) {
@@ -9281,6 +11205,85 @@ ${extraRule}
         });
       });
       // 导出按钮
+      // ========== 图包选择器逻辑 ==========
+
+      // 切换图包下拉菜单显示
+      $('#gal-pack-dropdown-btn').on('click', function (e) {
+        e.stopPropagation();
+        $('#gal-export-menu, #gal-import-menu').hide();
+        const $menu = $('#gal-pack-menu');
+        $menu.toggle();
+      });
+
+      // 点击页面其他区域关闭图包菜单
+      $(topWindow.document).on('click.galPackMenu', function (e) {
+        if (!$(e.target).closest('.gal-pack-selector').length) {
+          $('#gal-pack-menu').hide();
+        }
+      });
+
+      // 图包选择事件
+      $modal.find('.gal-pack-item[data-pack-id]').on('click', function () {
+        const packId = $(this).data('pack-id');
+        $('#gal-pack-menu').hide();
+        setCurrentPack(packId);
+        // 刷新资源管理器
+        $modal.remove();
+        $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
+        showAssetManagerModal();
+      });
+
+      // 新建图包按钮
+      $('#gal-add-pack-btn').on('click', function () {
+        $('#gal-pack-menu').hide();
+        const name = prompt('请输入新图包名称：');
+        if (name && name.trim()) {
+          createImagePack(name.trim()).then(() => {
+            // 刷新资源管理器
+            $modal.remove();
+            $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
+            showAssetManagerModal();
+          });
+        }
+      });
+
+      // 管理图包按钮
+      $('#gal-manage-packs-btn').on('click', function () {
+        $('#gal-pack-menu').hide();
+        showPackManagerModal();
+      });
+
+      // 渲染范围切换按钮
+      $('#gal-render-scope-btn').on('click', function () {
+        const currentScope = getRenderScope();
+        const newScope = currentScope === 'current' ? 'all' : 'current';
+        setRenderScope(newScope);
+        // 更新按钮样式
+        const $btn = $(this);
+        if (newScope === 'current') {
+          $btn.css({ background: '#fd7e14', borderColor: '#fd7e14' })
+              .attr('title', '仅当前图包资源')
+              .find('i').removeClass('fa-globe').addClass('fa-bullseye');
+        } else {
+          $btn.css({ background: '#20c997', borderColor: '#20c997' })
+              .attr('title', '搜索所有图包资源')
+              .find('i').removeClass('fa-bullseye').addClass('fa-globe');
+        }
+        showToast(newScope === 'current' ? '已切换为：仅当前图包' : '已切换为：搜索所有图包');
+      });
+
+      // 背景转移按钮
+      $modal.find('.gal-bg-transfer').on('click', function (e) {
+        e.stopPropagation();
+        const sceneName = $(this).data('scene');
+        showTransferDialog('background', [sceneName], () => {
+          // 刷新资源管理器
+          $modal.remove();
+          $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
+          showAssetManagerModal('backgrounds');
+        });
+      });
+
       // ========== 导出下拉菜单逻辑 ==========
 
       // 切换导出下拉菜单显示
@@ -9311,21 +11314,55 @@ ${extraRule}
             AssetIO.exportAllAssets();
         } else if (action === 'export-remote') {
             const input = prompt(
-              '请输入 GitHub 仓库信息 (格式: 用户名/仓库名) 或 完整URL前缀\n\n如果输入 用户名/仓库名 (如 Baibai/GalgamePlugin)，程序将自动生成 jsDelivr CDN 加速链接。\n\n也可以直接输入完整的 URL 前缀。',
+              '请输入 GitHub 仓库信息 (格式: 用户名/仓库名 或 GitHub 仓库链接)\n\n将统一生成 jsDelivr CDN 加速链接。',
             );
             if (!input) return;
-            let baseUrl = input.trim();
-            // 检测是否为 user/repo 格式 (不含 http 且包含一个斜杠)
-            if (!baseUrl.startsWith('http') && baseUrl.indexOf('/') > 0 && baseUrl.split('/').length === 2) {
-              // 是 GitHub 简写格式
-              const branch = prompt('请输入分支名或版本号 (例如 main, master, v1.0):', 'main');
-              if (!branch) return;
-              const cleanRepo = baseUrl.replace('.git', '');
-              // 构建 jsDelivr 链接: https://cdn.jsdelivr.net/gh/user/repo@branch/
-              baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
-              if (!confirm(`确认生成以下 CDN 链接前缀的配置吗？\n${baseUrl}`)) {
+            const rawInput = input.trim();
+            let cleanRepo = '';
+            let branch = '';
+            let baseUrl = '';
+
+            // 已是 jsDelivr CDN 链接前缀
+            if (rawInput.includes('cdn.jsdelivr.net/gh/')) {
+              baseUrl = rawInput.endsWith('/') ? rawInput : `${rawInput}/`;
+              if (!confirm(`确认使用以下 CDN 链接前缀吗？\n${baseUrl}`)) {
                 return;
               }
+              AssetIO.exportAllAssets(baseUrl);
+              return;
+            }
+
+            if (rawInput.startsWith('http')) {
+              // 支持 GitHub 仓库链接或 raw 链接
+              const rawMatch = rawInput.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\//i);
+              if (rawMatch) {
+                cleanRepo = `${rawMatch[1]}/${rawMatch[2]}`;
+                branch = rawMatch[3];
+              } else {
+                const githubMatch = rawInput.match(/github\.com\/([^/]+)\/([^/#?]+)(?:\.git)?/i);
+                if (githubMatch) {
+                  cleanRepo = `${githubMatch[1]}/${githubMatch[2].replace(/\.git$/i, '')}`;
+                }
+              }
+            } else if (rawInput.indexOf('/') > 0 && rawInput.split('/').length === 2) {
+              // GitHub 简写格式 user/repo
+              cleanRepo = rawInput.replace('.git', '');
+            }
+
+            if (!cleanRepo) {
+              alert('无法识别 GitHub 仓库信息，请输入 用户名/仓库名 或 GitHub 仓库链接。');
+              return;
+            }
+
+            if (!branch) {
+              const branchInput = prompt('请输入分支名或版本号 (例如 main, master, v1.0):', 'main');
+              if (!branchInput) return;
+              branch = branchInput;
+            }
+
+            baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
+            if (!confirm(`确认生成以下 CDN 链接前缀的配置吗？\n${baseUrl}`)) {
+              return;
             }
             AssetIO.exportAllAssets(baseUrl);
         }
@@ -9507,9 +11544,11 @@ ${extraRule}
                       }
                     </div>
                     <div class="gal-sprite-label" style="padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.expression}</div>
-                    <button class="gal-sprite-delete" data-char="${s.characterId}" data-expr="${s.expression}" title="删除" style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer;">
-                      <i class="fa-solid fa-trash"></i>
-                    </button>
+                    <div class="gal-sprite-actions" style="position: absolute; top: 4px; right: 4px; display: flex; gap: 3px;">
+                      <button class="gal-sprite-delete" data-char="${s.characterId}" data-expr="${s.expression}" title="删除" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </div>
                   </div>
                 `,
                   )
@@ -9545,8 +11584,9 @@ ${extraRule}
         }
       </style>
     `;
-      $(topWindow.document.body).append(modalHtml);
-      const $modal = $('#gal-character-sprites-modal');
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(modalHtml);
+      const $modal = $(mountRoot).find('#gal-character-sprites-modal');
       // makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title').parent());
       // 统一关闭处理
       const handleClose = () => {
@@ -9560,7 +11600,7 @@ ${extraRule}
         }
       };
       // 关闭
-      $('#gal-char-sprites-close').on('click', handleClose);
+      $modal.find('#gal-char-sprites-close').on('click', handleClose);
       $modal.on('click', function (e) {
         if (e.target === this) handleClose();
       });
@@ -9612,24 +11652,251 @@ ${extraRule}
       });
     });
   }
-  // 获取所有立绘
-  function getAllSprites() {
+  // ============================================
+  // 图包管理弹窗
+  // ============================================
+  /**
+   * 显示图包管理弹窗
+   */
+  function showPackManagerModal() {
+    return __awaiter(this, void 0, void 0, function* () {
+      const allPacks = yield getAllImagePacks();
+      const currentPackId = getCurrentPackId();
+
+      // 获取每个图包的资源统计
+      const packStats = new Map();
+      for (const pack of allPacks) {
+        const stats = yield getPackResourceCount(pack.id);
+        packStats.set(pack.id, stats);
+      }
+
+      const modalHtml = `
+        <div class="gal-input-modal" id="gal-pack-manager-modal">
+          <div class="gal-input-box" style="width: 500px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
+            <div class="gal-input-title" style="display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fa-solid fa-layer-group"></i> 图包管理</span>
+              <button class="gal-close-btn" id="gal-pack-manager-close" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #666;">
+                <i class="fa-solid fa-times"></i>
+              </button>
+            </div>
+            <div style="flex: 1; overflow-y: auto; padding: 15px;">
+              <div style="margin-bottom: 15px;">
+                <button class="gal-action-btn primary" id="gal-create-pack-btn" style="padding: 8px 16px;">
+                  <i class="fa-solid fa-plus"></i> 新建图包
+                </button>
+              </div>
+              <div class="gal-pack-list" style="display: flex; flex-direction: column; gap: 10px;">
+                ${allPacks.map(pack => {
+                  const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0 };
+                  const isDefault = pack.id === DEFAULT_PACK_ID;
+                  const isCurrent = pack.id === currentPackId;
+                  return `
+                    <div class="gal-pack-row" data-pack-id="${pack.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: ${isCurrent ? '#e8f4fd' : '#f8f9fa'}; border: 2px solid ${isCurrent ? '#0d6efd' : '#dee2e6'}; border-radius: 8px;">
+                      <div style="display: flex; align-items: center; gap: 12px;">
+                        <i class="fa-solid fa-folder${isCurrent ? '-open' : ''}" style="font-size: 1.5rem; color: ${isCurrent ? '#0d6efd' : '#6c757d'};"></i>
+                        <div>
+                          <div style="font-weight: 700; color: #333; display: flex; align-items: center; gap: 8px;">
+                            <span class="pack-name-display">${pack.name}</span>
+                            ${isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">默认</span>' : ''}
+                            ${isCurrent ? '<span style="font-size: 0.7rem; background: #0d6efd; color: #fff; padding: 2px 6px; border-radius: 3px;">当前</span>' : ''}
+                          </div>
+                          <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">
+                            <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘 &nbsp;|&nbsp;
+                            <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景
+                          </div>
+                        </div>
+                      </div>
+                      <div style="display: flex; gap: 8px;">
+                        ${!isCurrent ? `<button class="gal-pack-select-btn gal-action-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; font-size: 0.8rem; background: #0d6efd; color: #fff; border-color: #0d6efd;" title="切换到此图包"><i class="fa-solid fa-check"></i></button>` : ''}
+                        ${!isDefault ? `<button class="gal-pack-rename-btn gal-action-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; font-size: 0.8rem;" title="重命名"><i class="fa-solid fa-pen"></i></button>` : ''}
+                        ${!isDefault ? `<button class="gal-pack-delete-btn gal-action-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; font-size: 0.8rem; background: #dc3545; color: #fff; border-color: #dc3545;" title="删除"><i class="fa-solid fa-trash"></i></button>` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(modalHtml);
+      const $modal = $(mountRoot).find('#gal-pack-manager-modal');
+
+      // 关闭按钮
+      $modal.find('#gal-pack-manager-close').on('click', () => $modal.remove());
+      $modal.on('click', function (e) {
+        if (e.target === this) $modal.remove();
+      });
+
+      // 新建图包
+      $modal.find('#gal-create-pack-btn').on('click', () => {
+        const name = prompt('请输入新图包名称：');
+        if (name && name.trim()) {
+          createImagePack(name.trim()).then(() => {
+            $modal.remove();
+            showPackManagerModal();
+          });
+        }
+      });
+
+      // 切换图包
+      $modal.find('.gal-pack-select-btn').on('click', function () {
+        const packId = $(this).data('pack-id');
+        setCurrentPack(packId);
+        $modal.remove();
+        showPackManagerModal();
+        showToast('已切换图包');
+      });
+
+      // 重命名图包
+      $modal.find('.gal-pack-rename-btn').on('click', function () {
+        const packId = $(this).data('pack-id');
+        const $row = $(this).closest('.gal-pack-row');
+        const currentName = $row.find('.pack-name-display').text();
+        const newName = prompt('请输入新名称：', currentName);
+        if (newName && newName.trim() && newName.trim() !== currentName) {
+          renameImagePack(packId, newName.trim()).then(() => {
+            $modal.remove();
+            showPackManagerModal();
+            showToast('已重命名图包');
+          }).catch(err => {
+            alert('重命名失败：' + err.message);
+          });
+        }
+      });
+
+      // 删除图包
+      $modal.find('.gal-pack-delete-btn').on('click', function () {
+        const packId = $(this).data('pack-id');
+        const $row = $(this).closest('.gal-pack-row');
+        const packName = $row.find('.pack-name-display').text();
+        if (confirm(`确定要删除图包"${packName}"吗？\n\n该图包内的所有资源将被转移到"未定义"图包。`)) {
+          deleteImagePack(packId).then(() => {
+            $modal.remove();
+            showPackManagerModal();
+            showToast('已删除图包，资源已转移');
+          }).catch(err => {
+            alert('删除失败：' + err.message);
+          });
+        }
+      });
+    });
+  }
+
+  // ============================================
+  // 资源转移对话框
+  // ============================================
+  /**
+   * 显示资源转移对话框
+   * @param {string} resourceType - 'sprite' 或 'background'
+   * @param {Array} resourceIds - 资源ID列表
+   * @param {Function} onComplete - 完成回调
+   */
+  function showTransferDialog(resourceType, resourceIds, onComplete) {
+    return __awaiter(this, void 0, void 0, function* () {
+      const allPacks = yield getAllImagePacks();
+      const currentPackId = getCurrentPackId();
+
+      const modalHtml = `
+        <div class="gal-input-modal" id="gal-transfer-modal">
+          <div class="gal-input-box" style="width: 400px;">
+            <div class="gal-input-title">
+              <span><i class="fa-solid fa-arrow-right-arrow-left"></i> 转移资源</span>
+            </div>
+            <div style="padding: 20px;">
+              <p style="margin-bottom: 15px; color: #333;">
+                将 <strong>${resourceIds.length}</strong> 个${resourceType === 'sprite' ? '立绘' : '背景'}转移到：
+              </p>
+              <select id="gal-transfer-target" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 6px; font-size: 1rem;">
+                ${allPacks.filter(p => p.id !== currentPackId).map(pack => `
+                  <option value="${pack.id}">${pack.name}</option>
+                `).join('')}
+              </select>
+              <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
+                <button class="gal-action-btn" id="gal-transfer-cancel" style="padding: 8px 16px;">取消</button>
+                <button class="gal-action-btn primary" id="gal-transfer-confirm" style="padding: 8px 16px;">
+                  <i class="fa-solid fa-check"></i> 确认转移
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(modalHtml);
+      const $modal = $(mountRoot).find('#gal-transfer-modal');
+
+      $modal.find('#gal-transfer-cancel').on('click', () => $modal.remove());
+      $modal.on('click', function (e) {
+        if (e.target === this) $modal.remove();
+      });
+
+      $modal.find('#gal-transfer-confirm').on('click', () => {
+        const targetPackId = $modal.find('#gal-transfer-target').val();
+        if (!targetPackId) {
+          alert('请选择目标图包');
+          return;
+        }
+
+        const transferPromise = resourceType === 'sprite'
+          ? transferSpritesToPack(resourceIds, targetPackId)
+          : transferBackgroundsToPack(resourceIds, targetPackId);
+
+        transferPromise.then(count => {
+          $modal.remove();
+          showToast(`已转移 ${count} 个${resourceType === 'sprite' ? '立绘' : '背景'}`);
+          if (typeof onComplete === 'function') {
+            onComplete();
+          }
+        }).catch(err => {
+          alert('转移失败：' + err.message);
+        });
+      });
+    });
+  }
+
+  // 获取所有立绘（支持图包过滤）
+  function getAllSprites(packId = null, ignorePackFilter = false) {
     return __awaiter(this, void 0, void 0, function* () {
       if (!db) yield initDB();
       return new Promise(resolve => {
         const transaction = db.transaction([STORE_SPRITES], 'readonly');
         const store = transaction.objectStore(STORE_SPRITES);
         const request = store.getAll();
-        request.onsuccess = () => resolve(request.result || []);
+        request.onsuccess = () => {
+          let sprites = request.result || [];
+          // 如果不忽略图包过滤
+          if (!ignorePackFilter) {
+            const targetPackId = packId || getCurrentPackId();
+            const scope = getRenderScope();
+            if (scope === 'current') {
+              // 仅当前图包
+              sprites = sprites.filter(s => s.packId === targetPackId);
+            }
+            // scope === 'all' 时返回所有，但排序优先当前图包
+            else {
+              sprites.sort((a, b) => {
+                if (a.packId === targetPackId && b.packId !== targetPackId) return -1;
+                if (a.packId !== targetPackId && b.packId === targetPackId) return 1;
+                return 0;
+              });
+            }
+          }
+          resolve(sprites);
+        };
         request.onerror = () => resolve([]);
       });
     });
   }
   function showToast(message) {
-    const $existing = $('.gal-toast');
+    const mountRoot = getModalMountRoot();
+    const $existing = $(mountRoot).find('.gal-toast');
     if ($existing.length) $existing.remove();
     const $toast = $(`<div class="gal-toast"><span>${message}</span></div>`);
-    $(topWindow.document.body).append($toast);
+    $(mountRoot).append($toast);
     setTimeout(() => $toast.fadeOut(300, () => $toast.remove()), 2500);
   }
   // ============================================
@@ -9770,9 +12037,12 @@ ${extraRule}
 
       // 遍历所有 swipe，找到包含 Galgame 标签的内容
       for (let i = 0; i < swipes.length; i++) {
-        const swipeContent = swipes[i];
+        let swipeContent = swipes[i];
         if (swipeContent && /<(p|sprite|maintext|background)[^>]*>/i.test(swipeContent)) {
           console.log(`[${SCRIPT_NAME}] 找到格式化 swipe[${i}] 用于消息 ${mesId}`);
+          // ★ 关键修复：清理 swipe 中的 <think> 污染
+          swipeContent = swipeContent.replace(RE_THINK_CLOSED, '');
+          swipeContent = swipeContent.replace(RE_THINK_UNCLOSED, '');
           return swipeContent;
         }
       }
@@ -9803,24 +12073,6 @@ ${extraRule}
     if ($bgLayer.length) {
       $bgLayer.addClass('generating-bg').removeClass('has-bg');
       clearBackgroundLayers($bgLayer);
-      if ($bgLayer.find('.gal-gen-indicator').length === 0) {
-        $bgLayer.append(`
-                     <div class="gal-gen-indicator">
-                         <div class="gal-gen-rings">
-                             <i class="fa-solid fa-paintbrush gal-gen-icon"></i>
-                         </div>
-                         <div class="gal-gen-text">
-                             <span class="gal-gen-title">GENERATING</span>
-                             <span class="gal-gen-scene">${sceneName}</span>
-                             <div class="gal-gen-dots">
-                                 <span class="gal-gen-dot"></span>
-                                 <span class="gal-gen-dot"></span>
-                                 <span class="gal-gen-dot"></span>
-                             </div>
-                         </div>
-                     </div>
-                 `);
-      }
     }
 
     // 异步执行生成，不阻塞UI
@@ -10035,6 +12287,259 @@ ${extraRule}
     })();
   }
 
+  // ============================================
+  // 大香蕉 AI 生图处理
+  // ============================================
+
+  /**
+   * 解析 API 响应中的图片 URL（参考 deepthink 的 parseImageFromResponse）
+   * 支持 Markdown 格式、Base64、直接 URL 等多种格式
+   */
+  function parseBananaImageFromResponse(content, proxyUrl) {
+    if (!content) return null;
+
+    // 修复本机地址
+    function fixLocalhostUrl(imageUrl) {
+      if (!imageUrl || !proxyUrl) return imageUrl;
+      const localhostPattern = /^(https?:\/\/)(127\.0\.0\.1|localhost|0\.0\.0\.0)(:\d+)?/i;
+      const match = imageUrl.match(localhostPattern);
+      if (!match) return imageUrl;
+
+      try {
+        const proxyUrlObj = new URL(proxyUrl);
+        const targetHost = proxyUrlObj.hostname;
+        const targetPort = proxyUrlObj.port;
+        const isProxyLocalhost = /^(127\.0\.0\.1|localhost|0\.0\.0\.0)$/i.test(targetHost);
+        if (isProxyLocalhost) return imageUrl;
+
+        const newHostPort = targetPort ? `${targetHost}:${targetPort}` : targetHost;
+        const fixedUrl = imageUrl.replace(localhostPattern, `$1${newHostPort}`);
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: 修复本机地址 ${imageUrl} -> ${fixedUrl}`);
+        return fixedUrl;
+      } catch (e) {
+        return imageUrl;
+      }
+    }
+
+    // 1. 尝试匹配 Markdown 图片格式 ![...](url)
+    const mdImageMatch = content.match(/!\[[^\]]*\]\(([^)]+)\)/);
+    if (mdImageMatch && mdImageMatch[1]) {
+      const url = mdImageMatch[1].trim();
+      if (url.startsWith('http') || url.startsWith('data:')) {
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: 解析到 Markdown 图片`);
+        return fixLocalhostUrl(url);
+      }
+    }
+
+    // 2. 尝试匹配 HTML img 标签
+    const imgTagMatch = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (imgTagMatch && imgTagMatch[1]) {
+      console.log(`[${SCRIPT_NAME}] 大香蕉生图: 解析到 HTML img 标签`);
+      return fixLocalhostUrl(imgTagMatch[1]);
+    }
+
+    // 3. 尝试匹配直接的图片 URL
+    const urlMatch = content.match(/(https?:\/\/[^\s<>"']+\.(?:png|jpg|jpeg|gif|webp|bmp)(?:\?[^\s<>"']*)?)/i);
+    if (urlMatch && urlMatch[1]) {
+      console.log(`[${SCRIPT_NAME}] 大香蕉生图: 解析到直接 URL`);
+      return fixLocalhostUrl(urlMatch[1]);
+    }
+
+    // 4. 尝试匹配 Base64 图片
+    const base64Match = content.match(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/i);
+    if (base64Match) {
+      console.log(`[${SCRIPT_NAME}] 大香蕉生图: 解析到 Base64 图片`);
+      return base64Match[0];
+    }
+
+    // 5. 尝试匹配任何看起来像图片URL的内容（更宽松）
+    const looseUrlMatch = content.match(/(https?:\/\/[^\s<>"'\]]+)/i);
+    if (looseUrlMatch && looseUrlMatch[1]) {
+      const url = looseUrlMatch[1];
+      // 检查是否可能是图片URL
+      if (url.includes('image') || url.includes('img') || url.includes('pic') ||
+          url.includes('photo') || url.includes('upload') || url.includes('file')) {
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: 解析到可能的图片 URL`);
+        return fixLocalhostUrl(url);
+      }
+    }
+
+    console.warn(`[${SCRIPT_NAME}] 大香蕉生图: 未能从响应中解析图片，响应内容: ${content.substring(0, 200)}...`);
+    return null;
+  }
+
+  function handleBananaBackgroundGeneration(sceneName, prompt) {
+    if (!settings.bananaImageGen?.enabled) return;
+    if (BGMManager.generatingScenes.has(sceneName)) return;
+
+    // 检查场景是否已存在缓存
+    if (sceneBackgrounds.has(sceneName)) {
+      console.log(`[${SCRIPT_NAME}] 大香蕉生图: 场景「${sceneName}」已存在缓存，跳过生成`);
+      return;
+    }
+
+    const bs = settings.bananaImageGen;
+
+    // 检查必要配置
+    if (!bs.proxyUrl) {
+      console.warn(`[${SCRIPT_NAME}] 大香蕉生图: 未配置反代 API 地址`);
+      return;
+    }
+
+    if (!bs.model) {
+      console.warn(`[${SCRIPT_NAME}] 大香蕉生图: 未选择图片生成模型`);
+      return;
+    }
+
+    BGMManager.generatingScenes.add(sceneName);
+
+    (async () => {
+      try {
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: 开始生成场景「${sceneName}」`);
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: 原始描述 = ${prompt.substring(0, 100)}...`);
+
+        // 构建最终提示词
+        let finalPrompt = prompt;
+        if (bs.defaultPromptPrefix) {
+          finalPrompt = bs.defaultPromptPrefix + finalPrompt;
+        }
+        if (!bs.cgMode) {
+          const defaultSceneSuffix = ', no humans, scenery, background';
+          const suffixToUse = bs.defaultPromptSuffix || defaultSceneSuffix;
+          if (suffixToUse) {
+            finalPrompt = finalPrompt + suffixToUse;
+          }
+        }
+        if (bs.cgMode) {
+          finalPrompt = finalPrompt + '\n请生成符合剧情的CG画面，必须包含人物。';
+
+          // 添加角色外观一致性提示（发送给生图AI）
+          const appearances = getBananaCharacterAppearances();
+          if (appearances.length > 0) {
+            const appearanceHint = '\n\n### 角色外观参考（必须遵守）\n' +
+              appearances.slice(0, 3).map(a => {
+                const name = a.characterName || a.characterId || '角色';
+                const expr = a.expression || '默认';
+                return `- **${name}**: 默认立绘表情「${expr}」`;
+              }).join('\n') +
+              '\n**重要**: 生成CG时人物外观需与以上立绘保持一致。\n';
+            finalPrompt = finalPrompt + appearanceHint;
+          }
+        }
+
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: 最终提示词 = ${finalPrompt.substring(0, 150)}...`);
+
+        // 自适应 URL 处理：如果用户已配置 /v1 则使用，否则自动添加
+        let baseUrl = bs.proxyUrl.replace(/\/+$/, '');
+        if (!baseUrl.endsWith('/v1')) {
+          baseUrl = baseUrl + '/v1';
+        }
+        const genUrl = `${baseUrl}/chat/completions`;
+
+        // 构建消息内容：CG模式下使用多模态格式（包含角色立绘图片）
+        let messageContent = finalPrompt;
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: cgMode = ${bs.cgMode}`);
+        const appearances = getBananaCharacterAppearances();
+        console.log(`[${SCRIPT_NAME}] 大香蕉生图: 角色外观列表 =`, JSON.stringify(appearances));
+        if (bs.cgMode && appearances.length > 0) {
+          console.log(`[${SCRIPT_NAME}] 大香蕉生图: CG模式，准备添加 ${appearances.length} 个角色立绘到多模态消息`);
+          messageContent = await buildBananaAppearanceMultimodalContent(finalPrompt);
+          if (Array.isArray(messageContent)) {
+            console.log(`[${SCRIPT_NAME}] 大香蕉生图: 已构建多模态消息，包含 ${messageContent.length - 1} 张图片`);
+          }
+        }
+
+        // 使用 chat/completions 端点（与 deepthink 一致）
+        const response = await fetch(genUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${bs.proxyApiKey || ''}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: bs.model,
+            messages: [{ role: 'user', content: messageContent }],
+            stream: false,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content || '';
+
+        if (!content) {
+          throw new Error('未返回内容');
+        }
+
+        // 解析响应中的图片
+        const imageUrl = parseBananaImageFromResponse(content, bs.proxyUrl);
+
+        if (!imageUrl) {
+          throw new Error('未能从响应中解析到图片');
+        }
+
+        // 自动保存到背景库
+        if (bs.autoSaveToLibrary) {
+          try {
+            // 如果是 base64，转换为 Blob
+            let imageBlob = null;
+            if (imageUrl.startsWith('data:')) {
+              const base64Data = imageUrl.split(',')[1];
+              const byteCharacters = atob(base64Data);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              imageBlob = new Blob([byteArray], { type: 'image/png' });
+            }
+
+            const savedUrl = await saveBackground(sceneName, imageBlob, imageUrl);
+            const cachedUrl = savedUrl || imageUrl;
+            sceneBackgrounds.set(sceneName, cachedUrl);
+            console.log(`[${SCRIPT_NAME}] 大香蕉生图: 场景「${sceneName}」已保存到背景库`);
+          } catch (saveErr) {
+            console.warn(`[${SCRIPT_NAME}] 大香蕉生图: 保存到背景库失败，使用临时缓存`, saveErr);
+            sceneBackgrounds.set(sceneName, imageUrl);
+          }
+        } else {
+          sceneBackgrounds.set(sceneName, imageUrl);
+        }
+
+        // 如果当前正处于该场景，刷新背景显示
+        const $lastMes = $('#chat > .mes').last();
+        if ($lastMes.length) {
+          const mesId = $lastMes.attr('mesid');
+          const state = messageSegmentState.get(String(mesId));
+          if (
+            state &&
+            state.parsedContent &&
+            state.parsedContent.currentBackground &&
+            state.parsedContent.currentBackground.scene === sceneName
+          ) {
+            // 强制重置当前场景记录
+            if (typeof SpriteManager !== 'undefined') {
+              SpriteManager.currentScene = null;
+            }
+            console.log(`[${SCRIPT_NAME}] 大香蕉生图: 强制刷新UI: ${sceneName}`);
+            updateGlobalOverlayContent(mesId, state.parsedContent);
+          }
+        }
+
+        showToast(`场景「${sceneName}」AI 背景已生成`);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 大香蕉生图失败:`, e);
+        showToast(`大香蕉生图失败: ${e.message.substring(0, 50)}`);
+      } finally {
+        BGMManager.generatingScenes.delete(sceneName);
+      }
+    })();
+  }
+
   function processNewMessage(mesNode) {
     // 注入开启按钮 (无论是否开启模式)
     if (typeof injectGalgameButton === 'function') {
@@ -10096,16 +12601,34 @@ ${extraRule}
     // 解析内容
     let parsed = parseGalgameContent(contentToProcess);
 
-    // ★ 实时背景生成处理 (ComfyUI)
-    if (settings.realTimeBackgroundGen && parsed.currentBackground && parsed.currentBackground.generationTags) {
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 handleRealTimeBackgroundGeneration`);
-      handleRealTimeBackgroundGeneration(parsed.currentBackground.scene, parsed.currentBackground.generationTags);
+    // ★ 实时背景生成处理 (ComfyUI) - 为所有出现的背景触发
+    if (settings.realTimeBackgroundGen && parsed.backgroundChanges) {
+      for (const bgChange of parsed.backgroundChanges) {
+        if (bgChange.generationTags) {
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ComfyUI 背景生成: "${bgChange.scene}"`);
+          handleRealTimeBackgroundGeneration(bgChange.scene, bgChange.generationTags);
+        }
+      }
     }
 
-    // ★ Wallhaven 壁纸搜索处理
-    if (settings.wallhaven?.enabled && parsed.currentBackground && parsed.currentBackground.wallhavenTags) {
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 Wallhaven 背景搜索`);
-      handleWallhavenBackgroundSearch(parsed.currentBackground.scene, parsed.currentBackground.wallhavenTags);
+    // ★ Wallhaven 壁纸搜索处理 - 为所有出现的背景触发
+    if (settings.wallhaven?.enabled && parsed.backgroundChanges) {
+      for (const bgChange of parsed.backgroundChanges) {
+        if (bgChange.wallhavenTags) {
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 Wallhaven 背景搜索: "${bgChange.scene}"`);
+          handleWallhavenBackgroundSearch(bgChange.scene, bgChange.wallhavenTags);
+        }
+      }
+    }
+
+    // ★ 大香蕉 AI 生图处理 - 为所有出现的背景触发
+    if (settings.bananaImageGen?.enabled && parsed.backgroundChanges) {
+      for (const bgChange of parsed.backgroundChanges) {
+        if (bgChange.bananaPrompt) {
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 触发大香蕉背景生成: "${bgChange.scene}"`);
+          handleBananaBackgroundGeneration(bgChange.scene, bgChange.bananaPrompt);
+        }
+      }
     }
 
     console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed.segments.length}`);
@@ -11337,19 +13860,20 @@ ${extraRule}
           }
       </style>
     `;
-    $(topWindow.document.body).append(modalHtml);
-    const $modal = $('#gal-batch-bg-upload-modal');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-batch-bg-upload-modal');
     makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
     // 状态变量
     let batchItems = []; // { file: File|Blob, name: string, status: 'pending'|'success'|'error', msg: '' }
     let currentPage = 1;
     const itemsPerPage = 15; // 5x3
     // UI 引用
-    const $step1 = $('#gal-batch-step-1');
-    const $step2 = $('#gal-batch-step-2');
-    const $grid = $('#gal-batch-grid');
-    const $saveBtn = $('#gal-batch-save-btn');
-    const $saveText = $('#gal-batch-save-text');
+    const $step1 = $modal.find('#gal-batch-step-1');
+    const $step2 = $modal.find('#gal-batch-step-2');
+    const $grid = $modal.find('#gal-batch-grid');
+    const $saveBtn = $modal.find('#gal-batch-save-btn');
+    const $saveText = $modal.find('#gal-batch-save-text');
     // Tab 切换
     $modal.find('.gal-upload-tab').on('click', function () {
       const target = $(this).data('target');
@@ -11652,15 +14176,16 @@ ${extraRule}
         </div>
       </div>
     `;
-    $(topWindow.document.body).append(modalHtml);
-    const $modal = $('#gal-bg-upload-modal');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-bg-upload-modal');
     makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
-    const $fileInput = $('#gal-bg-file-input');
-    const $uploadArea = $('#gal-bg-upload-trigger'); // Use correct ID
-    const $previewContainer = $('#gal-bg-preview-container');
-    const $previewImg = $('#gal-bg-preview-img');
-    const $confirmBtn = $('#gal-bg-confirm');
-    const $sceneNameInput = $('#gal-bg-scene-name');
+    const $fileInput = $modal.find('#gal-bg-file-input');
+    const $uploadArea = $modal.find('#gal-bg-upload-trigger'); // Use correct ID
+    const $previewContainer = $modal.find('#gal-bg-preview-container');
+    const $previewImg = $modal.find('#gal-bg-preview-img');
+    const $confirmBtn = $modal.find('#gal-bg-confirm');
+    const $sceneNameInput = $modal.find('#gal-bg-scene-name');
     let selectedFile = null;
     // Tab 切换
     $modal.find('.gal-upload-tab').on('click', function () {
@@ -11959,8 +14484,23 @@ ${extraRule}
               <div class="gal-settings-row">
                 <span class="gal-settings-label">对话框透明度</span>
                 <div class="gal-settings-control">
-                  <input type="range" id="gal-dialog-opacity" min="50" max="100" step="5" value="${Math.round(settings.dialogOpacity * 100)}">
-                  <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round(settings.dialogOpacity * 100)}%</span>
+                  <input type="range" id="gal-dialog-opacity" min="0" max="100" step="5" value="${Math.round((1 - settings.dialogOpacity) * 100)}">
+                  <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round((1 - settings.dialogOpacity) * 100)}%</span>
+                </div>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">文字特效</span>
+                <div class="gal-settings-control">
+                  <select id="gal-text-effect" class="gal-select">
+                    <option value="none" ${settings.textEffect === 'none' ? 'selected' : ''}>无</option>
+                    <option value="shadow" ${settings.textEffect === 'shadow' ? 'selected' : ''}>阴影增强</option>
+                    <option value="glow" ${settings.textEffect === 'glow' ? 'selected' : ''}>发光效果</option>
+                    <option value="stroke" ${settings.textEffect === 'stroke' ? 'selected' : ''}>文字描边</option>
+                    <option value="glass" ${settings.textEffect === 'glass' ? 'selected' : ''}>毛玻璃背景</option>
+                    <option value="gradient" ${settings.textEffect === 'gradient' ? 'selected' : ''}>底部渐变遮罩</option>
+                    <option value="text-bg" ${settings.textEffect === 'text-bg' ? 'selected' : ''}>独立文字背景</option>
+                  </select>
                 </div>
               </div>
             </div>
@@ -12004,6 +14544,14 @@ ${extraRule}
                   <input type="checkbox" id="gal-hide-floors" ${settings.hideOtherFloors ? 'checked' : ''}>
                   <span class="gal-switch-slider"></span>
                 </label>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">背景图填充 <small style="color:#999;">(cover填满/contain完整)</small></span>
+                <select id="gal-bg-fill-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                  <option value="cover" ${settings.bgFillMode === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
+                  <option value="contain" ${settings.bgFillMode === 'contain' ? 'selected' : ''}>Contain (完整显示)</option>
+                </select>
               </div>
             </div>
 
@@ -12527,8 +15075,14 @@ ${extraRule}
         saveSettings();
       });
       $('#gal-dialog-opacity').on('input', function () {
-        settings.dialogOpacity = parseInt($(this).val()) / 100;
-        $('#gal-dialog-opacity-value').text(Math.round(settings.dialogOpacity * 100) + '%');
+        const transparency = parseInt($(this).val()); // 透明度 0-100
+        settings.dialogOpacity = 1 - (transparency / 100); // 转换为 opacity 1.0-0
+        $('#gal-dialog-opacity-value').text(transparency + '%');
+        applySettingsToUI();
+        saveSettings();
+      });
+      $('#gal-text-effect').on('change', function () {
+        settings.textEffect = $(this).val();
         applySettingsToUI();
         saveSettings();
       });
@@ -12553,6 +15107,12 @@ ${extraRule}
             showAllFloors();
           }
         }
+        saveSettings();
+      });
+      // 背景图填充方式设置
+      $('#gal-bg-fill-mode').on('change', function () {
+        settings.bgFillMode = $(this).val();
+        applyBgFillMode();
         saveSettings();
       });
       $('#gal-space-next').on('change', function () {
@@ -12755,9 +15315,10 @@ ${extraRule}
                     </div>
                 </div>
             `;
-        $(topWindow.document.body).append(modalHtml);
+        const mountRoot = getModalMountRoot();
+        $(mountRoot).append(modalHtml);
         // 事件绑定
-        const $modal = $(topWindow.document).find('#gal-prompts-modal');
+        const $modal = $(mountRoot).find('#gal-prompts-modal');
         $modal.find('#gal-prompts-modal-close, #gal-prompts-modal-ok').on('click', () => $modal.remove());
         $modal.on('click', e => {
           if (e.target === $modal[0]) $modal.remove();
@@ -13001,8 +15562,12 @@ ${extraRule}
     // 字体大小（缩放系数 1-20，映射为 0.5-1.5）
     const fontScale = 0.5 + (settings.fontSize / 30) * 1.0;
     $('#gal-global-overlay').css('--font-scale', fontScale);
-    // 对话框透明度
-    $('.gal-dialog-layer').css('background', `rgba(255, 255, 255, ${settings.dialogOpacity})`);
+    // 对话框透明度 - 应用到 gal-text-panel，同时保留渐变背景
+    const opacity = settings.dialogOpacity;
+    $('.gal-text-panel').css({
+      'background-color': `rgba(255, 255, 255, ${opacity})`,
+      'background-image': `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
+    });
     // 立绘显示/隐藏
     if (settings.showSprites) {
       $('.gal-layer-character').show();
@@ -13032,6 +15597,114 @@ ${extraRule}
       $('.gal-layer-character').addClass('bubble-enabled');
     } else {
       $('.gal-layer-character').removeClass('bubble-enabled');
+    }
+    // 应用背景图填充方式
+    applyBgFillMode();
+    // 应用文字特效
+    applyTextEffect();
+  }
+  // 应用背景图填充方式
+  function applyBgFillMode() {
+    const fillMode = settings.bgFillMode || 'cover';
+    const $bgLayers = $('.gal-bg-layer');
+    $bgLayers.css('background-size', fillMode);
+    // contain 模式顶部对齐，只在下方留白；cover 模式保持居中
+    if (fillMode === 'contain') {
+      $bgLayers.css('background-position', 'center top');
+    } else {
+      $bgLayers.css('background-position', 'center');
+    }
+  }
+  // 应用文字特效
+  function applyTextEffect() {
+    const effect = settings.textEffect || 'none';
+    const $textPanel = $('.gal-text-panel');
+    const $dialogText = $('.gal-dialog-text');
+    const $nameBadge = $('.gal-name-badge');
+
+    // 清除所有特效类
+    $textPanel.removeClass('text-effect-glass text-effect-gradient text-effect-text-bg');
+    $dialogText.css({
+      'text-shadow': '',
+      '-webkit-text-stroke': '',
+      'background-color': '',
+      'padding': '',
+      'border-radius': '',
+      'color': ''
+    });
+    $nameBadge.css({
+      'text-shadow': '',
+      '-webkit-text-stroke': ''
+    });
+
+    // 根据特效类型应用样式
+    switch (effect) {
+      case 'shadow':
+        // 阴影增强：多层阴影确保任何背景下都清晰
+        $dialogText.css({
+          'text-shadow': '0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5)',
+          'color': '#fff'
+        });
+        $nameBadge.css({
+          'text-shadow': '0 0 4px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.5)'
+        });
+        break;
+
+      case 'glow':
+        // 发光效果：霓虹灯式发光
+        $dialogText.css({
+          'text-shadow': '0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(0,210,255,0.4)',
+          'color': '#fff'
+        });
+        $nameBadge.css({
+          'text-shadow': '0 0 5px rgba(0,210,255,0.8), 0 0 10px rgba(0,210,255,0.5)'
+        });
+        break;
+
+      case 'stroke':
+        // 文字描边：黑色描边使白色文字清晰
+        $dialogText.css({
+          '-webkit-text-stroke': '1.5px rgba(0,0,0,0.8)',
+          'text-shadow': '0 2px 4px rgba(0,0,0,0.3)',
+          'color': '#fff'
+        });
+        $nameBadge.css({
+          '-webkit-text-stroke': '1px rgba(0,0,0,0.6)',
+          'text-shadow': '0 1px 2px rgba(0,0,0,0.3)'
+        });
+        break;
+
+      case 'glass':
+        // 毛玻璃效果：背景模糊
+        $textPanel.addClass('text-effect-glass');
+        $dialogText.css('color', '#333');
+        break;
+
+      case 'gradient':
+        // 底部渐变遮罩：文字区域底部有渐变黑色遮罩
+        $textPanel.addClass('text-effect-gradient');
+        $dialogText.css({
+          'text-shadow': '0 1px 2px rgba(0,0,0,0.3)',
+          'color': '#fff'
+        });
+        break;
+
+      case 'text-bg':
+        // 独立文字背景：仅文字区域有半透明背景
+        $textPanel.addClass('text-effect-text-bg');
+        $dialogText.css({
+          'background-color': 'rgba(0,0,0,0.6)',
+          'padding': '8px 12px',
+          'border-radius': '8px',
+          'color': '#fff',
+          'text-shadow': '0 1px 2px rgba(0,0,0,0.3)'
+        });
+        break;
+
+      default:
+        // 无特效：恢复默认颜色
+        $dialogText.css('color', '#333');
+        break;
     }
   }
   // 应用 Galgame 模式
@@ -13399,8 +16072,9 @@ ${extraRule}
   }
 
   function showCustomPopupPanel(title, htmlContent) {
+    const mountRoot = getModalMountRoot();
     // 移除已存在的
-    $('#gal-custom-popup').remove();
+    $(mountRoot).find('#gal-custom-popup').remove();
 
     const $popup = $(`
             <div id="gal-custom-popup" class="gal-input-modal">
@@ -13416,7 +16090,7 @@ ${extraRule}
             </div>
         `);
 
-    $(topWindow.document.body).append($popup);
+    $(mountRoot).append($popup);
 
     // 关闭事件
     $popup.find('.gal-popup-close').on('click', () => $popup.remove());

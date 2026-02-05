@@ -45,7 +45,7 @@
         height: 100vh !important;
         max-height: none !important;
         min-height: 100vh !important;
-        z-index: 99999 !important;
+        z-index: 10000 !important;
         border-radius: 0 !important;
         margin: 0 !important;
         box-shadow: none !important;
@@ -400,148 +400,6 @@
         100% { transform: translateY(100%); }
       }
 
-      /* 生成指示器容器 */
-      .gal-gen-indicator {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1.25rem;
-        z-index: 20;
-        padding: 2.5rem 3.75rem;
-        background: rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(0.625rem);
-        border-radius: 1.25rem;
-        border: 1px solid rgba(0, 210, 255, 0.3);
-        box-shadow:
-          0 0 2.5rem rgba(0, 210, 255, 0.2),
-          inset 0 0 2.5rem rgba(0, 210, 255, 0.05);
-        animation: galGenPulse 2s ease-in-out infinite;
-      }
-
-      @keyframes galGenPulse {
-        0%, 100% {
-          box-shadow:
-            0 0 2.5rem rgba(0, 210, 255, 0.2),
-            0 0 5rem rgba(0, 210, 255, 0.1),
-            inset 0 0 2.5rem rgba(0, 210, 255, 0.05);
-        }
-        50% {
-          box-shadow:
-            0 0 3.75rem rgba(0, 210, 255, 0.4),
-            0 0 7.5rem rgba(0, 210, 255, 0.2),
-            inset 0 0 3.75rem rgba(0, 210, 255, 0.1);
-        }
-      }
-
-      /* 环形加载动画 - 多层 */
-      .gal-gen-rings {
-        position: relative;
-        width: 5rem;
-        height: 5rem;
-      }
-
-      .gal-gen-rings::before,
-      .gal-gen-rings::after {
-        content: '';
-        position: absolute;
-        border-radius: 50%;
-        border: 0.188rem solid transparent;
-      }
-
-      .gal-gen-rings::before {
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        border-top-color: #00d2ff;
-        border-right-color: rgba(0, 210, 255, 0.3);
-        animation: galGenSpin 1.5s linear infinite;
-      }
-
-      .gal-gen-rings::after {
-        top: 0.625rem;
-        left: 0.625rem;
-        right: 0.625rem;
-        bottom: 0.625rem;
-        border-bottom-color: #ff0055;
-        border-left-color: rgba(255, 0, 85, 0.3);
-        animation: galGenSpin 1s linear infinite reverse;
-      }
-
-      @keyframes galGenSpin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-
-      /* 中心图标 */
-      .gal-gen-icon {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 1.5rem;
-        color: #00d2ff;
-        animation: galGenIconPulse 1.5s ease-in-out infinite;
-      }
-
-      @keyframes galGenIconPulse {
-        0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        50% { opacity: 0.7; transform: translate(-50%, -50%) scale(0.9); }
-      }
-
-      /* 文字区域 */
-      .gal-gen-text {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .gal-gen-title {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: #fff;
-        text-shadow: 0 0 1.25rem rgba(0, 210, 255, 0.8);
-        letter-spacing: 0.125rem;
-        font-family: 'Barlow', sans-serif;
-      }
-
-      .gal-gen-scene {
-        font-size: 0.95rem;
-        color: rgba(255, 255, 255, 0.8);
-        max-width: 12.5rem;
-        text-align: center;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      /* 进度点 */
-      .gal-gen-dots {
-        display: flex;
-        gap: 0.375rem;
-        margin-top: 0.313rem;
-      }
-
-      .gal-gen-dot {
-        width: 0.375rem;
-        height: 0.375rem;
-        background: #00d2ff;
-        border-radius: 50%;
-        animation: galGenDot 1.4s ease-in-out infinite;
-      }
-
-      .gal-gen-dot:nth-child(2) { animation-delay: 0.2s; }
-      .gal-gen-dot:nth-child(3) { animation-delay: 0.4s; }
-
-      @keyframes galGenDot {
-        0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-        40% { transform: scale(1); opacity: 1; box-shadow: 0 0 0.625rem #00d2ff; }
-      }
 
       /* ═══════════════════════════════════════════════════════════════
          立绘动画关键帧
@@ -819,6 +677,69 @@
         transform: skewX(15deg);
       }
 
+      /* 隐藏立绘按钮 - 位于名字标签右侧 */
+      .gal-sprite-toggle {
+        position: absolute;
+        top: -1.375rem;
+        left: auto;
+        right: -2.5rem;
+        width: 2.2rem;
+        height: 2.2rem;
+        background: ${THEME.dark};
+        border: none;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transform: scale(var(--ui-scale));
+        transform-origin: bottom left;
+        z-index: 35;
+        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
+        transition: all 0.2s ease;
+        opacity: 0.8;
+      }
+
+      .gal-sprite-toggle:hover {
+        opacity: 1;
+        background: ${THEME.accent};
+      }
+
+      .gal-sprite-toggle:hover .gal-eye-icon {
+        color: ${THEME.dark};
+      }
+
+      .gal-eye-icon {
+        font-size: 1.2rem;
+        color: ${THEME.accent};
+        transition: color 0.2s ease;
+        transform: skewX(0deg);
+      }
+
+      /* 立绘隐藏状态 */
+      .gal-sprite-toggle.sprites-hidden {
+        background: rgba(100, 100, 100, 0.8);
+      }
+
+      .gal-sprite-toggle.sprites-hidden .gal-eye-icon {
+        color: #999;
+      }
+
+      .gal-sprite-toggle.sprites-hidden:hover {
+        background: ${THEME.accent};
+      }
+
+      .gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon {
+        color: ${THEME.dark};
+      }
+
+      /* 立绘层隐藏时的样式 */
+      .gal-layer-character.sprites-hidden {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transition: opacity 0.3s ease;
+      }
+
       .gal-narrator-label {
         background: #666;
         color: #fff;
@@ -952,6 +873,44 @@
         color: #333;
         font-weight: 500;
         letter-spacing: 0.02em;
+      }
+
+      /* ========== 文字特效样式 ========== */
+
+      /* 毛玻璃效果 */
+      .gal-text-panel.text-effect-glass {
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.7) !important;
+      }
+
+      /* 底部渐变遮罩 */
+      .gal-text-panel.text-effect-gradient::before {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 50%;
+        background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.3) 50%, transparent 100%);
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .gal-text-panel.text-effect-gradient .gal-dialog-text {
+        position: relative;
+        z-index: 2;
+      }
+
+      .gal-text-panel.text-effect-gradient .gal-name-badge {
+        z-index: 3;
+      }
+
+      /* 独立文字背景 */
+      .gal-text-panel.text-effect-text-bg {
+        background: transparent !important;
+        background-image: none !important;
+        box-shadow: none !important;
       }
 
       /* TTS 加载指示器 */
@@ -1113,6 +1072,7 @@
 
       .gal-footer-btn i, .gal-footer-btn span {
         transform: skewX(10deg) !important;
+        font-size: calc(1rem * var(--ui-scale)) !important;
       }
 
       .gal-footer-btn:hover {
@@ -1197,12 +1157,13 @@
       }
 
       /* 自由输入弹窗 */
-      .gal-input-modal {
+      .gal-input-modal,
+      #gal-free-input-modal {
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 0;
         background: rgba(0,0,0,0.5);
         backdrop-filter: blur(0.25rem);
-        z-index: 10000;
+        z-index: 100001 !important;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1765,6 +1726,11 @@
 
       .gal-pending-choices-btn i, .gal-pending-choices-btn span {
         transform: skewX(10deg) !important;
+      }
+
+      .gal-pending-choices-btn i {
+        font-size: 1.1rem !important;
+        margin: 0 !important;
       }
 
       .gal-pending-choices-btn:hover {
@@ -2479,7 +2445,8 @@
             padding: 0 0.625rem !important;
             display: flex !important;
             align-items: center !important;
-            justify-content: space-between !important;
+            justify-content: flex-start !important;
+            gap: 0.5rem !important;
             background: #fff !important;
             border-bottom: 1px solid #eee !important;
         }
@@ -2495,15 +2462,21 @@
         #gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span {
             display: none !important;
         }
-        /* ������ťͼ�꣺ǿ�Ƴߴ� */
+        /* 顶部按钮图标：强制尺寸，禁止flex拉伸 */
         #gal-asset-manager-modal .gal-asset-header button {
+            flex: 0 0 auto !important;
             width: 2rem !important;
             height: 2rem !important;
+            min-width: 2rem !important;
+            max-width: 2rem !important;
             padding: 0 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
             font-size: 0.875rem !important;
+        }
+        #gal-asset-manager-modal .gal-asset-header > div {
+            flex: 0 0 auto !important;
         }
 
         /* 2. Tab ����ǿ�Ƹ߶����� */
@@ -3524,5 +3497,112 @@
         /* 按钮文字隐藏图标简化 */
         #gal-sprite-upload-modal .gal-input-actions button i {
             margin-right: 0.375rem !important;
+        }
+    }
+
+    /* === 角色立绘管理弹窗移动端适配 === */
+    @media screen and (max-width: 48rem) {
+        #gal-character-sprites-modal .gal-input-box {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        #gal-character-sprites-modal .gal-input-box > div:first-child {
+            padding: 0.75rem 1rem 0.5rem !important;
+            flex: 0 0 auto !important;
+        }
+
+        #gal-character-sprites-modal .gal-input-title {
+            font-size: 1.1rem !important;
+        }
+
+        /* TTS 绑定区域：收紧高度并避免被拉伸 */
+        #gal-character-sprites-modal .gal-input-box > div:nth-child(2) {
+            margin: 0.5rem 0.75rem 0 !important;
+            padding: 0.75rem !important;
+            border-radius: 0.5rem !important;
+            flex: 0 0 auto !important;
+        }
+
+        #gal-character-sprites-modal .gal-input-box > div:nth-child(2) > div:nth-child(2) {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            gap: 0.5rem !important;
+        }
+
+        #gal-character-sprites-modal #gal-char-tts-voice-select {
+            flex: 1 1 10rem !important;
+            width: auto !important;
+            min-width: 10rem !important;
+        }
+
+        #gal-character-sprites-modal #gal-char-tts-save-btn {
+            width: auto !important;
+            padding: 0.5rem 0.75rem !important;
+        }
+
+        /* 列表区内边距收紧，并允许滚动填满剩余空间 */
+        #gal-character-sprites-modal .gal-input-box > div:nth-child(3) {
+            padding: 0.75rem 1rem !important;
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            overflow-y: auto !important;
+        }
+
+        #gal-character-sprites-modal .gal-input-box > div:nth-child(3) > div:first-child {
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            gap: 0.5rem !important;
+        }
+
+        #gal-character-sprites-modal #gal-char-add-sprite-btn {
+            width: auto !important;
+        }
+
+        #gal-character-sprites-modal .gal-sprite-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 0.5rem !important;
+        }
+
+        #gal-character-sprites-modal .gal-sprite-card {
+            border-radius: 0.375rem !important;
+        }
+
+        #gal-character-sprites-modal .gal-sprite-label {
+            font-size: 0.75rem !important;
+            padding: 0.375rem !important;
+        }
+
+        /* 底部按钮区：改为纵向 */
+        #gal-character-sprites-modal .gal-input-box > div:last-child {
+            flex-direction: column !important;
+            gap: 0.5rem !important;
+            padding: 0.75rem 1rem !important;
+            flex: 0 0 auto !important;
+            margin-top: 0 !important;
+        }
+
+        #gal-character-sprites-modal #gal-char-sprites-back,
+        #gal-character-sprites-modal #gal-char-sprites-close {
+            width: 100% !important;
+            min-height: 40px !important;
+        }
+    }
+
+    /* === 超窄屏优化 (<= 360px) === */
+    @media screen and (max-width: 22.5rem) {
+        #gal-character-sprites-modal .gal-sprite-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+
+        #gal-character-sprites-modal #gal-char-add-sprite-btn {
+            width: 100% !important;
         }
     }

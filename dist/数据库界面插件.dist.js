@@ -3277,6 +3277,109 @@ const __awaiter =
     }
   }
 
+  // ============================================
+  // Live2D 预加载管理器（SDK + 模型预热）
+  // ============================================
+  const Live2DPreloadManager = {
+    sdkPreloadStarted: false,
+    sdkPreloadDone: false,
+    queue: [],
+    queuedSet: new Set(),
+    preloadedSet: new Set(),
+    workerPromise: null,
+    lookAheadLimit: 60, // 预加载时向前看的最大分段数
+
+    scheduleSdkPreload(reason = 'unknown') {
+      if (this.sdkPreloadStarted || this.sdkPreloadDone) return;
+      this.sdkPreloadStarted = true;
+
+      const run = async () => {
+        try {
+          const ok = await Live2DManager.init();
+          this.sdkPreloadDone = !!ok;
+          console.log(`[${SCRIPT_NAME}] Live2D 预加载 SDK 完成: ${ok ? '成功' : '失败'} (${reason})`);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2D 预加载 SDK 失败 (${reason}):`, e);
+        }
+      };
+
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      if (typeof _topWindow.requestIdleCallback === 'function') {
+        _topWindow.requestIdleCallback(() => {
+          run();
+        }, { timeout: 2000 });
+      } else {
+        setTimeout(() => {
+          run();
+        }, 300);
+      }
+    },
+
+    enqueueCharacter(characterId, reason = 'unknown') {
+      if (!characterId) return;
+      if (this.preloadedSet.has(characterId)) return;
+      if (Live2DManager.models.has(characterId)) {
+        this.preloadedSet.add(characterId);
+        return;
+      }
+      if (this.queuedSet.has(characterId)) return;
+      this.queue.push({ characterId, reason });
+      this.queuedSet.add(characterId);
+      this._ensureWorker();
+    },
+
+    preloadFromSegments(segments, currentIndex = 0, reason = 'segments') {
+      if (!Array.isArray(segments) || segments.length === 0) return;
+      const start = Math.max(0, Number(currentIndex) || 0);
+      const end = Math.min(segments.length, start + this.lookAheadLimit + 1);
+      const seen = new Set();
+      for (let i = start; i < end; i++) {
+        const speaker = segments[i]?.speaker;
+        if (!speaker || seen.has(speaker)) continue;
+        seen.add(speaker);
+        this.enqueueCharacter(speaker, `${reason}@${i}`);
+      }
+    },
+
+    _ensureWorker() {
+      if (this.workerPromise) return;
+      this.workerPromise = (async () => {
+        while (this.queue.length > 0) {
+          const item = this.queue.shift();
+          if (!item?.characterId) continue;
+          const { characterId, reason } = item;
+          this.queuedSet.delete(characterId);
+
+          try {
+            if (this.preloadedSet.has(characterId) || Live2DManager.models.has(characterId)) {
+              this.preloadedSet.add(characterId);
+              continue;
+            }
+            if (!getCharacterUseLive2D(characterId)) {
+              continue;
+            }
+            const hasModel = await hasLive2DModel(characterId);
+            if (!hasModel) {
+              continue;
+            }
+            const model = await Live2DManager.loadModel(characterId, false);
+            if (model) {
+              this.preloadedSet.add(characterId);
+              console.log(`[${SCRIPT_NAME}] Live2D 预加载模型成功: ${characterId} (${reason})`);
+            }
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Live2D 预加载模型失败: ${characterId} (${reason})`, e);
+          }
+        }
+      })().finally(() => {
+        this.workerPromise = null;
+        if (this.queue.length > 0) {
+          this._ensureWorker();
+        }
+      });
+    },
+  };
+
   // 统一渲染入口：根据设置选择 Live2D 或静态立绘
   async function renderCharacterVisual(characterId, expression, container, options = {}) {
     const useLive2D = getCharacterUseLive2D(characterId);
@@ -14574,6 +14677,7 @@ ${extraRule}
       $overlay.attr('data-render-token', String(renderToken));
       // 显示当前索引的段落
       const currentIndex = Math.min(state.currentIndex, segments.length - 1);
+      Live2DPreloadManager.preloadFromSegments(segments, currentIndex, 'overlay-content');
       const displaySegment = segments[currentIndex] || { type: 'narration', text: '' };
       const displayText = displaySegment.text || '';
       const speaker = displaySegment.speaker;
@@ -15115,6 +15219,7 @@ ${extraRule}
       const currentIndex = state.currentIndex;
       const segment = state.segments[currentIndex];
       if (!segment) return false;
+      Live2DPreloadManager.preloadFromSegments(state.segments, currentIndex, 'segment-display');
       if (expectedRenderToken !== null) {
         $overlay.attr('data-render-token', String(expectedRenderToken));
       }
@@ -21885,6 +21990,7 @@ ${extraRule}
       // state.currentIndex = Math.min(state.currentIndex, parsed.segments.length - 1);
       //console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 更新: ${oldSegmentsCount} -> ${parsed.segments.length} 段`);
     }
+    Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, 'process-message');
     // 检查是否是最后一条AI消息
     // 防止旧消息的 MutationObserver 触发导致界面切回旧内容
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
@@ -25079,6 +25185,7 @@ ${extraRule}
         yield loadAllSpritesToCache();
         yield loadAllBackgroundsToCache();
         SpriteManager.init(); // 初始化立绘管理器（获取主角名称）
+        Live2DPreloadManager.scheduleSdkPreload('init');
         injectStyles();
         // ★ 在注册事件监听器之前，先重置生成状态（防止刷新时的事件误触发）
         resetGenerationState('页面初始化（事件注册前）');

@@ -463,6 +463,12 @@
         gap: 2%;
       }
 
+      /* Live2D 全局舞台画布：下置到 UI 层下方，避免视觉遮挡按钮/对话框 */
+      .gal-live2d-stage-canvas {
+        z-index: 4;
+        pointer-events: none;
+      }
+
       /* 多角色槽位 */
       .gal-char-slot {
         position: relative;
@@ -1168,6 +1174,11 @@
         align-items: center;
         justify-content: center;
         animation: galFadeIn 0.2s ease;
+      }
+
+      /* Live2D 设置弹窗 - 确保最高层级 */
+      #gal-live2d-settings-modal {
+        z-index: 2147483647 !important;
       }
 
       @keyframes galFadeIn {
@@ -2077,7 +2088,7 @@
         right: auto;
         color: rgba(255,255,255,0.95);
       }
-@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: 2147483647 !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
+@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal, #gal-live2d-settings-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: 2147483647 !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
 @media screen and (max-width: 48rem) { /* �����������Ż� */ .gal-input-title { flex-direction: column; align-items: flex-start !important; gap: 0.625rem; padding: 0.625rem 0.938rem !important; height: auto !important; } .gal-input-title span { font-size: 1.2rem !important; } .gal-input-title div { width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.313rem; } /* �����Ҳఴť�� (����/Զ��/����) */ .gal-input-title div > button, .gal-input-title div > div { flex: 1; min-width: auto !important; margin: 0 !important; } .gal-title-btn { padding: 0.25rem 0.625rem !important; font-size: 0.85rem !important; min-width: auto !important; transform: none !important; } .gal-title-btn * { transform: none !important; } /* Tab �����Ż� */ .gal-tab-header { padding: 0 0.625rem !important; gap: 0.625rem !important; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; } .gal-tab-item { padding: 0.625rem 0.5rem !important; font-size: 0.9rem !important; flex-shrink: 0; } /* �ڲ��������Ż� (�����ϴ���) */ .gal-sub-header, .gal-action-bar { flex-direction: column; align-items: stretch !important; gap: 0.625rem; height: auto !important; padding: 0.625rem 0.938rem !important; } .gal-action-group, .gal-filter-group { display: flex !important; flex-wrap: wrap; gap: 0.5rem !important; width: 100%; } .gal-action-btn { margin: 0 !important; flex: 1; min-width: 6.25rem; padding: 0.5rem 0 !important; justify-content: center; transform: none !important; } .gal-action-btn * { transform: none !important; } /* ������������ */ .gal-grid-container { padding: 0.625rem !important; grid-template-columns: repeat(auto-fill, minmax(6.875rem, 1fr)) !important; gap: 0.625rem !important; } /* �ײ��رհ�ť */ .gal-input-box > div:last-child { padding: 0.625rem 0.938rem !important; min-height: auto !important; } #gal-settings-close, #gal-char-sprites-close, #gal-input-cancel { min-height: 2.5rem !important; transform: none !important; } }
 
     /* === ��Դ������ר�ý��ղ��� (Mobile) === */
@@ -2359,7 +2370,7 @@
         }
         #gal-asset-manager-modal .gal-tab-btn.active {
             background: #fff !important;
-            color:  !important;
+            color: #333 !important;
             box-shadow: 0 1px 0.188rem rgba(0,0,0,0.1) !important;
             font-weight: bold;
         }

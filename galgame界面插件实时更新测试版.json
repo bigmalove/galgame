@@ -1,9 +1,9 @@
-{
+﻿{
   "type": "script",
   "enabled": true,
   "name": "galgame界面插件实时更新测试版",
   "id": "b0fdab95-9be7-4f02-afbb-5e472008a876",
-  "content": "import 'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/数据库界面插件.dist.js'",
+  "content": "import 'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/%E6%95%B0%E6%8D%AE%E5%BA%93%E7%95%8C%E9%9D%A2%E6%8F%92%E4%BB%B6.dist.js'",
   "info": "galgame界面插件实时更新测试版",
   "button": {
     "enabled": true,

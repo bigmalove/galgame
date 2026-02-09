@@ -3,7 +3,7 @@
 /**
  * Galgame 界面插件 - SillyTavern 酒馆助手脚本
  * 功能：嵌入式视觉小说界面、立绘系统、对话解析
- * 版本：2.2.0
+ * 版本：2.2.1
  */
 const __awaiter =
   (this && this.__awaiter) ||
@@ -45,12 +45,14 @@ const __awaiter =
   // ============================================
   const SCRIPT_ID = 'galgame-ui-plugin';
   const SCRIPT_NAME = 'Galgame界面插件';
-  const VERSION = '2.2.0';
+  const VERSION = '2.2.1';
   const DB_NAME = 'GalgameUIPluginDB';
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   const STORE_SPRITES = 'sprites';
   const STORE_BACKGROUNDS = 'backgrounds';
   const STORE_IMAGE_PACKS = 'imagePacks';
+  const STORE_LIVE2D_MODELS = 'live2dModels';
+  const STORE_SDK_CACHE = 'sdkCache';
   const DEFAULT_PACK_ID = 'pack_default';
   const DEFAULT_PACK_NAME = '未定义';
   // 样式主题常量 (Cyber Pop)
@@ -241,9 +243,9 @@ const __awaiter =
       if (!this.gsap || !element) return;
       const el = element instanceof jQuery ? element[0] : element;
       if (isSpeaking) {
-        this.gsap.to(el, { filter: "brightness(1.05)", scale: 1.02, duration: 0.3, ease: "power2.out" });
+        this.gsap.to(el, { filter: "brightness(1.05)", scale: 1.02, opacity: 1, duration: 0.3, ease: "power2.out" });
       } else {
-        this.gsap.to(el, { filter: "brightness(0.7)", scale: 0.98, duration: 0.3, ease: "power2.out" });
+        this.gsap.to(el, { filter: "brightness(0.7)", scale: 0.98, opacity: 0.9, duration: 0.3, ease: "power2.out" });
       }
     },
 
@@ -257,6 +259,3616 @@ const __awaiter =
 
     cleanupAll() { this.animations.forEach((_, id) => this.cleanup(id)); this.animations.clear(); }
   };
+
+  // ============================================
+  // Live2D SDK 缓存加载器
+  // ============================================
+  const Live2DLoader = {
+    PIXI_URL: 'https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js',
+    // Cubism 4 Core (官方 SDK)
+    CUBISM4_CORE_URL: 'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js',
+    // Cubism 2.1 Core
+    CUBISM2_CORE_URL: 'https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js',
+    // pixi-live2d-display (支持所有版本)
+    SDK_URL: 'https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js',
+    SDK_CACHE_KEY: 'live2d_sdk_v3',
+
+    isLoaded: false,
+    loadPromise: null,
+
+    async load() {
+      if (this.isLoaded) return true;
+      if (this.loadPromise) return this.loadPromise;
+
+      this.loadPromise = this._doLoad();
+      return this.loadPromise;
+    },
+
+    async _doLoad() {
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+
+      try {
+        // 检查是否已加载
+        if (_topWindow.PIXI?.live2d?.Live2DModel) {
+          console.log(`[${SCRIPT_NAME}] Live2D SDK 已存在`);
+          this.isLoaded = true;
+          return true;
+        }
+
+        // 1. 确保 PIXI.js 已加载
+        if (!_topWindow.PIXI) {
+          console.log(`[${SCRIPT_NAME}] 加载 PIXI.js...`);
+          const pixiText = await fetch(this.PIXI_URL).then(r => {
+            if (!r.ok) throw new Error(`PIXI.js 加载失败: ${r.status}`);
+            return r.text();
+          });
+          await this._executeScript(pixiText, _topWindow);
+          console.log(`[${SCRIPT_NAME}] PIXI.js 加载完成`);
+        }
+
+        // 确保 PIXI 暴露到 window（pixi-live2d-display 需要）
+        if (!_topWindow.window.PIXI) {
+          _topWindow.window.PIXI = _topWindow.PIXI;
+        }
+
+        // 2. 加载 Cubism Core（如果未加载）
+        if (!_topWindow.Live2DCubismCore) {
+          console.log(`[${SCRIPT_NAME}] 加载 Cubism 4 Core...`);
+          try {
+            const coreText = await fetch(this.CUBISM4_CORE_URL).then(r => {
+              if (!r.ok) throw new Error(`Cubism 4 Core 加载失败: ${r.status}`);
+              return r.text();
+            });
+            await this._executeScript(coreText, _topWindow);
+            console.log(`[${SCRIPT_NAME}] Cubism 4 Core 加载完成`);
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Cubism 4 Core 加载失败，尝试备用源...`, e);
+          }
+        }
+
+        // 3. 加载 Cubism 2.1 Core（可选，用于旧模型）
+        if (!_topWindow.Live2D) {
+          console.log(`[${SCRIPT_NAME}] 加载 Cubism 2.1 Core...`);
+          try {
+            const core2Text = await fetch(this.CUBISM2_CORE_URL).then(r => {
+              if (!r.ok) throw new Error(`Cubism 2.1 Core 加载失败: ${r.status}`);
+              return r.text();
+            });
+            await this._executeScript(core2Text, _topWindow);
+            console.log(`[${SCRIPT_NAME}] Cubism 2.1 Core 加载完成`);
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Cubism 2.1 Core 加载失败（旧模型可能不可用）:`, e);
+          }
+        }
+
+        // 4. 尝试从 IndexedDB 缓存加载 Live2D SDK
+        const cached = await this._getFromCache();
+        if (cached && cached.sdk) {
+          console.log(`[${SCRIPT_NAME}] 从缓存加载 pixi-live2d-display`);
+          await this._executeScript(cached.sdk, _topWindow);
+        } else {
+          // 5. 从 CDN 加载 pixi-live2d-display
+          console.log(`[${SCRIPT_NAME}] 从 CDN 加载 pixi-live2d-display...`);
+          const sdkText = await fetch(this.SDK_URL).then(r => {
+            if (!r.ok) throw new Error(`pixi-live2d-display 加载失败: ${r.status}`);
+            return r.text();
+          });
+
+          // 缓存到 IndexedDB
+          await this._saveToCache({ sdk: sdkText });
+
+          // 执行脚本
+          await this._executeScript(sdkText, _topWindow);
+        }
+
+        // 等待 PIXI.live2d 就绪
+        await new Promise(r => setTimeout(r, 100));
+
+        this.isLoaded = true;
+        console.log(`[${SCRIPT_NAME}] Live2D SDK 加载完成`);
+        return true;
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] Live2D SDK 加载失败:`, e);
+        this.loadPromise = null;
+        return false;
+      }
+    },
+
+    _executeScript(code, targetWindow) {
+      return new Promise((resolve, reject) => {
+        try {
+          const script = targetWindow.document.createElement('script');
+          script.textContent = code;
+          targetWindow.document.head.appendChild(script);
+          setTimeout(resolve, 10);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    },
+
+    async _getFromCache() {
+      return new Promise((resolve) => {
+        try {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onsuccess = (e) => {
+            const database = e.target.result;
+            if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
+              database.close();
+              resolve(null);
+              return;
+            }
+            const tx = database.transaction(STORE_SDK_CACHE, 'readonly');
+            const store = tx.objectStore(STORE_SDK_CACHE);
+            const get = store.get(this.SDK_CACHE_KEY);
+            get.onsuccess = () => {
+              database.close();
+              resolve(get.result?.data || null);
+            };
+            get.onerror = () => {
+              database.close();
+              resolve(null);
+            };
+          };
+          request.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    },
+
+    async _saveToCache(data) {
+      return new Promise((resolve) => {
+        try {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onsuccess = (e) => {
+            const database = e.target.result;
+            if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
+              database.close();
+              resolve();
+              return;
+            }
+            const tx = database.transaction(STORE_SDK_CACHE, 'readwrite');
+            const store = tx.objectStore(STORE_SDK_CACHE);
+            store.put({ id: this.SDK_CACHE_KEY, data, timestamp: Date.now() });
+            tx.oncomplete = () => {
+              database.close();
+              console.log(`[${SCRIPT_NAME}] Live2D SDK 已缓存到 IndexedDB`);
+              resolve();
+            };
+            tx.onerror = () => {
+              database.close();
+              resolve();
+            };
+          };
+          request.onerror = () => resolve();
+        } catch (e) {
+          resolve();
+        }
+      });
+    },
+
+    async clearCache() {
+      return new Promise((resolve) => {
+        try {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onsuccess = (e) => {
+            const database = e.target.result;
+            if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
+              database.close();
+              resolve();
+              return;
+            }
+            const tx = database.transaction(STORE_SDK_CACHE, 'readwrite');
+            const store = tx.objectStore(STORE_SDK_CACHE);
+            store.delete(this.SDK_CACHE_KEY);
+            tx.oncomplete = () => {
+              database.close();
+              this.isLoaded = false;
+              this.loadPromise = null;
+              console.log(`[${SCRIPT_NAME}] Live2D SDK 缓存已清除`);
+              resolve();
+            };
+          };
+          request.onerror = () => resolve();
+        } catch (e) {
+          resolve();
+        }
+      });
+    }
+  };
+
+  // ============================================
+  // Live2D 核心渲染管理器
+  // ============================================
+  const Live2DManager = {
+    models: new Map(),        // characterId -> PIXI.Live2DModel
+    containers: new Map(),    // characterId -> { app, canvas }
+    loadingModels: new Map(), // characterId -> Promise<PIXI.Live2DModel|null>
+    renderLocks: new Map(),   // characterId -> Promise<void>
+    isReady: false,
+
+    _normalizeTransform(characterId, transformConfig, containerWidth, containerHeight) {
+      const safeTransform = {
+        offsetX: Number(transformConfig?.offsetX) || 0,
+        offsetY: Number(transformConfig?.offsetY) || 0,
+        scale: Number(transformConfig?.scale) || 1.0,
+      };
+
+      // 兼容旧版“扩展画布”坐标，超过合理范围时按旧比例回退
+      const legacyThresholdX = Math.max(120, containerWidth * 1.2);
+      const legacyThresholdY = Math.max(120, containerHeight * 1.2);
+      let normalizedX = safeTransform.offsetX;
+      let normalizedY = safeTransform.offsetY;
+      let changed = false;
+
+      if (Math.abs(normalizedX) > legacyThresholdX) {
+        normalizedX = normalizedX / 3;
+        changed = true;
+      }
+      if (Math.abs(normalizedY) > legacyThresholdY) {
+        normalizedY = normalizedY / 3;
+        changed = true;
+      }
+
+      // 限幅，避免模型中心点被推到槽位外导致“看起来消失”
+      const maxOffsetX = Math.max(40, containerWidth * 0.45);
+      const maxOffsetY = Math.max(40, containerHeight * 0.45);
+      const clampedX = Math.max(-maxOffsetX, Math.min(maxOffsetX, normalizedX));
+      const clampedY = Math.max(-maxOffsetY, Math.min(maxOffsetY, normalizedY));
+      if (clampedX !== normalizedX || clampedY !== normalizedY) {
+        changed = true;
+      }
+
+      const normalizedTransform = {
+        offsetX: clampedX,
+        offsetY: clampedY,
+        scale: safeTransform.scale,
+      };
+
+      // 只在发生兼容修正时落盘，避免每帧写入
+      if (changed) {
+        try {
+          updateLive2DConfig(characterId, { transform: normalizedTransform });
+          console.log(
+            `[${SCRIPT_NAME}] Live2DManager: 坐标兼容修正 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`,
+          );
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: 保存兼容修正失败`, e);
+        }
+      }
+
+      return normalizedTransform;
+    },
+
+    async init() {
+      if (this.isReady) return true;
+
+      const sdkLoaded = await Live2DLoader.load();
+      if (!sdkLoaded) {
+        console.error(`[${SCRIPT_NAME}] Live2DManager: SDK 加载失败`);
+        return false;
+      }
+
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+
+      // 等待 PIXI.live2d 就绪（最多等待 3 秒）
+      let retries = 30;
+      while (!_topWindow.PIXI?.live2d?.Live2DModel && retries > 0) {
+        await new Promise(r => setTimeout(r, 100));
+        retries--;
+      }
+
+      if (!_topWindow.PIXI?.live2d?.Live2DModel) {
+        console.error(`[${SCRIPT_NAME}] Live2DManager: PIXI.live2d 未就绪`, {
+          PIXI: !!_topWindow.PIXI,
+          live2d: !!_topWindow.PIXI?.live2d,
+          Live2DModel: !!_topWindow.PIXI?.live2d?.Live2DModel
+        });
+        return false;
+      }
+
+      try {
+        const { Live2DModel } = _topWindow.PIXI.live2d;
+        // 注册 Ticker 类（不是实例）
+        Live2DModel.registerTicker(_topWindow.PIXI.Ticker);
+
+        this.isReady = true;
+        console.log(`[${SCRIPT_NAME}] Live2DManager 初始化完成`);
+        return true;
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] Live2DManager 初始化失败:`, e);
+        return false;
+      }
+    },
+
+    async loadModel(characterId, forceReload = false) {
+      if (!this.isReady) {
+        const ready = await this.init();
+        if (!ready) return null;
+      }
+
+      // 非强制重载时，复用同角色进行中的加载任务，避免并发创建多个模型实例
+      if (!forceReload && this.loadingModels.has(characterId)) {
+        return await this.loadingModels.get(characterId);
+      }
+
+      // 如果强制重新加载，先销毁旧模型
+      if (forceReload && this.models.has(characterId)) {
+        const oldModel = this.models.get(characterId);
+        try {
+          if (oldModel.parent) {
+            oldModel.parent.removeChild(oldModel);
+          }
+          oldModel.destroy();
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: 销毁旧模型失败:`, e);
+        }
+        this.models.delete(characterId);
+      }
+
+      if (this.models.has(characterId)) {
+        return this.models.get(characterId);
+      }
+
+      const modelData = await getLive2DModel(characterId);
+      if (!modelData) {
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到角色 ${characterId} 的 Live2D 模型`);
+        return null;
+      }
+
+      const loadTask = (async () => {
+        const modelBlobUrl = await this._buildModelBlobUrl(modelData);
+        const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+        const PIXI = _topWindow.PIXI;
+        const { Live2DModel } = PIXI.live2d;
+
+        // ★ 修复1: 使用 Live2DModel.from() 的完整选项并等待加载完成
+        const model = await Live2DModel.from(modelBlobUrl, {
+          autoUpdate: true,
+          autoInteract: false, // 禁用自动交互，手动控制
+        });
+
+        // ★ 修复2: 等待所有纹理完全加载（带超时和最大重试限制）
+        await new Promise((resolve) => {
+          let retryCount = 0;
+          const maxRetries = 30; // 最多等待 3 秒
+
+          const checkTextures = () => {
+            retryCount++;
+
+            // 超过最大重试次数，直接继续
+            if (retryCount > maxRetries) {
+              console.warn(`[${SCRIPT_NAME}] Live2DManager: 纹理检查达到最大重试次数，继续渲染`);
+              resolve(false);
+              return;
+            }
+
+            // 检查内部模型和纹理状态
+            const internalModel = model.internalModel;
+            if (!internalModel) {
+              setTimeout(checkTextures, 100);
+              return;
+            }
+
+            // 检查纹理是否加载完成
+            const textures = internalModel.textures || internalModel._textures || [];
+
+            // 如果纹理数组为空，直接通过（某些模型可能不需要外部纹理）
+            if (textures.length === 0) {
+              console.log(`[${SCRIPT_NAME}] Live2DManager: 模型无外部纹理，跳过等待`);
+              resolve(true);
+              return;
+            }
+
+            const allLoaded = textures.every(tex => {
+              if (!tex) return false;
+              // 检查 PIXI BaseTexture 是否有效
+              if (tex.baseTexture) {
+                return tex.baseTexture.valid;
+              }
+              return true;
+            });
+
+            if (allLoaded) {
+              console.log(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${textures.length} 张)`);
+              resolve(true);
+            } else {
+              if (retryCount % 5 === 0) { // 每 500ms 输出一次日志
+                console.log(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+              }
+              setTimeout(checkTextures, 100);
+            }
+          };
+
+          checkTextures();
+        });
+
+        // ★ 修复3: 额外等待一帧确保 GPU 就绪
+        await new Promise(r => requestAnimationFrame(r));
+        await new Promise(r => setTimeout(r, 100));
+
+        // ★ 修复4: 强制更新一次模型以初始化遮罩
+        if (model.internalModel && model.internalModel.update) {
+          model.internalModel.update(0);
+        }
+        if (model.update && typeof model.update === 'function') {
+          model.update(0);
+        }
+
+        this.models.set(characterId, model);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
+        return model;
+      })()
+        .catch((e) => {
+          console.error(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载失败:`, e);
+          return null;
+        })
+        .finally(() => {
+          this.loadingModels.delete(characterId);
+        });
+
+      this.loadingModels.set(characterId, loadTask);
+      return await loadTask;
+    },
+
+    async _buildModelBlobUrl(modelData) {
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+
+      // 创建修改后的 modelJson，使用 Data URL（避免跨域问题）
+      const modifiedModelJson = JSON.parse(JSON.stringify(modelData.modelJson));
+
+      // 辅助函数：ArrayBuffer 转 Base64
+      const arrayBufferToBase64 = (buffer) => {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      };
+
+      // 辅助函数：Blob 转 Data URL
+      const blobToDataUrl = (blob) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      };
+
+      // 辅助函数：ArrayBuffer 转 Data URL
+      const arrayBufferToDataUrl = (buffer, mimeType) => {
+        const base64 = arrayBufferToBase64(buffer);
+        return `data:${mimeType};base64,${base64}`;
+      };
+
+      const normalizePath = (p) => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
+
+      const isModel3 = !!modifiedModelJson?.FileReferences;
+
+      if (isModel3) {
+        // Cubism 3/4: model3.json
+
+        // 处理 moc3 文件
+        if (modelData.moc3 && modifiedModelJson.FileReferences) {
+          const mocDataUrl = arrayBufferToDataUrl(modelData.moc3, 'application/octet-stream');
+          modifiedModelJson.FileReferences.Moc = mocDataUrl;
+        }
+
+        // 处理纹理
+        if (modelData.textures && modifiedModelJson.FileReferences?.Textures) {
+          for (let i = 0; i < modelData.textures.length; i++) {
+            const tex = modelData.textures[i];
+            const texDataUrl = await blobToDataUrl(tex.data);
+            modifiedModelJson.FileReferences.Textures[i] = texDataUrl;
+          }
+        }
+
+        // 处理物理配置
+        if (modelData.physics && modifiedModelJson.FileReferences?.Physics) {
+          const physicsDataUrl = arrayBufferToDataUrl(modelData.physics, 'application/json');
+          modifiedModelJson.FileReferences.Physics = physicsDataUrl;
+        }
+
+        // 处理姿势配置
+        if (modelData.pose && modifiedModelJson.FileReferences?.Pose) {
+          const poseDataUrl = arrayBufferToDataUrl(modelData.pose, 'application/json');
+          modifiedModelJson.FileReferences.Pose = poseDataUrl;
+        }
+
+        // 处理动作文件（motion3.json）
+        if (modelData.motions && Object.keys(modelData.motions).length > 0) {
+          if (!modifiedModelJson.FileReferences.Motions) {
+            modifiedModelJson.FileReferences.Motions = {};
+          }
+
+          for (const [groupName, motionList] of Object.entries(modelData.motions)) {
+            if (!modifiedModelJson.FileReferences.Motions[groupName]) {
+              modifiedModelJson.FileReferences.Motions[groupName] = [];
+            }
+
+            for (let i = 0; i < motionList.length; i++) {
+              const motion = motionList[i];
+              if (motion.data) {
+                const motionDataUrl = arrayBufferToDataUrl(motion.data, 'application/json');
+                if (modifiedModelJson.FileReferences.Motions[groupName][i]) {
+                  modifiedModelJson.FileReferences.Motions[groupName][i].File = motionDataUrl;
+                } else {
+                  modifiedModelJson.FileReferences.Motions[groupName].push({ File: motionDataUrl });
+                }
+              }
+            }
+          }
+        }
+
+        // 处理表情文件（exp3.json）
+        if (modelData.expressions && modelData.expressions.length > 0) {
+          if (!modifiedModelJson.FileReferences.Expressions) {
+            modifiedModelJson.FileReferences.Expressions = [];
+          }
+
+          for (let i = 0; i < modelData.expressions.length; i++) {
+            const expr = modelData.expressions[i];
+            if (expr.data) {
+              const exprDataUrl = arrayBufferToDataUrl(expr.data, 'application/json');
+              if (modifiedModelJson.FileReferences.Expressions[i]) {
+                modifiedModelJson.FileReferences.Expressions[i].File = exprDataUrl;
+              } else {
+                modifiedModelJson.FileReferences.Expressions.push({
+                  Name: expr.name,
+                  File: exprDataUrl
+                });
+              }
+            }
+          }
+        }
+      } else {
+        // Cubism 2.1: model.json
+
+        // 处理 moc 文件
+        if (modelData.moc) {
+          const mocDataUrl = arrayBufferToDataUrl(modelData.moc, 'application/octet-stream');
+          if (typeof modifiedModelJson.model === 'string') {
+            modifiedModelJson.model = mocDataUrl;
+          } else if (typeof modifiedModelJson.Model === 'string') {
+            modifiedModelJson.Model = mocDataUrl;
+          } else {
+            modifiedModelJson.model = mocDataUrl;
+          }
+        }
+
+        // 处理纹理
+        const textureList = modifiedModelJson.textures || modifiedModelJson.Textures;
+        if (Array.isArray(textureList) && Array.isArray(modelData.textures)) {
+          const texMap = new Map();
+          for (const tex of modelData.textures) {
+            if (!tex?.name || !tex?.data) continue;
+            texMap.set(normalizePath(tex.name), tex.data);
+          }
+
+          const getByBasename = (target) => {
+            const base = String(target || '').split('/').pop();
+            if (!base) return null;
+            const matches = [];
+            for (const [k, v] of texMap.entries()) {
+              if (k.split('/').pop() === base) matches.push(v);
+            }
+            return matches.length === 1 ? matches[0] : null;
+          };
+
+          for (let i = 0; i < textureList.length; i++) {
+            const texPath = textureList[i];
+            const blob = texMap.get(normalizePath(texPath)) || getByBasename(texPath);
+            if (blob) {
+              textureList[i] = await blobToDataUrl(blob);
+            }
+          }
+        }
+
+        // 处理物理/姿势配置
+        if (modelData.physics) {
+          const physicsDataUrl = arrayBufferToDataUrl(modelData.physics, 'application/json');
+          modifiedModelJson.physics = physicsDataUrl;
+          if (typeof modifiedModelJson.Physics === 'string') {
+            modifiedModelJson.Physics = physicsDataUrl;
+          }
+        }
+
+        if (modelData.pose) {
+          const poseDataUrl = arrayBufferToDataUrl(modelData.pose, 'application/json');
+          modifiedModelJson.pose = poseDataUrl;
+          if (typeof modifiedModelJson.Pose === 'string') {
+            modifiedModelJson.Pose = poseDataUrl;
+          }
+        }
+
+        const guessMime = (filePath) => {
+          const lower = String(filePath || '').toLowerCase();
+          return lower.endsWith('.json') ? 'application/json' : 'application/octet-stream';
+        };
+
+        // 处理动作文件（.mtn）
+        if (modelData.motions && Object.keys(modelData.motions).length > 0) {
+          const motionMap = new Map();
+          for (const motionList of Object.values(modelData.motions)) {
+            if (!Array.isArray(motionList)) continue;
+            for (const motion of motionList) {
+              if (!motion?.name || !motion?.data) continue;
+              motionMap.set(normalizePath(motion.name), motion.data);
+            }
+          }
+
+          const motionsObj = modifiedModelJson.motions || modifiedModelJson.Motions;
+          if (motionsObj && typeof motionsObj === 'object') {
+            for (const [groupName, motionList] of Object.entries(motionsObj)) {
+              if (!Array.isArray(motionList)) continue;
+              for (let i = 0; i < motionList.length; i++) {
+                const motionDef = motionList[i];
+                const filePath = typeof motionDef === 'string' ? motionDef : motionDef?.file || motionDef?.File;
+                if (!filePath) continue;
+                const data = motionMap.get(normalizePath(filePath));
+                if (!data) continue;
+                const dataUrl = arrayBufferToDataUrl(data, guessMime(filePath));
+                if (typeof motionDef === 'string') {
+                  motionList[i] = dataUrl;
+                } else if (typeof motionDef?.file === 'string') {
+                  motionDef.file = dataUrl;
+                } else {
+                  motionDef.File = dataUrl;
+                }
+              }
+            }
+          }
+        }
+
+        // 处理表情文件（.exp.json）
+        if (Array.isArray(modelData.expressions) && modelData.expressions.length > 0) {
+          const exprMap = new Map();
+          for (const expr of modelData.expressions) {
+            const key = expr?.file || expr?.name;
+            if (!key || !expr?.data) continue;
+            exprMap.set(normalizePath(key), expr.data);
+          }
+
+          const exprList = modifiedModelJson.expressions || modifiedModelJson.Expressions;
+          if (Array.isArray(exprList)) {
+            for (let i = 0; i < exprList.length; i++) {
+              const exprDef = exprList[i];
+              const filePath = typeof exprDef === 'string' ? exprDef : exprDef?.file || exprDef?.File;
+              if (!filePath) continue;
+              const data = exprMap.get(normalizePath(filePath));
+              if (!data) continue;
+              const dataUrl = arrayBufferToDataUrl(data, 'application/json');
+
+              if (typeof exprDef === 'string') {
+                exprList[i] = dataUrl;
+              } else if (typeof exprDef?.file === 'string') {
+                exprDef.file = dataUrl;
+              } else {
+                exprDef.File = dataUrl;
+              }
+            }
+          }
+        }
+      }
+
+      // 创建 model.json Data URL
+      const modelJsonStr = JSON.stringify(modifiedModelJson);
+      const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));
+      return `data:application/json;base64,${modelJsonBase64}`;
+    },
+
+    async renderTo(characterId, containerElement, forceReload = false) {
+      // 同一角色渲染串行化，避免并发创建多个 renderer/context
+      const prevRender = this.renderLocks.get(characterId) || Promise.resolve();
+      let releaseRender;
+      const currentRender = new Promise((resolve) => {
+        releaseRender = resolve;
+      });
+      this.renderLocks.set(characterId, prevRender.then(() => currentRender));
+      await prevRender;
+
+      try {
+        // 方案A：统一由 Live2DStage 管理（单 Canvas / 单 PIXI.Application）
+        // - story：挂载到 .gal-game-content（全屏/主界面渲染）
+        // - 不加 mask：模型可自由溢出，UI 通过更高 z-index 覆盖在上层避免遮挡
+        if (containerElement && containerElement.isConnected) {
+          let model = this.models.get(characterId);
+          if (!model) {
+            model = await this.loadModel(characterId, false);
+            if (!model) return false;
+          }
+
+          const targetEl = containerElement;
+          const slotEl = targetEl?.closest?.('.gal-char-slot');
+          const gameContentEl = targetEl?.closest?.('.gal-game-content');
+          const isStory = !!(slotEl && gameContentEl);
+
+          if (isStory) {
+            const slot = slotEl.classList.contains('slot-right')
+              ? 'right'
+              : slotEl.classList.contains('slot-left')
+                ? 'left'
+                : 'left';
+
+            Live2DStage.focusCharacterId = null;
+            if (!Live2DStage.ensureMounted(gameContentEl, { mode: 'story' })) return false;
+            if (forceReload) {
+              Live2DStage.detach(characterId);
+            }
+            Live2DStage.attach(characterId, model, slot, { entering: false });
+          } else {
+            // single 模式（预览/设置面板）：由外部 pushMount/popMount 控制回退
+            Live2DStage.focusCharacterId = characterId;
+            if (!Live2DStage.ensureMounted(targetEl, { mode: 'single' })) return false;
+
+            // single 模式默认只显示当前角色，避免与舞台角色叠画
+            for (const [id, inst] of Live2DStage.instances) {
+              if (!inst?.model) continue;
+              inst.model.visible = id === characterId;
+            }
+
+            if (forceReload) {
+              Live2DStage.detach(characterId);
+            }
+            Live2DStage.attach(characterId, model, 'left', { entering: false });
+          }
+
+          return true;
+        }
+
+      let model = this.models.get(characterId);
+      const existingContainer = this.containers.get(characterId);
+
+      // 检查是否渲染到同一个容器 - 如果是，直接复用不需要重建
+      if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
+        console.log(`[${SCRIPT_NAME}] Live2DManager: 复用现有渲染 ${characterId}`);
+        return true;
+      }
+
+      // 容器变化或强制重载时，必须销毁并重建模型，避免跨 WebGL Context 复用导致渲染异常
+      const needReload = forceReload || (model && existingContainer && existingContainer.containerElement !== containerElement);
+      if (needReload) {
+        this.cleanup(characterId);
+        model = null;
+      }
+
+      // 如果没有模型，加载它
+      if (!model) {
+        model = await this.loadModel(characterId, false);
+        if (!model) return false;
+      }
+
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const PIXI = _topWindow.PIXI;
+
+      // 获取用户配置
+      const config = getLive2DConfig(characterId);
+      const qualityConfig = config.quality || {};
+      let containerWidth = containerElement.clientWidth || containerElement.offsetWidth;
+      let containerHeight = containerElement.clientHeight || containerElement.offsetHeight;
+
+      // 确保容器有尺寸
+      if (containerWidth <= 0 || containerHeight <= 0) {
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 容器尺寸无效 (${containerWidth}x${containerHeight})，使用默认值`);
+        containerWidth = 400;
+        containerHeight = 600;
+      }
+
+      const transformConfig = this._normalizeTransform(characterId, config.transform || {}, containerWidth, containerHeight);
+
+      // 获取设备像素比以提高清晰度 (支持用户自定义)
+      let dpr;
+      if (qualityConfig.devicePixelRatio === 'auto' || !qualityConfig.devicePixelRatio) {
+        dpr = _topWindow.devicePixelRatio || 1;
+      } else {
+        dpr = parseFloat(qualityConfig.devicePixelRatio) || 1;
+      }
+      // 应用纹理精度倍率
+      dpr *= (qualityConfig.textureResolution || 1.0);
+
+      console.log(`[${SCRIPT_NAME}] Live2DManager: 容器尺寸 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+
+      // 在 topWindow 中创建 canvas - 维持在槽位范围内，避免多角色互相覆盖
+      const canvas = _topWindow.document.createElement('canvas');
+      const renderWidth = containerWidth;
+      const renderHeight = containerHeight;
+      canvas.width = Math.max(1, Math.floor(renderWidth * dpr));
+      canvas.height = Math.max(1, Math.floor(renderHeight * dpr));
+
+      // Live2D 依赖 WebGL：手动创建 WebGL Context，避免 PIXI 自动降级到 Canvas 导致 gl 为 undefined
+      const glContext =
+        canvas.getContext('webgl2', {
+          alpha: true,
+          antialias: true,
+          preserveDrawingBuffer: true,
+          premultipliedAlpha: true,
+        }) ||
+        canvas.getContext('webgl', {
+          alpha: true,
+          antialias: true,
+          preserveDrawingBuffer: true,
+          premultipliedAlpha: true,
+        });
+
+      if (!glContext) {
+        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL 不可用，无法渲染 Live2D`);
+        try {
+          showToast('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
+        } catch {}
+        return false;
+      }
+      canvas.style.cssText = `width: ${renderWidth}px; height: ${renderHeight}px; position: absolute; top: 0; left: 0; pointer-events: none;`;
+      containerElement.style.position = 'relative';
+      containerElement.style.overflow = 'hidden';
+      containerElement.appendChild(canvas);
+
+      // ★ 修复5: 改进 PIXI Application 配置
+      const app = new PIXI.Application({
+        view: canvas,
+        context: glContext,
+        backgroundAlpha: 0,
+        autoStart: false,
+        width: renderWidth,
+        height: renderHeight,
+        resolution: dpr,
+        autoDensity: true,
+        antialias: true,
+        preserveDrawingBuffer: true,
+      });
+
+      if (!app.renderer?.gl) {
+        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL Renderer 初始化失败`, app.renderer);
+        try {
+          app.destroy(true);
+        } catch {}
+        try {
+          if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+        } catch {}
+        try {
+          showToast('WebGL Renderer 初始化失败，Live2D 无法渲染');
+        } catch {}
+        return false;
+      }
+
+      // 计算模型缩放 - 贴合槽位尺寸，确保双角色同时可见
+      model.scale.set(1);
+      const modelWidth = model.width || model.internalModel?.width || 500;
+      const modelHeight = model.height || model.internalModel?.height || 800;
+      const fitScale = Math.min(renderWidth / modelWidth, renderHeight / modelHeight) * 0.95;
+      const baseScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1;
+
+      // 应用用户自定义缩放
+      const userScale = transformConfig.scale || 1.0;
+      const finalScale = baseScale * userScale;
+
+      console.log(`[${SCRIPT_NAME}] Live2DManager: 模型尺寸 ${modelWidth}x${modelHeight}, 基础缩放: ${baseScale}, 用户缩放: ${userScale}, 最终缩放: ${finalScale}`);
+
+      model.scale.set(finalScale);
+      model.anchor.set(0.5, 0.5);
+
+      // 应用用户自定义偏移 - 以槽位中心为基准
+      const offsetX = transformConfig.offsetX || 0;
+      const offsetY = transformConfig.offsetY || 0;
+      model.x = renderWidth / 2 + offsetX;
+      model.y = renderHeight / 2 + offsetY;
+      model.visible = true;
+      model.alpha = 1;
+
+      app.stage.addChild(model);
+
+      // 强制渲染一帧确保显示
+      app.renderer.render(app.stage);
+      // 保持渲染循环运行，避免切段后出现画布空白导致角色“消失”
+      if (!app.ticker?.started) {
+        app.start();
+      }
+
+      this.containers.set(characterId, {
+        app,
+        canvas,
+        baseScale: baseScale,
+        containerElement,
+        width: containerWidth,
+        height: containerHeight,
+        renderWidth,
+        renderHeight,
+      });
+
+      console.log(
+        `[${SCRIPT_NAME}] Live2DManager: 渲染 ${characterId} 完成 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
+      );
+      return true;
+      } finally {
+        if (typeof releaseRender === 'function') {
+          releaseRender();
+        }
+      }
+    },
+
+    // 调整模型缩放
+    setZoom(characterId, zoomFactor) {
+      const model = this.models.get(characterId);
+      const container = this.containers.get(characterId);
+      if (!model || !container) return;
+
+      const baseScale = container.baseScale || 1;
+      model.scale.set(baseScale * zoomFactor);
+    },
+
+    // 应用用户配置的变换 (位置、缩放)
+    applyTransformConfig(characterId) {
+      if (!this.models.has(characterId)) return false;
+      const ok = Live2DStage.applyTransform(characterId);
+      if (ok) {
+        console.log(`[${SCRIPT_NAME}] Live2DManager: 应用变换配置 ${characterId}`);
+      }
+      return ok;
+    },
+
+    // 设置模型位置偏移 (用于实时预览)
+    setOffset(characterId, offsetX, offsetY) {
+      const model = this.models.get(characterId);
+      const container = this.containers.get(characterId);
+      if (!model || !container) return;
+
+      // 使用当前槽位画布尺寸
+      const renderWidth = container.renderWidth || container.width || 400;
+      const renderHeight = container.renderHeight || container.height || 600;
+      const maxOffsetX = Math.max(40, renderWidth * 0.45);
+      const maxOffsetY = Math.max(40, renderHeight * 0.45);
+      const safeOffsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, Number(offsetX) || 0));
+      const safeOffsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, Number(offsetY) || 0));
+      const isStage = !!container?.canvas?.classList?.contains?.('gal-live2d-stage-canvas');
+      model.x = renderWidth / 2 + safeOffsetX;
+      model.y = (isStage ? renderHeight : renderHeight / 2) + safeOffsetY;
+
+      if (container.app) {
+        container.app.renderer.render(container.app.stage);
+      }
+    },
+
+    // 设置模型缩放 (用于实时预览)
+    setScale(characterId, scale) {
+      const model = this.models.get(characterId);
+      const container = this.containers.get(characterId);
+      if (!model || !container) return;
+
+      const baseScale = container.baseScale || 1;
+      model.scale.set(baseScale * scale);
+
+      if (container.app) {
+        container.app.renderer.render(container.app.stage);
+      }
+    },
+
+    setExpression(characterId, expressionName) {
+      const model = this.models.get(characterId);
+      if (!model) return;
+
+      const mapped = this._matchExpression(model, expressionName);
+      if (mapped) {
+        try {
+          model.expression(mapped);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: 设置表情失败:`, e);
+        }
+      }
+    },
+
+    playMotion(characterId, motionGroup, index = 0) {
+      const model = this.models.get(characterId);
+      if (!model) return;
+
+      try {
+        model.motion(motionGroup, index);
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 播放动作失败:`, e);
+      }
+    },
+
+    setFocus(characterId, isSpeaking) {
+      const model = this.models.get(characterId);
+      const container = this.containers.get(characterId);
+      if (!model) return;
+
+      // 方案A：由 Live2DStage 统一维护说话者状态（alpha + 轻微放大）
+      if (container?.canvas?.classList?.contains?.('gal-live2d-stage-canvas')) {
+        Live2DStage.setFocus(characterId, isSpeaking);
+        Live2DStage.applyTransform(characterId);
+        return;
+      }
+
+      model.alpha = isSpeaking ? 1 : 0.7;
+
+      // 保持所有在场 Live2D 的渲染循环，避免非说话角色在翻页/重排后出现“画布空白=消失”
+      // 说话态仍通过 alpha 与外层焦点样式体现。
+      if (container?.app) {
+        try {
+          if (!container.app.ticker?.started) {
+            container.app.start();
+          }
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: setFocus 渲染状态切换失败`, e);
+        }
+      }
+    },
+
+    // 设置口型张开程度 (0-1)
+    setMouthOpen(characterId, value) {
+      const model = this.models.get(characterId);
+      if (!model?.internalModel?.coreModel) return false;
+
+      const coreModel = model.internalModel.coreModel;
+      const clampedValue = Math.max(0, Math.min(1, value));
+
+      // 尝试多种参数名 (不同模型命名不同)
+      const paramNames = [
+        'ParamMouthOpenY',      // Cubism 4 标准
+        'PARAM_MOUTH_OPEN_Y',
+        'ParamMouthOpen',
+        'ParamA',               // Cubism 2/3
+        'Param_Mouth_Open',
+        'mouth_open',
+      ];
+
+      for (const paramName of paramNames) {
+        try {
+          const paramIndex = coreModel.getParameterIndex(paramName);
+          if (paramIndex >= 0) {
+            coreModel.setParameterValueById(paramName, clampedValue);
+            return true;
+          }
+        } catch (e) { continue; }
+      }
+      return false;
+    },
+
+    // 获取模型支持的口型参数列表
+    getMouthParams(characterId) {
+      const model = this.models.get(characterId);
+      if (!model?.internalModel?.coreModel) return [];
+
+      const coreModel = model.internalModel.coreModel;
+      const params = [];
+      try {
+        const count = coreModel.getParameterCount();
+        for (let i = 0; i < count; i++) {
+          const id = coreModel.getParameterId(i);
+          if (id.toLowerCase().includes('mouth') ||
+              id.toLowerCase().includes('lip') ||
+              id === 'ParamA') {
+            params.push(id);
+          }
+        }
+      } catch (e) {}
+      return params;
+    },
+
+    _matchExpression(model, targetExpression) {
+      const expressionMap = {
+        '默认': ['normal', 'default', 'neutral', 'idle'],
+        '微笑': ['smile', 'happy', 'joy', 'glad'],
+        '生气': ['angry', 'anger', 'mad', 'rage'],
+        '难过': ['sad', 'sorrow', 'cry', 'upset'],
+        '惊讶': ['surprised', 'shock', 'amazed', 'wow'],
+        '嘲讽': ['smirk', 'mock', 'sneer', 'tease'],
+        '害羞': ['shy', 'blush', 'embarrassed', 'bashful'],
+        '思考': ['think', 'ponder', 'confused', 'wonder'],
+        '大笑': ['laugh', 'lol', 'haha', 'giggle'],
+        '搞怪': ['playful', 'wink', 'silly', 'fun'],
+      };
+
+      const candidates = expressionMap[targetExpression] || [targetExpression.toLowerCase()];
+
+      try {
+        const expressionManager = model.internalModel?.motionManager?.expressionManager;
+        if (!expressionManager?.definitions) return null;
+
+        const definitions = expressionManager.definitions;
+        for (const candidate of candidates) {
+          for (const def of definitions) {
+            const name = (def.Name || def.name || '').toLowerCase();
+            if (name.includes(candidate) || candidate.includes(name)) {
+              return def.Name || def.name;
+            }
+          }
+        }
+
+        return definitions[0]?.Name || definitions[0]?.name || null;
+      } catch (e) {
+        return null;
+      }
+    },
+
+    _cleanupContainer(characterId) {
+      const container = this.containers.get(characterId);
+      if (container) {
+        // 方案A：全局舞台复用同一个 app/canvas，不在这里 destroy
+        if (container?.canvas?.classList?.contains?.('gal-live2d-stage-canvas')) {
+          Live2DStage.detach(characterId);
+          return;
+        }
+        try {
+          container.app.destroy(true);
+          if (container.canvas.parentNode) {
+            container.canvas.parentNode.removeChild(container.canvas);
+          }
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: 清理容器失败:`, e);
+        }
+        this.containers.delete(characterId);
+      }
+    },
+
+    // 公共容器清理接口（供预览面板等外部调用）
+    cleanupContainer(characterId) {
+      this._cleanupContainer(characterId);
+    },
+
+    cleanup(characterId) {
+      this._cleanupContainer(characterId);
+      const model = this.models.get(characterId);
+      if (model) {
+        try {
+          model.destroy();
+        } catch (e) {}
+        this.models.delete(characterId);
+      }
+    },
+
+    cleanupAll() {
+      for (const charId of this.models.keys()) {
+        this.cleanup(charId);
+      }
+    },
+
+    // 启用模型交互 (拖拽模式)
+    enableInteraction(characterId) {
+      const model = this.models.get(characterId);
+      const container = this.containers.get(characterId);
+      if (!model || !container) {
+        console.warn(`[Live2DManager] enableInteraction 失败: 模型或容器不存在`, { model: !!model, container: !!container });
+        return false;
+      }
+
+      // 启用模型交互
+      model.interactive = true;
+      model.buttonMode = true;
+      model.cursor = 'move';
+
+      // 确保 stage 也是交互的
+      if (container.app && container.app.stage) {
+        container.app.stage.interactive = true;
+        container.app.stage.hitArea = container.app.screen;
+      }
+
+      // 添加高亮边框效果 (通过 filter)
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const PIXI = _topWindow.PIXI;
+      if (PIXI.filters && PIXI.filters.OutlineFilter) {
+        model.filters = [new PIXI.filters.OutlineFilter(2, 0x00d2ff)];
+      }
+
+      // 更新 canvas 样式允许交互
+      if (container.canvas) {
+        container.canvas.style.pointerEvents = 'auto';
+        container.canvas.style.cursor = 'move';
+        // 不提升 z-index：保持 Live2D 在 UI 下层（避免遮挡按钮/对话框）
+      }
+
+      console.log(`[Live2DManager] enableInteraction 成功: ${characterId}`);
+      return true;
+    },
+
+    // 禁用模型交互
+    disableInteraction(characterId) {
+      const model = this.models.get(characterId);
+      const container = this.containers.get(characterId);
+      if (!model) return;
+
+      model.interactive = false;
+      model.buttonMode = false;
+      model.cursor = 'default';
+      model.filters = [];
+
+      if (container && container.canvas) {
+        container.canvas.style.pointerEvents = 'none';
+        container.canvas.style.cursor = 'default';
+      }
+    },
+
+    // 获取当前模型的变换参数
+    getCurrentTransform(characterId) {
+      const model = this.models.get(characterId);
+      const container = this.containers.get(characterId);
+      if (!model || !container) return null;
+
+      // 使用当前槽位画布尺寸
+      const renderWidth = container.renderWidth || container.width || 400;
+      const renderHeight = container.renderHeight || container.height || 600;
+      const baseScale = container.baseScale || 1;
+      const isStage = !!container?.canvas?.classList?.contains?.('gal-live2d-stage-canvas');
+
+      return {
+        offsetX: model.x - renderWidth / 2,
+        offsetY: model.y - (isStage ? renderHeight : renderHeight / 2),
+        scale: model.scale.x / baseScale
+      };
+    }
+  };
+
+  // ============================================
+  // Live2D 舞台渲染器（方案A：单 Canvas / 单 PIXI.Application）
+  // - 全屏/主界面渲染：挂载到 .gal-game-content（覆盖整个游戏内容层）
+  // - 不使用 mask：允许模型自由溢出；UI 通过更高 z-index 覆盖在上层，不再被 Live2D 遮挡
+  // - 左/右角色通过“虚拟槽位矩形”布局（可重叠，最自由）
+  // ============================================
+  const Live2DStage = {
+    app: null,
+    canvas: null,
+    mountEl: null,
+    mode: 'story', // 'story' | 'single'
+    focusCharacterId: null,
+    dpr: 1,
+    mountStack: [],
+    _resizeObserver: null,
+    _observedEl: null,
+    _layoutRaf: 0,
+    _onWindowResize: null,
+
+    slots: {
+      left: { el: null, rect: null, container: null },
+      right: { el: null, rect: null, container: null },
+    },
+
+    // characterId -> { model, slot, bounds, baseScale, speaking }
+    instances: new Map(),
+
+    _getTopWindow() {
+      return typeof window.parent !== 'undefined' ? window.parent : window;
+    },
+
+    _getPIXI() {
+      return this._getTopWindow().PIXI;
+    },
+
+    _computeDpr() {
+      const _topWindow = this._getTopWindow();
+      const raw = _topWindow.devicePixelRatio || 1;
+      return Math.max(1, Math.min(2, raw));
+    },
+
+    _setCanvasPointerEvents(enabled) {
+      if (!this.canvas) return;
+      this.canvas.style.pointerEvents = enabled ? 'auto' : 'none';
+      this.canvas.style.cursor = enabled ? 'move' : 'default';
+    },
+
+    _requestLayout() {
+      const _topWindow = this._getTopWindow();
+      if (this._layoutRaf) return;
+      this._layoutRaf = _topWindow.requestAnimationFrame(() => {
+        this._layoutRaf = 0;
+        this.updateLayout();
+      });
+    },
+
+    _ensureSlotContainers() {
+      if (!this.app) return false;
+      const PIXI = this._getPIXI();
+      if (!PIXI) return false;
+
+      if (!this.slots.left.container) {
+        const c = new PIXI.Container();
+        this.app.stage.addChild(c);
+        this.slots.left.container = c;
+      }
+      if (!this.slots.right.container) {
+        const c = new PIXI.Container();
+        this.app.stage.addChild(c);
+        this.slots.right.container = c;
+      }
+      return true;
+    },
+
+    ensureMounted(mountEl, { mode = null } = {}) {
+      const _topWindow = this._getTopWindow();
+      const PIXI = this._getPIXI();
+
+      if (!mountEl || !mountEl.isConnected) return false;
+      if (!PIXI) {
+        console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI 未就绪，无法挂载`);
+        return false;
+      }
+
+      if (this.mountEl !== mountEl) {
+        this.mountEl = mountEl;
+      }
+
+      if (!this.canvas) {
+        this.canvas = _topWindow.document.createElement('canvas');
+        this.canvas.className = 'gal-live2d-stage-canvas';
+        this.canvas.style.cssText =
+          'position:absolute; inset:0; width:100%; height:100%; pointer-events:none;';
+      }
+
+      try {
+        const pos = _topWindow.getComputedStyle(mountEl).position;
+        if (pos === 'static') {
+          mountEl.style.position = 'relative';
+        }
+      } catch (e) {}
+
+      // 放到 mountEl 最底层（DOM 顺序靠前 + z-index 低于对话框层）
+      if (this.canvas.parentNode !== mountEl) {
+        try {
+          mountEl.prepend(this.canvas);
+        } catch (e) {
+          try {
+            mountEl.appendChild(this.canvas);
+          } catch (e2) {}
+        }
+      }
+
+      if (!this.app) {
+        this.dpr = this._computeDpr();
+        const rect = mountEl.getBoundingClientRect();
+        const width = Math.max(1, Math.floor(rect.width || 1));
+        const height = Math.max(1, Math.floor(rect.height || 1));
+
+        // Live2D 依赖 WebGL：手动创建 WebGL Context，避免 PIXI 自动降级导致 gl 为 undefined
+        const glContext =
+          this.canvas.getContext('webgl2', {
+            alpha: true,
+            antialias: false,
+            preserveDrawingBuffer: false,
+            premultipliedAlpha: true,
+          }) ||
+          this.canvas.getContext('webgl', {
+            alpha: true,
+            antialias: false,
+            preserveDrawingBuffer: false,
+            premultipliedAlpha: true,
+          });
+
+        if (!glContext) {
+          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL 不可用，无法渲染 Live2D`);
+          try {
+            showToast('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
+          } catch {}
+          return false;
+        }
+
+        this.app = new PIXI.Application({
+          view: this.canvas,
+          context: glContext,
+          backgroundAlpha: 0,
+          autoStart: false,
+          width,
+          height,
+          resolution: this.dpr,
+          autoDensity: true,
+          antialias: false,
+          preserveDrawingBuffer: false,
+        });
+
+        if (!this.app.renderer?.gl) {
+          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL Renderer 初始化失败`, this.app.renderer);
+          try {
+            this.app.destroy(true);
+          } catch {}
+          this.app = null;
+          return false;
+        }
+
+        if (this.app.stage) {
+          this.app.stage.interactive = false;
+        }
+
+        this._ensureSlotContainers();
+        this.app.start();
+      }
+
+      // 监听尺寸变化
+      if (!this._onWindowResize) {
+        this._onWindowResize = () => this._requestLayout();
+        try {
+          _topWindow.addEventListener('resize', this._onWindowResize, { passive: true });
+        } catch (e) {}
+      }
+      if (_topWindow.ResizeObserver && !this._resizeObserver) {
+        try {
+          this._resizeObserver = new _topWindow.ResizeObserver(() => this._requestLayout());
+        } catch (e) {}
+      }
+      if (this._resizeObserver && this._observedEl !== mountEl) {
+        try {
+          this._resizeObserver.disconnect();
+        } catch (e) {}
+        try {
+          this._resizeObserver.observe(mountEl);
+          this._observedEl = mountEl;
+        } catch (e) {}
+      }
+
+      if (mode) {
+        this.mode = mode;
+      }
+
+      this.updateLayout();
+      return true;
+    },
+
+    pushMount(mountEl, { mode = 'single', focusCharacterId = null } = {}) {
+      const snapshot = {
+        mountEl: this.mountEl,
+        mode: this.mode,
+        focusCharacterId: this.focusCharacterId,
+        instanceStates: Array.from(this.instances.entries()).map(([id, inst]) => ({
+          id,
+          visible: inst.model?.visible !== false,
+          alpha: inst.model?.alpha,
+          slot: inst.slot,
+        })),
+        pointerEvents: this.canvas ? this.canvas.style.pointerEvents : 'none',
+      };
+      this.mountStack.push(snapshot);
+
+      this.focusCharacterId = focusCharacterId;
+      this.ensureMounted(mountEl, { mode });
+
+      // single 模式只显示 focus 角色
+      if (focusCharacterId) {
+        for (const [id, inst] of this.instances) {
+          if (!inst?.model) continue;
+          inst.model.visible = id === focusCharacterId;
+        }
+      }
+      return true;
+    },
+
+    popMount() {
+      const snapshot = this.mountStack.pop();
+      if (!snapshot) return false;
+
+      this.focusCharacterId = snapshot.focusCharacterId || null;
+      if (snapshot.mountEl && snapshot.mountEl.isConnected) {
+        this.ensureMounted(snapshot.mountEl, { mode: snapshot.mode });
+      } else {
+        this.mode = snapshot.mode || this.mode;
+      }
+
+      for (const s of snapshot.instanceStates || []) {
+        const inst = this.instances.get(s.id);
+        if (!inst?.model) continue;
+        inst.slot = s.slot || inst.slot;
+        inst.model.visible = s.visible !== false;
+        if (typeof s.alpha === 'number') {
+          inst.model.alpha = s.alpha;
+        }
+      }
+
+      if (this.canvas) {
+        this.canvas.style.pointerEvents = snapshot.pointerEvents || 'none';
+      }
+
+      this.updateLayout();
+      return true;
+    },
+
+    updateLayout() {
+      if (!this.app || !this.canvas || !this.mountEl || !this.mountEl.isConnected) return false;
+
+      const rect = this.mountEl.getBoundingClientRect();
+      const width = Math.max(1, Math.floor(rect.width || 1));
+      const height = Math.max(1, Math.floor(rect.height || 1));
+
+      const nextDpr = this._computeDpr();
+      if (nextDpr !== this.dpr) {
+        this.dpr = nextDpr;
+        try {
+          this.app.renderer.resolution = this.dpr;
+        } catch (e) {}
+      }
+
+      try {
+        this.app.renderer.resize(width, height);
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize 失败`, e);
+      }
+
+      this._ensureSlotContainers();
+
+      if (this.mode === 'single') {
+        const fullRect = { x: 0, y: 0, width, height };
+        this._applySlotRect('left', fullRect);
+        if (this.slots.right.container) this.slots.right.container.visible = false;
+      } else {
+        if (this.slots.right.container) this.slots.right.container.visible = true;
+
+        // 全屏布局：用“虚拟槽位”覆盖全高，宽度按 DOM slot 中心参考，可重叠（不加 mask）
+        const base = rect;
+        const leftEl = this.mountEl.querySelector?.('.gal-char-slot.slot-left');
+        const rightEl = this.mountEl.querySelector?.('.gal-char-slot.slot-right');
+
+        let leftCenterX = width * 0.32;
+        let rightCenterX = width * 0.68;
+        let domSlotWidth = width * 0.3;
+
+        const toLocalRect = (el) => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height) return null;
+          return {
+            x: r.left - base.left,
+            y: r.top - base.top,
+            width: r.width,
+            height: r.height,
+          };
+        };
+
+        const leftDom = toLocalRect(leftEl);
+        const rightDom = toLocalRect(rightEl);
+        if (leftDom) {
+          leftCenterX = leftDom.x + leftDom.width / 2;
+          domSlotWidth = leftDom.width;
+        }
+        if (rightDom) {
+          rightCenterX = rightDom.x + rightDom.width / 2;
+          domSlotWidth = Math.max(domSlotWidth, rightDom.width);
+        }
+
+        let virtualWidth = Math.max(width * 0.45, domSlotWidth * 1.7);
+        virtualWidth = Math.max(1, Math.min(width, Math.floor(virtualWidth)));
+
+        const clampX = (x) => Math.max(0, Math.min(width - virtualWidth, Math.floor(x)));
+        const leftX = clampX(leftCenterX - virtualWidth / 2);
+        const rightX = clampX(rightCenterX - virtualWidth / 2);
+
+        this.slots.left.el = leftEl;
+        this.slots.right.el = rightEl;
+        this._applySlotRect('left', { x: leftX, y: 0, width: virtualWidth, height });
+        this._applySlotRect('right', { x: rightX, y: 0, width: virtualWidth, height });
+      }
+
+      for (const id of this.instances.keys()) {
+        this.applyTransform(id);
+      }
+
+      return true;
+    },
+
+    _applySlotRect(slotKey, localRect) {
+      const slot = this.slots[slotKey];
+      if (!slot?.container || !localRect) return false;
+
+      const w = Math.max(1, Math.floor(localRect.width || 1));
+      const h = Math.max(1, Math.floor(localRect.height || 1));
+      slot.rect = { x: localRect.x || 0, y: localRect.y || 0, width: w, height: h };
+      slot.container.position.set(slot.rect.x, slot.rect.y);
+      return true;
+    },
+
+    attach(characterId, model, slot, { entering = false } = {}) {
+      if (!characterId || !model) return false;
+      if (!this.app || !this.mountEl) return false;
+
+      const key = this.mode === 'single' ? 'left' : slot === 'right' ? 'right' : 'left';
+      const targetContainer = this.slots[key]?.container;
+      if (!targetContainer) return false;
+
+      const inst = this.instances.get(characterId) || { model, slot: key, bounds: null, baseScale: 1, speaking: false };
+      inst.model = model;
+      inst.slot = key;
+      this.instances.set(characterId, inst);
+
+      try {
+        if (model.parent && model.parent !== targetContainer) {
+          model.parent.removeChild(model);
+        }
+        if (!model.parent) {
+          targetContainer.addChild(model);
+        }
+      } catch (e) {}
+
+      // 预计算 bounds + pivot（底部居中），用于 bottom-align
+      if (!inst.bounds) {
+        const wasVisible = model.visible;
+        model.visible = false;
+        try {
+          if (model.scale?.set) model.scale.set(1);
+          if (model.pivot?.set) model.pivot.set(0, 0);
+          if (model.position?.set) model.position.set(0, 0);
+          if (model.internalModel?.update) model.internalModel.update(0);
+          if (typeof model.update === 'function') model.update(0);
+          const b = model.getLocalBounds?.();
+          if (b && Number.isFinite(b.width) && Number.isFinite(b.height) && b.width > 0 && b.height > 0) {
+            inst.bounds = b;
+          }
+        } catch (e) {}
+        if (!inst.bounds) {
+          inst.bounds = { x: 0, y: 0, width: model.width || 500, height: model.height || 800 };
+        }
+        try {
+          const pivotX = inst.bounds.x + inst.bounds.width / 2;
+          const pivotY = inst.bounds.y + inst.bounds.height;
+          if (model.pivot?.set) model.pivot.set(pivotX, pivotY);
+        } catch (e) {}
+        model.visible = wasVisible;
+      }
+
+      this.applyTransform(characterId);
+
+      // 写回容器信息（供旧接口使用）
+      const rect = this.slots[key]?.rect;
+      if (rect) {
+        const containerInfo = Live2DManager.containers.get(characterId) || {};
+        Live2DManager.containers.set(characterId, {
+          ...containerInfo,
+          app: this.app,
+          canvas: this.canvas,
+          renderWidth: rect.width,
+          renderHeight: rect.height,
+          width: rect.width,
+          height: rect.height,
+          slot: key,
+          baseScale: inst.baseScale || containerInfo.baseScale || 1,
+        });
+      }
+
+      if (entering) {
+        // no-op（不做 DOM 同步动画，避免与 UI 层错位）
+      }
+      return true;
+    },
+
+    detach(characterId) {
+      const inst = this.instances.get(characterId);
+      if (!inst?.model) {
+        this.instances.delete(characterId);
+        Live2DManager.containers.delete(characterId);
+        return false;
+      }
+
+      try {
+        if (inst.model.parent) {
+          inst.model.parent.removeChild(inst.model);
+        }
+      } catch (e) {}
+
+      this.instances.delete(characterId);
+      Live2DManager.containers.delete(characterId);
+      return true;
+    },
+
+    setFocus(characterId, isSpeaking) {
+      const inst = this.instances.get(characterId);
+      if (!inst?.model) return;
+      inst.speaking = !!isSpeaking;
+      inst.model.alpha = inst.speaking ? 1 : 0.7;
+    },
+
+    applyTransform(characterId) {
+      const inst = this.instances.get(characterId);
+      if (!inst?.model) return false;
+
+      const slotKey = this.mode === 'single' ? 'left' : inst.slot === 'right' ? 'right' : 'left';
+      const targetContainer = this.slots[slotKey]?.container;
+      if (targetContainer && inst.model.parent !== targetContainer) {
+        try {
+          if (inst.model.parent) {
+            inst.model.parent.removeChild(inst.model);
+          }
+          targetContainer.addChild(inst.model);
+        } catch (e) {}
+      }
+
+      const rect = this.slots[slotKey]?.rect;
+      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+
+      const config = getLive2DConfig(characterId);
+      const transformConfig = Live2DManager._normalizeTransform(characterId, config.transform || {}, rect.width, rect.height);
+
+      const safePadding = Math.min(0.08, Math.max(0.0, Number(config?.safePadding) || 0.03));
+      const bounds = inst.bounds || { x: 0, y: 0, width: inst.model.width || 500, height: inst.model.height || 800 };
+      const fitScale = Math.min(rect.width / bounds.width, rect.height / bounds.height) * (1 - safePadding);
+      const baseScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1;
+      inst.baseScale = baseScale;
+
+      const userScale = transformConfig.scale || 1.0;
+      const finalScale = baseScale * userScale * (inst.speaking ? 1.03 : 1.0);
+      if (inst.model.scale?.set) inst.model.scale.set(finalScale);
+
+      // bottom align：以“虚拟槽位”底部中心为原点
+      const originX = rect.width / 2;
+      const originY = rect.height;
+      inst.model.x = originX + (transformConfig.offsetX || 0);
+      inst.model.y = originY + (transformConfig.offsetY || 0);
+
+      // 同步容器信息（供旧接口读取）
+      const containerInfo = Live2DManager.containers.get(characterId) || {};
+      Live2DManager.containers.set(characterId, {
+        ...containerInfo,
+        app: this.app,
+        canvas: this.canvas,
+        renderWidth: rect.width,
+        renderHeight: rect.height,
+        width: rect.width,
+        height: rect.height,
+        slot: slotKey,
+        baseScale: baseScale,
+      });
+
+      return true;
+    },
+  };
+
+  // ============================================
+  // LipSync 口型同步管理器 (增强修复版)
+  // ============================================
+  const LipSyncManager = {
+    audioContext: null,
+    analyser: null,
+    dataArray: null,
+    source: null,
+    animationFrameId: null,
+    currentCharacterId: null,
+    lastVolume: 0,
+    connectedAudioElements: new WeakSet(), // 追踪已连接的音频元素
+    _proxyAudio: null, // 代理音频元素（用于跨域情况）
+
+    // 配置
+    config: {
+      fftSize: 256,
+      smoothingFactor: 0.5,  // 降低平滑度，反应更灵敏
+      sensitivity: 2.5,      // 提高灵敏度
+      minThreshold: 0.01,    // 降低噪声门限
+    },
+
+    // 初始化 AudioContext
+    init() {
+      // 1. 检查并恢复被挂起的 AudioContext
+      if (this.audioContext) {
+        if (this.audioContext.state === 'suspended') {
+          this.audioContext.resume().then(() => {
+            console.log(`[${SCRIPT_NAME}] LipSync: AudioContext 已恢复`);
+          });
+        }
+        return;
+      }
+
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const AudioContextClass = _topWindow.AudioContext || _topWindow.webkitAudioContext;
+      if (!AudioContextClass) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: 浏览器不支持 Web Audio API`);
+          return;
+      }
+
+      this.audioContext = new AudioContextClass();
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = this.config.fftSize;
+      this.analyser.smoothingTimeConstant = this.config.smoothingFactor;
+      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      console.log(`[${SCRIPT_NAME}] LipSyncManager 初始化完成`);
+    },
+
+    // 获取代理音频 URL（与 TTSManager 保持一致）
+    _getProxiedAudioUrl(originalUrl) {
+      if (typeof TTSManager !== 'undefined' && typeof TTSManager._getProxiedAudioUrl === 'function') {
+        return TTSManager._getProxiedAudioUrl(originalUrl);
+      }
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+
+      // 方法1: 使用 SillyTavern 的 getCorsProxyUrl 函数（如果存在）
+      if (typeof _topWindow.getCorsProxyUrl === 'function') {
+        try {
+          const proxied = _topWindow.getCorsProxyUrl(originalUrl);
+          console.log(`[${SCRIPT_NAME}] LipSync: 使用 getCorsProxyUrl 代理音频`);
+          return proxied;
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: getCorsProxyUrl 失败`, e);
+        }
+      }
+
+      // 方法2: 使用 SillyTavern 的 enableCorsProxy（如果存在）
+      if (typeof _topWindow.enableCorsProxy === 'function') {
+        try {
+          const proxied = _topWindow.enableCorsProxy(originalUrl);
+          if (typeof proxied === 'string' && proxied) {
+            console.log(`[${SCRIPT_NAME}] LipSync: 使用 enableCorsProxy 代理音频`);
+            return proxied;
+          }
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: enableCorsProxy 失败`, e);
+        }
+      }
+
+      // 方法3: 使用 SillyTavern 的 corsProxy 模块（小白盒方式）
+      if (_topWindow.corsProxy?.getProxyUrl) {
+        try {
+          const proxied = _topWindow.corsProxy.getProxyUrl(originalUrl);
+          console.log(`[${SCRIPT_NAME}] LipSync: 使用 corsProxy.getProxyUrl 代理音频`);
+          return proxied;
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: corsProxy.getProxyUrl 失败`, e);
+        }
+      }
+
+      // 方法4: 手动构造代理 URL（基于 SillyTavern 默认配置）
+      if (_topWindow.location) {
+        const origin = _topWindow.location.origin;
+        // SillyTavern 默认代理端点是 /proxy
+        console.log(`[${SCRIPT_NAME}] LipSync: 使用默认代理端点 /proxy`);
+        return `${origin}/proxy?url=${encodeURIComponent(originalUrl)}`;
+      }
+
+      return originalUrl;
+    },
+
+    // 连接音频元素
+    connectAudio(audioElement) {
+      if (!audioElement) return false;
+
+      // 如果已连接，确保上下文是活跃的
+      if (this.connectedAudioElements.has(audioElement)) {
+        this.init();
+        // 确保 AudioContext 处于运行状态
+        if (this.audioContext?.state === 'suspended') {
+          this.audioContext.resume();
+        }
+        return true;
+      }
+
+      this.init();
+      if (!this.audioContext) return false;
+
+      // 关键：确保 AudioContext 已恢复（可能被浏览器暂停）
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(e => console.warn('AudioContext resume failed:', e));
+      }
+
+      try {
+        // 断开旧连接
+        if (this.source) {
+          try { this.source.disconnect(); } catch (e) {}
+        }
+
+        // 检查是否需要使用代理（非本地/非数据 URL）
+        const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+        let targetAudio = audioElement;
+        const src = audioElement.src || '';
+        const isLocalhost = src.includes('127.0.0.1') || src.includes('localhost');
+        const isDataUrl = src.startsWith('data:');
+        const isBlobUrl = src.startsWith('blob:');
+        let isSameOrigin = false;
+        try {
+          const base = _topWindow.location?.origin || window.location.origin;
+          const url = new URL(src, base);
+          isSameOrigin = url.origin === base;
+        } catch (e) {}
+
+        if (!isLocalhost && !isDataUrl && !isBlobUrl && !isSameOrigin) {
+          // 尝试使用代理音频元素
+          console.log(`[${SCRIPT_NAME}] LipSync: 检测到跨域音频，尝试使用代理`);
+          const proxiedUrl = this._getProxiedAudioUrl(src);
+          if (proxiedUrl && proxiedUrl !== src) {
+            // 创建代理音频元素用于分析
+            targetAudio = new Audio(proxiedUrl);
+            targetAudio.crossOrigin = 'anonymous';
+            console.log(`[${SCRIPT_NAME}] LipSync: 创建代理音频元素`, proxiedUrl.substring(0, 50) + '...');
+
+            // 同步原始音频的播放状态
+            targetAudio.currentTime = audioElement.currentTime;
+            targetAudio.volume = 0.001; // 几乎静音，仅用于分析
+
+            // 如果原始音频正在播放，也播放代理音频
+            if (!audioElement.paused) {
+              targetAudio.play().catch(e => {
+                console.warn(`[${SCRIPT_NAME}] LipSync: 代理音频播放失败`, e);
+              });
+            }
+
+            // 监听原始音频事件，同步到代理音频
+            const syncPlay = () => {
+              if (this._proxyAudio && this._proxyAudio.paused) {
+                this._proxyAudio.currentTime = audioElement.currentTime;
+                this._proxyAudio.play().catch(() => {});
+              }
+            };
+            const syncPause = () => {
+              if (this._proxyAudio) {
+                this._proxyAudio.pause();
+              }
+            };
+            const syncSeek = () => {
+              if (this._proxyAudio) {
+                this._proxyAudio.currentTime = audioElement.currentTime;
+              }
+            };
+
+            audioElement.addEventListener('play', syncPlay);
+            audioElement.addEventListener('playing', syncPlay);
+            audioElement.addEventListener('pause', syncPause);
+            audioElement.addEventListener('ended', syncPause);
+            audioElement.addEventListener('seeked', syncSeek);
+
+            // 存储引用和清理函数
+            this._proxyAudio = targetAudio;
+            this._proxyAudioCleanup = () => {
+              audioElement.removeEventListener('play', syncPlay);
+              audioElement.removeEventListener('playing', syncPlay);
+              audioElement.removeEventListener('pause', syncPause);
+              audioElement.removeEventListener('ended', syncPause);
+              audioElement.removeEventListener('seeked', syncSeek);
+            };
+          }
+        }
+
+        console.log(`[${SCRIPT_NAME}] LipSync: 连接音频源`, targetAudio.src?.substring(0, 50) + '...');
+        this.source = this.audioContext.createMediaElementSource(targetAudio);
+        this.source.connect(this.analyser);
+        this.analyser.connect(this.audioContext.destination);
+        this.connectedAudioElements.add(audioElement);
+        return true;
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] LipSync: 连接失败 (可能是跨域或已被其他 Source 连接)`, e);
+        return false;
+      }
+    },
+
+    // 获取当前音量 (优化算法)
+    getVolume() {
+      if (!this.analyser || !this.dataArray) return 0;
+      this.analyser.getByteFrequencyData(this.dataArray);
+
+      let sum = 0;
+      // 人声主要集中在低频段，只取前 75% 的频率数据
+      const length = Math.floor(this.dataArray.length * 0.75);
+      for (let i = 0; i < length; i++) {
+        sum += this.dataArray[i];
+      }
+      const average = sum / length / 255;
+      return Math.min(1, average * this.config.sensitivity);
+    },
+
+    // 启动口型同步循环
+    async startSync(characterId) {
+      this.stopSync();
+      this.currentCharacterId = characterId;
+
+      // 关键：确保 AudioContext 处于运行状态（浏览器可能会自动暂停）
+      if (this.audioContext?.state === 'suspended') {
+        try {
+          await this.audioContext.resume();
+          console.log(`[${SCRIPT_NAME}] LipSync: AudioContext 已恢复`);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: AudioContext 恢复失败`, e);
+        }
+      }
+
+      console.log(`[${SCRIPT_NAME}] LipSync: ▶️ 开始口型同步 - characterId=${characterId}, AudioContext.state=${this.audioContext?.state}`);
+
+      // 诊断：检测音量数据
+      let frameCount = 0;
+      const update = () => {
+        if (!this.currentCharacterId) return;
+
+        let volume = this.getVolume();
+
+        // 简单的噪声门限
+        if (volume < this.config.minThreshold) volume = 0;
+
+        // 平滑插值
+        volume = this.lastVolume * 0.4 + volume * 0.6;
+        this.lastVolume = volume;
+
+        // 每 30 帧（约 0.5 秒）输出一次调试信息
+        frameCount++;
+        if (frameCount % 30 === 0) {
+          console.log(`[${SCRIPT_NAME}] LipSync: 音量=${volume.toFixed(3)}, rawData[0]=${this.dataArray?.[0]}`);
+        }
+
+        Live2DManager.setMouthOpen(this.currentCharacterId, volume);
+        this.animationFrameId = requestAnimationFrame(update);
+      };
+      update();
+    },
+
+    // 停止口型同步
+    stopSync() {
+      if (this.animationFrameId) {
+        cancelAnimationFrame(this.animationFrameId);
+        this.animationFrameId = null;
+      }
+      if (this.currentCharacterId) {
+        Live2DManager.setMouthOpen(this.currentCharacterId, 0);
+      }
+      this.currentCharacterId = null;
+      this.lastVolume = 0;
+
+      // 清理代理音频元素
+      if (this._proxyAudio) {
+        try {
+          this._proxyAudio.pause();
+          this._proxyAudio.src = '';
+          this._proxyAudio = null;
+        } catch (e) {}
+      }
+    },
+
+    // 清理
+    cleanup() {
+      this.stopSync();
+      if (this.source) {
+        try { this.source.disconnect(); } catch (e) {}
+        this.source = null;
+      }
+    }
+  };
+
+  // ============================================
+  // Live2D 位置调整编辑器
+  // ============================================
+  const Live2DPositionEditor = {
+    isActive: false,           // 是否处于调整模式
+    characterId: null,         // 当前调整的角色
+    originalConfig: null,      // 原始配置 (用于取消时恢复)
+    $toolbar: null,            // 浮动工具栏 jQuery 对象
+    isDragging: false,         // 是否正在拖拽
+    dragStart: { x: 0, y: 0 }, // 拖拽起始位置
+    modelStart: { x: 0, y: 0 },// 模型起始位置
+    lastPinchDistance: 0,      // 双指缩放距离
+
+    // 进入调整模式
+    async enter(characterId) {
+      if (this.isActive) {
+        this.exit(false);
+      }
+
+      const _$ = topWindow.jQuery || $;
+      this.characterId = characterId;
+      this.isActive = true;
+
+      // 保存原始配置
+      const config = getLive2DConfig(characterId);
+      this.originalConfig = JSON.parse(JSON.stringify(config.transform || {}));
+
+      // 确保模型已加载
+      let model = Live2DManager.models.get(characterId);
+      if (!model) {
+        model = await Live2DManager.loadModel(characterId);
+      }
+
+      if (!model) {
+        const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+        if (_toastr) {
+          _toastr.error('无法加载 Live2D 模型');
+        }
+        this.isActive = false;
+        return;
+      }
+
+      // 在主界面 gal-game-content 中创建全屏调整容器
+      const $gameContent = _$('#gal-global-overlay .gal-game-content');
+      if (!$gameContent.length) {
+        const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+        if (_toastr) {
+          _toastr.error('未找到游戏主界面');
+        }
+        this.isActive = false;
+        return;
+      }
+
+      // 移除已有的调整容器
+      _$('#gal-live2d-position-edit-container').remove();
+
+      // 获取实际槽位的尺寸作为参考（模拟实际显示效果）
+      let slotWidth = 200;
+      let slotHeight = 400;
+      const $existingSlot = _$('#gal-global-overlay .gal-char-slot').first();
+      if ($existingSlot.length) {
+        slotWidth = $existingSlot.width() || 200;
+        slotHeight = $existingSlot.height() || 400;
+      }
+
+      // 创建调整容器，使用与实际槽位相同的尺寸
+      // 放在游戏内容区域中央，尺寸模拟实际槽位
+      const fullscreenContainerHtml = `
+        <div id="gal-live2d-position-edit-container" style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: ${slotWidth}px;
+          height: ${slotHeight}px;
+          z-index: 1000;
+          pointer-events: none;
+          border: 2px dashed rgba(0, 210, 255, 0.5);
+          border-radius: 8px;
+          box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
+          background: rgba(0, 0, 0, 0.1);
+        ">
+          <div class="gal-live2d-canvas-container" style="width: 100%; height: 100%; position: relative;"></div>
+        </div>
+      `;
+      $gameContent.append(fullscreenContainerHtml);
+
+      const $mainContainer = _$('#gal-live2d-position-edit-container .gal-live2d-canvas-container');
+      this._tempContainerCreated = true;
+
+      // 复用同一个舞台：pushMount 到调整容器并挂载模型（避免“又创建一个 app”）
+      const containerEl = $mainContainer.get(0);
+      if (containerEl) {
+        Live2DStage.pushMount(containerEl, { mode: 'single', focusCharacterId: characterId });
+        const attached = Live2DStage.attach(characterId, model, 'left', { entering: false });
+        if (!attached) {
+          Live2DStage.popMount();
+          const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+          if (_toastr) {
+            _toastr.error('模型渲染失败');
+          }
+          this.isActive = false;
+          _$('#gal-live2d-position-edit-container').remove();
+          this._tempContainerCreated = false;
+          return;
+        }
+      }
+
+      // 等待一帧确保渲染完成
+      await new Promise(r => requestAnimationFrame(r));
+
+      // 再次获取模型和容器（renderTo 后才会注册到 containers）
+      model = Live2DManager.models.get(characterId);
+      const container = Live2DManager.containers.get(characterId);
+
+      if (!model || !container) {
+        const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+        if (_toastr) {
+          _toastr.error('模型渲染失败');
+        }
+        this.isActive = false;
+        if (this._tempContainerCreated) {
+          _$('.gal-position-edit-temp').remove();
+          this._tempContainerCreated = false;
+        }
+        return;
+      }
+
+      // 启用交互
+      Live2DManager.enableInteraction(characterId);
+
+      // 创建浮动工具栏
+      this.createToolbar();
+
+      // 绑定事件
+      this.bindDragEvents();
+      this.bindZoomEvents();
+
+      // 更新显示
+      const transform = Live2DManager.getCurrentTransform(characterId);
+      if (transform) {
+        this.updateDisplay(transform.offsetX, transform.offsetY, transform.scale);
+      }
+
+      console.log(`[Live2DPositionEditor] 进入调整模式: ${characterId}, 容器已就绪`);
+    },
+
+    // 退出调整模式
+    exit(save = false) {
+      if (!this.isActive) return;
+
+      const _$ = topWindow.jQuery || $;
+      const characterId = this.characterId;
+
+      // 解绑事件
+      this.unbindEvents();
+
+      // 禁用交互
+      Live2DManager.disableInteraction(characterId);
+
+      if (save) {
+        // 保存当前配置
+        const transform = Live2DManager.getCurrentTransform(characterId);
+        if (transform) {
+          const config = getLive2DConfig(characterId);
+          config.transform = {
+            offsetX: Math.round(transform.offsetX),
+            offsetY: Math.round(transform.offsetY),
+            scale: parseFloat(transform.scale.toFixed(2))
+          };
+          setLive2DConfig(characterId, config);
+
+          const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+          if (_toastr) {
+            _toastr.success('Live2D 位置设置已保存');
+          }
+        }
+      } else {
+        // 恢复原始配置
+        if (this.originalConfig) {
+          const config = getLive2DConfig(characterId);
+          config.transform = this.originalConfig;
+          setLive2DConfig(characterId, config);
+          // 应用恢复的配置
+          Live2DManager.applyTransformConfig(characterId);
+        }
+      }
+
+      // 如果创建了临时容器，清理它
+      if (this._tempContainerCreated) {
+        // 恢复舞台挂载（不销毁全局 app/canvas）
+        Live2DStage.popMount();
+        _$('#gal-live2d-position-edit-container').remove();
+        _$('.gal-position-edit-temp').remove();
+        this._tempContainerCreated = false;
+      }
+
+      // 移除工具栏
+      if (this.$toolbar) {
+        this.$toolbar.remove();
+        this.$toolbar = null;
+      }
+
+      this.isActive = false;
+      this.characterId = null;
+      this.originalConfig = null;
+
+      console.log(`[Live2DPositionEditor] 退出调整模式: ${characterId}, 保存: ${save}`);
+    },
+
+    // 更新工具栏显示
+    updateDisplay(offsetX, offsetY, scale) {
+      if (!this.$toolbar) return;
+      const _$ = topWindow.jQuery || $;
+      this.$toolbar.find('.gal-pos-x-val').text(Math.round(offsetX));
+      this.$toolbar.find('.gal-pos-y-val').text(Math.round(offsetY));
+      this.$toolbar.find('.gal-pos-scale-val').text(scale.toFixed(2) + 'x');
+      // 同步滑条值
+      this.$toolbar.find('#gal-pos-x-slider').val(offsetX);
+      this.$toolbar.find('#gal-pos-y-slider').val(offsetY);
+      this.$toolbar.find('#gal-pos-scale-slider').val(scale);
+    },
+
+    // 创建浮动工具栏 (使用滑条控件)
+    createToolbar() {
+      const _$ = topWindow.jQuery || $;
+
+      // 移除已有工具栏
+      _$('#gal-live2d-position-toolbar').remove();
+      _$('#gal-live2d-position-hint').remove();
+
+      const transform = Live2DManager.getCurrentTransform(this.characterId) || { offsetX: 0, offsetY: 0, scale: 1 };
+      const self = this;
+
+      const toolbarHtml = `
+        <div id="gal-live2d-position-toolbar" style="
+          position: fixed;
+          bottom: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(50, 50, 70, 0.98));
+          backdrop-filter: blur(10px);
+          border-radius: 16px;
+          padding: 16px 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+          z-index: 100002;
+          color: #fff;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          min-width: 320px;
+        ">
+          <!-- X 位置滑条 -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="min-width: 70px; font-size: 0.85rem;">X 偏移:</span>
+            <input type="range" id="gal-pos-x-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetX)}"
+              style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
+            <span class="gal-pos-x-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetX)}</span>
+          </div>
+
+          <!-- Y 位置滑条 -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="min-width: 70px; font-size: 0.85rem;">Y 偏移:</span>
+            <input type="range" id="gal-pos-y-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetY)}"
+              style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
+            <span class="gal-pos-y-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetY)}</span>
+          </div>
+
+          <!-- 缩放滑条 -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="min-width: 70px; font-size: 0.85rem;">缩放:</span>
+            <input type="range" id="gal-pos-scale-slider" min="0.3" max="2.5" step="0.05" value="${transform.scale.toFixed(2)}"
+              style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
+            <span class="gal-pos-scale-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${transform.scale.toFixed(2)}x</span>
+          </div>
+
+          <!-- 按钮行 -->
+          <div style="display: flex; gap: 10px; margin-top: 4px; justify-content: flex-end;">
+            <button id="gal-pos-reset" style="
+              padding: 8px 16px;
+              background: rgba(255, 255, 255, 0.1);
+              border: 1px solid rgba(255, 255, 255, 0.2);
+              border-radius: 6px;
+              color: #fff;
+              cursor: pointer;
+              font-size: 0.85rem;
+            ">
+              <i class="fa-solid fa-undo"></i> 重置
+            </button>
+            <button id="gal-pos-cancel" style="
+              padding: 8px 16px;
+              background: rgba(220, 53, 69, 0.8);
+              border: none;
+              border-radius: 6px;
+              color: #fff;
+              cursor: pointer;
+              font-size: 0.85rem;
+            ">
+              <i class="fa-solid fa-times"></i> 取消
+            </button>
+            <button id="gal-pos-save" style="
+              padding: 8px 16px;
+              background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+              border: none;
+              border-radius: 6px;
+              color: #fff;
+              cursor: pointer;
+              font-size: 0.85rem;
+              font-weight: 600;
+            ">
+              <i class="fa-solid fa-check"></i> 保存
+            </button>
+          </div>
+        </div>
+      `;
+
+      _$(topWindow.document.body).append(toolbarHtml);
+      this.$toolbar = _$('#gal-live2d-position-toolbar');
+
+      // 绑定滑条事件
+      this.$toolbar.find('#gal-pos-x-slider').on('input', function() {
+        const val = parseInt(_$(this).val());
+        self.$toolbar.find('.gal-pos-x-val').text(val);
+        const currentY = parseInt(self.$toolbar.find('#gal-pos-y-slider').val()) || 0;
+        Live2DManager.setOffset(self.characterId, val, currentY);
+      });
+
+      this.$toolbar.find('#gal-pos-y-slider').on('input', function() {
+        const val = parseInt(_$(this).val());
+        self.$toolbar.find('.gal-pos-y-val').text(val);
+        const currentX = parseInt(self.$toolbar.find('#gal-pos-x-slider').val()) || 0;
+        Live2DManager.setOffset(self.characterId, currentX, val);
+      });
+
+      this.$toolbar.find('#gal-pos-scale-slider').on('input', function() {
+        const val = parseFloat(_$(this).val());
+        self.$toolbar.find('.gal-pos-scale-val').text(val.toFixed(2) + 'x');
+        Live2DManager.setScale(self.characterId, val);
+      });
+
+      // 绑定按钮事件
+      this.$toolbar.find('#gal-pos-reset').on('click', function() {
+        self.resetToDefault();
+      });
+      this.$toolbar.find('#gal-pos-cancel').on('click', function() {
+        self.exit(false);
+      });
+      this.$toolbar.find('#gal-pos-save').on('click', function() {
+        self.exit(true);
+      });
+    },
+
+    // 重置为默认值
+    resetToDefault() {
+      const characterId = this.characterId;
+      Live2DManager.setOffset(characterId, 0, 0);
+      Live2DManager.setScale(characterId, 1.0);
+      this.updateDisplay(0, 0, 1.0);
+    },
+
+    // 不再需要拖拽和缩放事件绑定
+    bindDragEvents() {
+      // 已移除拖拽事件，改用滑条
+    },
+
+    bindZoomEvents() {
+      // 已移除缩放事件，改用滑条
+    },
+
+    // 解绑事件
+    unbindEvents() {
+      // 清理提示
+      const _$ = topWindow.jQuery || $;
+      _$('#gal-live2d-position-hint').remove();
+    }
+  };
+
+  // ============================================
+  // Live2D 模型上传器
+  // ============================================
+  const Live2DUploader = {
+    JSZip: null,
+
+    async _loadJSZip() {
+      if (this.JSZip) return this.JSZip;
+
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+
+      if (_topWindow.JSZip) {
+        this.JSZip = _topWindow.JSZip;
+        return this.JSZip;
+      }
+
+      return new Promise((resolve, reject) => {
+        const script = _topWindow.document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+        script.onload = () => {
+          this.JSZip = _topWindow.JSZip;
+          console.log(`[${SCRIPT_NAME}] JSZip 加载完成`);
+          resolve(this.JSZip);
+        };
+        script.onerror = () => reject(new Error('JSZip 加载失败'));
+        _topWindow.document.head.appendChild(script);
+      });
+    },
+
+    async uploadZip(file, characterId) {
+      const JSZip = await this._loadJSZip();
+
+      console.log(`[${SCRIPT_NAME}] Live2DUploader: 开始解析 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
+      const zip = await JSZip.loadAsync(file);
+
+      const modelJsonEntry = await this._findModelJson(zip);
+      if (!modelJsonEntry) {
+        throw new Error('未找到 Live2D 模型配置（model3.json / model.json / *.model.json / model*.json）');
+      }
+
+      const modelDir = modelJsonEntry.path.substring(0, modelJsonEntry.path.lastIndexOf('/') + 1);
+      const modelJsonText = await modelJsonEntry.file.async('text');
+      const modelJson = JSON.parse(modelJsonText);
+
+      const entryPathLower = String(modelJsonEntry.path || '').toLowerCase();
+      const isModel3 =
+        entryPathLower.endsWith('model3.json') ||
+        !!modelJson?.FileReferences;
+      const isModel2 =
+        !isModel3 &&
+        (typeof modelJson?.model === 'string' ||
+          typeof modelJson?.Model === 'string' ||
+          Array.isArray(modelJson?.textures) ||
+          Array.isArray(modelJson?.expressions) ||
+          typeof modelJson?.motions === 'object');
+
+      console.log(
+        `[${SCRIPT_NAME}] Live2DUploader: 模型配置解析完成，目录: ${modelDir || '根目录'}，类型: ${
+          isModel3 ? 'Cubism 3/4' : 'Cubism 2.1'
+        }`,
+      );
+
+      let modelData;
+      if (isModel3) {
+        modelData = {
+          modelId: characterId,
+          cubismVersion: 4,
+          modelJson: modelJson,
+          moc3: await this._extractFile(zip, modelDir, modelJson.FileReferences?.Moc),
+          moc: null,
+          textures: await this._extractTextures(zip, modelDir, modelJson),
+          motions: await this._extractMotions(zip, modelDir, modelJson),
+          expressions: await this._extractExpressions(zip, modelDir, modelJson),
+          physics: modelJson.FileReferences?.Physics
+            ? await this._extractFileOptional(zip, modelDir, modelJson.FileReferences.Physics)
+            : null,
+          pose: modelJson.FileReferences?.Pose
+            ? await this._extractFileOptional(zip, modelDir, modelJson.FileReferences.Pose)
+            : null,
+          uploadTime: Date.now(),
+          fileSize: file.size,
+        };
+      } else if (isModel2) {
+        const mocPath = modelJson?.model || modelJson?.Model;
+        const physicsPath = modelJson?.physics || modelJson?.Physics;
+        const posePath = modelJson?.pose || modelJson?.Pose;
+        modelData = {
+          modelId: characterId,
+          cubismVersion: 2,
+          modelJson: modelJson,
+          moc3: null,
+          moc: await this._extractFile(zip, modelDir, mocPath),
+          textures: await this._extractTexturesV2(zip, modelDir, modelJson),
+          motions: await this._extractMotionsV2(zip, modelDir, modelJson),
+          expressions: await this._extractExpressionsV2(zip, modelDir, modelJson),
+          physics: physicsPath
+            ? await this._extractFileOptional(zip, modelDir, physicsPath)
+            : null,
+          pose: posePath
+            ? await this._extractFileOptional(zip, modelDir, posePath)
+            : null,
+          uploadTime: Date.now(),
+          fileSize: file.size,
+        };
+      } else {
+        throw new Error('未识别的 Live2D 模型格式：请确保 zip 中包含标准的 model3.json / model.json');
+      }
+
+      await saveLive2DModel(modelData);
+
+      console.log(`[${SCRIPT_NAME}] Live2DUploader: 模型 ${characterId} 保存成功`);
+      return modelData;
+    },
+
+    async _findModelJson(zip) {
+      const candidates = [];
+      const jsonEntries = [];
+
+      zip.forEach((path, file) => {
+        if (file.dir) return;
+        if (/(^|\/)model3\.json$/i.test(path) || /\.model3\.json$/i.test(path)) {
+          candidates.push({ path, file, priority: 1 });
+        } else if (/(^|\/)model\.json$/i.test(path) || /\.model\.json$/i.test(path)) {
+          candidates.push({ path, file, priority: 2 });
+        } else if (/(^|\/)model[_-]?\d+\.json$/i.test(path)) {
+          candidates.push({ path, file, priority: 3 });
+        }
+
+        if (/\.json$/i.test(path)) {
+          jsonEntries.push({ path, file });
+        }
+      });
+
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a.priority - b.priority);
+        return candidates[0];
+      }
+
+      // fallback: 兼容 model0.json / 其他命名，通过内容特征识别
+      let best = null;
+      let bestScore = 0;
+      for (const entry of jsonEntries) {
+        try {
+          const text = await entry.file.async('text');
+          const json = JSON.parse(text);
+          if (!json || typeof json !== 'object') continue;
+
+          let score = 0;
+          const fileName = String(entry.path).split('/').pop().toLowerCase();
+          if (fileName.includes('model')) score += 50;
+
+          if (json.FileReferences && typeof json.FileReferences === 'object') {
+            score += 100;
+            if (typeof json.FileReferences.Moc === 'string') score += 1000;
+            if (Array.isArray(json.FileReferences.Textures)) score += 200;
+          }
+
+          if (typeof json.model === 'string' || typeof json.Model === 'string') score += 900;
+          if (Array.isArray(json.textures) || Array.isArray(json.Textures)) score += 200;
+
+          if (score > bestScore) {
+            best = entry;
+            bestScore = score;
+          }
+        } catch (e) {}
+      }
+
+      return best;
+    },
+
+    async _extractFile(zip, baseDir, relativePath) {
+      if (!relativePath) throw new Error('文件路径为空');
+
+      const fullPath = baseDir + relativePath;
+      let file = zip.file(fullPath);
+
+      if (!file) {
+        file = zip.file(relativePath);
+      }
+
+      if (!file) {
+        const normalizedPath = relativePath.replace(/\\/g, '/');
+        file = zip.file(baseDir + normalizedPath) || zip.file(normalizedPath);
+      }
+
+      if (!file) {
+        throw new Error(`文件不存在: ${fullPath}`);
+      }
+
+      return await file.async('arraybuffer');
+    },
+
+    async _extractFileOptional(zip, baseDir, relativePath) {
+      try {
+        return await this._extractFile(zip, baseDir, relativePath);
+      } catch {
+        return null;
+      }
+    },
+
+    async _extractTextures(zip, baseDir, modelJson) {
+      const textures = [];
+      const textureList = modelJson.FileReferences?.Textures || [];
+
+      for (const texPath of textureList) {
+        try {
+          const data = await this._extractFile(zip, baseDir, texPath);
+          const mimeType = texPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+          textures.push({
+            name: texPath,
+            data: new Blob([data], { type: mimeType }),
+          });
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DUploader: 纹理提取失败: ${texPath}`, e);
+        }
+      }
+
+      return textures;
+    },
+
+    async _extractTexturesV2(zip, baseDir, modelJson) {
+      const textures = [];
+      const textureList = modelJson?.textures || modelJson?.Textures || [];
+      if (!Array.isArray(textureList)) return textures;
+
+      for (const texPath of textureList) {
+        if (!texPath) continue;
+        try {
+          const data = await this._extractFile(zip, baseDir, texPath);
+          const lower = String(texPath).toLowerCase();
+          const mimeType = lower.endsWith('.png') ? 'image/png' : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+          textures.push({
+            name: texPath,
+            data: new Blob([data], { type: mimeType }),
+          });
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DUploader: 纹理提取失败: ${texPath}`, e);
+        }
+      }
+
+      return textures;
+    },
+
+    async _extractMotions(zip, baseDir, modelJson) {
+      const motions = {};
+      const motionGroups = modelJson.FileReferences?.Motions || {};
+
+      // 从 modelJson 配置中提取
+      for (const [groupName, motionList] of Object.entries(motionGroups)) {
+        motions[groupName] = [];
+        if (!Array.isArray(motionList)) continue;
+
+        for (const motionDef of motionList) {
+          const filePath = typeof motionDef === 'string' ? motionDef : motionDef?.File;
+          if (!filePath) continue;
+
+          try {
+            const data = await this._extractFile(zip, baseDir, filePath);
+            motions[groupName].push({
+              name: filePath,
+              data: data,
+            });
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Live2DUploader: 动作提取失败: ${filePath}`);
+          }
+        }
+      }
+
+      // 如果 modelJson 中没有动作配置，自动扫描 .motion3.json 文件
+      if (Object.keys(motions).length === 0) {
+        const scannedMotions = [];
+        zip.forEach((path, file) => {
+          if (file.dir) return;
+          if (path.startsWith(baseDir) && /\.motion3\.json$/i.test(path)) {
+            const relativePath = path.substring(baseDir.length);
+            scannedMotions.push(relativePath);
+          }
+        });
+
+        if (scannedMotions.length > 0) {
+          motions['default'] = [];
+          for (const filePath of scannedMotions) {
+            try {
+              const data = await this._extractFile(zip, baseDir, filePath);
+              motions['default'].push({
+                name: filePath,
+                data: data,
+              });
+            } catch (e) {
+              console.warn(`[${SCRIPT_NAME}] Live2DUploader: 扫描动作提取失败: ${filePath}`);
+            }
+          }
+          console.log(`[${SCRIPT_NAME}] Live2DUploader: 自动扫描到 ${scannedMotions.length} 个动作文件`);
+        }
+      }
+
+      return motions;
+    },
+
+    async _extractMotionsV2(zip, baseDir, modelJson) {
+      const motions = {};
+      const motionGroups = modelJson?.motions || modelJson?.Motions || {};
+
+      // 从 modelJson 配置中提取
+      for (const [groupName, motionList] of Object.entries(motionGroups || {})) {
+        motions[groupName] = [];
+        if (!Array.isArray(motionList)) continue;
+
+        for (const motionDef of motionList) {
+          const filePath = typeof motionDef === 'string' ? motionDef : motionDef?.file || motionDef?.File;
+          if (!filePath) continue;
+
+          try {
+            const data = await this._extractFile(zip, baseDir, filePath);
+            motions[groupName].push({
+              name: filePath,
+              data: data,
+            });
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Live2DUploader: 动作提取失败: ${filePath}`);
+          }
+        }
+      }
+
+      const extractedCount = Object.values(motions).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+
+      // 如果 modelJson 中没有动作配置，自动扫描 .mtn 文件
+      if (extractedCount === 0) {
+        const scannedMotions = [];
+        zip.forEach((path, file) => {
+          if (file.dir) return;
+          if (path.startsWith(baseDir) && /\.mtn$/i.test(path)) {
+            const relativePath = path.substring(baseDir.length);
+            scannedMotions.push(relativePath);
+          }
+        });
+
+        if (scannedMotions.length > 0) {
+          motions['default'] = [];
+          for (const filePath of scannedMotions) {
+            try {
+              const data = await this._extractFile(zip, baseDir, filePath);
+              motions['default'].push({
+                name: filePath,
+                data: data,
+              });
+            } catch (e) {
+              console.warn(`[${SCRIPT_NAME}] Live2DUploader: 扫描动作提取失败: ${filePath}`);
+            }
+          }
+          console.log(`[${SCRIPT_NAME}] Live2DUploader: 自动扫描到 ${scannedMotions.length} 个动作文件`);
+        }
+      }
+
+      return motions;
+    },
+
+    async _extractExpressions(zip, baseDir, modelJson) {
+      const expressions = [];
+      const exprList = modelJson.FileReferences?.Expressions || [];
+
+      // 从 modelJson 配置中提取
+      for (const exprDef of exprList) {
+        const filePath = typeof exprDef === 'string' ? exprDef : exprDef?.File;
+        const name = typeof exprDef === 'object' ? exprDef?.Name : filePath;
+        if (!filePath) continue;
+
+        try {
+          const data = await this._extractFile(zip, baseDir, filePath);
+          expressions.push({
+            name: name || filePath,
+            file: filePath,
+            data: data,
+          });
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2DUploader: 表情提取失败: ${filePath}`);
+        }
+      }
+
+      // 如果 modelJson 中没有表情配置，自动扫描 .exp3.json 文件
+      if (expressions.length === 0) {
+        const scannedExprs = [];
+        zip.forEach((path, file) => {
+          if (file.dir) return;
+          if (path.startsWith(baseDir) && /\.exp3\.json$/i.test(path)) {
+            const relativePath = path.substring(baseDir.length);
+            scannedExprs.push(relativePath);
+          }
+        });
+
+        for (const filePath of scannedExprs) {
+          try {
+            const data = await this._extractFile(zip, baseDir, filePath);
+            // 从文件名提取表情名称（去掉 .exp3.json 后缀）
+            const name = filePath.replace(/\.exp3\.json$/i, '').split('/').pop();
+            expressions.push({
+              name: name,
+              file: filePath,
+              data: data,
+            });
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Live2DUploader: 扫描表情提取失败: ${filePath}`);
+          }
+        }
+
+        if (scannedExprs.length > 0) {
+          console.log(`[${SCRIPT_NAME}] Live2DUploader: 自动扫描到 ${scannedExprs.length} 个表情文件`);
+        }
+      }
+
+      return expressions;
+    }
+    ,
+
+    async _extractExpressionsV2(zip, baseDir, modelJson) {
+      const expressions = [];
+      const exprList = modelJson?.expressions || modelJson?.Expressions || [];
+
+      // 从 modelJson 配置中提取
+      if (Array.isArray(exprList)) {
+        for (const exprDef of exprList) {
+          const filePath = typeof exprDef === 'string' ? exprDef : exprDef?.file || exprDef?.File;
+          const name = typeof exprDef === 'string' ? exprDef : exprDef?.name || exprDef?.Name || filePath;
+          if (!filePath) continue;
+
+          try {
+            const data = await this._extractFile(zip, baseDir, filePath);
+            expressions.push({
+              name: name || filePath,
+              file: filePath,
+              data: data,
+            });
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Live2DUploader: 表情提取失败: ${filePath}`);
+          }
+        }
+      }
+
+      // 如果 modelJson 中没有表情配置，自动扫描 .exp.json 文件
+      if (expressions.length === 0) {
+        const scannedExprs = [];
+        zip.forEach((path, file) => {
+          if (file.dir) return;
+          if (path.startsWith(baseDir) && /\.exp\.json$/i.test(path)) {
+            const relativePath = path.substring(baseDir.length);
+            scannedExprs.push(relativePath);
+          }
+        });
+
+        for (const filePath of scannedExprs) {
+          try {
+            const data = await this._extractFile(zip, baseDir, filePath);
+            const name = filePath.replace(/\.exp\.json$/i, '').split('/').pop();
+            expressions.push({
+              name: name,
+              file: filePath,
+              data: data,
+            });
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Live2DUploader: 扫描表情提取失败: ${filePath}`);
+          }
+        }
+
+        if (scannedExprs.length > 0) {
+          console.log(`[${SCRIPT_NAME}] Live2DUploader: 自动扫描到 ${scannedExprs.length} 个表情文件`);
+        }
+      }
+
+      return expressions;
+    }
+  };
+
+  // ============================================
+  // Live2D 渲染模式切换器
+  // ============================================
+  const CHAR_USE_LIVE2D_KEY = `${SCRIPT_ID}_char_use_live2d`;
+  const LIVE2D_CONFIG_KEY = `${SCRIPT_ID}_live2d_config`;
+
+  // 获取默认 Live2D 配置
+  function getDefaultLive2DConfig() {
+    return {
+      // 位置和大小设置
+      transform: {
+        offsetX: 0,        // 水平偏移 (像素)
+        offsetY: 0,        // 垂直偏移 (像素)
+        scale: 1.0         // 缩放倍率 (0.5-2.0)
+      },
+      // 纹理精度设置
+      quality: {
+        textureResolution: 1.0,  // 0.5=低精度 1.0=正常 2.0=高精度
+        devicePixelRatio: 'auto' // 'auto' | 0.5 | 1.0 | 2.0
+      },
+      // 表情标签映射 (游戏表情标签 -> Live2D表情名)
+      expressionMapping: {},
+      // 动作映射 (游戏表情标签 -> 动作配置)
+      motionMapping: {}
+    };
+  }
+
+  // 获取角色 Live2D 配置
+  function getLive2DConfig(characterId) {
+    try {
+      const allConfigs = JSON.parse(localStorage.getItem(LIVE2D_CONFIG_KEY) || '{}');
+      const charConfig = allConfigs[characterId];
+      if (!charConfig) {
+        return getDefaultLive2DConfig();
+      }
+      // 合并默认配置，确保新字段存在
+      const defaultConfig = getDefaultLive2DConfig();
+      return {
+        transform: { ...defaultConfig.transform, ...charConfig.transform },
+        quality: { ...defaultConfig.quality, ...charConfig.quality },
+        expressionMapping: charConfig.expressionMapping || {},
+        motionMapping: charConfig.motionMapping || {}
+      };
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 读取 Live2D 配置失败:`, e);
+      return getDefaultLive2DConfig();
+    }
+  }
+
+  // 设置角色 Live2D 配置
+  function setLive2DConfig(characterId, config) {
+    try {
+      const allConfigs = JSON.parse(localStorage.getItem(LIVE2D_CONFIG_KEY) || '{}');
+      allConfigs[characterId] = config;
+      localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
+      console.log(`[${SCRIPT_NAME}] 已保存角色 ${characterId} 的 Live2D 配置`);
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 保存 Live2D 配置失败:`, e);
+    }
+  }
+
+  // 更新角色 Live2D 配置的部分字段
+  function updateLive2DConfig(characterId, partialConfig) {
+    const currentConfig = getLive2DConfig(characterId);
+    const newConfig = {
+      ...currentConfig,
+      ...partialConfig,
+      transform: { ...currentConfig.transform, ...(partialConfig.transform || {}) },
+      quality: { ...currentConfig.quality, ...(partialConfig.quality || {}) },
+      expressionMapping: partialConfig.expressionMapping !== undefined
+        ? partialConfig.expressionMapping
+        : currentConfig.expressionMapping,
+      motionMapping: partialConfig.motionMapping !== undefined
+        ? partialConfig.motionMapping
+        : currentConfig.motionMapping
+    };
+    setLive2DConfig(characterId, newConfig);
+    return newConfig;
+  }
+
+  // 删除角色 Live2D 配置
+  function deleteLive2DConfig(characterId) {
+    try {
+      const allConfigs = JSON.parse(localStorage.getItem(LIVE2D_CONFIG_KEY) || '{}');
+      delete allConfigs[characterId];
+      localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 删除 Live2D 配置失败:`, e);
+    }
+  }
+
+  // 获取角色是否使用 Live2D
+  function getCharacterUseLive2D(characterId) {
+    try {
+      const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || '{}');
+      return settings[characterId] || false;
+    } catch {
+      return false;
+    }
+  }
+
+  // 设置角色是否使用 Live2D
+  function setCharacterUseLive2D(characterId, useLive2D) {
+    try {
+      const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || '{}');
+      settings[characterId] = useLive2D;
+      localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 保存 Live2D 设置失败:`, e);
+    }
+  }
+
+  // 统一渲染入口：根据设置选择 Live2D 或静态立绘
+  async function renderCharacterVisual(characterId, expression, container, options = {}) {
+    const useLive2D = getCharacterUseLive2D(characterId);
+    const hasModel = await hasLive2DModel(characterId);
+
+    if (useLive2D && hasModel) {
+      // Live2D 模式
+      try {
+        const model = await Live2DManager.loadModel(characterId);
+        if (model) {
+          Live2DManager.renderTo(characterId, container);
+          Live2DManager.setExpression(characterId, expression);
+          console.log(`[${SCRIPT_NAME}] 使用 Live2D 渲染: ${characterId}`);
+          return { mode: 'live2d', success: true };
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2D 渲染失败，降级到静态立绘:`, e);
+      }
+    }
+
+    // 静态立绘模式（原有逻辑）
+    return { mode: 'static', success: true };
+  }
+
+  // 更新角色焦点状态
+  function updateCharacterFocus(characterId, isSpeaking) {
+    const useLive2D = getCharacterUseLive2D(characterId);
+
+    if (useLive2D && Live2DManager.models.has(characterId)) {
+      Live2DManager.setFocus(characterId, isSpeaking);
+    }
+    // 静态立绘的焦点由 SpriteAnimationManager 处理
+  }
+
+  // 清理角色视觉资源
+  function cleanupCharacterVisual(characterId) {
+    // 清理 Live2D
+    if (Live2DManager.models.has(characterId)) {
+      Live2DManager.cleanup(characterId);
+    }
+    // 清理 GSAP 动画
+    SpriteAnimationManager.cleanup(characterId);
+  }
+
+  // 清理所有视觉资源
+  function cleanupAllVisuals() {
+    Live2DManager.cleanupAll();
+    SpriteAnimationManager.cleanupAll();
+  }
+
+  // ============================================
+  // Live2D 表情动画映射增强
+  // ============================================
+  const EXPRESSION_LIVE2D_MAP = {
+    '默认': {
+      expressions: ['normal', 'default', 'neutral', 'idle', 'base'],
+      motions: ['idle', 'normal', 'wait']
+    },
+    '微笑': {
+      expressions: ['smile', 'happy', 'joy', 'glad', 'pleased'],
+      motions: ['happy', 'smile', 'joy']
+    },
+    '生气': {
+      expressions: ['angry', 'anger', 'mad', 'rage', 'annoyed'],
+      motions: ['angry', 'rage', 'mad']
+    },
+    '难过': {
+      expressions: ['sad', 'sorrow', 'cry', 'upset', 'depressed'],
+      motions: ['sad', 'cry', 'sorrow']
+    },
+    '惊讶': {
+      expressions: ['surprised', 'shock', 'amazed', 'wow', 'astonished'],
+      motions: ['surprised', 'shock', 'amazed']
+    },
+    '嘲讽': {
+      expressions: ['smirk', 'mock', 'sneer', 'tease', 'sarcastic'],
+      motions: ['mock', 'tease']
+    },
+    '害羞': {
+      expressions: ['shy', 'blush', 'embarrassed', 'bashful', 'timid'],
+      motions: ['shy', 'embarrassed', 'blush']
+    },
+    '思考': {
+      expressions: ['think', 'ponder', 'confused', 'wonder', 'curious'],
+      motions: ['think', 'ponder', 'wonder']
+    },
+    '大笑': {
+      expressions: ['laugh', 'lol', 'haha', 'giggle', 'rofl'],
+      motions: ['laugh', 'giggle', 'haha']
+    },
+    '搞怪': {
+      expressions: ['playful', 'wink', 'silly', 'fun', 'mischievous'],
+      motions: ['playful', 'wink', 'fun']
+    },
+  };
+
+  // 智能匹配 Live2D 表情 (支持用户自定义映射)
+  function matchLive2DExpression(model, targetExpression, characterId = null) {
+    // 优先使用用户自定义映射
+    if (characterId) {
+      const config = getLive2DConfig(characterId);
+      const userMapping = config.expressionMapping || {};
+      if (userMapping[targetExpression]) {
+        return userMapping[targetExpression];
+      }
+    }
+
+    // 回退到默认映射
+    const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
+    const candidates = mapping?.expressions || [targetExpression.toLowerCase()];
+
+    try {
+      const expressionManager = model.internalModel?.motionManager?.expressionManager;
+      if (!expressionManager?.definitions) return null;
+
+      const definitions = expressionManager.definitions;
+
+      // 精确匹配
+      for (const candidate of candidates) {
+        for (const def of definitions) {
+          const name = (def.Name || def.name || '').toLowerCase();
+          if (name === candidate) {
+            return def.Name || def.name;
+          }
+        }
+      }
+
+      // 模糊匹配
+      for (const candidate of candidates) {
+        for (const def of definitions) {
+          const name = (def.Name || def.name || '').toLowerCase();
+          if (name.includes(candidate) || candidate.includes(name)) {
+            return def.Name || def.name;
+          }
+        }
+      }
+
+      // 返回默认表情
+      return definitions[0]?.Name || definitions[0]?.name || null;
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 表情匹配失败:`, e);
+      return null;
+    }
+  }
+
+  // 智能匹配 Live2D 动作 (支持用户自定义映射)
+  function matchLive2DMotion(model, targetExpression, characterId = null) {
+    // 优先使用用户自定义映射
+    if (characterId) {
+      const config = getLive2DConfig(characterId);
+      const userMotionMapping = config.motionMapping || {};
+      if (userMotionMapping[targetExpression]) {
+        const motionConfig = userMotionMapping[targetExpression];
+        if (motionConfig.enabled !== false && motionConfig.group) {
+          return { group: motionConfig.group, index: motionConfig.index || 0 };
+        }
+        // 如果明确禁用了动作，返回 null
+        if (motionConfig.enabled === false) {
+          return null;
+        }
+      }
+    }
+
+    // 回退到默认映射
+    const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
+    if (!mapping?.motions?.length) return null;
+
+    try {
+      const motionManager = model.internalModel?.motionManager;
+      if (!motionManager) return null;
+
+      const groups = motionManager.motionGroups || motionManager.groups || {};
+      const groupNames = Object.keys(groups);
+
+      // 精确匹配
+      for (const candidate of mapping.motions) {
+        if (groups[candidate]) {
+          return { group: candidate, index: 0 };
+        }
+      }
+
+      // 模糊匹配
+      for (const candidate of mapping.motions) {
+        for (const groupName of groupNames) {
+          if (groupName.toLowerCase().includes(candidate.toLowerCase())) {
+            return { group: groupName, index: 0 };
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // 设置角色表情（表情 + 动作联动）
+  function setLive2DCharacterExpression(characterId, expressionName, playMotion = true) {
+    const model = Live2DManager.models.get(characterId);
+    if (!model) return false;
+
+    // 设置表情 (传递 characterId 以使用用户自定义映射)
+    const expr = matchLive2DExpression(model, expressionName, characterId);
+    if (expr) {
+      try {
+        model.expression(expr);
+      } catch (e) {}
+    }
+
+    // 播放对应动作 (传递 characterId 以使用用户自定义映射)
+    if (playMotion) {
+      const motion = matchLive2DMotion(model, expressionName, characterId);
+      if (motion) {
+        try {
+          model.motion(motion.group, motion.index, 'NORMAL');
+        } catch (e) {}
+      }
+    }
+
+    return true;
+  }
+
+  // 获取模型支持的表情列表
+  function getLive2DExpressionList(characterId) {
+    const model = Live2DManager.models.get(characterId);
+    if (!model) return [];
+
+    try {
+      // pixi-live2d-display 的表情定义可能在多个位置
+      const expressionManager = model.internalModel?.motionManager?.expressionManager;
+
+      // 尝试多种路径获取表情定义
+      let definitions = expressionManager?.definitions
+        || expressionManager?.expressions
+        || model.internalModel?.settings?.expressions
+        || [];
+
+      // 如果还是空的，尝试从 modelSettings 获取
+      if (definitions.length === 0) {
+        const settings = model.internalModel?.settings;
+        if (settings?.expressions) {
+          definitions = settings.expressions;
+        }
+      }
+
+      console.log(`[${SCRIPT_NAME}] getLive2DExpressionList: 找到 ${definitions.length} 个表情定义`, definitions);
+
+      return definitions.map(def => def.Name || def.name || def.File || '').filter(Boolean);
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] getLive2DExpressionList 错误:`, e);
+      return [];
+    }
+  }
+
+  // 获取模型支持的动作组列表
+  function getLive2DMotionGroups(characterId) {
+    const model = Live2DManager.models.get(characterId);
+    if (!model) return [];
+
+    try {
+      const motionManager = model.internalModel?.motionManager;
+      if (!motionManager) {
+        console.log(`[${SCRIPT_NAME}] getLive2DMotionGroups: motionManager 不存在`);
+        return [];
+      }
+
+      // 尝试多种路径获取动作组
+      let groups = motionManager.motionGroups
+        || motionManager.groups
+        || motionManager.definitions
+        || {};
+
+      // 如果是空对象，尝试从 modelSettings 获取
+      if (Object.keys(groups).length === 0) {
+        const settings = model.internalModel?.settings;
+        if (settings?.motions) {
+          groups = settings.motions;
+        }
+      }
+
+      const groupNames = Object.keys(groups);
+      console.log(`[${SCRIPT_NAME}] getLive2DMotionGroups: 找到 ${groupNames.length} 个动作组`, groupNames);
+
+      return groupNames;
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] getLive2DMotionGroups 错误:`, e);
+      return [];
+    }
+  }
+
+  // ============================================
+  // Live2D 角色设置界面扩展
+  // ============================================
+
+  // 渲染角色 Live2D 设置行
+  function renderCharacterLive2DRow(characterId) {
+    const useLive2D = getCharacterUseLive2D(characterId);
+
+    return `
+      <div class="gal-setting-row gal-live2d-row" data-char-id="${characterId}">
+        <div class="gal-setting-label">Live2D</div>
+        <div class="gal-setting-controls" style="display: flex; align-items: center; gap: 8px;">
+          <label class="gal-toggle" style="display: inline-flex; align-items: center; cursor: pointer;">
+            <input type="checkbox"
+                   class="gal-live2d-toggle"
+                   data-char-id="${characterId}"
+                   ${useLive2D ? 'checked' : ''}
+                   disabled
+                   style="margin-right: 4px;">
+            <span class="gal-toggle-text">启用</span>
+          </label>
+          <button class="gal-btn gal-btn-small gal-live2d-upload"
+                  data-char-id="${characterId}"
+                  style="padding: 4px 8px; font-size: 12px;">
+            上传模型
+          </button>
+          <button class="gal-btn gal-btn-small gal-btn-danger gal-live2d-delete"
+                  data-char-id="${characterId}"
+                  style="padding: 4px 8px; font-size: 12px; display: none;">
+            删除
+          </button>
+          <span class="gal-live2d-status" style="font-size: 12px; color: #888;"></span>
+        </div>
+      </div>
+    `;
+  }
+
+  // 异步更新 Live2D 行状态
+  async function updateLive2DRowState(characterId) {
+    const _$ = topWindow.jQuery || $;
+    const row = _$(topWindow.document).find(`.gal-live2d-row[data-char-id="${characterId}"]`);
+    if (!row.length) return;
+
+    const hasModel = await hasLive2DModel(characterId);
+    const toggle = row.find('.gal-live2d-toggle');
+    const uploadBtn = row.find('.gal-live2d-upload');
+    const deleteBtn = row.find('.gal-live2d-delete');
+    const status = row.find('.gal-live2d-status');
+
+    toggle.prop('disabled', !hasModel);
+    uploadBtn.text(hasModel ? '更换模型' : '上传模型');
+    deleteBtn.css('display', hasModel ? '' : 'none');
+
+    if (hasModel) {
+      const modelData = await getLive2DModel(characterId);
+      if (modelData) {
+        const sizeMB = (modelData.fileSize / 1024 / 1024).toFixed(1);
+        status.text(`(${sizeMB} MB)`);
+      }
+    } else {
+      status.text('');
+    }
+  }
+
+  // 绑定 Live2D 设置事件
+  function bindLive2DSettingsEvents() {
+    const _$ = topWindow.jQuery || $;
+    const _toastr = topWindow.toastr || toastr;
+
+    // 上传按钮点击
+    _$(topWindow.document).off('click.live2dupload').on('click.live2dupload', '.gal-live2d-upload', async function() {
+      const characterId = _$(this).data('char-id');
+
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.zip';
+
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const row = _$(topWindow.document).find(`.gal-live2d-row[data-char-id="${characterId}"]`);
+        const status = row.find('.gal-live2d-status');
+
+        try {
+          status.text('上传中...');
+
+          await Live2DUploader.uploadZip(file, characterId);
+
+          _toastr.success(`Live2D 模型上传成功: ${characterId}`);
+          await updateLive2DRowState(characterId);
+
+          if (Live2DManager.models.has(characterId)) {
+            Live2DManager.cleanup(characterId);
+          }
+        } catch (err) {
+          console.error(`[${SCRIPT_NAME}] Live2D 上传失败:`, err);
+          _toastr.error(`上传失败: ${err.message}`);
+          status.text('上传失败');
+        }
+      };
+
+      input.click();
+    });
+
+    // 删除按钮点击
+    _$(topWindow.document).off('click.live2ddelete').on('click.live2ddelete', '.gal-live2d-delete', async function() {
+      const characterId = _$(this).data('char-id');
+
+      if (!confirm(`确定删除角色 "${characterId}" 的 Live2D 模型吗？`)) return;
+
+      try {
+        await deleteLive2DModel(characterId);
+        setCharacterUseLive2D(characterId, false);
+        Live2DManager.cleanup(characterId);
+
+        _toastr.success('Live2D 模型已删除');
+        await updateLive2DRowState(characterId);
+      } catch (err) {
+        console.error(`[${SCRIPT_NAME}] Live2D 删除失败:`, err);
+        _toastr.error(`删除失败: ${err.message}`);
+      }
+    });
+
+    // 开关切换
+    _$(topWindow.document).off('change.live2dtoggle').on('change.live2dtoggle', '.gal-live2d-toggle', function() {
+      const characterId = _$(this).data('char-id');
+      const useLive2D = this.checked;
+      setCharacterUseLive2D(characterId, useLive2D);
+
+      console.log(`[${SCRIPT_NAME}] 角色 ${characterId} Live2D 模式: ${useLive2D ? '启用' : '禁用'}`);
+    });
+
+    console.log(`[${SCRIPT_NAME}] Live2D 设置事件已绑定`);
+  }
+
+  // 初始化所有角色的 Live2D 行状态
+  async function initAllLive2DRowStates(characterIds) {
+    for (const characterId of characterIds) {
+      await updateLive2DRowState(characterId);
+    }
+  }
+
+  // ============================================
+  // Live2D 性能优化模块
+  // ============================================
+
+  // 懒加载管理器
+  const Live2DLazyLoader = {
+    loadingQueue: new Set(),
+    maxConcurrent: 2,
+
+    async loadOnDemand(characterId) {
+      // 已加载或正在加载
+      if (Live2DManager.models.has(characterId)) return true;
+      if (this.loadingQueue.has(characterId)) return false;
+
+      // 检查是否启用 Live2D
+      if (!getCharacterUseLive2D(characterId)) return false;
+
+      // 检查是否有模型
+      const hasModel = await hasLive2DModel(characterId);
+      if (!hasModel) return false;
+
+      // 并发控制
+      if (this.loadingQueue.size >= this.maxConcurrent) {
+        console.log(`[${SCRIPT_NAME}] Live2D 加载队列已满，延迟加载: ${characterId}`);
+        return false;
+      }
+
+      this.loadingQueue.add(characterId);
+
+      try {
+        await Live2DManager.loadModel(characterId);
+        return true;
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 懒加载失败: ${characterId}`, e);
+        return false;
+      } finally {
+        this.loadingQueue.delete(characterId);
+      }
+    },
+
+    unloadInvisible(visibleCharacterIds) {
+      const toUnload = [];
+
+      for (const charId of Live2DManager.models.keys()) {
+        if (!visibleCharacterIds.includes(charId)) {
+          toUnload.push(charId);
+        }
+      }
+
+      for (const charId of toUnload) {
+        Live2DManager.cleanup(charId);
+        console.log(`[${SCRIPT_NAME}] 卸载不可见 Live2D 模型: ${charId}`);
+      }
+
+      return toUnload.length;
+    },
+
+    getLoadingCount() {
+      return this.loadingQueue.size;
+    }
+  };
+
+  // LOD 配置
+  const LOD_CONFIG = {
+    high: {
+      updateInterval: 1,
+      physicsEnabled: true,
+      alpha: 1.0,
+    },
+    medium: {
+      updateInterval: 2,
+      physicsEnabled: true,
+      alpha: 0.9,
+    },
+    low: {
+      updateInterval: 4,
+      physicsEnabled: false,
+      alpha: 0.7,
+    },
+  };
+
+  // 应用 LOD 设置
+  function applyLOD(characterId, level) {
+    const model = Live2DManager.models.get(characterId);
+    if (!model) return;
+
+    const config = LOD_CONFIG[level] || LOD_CONFIG.low;
+
+    try {
+      // 物理模拟开关
+      if (model.internalModel?.physicsManager) {
+        model.internalModel.physicsManager.enabled = config.physicsEnabled;
+      }
+
+      // 透明度
+      model.alpha = config.alpha;
+
+      // 存储当前 LOD 级别
+      model._currentLOD = level;
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 应用 LOD 失败:`, e);
+    }
+  }
+
+  // 根据说话者更新所有角色 LOD
+  function updateAllLOD(speakerId, allCharacterIds) {
+    for (const charId of allCharacterIds) {
+      if (!Live2DManager.models.has(charId)) continue;
+
+      if (charId === speakerId) {
+        applyLOD(charId, 'high');
+      } else {
+        applyLOD(charId, 'low');
+      }
+    }
+  }
+
+  // 性能监控
+  const Live2DPerformanceMonitor = {
+    lastFrameTime: 0,
+    frameCount: 0,
+    fps: 60,
+
+    update() {
+      const now = performance.now();
+      this.frameCount++;
+
+      if (now - this.lastFrameTime >= 1000) {
+        this.fps = this.frameCount;
+        this.frameCount = 0;
+        this.lastFrameTime = now;
+      }
+    },
+
+    getFPS() {
+      return this.fps;
+    },
+
+    shouldReduceQuality() {
+      return this.fps < 30;
+    },
+
+    getStats() {
+      return {
+        fps: this.fps,
+        loadedModels: Live2DManager.models.size,
+        loadingQueue: Live2DLazyLoader.loadingQueue.size,
+      };
+    }
+  };
+
+  // 自动性能调节
+  function autoAdjustPerformance() {
+    if (Live2DPerformanceMonitor.shouldReduceQuality()) {
+      // 降低所有非说话者的质量
+      for (const [charId, model] of Live2DManager.models) {
+        if (model._currentLOD !== 'high') {
+          applyLOD(charId, 'low');
+        }
+      }
+      console.log(`[${SCRIPT_NAME}] 性能自动降级: FPS=${Live2DPerformanceMonitor.getFPS()}`);
+    }
+  }
 
   const DEFAULT_BIG_BANANA_CONFIG = {
     enabled: false,
@@ -615,19 +4227,223 @@ const __awaiter =
   // ============================================
   // TTS 音色配置 (LittleWhiteBox)
   // ============================================
-  const TTS_VOICE_LIST = [
-    { name: '桃夭', gender: 'female_1', desc: '温柔少女' },
-    { name: '夜枭', gender: 'male_1', desc: '沉稳男声' },
-    { name: '霜华', gender: 'female_2', desc: '清冷女声' },
-    { name: '顾姐', gender: 'female_3', desc: '成熟御姐' },
-    { name: '苏菲', gender: 'female_4', desc: '元气少女' },
-    { name: '嘉欣', gender: 'female_5', desc: '甜美声线' },
-    { name: '青梅', gender: 'female_6', desc: '邻家女孩' },
-    { name: '可莉', gender: 'female_7', desc: '活泼萝莉' },
-    { name: '君泽', gender: 'male_2', desc: '儒雅公子' },
-    { name: '沐阳', gender: 'male_3', desc: '阳光少年' },
-    { name: '梓辛', gender: 'male_4', desc: '磁性低音' },
-  ];
+
+  // 缓存 LittleWhiteBox TTS 数据
+  let _lwbTtsCache = null;
+  let _lwbTtsCacheTime = 0;
+  const LWB_TTS_CACHE_MS = 5000; // 缓存 5 秒
+
+  /**
+   * 从服务器获取 LittleWhiteBox TTS 配置
+   * @returns {Promise<Array>}
+   */
+  async function fetchLittleWhiteBoxTTSConfig() {
+    try {
+      const response = await fetch('/user/files/LittleWhiteBox_TTS.json', { cache: 'no-cache' });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data?.volc?.mySpeakers || null;
+    } catch (e) {
+      console.log(`[${SCRIPT_NAME}] 获取 LittleWhiteBox TTS 配置失败:`, e);
+      return null;
+    }
+  }
+
+  /**
+   * 实时获取 LittleWhiteBox 的"我的音色"列表（异步版本，推荐）
+   * @returns {Promise<Array<{name: string, value: string, source: string, resourceId: string}>>}
+   */
+  async function getTTSVoiceListAsync() {
+    // 1. 优先从服务器文件获取（最可靠的方式）
+    const now = Date.now();
+    if (!_lwbTtsCache || (now - _lwbTtsCacheTime) > LWB_TTS_CACHE_MS) {
+      const mySpeakers = await fetchLittleWhiteBoxTTSConfig();
+      if (mySpeakers && mySpeakers.length > 0) {
+        _lwbTtsCache = mySpeakers.map(s => ({
+          name: s.name,
+          value: s.value,
+          source: s.source || (isFreeVoice(s.value) ? 'free' : 'auth'),
+          resourceId: s.resourceId || inferResourceId(s.value),
+          desc: getVoiceDesc(s.value)
+        }));
+        _lwbTtsCacheTime = now;
+        return _lwbTtsCache;
+      }
+    } else if (_lwbTtsCache) {
+      return _lwbTtsCache;
+    }
+
+    // 2. 尝试从 LittleWhiteBox 全局对象获取配置
+    const xbTts = window.xiaobaixTts;
+    if (xbTts?.getConfig) {
+      const config = xbTts.getConfig();
+      const mySpeakers = config?.volc?.mySpeakers || [];
+      if (mySpeakers.length > 0) {
+        return mySpeakers.map(s => ({
+          name: s.name,
+          value: s.value,
+          source: s.source || (isFreeVoice(s.value) ? 'free' : 'auth'),
+          resourceId: s.resourceId || inferResourceId(s.value),
+          desc: getVoiceDesc(s.value)
+        }));
+      }
+    }
+
+    // 3. 尝试从全局变量获取内置音色库
+    if (window.XB_TTS_VOICE_DATA?.length > 0) {
+      return window.XB_TTS_VOICE_DATA.slice(0, 20).map(v => ({
+        name: v.name,
+        value: v.value,
+        source: inferSource(v.value),
+        resourceId: inferResourceId(v.value),
+        desc: v.scene || '预设音色'
+      }));
+    }
+
+    // 4. 回退到免费试用音色
+    return getDefaultFreeVoices();
+  }
+
+  /**
+   * 实时获取 LittleWhiteBox 的"我的音色"列表（同步版本，兼容旧代码）
+   * @returns {Array<{name: string, value: string, source: string, resourceId: string}>}
+   */
+  function getTTSVoiceList() {
+    // 如果有缓存，先返回缓存
+    if (_lwbTtsCache) {
+      return _lwbTtsCache;
+    }
+
+    // 1. 尝试从 LittleWhiteBox 全局对象获取配置
+    const xbTts = window.xiaobaixTts;
+    if (xbTts?.getConfig) {
+      const config = xbTts.getConfig();
+      const mySpeakers = config?.volc?.mySpeakers || [];
+      if (mySpeakers.length > 0) {
+        return mySpeakers.map(s => ({
+          name: s.name,
+          value: s.value,
+          source: s.source || (isFreeVoice(s.value) ? 'free' : 'auth'),
+          resourceId: s.resourceId || inferResourceId(s.value),
+          desc: getVoiceDesc(s.value)
+        }));
+      }
+    }
+
+    // 2. 尝试从全局变量获取内置音色库
+    if (window.XB_TTS_VOICE_DATA?.length > 0) {
+      return window.XB_TTS_VOICE_DATA.slice(0, 20).map(v => ({
+        name: v.name,
+        value: v.value,
+        source: inferSource(v.value),
+        resourceId: inferResourceId(v.value),
+        desc: v.scene || '预设音色'
+      }));
+    }
+
+    // 3. 回退到免费试用音色
+    return getDefaultFreeVoices();
+  }
+
+  /**
+   * 判断是否为免费音色
+   */
+  function isFreeVoice(value) {
+    const freeVoices = ['female_1', 'female_2', 'female_3', 'female_4', 'female_5', 'female_6', 'female_7',
+                        'male_1', 'male_2', 'male_3', 'male_4'];
+    return freeVoices.includes(value);
+  }
+
+  /**
+   * 推断音色来源
+   */
+  function inferSource(value) {
+    return isFreeVoice(value) ? 'free' : 'auth';
+  }
+
+  /**
+   * 推断 Resource ID
+   * 根据火山引擎音色命名规则：
+   * - _uranus_ / _saturn_ = TTS 2.0
+   * - _moon_ / _mars_ = TTS 1.0
+   * - icl_ / s_ = ICL 复刻 2.0
+   */
+  function inferResourceId(value) {
+    const lower = (value || '').toLowerCase();
+    // ICL 复刻音色
+    if (lower.startsWith('icl_') || lower.startsWith('s_')) return 'seed-icl-2.0';
+    // TTS 2.0 音色
+    if (lower.includes('_uranus_') || lower.includes('_saturn_')) return 'seed-tts-2.0';
+    // TTS 1.0 音色（包括 _moon_ 和 _mars_）
+    return 'seed-tts-1.0';
+  }
+
+  /**
+   * 获取音色描述
+   */
+  function getVoiceDesc(value) {
+    const descMap = {
+      'female_1': '温柔少女(免费)', 'female_2': '清冷女声(免费)', 'female_3': '成熟御姐(免费)',
+      'female_4': '元气少女(免费)', 'female_5': '甜美声线(免费)', 'female_6': '邻家女孩(免费)',
+      'female_7': '活泼萝莉(免费)', 'male_1': '沉稳男声(免费)', 'male_2': '儒雅公子(免费)',
+      'male_3': '阳光少年(免费)', 'male_4': '磁性低音(免费)'
+    };
+    return descMap[value] || '自定义音色';
+  }
+
+  /**
+   * 默认免费音色列表
+   */
+  function getDefaultFreeVoices() {
+    return [
+      { name: '桃夭', value: 'female_1', source: 'free', resourceId: null, desc: '温柔少女(免费)' },
+      { name: '夜枭', value: 'male_1', source: 'free', resourceId: null, desc: '沉稳男声(免费)' },
+      { name: '霜华', value: 'female_2', source: 'free', resourceId: null, desc: '清冷女声(免费)' },
+      { name: '顾姐', value: 'female_3', source: 'free', resourceId: null, desc: '成熟御姐(免费)' },
+      { name: '苏菲', value: 'female_4', source: 'free', resourceId: null, desc: '元气少女(免费)' },
+      { name: '嘉欣', value: 'female_5', source: 'free', resourceId: null, desc: '甜美声线(免费)' },
+      { name: '青梅', value: 'female_6', source: 'free', resourceId: null, desc: '邻家女孩(免费)' },
+      { name: '可莉', value: 'female_7', source: 'free', resourceId: null, desc: '活泼萝莉(免费)' },
+      { name: '君泽', value: 'male_2', source: 'free', resourceId: null, desc: '儒雅公子(免费)' },
+      { name: '沐阳', value: 'male_3', source: 'free', resourceId: null, desc: '阳光少年(免费)' },
+      { name: '梓辛', value: 'male_4', source: 'free', resourceId: null, desc: '磁性低音(免费)' },
+    ];
+  }
+
+  /**
+   * 根据音色名称查找对应的 value（ID）
+   * @param {string} voiceName - 音色显示名称（如"呆萌川妹"）
+   * @returns {Promise<{name: string, value: string, source: string, resourceId: string|null}|null>}
+   */
+  async function resolveVoiceByName(voiceName) {
+    if (!voiceName) return null;
+
+    // 获取所有可用音色
+    const voiceList = await getTTSVoiceListAsync();
+
+    // 1. 先按名称查找
+    let voice = voiceList.find(v => v.name === voiceName);
+    if (voice) return voice;
+
+    // 2. 如果已经是 value，直接返回
+    voice = voiceList.find(v => v.value === voiceName);
+    if (voice) return voice;
+
+    // 3. 未找到，返回默认免费音色
+    const defaultVoice = voiceList[0];
+    if (defaultVoice) {
+      console.warn(`[${SCRIPT_NAME}] 未找到音色 "${voiceName}"，使用默认: ${defaultVoice.name}`);
+      return defaultVoice;
+    }
+
+    return null;
+  }
+
+  // 为了保持兼容性，保留 TTS_VOICE_LIST 作为 getter
+  Object.defineProperty(window, 'TTS_VOICE_LIST', {
+    get: getTTSVoiceList,
+    configurable: true
+  });
 
   // CHAR_TTS_VOICE_KEY 和 TTS_ENABLED_KEY 已移至 GalgameStore.STORAGE_KEYS（兼容代理层）
 
@@ -721,8 +4537,9 @@ const __awaiter =
       const allExpressions = getAllExpressions();
       const expressionListText = allExpressions.join(', ');
 
-      // 构建TTS音色列表
-      const ttsVoiceListText = TTS_VOICE_LIST.map(v => `${v.name}(${v.desc})`).join(', ');
+      // 构建TTS音色列表（异步获取）
+      const ttsVoiceList = yield getTTSVoiceListAsync();
+      const ttsVoiceListText = ttsVoiceList.map(v => `${v.name}(${v.desc})`).join(', ');
 
       // 获取角色音色绑定
       const charVoiceMap = getAllCharacterTTSVoices();
@@ -1052,6 +4869,123 @@ ${extraRule}
   let nextBtnAnimationTimer = null;
   const NEXT_BTN_ANIMATION_INTERVAL = 500; // 动画切换间隔(ms)
 
+  // 页面初始化时间（用于防护刷新时的事件误触发）
+  const initializationTime = Date.now();
+
+  // 生成状态追踪 - 多维度验证
+  const generationState = {
+    isGenerating: false,      // 是否正在生成
+    startTime: 0,             // 生成开始时间
+    lastMessageId: null,      // 上次处理的消息ID
+    pendingMessageId: null,   // 等待生成的消息ID
+    verificationTimer: null,  // 验证定时器
+  };
+  const GENERATION_TIMEOUT_MS = 120000; // 2分钟超时保护
+  const VERIFICATION_DELAY_MS = 2000;   // 验证延迟（等待消息同步）
+
+  /**
+   * 重置生成状态 - 多维度验证失败后的安全重置
+   */
+  function resetGenerationState(reason = 'unknown') {
+    console.log(`[${SCRIPT_NAME}] 重置生成状态，原因: ${reason}`);
+    isGeneratingResponse = false;
+    generationState.isGenerating = false;
+    generationState.pendingMessageId = null;
+    stopNextBtnAnimation();
+    refreshNextBtnDisplay();
+  }
+
+  /**
+   * 检查 SillyTavern 原生生成状态
+   */
+  function checkSillyTavernGenerating() {
+    try {
+      // 检查多种可能的 generating 标志位置
+      if (typeof window !== 'undefined' && window.SillyTavern?.generating) {
+        return true;
+      }
+      if (typeof topWindow !== 'undefined' && topWindow.SillyTavern?.generating) {
+        return true;
+      }
+      // 检查全局生成锁（某些版本使用）
+      if (typeof window !== 'undefined' && window.isGenerating) {
+        return true;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  }
+
+  /**
+   * 验证生成是否真正完成
+   * 结合 MESSAGE_RECEIVED 和 SillyTavern 状态验证
+   */
+  function verifyGenerationComplete(messageId) {
+    console.log(`[${SCRIPT_NAME}] 验证生成完成 - messageId: ${messageId}, pendingId: ${generationState.pendingMessageId}`);
+
+    // 如果当前没有等待的生成，忽略
+    if (!generationState.isGenerating && !isGeneratingResponse) {
+      console.log(`[${SCRIPT_NAME}] 无正在进行的生成，跳过验证`);
+      return;
+    }
+
+    // 检查 SillyTavern 是否还在生成中
+    if (checkSillyTavernGenerating()) {
+      console.log(`[${SCRIPT_NAME}] SillyTavern 仍在生成中，延迟验证`);
+      // 延迟再次验证
+      setTimeout(() => verifyGenerationComplete(messageId), 1000);
+      return;
+    }
+
+    // 验证通过，重置状态
+    resetGenerationState(`消息 ${messageId} 验证完成`);
+  }
+
+  /**
+   * 启动生成超时保护
+   */
+  function startGenerationTimeout() {
+    // 清除之前的超时定时器
+    if (generationState.verificationTimer) {
+      clearTimeout(generationState.verificationTimer);
+    }
+
+    generationState.startTime = Date.now();
+    generationState.isGenerating = true;
+
+    console.log(`[${SCRIPT_NAME}] 启动生成超时保护 (${GENERATION_TIMEOUT_MS}ms)`);
+
+    // 设置超时保护
+    generationState.verificationTimer = setTimeout(() => {
+      const elapsed = Date.now() - generationState.startTime;
+      console.log(`[${SCRIPT_NAME}] 生成超时保护触发 - 已等待 ${elapsed}ms`);
+
+      // 检查 SillyTavern 是否还在生成
+      if (checkSillyTavernGenerating()) {
+        console.log(`[${SCRIPT_NAME}] SillyTavern 仍在生成中，延长超时`);
+        // 延长超时时间
+        generationState.verificationTimer = setTimeout(() => {
+          resetGenerationState('超时保护强制重置');
+        }, GENERATION_TIMEOUT_MS);
+        return;
+      }
+
+      resetGenerationState('超时保护触发');
+    }, GENERATION_TIMEOUT_MS);
+  }
+
+  /**
+   * 停止生成超时保护
+   */
+  function stopGenerationTimeout() {
+    if (generationState.verificationTimer) {
+      clearTimeout(generationState.verificationTimer);
+      generationState.verificationTimer = null;
+    }
+    generationState.isGenerating = false;
+  }
+
   // ComfyUI 默认设置
   const DEFAULT_COMFYUI_SETTINGS = {
     apiUrl: 'http://127.0.0.1:8188',
@@ -1326,6 +5260,8 @@ ${extraRule}
         this.isLoading = false;
         this.currentAudio = null;
         this.hideLoadingIndicator();
+        // ★ 停止口型同步
+        LipSyncManager.stopSync();
       });
     },
 
@@ -1388,6 +5324,264 @@ ${extraRule}
     },
 
     /**
+     * 获取当前播放的音频元素
+     */
+    _getCurrentAudioElement() {
+      // 方式1: 从 xiaobaixTts.player.currentAudio 获取（LittleWhiteBox 播放器）
+      if (this.xiaobaixTts?.player?.currentAudio) {
+        return this.xiaobaixTts.player.currentAudio;
+      }
+      // 方式2: 从 xiaobaixTts 获取
+      if (this.xiaobaixTts?.player?.audio) {
+        return this.xiaobaixTts.player.audio;
+      }
+      // 方式3: 从 player.audioElements 数组获取（新版 LittleWhiteBox）
+      if (this.xiaobaixTts?.player?.audioElements?.length > 0) {
+        return this.xiaobaixTts.player.audioElements[0];
+      }
+      // 方式4: 从 xiaobaixTts.audio 获取
+      if (this.xiaobaixTts?.audio) {
+        return this.xiaobaixTts.audio;
+      }
+      // 方式4: 查找 DOM 中的所有 audio 元素（更宽松的匹配）
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const allAudio = _topWindow.document.querySelectorAll('audio');
+      for (const audio of allAudio) {
+        // 找最近开始播放的音频（有 src 且未暂停）
+        if (audio.src && !audio.paused) {
+          return audio;
+        }
+      }
+      // 方式5: 找任何有 src 的音频
+      const anyAudio = _topWindow.document.querySelector('audio[src]');
+      if (anyAudio) return anyAudio;
+      return null;
+    },
+
+    // 优先获取 LittleWhiteBox 播放器音频（避免拿到错误的 DOM audio）
+    _getPreferredAudioElement() {
+      if (this.xiaobaixTts?.player?.currentAudio) {
+        return this.xiaobaixTts.player.currentAudio;
+      }
+      if (this.xiaobaixTts?.player?.audio) {
+        return this.xiaobaixTts.player.audio;
+      }
+      if (this.xiaobaixTts?.player?.audioElements?.length > 0) {
+        return this.xiaobaixTts.player.audioElements[0];
+      }
+      if (this.xiaobaixTts?.audio) {
+        return this.xiaobaixTts.audio;
+      }
+      return null;
+    },
+
+    /**
+     * 通过 CORS 代理获取音频 URL（解决跨域问题）
+     * 模仿小白盒插件使用 enableCorsProxy 的方式
+     */
+    _getProxiedAudioUrl(originalUrl) {
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+
+      // 方法1: 使用 SillyTavern 的 getCorsProxyUrl 函数（如果存在）
+      if (typeof _topWindow.getCorsProxyUrl === 'function') {
+        try {
+          const proxied = _topWindow.getCorsProxyUrl(originalUrl);
+          console.log(`[${SCRIPT_NAME}] LipSync: 使用 getCorsProxyUrl 代理音频`);
+          return proxied;
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: getCorsProxyUrl 失败`, e);
+        }
+      }
+
+      // 方法2: 使用 SillyTavern 的 enableCorsProxy（如果存在）
+      if (typeof _topWindow.enableCorsProxy === 'function') {
+        try {
+          const proxied = _topWindow.enableCorsProxy(originalUrl);
+          if (typeof proxied === 'string' && proxied) {
+            console.log(`[${SCRIPT_NAME}] LipSync: 使用 enableCorsProxy 代理音频`);
+            return proxied;
+          }
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: enableCorsProxy 失败`, e);
+        }
+      }
+
+      // 方法3: 使用 SillyTavern 的 corsProxy 模块（小白盒方式）
+      if (_topWindow.corsProxy?.getProxyUrl) {
+        try {
+          const proxied = _topWindow.corsProxy.getProxyUrl(originalUrl);
+          console.log(`[${SCRIPT_NAME}] LipSync: 使用 corsProxy.getProxyUrl 代理音频`);
+          return proxied;
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: corsProxy.getProxyUrl 失败`, e);
+        }
+      }
+
+      // 方法4: 手动构造代理 URL（基于 SillyTavern 默认配置）
+      if (_topWindow.location) {
+        const origin = _topWindow.location.origin;
+        // SillyTavern 默认代理端点是 /proxy
+        console.log(`[${SCRIPT_NAME}] LipSync: 使用默认代理端点 /proxy`);
+        return `${origin}/proxy?url=${encodeURIComponent(originalUrl)}`;
+      }
+
+      return originalUrl;
+    },
+
+    /**
+     * ★ 启动口型同步（等待模型就绪后再绑定）
+     */
+    _startLipSyncWhenModelReady(characterId, maxWait = 5000) {
+      const startTime = Date.now();
+      const tryLoad = async () => {
+        if (Live2DManager.models.has(characterId)) {
+          this._startLipSyncOnPlay(characterId, maxWait);
+          return;
+        }
+        try {
+          await Live2DManager.loadModel(characterId);
+        } catch (e) {}
+        if (Live2DManager.models.has(characterId)) {
+          this._startLipSyncOnPlay(characterId, maxWait);
+          return;
+        }
+        if (Date.now() - startTime < maxWait) {
+          setTimeout(tryLoad, 120);
+        } else {
+          console.warn(`[${SCRIPT_NAME}] LipSync: 模型加载超时，放弃口型同步 - characterId=${characterId}`);
+        }
+      };
+      tryLoad();
+    },
+
+    /**
+     * ★ 等待模型就绪后再请求 TTS（避免首段无口型）
+     */
+    async _waitForModelReadyBeforeTTS(characterId, maxWait = 5000) {
+      if (!characterId) return false;
+      if (Live2DManager.models.has(characterId)) return true;
+
+      const startTime = Date.now();
+      while (Date.now() - startTime < maxWait) {
+        try {
+          await Live2DManager.loadModel(characterId);
+        } catch (e) {}
+        if (Live2DManager.models.has(characterId)) {
+          return true;
+        }
+        await new Promise(r => setTimeout(r, 120));
+      }
+      console.warn(`[${SCRIPT_NAME}] TTS: 等待模型就绪超时，仍继续请求TTS - characterId=${characterId}`);
+      return false;
+    },
+
+    /**
+     * ★ 启动口型同步（监听 playing 事件确保音频真正开始播放）
+     * 关键：必须等音频 playing 事件触发后再启动，否则 Analyser 读不到数据
+     */
+    _startLipSyncOnPlay(characterId, maxWait = 5000) {
+      console.log(`[${SCRIPT_NAME}] LipSync: _startLipSyncOnPlay 被调用 - characterId=${characterId}`);
+      const startTime = Date.now();
+      let hasStarted = false;
+
+      const tryBind = () => {
+        const preferredAudio = this._getPreferredAudioElement();
+        const audioElement = preferredAudio || this._getCurrentAudioElement();
+        console.log(`[${SCRIPT_NAME}] LipSync: 获取音频元素 -`, audioElement ? `src=${audioElement.src?.substring(0, 50)}... paused=${audioElement.paused} currentTime=${audioElement.currentTime}` : 'null');
+
+        if (!audioElement) {
+          if (Date.now() - startTime < maxWait && !hasStarted) {
+            setTimeout(tryBind, 100);
+          } else if (!hasStarted) {
+            console.warn(`[${SCRIPT_NAME}] LipSync: 超时未找到音频元素`);
+          }
+          return;
+        }
+
+        // 关键：如果音频已经在播放，立即启动
+        if (!audioElement.paused) {
+          console.log(`[${SCRIPT_NAME}] LipSync: 音频已在播放，立即启动口型同步`);
+          hasStarted = true;
+          this._bindLipSyncToAudio(audioElement, characterId);
+          return;
+        }
+
+        // 如果未拿到播放器音频且当前音频未播放，继续轮询等待正确的音频实例
+        if (!preferredAudio) {
+          if (Date.now() - startTime < maxWait && !hasStarted) {
+            setTimeout(tryBind, 100);
+          } else if (!hasStarted) {
+            console.warn(`[${SCRIPT_NAME}] LipSync: 等待播放超时，尝试强制启动`);
+            if (audioElement.src) {
+              this._bindLipSyncToAudio(audioElement, characterId);
+            }
+          }
+          return;
+        }
+
+        // 关键：等待 playing 事件（音频真正开始播放时触发）
+        console.log(`[${SCRIPT_NAME}] LipSync: 等待音频播放...`);
+
+        const onPlaying = () => {
+          if (hasStarted) return;
+          hasStarted = true;
+          console.log(`[${SCRIPT_NAME}] LipSync: 🎵 音频开始播放，启动口型同步`);
+          this._bindLipSyncToAudio(audioElement, characterId);
+        };
+
+        // 监听 playing 事件（更可靠）
+        audioElement.addEventListener('playing', onPlaying, { once: true });
+        // 备用：监听 play 事件
+        audioElement.addEventListener('play', onPlaying, { once: true });
+        // 额外备用：timeupdate 事件（如果 playing 没触发）
+        const onTimeUpdate = () => {
+          if (hasStarted) return;
+          if (audioElement.currentTime > 0 && !audioElement.paused) {
+            console.log(`[${SCRIPT_NAME}] LipSync: ⏱️ timeupdate 触发，启动口型同步`);
+            onPlaying();
+          }
+        };
+        audioElement.addEventListener('timeupdate', onTimeUpdate);
+
+        // 超时清理
+        setTimeout(() => {
+          audioElement.removeEventListener('playing', onPlaying);
+          audioElement.removeEventListener('play', onPlaying);
+          audioElement.removeEventListener('timeupdate', onTimeUpdate);
+          if (!hasStarted) {
+            console.warn(`[${SCRIPT_NAME}] LipSync: 等待播放超时，尝试强制启动`);
+            // 最后尝试：如果音频元素存在，直接启动
+            if (audioElement.src) {
+              this._bindLipSyncToAudio(audioElement, characterId);
+            }
+          }
+        }, maxWait);
+      };
+
+      tryBind();
+    },
+
+    /**
+     * 绑定口型同步到音频元素（包括自动停止）
+     */
+    _bindLipSyncToAudio(audioElement, characterId) {
+      if (LipSyncManager.connectAudio(audioElement)) {
+        LipSyncManager.startSync(characterId);
+      }
+
+      // 音频结束或暂停时自动停止口型同步
+      const onEnd = () => {
+        console.log(`[${SCRIPT_NAME}] LipSync: ⏹️ 音频结束/暂停，停止口型同步`);
+        LipSyncManager.stopSync();
+        audioElement.removeEventListener('ended', onEnd);
+        audioElement.removeEventListener('pause', onEnd);
+      };
+
+      audioElement.addEventListener('ended', onEnd, { once: true });
+      audioElement.addEventListener('pause', onEnd, { once: true });
+    },
+
+    /**
      * ★ 核心：播放单个段落（注意：调用前需要先执行 stop() 清空队列）
      * @param {object} segment - { type, speaker, text, tts }
      * @param {string} segmentId - 唯一标识，格式: `${mesId}_${index}`
@@ -1407,12 +5601,23 @@ ${extraRule}
       // 检查角色是否有绑定的音色
       const boundVoice = getCharacterTTSVoice(segment.speaker);
       // 优先级: tts.speaker > boundVoice > settings.ttsDefaultSpeaker > '桃夭'(默认女声)
-      const speaker = ttsConfig.speaker || boundVoice || settings.ttsDefaultSpeaker || '桃夭';
+      const voiceName = ttsConfig.speaker || boundVoice || settings.ttsDefaultSpeaker || '桃夭';
       const emotion = ttsConfig.emotion || '中性';
       const context = ttsConfig.context || '';
 
+      // ★ 关键修复：将音色名称转换为 value（API ID）
+      const resolvedVoice = await resolveVoiceByName(voiceName);
+      if (!resolvedVoice) {
+        console.error(`[${SCRIPT_NAME}] TTS播放失败: 无法解析音色 "${voiceName}"`);
+        return;
+      }
+      const speakerValue = resolvedVoice.value;
+
+      // ★ 自动推断 resourceId
+      const resourceId = inferResourceId(speakerValue);
+
       console.log(
-        `[${SCRIPT_NAME}] TTS播放: speaker=${speaker}, emotion=${emotion}, text=${segment.text.substring(0, 30)}...`,
+        `[${SCRIPT_NAME}] TTS播放: voiceName=${voiceName}, speakerValue=${speakerValue}, resourceId=${resourceId}, emotion=${emotion}, text=${segment.text.substring(0, 30)}...`,
       );
 
       this.isLoading = true;
@@ -1420,26 +5625,46 @@ ${extraRule}
 
       // 调用 xiaobaixTts/LittleWhiteBox 播放
       try {
+        // ★ 口型同步：确保模型就绪后再请求 TTS
+        await this._waitForModelReadyBeforeTTS(segment.speaker);
+        const hasLive2D = Live2DManager.models.has(segment.speaker);
+
         // 方式1: 使用 xiaobaixTts.speak（主要方式）
         if (this.xiaobaixTts && typeof this.xiaobaixTts.speak === 'function') {
           await this.xiaobaixTts.speak(segment.text, {
-            speaker: speaker,
+            speaker: speakerValue,   // ★ 使用 value 而不是 name
+            resourceId: resourceId,  // ★ 自动推断 resourceId
             emotion: emotion,
             context: context,
           });
           this.isPlaying = true;
           this.currentSegmentId = segmentId;
+          // ★ 口型同步集成（监听 playing 事件）
+          console.log(`[${SCRIPT_NAME}] TTS: 检查口型同步 - hasLive2D=${hasLive2D}, speaker=${segment.speaker}`);
+          if (hasLive2D) {
+            this._startLipSyncOnPlay(segment.speaker);
+          } else {
+            this._startLipSyncWhenModelReady(segment.speaker);
+          }
         }
         // 方式2: 使用 LittleWhiteBox.callGenerate（备用）
         else if (this.littleWhiteBox && typeof this.littleWhiteBox.callGenerate === 'function') {
           await this.littleWhiteBox.callGenerate({
             message: segment.text,
-            speaker: speaker,
+            speaker: speakerValue,   // ★ 使用 value 而不是 name
+            resourceId: resourceId,  // ★ 自动推断 resourceId
             emotion: emotion,
             context: context,
           });
           this.isPlaying = true;
           this.currentSegmentId = segmentId;
+          // ★ 口型同步集成（监听 playing 事件）
+          console.log(`[${SCRIPT_NAME}] TTS: 检查口型同步 - hasLive2D=${hasLive2D}, speaker=${segment.speaker}`);
+          if (hasLive2D) {
+            this._startLipSyncOnPlay(segment.speaker);
+          } else {
+            this._startLipSyncWhenModelReady(segment.speaker);
+          }
         } else {
           console.warn(`[${SCRIPT_NAME}] TTS: 未找到可用的 TTS 接口，请确保 LittleWhiteBox 插件已安装并启用`);
         }
@@ -3044,9 +7269,130 @@ ${extraRule}
 
           console.log(`[${SCRIPT_NAME}] 数据库升级到版本3: 已添加图包支持并迁移现有数据`);
         }
+
+        // 版本4: 添加 Live2D 支持
+        if (oldVersion < 4) {
+          // 创建 Live2D 模型存储
+          if (!database.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
+            const live2dStore = database.createObjectStore(STORE_LIVE2D_MODELS, { keyPath: 'modelId' });
+            live2dStore.createIndex('uploadTime', 'uploadTime', { unique: false });
+            console.log(`[${SCRIPT_NAME}] 已创建 Live2D 模型存储`);
+          }
+
+          // 创建 SDK 缓存存储
+          if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
+            database.createObjectStore(STORE_SDK_CACHE, { keyPath: 'id' });
+            console.log(`[${SCRIPT_NAME}] 已创建 SDK 缓存存储`);
+          }
+
+          console.log(`[${SCRIPT_NAME}] 数据库升级到版本4: 已添加 Live2D 支持`);
+        }
       };
     });
   }
+
+  // ============================================
+  // Live2D 模型存储函数
+  // ============================================
+
+  // 保存 Live2D 模型
+  function saveLive2DModel(modelData) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      return new Promise((resolve, reject) => {
+        try {
+          const transaction = db.transaction([STORE_LIVE2D_MODELS], 'readwrite');
+          const store = transaction.objectStore(STORE_LIVE2D_MODELS);
+          store.put(modelData);
+          transaction.oncomplete = () => {
+            console.log(`[${SCRIPT_NAME}] Live2D 模型已保存: ${modelData.modelId}`);
+            resolve();
+          };
+          transaction.onerror = () => reject(transaction.error);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  }
+
+  // 获取 Live2D 模型
+  function getLive2DModel(characterId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      return new Promise((resolve) => {
+        try {
+          if (!db.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
+            resolve(null);
+            return;
+          }
+          const transaction = db.transaction([STORE_LIVE2D_MODELS], 'readonly');
+          const store = transaction.objectStore(STORE_LIVE2D_MODELS);
+          const request = store.get(characterId);
+          request.onsuccess = () => resolve(request.result || null);
+          request.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  // 删除 Live2D 模型
+  function deleteLive2DModel(characterId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      return new Promise((resolve, reject) => {
+        try {
+          if (!db.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
+            resolve();
+            return;
+          }
+          const transaction = db.transaction([STORE_LIVE2D_MODELS], 'readwrite');
+          const store = transaction.objectStore(STORE_LIVE2D_MODELS);
+          store.delete(characterId);
+          transaction.oncomplete = () => {
+            console.log(`[${SCRIPT_NAME}] Live2D 模型已删除: ${characterId}`);
+            resolve();
+          };
+          transaction.onerror = () => reject(transaction.error);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  }
+
+  // 检查是否存在 Live2D 模型
+  function hasLive2DModel(characterId) {
+    return __awaiter(this, void 0, void 0, function* () {
+      const model = yield getLive2DModel(characterId);
+      return model !== null;
+    });
+  }
+
+  // 获取所有 Live2D 模型列表
+  function getAllLive2DModels() {
+    return __awaiter(this, void 0, void 0, function* () {
+      if (!db) yield initDB();
+      return new Promise((resolve) => {
+        try {
+          if (!db.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
+            resolve([]);
+            return;
+          }
+          const transaction = db.transaction([STORE_LIVE2D_MODELS], 'readonly');
+          const store = transaction.objectStore(STORE_LIVE2D_MODELS);
+          const request = store.getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => resolve([]);
+        } catch (e) {
+          resolve([]);
+        }
+      });
+    });
+  }
+
   // 保存立绘
   function saveSprite(characterId_1, expression_1, imageBlob_1) {
     return __awaiter(this, arguments, void 0, function* (characterId, expression, imageBlob, imageUrl = null, packId = null) {
@@ -3102,17 +7448,20 @@ ${extraRule}
   }
 
   // 批量保存立绘
-  function saveSpritesBatch(spritesList) {
+  function saveSpritesBatch(spritesList, packId = null) {
     return __awaiter(this, void 0, void 0, function* () {
       if (!spritesList || spritesList.length === 0) return;
       if (!db) yield initDB();
+
+      // 如果未指定packId，使用当前图包
+      const targetPackId = packId || getCurrentPackId();
 
       return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_SPRITES], 'readwrite');
         const store = transaction.objectStore(STORE_SPRITES);
 
         transaction.oncomplete = () => {
-          console.log(`[${SCRIPT_NAME}] 批量保存立绘完成: ${spritesList.length} 个`);
+          console.log(`[${SCRIPT_NAME}] 批量保存立绘完成: ${spritesList.length} 个 (图包: ${targetPackId})`);
           resolve();
         };
 
@@ -3142,6 +7491,7 @@ ${extraRule}
             expression: item.expression,
             imageBlob: item.imageBlob,
             imageUrl: item.imageUrl || null,
+            packId: targetPackId,
             lastModified: new Date().toISOString(),
           };
           store.put(data);
@@ -3347,17 +7697,20 @@ ${extraRule}
   }
 
   // 批量保存背景
-  function saveBackgroundsBatch(backgroundsList) {
+  function saveBackgroundsBatch(backgroundsList, packId = null) {
     return __awaiter(this, void 0, void 0, function* () {
       if (!backgroundsList || backgroundsList.length === 0) return;
       if (!db) yield initDB();
+
+      // 如果未指定packId，使用当前图包
+      const targetPackId = packId || getCurrentPackId();
 
       return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
         const store = transaction.objectStore(STORE_BACKGROUNDS);
 
         transaction.oncomplete = () => {
-          console.log(`[${SCRIPT_NAME}] 批量保存背景完成: ${backgroundsList.length} 个`);
+          console.log(`[${SCRIPT_NAME}] 批量保存背景完成: ${backgroundsList.length} 个 (图包: ${targetPackId})`);
           resolve();
         };
 
@@ -3373,6 +7726,7 @@ ${extraRule}
             sceneName: item.sceneName,
             imageBlob: item.imageBlob,
             imageUrl: item.imageUrl || null,
+            packId: targetPackId,
             lastModified: new Date().toISOString(),
           };
           store.put(data);
@@ -3904,6 +8258,8 @@ ${extraRule}
   const SpriteManager = {
     // 当前显示的角色 { characterId: { slot: 'left'|'center'|'right', element: jQuery, expression: string } }
     activeCharacters: new Map(),
+    // 槽位占用关系 { slot -> characterId }，避免通过DOM反查导致误删
+    slotOwners: new Map(),
     // 当前说话者
     currentSpeaker: null,
     //let名称（从数据库获取）
@@ -3978,9 +8334,70 @@ ${extraRule}
       console.log(`[${SCRIPT_NAME}] 未能识别主角名称`);
       return null;
     },
+    // 角色ID归一化（用于比较，不改变原始ID）
+    normalizeCharacterId(characterId) {
+      return String(characterId || '').trim().toLowerCase();
+    },
     // 判断角色是否是主角
     isProtagonist(characterId) {
-      return this.protagonistName && characterId === this.protagonistName;
+      if (!this.protagonistName || !characterId) return false;
+      return this.normalizeCharacterId(characterId) === this.normalizeCharacterId(this.protagonistName);
+    },
+    // 根据 activeCharacters 重建槽位占用，避免历史状态污染
+    syncSlotOwners() {
+      this.slotOwners.clear();
+      this.activeCharacters.forEach((info, charId) => {
+        if (info?.slot) {
+          this.slotOwners.set(info.slot, charId);
+        }
+      });
+    },
+    ensureSlots($overlay) {
+      const $charLayer = $overlay?.find('.gal-layer-character');
+      if (!$charLayer?.length) return $();
+      if (!$charLayer.find('.gal-char-slot.slot-left').length) {
+        $charLayer.append('<div class="gal-char-slot slot-left"></div>');
+      }
+      if (!$charLayer.find('.gal-char-slot.slot-right').length) {
+        $charLayer.append('<div class="gal-char-slot slot-right"></div>');
+      }
+      return $charLayer;
+    },
+    isCharacterElementValid(info, $overlay) {
+      return !!(
+        info?.element &&
+        info.element.length &&
+        info.element[0] &&
+        info.element[0].isConnected &&
+        (!$overlay?.length || $overlay[0].contains(info.element[0]))
+      );
+    },
+    // NEXT/重排后，若已有角色节点断开，先补建，避免只剩当前说话者
+    rehydrateDisconnectedCharacters($overlay, preferredCharacterId = null) {
+      return __awaiter(this, void 0, void 0, function* () {
+        const entries = Array.from(this.activeCharacters.entries());
+        if (preferredCharacterId) {
+          entries.sort(([a], [b]) => {
+            if (a === preferredCharacterId) return -1;
+            if (b === preferredCharacterId) return 1;
+            return 0;
+          });
+        }
+        for (const [charId, info] of entries) {
+          if (!info?.slot) continue;
+          if (this.isCharacterElementValid(info, $overlay)) continue;
+          const $relinked = $(
+            `#gal-global-overlay .gal-char-slot.slot-${info.slot} .gal-char-container[data-character="${charId}"]`,
+          );
+          if ($relinked.length) {
+            info.element = $relinked;
+            continue;
+          }
+          this.slotOwners.set(info.slot, charId);
+          const spriteUrl = yield getSprite(charId, info.expression || '默认');
+          yield this.updateCharacterSprite($overlay, charId, info.expression || '默认', spriteUrl, info.slot, false);
+        }
+      });
     },
     // 分配角色槽位（只支持2个角色：左侧和右侧）
     assignSlot(characterId) {
@@ -3988,11 +8405,8 @@ ${extraRule}
       if (this.isProtagonist(characterId)) {
         return 'left';
       }
-      // 检查现有槽位
-      const usedSlots = new Set();
-      this.activeCharacters.forEach(info => {
-        usedSlots.add(info.slot);
-      });
+      // 检查现有槽位（以内部状态为准，避免DOM短暂重排导致的误判）
+      const usedSlots = new Set(this.slotOwners.keys());
       // 非主角分配右侧
       if (!usedSlots.has('right')) return 'right';
       // 如果没有主角，可以使用左侧
@@ -4015,9 +8429,13 @@ ${extraRule}
             // 动画结束后移除元素
             setTimeout(() => {
               info.element.remove();
+              // 角色退场后清理其 Live2D/动画资源，避免残留 WebGL 资源污染
+              Live2DManager.cleanup(charId);
+              SpriteAnimationManager.cleanup(charId);
             }, 400);
           }
           this.activeCharacters.delete(charId);
+          this.slotOwners.delete(info.slot);
           this.characterQueue.splice(i, 1);
           return info.slot;
         }
@@ -4027,11 +8445,22 @@ ${extraRule}
     // 更新立绘显示
     updateSprite($overlay, characterId, expression) {
       return __awaiter(this, void 0, void 0, function* () {
+        this.ensureSlots($overlay);
+        this.syncSlotOwners();
         if (!characterId) {
           // 旁白 - 暗化所有角色
           this.setSpeaker(null);
           return;
         }
+        // 统一大小写/空白差异，避免同一角色被识别为多个ID（如 User vs user）
+        const normalizedId = this.normalizeCharacterId(characterId);
+        const existingSameCharacter = Array.from(this.activeCharacters.keys()).find(
+          id => this.normalizeCharacterId(id) === normalizedId,
+        );
+        if (existingSameCharacter) {
+          characterId = existingSameCharacter;
+        }
+        yield this.rehydrateDisconnectedCharacters($overlay, characterId);
         const spriteUrl = yield getSprite(characterId, expression);
         let slot = null;
         let isNewCharacter = false;
@@ -4040,8 +8469,14 @@ ${extraRule}
           // 更新表达式
           const info = this.activeCharacters.get(characterId);
           slot = info.slot;
-          // 检查表情是否变化
-          if (info.expression !== expression) {
+          this.slotOwners.set(slot, characterId);
+          const isElementValid = this.isCharacterElementValid(info, $overlay);
+          // NEXT/重排后如果节点丢失，强制重建当前角色，避免“只剩一个角色”
+          if (!isElementValid) {
+            info.expression = expression;
+            yield this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false);
+          } else if (info.expression !== expression) {
+            // 检查表情是否变化
             info.expression = expression;
             // 触发表情切换动画
             yield this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false);
@@ -4061,6 +8496,7 @@ ${extraRule}
             expression,
             element: null,
           });
+          this.slotOwners.set(slot, characterId);
           yield this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, true);
         }
         // 设置当前说话者
@@ -4072,28 +8508,75 @@ ${extraRule}
     // 更新/创建角色立绘元素
     updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, isEntering) {
       return __awaiter(this, void 0, void 0, function* () {
-        const $charLayer = $overlay.find('.gal-layer-character');
+        const $charLayer = this.ensureSlots($overlay);
         let $slot = $charLayer.find(`.gal-char-slot.slot-${slot}`);
         // 如果槽位不存在，创建它
         if (!$slot.length) {
           $slot = $(`<div class="gal-char-slot slot-${slot}"></div>`);
           $charLayer.append($slot);
-          // 重新排序
-          const $slots = $charLayer.find('.gal-char-slot').sort((a, b) => {
-            const order = { left: 1, center: 2, right: 3 };
-            const aSlot = $(a).hasClass('slot-left') ? 'left' : $(a).hasClass('slot-center') ? 'center' : 'right';
-            const bSlot = $(b).hasClass('slot-left') ? 'left' : $(b).hasClass('slot-center') ? 'center' : 'right';
-            return order[aSlot] - order[bSlot];
-          });
-          $charLayer.append($slots);
         }
+
+        // 若该槽位在内部状态上被其他角色占用，才做替换清理（避免DOM短暂状态误删）
+        const oldCharIdInSlot = this.slotOwners.get(slot);
+        if (oldCharIdInSlot && oldCharIdInSlot !== characterId) {
+          const oldInfo = this.activeCharacters.get(oldCharIdInSlot);
+          // 仅在“旧角色确实属于这个槽位”时才清理，防止脏映射误删另一侧角色
+          if (oldInfo?.slot === slot) {
+            if (oldInfo?.element) {
+              oldInfo.element.remove();
+            }
+            Live2DManager.cleanup(oldCharIdInSlot);
+            SpriteAnimationManager.cleanup(oldCharIdInSlot);
+            this.activeCharacters.delete(oldCharIdInSlot);
+            this.characterQueue = this.characterQueue.filter(id => id !== oldCharIdInSlot);
+          } else {
+            this.slotOwners.delete(slot);
+          }
+        }
+        this.slotOwners.set(slot, characterId);
+
         // 使用GSAP时不需要CSS入场动画类
         const useGSAP = SpriteAnimationManager.gsap !== null;
         const enterClass = (!useGSAP && isEntering) ? `entering-${slot}` : '';
         const emotion = this.emotionMap[expression] || '';
         const emotionAttr = emotion ? `data-emotion="${emotion}"` : '';
+
+        // ========== Live2D 支持 ==========
+        const useLive2D = getCharacterUseLive2D(characterId);
+        const hasLive2D = useLive2D ? yield hasLive2DModel(characterId) : false;
+
+        // ★ 优化：检查是否已有 Live2D 容器且角色相同，避免重复渲染
+        const $existingContainer = $slot.find('.gal-char-container[data-character="' + characterId + '"]');
+        const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr('data-live2d') === 'true';
+
+        // 如果只是表情变化且已有 Live2D 容器，只更新表情，不重新渲染
+        if (isExistingLive2D && !isEntering) {
+          $existingContainer.attr('data-expression', expression);
+          if (emotionAttr) {
+            $existingContainer.attr('data-emotion', emotion);
+          }
+          // 只更新 Live2D 表情
+          Live2DManager.setExpression(characterId, expression);
+          console.log(`[${SCRIPT_NAME}] Live2D 表情更新: ${characterId} -> ${expression}`);
+
+          // 更新引用
+          const info = this.activeCharacters.get(characterId);
+          if (info) {
+            info.element = $existingContainer;
+          }
+          return; // 直接返回，不重新创建 HTML
+        }
+
         let spriteHtml;
-        if (spriteUrl) {
+        if (hasLive2D) {
+          // Live2D 模式：创建 canvas 容器，需要明确设置尺寸
+          // 父元素 .gal-char-slot 有 height: 100%，需要让容器继承这个高度
+          spriteHtml = `
+          <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr} data-live2d="true" style="width: 100%; height: 100%; max-height: none;">
+            <div class="gal-live2d-canvas-container" style="width: 100%; height: 100%; position: relative;"></div>
+          </div>
+        `;
+        } else if (spriteUrl) {
           spriteHtml = `
           <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}>
             <img class="gal-char-img" src="${spriteUrl}" alt="${characterId}">
@@ -4110,6 +8593,35 @@ ${extraRule}
         `;
         }
         $slot.html(spriteHtml);
+
+        // ========== Live2D 渲染初始化 ==========
+        if (hasLive2D) {
+          const $container = $slot.find('.gal-live2d-canvas-container');
+          if ($container.length) {
+            // 异步加载并渲染 Live2D 模型
+            (async () => {
+              try {
+                const model = await Live2DManager.loadModel(characterId);
+                if (model && $container.length) {
+                  await Live2DManager.renderTo(characterId, $container[0]);
+                  Live2DManager.setExpression(characterId, expression);
+                  // 新渲染完成后立即同步说话者焦点，避免异步加载导致渲染状态错位
+                  Live2DManager.setFocus(characterId, this.currentSpeaker === characterId);
+                  console.log(`[${SCRIPT_NAME}] Live2D 渲染成功: ${characterId}`);
+                }
+              } catch (e) {
+                console.error(`[${SCRIPT_NAME}] Live2D 渲染失败:`, e);
+                // 降级显示占位符
+                $container.html(`
+                  <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">
+                    <i class="fa-solid fa-cube" style="font-size: 2rem;"></i>
+                  </div>
+                `);
+              }
+            })();
+          }
+        }
+
         // 更新引用
         const info = this.activeCharacters.get(characterId);
         if (info) {
@@ -4140,18 +8652,35 @@ ${extraRule}
     setSpeaker(speakerId) {
       this.currentSpeaker = speakerId;
       this.activeCharacters.forEach((info, charId) => {
-        if (info.element) {
+        let $element = info.element;
+        const isConnected = !!($element && $element.length && $element[0] && $element[0].isConnected);
+        if (!isConnected && info?.slot) {
+          const $relinked = $(
+            `#gal-global-overlay .gal-char-slot.slot-${info.slot} .gal-char-container[data-character="${charId}"]`,
+          );
+          if ($relinked.length) {
+            info.element = $relinked;
+            $element = $relinked;
+          }
+        }
+        if ($element && $element.length) {
+          // 防止角色因中断动画残留在退出态而“消失”
+          $element
+            .removeClass('exiting-left exiting-right')
+            .css({ display: '', visibility: 'visible' });
           const isSpeaking = speakerId !== null && charId === speakerId;
           // 使用GSAP焦点动画
-          SpriteAnimationManager.setFocus(info.element, isSpeaking, charId);
+          SpriteAnimationManager.setFocus($element, isSpeaking, charId);
+          // 同步 Live2D 焦点（渲染启停/透明度），否则多角色 Live2D 不会随说话者切换
+          updateCharacterFocus(charId, isSpeaking);
           // 保留CSS类用于样式兼容
           if (speakerId === null) {
             // 旁白时，所有角色都暗化
-            info.element.removeClass('speaking').addClass('silent');
+            $element.removeClass('speaking').addClass('silent');
           } else if (charId === speakerId) {
-            info.element.removeClass('silent').addClass('speaking');
+            $element.removeClass('silent').addClass('speaking');
           } else {
-            info.element.removeClass('speaking').addClass('silent');
+            $element.removeClass('speaking').addClass('silent');
           }
         }
       });
@@ -4261,12 +8790,20 @@ ${extraRule}
     },
     // 清除所有立绘
     clearAll($overlay) {
+      // 重置前清理所有角色的 Live2D/动画资源，防止跨消息污染
+      for (const charId of this.activeCharacters.keys()) {
+        Live2DManager.cleanup(charId);
+        SpriteAnimationManager.cleanup(charId);
+      }
       this.activeCharacters.clear();
+      this.slotOwners.clear();
       this.characterQueue = [];
       this.currentSpeaker = null;
       this.currentScene = null;
       if ($overlay) {
-        $overlay.find('.gal-layer-character').empty();
+        $overlay
+          .find('.gal-layer-character')
+          .html('<div class="gal-char-slot slot-left"></div><div class="gal-char-slot slot-right"></div>');
       }
     },
     // 重置（切换消息时）
@@ -5154,21 +9691,42 @@ ${extraRule}
 
       // 生成开始/结束事件监听（用于显示生成中特效）
       eventOn(tavern_events.GENERATION_STARTED, () => {
+        // ★ 防护：页面加载后前3秒内忽略 GENERATION_STARTED（避免刷新时误触发）
+        const timeSinceInit = Date.now() - initializationTime;
+        if (timeSinceInit < 3000) {
+          console.log(`[${SCRIPT_NAME}] GENERATION_STARTED 被忽略（页面刚加载 ${timeSinceInit}ms）`);
+          return;
+        }
+
         // 只在Galgame模式开启且覆盖层显示时显示生成中
         // 已移除"AI正在生成回复..."特效
         isGeneratingResponse = true;
+        generationState.isGenerating = true;
+        generationState.startTime = Date.now();
+        console.log(`[${SCRIPT_NAME}] GENERATION_STARTED - isGeneratingResponse = true`);
+        // 启动超时保护
+        startGenerationTimeout();
         // 如果当前在最后一段，启动按钮动画
         updateNextBtnForGeneratingState();
       });
 
       eventOn(tavern_events.GENERATION_ENDED, () => {
-        // 隐藏生成中指示器
-        hideGeneratingIndicator();
-        // 停止按钮动画
-        isGeneratingResponse = false;
-        stopNextBtnAnimation();
-        // 刷新按钮显示
-        refreshNextBtnDisplay();
+        console.log(`[${SCRIPT_NAME}] GENERATION_ENDED - 触发验证流程`);
+        // 不立即重置状态，而是启动验证流程
+        // 验证将在 MESSAGE_RECEIVED 中完成，或超时保护触发
+        stopGenerationTimeout();
+        // 延迟验证，等待消息同步
+        setTimeout(() => {
+          if (checkSillyTavernGenerating()) {
+            console.log(`[${SCRIPT_NAME}] GENERATION_ENDED 后 SillyTavern 仍在生成，继续等待`);
+            return;
+          }
+          // 如果一段时间后没有 MESSAGE_RECEIVED，主动验证
+          if (isGeneratingResponse) {
+            console.log(`[${SCRIPT_NAME}] GENERATION_ENDED 后未收到消息验证，主动重置`);
+            resetGenerationState('GENERATION_ENDED 后主动验证');
+          }
+        }, VERIFICATION_DELAY_MS * 2);
       });
 
       worldbookInjectionListenerRegistered = true;
@@ -6046,6 +10604,12 @@ ${extraRule}
         gap: 2%;
       }
 
+      /* Live2D 全局舞台画布：下置到 UI 层下方，避免视觉遮挡按钮/对话框 */
+      .gal-live2d-stage-canvas {
+        z-index: 4;
+        pointer-events: none;
+      }
+
       /* 多角色槽位 */
       .gal-char-slot {
         position: relative;
@@ -6751,6 +11315,11 @@ ${extraRule}
         align-items: center;
         justify-content: center;
         animation: galFadeIn 0.2s ease;
+      }
+
+      /* Live2D 设置弹窗 - 确保最高层级 */
+      #gal-live2d-settings-modal {
+        z-index: 2147483647 !important;
       }
 
       @keyframes galFadeIn {
@@ -7660,7 +12229,7 @@ ${extraRule}
         right: auto;
         color: rgba(255,255,255,0.95);
       }
-@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: 2147483647 !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
+@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal, #gal-live2d-settings-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: 2147483647 !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
 @media screen and (max-width: 48rem) { /* �����������Ż� */ .gal-input-title { flex-direction: column; align-items: flex-start !important; gap: 0.625rem; padding: 0.625rem 0.938rem !important; height: auto !important; } .gal-input-title span { font-size: 1.2rem !important; } .gal-input-title div { width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.313rem; } /* �����Ҳఴť�� (����/Զ��/����) */ .gal-input-title div > button, .gal-input-title div > div { flex: 1; min-width: auto !important; margin: 0 !important; } .gal-title-btn { padding: 0.25rem 0.625rem !important; font-size: 0.85rem !important; min-width: auto !important; transform: none !important; } .gal-title-btn * { transform: none !important; } /* Tab �����Ż� */ .gal-tab-header { padding: 0 0.625rem !important; gap: 0.625rem !important; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; } .gal-tab-item { padding: 0.625rem 0.5rem !important; font-size: 0.9rem !important; flex-shrink: 0; } /* �ڲ��������Ż� (�����ϴ���) */ .gal-sub-header, .gal-action-bar { flex-direction: column; align-items: stretch !important; gap: 0.625rem; height: auto !important; padding: 0.625rem 0.938rem !important; } .gal-action-group, .gal-filter-group { display: flex !important; flex-wrap: wrap; gap: 0.5rem !important; width: 100%; } .gal-action-btn { margin: 0 !important; flex: 1; min-width: 6.25rem; padding: 0.5rem 0 !important; justify-content: center; transform: none !important; } .gal-action-btn * { transform: none !important; } /* ������������ */ .gal-grid-container { padding: 0.625rem !important; grid-template-columns: repeat(auto-fill, minmax(6.875rem, 1fr)) !important; gap: 0.625rem !important; } /* �ײ��رհ�ť */ .gal-input-box > div:last-child { padding: 0.625rem 0.938rem !important; min-height: auto !important; } #gal-settings-close, #gal-char-sprites-close, #gal-input-cancel { min-height: 2.5rem !important; transform: none !important; } }
 
     /* === ��Դ������ר�ý��ղ��� (Mobile) === */
@@ -7942,7 +12511,7 @@ ${extraRule}
         }
         #gal-asset-manager-modal .gal-tab-btn.active {
             background: #fff !important;
-            color:  !important;
+            color: #333 !important;
             box-shadow: 0 1px 0.188rem rgba(0,0,0,0.1) !important;
             font-weight: bold;
         }
@@ -9239,7 +13808,10 @@ ${extraRule}
             <!-- 游戏内容层 - 负责缩放 -->
             <div class="gal-game-content">
               <!-- 立绘层 - 由SpriteManager动态管理 -->
-              <div class="gal-layer-character${settings.speakerGlow ? ' glow-enabled' : ''}${settings.speakerBubble ? ' bubble-enabled' : ''}${getTTSEnabled() ? ' tts-mode-enabled' : ''}"></div>
+              <div class="gal-layer-character${settings.speakerGlow ? ' glow-enabled' : ''}${settings.speakerBubble ? ' bubble-enabled' : ''}${getTTSEnabled() ? ' tts-mode-enabled' : ''}">
+                <div class="gal-char-slot slot-left"></div>
+                <div class="gal-char-slot slot-right"></div>
+              </div>
 
               <!-- 对话框层 -->
             <div class="gal-dialog-layer">
@@ -9496,11 +14068,11 @@ ${extraRule}
     if ($overlay.length === 0) return;
 
     const $nextBtn = $overlay.find('[data-action="next"]');
-    
+
     // 获取当前显示的消息ID
     const mesId = currentDisplayMesId;
     if (!mesId) return;
-    
+
     // 从 messageSegmentState 获取状态
     const state = messageSegmentState.get(String(mesId));
     if (!state) return;
@@ -9510,8 +14082,12 @@ ${extraRule}
     const currentIndex = state.currentIndex;
     const isEnd = currentIndex >= total - 1;
 
+    console.log(`[${SCRIPT_NAME}] updateNextBtnForGeneratingState - isEnd=${isEnd}, isGeneratingResponse=${isGeneratingResponse}`);
+
     // 只有在最后一段且正在生成时才显示动画
     if (!isEnd || !isGeneratingResponse) return;
+
+    console.log(`[${SCRIPT_NAME}] 启动动画定时器`);
 
     // 清除之前的定时器
     stopNextBtnAnimation();
@@ -9543,11 +14119,11 @@ ${extraRule}
     if ($overlay.length === 0) return;
 
     const $nextBtn = $overlay.find('[data-action="next"]');
-    
+
     // 获取当前显示的消息ID
     const mesId = currentDisplayMesId;
     if (!mesId) return;
-    
+
     // 从 messageSegmentState 获取状态
     const state = messageSegmentState.get(String(mesId));
     if (!state) return;
@@ -9555,6 +14131,8 @@ ${extraRule}
     const total = state.segments.length;
     const currentIndex = state.currentIndex;
     const isEnd = currentIndex >= total - 1;
+
+    console.log(`[${SCRIPT_NAME}] refreshNextBtnDisplay - isEnd=${isEnd}, isGeneratingResponse=${isGeneratingResponse}`);
 
     if (isEnd) {
       // 最后一段：检查是否正在生成
@@ -9978,15 +14556,19 @@ ${extraRule}
       // ★ 再次尝试获取下一段，直接判断是否真的有下一段内容
       // 这是最可靠的判断方式，不依赖于索引计算
       const hasNextSegment = !!segments[currentIndex + 1];
+      console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - hasNextSegment=${hasNextSegment}, isGeneratingResponse=${isGeneratingResponse}`);
       if (!hasNextSegment) {
         // 最后一段：检查是否正在生成
         if (isGeneratingResponse) {
+          console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 启动动画`);
           updateNextBtnForGeneratingState();
         } else {
+          console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 显示END`);
           stopNextBtnAnimation();
           $nextBtn.html('END <i class="fa-solid fa-check"></i>');
         }
       } else {
+        console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 显示NEXT`);
         stopNextBtnAnimation();
         $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
       }
@@ -10443,22 +15025,22 @@ ${extraRule}
       }
     });
     //let立绘占位符上传
-    $(doc).on('click', '#gal-global-overlay .gal-char-placeholder', function (e) {
+    $(doc).on('click', '#gal-global-overlay .gal-char-placeholder', async function (e) {
       e.stopPropagation();
       // 从父元素 .gal-char-container 获取角色名称
       const $container = $(this).closest('.gal-char-container');
       const character = $container.data('character') || 'default';
       const expression = $container.data('expression') || '默认';
-      showSpriteUploadDialog(character, expression);
+      await showSpriteUploadDialog(character, expression);
     });
     // 双击立绘修改
-    $(doc).on('dblclick', '#gal-global-overlay .gal-char-img', function (e) {
+    $(doc).on('dblclick', '#gal-global-overlay .gal-char-img', async function (e) {
       e.stopPropagation();
       // 从父元素 .gal-char-container 获取角色名称和表情
       const $container = $(this).closest('.gal-char-container');
       const character = $container.data('character') || 'default';
       const expression = $container.data('expression') || '默认';
-      showSpriteUploadDialog(character, expression);
+      await showSpriteUploadDialog(character, expression);
     });
   }
   /**
@@ -10491,13 +15073,21 @@ ${extraRule}
       // 只有当完全是最后一段时才显示END
       const isEnd = currentIndex >= total - 1;
       const $nextBtn = $overlay.find('[data-action="next"]');
+      console.log(`[${SCRIPT_NAME}] 更新NEXT按钮 - isEnd=${isEnd}, isGeneratingResponse=${isGeneratingResponse}`);
       if (isEnd) {
         // 最后一段：检查是否正在生成
+        // ★ 只在最后一段时进行状态修正
+        if (isGeneratingResponse && !checkSillyTavernGenerating()) {
+          console.log(`[${SCRIPT_NAME}] 状态修正：SillyTavern 未在生成，重置 isGeneratingResponse`);
+          resetGenerationState('状态修正 - SillyTavern 未在生成');
+        }
         if (isGeneratingResponse) {
           // 正在生成时显示动态动画
+          console.log(`[${SCRIPT_NAME}] 启动动画`);
           updateNextBtnForGeneratingState();
         } else {
           // 未生成时显示 END
+          console.log(`[${SCRIPT_NAME}] 显示END`);
           stopNextBtnAnimation();
           $nextBtn.html('END <i class="fa-solid fa-check"></i>');
         }
@@ -10508,6 +15098,7 @@ ${extraRule}
         }
       } else {
         // 不是最后一段，恢复正常 NEXT
+        console.log(`[${SCRIPT_NAME}] 显示NEXT`);
         stopNextBtnAnimation();
         $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
       }
@@ -11074,7 +15665,7 @@ ${extraRule}
   }
 
   // 立绘上传对话框（带裁剪功能）
-  function showSpriteUploadDialog(characterId, expression, onCloseCallback) {
+  async function showSpriteUploadDialog(characterId, expression, onCloseCallback) {
     // 动态获取表情列表（预设 + 自定义）
     const allExpressions = getAllExpressions();
     const expressionOptions = allExpressions
@@ -11083,6 +15674,13 @@ ${extraRule}
           `<option value="${e}" ${e === expression || (expression === 'neutral' && e === '默认') ? 'selected' : ''}>${e}</option>`,
       )
       .join('');
+
+    // 异步获取 TTS 音色列表
+    const ttsVoiceList = await getTTSVoiceListAsync();
+    const ttsVoiceOptions = ttsVoiceList
+      .map(v => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`)
+      .join('');
+
     const modalHtml = `
       <div class="gal-input-modal" id="gal-sprite-upload-modal">
         <div class="gal-input-box" style="max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 25px;">
@@ -11116,9 +15714,9 @@ ${extraRule}
             </label>
             <div style="display: flex; gap: 10px;">
               <select id="gal-tts-voice-select"
-                      style="flex: 1; padding: 10px 15px; border: 2px solid #ddd; font-size: 1rem; cursor: pointer; border-radius: 4px; background: #fff;">
+                      style="flex: 1; padding: 10px 15px; border: 2px solid #ddd; font-size: 1rem; cursor: pointer; border-radius: 4px; background: #fff; color: #333;">
                 <option value="">-- 不绑定音色 --</option>
-                ${TTS_VOICE_LIST.map(v => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`).join('')}
+                ${ttsVoiceOptions}
               </select>
               <button class="gal-action-btn" id="gal-tts-voice-save-btn" style="white-space: nowrap; padding: 10px 20px;">
                 <i class="fa-solid fa-check"></i> 绑定
@@ -12489,7 +17087,7 @@ ${extraRule}
                                       e => `
                                 <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
                                     <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
-                                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff;">
+                                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff; color: #333;">
                                         <option value="">TTS情绪: 自动(中性)</option>
                                         ${TTS_EMOTION_LIST.map(em => `<option value="${em}" ${e.emotion === em ? 'selected' : ''}>${em}</option>`).join('')}
                                     </select>
@@ -12562,7 +17160,7 @@ ${extraRule}
               e => `
                 <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
                     <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
-                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff;">
+                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff; color: #333;">
                         <option value="">TTS情绪: 自动(中性)</option>
                         ${TTS_EMOTION_LIST.map(em => `<option value="${em}" ${e.emotion === em ? 'selected' : ''}>${em}</option>`).join('')}
                     </select>
@@ -12624,11 +17222,22 @@ ${extraRule}
     });
   }
   // 导入 JSON 资源配置
-  function importAssetsFromJson(file) {
+  function importAssetsFromJson(file, targetPackId = null) {
     return __awaiter(this, void 0, void 0, function* () {
       try {
         const text = yield file.text();
         const json = JSON.parse(text);
+
+        // 如果没有指定目标图包，显示选择对话框
+        if (!targetPackId) {
+          const suggestedName = json.packageName || json.name;
+          targetPackId = yield showImportPackSelector(suggestedName);
+          if (!targetPackId) {
+            showToast('已取消导入');
+            return;
+          }
+        }
+
         let count = 0;
         const newExpressions = [];
         if (json.sprites) {
@@ -12636,7 +17245,7 @@ ${extraRule}
           const customs = getCustomExpressions();
           for (const s of json.sprites) {
             if (s.characterId && s.expression && s.url) {
-              yield saveSprite(s.characterId, s.expression, null, s.url);
+              yield saveSprite(s.characterId, s.expression, null, s.url, targetPackId);
               count++;
               // 自动注册缺失的表情标签
               const expr = s.expression;
@@ -12654,7 +17263,7 @@ ${extraRule}
         if (json.backgrounds) {
           for (const bg of json.backgrounds) {
             if (bg.sceneName && bg.url) {
-              yield saveBackground(bg.sceneName, null, bg.url);
+              yield saveBackground(bg.sceneName, null, bg.url, targetPackId);
               count++;
             }
           }
@@ -12694,19 +17303,29 @@ ${extraRule}
     },
     // 导出所有资源为 ZIP
     exportAllAssets() {
-      return __awaiter(this, arguments, void 0, function* (remoteBaseUrl = null) {
+      return __awaiter(this, arguments, void 0, function* (remoteBaseUrl = null, packageName = null) {
         try {
           showToast('正在准备导出...');
           const zip = new (yield this.loadJSZip())();
+
+          // 获取当前图包ID
+          const currentPackId = getCurrentPackId();
+          const allPacks = yield getAllImagePacks();
+          const currentPack = allPacks.find(p => p.id === currentPackId);
+          const currentPackName = currentPack ? currentPack.name : '未命名包';
+
           // 远程配置对象
           const remoteConfig = {
+            packageName: packageName || currentPackName,
+            exportDate: new Date().toISOString(),
+            packId: currentPackId,
             sprites: [],
             backgrounds: [],
           };
           // 确保baseUrl以/结尾
           const baseUrl = remoteBaseUrl ? (remoteBaseUrl.endsWith('/') ? remoteBaseUrl : remoteBaseUrl + '/') : '';
-          // 导出立绘（忽略图包过滤，导出所有）
-          const sprites = yield getAllSprites(null, true);
+          // 导出立绘（仅当前图包）
+          const sprites = yield getAllSprites(currentPackId);
           const spritesFolder = zip.folder('sprites');
           for (const s of sprites) {
             if (s.imageBlob) {
@@ -12727,8 +17346,8 @@ ${extraRule}
               }
             }
           }
-          // 导出背景（忽略图包过滤，导出所有）
-          const backgrounds = yield getAllBackgrounds(null, true);
+          // 导出背景（仅当前图包）
+          const backgrounds = yield getAllBackgrounds(currentPackId);
           const bgFolder = zip.folder('backgrounds');
           for (const bg of backgrounds) {
             if (bg.imageBlob) {
@@ -12745,6 +17364,14 @@ ${extraRule}
               }
             }
           }
+          // 添加 package_info.json
+          const packageInfo = {
+            packageName: packageName || currentPackName,
+            exportDate: new Date().toISOString(),
+            version: '1.0',
+            packId: currentPackId,
+          };
+          zip.file('package_info.json', JSON.stringify(packageInfo, null, 2));
           // 如果有远程链接，生成JSON文件
           if (remoteBaseUrl) {
             zip.file('remote_assets.json', JSON.stringify(remoteConfig, null, 2));
@@ -12755,12 +17382,15 @@ ${extraRule}
           const url = URL.createObjectURL(content);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `galgame_assets_${new Date().toISOString().slice(0, 10)}.zip`;
+          // 使用自定义包名作为文件名
+          const safePackageName = (packageName || currentPackName).replace(/[\\/:*?"<>|]/g, '_');
+          const date = new Date().toISOString().slice(0, 10);
+          a.download = `${safePackageName}_${date}.zip`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-          showToast('导出成功！');
+          showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景`);
         } catch (e) {
           console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
           showToast('导出失败: ' + e.message);
@@ -12768,8 +17398,17 @@ ${extraRule}
       });
     },
     // 批量导入文件 (File List)
-    importFiles(fileList) {
+    importFiles(fileList, targetPackId = null) {
       return __awaiter(this, void 0, void 0, function* () {
+        // 如果没有指定目标图包，显示选择对话框
+        if (!targetPackId) {
+          targetPackId = yield showImportPackSelector('文件夹导入');
+          if (!targetPackId) {
+            showToast('已取消导入');
+            return false;
+          }
+        }
+
         let successCount = 0;
         let failCount = 0;
         showToast('开始导入...');
@@ -12782,20 +17421,20 @@ ${extraRule}
             let imported = false;
             // 1. 根据文件夹判断
             if (isSpriteFolder) {
-              yield this.importAsSprite(file);
+              yield this.importAsSprite(file, targetPackId);
               imported = true;
             } else if (isBgFolder) {
-              yield this.importAsBackground(file);
+              yield this.importAsBackground(file, targetPackId);
               imported = true;
             }
             // 2. 根据文件名格式判断 (Name_Expression.ext)
             else if (file.name.includes('_')) {
-              yield this.importAsSprite(file);
+              yield this.importAsSprite(file, targetPackId);
               imported = true;
             }
             // 3. 默认为背景 (Label.ext)
             else {
-              yield this.importAsBackground(file);
+              yield this.importAsBackground(file, targetPackId);
               imported = true;
             }
             if (imported) successCount++;
@@ -12809,7 +17448,7 @@ ${extraRule}
       });
     },
     // 导入为立绘
-    importAsSprite(file) {
+    importAsSprite(file, packId = null) {
       return __awaiter(this, void 0, void 0, function* () {
         // 解析文件名: Name_Expression.ext
         // 移除路径前缀
@@ -12822,7 +17461,7 @@ ${extraRule}
           const expression = parts.pop();
           const characterId = parts.join('_');
           if (characterId && expression) {
-            yield saveSprite(characterId, expression, file);
+            yield saveSprite(characterId, expression, file, null, packId);
             console.log(`[${SCRIPT_NAME}] 导入立绘: ${characterId} - ${expression}`);
             // 自动注册缺失的表情标签
             const allExpressions = getAllExpressions();
@@ -12843,20 +17482,29 @@ ${extraRule}
       });
     },
     // 导入为背景
-    importAsBackground(file) {
+    importAsBackground(file, packId = null) {
       return __awaiter(this, void 0, void 0, function* () {
         const fileName = file.name.split('/').pop();
         const sceneName = fileName.substring(0, fileName.lastIndexOf('.'));
         if (sceneName) {
-          yield saveBackground(sceneName, file);
+          yield saveBackground(sceneName, file, null, packId);
           console.log(`[${SCRIPT_NAME}] 导入背景: ${sceneName}`);
         }
       });
     },
     // 从 GitHub 导入
-    importFromGitHub(repoUrl) {
+    importFromGitHub(repoUrl, targetPackId = null) {
       return __awaiter(this, void 0, void 0, function* () {
         try {
+          // 如果没有指定目标图包，显示选择对话框
+          if (!targetPackId) {
+            targetPackId = yield showImportPackSelector(`GitHub导入`);
+            if (!targetPackId) {
+              showToast('已取消导入');
+              return false;
+            }
+          }
+
           // 解析 URL
           // 支持格式: https://github.com/user/repo/tree/main/path
           // 或 user/repo
@@ -12917,10 +17565,10 @@ ${extraRule}
               // 简单的路径判断 (如果是递归获取可以更准，但这里只获取了一层)
               // 我们可以尝试在文件名判断前加逻辑
               if (item.name.includes('_')) {
-                yield this.importAsSprite(file);
+                yield this.importAsSprite(file, targetPackId);
                 imported = true;
               } else {
-                yield this.importAsBackground(file);
+                yield this.importAsBackground(file, targetPackId);
                 imported = true;
               }
               if (imported) count++;
@@ -13156,12 +17804,145 @@ ${extraRule}
   }
 
   /**
+   * 显示导入图包选择对话框
+   * @param {string} suggestedName - 建议的包名（从package_info.json读取）
+   * @returns {Promise<string|null>} 返回选择的packId，取消返回null
+   */
+  function showImportPackSelector(suggestedName = null) {
+    return __awaiter(this, void 0, void 0, function* () {
+      return new Promise((resolve) => {
+        // 获取所有图包
+        getAllImagePacks().then(packs => {
+          const currentPackId = getCurrentPackId();
+          const currentPack = packs.find(p => p.id === currentPackId);
+          const currentPackName = currentPack ? currentPack.name : '当前图包';
+
+          // 构建图包选项HTML
+          const packOptions = packs.map(p =>
+            `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (当前)' : ''}</option>`
+          ).join('');
+
+          const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
+
+          const dialogHtml = `
+            <div class="gal-input-modal" id="gal-import-pack-selector" style="z-index: 2147483647 !important;">
+              <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
+                <div class="gal-input-title" style="margin-bottom: 20px;">
+                  <span><i class="fa-solid fa-box-open"></i> 选择导入目标图包</span>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
+                    <input type="radio" name="import-target" value="current" checked style="width: 18px; height: 18px;">
+                    <span style="font-weight: 600; color: #2b2e38;">导入到当前图包</span>
+                    <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${currentPackName}</span>
+                  </label>
+
+                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
+                    <input type="radio" name="import-target" value="existing" style="width: 18px; height: 18px;">
+                    <span style="font-weight: 600; color: #2b2e38;">导入到已有图包</span>
+                  </label>
+                  <select id="gal-import-existing-pack" disabled style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-bottom: 15px; margin-left: 26px; opacity: 0.6;">
+                    ${packOptions}
+                  </select>
+
+                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
+                    <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
+                    <span style="font-weight: 600; color: #2b2e38;">创建新图包</span>
+                  </label>
+                  <input type="text" id="gal-import-new-pack-name" disabled placeholder="输入新图包名称" value="${defaultNewName}"
+                         style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
+                </div>
+
+                <div class="gal-input-actions" style="display: flex; gap: 12px;">
+                  <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
+                    <i class="fa-solid fa-check"></i> <span>确认导入</span>
+                  </button>
+                  <button class="gal-action-btn" id="gal-import-pack-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
+                    <i class="fa-solid fa-xmark"></i> <span>取消</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+
+          const mountRoot = getModalMountRoot();
+          $(mountRoot).append(dialogHtml);
+          const $dialog = $(mountRoot).find('#gal-import-pack-selector');
+
+          // 单选按钮切换逻辑
+          $dialog.find('input[name="import-target"]').on('change', function() {
+            const value = $(this).val();
+            const $existingSelect = $dialog.find('#gal-import-existing-pack');
+            const $newInput = $dialog.find('#gal-import-new-pack-name');
+
+            $existingSelect.prop('disabled', value !== 'existing').css('opacity', value === 'existing' ? 1 : 0.6);
+            $newInput.prop('disabled', value !== 'new').css('opacity', value === 'new' ? 1 : 0.6);
+
+            // 更新边框样式
+            $dialog.find('label').css('border-color', '#ddd');
+            $(this).closest('label').css('border-color', '#3498db');
+          });
+
+          // 确认按钮
+          $dialog.find('#gal-import-pack-confirm').on('click', () => {
+            const targetType = $dialog.find('input[name="import-target"]:checked').val();
+            let targetPackId = null;
+
+            if (targetType === 'current') {
+              targetPackId = currentPackId;
+            } else if (targetType === 'existing') {
+              targetPackId = $dialog.find('#gal-import-existing-pack').val();
+            } else if (targetType === 'new') {
+              const newName = $dialog.find('#gal-import-new-pack-name').val().trim();
+              if (!newName) {
+                showToast('请输入新图包名称');
+                return;
+              }
+              // 创建新图包
+              createImagePack(newName).then(newPack => {
+                $dialog.remove();
+                resolve(newPack.id);
+              }).catch(err => {
+                showToast('创建图包失败: ' + err.message);
+              });
+              return;
+            }
+
+            $dialog.remove();
+            resolve(targetPackId);
+          });
+
+          // 取消按钮
+          $dialog.find('#gal-import-pack-cancel').on('click', () => {
+            $dialog.remove();
+            resolve(null);
+          });
+
+          // 点击背景关闭
+          $dialog.on('click', function(e) {
+            if (e.target === this) {
+              $dialog.remove();
+              resolve(null);
+            }
+          });
+        }).catch(err => {
+          console.error('获取图包列表失败:', err);
+          showToast('获取图包列表失败');
+          resolve(null);
+        });
+      });
+    });
+  }
+
+  /**
    * 处理ZIP包内容 - 批量优化版
    * @param {JSZip} zip - JSZip实例
    * @param {Object} progressController - 进度控制器
    * @param {Function} isCancelledCheck - 检查是否取消的回调
+   * @param {string} targetPackId - 目标图包ID（可选）
    */
-  function processZipContents(zip, progressController, isCancelledCheck) {
+  function processZipContents(zip, progressController, isCancelledCheck, targetPackId = null) {
     return __awaiter(this, void 0, void 0, function* () {
       // 验证必须存在 sprites 或 backgrounds 目录
       const hasSpritesDir = Object.keys(zip.files).some(path => path.startsWith('sprites/'));
@@ -13169,6 +17950,29 @@ ${extraRule}
 
       if (!hasSpritesDir && !hasBackgroundsDir) {
         throw new Error('ZIP包格式错误：必须包含 sprites/ 或 backgrounds/ 目录');
+      }
+
+      // 尝试读取 package_info.json 获取包名信息
+      let packageInfo = null;
+      const infoFile = zip.file('package_info.json');
+      if (infoFile) {
+        try {
+          const infoText = yield infoFile.async('text');
+          packageInfo = JSON.parse(infoText);
+          console.log(`[${SCRIPT_NAME}] 读取到包信息:`, packageInfo);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] 读取 package_info.json 失败:`, e);
+        }
+      }
+
+      // 如果没有指定目标图包，显示选择对话框
+      if (!targetPackId) {
+        const suggestedName = packageInfo?.packageName || packageInfo?.name;
+        targetPackId = yield showImportPackSelector(suggestedName);
+        if (!targetPackId) {
+          showToast('已取消导入');
+          return;
+        }
       }
 
       const imageFiles = [];
@@ -13246,7 +18050,7 @@ ${extraRule}
 
         // 批量保存到数据库
         if (spriteBatch.length > 0) {
-          yield saveSpritesBatch(spriteBatch);
+          yield saveSpritesBatch(spriteBatch, targetPackId);
           // 自动注册缺失的表情标签
           const allExpressions = getAllExpressions();
           const customs = getCustomExpressions();
@@ -13264,7 +18068,7 @@ ${extraRule}
           }
         }
         if (backgroundBatch.length > 0) {
-          yield saveBackgroundsBatch(backgroundBatch);
+          yield saveBackgroundsBatch(backgroundBatch, targetPackId);
         }
 
         successCount += spriteBatch.length + backgroundBatch.length;
@@ -14720,9 +19524,9 @@ ${extraRule}
         showCustomExpressionManager(() => showAssetManagerModal('sprites'));
       });
       // 添加立绘
-      $('#gal-add-sprite-btn').on('click', () => {
+      $('#gal-add-sprite-btn').on('click', async () => {
         $modal.remove();
-        showSpriteUploadDialog('', '默认', () => showAssetManagerModal('sprites'));
+        await showSpriteUploadDialog('', '默认', () => showAssetManagerModal('sprites'));
       });
       // 添加背景
       $('#gal-add-bg-btn').on('click', () => {
@@ -14878,6 +19682,12 @@ ${extraRule}
               .find('i').removeClass('fa-bullseye').addClass('fa-globe');
         }
         showToast(newScope === 'current' ? '已切换为：仅当前图包' : '已切换为：搜索所有图包');
+
+        // 切换范围后需要刷新列表，否则只更新了按钮状态，资源列表仍停留在打开弹窗时的旧数据
+        const currentTab = $modal.find('.gal-tab-btn.active').data('tab') || activeTab || 'sprites';
+        $modal.remove();
+        $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
+        showAssetManagerModal(currentTab);
       });
 
       // 背景转移按钮
@@ -14919,8 +19729,24 @@ ${extraRule}
         $('#gal-export-menu').hide(); // 关闭菜单
 
         if (action === 'export-local') {
-            AssetIO.exportAllAssets();
+          // 获取当前图包名称作为默认包名
+          const currentPackId = getCurrentPackId();
+          getAllImagePacks().then(packs => {
+            const currentPack = packs.find(p => p.id === currentPackId);
+            const defaultName = currentPack ? currentPack.name : '图包';
+            const packageName = prompt(`将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`, `${defaultName}_${new Date().toISOString().slice(0, 10)}`);
+            if (!packageName) return;
+            AssetIO.exportAllAssets(null, packageName);
+          });
         } else if (action === 'export-remote') {
+          // 先询问包名
+          const currentPackId = getCurrentPackId();
+          getAllImagePacks().then(packs => {
+            const currentPack = packs.find(p => p.id === currentPackId);
+            const defaultName = currentPack ? currentPack.name : '图包';
+            const packageName = prompt(`将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`, `${defaultName}_${new Date().toISOString().slice(0, 10)}`);
+            if (!packageName) return;
+
             const input = prompt(
               '请输入 GitHub 仓库信息 (格式: 用户名/仓库名 或 GitHub 仓库链接)\n\n将统一生成 jsDelivr CDN 加速链接。',
             );
@@ -14936,7 +19762,7 @@ ${extraRule}
               if (!confirm(`确认使用以下 CDN 链接前缀吗？\n${baseUrl}`)) {
                 return;
               }
-              AssetIO.exportAllAssets(baseUrl);
+              AssetIO.exportAllAssets(baseUrl, packageName);
               return;
             }
 
@@ -14972,7 +19798,8 @@ ${extraRule}
             if (!confirm(`确认生成以下 CDN 链接前缀的配置吗？\n${baseUrl}`)) {
               return;
             }
-            AssetIO.exportAllAssets(baseUrl);
+            AssetIO.exportAllAssets(baseUrl, packageName);
+          });
         }
       });
 
@@ -15074,6 +19901,424 @@ ${extraRule}
       });
     });
   }
+  // ============================================
+  // Live2D 设置弹窗
+  // ============================================
+  /**
+   * 显示 Live2D 设置弹窗
+   * @param {string} characterId - 角色ID
+   */
+  async function showLive2DSettingsModal(characterId) {
+    const _$ = topWindow.jQuery || $;
+
+    // 获取当前配置
+    const config = getLive2DConfig(characterId);
+    const transformConfig = config.transform || {};
+    const qualityConfig = config.quality || {};
+    const expressionMapping = config.expressionMapping || {};
+    const motionMapping = config.motionMapping || {};
+
+    // 先显示弹窗，再异步加载模型
+    let expressionList = [];
+    let motionGroups = [];
+
+    // 获取游戏表情标签列表
+    const gameExpressionTags = Object.keys(EXPRESSION_LIVE2D_MAP);
+
+    // 构建表情映射行 HTML（懒加载版本）
+    const buildMappingRows = () => {
+      const existingMappings = { ...expressionMapping };
+      const existingMotionMappings = { ...motionMapping };
+      let rows = '';
+
+      // 优先显示已有映射
+      const allTags = [...new Set([...Object.keys(existingMappings), ...gameExpressionTags])];
+
+      // 预生成选项 HTML，避免每次循环重复生成
+      const exprOptionsHtml = expressionList.length > 0
+        ? expressionList.map(e => `<option value="${e}">${e}</option>`).join('')
+        : '';
+      const motionOptionsHtml = motionGroups.length > 0
+        ? motionGroups.map(g => `<option value="${g}">${g}</option>`).join('')
+        : '';
+
+      for (const tag of allTags) {
+        const currentExpr = existingMappings[tag] || '';
+        const currentMotion = existingMotionMappings[tag] || {};
+
+        rows += `
+          <div class="gal-mapping-row" data-tag="${tag}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+            <span style="min-width: 60px; font-weight: 600;">${tag}</span>
+            <span style="color: #666;">→</span>
+            <select class="gal-expr-mapping-select" data-tag="${tag}" data-current="${currentExpr}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="">(自动匹配)</option>
+              ${exprOptionsHtml}
+            </select>
+            <select class="gal-motion-mapping-select" data-tag="${tag}" data-current="${currentMotion.group || ''}" data-disabled="${currentMotion.enabled === false}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="">(自动匹配)</option>
+              <option value="__disabled__">(禁用动作)</option>
+              ${motionOptionsHtml}
+            </select>
+          </div>
+        `;
+      }
+
+      return rows;
+    };
+
+    // 异步加载模型数据（不阻塞弹窗显示）
+    const loadModelDataAsync = async () => {
+      try {
+        // 检查模型是否已加载
+        let model = Live2DManager.models.get(characterId);
+        if (!model) {
+          model = await Live2DManager.loadModel(characterId);
+        }
+
+        expressionList = getLive2DExpressionList(characterId);
+        motionGroups = getLive2DMotionGroups(characterId);
+
+        // 更新弹窗中的模型信息
+        const $modal = _$('#gal-live2d-settings-modal');
+        if ($modal.length) {
+          $modal.find('.gal-model-info-expr').text(expressionList.length);
+          $modal.find('.gal-model-info-motion').text(motionGroups.length);
+
+          // 延迟加载映射行（避免一次性渲染太多 DOM）
+          setTimeout(() => {
+            const $mappingContainer = $modal.find('#gal-mapping-rows');
+            if ($mappingContainer.length && !$mappingContainer.data('loaded')) {
+              const rowsHtml = buildMappingRows();
+              $mappingContainer.html(rowsHtml);
+              $mappingContainer.data('loaded', true);
+
+              // 设置选中值（必须在 DOM 插入后）
+              $mappingContainer.find('.gal-expr-mapping-select').each(function() {
+                const current = $(this).data('current');
+                if (current) $(this).val(current);
+              });
+              $mappingContainer.find('.gal-motion-mapping-select').each(function() {
+                const current = $(this).data('current');
+                const disabled = $(this).data('disabled');
+                if (disabled) {
+                  $(this).val('__disabled__');
+                } else if (current) {
+                  $(this).val(current);
+                }
+              });
+            }
+          }, 50);
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 加载模型数据失败:`, e);
+      }
+    };
+
+    const modalHtml = `
+      <div id="gal-live2d-settings-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100001; display: flex; align-items: center; justify-content: center;">
+        <div style="background: #fff; border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+          <!-- 头部 -->
+          <div style="padding: 16px 20px; background: linear-gradient(135deg, ${THEME.accent}, ${THEME.accentSub}); color: #fff; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; font-size: 1.1rem;">
+              <i class="fa-solid fa-cog"></i> Live2D 设置 - ${characterId}
+            </span>
+            <button id="gal-live2d-settings-close" style="background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer;">
+              <i class="fa-solid fa-times"></i>
+            </button>
+          </div>
+
+          <!-- 标签页导航 -->
+          <div style="display: flex; border-bottom: 1px solid #e0e0e0; background: #f8f8f8;">
+            <button class="gal-settings-tab active" data-tab="transform" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; font-weight: 600; color: ${THEME.accent}; border-bottom: 2px solid ${THEME.accent};">
+              常规设置
+            </button>
+            <button class="gal-settings-tab" data-tab="mapping" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; font-weight: 600; color: #666; border-bottom: 2px solid transparent;">
+              表情映射
+            </button>
+            <button class="gal-settings-tab" data-tab="quality" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; font-weight: 600; color: #666; border-bottom: 2px solid transparent;">
+              高级设置
+            </button>
+          </div>
+
+          <!-- 标签页内容 -->
+          <div style="flex: 1; overflow-y: auto; padding: 20px;">
+            <!-- 常规设置 -->
+            <div class="gal-settings-panel" data-panel="transform">
+              <div style="margin-bottom: 20px;">
+                <h4 style="margin: 0 0 12px 0; color: ${THEME.dark};">位置与大小</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                  <div>
+                    <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #333;">X 偏移 (像素)</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <button class="gal-offset-btn" data-dir="x" data-delta="-10" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">-10</button>
+                      <input type="number" id="gal-live2d-offset-x" value="${transformConfig.offsetX || 0}" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; text-align: center;">
+                      <button class="gal-offset-btn" data-dir="x" data-delta="10" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">+10</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #333;">Y 偏移 (像素)</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <button class="gal-offset-btn" data-dir="y" data-delta="-10" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">-10</button>
+                      <input type="number" id="gal-live2d-offset-y" value="${transformConfig.offsetY || 0}" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; text-align: center;">
+                      <button class="gal-offset-btn" data-dir="y" data-delta="10" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">+10</button>
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-top: 15px;">
+                  <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #333;">缩放倍率: <span id="gal-live2d-scale-value">${(transformConfig.scale || 1.0).toFixed(1)}x</span></label>
+                  <input type="range" id="gal-live2d-scale" min="0.5" max="2.0" step="0.1" value="${transformConfig.scale || 1.0}" style="width: 100%;">
+                </div>
+                <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button id="gal-live2d-reset-transform" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                    <i class="fa-solid fa-undo"></i> 重置为默认
+                  </button>
+                  <button id="gal-live2d-start-position-edit" style="padding: 8px 16px; background: linear-gradient(135deg, #00d2ff, #3a7bd5); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                    <i class="fa-solid fa-arrows-alt"></i> 开始调整位置
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- 表情映射 -->
+            <div class="gal-settings-panel" data-panel="mapping" style="display: none;">
+              <div style="margin-bottom: 15px;">
+                <h4 style="margin: 0 0 8px 0; color: ${THEME.dark};">表情标签映射</h4>
+                <p style="margin: 0; color: #666; font-size: 0.85rem;">将游戏表情标签映射到 Live2D 表情和动作。留空则使用自动匹配。</p>
+              </div>
+              <div id="gal-mapping-rows" style="max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px;">
+                <div style="text-align: center; padding: 30px; color: #999;">
+                  <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 10px; display: block;"></i>
+                  正在加载模型数据...
+                </div>
+              </div>
+              <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button id="gal-live2d-auto-match" style="padding: 8px 16px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
+                  <i class="fa-solid fa-magic"></i> 自动匹配全部
+                </button>
+                <button id="gal-live2d-clear-mapping" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                  <i class="fa-solid fa-trash"></i> 清空映射
+                </button>
+              </div>
+            </div>
+
+            <!-- 高级设置 -->
+            <div class="gal-settings-panel" data-panel="quality" style="display: none;">
+              <div style="margin-bottom: 20px;">
+                <h4 style="margin: 0 0 12px 0; color: ${THEME.dark};">纹理精度</h4>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="textureResolution" value="0.5" ${qualityConfig.textureResolution === 0.5 ? 'checked' : ''}>
+                    <span>低 (0.5x) - 加载更快，节省内存</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="textureResolution" value="1.0" ${(!qualityConfig.textureResolution || qualityConfig.textureResolution === 1.0) ? 'checked' : ''}>
+                    <span>正常 (1.0x) - 推荐</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="textureResolution" value="2.0" ${qualityConfig.textureResolution === 2.0 ? 'checked' : ''}>
+                    <span>高 (2.0x) - 画质更好，但加载较慢</span>
+                  </label>
+                </div>
+              </div>
+              <div style="margin-bottom: 20px;">
+                <h4 style="margin: 0 0 12px 0; color: ${THEME.dark};">设备像素比</h4>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="radio" name="devicePixelRatio" value="auto" ${(!qualityConfig.devicePixelRatio || qualityConfig.devicePixelRatio === 'auto') ? 'checked' : ''}>
+                    <span>自动</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="radio" name="devicePixelRatio" value="1.0" ${qualityConfig.devicePixelRatio === 1.0 ? 'checked' : ''}>
+                    <span>1.0</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="radio" name="devicePixelRatio" value="1.5" ${qualityConfig.devicePixelRatio === 1.5 ? 'checked' : ''}>
+                    <span>1.5</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="radio" name="devicePixelRatio" value="2.0" ${qualityConfig.devicePixelRatio === 2.0 ? 'checked' : ''}>
+                    <span>2.0</span>
+                  </label>
+                </div>
+              </div>
+              <div style="padding: 12px; background: #f8f8f8; border-radius: 8px;">
+                <h4 style="margin: 0 0 8px 0; color: ${THEME.dark}; font-size: 0.9rem;">模型信息</h4>
+                <p style="margin: 0; color: #666; font-size: 0.85rem;">
+                  表情数: <span class="gal-model-info-expr">-</span> | 动作组: <span class="gal-model-info-motion">-</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部按钮 -->
+          <div style="padding: 15px 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="gal-live2d-settings-cancel" style="padding: 10px 20px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer;">
+              取消
+            </button>
+            <button id="gal-live2d-settings-save" style="padding: 10px 20px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+              <i class="fa-solid fa-save"></i> 保存设置
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 移除已有弹窗
+    _$('#gal-live2d-settings-modal').remove();
+    _$(topWindow.document.body).append(modalHtml);
+
+    const $modal = _$('#gal-live2d-settings-modal');
+
+    // 启动异步加载模型数据（不阻塞弹窗显示）
+    loadModelDataAsync();
+
+    // 标签页切换
+    $modal.find('.gal-settings-tab').on('click', function() {
+      const tab = _$(this).data('tab');
+      $modal.find('.gal-settings-tab').removeClass('active').css({ color: '#666', borderBottom: '2px solid transparent' });
+      _$(this).addClass('active').css({ color: THEME.accent, borderBottom: `2px solid ${THEME.accent}` });
+      $modal.find('.gal-settings-panel').hide();
+      $modal.find(`.gal-settings-panel[data-panel="${tab}"]`).show();
+    });
+
+    // 缩放滑块 (基础绑定，完整功能在下方实时预览部分)
+    $modal.find('#gal-live2d-scale').on('input', function() {
+      const val = parseFloat(_$(this).val());
+      $modal.find('#gal-live2d-scale-value').text(val.toFixed(1) + 'x');
+    });
+
+    // 重置变换
+    $modal.find('#gal-live2d-reset-transform').on('click', function() {
+      $modal.find('#gal-live2d-offset-x').val(0);
+      $modal.find('#gal-live2d-offset-y').val(0);
+      $modal.find('#gal-live2d-scale').val(1.0);
+      $modal.find('#gal-live2d-scale-value').text('1.0x');
+      // 实时更新（若当前角色已在舞台上会立即生效）
+      Live2DManager.setOffset(characterId, 0, 0);
+      Live2DManager.setScale(characterId, 1.0);
+    });
+
+    // 偏移按钮
+    $modal.find('.gal-offset-btn').on('click', function() {
+      const dir = _$(this).data('dir');
+      const delta = parseInt(_$(this).data('delta'));
+      const $input = $modal.find(`#gal-live2d-offset-${dir}`);
+      $input.val(parseInt($input.val() || 0) + delta);
+      // 触发 change 事件
+      $input.trigger('change');
+    });
+    $modal.find('#gal-live2d-auto-match').on('click', function() {
+      if (!model) return;
+      $modal.find('.gal-expr-mapping-select').each(function() {
+        const tag = _$(this).data('tag');
+        const matched = matchLive2DExpression(model, tag, null);
+        if (matched) {
+          _$(this).val(matched);
+        }
+      });
+      $modal.find('.gal-motion-mapping-select').each(function() {
+        const tag = _$(this).data('tag');
+        const matched = matchLive2DMotion(model, tag, null);
+        if (matched) {
+          _$(this).val(matched.group);
+        }
+      });
+    });
+
+    // 清空映射
+    $modal.find('#gal-live2d-clear-mapping').on('click', function() {
+      $modal.find('.gal-expr-mapping-select').val('');
+      $modal.find('.gal-motion-mapping-select').val('');
+    });
+
+    // 关闭/取消
+    $modal.find('#gal-live2d-settings-close, #gal-live2d-settings-cancel').on('click', function() {
+      $modal.remove();
+    });
+
+    // 开始调整位置 - 关闭弹窗并进入位置调整模式
+    $modal.find('#gal-live2d-start-position-edit').on('click', async function() {
+      // 先应用当前弹窗中的设置
+      const currentTransform = {
+        offsetX: parseInt($modal.find('#gal-live2d-offset-x').val()) || 0,
+        offsetY: parseInt($modal.find('#gal-live2d-offset-y').val()) || 0,
+        scale: parseFloat($modal.find('#gal-live2d-scale').val()) || 1.0
+      };
+      const config = getLive2DConfig(characterId);
+      config.transform = currentTransform;
+      setLive2DConfig(characterId, config);
+
+      // 关闭弹窗
+      $modal.remove();
+
+      // 进入位置调整模式
+      await Live2DPositionEditor.enter(characterId);
+    });
+
+    // 保存设置
+    $modal.find('#gal-live2d-settings-save').on('click', function() {
+      // 收集变换设置
+      const newTransform = {
+        offsetX: parseInt($modal.find('#gal-live2d-offset-x').val()) || 0,
+        offsetY: parseInt($modal.find('#gal-live2d-offset-y').val()) || 0,
+        scale: parseFloat($modal.find('#gal-live2d-scale').val()) || 1.0
+      };
+
+      // 收集精度设置
+      const newQuality = {
+        textureResolution: parseFloat($modal.find('input[name="textureResolution"]:checked').val()) || 1.0,
+        devicePixelRatio: $modal.find('input[name="devicePixelRatio"]:checked').val()
+      };
+      if (newQuality.devicePixelRatio !== 'auto') {
+        newQuality.devicePixelRatio = parseFloat(newQuality.devicePixelRatio);
+      }
+
+      // 收集表情映射
+      const newExpressionMapping = {};
+      $modal.find('.gal-expr-mapping-select').each(function() {
+        const tag = _$(this).data('tag');
+        const val = _$(this).val();
+        if (val) {
+          newExpressionMapping[tag] = val;
+        }
+      });
+
+      // 收集动作映射
+      const newMotionMapping = {};
+      $modal.find('.gal-motion-mapping-select').each(function() {
+        const tag = _$(this).data('tag');
+        const val = _$(this).val();
+        if (val === '__disabled__') {
+          newMotionMapping[tag] = { enabled: false };
+        } else if (val) {
+          newMotionMapping[tag] = { group: val, index: 0, enabled: true };
+        }
+      });
+
+      // 保存配置
+      const newConfig = {
+        transform: newTransform,
+        quality: newQuality,
+        expressionMapping: newExpressionMapping,
+        motionMapping: newMotionMapping
+      };
+      setLive2DConfig(characterId, newConfig);
+
+      // 应用变换 (如果模型已加载)
+      if (Live2DManager.models.has(characterId)) {
+        Live2DManager.applyTransformConfig(characterId);
+      }
+
+      const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+      if (_toastr) {
+        _toastr.success(`Live2D 设置已保存: ${characterId}`);
+      }
+
+      $modal.remove();
+    });
+  }
+
   /**
    * 角色立绘编辑弹窗 - 显示指定角色的所有立绘，支持编辑和删除
    * @param {string} characterId - 角色ID
@@ -15083,6 +20328,14 @@ ${extraRule}
       // 获取该角色的所有立绘
       const allSprites = yield getAllSprites();
       const characterSpritesData = allSprites.filter(s => s.characterId === characterId);
+
+      // 异步获取 TTS 音色列表
+      const ttsVoiceList = yield getTTSVoiceListAsync();
+      const boundVoice = getCharacterTTSVoice(characterId);
+      const ttsVoiceOptions = ttsVoiceList
+        .map(v => `<option value="${v.name}" ${boundVoice === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`)
+        .join('');
+
       const modalHtml = `
       <div class="gal-input-modal" id="gal-character-sprites-modal">
         <div class="gal-input-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
@@ -15103,10 +20356,7 @@ ${extraRule}
               <select id="gal-char-tts-voice-select"
                       style="flex: 1; padding: 8px 12px; border: none; border-radius: 4px; font-size: 0.95rem; cursor: pointer;">
                 <option value="">-- 不绑定音色 --</option>
-                ${TTS_VOICE_LIST.map(v => {
-                  const boundVoice = getCharacterTTSVoice(characterId);
-                  return `<option value="${v.name}" ${boundVoice === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`;
-                }).join('')}
+                ${ttsVoiceOptions}
               </select>
               <button class="gal-action-btn" id="gal-char-tts-save-btn" style="padding: 8px 16px; font-size: 0.9rem; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); white-space: nowrap;">
                 <i class="fa-solid fa-check"></i> 保存
@@ -15114,6 +20364,56 @@ ${extraRule}
             </div>
             <small style="opacity: 0.9; margin-top: 8px; display: block; font-size: 0.8rem;">
               <i class="fa-solid fa-circle-info"></i> 绑定后AI会自动为该角色使用此音色配音
+            </small>
+          </div>
+
+          <!-- Live2D 设置 -->
+          <div id="gal-char-live2d-section" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #fff; padding: 15px 20px; border-radius: 10px; margin: 0 25px 15px 25px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              <i class="fa-solid fa-cube" style="font-size: 1.2rem;"></i>
+              <span style="font-weight: 600;">Live2D 模型</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="gal-char-live2d-toggle" data-char-id="${characterId}" style="margin-right: 6px; width: 16px; height: 16px;" disabled>
+                <span>启用 Live2D</span>
+              </label>
+              <button class="gal-action-btn" id="gal-char-live2d-upload" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3);">
+                <i class="fa-solid fa-upload"></i> 上传模型
+              </button>
+              <button class="gal-action-btn" id="gal-char-live2d-delete" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(220,53,69,0.8); color: #fff; border: none; display: none;">
+                <i class="fa-solid fa-trash"></i> 删除
+              </button>
+              <button class="gal-action-btn" id="gal-char-live2d-preview" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); display: none;">
+                <i class="fa-solid fa-eye"></i> 预览
+              </button>
+              <button class="gal-action-btn" id="gal-char-live2d-settings" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(0,210,255,0.3); color: #fff; border: 1px solid rgba(0,210,255,0.5); display: none;">
+                <i class="fa-solid fa-cog"></i> 设置
+              </button>
+              <span id="gal-char-live2d-status" style="font-size: 0.8rem; opacity: 0.9;"></span>
+            </div>
+            <!-- Live2D 预览区域 -->
+            <div id="gal-char-live2d-preview-container" style="display: none; margin-top: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; overflow: hidden; position: relative;">
+              <div id="gal-char-live2d-preview-canvas" style="width: 100%; height: 400px; position: relative;"></div>
+              <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+                <select id="gal-char-live2d-expr-select" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px;">
+                  <option value="">选择表情</option>
+                </select>
+                <select id="gal-char-live2d-motion-select" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px;">
+                  <option value="">选择动作</option>
+                </select>
+                <button id="gal-char-live2d-preview-close" style="padding: 4px 10px; font-size: 0.8rem; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; cursor: pointer;">
+                  <i class="fa-solid fa-times"></i> 关闭
+                </button>
+              </div>
+              <div style="position: absolute; bottom: 8px; left: 8px; display: flex; gap: 6px; align-items: center;">
+                <span style="color: #fff; font-size: 0.75rem;">缩放:</span>
+                <input type="range" id="gal-char-live2d-zoom" min="0.3" max="2" step="0.1" value="1" style="width: 100px;">
+                <span id="gal-char-live2d-zoom-value" style="color: #fff; font-size: 0.75rem; min-width: 35px;">100%</span>
+              </div>
+            </div>
+            <small style="opacity: 0.9; margin-top: 8px; display: block; font-size: 0.8rem;">
+              <i class="fa-solid fa-circle-info"></i> 上传 .zip 格式的 Live2D 模型包（支持 Cubism 2.1/3.x/4.x）
             </small>
           </div>
 
@@ -15196,8 +20496,16 @@ ${extraRule}
       $(mountRoot).append(modalHtml);
       const $modal = $(mountRoot).find('#gal-character-sprites-modal');
       // makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title').parent());
+      const cleanupLive2DStageMount = () => {
+        try {
+          if ($modal.find('#gal-char-live2d-preview-container').is(':visible')) {
+            Live2DStage.popMount();
+          }
+        } catch (e) {}
+      };
       // 统一关闭处理
       const handleClose = () => {
+        cleanupLive2DStageMount();
         $modal.remove();
         if (typeof onCloseCallback === 'function') {
           try {
@@ -15214,13 +20522,14 @@ ${extraRule}
       });
       // 返回资源管理器
       $('#gal-char-sprites-back').on('click', () => {
+        cleanupLive2DStageMount();
         $modal.remove();
         showAssetManagerModal();
       });
       // 添加表情
-      $('#gal-char-add-sprite-btn').on('click', () => {
+      $('#gal-char-add-sprite-btn').on('click', async () => {
         $modal.remove();
-        showSpriteUploadDialog(characterId, '默认', () => showCharacterSpritesModal(characterId));
+        await showSpriteUploadDialog(characterId, '默认', () => showCharacterSpritesModal(characterId));
       });
       // TTS音色保存按钮
       $('#gal-char-tts-save-btn').on('click', () => {
@@ -15235,13 +20544,236 @@ ${extraRule}
         $modal.remove();
         showCharacterSpritesModal(characterId);
       });
+
+      // ========== Live2D 控件事件 ==========
+      // 初始化 Live2D 区域状态
+      (async () => {
+        const hasModel = await hasLive2DModel(characterId);
+        const useLive2D = getCharacterUseLive2D(characterId);
+        const $toggle = $('#gal-char-live2d-toggle');
+        const $uploadBtn = $('#gal-char-live2d-upload');
+        const $deleteBtn = $('#gal-char-live2d-delete');
+        const $previewBtn = $('#gal-char-live2d-preview');
+        const $settingsBtn = $('#gal-char-live2d-settings');
+        const $status = $('#gal-char-live2d-status');
+
+        $toggle.prop('disabled', !hasModel);
+        $toggle.prop('checked', useLive2D && hasModel);
+        $uploadBtn.html(hasModel ? '<i class="fa-solid fa-sync"></i> 更换模型' : '<i class="fa-solid fa-upload"></i> 上传模型');
+        $deleteBtn.css('display', hasModel ? '' : 'none');
+        $previewBtn.css('display', hasModel ? '' : 'none');
+        $settingsBtn.css('display', hasModel ? '' : 'none');
+
+        if (hasModel) {
+          const modelData = await getLive2DModel(characterId);
+          if (modelData) {
+            const sizeMB = (modelData.fileSize / 1024 / 1024).toFixed(1);
+            $status.text(`(${sizeMB} MB)`);
+          }
+        }
+      })();
+
+      // Live2D 开关切换
+      $('#gal-char-live2d-toggle').on('change', function() {
+        const useLive2D = this.checked;
+        setCharacterUseLive2D(characterId, useLive2D);
+        showToast(useLive2D ? `已启用 ${characterId} 的 Live2D` : `已禁用 ${characterId} 的 Live2D`);
+      });
+
+      // Live2D 上传按钮
+      $('#gal-char-live2d-upload').on('click', function() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.zip';
+
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const $status = $('#gal-char-live2d-status');
+          const $uploadBtn = $('#gal-char-live2d-upload');
+
+          try {
+            $status.text('上传中...');
+            $uploadBtn.prop('disabled', true);
+
+            await Live2DUploader.uploadZip(file, characterId);
+
+            showToast(`Live2D 模型上传成功: ${characterId}`);
+
+            // 清理已加载的模型缓存
+            if (Live2DManager.models.has(characterId)) {
+              Live2DManager.cleanup(characterId);
+            }
+
+            // 刷新界面
+            $modal.remove();
+            showCharacterSpritesModal(characterId);
+          } catch (err) {
+            console.error(`[${SCRIPT_NAME}] Live2D 上传失败:`, err);
+            showToast(`上传失败: ${err.message}`, 'error');
+            $status.text('上传失败');
+            $uploadBtn.prop('disabled', false);
+          }
+        };
+
+        input.click();
+      });
+
+      // Live2D 删除按钮
+      $('#gal-char-live2d-delete').on('click', async function() {
+        if (!confirm(`确定删除角色 "${characterId}" 的 Live2D 模型吗？`)) return;
+
+        try {
+          await deleteLive2DModel(characterId);
+          setCharacterUseLive2D(characterId, false);
+
+          if (Live2DManager.models.has(characterId)) {
+            Live2DManager.cleanup(characterId);
+          }
+
+          showToast('Live2D 模型已删除');
+
+          // 刷新界面
+          $modal.remove();
+          showCharacterSpritesModal(characterId);
+        } catch (err) {
+          console.error(`[${SCRIPT_NAME}] Live2D 删除失败:`, err);
+          showToast(`删除失败: ${err.message}`, 'error');
+        }
+      });
+
+      // Live2D 预览按钮
+      $('#gal-char-live2d-preview').on('click', async function() {
+        const $previewContainer = $('#gal-char-live2d-preview-container');
+        const $previewCanvas = $('#gal-char-live2d-preview-canvas');
+        const $exprSelect = $('#gal-char-live2d-expr-select');
+        const $motionSelect = $('#gal-char-live2d-motion-select');
+        const $zoomSlider = $('#gal-char-live2d-zoom');
+        const $zoomValue = $('#gal-char-live2d-zoom-value');
+
+        // 切换显示状态
+        if ($previewContainer.is(':visible')) {
+          // 关闭预览
+          Live2DStage.popMount();
+          $previewContainer.hide();
+          return;
+        }
+
+        // 显示预览
+        $previewContainer.show();
+        $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fff;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem;"></i></div>');
+
+        // 重置缩放滑块
+        $zoomSlider.val(1);
+        $zoomValue.text('100%');
+
+        try {
+          // 加载模型
+          const model = await Live2DManager.loadModel(characterId);
+          if (!model) {
+            $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">模型加载失败</div>');
+            return;
+          }
+
+          // 清空并渲染
+          $previewCanvas.empty();
+          Live2DStage.pushMount($previewCanvas[0], { mode: 'single', focusCharacterId: characterId });
+          if (!Live2DStage.attach(characterId, model, 'left', { entering: false })) {
+            Live2DStage.popMount();
+            $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败：无法挂载舞台</div>');
+            return;
+          }
+
+          // 填充表情选择列表
+          const expressions = getLive2DExpressionList(characterId);
+          $exprSelect.empty().append('<option value="">选择表情</option>');
+          if (expressions.length > 0) {
+            expressions.forEach(expr => {
+              $exprSelect.append(`<option value="${expr}">${expr}</option>`);
+            });
+          } else {
+            $exprSelect.append('<option value="" disabled>无可用表情</option>');
+          }
+
+          // 填充动作选择列表
+          const motionGroups = getLive2DMotionGroups(characterId);
+          $motionSelect.empty().append('<option value="">选择动作</option>');
+          if (motionGroups.length > 0) {
+            motionGroups.forEach(group => {
+              $motionSelect.append(`<option value="${group}">${group}</option>`);
+            });
+          } else {
+            $motionSelect.append('<option value="" disabled>无可用动作</option>');
+          }
+
+          console.log(`[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情: ${expressions.length}, 动作组: ${motionGroups.length}`);
+        } catch (err) {
+          console.error(`[${SCRIPT_NAME}] Live2D 预览失败:`, err);
+          $previewCanvas.html(`<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败: ${err.message}</div>`);
+        }
+      });
+
+      // Live2D 预览关闭按钮
+      $('#gal-char-live2d-preview-close').on('click', function() {
+        const $previewContainer = $('#gal-char-live2d-preview-container');
+        Live2DStage.popMount();
+        $previewContainer.hide();
+      });
+
+      // Live2D 缩放控制
+      $('#gal-char-live2d-zoom').on('input', function() {
+        const zoomFactor = parseFloat($(this).val());
+        $('#gal-char-live2d-zoom-value').text(Math.round(zoomFactor * 100) + '%');
+        Live2DManager.setZoom(characterId, zoomFactor);
+      });
+
+      // Live2D 表情选择
+      $('#gal-char-live2d-expr-select').on('change', function() {
+        const value = $(this).val();
+        if (!value) return;
+
+        const model = Live2DManager.models.get(characterId);
+        if (!model) return;
+
+        // 直接调用模型的表情方法
+        try {
+          model.expression(value);
+          console.log(`[${SCRIPT_NAME}] 设置表情: ${value}`);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] 表情设置失败:`, e);
+        }
+      });
+
+      // Live2D 动作选择
+      $('#gal-char-live2d-motion-select').on('change', function() {
+        const value = $(this).val();
+        if (!value) return;
+
+        const model = Live2DManager.models.get(characterId);
+        if (!model) return;
+
+        // 直接调用模型的动作方法
+        try {
+          model.motion(value, 0, 'FORCE');
+          console.log(`[${SCRIPT_NAME}] 播放动作: ${value}`);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] 动作播放失败:`, e);
+        }
+      });
+
+      // Live2D 设置按钮
+      $('#gal-char-live2d-settings').on('click', async function() {
+        await showLive2DSettingsModal(characterId);
+      });
+
       // 点击立绘卡片编辑
-      $modal.find('.gal-sprite-card').on('click', function (e) {
+      $modal.find('.gal-sprite-card').on('click', async function (e) {
         if ($(e.target).closest('.gal-sprite-delete').length) return; // 忽略删除按钮点击
         const charId = $(this).data('char');
         const expr = $(this).data('expr');
         $modal.remove();
-        showSpriteUploadDialog(charId, expr, () => showCharacterSpritesModal(charId));
+        await showSpriteUploadDialog(charId, expr, () => showCharacterSpritesModal(charId));
       });
       // 删除立绘
       $modal.find('.gal-sprite-delete').on('click', function (e) {
@@ -17298,9 +22830,9 @@ ${extraRule}
           });
           // 手动添加立绘
           // 手动添加立绘（单个）
-          $('#gal-add-sprite').on('click', () => {
+          $('#gal-add-sprite').on('click', async () => {
             $modal.remove();
-            showSpriteUploadDialog('default', '默认', () => showSpriteConfigModal());
+            await showSpriteUploadDialog('default', '默认', () => showSpriteConfigModal());
           });
           // 批量添加立绘按钮
           $('#gal-batch-add-sprite').on('click', () => {
@@ -19477,8 +25009,14 @@ ${extraRule}
         yield loadAllBackgroundsToCache();
         SpriteManager.init(); // 初始化立绘管理器（获取主角名称）
         injectStyles();
+        // ★ 在注册事件监听器之前，先重置生成状态（防止刷新时的事件误触发）
+        resetGenerationState('页面初始化（事件注册前）');
+
         // 延迟添加按钮和启动监听器
         setTimeout(() => {
+          // ★ 再次重置状态（双重保险）
+          resetGenerationState('页面初始化（延迟执行）');
+
           // ★ 延迟后重新检查角色卡状态（此时角色卡应该已加载）
           isEnabled = isCurrentCharEnabled();
           console.log(`[${SCRIPT_NAME}] 当前角色ID: ${getCurrentCharId()}, Galgame模式: ${isEnabled ? '开' : '关'}`);
@@ -19522,6 +25060,15 @@ ${extraRule}
           if (typeof topWindow.eventOn === 'function' && topWindow.tavern_events) {
             topWindow.eventOn(topWindow.tavern_events.MESSAGE_RECEIVED, messageId => {
               console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件触发, messageId: ${messageId}`);
+
+              // ★ 记录等待的消息ID
+              generationState.pendingMessageId = messageId;
+
+              // ★ 结合 SillyTavern 状态验证生成是否真的完成
+              setTimeout(() => {
+                verifyGenerationComplete(messageId);
+              }, VERIFICATION_DELAY_MS);
+
               if (!isEnabled) return;
               // 延迟处理确保DOM更新
               setTimeout(() => {
@@ -19551,6 +25098,8 @@ ${extraRule}
             console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件监听已注册`);
             // 监听角色卡切换，更新开关状态
             topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, () => {
+              // ★ 切换聊天时重置生成状态
+              resetGenerationState('切换聊天');
               const newEnabled = isCurrentCharEnabled();
               if (newEnabled !== isEnabled) {
                 isEnabled = newEnabled;
@@ -19640,7 +25189,7 @@ ${extraRule}
         return;
       }
 
-      if (stlet.currentIndex > 0) {
+      if (state.currentIndex > 0) {
         // ★ TTS: 快退时停止当前播放
         TTSManager.stop();
         state.currentIndex--;
@@ -19793,4 +25342,21 @@ ${extraRule}
   } else {
     topWindow.addEventListener('load', init);
   }
+
+  // ============================================
+  // 全局导出 (用于外部访问)
+  // ============================================
+  topWindow.LipSyncManager = LipSyncManager;
+  topWindow.Live2DManager = Live2DManager;
+  topWindow.TTSManager = TTSManager;
+  topWindow.BGMManager = BGMManager;
+
+  // 导出到 galgame 命名空间 (推荐使用此方式)
+  topWindow.galgame = topWindow.galgame || {};
+  topWindow.galgame.LipSyncManager = LipSyncManager;
+  topWindow.galgame.Live2DManager = Live2DManager;
+  topWindow.galgame.TTSManager = TTSManager;
+  topWindow.galgame.BGMManager = BGMManager;
+
+  console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager}`);
 })();

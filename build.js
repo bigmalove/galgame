@@ -11,7 +11,6 @@ const DIR = __dirname;
 const CSS_FILE = path.join(DIR, '数据库界面插件.css');
 const JS_SOURCE = path.join(DIR, '数据库界面插件.js');
 const JS_DIST1 = path.join(DIR, 'dist', '数据库界面插件.dist.js');
-const JS_DIST2 = path.join(DIR, '数据库界面插件.dist.js');
 
 console.log('🔨 开始构建...');
 
@@ -45,9 +44,8 @@ if (!js.includes('__CSS_PLACEHOLDER__')) {
 
 js = js.replace('__CSS_PLACEHOLDER__', processedCss);
 
-// 写入发布文件到两个位置
+// 写入发布文件
 fs.writeFileSync(JS_DIST1, js, 'utf8');
-fs.writeFileSync(JS_DIST2, js, 'utf8');
 
 // 统计信息
 const cssSize = (css.length / 1024).toFixed(1);
@@ -63,4 +61,3 @@ console.log(`   JS 发布版:    ${jsDistSize} KB`);
 console.log('');
 console.log('📁 输出文件:');
 console.log(`   ${JS_DIST1}`);
-console.log(`   ${JS_DIST2}`);

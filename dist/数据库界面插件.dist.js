@@ -486,7 +486,53 @@ const __awaiter =
     containers: new Map(),    // characterId -> { app, canvas }
     loadingModels: new Map(), // characterId -> Promise<PIXI.Live2DModel|null>
     renderLocks: new Map(),   // characterId -> Promise<void>
+    cachedDetachedAt: new Map(), // characterId -> timestamp (已退场缓存)
+    maxDetachedCache: 3,
     isReady: false,
+
+    _markModelActive(characterId) {
+      this.cachedDetachedAt.delete(characterId);
+    },
+
+    _destroyModel(characterId, reason = 'cleanup') {
+      const model = this.models.get(characterId);
+      if (!model) {
+        this.cachedDetachedAt.delete(characterId);
+        this.containers.delete(characterId);
+        return false;
+      }
+      try {
+        if (model.parent) {
+          model.parent.removeChild(model);
+        }
+        model.destroy();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 销毁模型失败 (${characterId}, ${reason})`, e);
+      }
+      this.models.delete(characterId);
+      this.containers.delete(characterId);
+      this.loadingModels.delete(characterId);
+      this.cachedDetachedAt.delete(characterId);
+      return true;
+    },
+
+    _evictDetachedModels() {
+      if (this.cachedDetachedAt.size <= this.maxDetachedCache) return;
+      const sorted = Array.from(this.cachedDetachedAt.entries()).sort((a, b) => a[1] - b[1]);
+      while (this.cachedDetachedAt.size > this.maxDetachedCache && sorted.length > 0) {
+        const [characterId] = sorted.shift();
+        this._destroyModel(characterId, 'cache-evict');
+        console.log(`[${SCRIPT_NAME}] Live2DManager: 缓存淘汰模型 ${characterId}`);
+      }
+    },
+
+    releaseCharacter(characterId) {
+      this._cleanupContainer(characterId);
+      if (!this.models.has(characterId)) return false;
+      this.cachedDetachedAt.set(characterId, Date.now());
+      this._evictDetachedModels();
+      return true;
+    },
 
     _normalizeTransform(characterId, transformConfig, containerWidth, containerHeight) {
       const safeTransform = {
@@ -595,19 +641,11 @@ const __awaiter =
 
       // 如果强制重新加载，先销毁旧模型
       if (forceReload && this.models.has(characterId)) {
-        const oldModel = this.models.get(characterId);
-        try {
-          if (oldModel.parent) {
-            oldModel.parent.removeChild(oldModel);
-          }
-          oldModel.destroy();
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: 销毁旧模型失败:`, e);
-        }
-        this.models.delete(characterId);
+        this._destroyModel(characterId, 'force-reload');
       }
 
       if (this.models.has(characterId)) {
+        this._markModelActive(characterId);
         return this.models.get(characterId);
       }
 
@@ -697,6 +735,7 @@ const __awaiter =
         }
 
         this.models.set(characterId, model);
+        this._markModelActive(characterId);
         console.log(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
         return model;
       })()
@@ -1020,6 +1059,7 @@ const __awaiter =
             Live2DStage.attach(characterId, model, 'left', { entering: false });
           }
 
+          this._markModelActive(characterId);
           return true;
         }
 
@@ -1414,17 +1454,11 @@ const __awaiter =
 
     cleanup(characterId) {
       this._cleanupContainer(characterId);
-      const model = this.models.get(characterId);
-      if (model) {
-        try {
-          model.destroy();
-        } catch (e) {}
-        this.models.delete(characterId);
-      }
+      this._destroyModel(characterId, 'cleanup');
     },
 
     cleanupAll() {
-      for (const charId of this.models.keys()) {
+      for (const charId of Array.from(this.models.keys())) {
         this.cleanup(charId);
       }
     },
@@ -8536,8 +8570,8 @@ ${extraRule}
             // 动画结束后移除元素
             setTimeout(() => {
               info.element.remove();
-              // 角色退场后清理其 Live2D/动画资源，避免残留 WebGL 资源污染
-              Live2DManager.cleanup(charId);
+              // 角色退场后优先进入缓存，便于后续快速返场
+              Live2DManager.releaseCharacter(charId);
               SpriteAnimationManager.cleanup(charId);
             }, 400);
           }
@@ -8632,7 +8666,7 @@ ${extraRule}
             if (oldInfo?.element) {
               oldInfo.element.remove();
             }
-            Live2DManager.cleanup(oldCharIdInSlot);
+            Live2DManager.releaseCharacter(oldCharIdInSlot);
             SpriteAnimationManager.cleanup(oldCharIdInSlot);
             this.activeCharacters.delete(oldCharIdInSlot);
             this.characterQueue = this.characterQueue.filter(id => id !== oldCharIdInSlot);

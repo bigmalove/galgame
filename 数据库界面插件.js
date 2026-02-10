@@ -21313,6 +21313,113 @@ ${extraRule}
                 开启：对话格式含TTS属性，表情在开头<br>
                 关闭：简单对话格式，表情在结尾
               </p>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">TTS引擎</span>
+                <select id="gal-tts-provider" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
+                  <option value="littlewhitebox" ${settings.ttsProvider === 'littlewhitebox' ? 'selected' : ''}>小白X（豆包火山）</option>
+                  <option value="gpt_sovits_v2" ${settings.ttsProvider === 'gpt_sovits_v2' ? 'selected' : ''}>GPT-SoVITS v2ProPlus</option>
+                </select>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">自动播放 <small style="color:#999;">(切段自动朗读)</small></span>
+                <label class="gal-switch">
+                  <input type="checkbox" id="gal-tts-autoplay" ${settings.ttsAutoPlay ? 'checked' : ''}>
+                  <span class="gal-switch-slider"></span>
+                </label>
+              </div>
+
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">默认音色 <small style="color:#999;">(未指定/未绑定时)</small></span>
+                <select id="gal-tts-default-speaker" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
+                  <option value="">（不指定）</option>
+                </select>
+              </div>
+              <p id="gal-tts-default-speaker-hint" style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;"></p>
+
+              <div id="gal-gpt-sovits-config" style="margin-top: 10px; padding: 12px; border: 1px dashed #ddd; border-radius: 8px; background: #fafafa; ${settings.ttsProvider === 'gpt_sovits_v2' ? '' : 'display: none;'}">
+                <div style="font-weight: 700; margin-bottom: 10px; color: ${THEME.dark}; display:flex; align-items:center; gap:8px;">
+                  <i class="fa-solid fa-microchip" style="color:${THEME.accent};"></i>
+                  <span>GPT-SoVITS（api_v2.py）设置</span>
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">API地址</span>
+                  <input type="text" id="gal-gpt-sovits-url" value="${settings.gptSoVits?.apiUrl || ''}"
+                         placeholder="http://127.0.0.1:9880"
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">使用酒馆代理 <small style="color:#999;">(建议开)</small></span>
+                  <label class="gal-switch">
+                    <input type="checkbox" id="gal-gpt-sovits-proxy" ${settings.gptSoVits?.useCorsProxy ? 'checked' : ''}>
+                    <span class="gal-switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">text_lang</span>
+                  <input type="text" id="gal-gpt-sovits-text-lang" value="${settings.gptSoVits?.textLang || 'auto'}"
+                         placeholder="auto/zh/en/ja..."
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">切分策略</span>
+                  <input type="text" id="gal-gpt-sovits-split" value="${settings.gptSoVits?.textSplitMethod || 'cut5'}"
+                         placeholder="cut5"
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">media_type</span>
+                  <select id="gal-gpt-sovits-media-type" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 160px;">
+                    <option value="wav" ${(settings.gptSoVits?.mediaType || 'wav') === 'wav' ? 'selected' : ''}>wav</option>
+                    <option value="ogg" ${(settings.gptSoVits?.mediaType || '') === 'ogg' ? 'selected' : ''}>ogg</option>
+                    <option value="raw" ${(settings.gptSoVits?.mediaType || '') === 'raw' ? 'selected' : ''}>raw</option>
+                  </select>
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">streaming_mode</span>
+                  <label class="gal-switch">
+                    <input type="checkbox" id="gal-gpt-sovits-streaming" ${(settings.gptSoVits?.streamingMode ?? true) ? 'checked' : ''}>
+                    <span class="gal-switch-slider"></span>
+                  </label>
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">speed_factor</span>
+                  <input type="number" id="gal-gpt-sovits-speed" value="${settings.gptSoVits?.speedFactor ?? 1}"
+                         min="0.5" max="2" step="0.05"
+                         style="width: 120px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
+                <div style="margin-top: 10px;">
+                  <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">音色列表（JSON）</div>
+                  <textarea id="gal-gpt-sovits-voices-json" rows="6"
+                            placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh"}]'
+                            style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 0.8rem;"></textarea>
+                  <div style="display:flex; gap:10px; margin-top: 10px;">
+                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-voices-save" style="flex: 1; padding: 10px;">
+                      <i class="fa-solid fa-floppy-disk"></i>
+                      <span>保存音色列表</span>
+                    </button>
+                    <button class="gal-panel-btn" id="gal-gpt-sovits-test" style="flex: 1; padding: 10px;">
+                      <i class="fa-solid fa-play"></i>
+                      <span>试听</span>
+                    </button>
+                  </div>
+                  <input type="text" id="gal-gpt-sovits-test-text" value="你好，这是一段 GPT-SoVITS 配音测试。"
+                         style="width: 100%; margin-top: 10px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem;"
+                         placeholder="试听文本">
+                  <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
+                    提示：需要 GPT-SoVITS 运行 <code>api_v2.py</code>，并确保可从酒馆访问（CORS 或开启代理）。
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div class="gal-settings-divider"></div>
@@ -21718,6 +21825,48 @@ ${extraRule}
       $(getModalMountRoot()).append(panelHtml);
       const $panel = $('#gal-settings-panel');
       // makeDraggable($panel.find('.gal-config-panel'), $panel.find('.gal-config-header'));
+
+      // ===== TTS 选项动态填充（音色列表异步获取） =====
+      const refreshTtsVoiceOptions = async () => {
+        const $sel = $('#gal-tts-default-speaker');
+        const $hint = $('#gal-tts-default-speaker-hint');
+        if (!$sel.length) return;
+
+        let voiceList = [];
+        try {
+          voiceList = await getTTSVoiceListAsync();
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] 获取TTS音色列表失败:`, e);
+        }
+
+        const current = settings.ttsDefaultSpeaker || '';
+        $sel.empty();
+        $sel.append('<option value="">（不指定）</option>');
+        voiceList.forEach(v => {
+          const desc = v.desc ? ` (${v.desc})` : '';
+          $sel.append(`<option value="${v.name}">${v.name}${desc}</option>`);
+        });
+        $sel.val(current);
+
+        const provider = getTTSProvider();
+        const providerHint =
+          provider === TTS_PROVIDER.GPT_SOVITS_V2
+            ? 'GPT-SoVITS：建议把音色 name 设为角色名，未指定/未绑定时可自动按角色名解析。'
+            : 'LittleWhiteBox：未指定/未绑定时使用此默认音色。';
+        const emptyHint = voiceList.length === 0 ? '（当前音色列表为空）' : '';
+        if ($hint.length) $hint.text(providerHint + emptyHint);
+      };
+
+      // GPT-SoVITS 音色 JSON 文本框初始化
+      if ($('#gal-gpt-sovits-voices-json').length) {
+        try {
+          $('#gal-gpt-sovits-voices-json').val(JSON.stringify(settings.gptSoVits?.voices || [], null, 2));
+        } catch (e) {
+          $('#gal-gpt-sovits-voices-json').val('[]');
+        }
+      }
+
+      refreshTtsVoiceOptions();
       // 关闭
       $('#gal-settings-close').on('click', () => $panel.remove());
       $panel.on('click', function (e) {
@@ -22090,6 +22239,120 @@ ${extraRule}
         injectCOTToWorldbook().then(() => {
           showToast(enabled ? 'TTS已启用，COT已更新' : 'TTS已关闭，COT已更新');
         });
+      });
+
+      // TTS 引擎/自动播放/默认音色
+      $('#gal-tts-provider').on('change', async function () {
+        settings.ttsProvider = $(this).val();
+        saveSettings();
+
+        // 显示/隐藏 GPT-SoVITS 区域
+        $('#gal-gpt-sovits-config').toggle(settings.ttsProvider === TTS_PROVIDER.GPT_SOVITS_V2);
+
+        // 刷新 TTSManager provider 状态
+        try { TTSManager._refreshProviderState(); } catch (e) {}
+
+        await refreshTtsVoiceOptions();
+
+        // provider 切换会影响 COT 中的音色列表，自动更新一次
+        injectCOTToWorldbook()
+          .then(() => showToast('TTS引擎已切换，COT已更新'))
+          .catch(() => showToast('TTS引擎已切换'));
+      });
+
+      $('#gal-tts-autoplay').on('change', function () {
+        settings.ttsAutoPlay = $(this).is(':checked');
+        saveSettings();
+      });
+
+      $('#gal-tts-default-speaker').on('change', function () {
+        settings.ttsDefaultSpeaker = $(this).val();
+        saveSettings();
+      });
+
+      // GPT-SoVITS 配置项
+      $('#gal-gpt-sovits-url').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        settings.gptSoVits.apiUrl = $(this).val().trim();
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-proxy').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        settings.gptSoVits.useCorsProxy = $(this).is(':checked');
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-text-lang').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        settings.gptSoVits.textLang = $(this).val().trim() || 'auto';
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-split').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        settings.gptSoVits.textSplitMethod = $(this).val().trim() || 'cut5';
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-media-type').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        settings.gptSoVits.mediaType = $(this).val();
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-streaming').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        settings.gptSoVits.streamingMode = $(this).is(':checked');
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-speed').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        const v = parseFloat($(this).val());
+        settings.gptSoVits.speedFactor = isFinite(v) ? v : 1;
+        saveSettings();
+      });
+
+      $('#gal-gpt-sovits-voices-save').on('click', async function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        const raw = $('#gal-gpt-sovits-voices-json').val() || '[]';
+        let parsed = null;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (e) {
+          showToast('音色列表 JSON 解析失败');
+          return;
+        }
+        if (!Array.isArray(parsed)) {
+          showToast('音色列表必须是数组');
+          return;
+        }
+        settings.gptSoVits.voices = parsed;
+        saveSettings();
+
+        await refreshTtsVoiceOptions();
+
+        injectCOTToWorldbook()
+          .then(() => showToast('GPT-SoVITS 音色列表已保存，COT已更新'))
+          .catch(() => showToast('GPT-SoVITS 音色列表已保存'));
+      });
+
+      $('#gal-gpt-sovits-test').on('click', () => {
+        if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) {
+          showToast('请先将 TTS 引擎切换为 GPT-SoVITS');
+          return;
+        }
+
+        const text = ($('#gal-gpt-sovits-test-text').val() || '').trim() || '你好，这是一段 GPT-SoVITS 配音测试。';
+        const selectedVoice = $('#gal-tts-default-speaker').val();
+        const gptVoices = getGptSoVitsVoiceList();
+        const fallbackVoice = gptVoices[0]?.name || '';
+        const voiceName = selectedVoice || fallbackVoice;
+        if (!voiceName) {
+          showToast('请先配置 GPT-SoVITS 音色列表');
+          return;
+        }
+
+        TTSManager.stop();
+        TTSManager.speak(
+          { type: 'dialogue', speaker: '', text, tts: { speaker: voiceName } },
+          `gpt_sovits_test_${Date.now()}`,
+        );
       });
       // 立绘管理
       $('#gal-open-sprite-manager').on('click', () => {

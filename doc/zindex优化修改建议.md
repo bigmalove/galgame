@@ -133,3 +133,22 @@
 - 移动端：`#gal-history-modal`、资源管理器下拉菜单、Live2D 设置弹窗显示层级正确
 - 不再出现 `2147483647/2147483648` 硬编码
 
+---
+
+## 8. 实施进度（2026-02-10）
+
+### 已完成
+
+- 阶段 A：
+  - 已建立统一 z-index token（`--gal-z-overlay / --gal-z-dropdown / --gal-z-toast / --gal-z-modal / --gal-z-modal-critical`）
+  - 已将高风险硬编码值替换为 token（包括 `2147483647/2147483648`）
+- 阶段 B：
+  - 关键弹窗已从 JS 内联 z-index 改为 class（如 `gal-z-modal / gal-z-critical / gal-z-dropdown`）
+  - 关键弹窗与工具层已统一挂载到 `getModalMountRoot()`
+- 阶段 C：
+  - 移动端 `#gal-history-modal` 多段重复补丁已合并为单段规则，降低覆盖竞态风险
+
+### 待继续（可选优化）
+
+- 逐步减少非必要 `!important`（保留跨容器强制覆盖场景）
+- 对移动端 `@media (max-width: 48rem)` 做进一步分组重排，提升可维护性

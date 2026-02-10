@@ -2965,7 +2965,7 @@ const __awaiter =
           transform: translate(-50%, -50%);
           width: ${slotWidth}px;
           height: ${slotHeight}px;
-          z-index: 1000;
+          z-index: var(--gal-z-dropdown);
           pointer-events: none;
           border: 2px dashed rgba(0, 210, 255, 0.5);
           border-radius: 8px;
@@ -3138,7 +3138,7 @@ const __awaiter =
           flex-direction: column;
           gap: 12px;
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-          z-index: 100002;
+          z-index: var(--gal-z-modal-critical);
           color: #fff;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           border: 1px solid rgba(255, 255, 255, 0.15);
@@ -10980,6 +10980,21 @@ ${extraRule}
          Galgame 界面插件 - Cyber Pop 全屏沉浸式主题
          ═══════════════════════════════════════════════════════════════ */
 
+      /* z-index 统一层级 token（先保持兼容数值，后续可继续收敛） */
+      :root {
+        --gal-z-overlay: 10000;
+        --gal-z-dropdown: 1000;
+        --gal-z-toast: 100000;
+        --gal-z-modal: 100001;
+        --gal-z-modal-critical: 100002;
+      }
+
+      .gal-z-overlay { z-index: var(--gal-z-overlay) !important; }
+      .gal-z-dropdown { z-index: var(--gal-z-dropdown) !important; }
+      .gal-z-toast { z-index: var(--gal-z-toast) !important; }
+      .gal-z-modal { z-index: var(--gal-z-modal) !important; }
+      .gal-z-critical { z-index: var(--gal-z-modal-critical) !important; }
+
       /* 全局Galgame界面层 - 默认内联模式（在#chat内） */
       #gal-global-overlay {
         position: relative !important;
@@ -11022,7 +11037,7 @@ ${extraRule}
         height: 100vh !important;
         max-height: none !important;
         min-height: 100vh !important;
-        z-index: 10000 !important;
+        z-index: var(--gal-z-overlay) !important;
         border-radius: 0 !important;
         margin: 0 !important;
         box-shadow: none !important;
@@ -12146,7 +12161,7 @@ ${extraRule}
         top: 0; left: 0; right: 0; bottom: 0;
         background: rgba(0,0,0,0.5);
         backdrop-filter: blur(0.25rem);
-        z-index: 100001 !important;
+        z-index: var(--gal-z-modal) !important;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -12155,7 +12170,7 @@ ${extraRule}
 
       /* Live2D 设置弹窗 - 确保最高层级 */
       #gal-live2d-settings-modal {
-        z-index: 2147483647 !important;
+        z-index: var(--gal-z-modal-critical) !important;
       }
 
       @keyframes galFadeIn {
@@ -12221,7 +12236,7 @@ ${extraRule}
         font-weight: 600;
         transform: skewX(-5deg);
         box-shadow: 0.313rem 0.313rem 0 ${THEME.accent};
-        z-index: 100000;
+        z-index: var(--gal-z-toast);
         animation: galToastIn 0.3s ease;
       }
 
@@ -12242,7 +12257,7 @@ ${extraRule}
         top: 0; left: 0; right: 0; bottom: 0;
         background: rgba(0,0,0,0.6);
         backdrop-filter: blur(0.375rem);
-        z-index: 100002 !important; /* Fix: Ensure it's above fullscreen overlay (99999) */
+        z-index: var(--gal-z-modal-critical) !important; /* Fix: Ensure it's above fullscreen overlay (99999) */
         display: flex;
         align-items: center;
         justify-content: center;
@@ -12250,7 +12265,7 @@ ${extraRule}
 
       /* 远程压缩导入进度遮罩层 - 强制置顶显示 */
       .gal-import-progress-overlay {
-        z-index: 2147483647 !important;
+        z-index: var(--gal-z-modal-critical) !important;
       }
 
       /* 移动端：进度框下移，避免过靠上 */
@@ -12571,7 +12586,7 @@ ${extraRule}
         width: 100% !important;
         height: 100% !important;
         background: rgba(0, 0, 0, 0.4) !important;
-        z-index: 2147483647 !important;
+        z-index: var(--gal-z-modal-critical) !important;
         display: none;
         flex-direction: column;
         justify-content: center;
@@ -12812,7 +12827,7 @@ ${extraRule}
         top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
         background: rgba(0,0,0,0.85) !important;
         backdrop-filter: blur(0.313rem) !important;
-        z-index: 2147483647 !important;
+        z-index: var(--gal-z-modal-critical) !important;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -12957,7 +12972,7 @@ ${extraRule}
         left: 0 !important;
         width: 100% !important;
         height: 100% !important;
-        z-index: 2147483647 !important;
+        z-index: var(--gal-z-modal-critical) !important;
         display: none;
       }
 
@@ -13065,7 +13080,7 @@ ${extraRule}
         right: auto;
         color: rgba(255,255,255,0.95);
       }
-@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal, #gal-live2d-settings-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: 2147483647 !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
+@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal, #gal-live2d-settings-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: var(--gal-z-modal-critical) !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
 @media screen and (max-width: 48rem) { /* �����������Ż� */ .gal-input-title { flex-direction: column; align-items: flex-start !important; gap: 0.625rem; padding: 0.625rem 0.938rem !important; height: auto !important; } .gal-input-title span { font-size: 1.2rem !important; } .gal-input-title div { width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.313rem; } /* �����Ҳఴť�� (����/Զ��/����) */ .gal-input-title div > button, .gal-input-title div > div { flex: 1; min-width: auto !important; margin: 0 !important; } .gal-title-btn { padding: 0.25rem 0.625rem !important; font-size: 0.85rem !important; min-width: auto !important; transform: none !important; } .gal-title-btn * { transform: none !important; } /* Tab �����Ż� */ .gal-tab-header { padding: 0 0.625rem !important; gap: 0.625rem !important; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; } .gal-tab-item { padding: 0.625rem 0.5rem !important; font-size: 0.9rem !important; flex-shrink: 0; } /* �ڲ��������Ż� (�����ϴ���) */ .gal-sub-header, .gal-action-bar { flex-direction: column; align-items: stretch !important; gap: 0.625rem; height: auto !important; padding: 0.625rem 0.938rem !important; } .gal-action-group, .gal-filter-group { display: flex !important; flex-wrap: wrap; gap: 0.5rem !important; width: 100%; } .gal-action-btn { margin: 0 !important; flex: 1; min-width: 6.25rem; padding: 0.5rem 0 !important; justify-content: center; transform: none !important; } .gal-action-btn * { transform: none !important; } /* ������������ */ .gal-grid-container { padding: 0.625rem !important; grid-template-columns: repeat(auto-fill, minmax(6.875rem, 1fr)) !important; gap: 0.625rem !important; } /* �ײ��رհ�ť */ .gal-input-box > div:last-child { padding: 0.625rem 0.938rem !important; min-height: auto !important; } #gal-settings-close, #gal-char-sprites-close, #gal-input-cancel { min-height: 2.5rem !important; transform: none !important; } }
 
     /* === ��Դ������ר�ý��ղ��� (Mobile) === */
@@ -13567,7 +13582,7 @@ ${extraRule}
 
         /* 3. �����˵���ȷ�����Զ��� */
         #gal-asset-manager-modal .gal-import-menu {
-            z-index: 9999 !important;
+            z-index: var(--gal-z-dropdown) !important;
             position: absolute !important;
             top: 100% !important;
             right: 0 !important;
@@ -13597,7 +13612,7 @@ ${extraRule}
         #gal-asset-manager-modal .gal-asset-header {
             overflow: visible !important;  /* �ؼ�����ֹ���ɹ������������˵����� */
             touch-action: none !important; /* ��ֹ��ͷ���������� */
-            z-index: 1000 !important;      /* ȷ�������ϲ� */
+            z-index: var(--gal-z-dropdown) !important;      /* ȷ�������ϲ� */
         }
 
         /* 2. ȷ�������˵�����ʾ */
@@ -13610,7 +13625,7 @@ ${extraRule}
             position: fixed !important; /* ǿ�� fixed ��λ�����װ��Ѹ��������� */
             top: 3.438rem !important;       /* �������߶� 3.125rem + 0.313rem */
             right: 0.625rem !important;
-            z-index: 9999 !important;
+            z-index: var(--gal-z-dropdown) !important;
             max-height: 60vh !important;
             overflow-y: auto !important;
         }
@@ -13707,7 +13722,7 @@ ${extraRule}
             left: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
-            z-index: 2147483647 !important;
+            z-index: var(--gal-z-modal-critical) !important;
             background: rgba(0,0,0,0.85) !important;
             opacity: 1 !important;
             visibility: visible !important;
@@ -13716,7 +13731,7 @@ ${extraRule}
 
         /* ȷ���������㼶��ȷ */
         #gal-history-modal .gal-history-panel {
-            z-index: 2147483648 !important; /* �ȱ�����һ�� */
+            z-index: var(--gal-z-modal-critical) !important; /* �ȱ�����һ�� */
             background: #fff !important;
             width: 100% !important;
             height: 100% !important;
@@ -13735,7 +13750,7 @@ ${extraRule}
             left: 0 !important;
             width: 100% !important;
             height: 100% !important;
-            z-index: 2147483647 !important; /* ȷ�����ϲ� */
+            z-index: var(--gal-z-modal-critical) !important; /* ȷ�����ϲ� */
             background: rgba(0,0,0,0.85) !important;
             display: flex !important;
             /* ȷ�����ݿɼ� */
@@ -13757,7 +13772,7 @@ ${extraRule}
             left: 0 !important;
             right: auto !important;
             bottom: auto !important;
-            z-index: 2147483647 !important;
+            z-index: var(--gal-z-modal-critical) !important;
             background: rgba(0,0,0,0.85) !important;
             display: flex !important;
             margin: 0 !important;
@@ -13937,7 +13952,7 @@ ${extraRule}
         .gal-config-modal,
         .gal-history-modal,
         #gal-layer-choices {
-            z-index: 2147483647 !important; /* Max Int 32 */
+            z-index: var(--gal-z-modal-critical) !important; /* Max Int 32 */
         }
 
         #gal-layer-choices {
@@ -13965,7 +13980,7 @@ ${extraRule}
 
         /* 确保全屏覆盖层在弹窗之下但在其他元素之上 */
         #gal-global-overlay.fullscreen {
-            z-index: 10000 !important;
+            z-index: var(--gal-z-overlay) !important;
         }
 
 
@@ -16012,7 +16027,7 @@ ${extraRule}
   // ============================================
   function showFreeInputModal() {
     const modalHtml = `
-      <div class="gal-input-modal" id="gal-free-input-modal" style="z-index: 2147483647 !important;">
+      <div class="gal-input-modal gal-z-critical" id="gal-free-input-modal">
         <div class="gal-input-box">
           <div class="gal-input-title"><span>自由输入</span></div>
           <textarea class="gal-input-field" id="gal-free-input-text" placeholder="输入你想说的话..."></textarea>
@@ -18713,7 +18728,7 @@ ${extraRule}
           const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
 
           const dialogHtml = `
-            <div class="gal-input-modal" id="gal-import-pack-selector" style="z-index: 2147483647 !important;">
+            <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
               <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
                 <div class="gal-input-title" style="margin-bottom: 20px;">
                   <span><i class="fa-solid fa-box-open"></i> 选择导入目标图包</span>
@@ -19150,7 +19165,7 @@ ${extraRule}
                   <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="切换图包" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
                     <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                   </button>
-                  <div class="gal-pack-menu" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 180px; overflow: hidden;">
+                  <div class="gal-pack-menu" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 180px; overflow: hidden;">
                     ${allPacks.map(pack => `
                       <div class="gal-pack-item ${pack.id === currentPackId ? 'active' : ''}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? 'background: #e9ecef; font-weight: 700;' : ''}">
                         <span><i class="fa-solid fa-folder${pack.id === currentPackId ? '-open' : ''}" style="margin-right: 8px; color: ${pack.id === currentPackId ? '#6f42c1' : '#666'};"></i>${pack.name}</span>
@@ -19181,7 +19196,7 @@ ${extraRule}
                     <button class="gal-action-btn" id="gal-export-dropdown-btn" title="导出资源" style="padding: 6px 12px; font-size: 0.9rem;">
                     <i class="fa-solid fa-file-export"></i> <span>导出</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                     </button>
-                    <div class="gal-export-menu" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 200px; overflow: hidden;">
+                    <div class="gal-export-menu" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 200px; overflow: hidden;">
                     <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                         <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i>
                         <span>导出本地压缩包</span>
@@ -19198,7 +19213,7 @@ ${extraRule}
                     <button class="gal-action-btn" id="gal-import-dropdown-btn" title="导入资源" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
                     <i class="fa-solid fa-file-import"></i> <span>导入</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                     </button>
-                    <div class="gal-import-menu" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 200px; overflow: hidden;">
+                    <div class="gal-import-menu" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 200px; overflow: hidden;">
                     <div class="gal-import-item" data-action="import-local-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                         <i class="fa-solid fa-file-zipper" style="width: 20px; color: #f39c12;"></i>
                         <span>本地压缩包导入</span>
@@ -19865,7 +19880,7 @@ ${extraRule}
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.7);
-            z-index: 100000;
+            z-index: var(--gal-z-toast);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -20903,7 +20918,7 @@ ${extraRule}
     };
 
     const modalHtml = `
-      <div id="gal-live2d-settings-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100001; display: flex; align-items: center; justify-content: center;">
+      <div id="gal-live2d-settings-modal" class="gal-z-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;">
         <div style="background: #fff; border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
           <!-- 头部 -->
           <div style="padding: 16px 20px; background: linear-gradient(135deg, ${THEME.accent}, ${THEME.accentSub}); color: #fff; display: flex; justify-content: space-between; align-items: center;">
@@ -25251,9 +25266,9 @@ ${extraRule}
             .replace(/'/g, '&#039;');
         };
         const modalHtml = `
-                <div id="gal-prompts-modal" style="
+                <div id="gal-prompts-modal" class="gal-z-modal" style="
                     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-                    background: rgba(0,0,0,0.6); z-index: 100001;
+                    background: rgba(0,0,0,0.6);
                     display: flex; align-items: center; justify-content: center;
                     padding: 20px; box-sizing: border-box;
                 ">

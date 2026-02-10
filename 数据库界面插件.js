@@ -2965,7 +2965,7 @@ const __awaiter =
           transform: translate(-50%, -50%);
           width: ${slotWidth}px;
           height: ${slotHeight}px;
-          z-index: 1000;
+          z-index: var(--gal-z-dropdown);
           pointer-events: none;
           border: 2px dashed rgba(0, 210, 255, 0.5);
           border-radius: 8px;
@@ -3138,7 +3138,7 @@ const __awaiter =
           flex-direction: column;
           gap: 12px;
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-          z-index: 100002;
+          z-index: var(--gal-z-modal-critical);
           color: #fff;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           border: 1px solid rgba(255, 255, 255, 0.15);
@@ -12393,7 +12393,7 @@ ${extraRule}
   // ============================================
   function showFreeInputModal() {
     const modalHtml = `
-      <div class="gal-input-modal" id="gal-free-input-modal" style="z-index: 2147483647 !important;">
+      <div class="gal-input-modal gal-z-critical" id="gal-free-input-modal">
         <div class="gal-input-box">
           <div class="gal-input-title"><span>自由输入</span></div>
           <textarea class="gal-input-field" id="gal-free-input-text" placeholder="输入你想说的话..."></textarea>
@@ -15094,7 +15094,7 @@ ${extraRule}
           const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
 
           const dialogHtml = `
-            <div class="gal-input-modal" id="gal-import-pack-selector" style="z-index: 2147483647 !important;">
+            <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
               <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
                 <div class="gal-input-title" style="margin-bottom: 20px;">
                   <span><i class="fa-solid fa-box-open"></i> 选择导入目标图包</span>
@@ -15531,7 +15531,7 @@ ${extraRule}
                   <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="切换图包" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
                     <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                   </button>
-                  <div class="gal-pack-menu" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 180px; overflow: hidden;">
+                  <div class="gal-pack-menu" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 180px; overflow: hidden;">
                     ${allPacks.map(pack => `
                       <div class="gal-pack-item ${pack.id === currentPackId ? 'active' : ''}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? 'background: #e9ecef; font-weight: 700;' : ''}">
                         <span><i class="fa-solid fa-folder${pack.id === currentPackId ? '-open' : ''}" style="margin-right: 8px; color: ${pack.id === currentPackId ? '#6f42c1' : '#666'};"></i>${pack.name}</span>
@@ -15562,7 +15562,7 @@ ${extraRule}
                     <button class="gal-action-btn" id="gal-export-dropdown-btn" title="导出资源" style="padding: 6px 12px; font-size: 0.9rem;">
                     <i class="fa-solid fa-file-export"></i> <span>导出</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                     </button>
-                    <div class="gal-export-menu" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 200px; overflow: hidden;">
+                    <div class="gal-export-menu" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 200px; overflow: hidden;">
                     <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                         <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i>
                         <span>导出本地压缩包</span>
@@ -15579,7 +15579,7 @@ ${extraRule}
                     <button class="gal-action-btn" id="gal-import-dropdown-btn" title="导入资源" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
                     <i class="fa-solid fa-file-import"></i> <span>导入</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                     </button>
-                    <div class="gal-import-menu" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; min-width: 200px; overflow: hidden;">
+                    <div class="gal-import-menu" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 200px; overflow: hidden;">
                     <div class="gal-import-item" data-action="import-local-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                         <i class="fa-solid fa-file-zipper" style="width: 20px; color: #f39c12;"></i>
                         <span>本地压缩包导入</span>
@@ -16246,7 +16246,7 @@ ${extraRule}
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.7);
-            z-index: 100000;
+            z-index: var(--gal-z-toast);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -17284,7 +17284,7 @@ ${extraRule}
     };
 
     const modalHtml = `
-      <div id="gal-live2d-settings-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100001; display: flex; align-items: center; justify-content: center;">
+      <div id="gal-live2d-settings-modal" class="gal-z-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;">
         <div style="background: #fff; border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
           <!-- 头部 -->
           <div style="padding: 16px 20px; background: linear-gradient(135deg, ${THEME.accent}, ${THEME.accentSub}); color: #fff; display: flex; justify-content: space-between; align-items: center;">
@@ -21632,9 +21632,9 @@ ${extraRule}
             .replace(/'/g, '&#039;');
         };
         const modalHtml = `
-                <div id="gal-prompts-modal" style="
+                <div id="gal-prompts-modal" class="gal-z-modal" style="
                     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-                    background: rgba(0,0,0,0.6); z-index: 100001;
+                    background: rgba(0,0,0,0.6);
                     display: flex; align-items: center; justify-content: center;
                     padding: 20px; box-sizing: border-box;
                 ">

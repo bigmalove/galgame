@@ -2958,14 +2958,13 @@ const __awaiter =
       // 创建调整容器，使用与实际槽位相同的尺寸
       // 放在游戏内容区域中央，尺寸模拟实际槽位
       const fullscreenContainerHtml = `
-        <div id="gal-live2d-position-edit-container" style="
+        <div id="gal-live2d-position-edit-container" class="gal-z-dropdown" style="
           position: absolute;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
           width: ${slotWidth}px;
           height: ${slotHeight}px;
-          z-index: var(--gal-z-dropdown);
           pointer-events: none;
           border: 2px dashed rgba(0, 210, 255, 0.5);
           border-radius: 8px;
@@ -3125,7 +3124,7 @@ const __awaiter =
       const self = this;
 
       const toolbarHtml = `
-        <div id="gal-live2d-position-toolbar" style="
+        <div id="gal-live2d-position-toolbar" class="gal-z-critical" style="
           position: fixed;
           bottom: 20px;
           left: 50%;
@@ -3138,7 +3137,6 @@ const __awaiter =
           flex-direction: column;
           gap: 12px;
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-          z-index: var(--gal-z-modal-critical);
           color: #fff;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           border: 1px solid rgba(255, 255, 255, 0.15);
@@ -3208,8 +3206,9 @@ const __awaiter =
         </div>
       `;
 
-      _$(topWindow.document.body).append(toolbarHtml);
-      this.$toolbar = _$('#gal-live2d-position-toolbar');
+      const mountRoot = getModalMountRoot();
+      _$(mountRoot).append(toolbarHtml);
+      this.$toolbar = _$(mountRoot).find('#gal-live2d-position-toolbar');
 
       // 绑定滑条事件
       this.$toolbar.find('#gal-pos-x-slider').on('input', function() {
@@ -19165,7 +19164,7 @@ ${extraRule}
                   <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="切换图包" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
                     <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                   </button>
-                  <div class="gal-pack-menu" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 180px; overflow: hidden;">
+                  <div class="gal-pack-menu gal-z-dropdown" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden;">
                     ${allPacks.map(pack => `
                       <div class="gal-pack-item ${pack.id === currentPackId ? 'active' : ''}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? 'background: #e9ecef; font-weight: 700;' : ''}">
                         <span><i class="fa-solid fa-folder${pack.id === currentPackId ? '-open' : ''}" style="margin-right: 8px; color: ${pack.id === currentPackId ? '#6f42c1' : '#666'};"></i>${pack.name}</span>
@@ -19196,7 +19195,7 @@ ${extraRule}
                     <button class="gal-action-btn" id="gal-export-dropdown-btn" title="导出资源" style="padding: 6px 12px; font-size: 0.9rem;">
                     <i class="fa-solid fa-file-export"></i> <span>导出</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                     </button>
-                    <div class="gal-export-menu" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 200px; overflow: hidden;">
+                    <div class="gal-export-menu gal-z-dropdown" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
                     <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                         <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i>
                         <span>导出本地压缩包</span>
@@ -19213,7 +19212,7 @@ ${extraRule}
                     <button class="gal-action-btn" id="gal-import-dropdown-btn" title="导入资源" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
                     <i class="fa-solid fa-file-import"></i> <span>导入</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                     </button>
-                    <div class="gal-import-menu" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: var(--gal-z-dropdown); min-width: 200px; overflow: hidden;">
+                    <div class="gal-import-menu gal-z-dropdown" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
                     <div class="gal-import-item" data-action="import-local-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                         <i class="fa-solid fa-file-zipper" style="width: 20px; color: #f39c12;"></i>
                         <span>本地压缩包导入</span>
@@ -19880,7 +19879,6 @@ ${extraRule}
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.7);
-            z-index: var(--gal-z-toast);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -21069,9 +21067,10 @@ ${extraRule}
 
     // 移除已有弹窗
     _$('#gal-live2d-settings-modal').remove();
-    _$(topWindow.document.body).append(modalHtml);
+    const mountRoot = getModalMountRoot();
+    _$(mountRoot).append(modalHtml);
 
-    const $modal = _$('#gal-live2d-settings-modal');
+    const $modal = _$(mountRoot).find('#gal-live2d-settings-modal');
 
     // 启动异步加载模型数据（不阻塞弹窗显示）
     loadModelDataAsync();
@@ -22984,8 +22983,8 @@ ${extraRule}
    * 创建或获取选项面板容器
    */
   function ensureChoicesLayer() {
-    const targetDoc = topWindow.document;
-    let $layer = $(targetDoc).find('#gal-layer-choices');
+    const mountRoot = getModalMountRoot();
+    let $layer = $(mountRoot).find('#gal-layer-choices');
     if (!$layer.length) {
       const layerHtml = `
         <div id="gal-layer-choices">
@@ -22994,8 +22993,8 @@ ${extraRule}
           <div class="gal-choices-hint">点击空白处关闭</div>
         </div>
       `;
-      $(targetDoc.body).append(layerHtml);
-      $layer = $(targetDoc).find('#gal-layer-choices');
+      $(mountRoot).append(layerHtml);
+      $layer = $(mountRoot).find('#gal-layer-choices');
       // 点击空白处关闭（标记为用户主动关闭）
       $layer.on('click', function (e) {
         if (e.target === this) {

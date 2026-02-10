@@ -486,12 +486,157 @@ const __awaiter =
     containers: new Map(),    // characterId -> { app, canvas }
     loadingModels: new Map(), // characterId -> Promise<PIXI.Live2DModel|null>
     renderLocks: new Map(),   // characterId -> Promise<void>
+    modelBlobUrls: new Map(), // characterId -> Set<string>
     cachedDetachedAt: new Map(), // characterId -> timestamp (已退场缓存)
     maxDetachedCache: 3,
+    xhrBlobUrlSupport: null, // null=unknown, boolean=supported
+    xhrBlobUrlSupportPromise: null,
+    hasLoggedBlobUrlDisabled: false,
     isReady: false,
 
     _markModelActive(characterId) {
       this.cachedDetachedAt.delete(characterId);
+    },
+
+    _registerModelBlobUrl(characterId, url) {
+      if (!url || typeof url !== 'string') return;
+      let urls = this.modelBlobUrls.get(characterId);
+      if (!urls) {
+        urls = new Set();
+        this.modelBlobUrls.set(characterId, urls);
+      }
+      urls.add(url);
+    },
+
+    _revokeModelBlobUrls(characterId) {
+      const urls = this.modelBlobUrls.get(characterId);
+      if (!urls || !urls.size) {
+        this.modelBlobUrls.delete(characterId);
+        return;
+      }
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const topURL = _topWindow.URL || URL;
+      for (const url of urls) {
+        try {
+          topURL.revokeObjectURL(url);
+        } catch (e) {}
+      }
+      this.modelBlobUrls.delete(characterId);
+    },
+
+    async _supportsXhrBlobUrls() {
+      if (this.xhrBlobUrlSupport === true || this.xhrBlobUrlSupport === false) {
+        return this.xhrBlobUrlSupport;
+      }
+      if (this.xhrBlobUrlSupportPromise) {
+        return await this.xhrBlobUrlSupportPromise;
+      }
+
+      this.xhrBlobUrlSupportPromise = (async () => {
+        try {
+          const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+          const topURL = _topWindow.URL || URL;
+          const XHR = _topWindow.XMLHttpRequest;
+          if (!topURL?.createObjectURL || !topURL?.revokeObjectURL || typeof XHR !== 'function') return false;
+
+          const payload = new Uint8Array([1, 2, 3, 4]);
+          const blob = new Blob([payload], { type: 'application/octet-stream' });
+          const blobUrl = topURL.createObjectURL(blob);
+
+          const ok = await new Promise((resolve) => {
+            let done = false;
+            const finish = (value) => {
+              if (done) return;
+              done = true;
+              resolve(!!value);
+            };
+
+            try {
+              const xhr = new XHR();
+              xhr.open('GET', blobUrl, true);
+              xhr.responseType = 'arraybuffer';
+              xhr.timeout = 1500;
+              xhr.onload = () => {
+                const buf = xhr.response;
+                finish(buf && buf.byteLength === payload.byteLength);
+              };
+              xhr.onerror = () => finish(false);
+              xhr.onabort = () => finish(false);
+              xhr.ontimeout = () => finish(false);
+              xhr.send();
+            } catch (e) {
+              finish(false);
+            }
+          });
+
+          try {
+            topURL.revokeObjectURL(blobUrl);
+          } catch (e) {}
+
+          return ok;
+        } catch (e) {
+          return false;
+        }
+      })()
+        .finally(() => {
+          this.xhrBlobUrlSupportPromise = null;
+        });
+
+      const supported = await this.xhrBlobUrlSupportPromise;
+      this.xhrBlobUrlSupport = supported;
+      return supported;
+    },
+
+    _disableXhrBlobUrls(reason = 'unknown') {
+      this.xhrBlobUrlSupport = false;
+      if (!this.hasLoggedBlobUrlDisabled) {
+        this.hasLoggedBlobUrlDisabled = true;
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 已禁用 Blob URL（XHR 不兼容或加载失败: ${reason}），将回退使用 Data URL`);
+      }
+    },
+
+    _isRemoteModelData(modelData) {
+      return (
+        !!modelData &&
+        modelData.source === 'remote' &&
+        typeof modelData.modelUrl === 'string' &&
+        modelData.modelUrl.trim().length > 0
+      );
+    },
+
+    _getProxiedUrl(originalUrl) {
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const url = String(originalUrl || '').trim();
+      if (!url) return url;
+      if (url.toLowerCase().includes('/proxy?url=')) return url;
+
+      if (typeof _topWindow.getCorsProxyUrl === 'function') {
+        try {
+          const proxied = _topWindow.getCorsProxyUrl(url);
+          if (typeof proxied === 'string' && proxied) return proxied;
+        } catch (e) {}
+      }
+
+      if (typeof _topWindow.enableCorsProxy === 'function') {
+        try {
+          const proxied = _topWindow.enableCorsProxy(url);
+          if (typeof proxied === 'string' && proxied) return proxied;
+        } catch (e) {}
+      }
+
+      if (_topWindow.corsProxy?.getProxyUrl) {
+        try {
+          const proxied = _topWindow.corsProxy.getProxyUrl(url);
+          if (typeof proxied === 'string' && proxied) return proxied;
+        } catch (e) {}
+      }
+
+      const origin = _topWindow.location?.origin;
+      if (origin) {
+        return `${origin}/proxy?url=${encodeURIComponent(url)}`;
+      }
+
+      return url;
     },
 
     _destroyModel(characterId, reason = 'cleanup') {
@@ -499,6 +644,7 @@ const __awaiter =
       if (!model) {
         this.cachedDetachedAt.delete(characterId);
         this.containers.delete(characterId);
+        this._revokeModelBlobUrls(characterId);
         return false;
       }
       try {
@@ -513,6 +659,7 @@ const __awaiter =
       this.containers.delete(characterId);
       this.loadingModels.delete(characterId);
       this.cachedDetachedAt.delete(characterId);
+      this._revokeModelBlobUrls(characterId);
       return true;
     },
 
@@ -655,91 +802,142 @@ const __awaiter =
         return null;
       }
 
+      const isRemote = this._isRemoteModelData(modelData);
+      const remoteModelUrl = isRemote ? modelData.modelUrl.trim() : '';
+
       const loadTask = (async () => {
-        const modelBlobUrl = await this._buildModelBlobUrl(modelData);
+        this._revokeModelBlobUrls(characterId);
         const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
         const PIXI = _topWindow.PIXI;
         const { Live2DModel } = PIXI.live2d;
 
-        // ★ 修复1: 使用 Live2DModel.from() 的完整选项并等待加载完成
-        const model = await Live2DModel.from(modelBlobUrl, {
-          autoUpdate: true,
-          autoInteract: false, // 禁用自动交互，手动控制
-        });
+        const loadFromUrl = async (modelUrl) => {
+          // ★ 修复1: 使用 Live2DModel.from() 的完整选项并等待加载完成
+          const model = await Live2DModel.from(modelUrl, {
+            autoUpdate: true,
+            autoInteract: false, // 禁用自动交互，手动控制
+          });
 
-        // ★ 修复2: 等待所有纹理完全加载（带超时和最大重试限制）
-        await new Promise((resolve) => {
-          let retryCount = 0;
-          const maxRetries = 30; // 最多等待 3 秒
+          // ★ 修复2: 等待所有纹理完全加载（带超时和最大重试限制）
+          await new Promise((resolve) => {
+            let retryCount = 0;
+            const maxRetries = 30; // 最多等待 3 秒
 
-          const checkTextures = () => {
-            retryCount++;
+            const checkTextures = () => {
+              retryCount++;
 
-            // 超过最大重试次数，直接继续
-            if (retryCount > maxRetries) {
-              console.warn(`[${SCRIPT_NAME}] Live2DManager: 纹理检查达到最大重试次数，继续渲染`);
-              resolve(false);
-              return;
-            }
-
-            // 检查内部模型和纹理状态
-            const internalModel = model.internalModel;
-            if (!internalModel) {
-              setTimeout(checkTextures, 100);
-              return;
-            }
-
-            // 检查纹理是否加载完成
-            const textures = internalModel.textures || internalModel._textures || [];
-
-            // 如果纹理数组为空，直接通过（某些模型可能不需要外部纹理）
-            if (textures.length === 0) {
-              console.log(`[${SCRIPT_NAME}] Live2DManager: 模型无外部纹理，跳过等待`);
-              resolve(true);
-              return;
-            }
-
-            const allLoaded = textures.every(tex => {
-              if (!tex) return false;
-              // 检查 PIXI BaseTexture 是否有效
-              if (tex.baseTexture) {
-                return tex.baseTexture.valid;
+              // 超过最大重试次数，直接继续
+              if (retryCount > maxRetries) {
+                console.warn(`[${SCRIPT_NAME}] Live2DManager: 纹理检查达到最大重试次数，继续渲染`);
+                resolve(false);
+                return;
               }
-              return true;
-            });
 
-            if (allLoaded) {
-              console.log(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${textures.length} 张)`);
-              resolve(true);
-            } else {
-              if (retryCount % 5 === 0) { // 每 500ms 输出一次日志
-                console.log(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+              // 检查内部模型和纹理状态
+              const internalModel = model.internalModel;
+              if (!internalModel) {
+                setTimeout(checkTextures, 100);
+                return;
               }
-              setTimeout(checkTextures, 100);
-            }
-          };
 
-          checkTextures();
-        });
+              // 检查纹理是否加载完成
+              const textures = internalModel.textures || internalModel._textures || [];
 
-        // ★ 修复3: 额外等待一帧确保 GPU 就绪
-        await new Promise(r => requestAnimationFrame(r));
-        await new Promise(r => setTimeout(r, 100));
+              // 如果纹理数组为空，直接通过（某些模型可能不需要外部纹理）
+              if (textures.length === 0) {
+                console.log(`[${SCRIPT_NAME}] Live2DManager: 模型无外部纹理，跳过等待`);
+                resolve(true);
+                return;
+              }
 
-        // ★ 修复4: 强制更新一次模型以初始化遮罩
-        if (model.internalModel && model.internalModel.update) {
-          model.internalModel.update(0);
+              const allLoaded = textures.every(tex => {
+                if (!tex) return false;
+                // 检查 PIXI BaseTexture 是否有效
+                if (tex.baseTexture) {
+                  return tex.baseTexture.valid;
+                }
+                return true;
+              });
+
+              if (allLoaded) {
+                console.log(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${textures.length} 张)`);
+                resolve(true);
+              } else {
+                if (retryCount % 5 === 0) { // 每 500ms 输出一次日志
+                  console.log(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+                }
+                setTimeout(checkTextures, 100);
+              }
+            };
+
+            checkTextures();
+          });
+
+          // ★ 修复3: 额外等待一帧确保 GPU 就绪
+          await new Promise(r => requestAnimationFrame(r));
+          await new Promise(r => setTimeout(r, 100));
+
+          // ★ 修复4: 强制更新一次模型以初始化遮罩
+          if (model.internalModel && model.internalModel.update) {
+            model.internalModel.update(0);
+          }
+          if (model.update && typeof model.update === 'function') {
+            model.update(0);
+          }
+
+          return model;
+        };
+
+        const buildRemoteModelUrl = async () => {
+          try {
+            return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl, false);
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Live2DManager: 远程模型 URL 加载失败，尝试使用 CORS 代理`, e);
+            return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl, true);
+          }
+        };
+
+        const buildLocalModelUrl = async (preferBlob = true) => {
+          if (!preferBlob) {
+            return await this._buildModelDataUrl(modelData, characterId);
+          }
+          const supported = await this._supportsXhrBlobUrls();
+          if (!supported) {
+            this._disableXhrBlobUrls('xhr-test-failed');
+            return await this._buildModelDataUrl(modelData, characterId);
+          }
+          return await this._buildModelBlobUrl(modelData, characterId);
+        };
+
+        let usedBlobForLocal = false;
+        try {
+          const modelUrl = isRemote
+            ? await buildRemoteModelUrl()
+            : await buildLocalModelUrl(true);
+          usedBlobForLocal = !isRemote && String(modelUrl || '').startsWith('blob:');
+
+          const model = await loadFromUrl(modelUrl);
+          this.models.set(characterId, model);
+          this._markModelActive(characterId);
+          console.log(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
+          return model;
+        } catch (e) {
+          if (!isRemote && usedBlobForLocal) {
+            console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL 加载失败，回退 Data URL (${characterId})`, e);
+            this._disableXhrBlobUrls('load-failed');
+            this._revokeModelBlobUrls(characterId);
+            const dataUrl = await buildLocalModelUrl(false);
+            const model = await loadFromUrl(dataUrl);
+            this.models.set(characterId, model);
+            this._markModelActive(characterId);
+            console.log(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} DataURL 回退加载成功`);
+            return model;
+          }
+          throw e;
         }
-        if (model.update && typeof model.update === 'function') {
-          model.update(0);
-        }
-
-        this.models.set(characterId, model);
-        this._markModelActive(characterId);
-        console.log(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
-        return model;
       })()
         .catch((e) => {
+          this._revokeModelBlobUrls(characterId);
           console.error(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载失败:`, e);
           return null;
         })
@@ -751,10 +949,243 @@ const __awaiter =
       return await loadTask;
     },
 
-    async _buildModelBlobUrl(modelData) {
+    async _buildModelBlobUrl(modelData, characterId) {
       const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
 
-      // 创建修改后的 modelJson，使用 Data URL（避免跨域问题）
+      // 创建修改后的 modelJson，使用 Blob URL（避免 DataURL/base64 CPU 开销）
+      const modifiedModelJson = JSON.parse(JSON.stringify(modelData.modelJson));
+      const topURL = _topWindow.URL || URL;
+
+      const registerBlob = (blob) => {
+        const url = topURL.createObjectURL(blob);
+        this._registerModelBlobUrl(characterId, url);
+        return url;
+      };
+
+      const arrayBufferToBlobUrl = (buffer, mimeType) => {
+        const blob = new Blob([buffer], { type: mimeType || 'application/octet-stream' });
+        return registerBlob(blob);
+      };
+
+      const normalizePath = (p) => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
+
+      const isModel3 = !!modifiedModelJson?.FileReferences;
+
+      if (isModel3) {
+        // Cubism 3/4: model3.json
+
+        // 处理 moc3 文件
+        if (modelData.moc3 && modifiedModelJson.FileReferences) {
+          const mocUrl = arrayBufferToBlobUrl(modelData.moc3, 'application/octet-stream');
+          modifiedModelJson.FileReferences.Moc = mocUrl;
+        }
+
+        // 处理纹理
+        if (modelData.textures && modifiedModelJson.FileReferences?.Textures) {
+          for (let i = 0; i < modelData.textures.length; i++) {
+            const tex = modelData.textures[i];
+            if (!tex?.data) continue;
+            modifiedModelJson.FileReferences.Textures[i] = registerBlob(tex.data);
+          }
+        }
+
+        // 处理物理配置
+        if (modelData.physics && modifiedModelJson.FileReferences?.Physics) {
+          const physicsUrl = arrayBufferToBlobUrl(modelData.physics, 'application/json');
+          modifiedModelJson.FileReferences.Physics = physicsUrl;
+        }
+
+        // 处理姿势配置
+        if (modelData.pose && modifiedModelJson.FileReferences?.Pose) {
+          const poseUrl = arrayBufferToBlobUrl(modelData.pose, 'application/json');
+          modifiedModelJson.FileReferences.Pose = poseUrl;
+        }
+
+        // 处理动作文件（motion3.json）
+        if (modelData.motions && Object.keys(modelData.motions).length > 0) {
+          if (!modifiedModelJson.FileReferences.Motions) {
+            modifiedModelJson.FileReferences.Motions = {};
+          }
+
+          for (const [groupName, motionList] of Object.entries(modelData.motions)) {
+            if (!modifiedModelJson.FileReferences.Motions[groupName]) {
+              modifiedModelJson.FileReferences.Motions[groupName] = [];
+            }
+
+            for (let i = 0; i < motionList.length; i++) {
+              const motion = motionList[i];
+              if (motion.data) {
+                const motionUrl = arrayBufferToBlobUrl(motion.data, 'application/json');
+                if (modifiedModelJson.FileReferences.Motions[groupName][i]) {
+                  modifiedModelJson.FileReferences.Motions[groupName][i].File = motionUrl;
+                } else {
+                  modifiedModelJson.FileReferences.Motions[groupName].push({ File: motionUrl });
+                }
+              }
+            }
+          }
+        }
+
+        // 处理表情文件（exp3.json）
+        if (modelData.expressions && modelData.expressions.length > 0) {
+          if (!modifiedModelJson.FileReferences.Expressions) {
+            modifiedModelJson.FileReferences.Expressions = [];
+          }
+
+          for (let i = 0; i < modelData.expressions.length; i++) {
+            const expr = modelData.expressions[i];
+            if (expr.data) {
+              const exprUrl = arrayBufferToBlobUrl(expr.data, 'application/json');
+              if (modifiedModelJson.FileReferences.Expressions[i]) {
+                modifiedModelJson.FileReferences.Expressions[i].File = exprUrl;
+              } else {
+                modifiedModelJson.FileReferences.Expressions.push({
+                  Name: expr.name,
+                  File: exprUrl
+                });
+              }
+            }
+          }
+        }
+      } else {
+        // Cubism 2.1: model.json
+
+        // 处理 moc 文件
+        if (modelData.moc) {
+          const mocUrl = arrayBufferToBlobUrl(modelData.moc, 'application/octet-stream');
+          if (typeof modifiedModelJson.model === 'string') {
+            modifiedModelJson.model = mocUrl;
+          } else if (typeof modifiedModelJson.Model === 'string') {
+            modifiedModelJson.Model = mocUrl;
+          } else {
+            modifiedModelJson.model = mocUrl;
+          }
+        }
+
+        // 处理纹理
+        const textureList = modifiedModelJson.textures || modifiedModelJson.Textures;
+        if (Array.isArray(textureList) && Array.isArray(modelData.textures)) {
+          const texMap = new Map();
+          for (const tex of modelData.textures) {
+            if (!tex?.name || !tex?.data) continue;
+            texMap.set(normalizePath(tex.name), tex.data);
+          }
+
+          const getByBasename = (target) => {
+            const base = String(target || '').split('/').pop();
+            if (!base) return null;
+            const matches = [];
+            for (const [k, v] of texMap.entries()) {
+              if (k.split('/').pop() === base) matches.push(v);
+            }
+            return matches.length === 1 ? matches[0] : null;
+          };
+
+          for (let i = 0; i < textureList.length; i++) {
+            const texPath = textureList[i];
+            const blob = texMap.get(normalizePath(texPath)) || getByBasename(texPath);
+            if (blob) {
+              textureList[i] = registerBlob(blob);
+            }
+          }
+        }
+
+        // 处理物理/姿势配置
+        if (modelData.physics) {
+          const physicsUrl = arrayBufferToBlobUrl(modelData.physics, 'application/json');
+          modifiedModelJson.physics = physicsUrl;
+          if (typeof modifiedModelJson.Physics === 'string') {
+            modifiedModelJson.Physics = physicsUrl;
+          }
+        }
+
+        if (modelData.pose) {
+          const poseUrl = arrayBufferToBlobUrl(modelData.pose, 'application/json');
+          modifiedModelJson.pose = poseUrl;
+          if (typeof modifiedModelJson.Pose === 'string') {
+            modifiedModelJson.Pose = poseUrl;
+          }
+        }
+
+        const guessMime = (filePath) => {
+          const lower = String(filePath || '').toLowerCase();
+          return lower.endsWith('.json') ? 'application/json' : 'application/octet-stream';
+        };
+
+        // 处理动作文件（.mtn）
+        if (modelData.motions && Object.keys(modelData.motions).length > 0) {
+          const motionMap = new Map();
+          for (const motionList of Object.values(modelData.motions)) {
+            if (!Array.isArray(motionList)) continue;
+            for (const motion of motionList) {
+              if (!motion?.name || !motion?.data) continue;
+              motionMap.set(normalizePath(motion.name), motion.data);
+            }
+          }
+
+          const motionsObj = modifiedModelJson.motions || modifiedModelJson.Motions;
+          if (motionsObj && typeof motionsObj === 'object') {
+            for (const [groupName, motionList] of Object.entries(motionsObj)) {
+              if (!Array.isArray(motionList)) continue;
+              for (let i = 0; i < motionList.length; i++) {
+                const motionDef = motionList[i];
+                const filePath = typeof motionDef === 'string' ? motionDef : motionDef?.file || motionDef?.File;
+                if (!filePath) continue;
+                const data = motionMap.get(normalizePath(filePath));
+                if (!data) continue;
+                const dataUrl = arrayBufferToBlobUrl(data, guessMime(filePath));
+                if (typeof motionDef === 'string') {
+                  motionList[i] = dataUrl;
+                } else if (typeof motionDef?.file === 'string') {
+                  motionDef.file = dataUrl;
+                } else {
+                  motionDef.File = dataUrl;
+                }
+              }
+            }
+          }
+        }
+
+        // 处理表情文件（.exp.json）
+        if (Array.isArray(modelData.expressions) && modelData.expressions.length > 0) {
+          const exprMap = new Map();
+          for (const expr of modelData.expressions) {
+            const key = expr?.file || expr?.name;
+            if (!key || !expr?.data) continue;
+            exprMap.set(normalizePath(key), expr.data);
+          }
+
+          const exprList = modifiedModelJson.expressions || modifiedModelJson.Expressions;
+          if (Array.isArray(exprList)) {
+            for (let i = 0; i < exprList.length; i++) {
+              const exprDef = exprList[i];
+              const filePath = typeof exprDef === 'string' ? exprDef : exprDef?.file || exprDef?.File;
+              if (!filePath) continue;
+              const data = exprMap.get(normalizePath(filePath));
+              if (!data) continue;
+              const dataUrl = arrayBufferToBlobUrl(data, 'application/json');
+
+              if (typeof exprDef === 'string') {
+                exprList[i] = dataUrl;
+              } else if (typeof exprDef?.file === 'string') {
+                exprDef.file = dataUrl;
+              } else {
+                exprDef.File = dataUrl;
+              }
+            }
+          }
+        }
+      }
+
+      // 创建 model.json Blob URL
+      const modelBlob = new Blob([JSON.stringify(modifiedModelJson)], { type: 'application/json' });
+      return registerBlob(modelBlob);
+    },
+
+    async _buildModelDataUrl(modelData, characterId) {
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+
+      // 创建修改后的 modelJson，使用 Data URL（兼容 Pixi XHRLoader，避免 blob: 读取失败）
       const modifiedModelJson = JSON.parse(JSON.stringify(modelData.modelJson));
 
       // 辅助函数：ArrayBuffer 转 Base64
@@ -784,40 +1215,31 @@ const __awaiter =
       };
 
       const normalizePath = (p) => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
-
       const isModel3 = !!modifiedModelJson?.FileReferences;
 
       if (isModel3) {
         // Cubism 3/4: model3.json
-
-        // 处理 moc3 文件
         if (modelData.moc3 && modifiedModelJson.FileReferences) {
-          const mocDataUrl = arrayBufferToDataUrl(modelData.moc3, 'application/octet-stream');
-          modifiedModelJson.FileReferences.Moc = mocDataUrl;
+          modifiedModelJson.FileReferences.Moc = arrayBufferToDataUrl(modelData.moc3, 'application/octet-stream');
         }
 
-        // 处理纹理
         if (modelData.textures && modifiedModelJson.FileReferences?.Textures) {
           for (let i = 0; i < modelData.textures.length; i++) {
             const tex = modelData.textures[i];
+            if (!tex?.data) continue;
             const texDataUrl = await blobToDataUrl(tex.data);
             modifiedModelJson.FileReferences.Textures[i] = texDataUrl;
           }
         }
 
-        // 处理物理配置
         if (modelData.physics && modifiedModelJson.FileReferences?.Physics) {
-          const physicsDataUrl = arrayBufferToDataUrl(modelData.physics, 'application/json');
-          modifiedModelJson.FileReferences.Physics = physicsDataUrl;
+          modifiedModelJson.FileReferences.Physics = arrayBufferToDataUrl(modelData.physics, 'application/json');
         }
 
-        // 处理姿势配置
         if (modelData.pose && modifiedModelJson.FileReferences?.Pose) {
-          const poseDataUrl = arrayBufferToDataUrl(modelData.pose, 'application/json');
-          modifiedModelJson.FileReferences.Pose = poseDataUrl;
+          modifiedModelJson.FileReferences.Pose = arrayBufferToDataUrl(modelData.pose, 'application/json');
         }
 
-        // 处理动作文件（motion3.json）
         if (modelData.motions && Object.keys(modelData.motions).length > 0) {
           if (!modifiedModelJson.FileReferences.Motions) {
             modifiedModelJson.FileReferences.Motions = {};
@@ -830,19 +1252,17 @@ const __awaiter =
 
             for (let i = 0; i < motionList.length; i++) {
               const motion = motionList[i];
-              if (motion.data) {
-                const motionDataUrl = arrayBufferToDataUrl(motion.data, 'application/json');
-                if (modifiedModelJson.FileReferences.Motions[groupName][i]) {
-                  modifiedModelJson.FileReferences.Motions[groupName][i].File = motionDataUrl;
-                } else {
-                  modifiedModelJson.FileReferences.Motions[groupName].push({ File: motionDataUrl });
-                }
+              if (!motion?.data) continue;
+              const motionDataUrl = arrayBufferToDataUrl(motion.data, 'application/json');
+              if (modifiedModelJson.FileReferences.Motions[groupName][i]) {
+                modifiedModelJson.FileReferences.Motions[groupName][i].File = motionDataUrl;
+              } else {
+                modifiedModelJson.FileReferences.Motions[groupName].push({ File: motionDataUrl });
               }
             }
           }
         }
 
-        // 处理表情文件（exp3.json）
         if (modelData.expressions && modelData.expressions.length > 0) {
           if (!modifiedModelJson.FileReferences.Expressions) {
             modifiedModelJson.FileReferences.Expressions = [];
@@ -850,23 +1270,20 @@ const __awaiter =
 
           for (let i = 0; i < modelData.expressions.length; i++) {
             const expr = modelData.expressions[i];
-            if (expr.data) {
-              const exprDataUrl = arrayBufferToDataUrl(expr.data, 'application/json');
-              if (modifiedModelJson.FileReferences.Expressions[i]) {
-                modifiedModelJson.FileReferences.Expressions[i].File = exprDataUrl;
-              } else {
-                modifiedModelJson.FileReferences.Expressions.push({
-                  Name: expr.name,
-                  File: exprDataUrl
-                });
-              }
+            if (!expr?.data) continue;
+            const exprDataUrl = arrayBufferToDataUrl(expr.data, 'application/json');
+            if (modifiedModelJson.FileReferences.Expressions[i]) {
+              modifiedModelJson.FileReferences.Expressions[i].File = exprDataUrl;
+            } else {
+              modifiedModelJson.FileReferences.Expressions.push({
+                Name: expr.name,
+                File: exprDataUrl
+              });
             }
           }
         }
       } else {
         // Cubism 2.1: model.json
-
-        // 处理 moc 文件
         if (modelData.moc) {
           const mocDataUrl = arrayBufferToDataUrl(modelData.moc, 'application/octet-stream');
           if (typeof modifiedModelJson.model === 'string') {
@@ -878,7 +1295,6 @@ const __awaiter =
           }
         }
 
-        // 处理纹理
         const textureList = modifiedModelJson.textures || modifiedModelJson.Textures;
         if (Array.isArray(textureList) && Array.isArray(modelData.textures)) {
           const texMap = new Map();
@@ -906,7 +1322,6 @@ const __awaiter =
           }
         }
 
-        // 处理物理/姿势配置
         if (modelData.physics) {
           const physicsDataUrl = arrayBufferToDataUrl(modelData.physics, 'application/json');
           modifiedModelJson.physics = physicsDataUrl;
@@ -928,7 +1343,6 @@ const __awaiter =
           return lower.endsWith('.json') ? 'application/json' : 'application/octet-stream';
         };
 
-        // 处理动作文件（.mtn）
         if (modelData.motions && Object.keys(modelData.motions).length > 0) {
           const motionMap = new Map();
           for (const motionList of Object.values(modelData.motions)) {
@@ -962,7 +1376,6 @@ const __awaiter =
           }
         }
 
-        // 处理表情文件（.exp.json）
         if (Array.isArray(modelData.expressions) && modelData.expressions.length > 0) {
           const exprMap = new Map();
           for (const expr of modelData.expressions) {
@@ -994,6 +1407,136 @@ const __awaiter =
       }
 
       // 创建 model.json Data URL
+      const modelJsonStr = JSON.stringify(modifiedModelJson);
+      const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));
+      return `data:application/json;base64,${modelJsonBase64}`;
+    },
+
+    async _buildRemoteModelDataUrl(characterId, modelUrl, useProxy = false) {
+      const url = String(modelUrl || '').trim();
+
+      if (!url) {
+        throw new Error('远程 Live2D modelUrl 为空');
+      }
+
+      let baseUrl;
+      try {
+        const u = new URL(url);
+        u.hash = '';
+        baseUrl = u.toString();
+      } catch (e) {
+        throw new Error('远程 Live2D modelUrl 无效');
+      }
+
+      const fetchUrl = useProxy ? this._getProxiedUrl(baseUrl) : baseUrl;
+      const response = await fetch(fetchUrl, { method: 'GET', cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`远程模型 JSON 获取失败: ${response.status}`);
+      }
+
+      const text = await response.text();
+      let modelJson;
+      try {
+        modelJson = JSON.parse(text);
+      } catch (e) {
+        throw new Error('远程模型 JSON 解析失败');
+      }
+
+      const modifiedModelJson = JSON.parse(JSON.stringify(modelJson));
+
+      const resolveUrl = (p) => {
+        if (typeof p !== 'string') return p;
+        const raw = p.trim();
+        if (!raw) return p;
+
+        const normalized = raw.replace(/\\/g, '/');
+        const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized);
+        const abs = hasScheme ? normalized : new URL(normalized, baseUrl).toString();
+        if (useProxy && (abs.startsWith('http://') || abs.startsWith('https://'))) {
+          return this._getProxiedUrl(abs);
+        }
+        return abs;
+      };
+
+      const rewriteCubism3 = (refs) => {
+        if (!refs || typeof refs !== 'object') return;
+
+        if (typeof refs.Moc === 'string') refs.Moc = resolveUrl(refs.Moc);
+        if (Array.isArray(refs.Textures)) refs.Textures = refs.Textures.map(resolveUrl);
+        if (typeof refs.Physics === 'string') refs.Physics = resolveUrl(refs.Physics);
+        if (typeof refs.Pose === 'string') refs.Pose = resolveUrl(refs.Pose);
+        if (typeof refs.UserData === 'string') refs.UserData = resolveUrl(refs.UserData);
+
+        if (refs.Motions && typeof refs.Motions === 'object') {
+          for (const groupName of Object.keys(refs.Motions)) {
+            const motionList = refs.Motions[groupName];
+            if (!Array.isArray(motionList)) continue;
+            for (const motionDef of motionList) {
+              if (!motionDef || typeof motionDef !== 'object') continue;
+              if (typeof motionDef.File === 'string') motionDef.File = resolveUrl(motionDef.File);
+              if (typeof motionDef.Sound === 'string') motionDef.Sound = resolveUrl(motionDef.Sound);
+            }
+          }
+        }
+
+        if (Array.isArray(refs.Expressions)) {
+          for (const exprDef of refs.Expressions) {
+            if (!exprDef || typeof exprDef !== 'object') continue;
+            if (typeof exprDef.File === 'string') exprDef.File = resolveUrl(exprDef.File);
+          }
+        }
+      };
+
+      const rewriteCubism2 = () => {
+        if (typeof modifiedModelJson.model === 'string') {
+          modifiedModelJson.model = resolveUrl(modifiedModelJson.model);
+        } else if (typeof modifiedModelJson.Model === 'string') {
+          modifiedModelJson.Model = resolveUrl(modifiedModelJson.Model);
+        }
+
+        const textures = modifiedModelJson.textures || modifiedModelJson.Textures;
+        if (Array.isArray(textures)) {
+          for (let i = 0; i < textures.length; i++) {
+            if (typeof textures[i] === 'string') textures[i] = resolveUrl(textures[i]);
+          }
+        }
+
+        if (typeof modifiedModelJson.physics === 'string') modifiedModelJson.physics = resolveUrl(modifiedModelJson.physics);
+        if (typeof modifiedModelJson.Physics === 'string') modifiedModelJson.Physics = resolveUrl(modifiedModelJson.Physics);
+        if (typeof modifiedModelJson.pose === 'string') modifiedModelJson.pose = resolveUrl(modifiedModelJson.pose);
+        if (typeof modifiedModelJson.Pose === 'string') modifiedModelJson.Pose = resolveUrl(modifiedModelJson.Pose);
+
+        const motions = modifiedModelJson.motions || modifiedModelJson.Motions;
+        if (motions && typeof motions === 'object') {
+          for (const groupName of Object.keys(motions)) {
+            const motionList = motions[groupName];
+            if (!Array.isArray(motionList)) continue;
+            for (const motionDef of motionList) {
+              if (!motionDef || typeof motionDef !== 'object') continue;
+              if (typeof motionDef.file === 'string') motionDef.file = resolveUrl(motionDef.file);
+              if (typeof motionDef.File === 'string') motionDef.File = resolveUrl(motionDef.File);
+              if (typeof motionDef.sound === 'string') motionDef.sound = resolveUrl(motionDef.sound);
+              if (typeof motionDef.Sound === 'string') motionDef.Sound = resolveUrl(motionDef.Sound);
+            }
+          }
+        }
+
+        const expressions = modifiedModelJson.expressions || modifiedModelJson.Expressions;
+        if (Array.isArray(expressions)) {
+          for (const exprDef of expressions) {
+            if (!exprDef || typeof exprDef !== 'object') continue;
+            if (typeof exprDef.file === 'string') exprDef.file = resolveUrl(exprDef.file);
+            if (typeof exprDef.File === 'string') exprDef.File = resolveUrl(exprDef.File);
+          }
+        }
+      };
+
+      if (modifiedModelJson?.FileReferences) {
+        rewriteCubism3(modifiedModelJson.FileReferences);
+      } else {
+        rewriteCubism2();
+      }
+
       const modelJsonStr = JSON.stringify(modifiedModelJson);
       const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));
       return `data:application/json;base64,${modelJsonBase64}`;
@@ -3320,6 +3863,8 @@ const __awaiter =
     queue: [],
     queuedSet: new Set(),
     preloadedSet: new Set(),
+    failedUntil: new Map(), // characterId -> timestamp (cooldown until)
+    failureCooldownMs: 60 * 1000,
     workerPromise: null,
     lookAheadLimit: 60, // 预加载时向前看的最大分段数
 
@@ -3356,6 +3901,9 @@ const __awaiter =
         this.preloadedSet.add(characterId);
         return;
       }
+      const until = this.failedUntil.get(characterId);
+      if (until && Date.now() < until) return;
+      if (until) this.failedUntil.delete(characterId);
       if (this.queuedSet.has(characterId)) return;
       this.queue.push({ characterId, reason });
       this.queuedSet.add(characterId);
@@ -3398,10 +3946,14 @@ const __awaiter =
             }
             const model = await Live2DManager.loadModel(characterId, false);
             if (model) {
+              this.failedUntil.delete(characterId);
               this.preloadedSet.add(characterId);
               console.log(`[${SCRIPT_NAME}] Live2D 预加载模型成功: ${characterId} (${reason})`);
+            } else {
+              this.failedUntil.set(characterId, Date.now() + this.failureCooldownMs);
             }
           } catch (e) {
+            this.failedUntil.set(characterId, Date.now() + this.failureCooldownMs);
             console.warn(`[${SCRIPT_NAME}] Live2D 预加载模型失败: ${characterId} (${reason})`, e);
           }
         }
@@ -3730,6 +4282,11 @@ const __awaiter =
                   style="padding: 4px 8px; font-size: 12px;">
             上传模型
           </button>
+          <button class="gal-btn gal-btn-small gal-live2d-url"
+                  data-char-id="${characterId}"
+                  style="padding: 4px 8px; font-size: 12px;">
+            远程URL
+          </button>
           <button class="gal-btn gal-btn-small gal-btn-danger gal-live2d-delete"
                   data-char-id="${characterId}"
                   style="padding: 4px 8px; font-size: 12px; display: none;">
@@ -3760,8 +4317,18 @@ const __awaiter =
     if (hasModel) {
       const modelData = await getLive2DModel(characterId);
       if (modelData) {
-        const sizeMB = (modelData.fileSize / 1024 / 1024).toFixed(1);
-        status.text(`(${sizeMB} MB)`);
+        if (modelData.source === 'remote' && typeof modelData.modelUrl === 'string') {
+          let host = '';
+          try {
+            host = new URL(modelData.modelUrl).host || '';
+          } catch (e) {}
+          status.text(host ? `(URL: ${host})` : `(URL)`);
+        } else if (Number.isFinite(modelData.fileSize) && modelData.fileSize > 0) {
+          const sizeMB = (modelData.fileSize / 1024 / 1024).toFixed(1);
+          status.text(`(${sizeMB} MB)`);
+        } else {
+          status.text('');
+        }
       }
     } else {
       status.text('');
@@ -3807,6 +4374,92 @@ const __awaiter =
       };
 
       input.click();
+    });
+
+    // 远程URL按钮点击
+    _$(topWindow.document).off('click.live2durl').on('click.live2durl', '.gal-live2d-url', async function() {
+      const characterId = _$(this).data('char-id');
+      const exampleUrl = 'https://cdn.jsdelivr.net/gh/Eikanya/Live2d-model/Live2D/Senko_Normals/senko.model3.json';
+
+      let currentUrl = '';
+      try {
+        const existing = await getLive2DModel(characterId);
+        if (existing?.source === 'remote' && typeof existing.modelUrl === 'string') {
+          currentUrl = existing.modelUrl;
+        }
+      } catch (e) {}
+
+      const modalHtml = `
+        <div class="gal-live2d-remote-url-panel">
+          <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
+            输入 Live2D 的 <code>model3.json</code> / <code>model.json</code> URL：
+          </div>
+          <input id="gal-live2d-remote-url-input"
+                 class="gal-live2d-remote-url-input"
+                 type="text"
+                 placeholder="https://.../xxx.model3.json">
+          <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px;">
+            <button id="gal-live2d-remote-url-cancel" class="gal-btn gal-btn-small">取消</button>
+            <button id="gal-live2d-remote-url-save" class="gal-btn gal-btn-small">保存</button>
+          </div>
+          <div style="margin-top: 8px; font-size: 12px; color: #888; word-break: break-all;">
+            示例：${exampleUrl}
+          </div>
+        </div>
+      `;
+
+      showCustomPopupPanel(`Live2D 远程URL - ${characterId}`, modalHtml);
+
+      const mountRoot = getModalMountRoot();
+      const $popup = _$(mountRoot).find('#gal-custom-popup');
+      $popup.find('#gal-live2d-remote-url-input').val(currentUrl || '');
+
+      const closePopup = () => {
+        try {
+          $popup.remove();
+        } catch (e) {}
+      };
+
+      $popup.find('#gal-live2d-remote-url-cancel').on('click', closePopup);
+      $popup.find('#gal-live2d-remote-url-save').on('click', async () => {
+        const inputVal = $popup.find('#gal-live2d-remote-url-input').val();
+        const url = String(inputVal || '').trim();
+        const lowerUrl = url.toLowerCase();
+
+        if (!url) {
+          _toastr.error('URL 不能为空');
+          return;
+        }
+        if (!(lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://'))) {
+          _toastr.error('URL 必须以 http:// 或 https:// 开头');
+          return;
+        }
+        if (!/\.json(\?|#|$)/i.test(url)) {
+          _toastr.warning('URL 看起来不是 .json 结尾（仍会尝试加载）');
+        }
+
+        try {
+          await saveLive2DModel({
+            modelId: characterId,
+            source: 'remote',
+            modelUrl: url,
+            uploadTime: Date.now(),
+            fileSize: 0,
+          });
+
+          _toastr.success(`Live2D 远程URL已保存: ${characterId}`);
+          await updateLive2DRowState(characterId);
+
+          if (Live2DManager.models.has(characterId)) {
+            Live2DManager.cleanup(characterId);
+          }
+
+          closePopup();
+        } catch (err) {
+          console.error(`[${SCRIPT_NAME}] Live2D 远程URL保存失败:`, err);
+          _toastr.error(`保存失败: ${err.message}`);
+        }
+      });
     });
 
     // 删除按钮点击
@@ -7508,7 +8161,11 @@ ${extraRule}
   function hasLive2DModel(characterId) {
     return __awaiter(this, void 0, void 0, function* () {
       const model = yield getLive2DModel(characterId);
-      return model !== null;
+      if (!model) return false;
+      if (model.source === 'remote') {
+        return typeof model.modelUrl === 'string' && model.modelUrl.trim().length > 0;
+      }
+      return !!model.modelJson;
     });
   }
 
@@ -8409,6 +9066,8 @@ ${extraRule}
     characterQueue: [],
     // 当前场景
     currentScene: null,
+    // characterId -> number, 同角色仅保留最后一次 Live2D 渲染任务
+    live2dRenderSeq: new Map(),
     // 表情到情绪的映射（GSAP动画效果）
     emotionMap: {
       默认: null,
@@ -8478,6 +9137,17 @@ ${extraRule}
     // 角色ID归一化（用于比较，不改变原始ID）
     normalizeCharacterId(characterId) {
       return String(characterId || '').trim().toLowerCase();
+    },
+    _nextLive2DRenderSeq(characterId) {
+      const next = (this.live2dRenderSeq.get(characterId) || 0) + 1;
+      this.live2dRenderSeq.set(characterId, next);
+      return next;
+    },
+    _isLatestLive2DTask(characterId, seq) {
+      return this.live2dRenderSeq.get(characterId) === seq;
+    },
+    _clearLive2DRenderSeq(characterId) {
+      this.live2dRenderSeq.delete(characterId);
     },
     // 判断角色是否是主角
     isProtagonist(characterId) {
@@ -8573,6 +9243,7 @@ ${extraRule}
               // 角色退场后优先进入缓存，便于后续快速返场
               Live2DManager.releaseCharacter(charId);
               SpriteAnimationManager.cleanup(charId);
+              this._clearLive2DRenderSeq(charId);
             }, 400);
           }
           this.activeCharacters.delete(charId);
@@ -8668,6 +9339,7 @@ ${extraRule}
             }
             Live2DManager.releaseCharacter(oldCharIdInSlot);
             SpriteAnimationManager.cleanup(oldCharIdInSlot);
+            this._clearLive2DRenderSeq(oldCharIdInSlot);
             this.activeCharacters.delete(oldCharIdInSlot);
             this.characterQueue = this.characterQueue.filter(id => id !== oldCharIdInSlot);
           } else {
@@ -8685,6 +9357,9 @@ ${extraRule}
         // ========== Live2D 支持 ==========
         const useLive2D = getCharacterUseLive2D(characterId);
         const hasLive2D = useLive2D ? yield hasLive2DModel(characterId) : false;
+        if (!hasLive2D) {
+          this._clearLive2DRenderSeq(characterId);
+        }
 
         // ★ 优化：检查是否已有 Live2D 容器且角色相同，避免重复渲染
         const $existingContainer = $slot.find('.gal-char-container[data-character="' + characterId + '"]');
@@ -8738,7 +9413,9 @@ ${extraRule}
         // ========== Live2D 渲染初始化 ==========
         if (hasLive2D) {
           const $container = $slot.find('.gal-live2d-canvas-container');
+          const taskSeq = this._nextLive2DRenderSeq(characterId);
           const isTaskStale = () => {
+            if (!this._isLatestLive2DTask(characterId, taskSeq)) return true;
             if (renderToken === null) return false;
             const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
             const latestState = messageSegmentState.get(String(mesId));
@@ -8758,6 +9435,8 @@ ${extraRule}
                 if (model && $container.length) {
                   const rendered = await Live2DManager.renderTo(characterId, $container[0]);
                   if (!rendered || isTaskStale()) return;
+                  if (this.slotOwners.get(slot) !== characterId) return;
+                  if (!$container[0]?.isConnected) return;
                   Live2DManager.setExpression(characterId, expression);
                   // 新渲染完成后立即同步说话者焦点，避免异步加载导致渲染状态错位
                   Live2DManager.setFocus(characterId, this.currentSpeaker === characterId);
@@ -8949,8 +9628,10 @@ ${extraRule}
       for (const charId of this.activeCharacters.keys()) {
         Live2DManager.cleanup(charId);
         SpriteAnimationManager.cleanup(charId);
+        this._clearLive2DRenderSeq(charId);
       }
       this.activeCharacters.clear();
+      this.live2dRenderSeq.clear();
       this.slotOwners.clear();
       this.characterQueue = [];
       this.currentSpeaker = null;

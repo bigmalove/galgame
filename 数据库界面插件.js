@@ -682,10 +682,13 @@ const __awaiter =
     },
 
     _normalizeTransform(characterId, transformConfig, containerWidth, containerHeight) {
+      const rawScaleBase = transformConfig?.scaleBase;
+      const normalizedScaleBase = normalizeLive2DScaleBase(rawScaleBase);
       const safeTransform = {
         offsetX: Number(transformConfig?.offsetX) || 0,
         offsetY: Number(transformConfig?.offsetY) || 0,
         scale: Number(transformConfig?.scale) || 1.0,
+        scaleBase: normalizedScaleBase,
       };
 
       // 兼容旧版“扩展画布”坐标，超过合理范围时按旧比例回退
@@ -712,11 +715,15 @@ const __awaiter =
       if (clampedX !== normalizedX || clampedY !== normalizedY) {
         changed = true;
       }
+      if (rawScaleBase !== undefined && rawScaleBase !== normalizedScaleBase) {
+        changed = true;
+      }
 
       const normalizedTransform = {
         offsetX: clampedX,
         offsetY: clampedY,
         scale: safeTransform.scale,
+        scaleBase: safeTransform.scaleBase,
       };
 
       // 只在发生兼容修正时落盘，避免每帧写入
@@ -1724,8 +1731,18 @@ const __awaiter =
       model.scale.set(1);
       const modelWidth = model.width || model.internalModel?.width || 500;
       const modelHeight = model.height || model.internalModel?.height || 800;
-      const fitScale = Math.min(renderWidth / modelWidth, renderHeight / modelHeight) * 0.95;
-      const baseScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1;
+      const safePadding = Math.min(0.08, Math.max(0.0, Number(config?.safePadding) || 0.03));
+      const scaleBaseMode = normalizeLive2DScaleBase(transformConfig.scaleBase);
+      const overlayRefHeight = getOverlayReferenceHeight(containerElement, renderHeight);
+      const refHeight = scaleBaseMode === 'height' ? overlayRefHeight : renderHeight;
+      const baseScale = calculateLive2DBaseScale(
+        renderWidth,
+        refHeight,
+        modelWidth,
+        modelHeight,
+        safePadding,
+        scaleBaseMode,
+      );
 
       // 应用用户自定义缩放
       const userScale = transformConfig.scale || 1.0;
@@ -2197,8 +2214,8 @@ const __awaiter =
       if (!this.app) {
         this.dpr = this._computeDpr();
         const rect = mountEl.getBoundingClientRect();
-        const width = Math.max(1, Math.floor(rect.width || 1));
-        const height = Math.max(1, Math.floor(rect.height || 1));
+        const width = Math.max(1, Math.floor(mountEl.clientWidth || rect.width || 1));
+        const height = Math.max(1, Math.floor(mountEl.clientHeight || rect.height || 1));
 
         // Live2D 依赖 WebGL：手动创建 WebGL Context，避免 PIXI 自动降级导致 gl 为 undefined
         const glContext =
@@ -2344,8 +2361,8 @@ const __awaiter =
       if (!this.app || !this.canvas || !this.mountEl || !this.mountEl.isConnected) return false;
 
       const rect = this.mountEl.getBoundingClientRect();
-      const width = Math.max(1, Math.floor(rect.width || 1));
-      const height = Math.max(1, Math.floor(rect.height || 1));
+      const width = Math.max(1, Math.floor(this.mountEl.clientWidth || rect.width || 1));
+      const height = Math.max(1, Math.floor(this.mountEl.clientHeight || rect.height || 1));
 
       const nextDpr = this._computeDpr();
       if (nextDpr !== this.dpr) {
@@ -2371,7 +2388,6 @@ const __awaiter =
         if (this.slots.right.container) this.slots.right.container.visible = true;
 
         // 全屏布局：用“虚拟槽位”覆盖全高，宽度按 DOM slot 中心参考，可重叠（不加 mask）
-        const base = rect;
         const leftEl = this.mountEl.querySelector?.('.gal-char-slot.slot-left');
         const rightEl = this.mountEl.querySelector?.('.gal-char-slot.slot-right');
 
@@ -2381,8 +2397,19 @@ const __awaiter =
 
         const toLocalRect = (el) => {
           if (!el) return null;
+          const cw = Number(el.clientWidth) || Number(el.offsetWidth) || 0;
+          const ch = Number(el.clientHeight) || Number(el.offsetHeight) || 0;
+          if (cw > 0 && ch > 0) {
+            return {
+              x: Number(el.offsetLeft) || 0,
+              y: Number(el.offsetTop) || 0,
+              width: cw,
+              height: ch,
+            };
+          }
           const r = el.getBoundingClientRect();
           if (!r.width || !r.height) return null;
+          const base = rect;
           return {
             x: r.left - base.left,
             y: r.top - base.top,
@@ -2555,8 +2582,17 @@ const __awaiter =
 
       const safePadding = Math.min(0.08, Math.max(0.0, Number(config?.safePadding) || 0.03));
       const bounds = inst.bounds || { x: 0, y: 0, width: inst.model.width || 500, height: inst.model.height || 800 };
-      const fitScale = Math.min(rect.width / bounds.width, rect.height / bounds.height) * (1 - safePadding);
-      const baseScale = Number.isFinite(fitScale) && fitScale > 0 ? fitScale : 1;
+      const scaleBaseMode = normalizeLive2DScaleBase(transformConfig.scaleBase);
+      const overlayRefHeight = getOverlayReferenceHeight(this.mountEl, rect.height);
+      const refHeight = scaleBaseMode === 'height' ? overlayRefHeight : rect.height;
+      const baseScale = calculateLive2DBaseScale(
+        rect.width,
+        refHeight,
+        bounds.width,
+        bounds.height,
+        safePadding,
+        scaleBaseMode,
+      );
       inst.baseScale = baseScale;
 
       const userScale = transformConfig.scale || 1.0;
@@ -2565,7 +2601,7 @@ const __awaiter =
 
       // bottom align：以“虚拟槽位”底部中心为原点
       const originX = rect.width / 2;
-      const originY = rect.height;
+      const originY = scaleBaseMode === 'height' ? overlayRefHeight : rect.height;
       inst.model.x = originX + (transformConfig.offsetX || 0);
       inst.model.y = originY + (transformConfig.offsetY || 0);
 
@@ -3054,10 +3090,13 @@ const __awaiter =
         const transform = Live2DManager.getCurrentTransform(characterId);
         if (transform) {
           const config = getLive2DConfig(characterId);
+          const currentTransform = config.transform || {};
           config.transform = {
+            ...currentTransform,
             offsetX: Math.round(transform.offsetX),
             offsetY: Math.round(transform.offsetY),
-            scale: parseFloat(transform.scale.toFixed(2))
+            scale: parseFloat(transform.scale.toFixed(2)),
+            scaleBase: normalizeLive2DScaleBase(currentTransform.scaleBase),
           };
           setLive2DConfig(characterId, config);
 
@@ -3747,6 +3786,43 @@ const __awaiter =
   const CHAR_USE_LIVE2D_KEY = `${SCRIPT_ID}_char_use_live2d`;
   const LIVE2D_CONFIG_KEY = `${SCRIPT_ID}_live2d_config`;
 
+  function normalizeLive2DScaleBase(scaleBase) {
+    return scaleBase === 'fit' ? 'fit' : 'height';
+  }
+
+  function calculateLive2DBaseScale(rectWidth, rectHeight, boundsWidth, boundsHeight, safePadding = 0.03, scaleBase = 'fit') {
+    const safeRectWidth = Math.max(1, Number(rectWidth) || 0);
+    const safeRectHeight = Math.max(1, Number(rectHeight) || 0);
+    const safeBoundsWidth = Math.max(1, Number(boundsWidth) || 0);
+    const safeBoundsHeight = Math.max(1, Number(boundsHeight) || 0);
+    const resolvedScaleBase = normalizeLive2DScaleBase(scaleBase);
+    const safePaddingRatio = Math.min(0.2, Math.max(0, Number(safePadding) || 0));
+
+    const widthRatio = safeRectWidth / safeBoundsWidth;
+    const heightRatio = safeRectHeight / safeBoundsHeight;
+    const fitScale = resolvedScaleBase === 'height'
+      ? heightRatio
+      : Math.min(widthRatio, heightRatio);
+    const baseScale = fitScale * (1 - safePaddingRatio);
+    return Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1;
+  }
+
+  function getOverlayReferenceHeight(element, fallbackHeight = 0) {
+    const safeFallbackHeight = Math.max(1, Number(fallbackHeight) || 1);
+    if (!element || typeof element.closest !== 'function') {
+      return safeFallbackHeight;
+    }
+    const overlayEl = element.closest('#gal-global-overlay');
+    if (!overlayEl) {
+      return safeFallbackHeight;
+    }
+    const overlayHeight = Math.max(
+      1,
+      Math.floor(Number(overlayEl.clientHeight) || Number(overlayEl.offsetHeight) || 0),
+    );
+    return Number.isFinite(overlayHeight) && overlayHeight > 0 ? overlayHeight : safeFallbackHeight;
+  }
+
   // 获取默认 Live2D 配置
   function getDefaultLive2DConfig() {
     return {
@@ -3754,7 +3830,8 @@ const __awaiter =
       transform: {
         offsetX: 0,        // 水平偏移 (像素)
         offsetY: 0,        // 垂直偏移 (像素)
-        scale: 1.0         // 缩放倍率 (0.5-2.0)
+        scale: 1.0,        // 缩放倍率 (0.5-2.0)
+        scaleBase: 'height',  // 缩放基准：fit | height
       },
       // 纹理精度设置
       quality: {
@@ -11266,6 +11343,12 @@ ${extraRule}
   let currentDisplayMesId = null;
   // 覆盖层更新串行队列，避免 NEXT/PREV/AUTO 并发修改同一批 DOM/Live2D 状态
   let overlayUpdateQueue = Promise.resolve();
+  let chatScrollLockSnapshot = null;
+  let overlayHeightLockState = {
+    lastViewportHeight: 0,
+    lastOverlayHeight: 0,
+  };
+  const OVERLAY_HEIGHT_RECALC_THRESHOLD = 24;
 
   function queueOverlayUpdate(source, updateTask) {
     const run = async () => {
@@ -11458,6 +11541,77 @@ ${extraRule}
   /**
    * 自适应缩放（基准宽度 1200，无下限限制）
    */
+  function setChatScrollLock(locked) {
+    const targetDoc = topWindow.document;
+    const chatEl = targetDoc.getElementById('chat');
+    if (!chatEl) return;
+
+    if (locked) {
+      if (!chatScrollLockSnapshot) {
+        chatScrollLockSnapshot = {
+          overflowX: chatEl.style.overflowX || '',
+          overflowY: chatEl.style.overflowY || '',
+          overscrollBehavior: chatEl.style.overscrollBehavior || '',
+        };
+      }
+      chatEl.style.overflowX = 'hidden';
+      chatEl.style.overflowY = 'hidden';
+      chatEl.style.overscrollBehavior = 'contain';
+      return;
+    }
+
+    if (!chatScrollLockSnapshot) return;
+    chatEl.style.overflowX = chatScrollLockSnapshot.overflowX;
+    chatEl.style.overflowY = chatScrollLockSnapshot.overflowY;
+    chatEl.style.overscrollBehavior = chatScrollLockSnapshot.overscrollBehavior;
+    chatScrollLockSnapshot = null;
+  }
+
+  function syncOverlayHeightToChatViewport(overlay, { force = false } = {}) {
+    if (!overlay || overlay.classList.contains('fullscreen')) return;
+
+    const targetDoc = topWindow.document;
+    const chatEl = targetDoc.getElementById('chat');
+    if (!chatEl) return;
+
+    const viewportHeight = Math.max(
+      1,
+      Math.floor(
+        Number(topWindow.innerHeight)
+        || Number(targetDoc.documentElement?.clientHeight)
+        || 0,
+      ),
+    );
+    const lastViewportHeight = Number(overlayHeightLockState.lastViewportHeight) || 0;
+    const viewportChanged = Math.abs(viewportHeight - lastViewportHeight) > OVERLAY_HEIGHT_RECALC_THRESHOLD;
+    const lockedHeight = Number(overlayHeightLockState.lastOverlayHeight) || 0;
+
+    if (!force && !viewportChanged && lockedHeight > 0) {
+      overlay.style.minHeight = '0px';
+      overlay.style.maxHeight = `${lockedHeight}px`;
+      overlay.style.height = `${lockedHeight}px`;
+      return;
+    }
+
+    const chatHeight = Number(chatEl.clientHeight) || 0;
+    if (!Number.isFinite(chatHeight) || chatHeight <= 0) return;
+
+    let marginTop = 0;
+    let marginBottom = 0;
+    try {
+      const computed = topWindow.getComputedStyle(overlay);
+      marginTop = parseFloat(computed.marginTop) || 0;
+      marginBottom = parseFloat(computed.marginBottom) || 0;
+    } catch (e) {}
+
+    const targetHeight = Math.max(120, Math.floor(chatHeight - marginTop - marginBottom));
+    overlay.style.minHeight = '0px';
+    overlay.style.maxHeight = `${targetHeight}px`;
+    overlay.style.height = `${targetHeight}px`;
+    overlayHeightLockState.lastViewportHeight = viewportHeight;
+    overlayHeightLockState.lastOverlayHeight = targetHeight;
+  }
+
   function adjustGameContentScale() {
     const targetDoc = topWindow.document;
     const overlay = targetDoc.getElementById('gal-global-overlay');
@@ -11468,6 +11622,8 @@ ${extraRule}
       overlay.style.setProperty('--ui-scale', '1');
       return;
     }
+
+    syncOverlayHeightToChatViewport(overlay);
 
     const width = overlay.clientWidth || overlay.getBoundingClientRect().width;
     if (!width || !Number.isFinite(width)) return;
@@ -11515,9 +11671,13 @@ ${extraRule}
     //console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 获取到覆盖层元素=${$overlay.length > 0}`);
     if ($overlay.length) {
       $overlay.addClass('active');
+      setChatScrollLock(true);
+      overlayHeightLockState.lastViewportHeight = 0;
+      overlayHeightLockState.lastOverlayHeight = 0;
       //console.log(`[${SCRIPT_NAME}] showGlobalOverlay: 已添加active类, 当前类名=${$overlay.attr('class')}`);
       // 显示后调整游戏内容缩放和工具栏布局
       setTimeout(() => {
+        syncOverlayHeightToChatViewport($overlay[0], { force: true });
         adjustGameContentScale();
         adjustToolbarForSpace();
       }, 0);
@@ -11531,6 +11691,9 @@ ${extraRule}
   function hideGlobalOverlay() {
     const targetDoc = topWindow.document;
     $(targetDoc).find('#gal-global-overlay').removeClass('active');
+    setChatScrollLock(false);
+    overlayHeightLockState.lastViewportHeight = 0;
+    overlayHeightLockState.lastOverlayHeight = 0;
     console.log(`[${SCRIPT_NAME}] 隐藏全局Galgame覆盖层`);
   }
   /**
@@ -17459,6 +17622,7 @@ ${extraRule}
     // 获取当前配置
     const config = getLive2DConfig(characterId);
     const transformConfig = config.transform || {};
+    const transformScaleBase = normalizeLive2DScaleBase(transformConfig.scaleBase);
     const qualityConfig = config.quality || {};
     const expressionMapping = config.expressionMapping || {};
     const motionMapping = config.motionMapping || {};
@@ -17613,6 +17777,13 @@ ${extraRule}
                   <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #333;">缩放倍率: <span id="gal-live2d-scale-value">${(transformConfig.scale || 1.0).toFixed(1)}x</span></label>
                   <input type="range" id="gal-live2d-scale" min="0.5" max="2.0" step="0.1" value="${transformConfig.scale || 1.0}" style="width: 100%;">
                 </div>
+                <div style="margin-top: 15px;">
+                  <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 0.9rem; color: #333;">缩放基准</label>
+                  <select id="gal-live2d-scale-base" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="height" ${transformScaleBase === 'height' ? 'selected' : ''}>按高度 (height，推荐)</option>
+                    <option value="fit" ${transformScaleBase === 'fit' ? 'selected' : ''}>适应容器 (fit)</option>
+                  </select>
+                </div>
                 <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
                   <button id="gal-live2d-reset-transform" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
                     <i class="fa-solid fa-undo"></i> 重置为默认
@@ -17740,6 +17911,7 @@ ${extraRule}
       $modal.find('#gal-live2d-offset-y').val(0);
       $modal.find('#gal-live2d-scale').val(1.0);
       $modal.find('#gal-live2d-scale-value').text('1.0x');
+      $modal.find('#gal-live2d-scale-base').val('height');
       // 实时更新（若当前角色已在舞台上会立即生效）
       Live2DManager.setOffset(characterId, 0, 0);
       Live2DManager.setScale(characterId, 1.0);
@@ -17789,10 +17961,11 @@ ${extraRule}
       const currentTransform = {
         offsetX: parseInt($modal.find('#gal-live2d-offset-x').val()) || 0,
         offsetY: parseInt($modal.find('#gal-live2d-offset-y').val()) || 0,
-        scale: parseFloat($modal.find('#gal-live2d-scale').val()) || 1.0
+        scale: parseFloat($modal.find('#gal-live2d-scale').val()) || 1.0,
+        scaleBase: normalizeLive2DScaleBase($modal.find('#gal-live2d-scale-base').val()),
       };
       const config = getLive2DConfig(characterId);
-      config.transform = currentTransform;
+      config.transform = { ...(config.transform || {}), ...currentTransform };
       setLive2DConfig(characterId, config);
 
       // 关闭弹窗
@@ -17808,7 +17981,8 @@ ${extraRule}
       const newTransform = {
         offsetX: parseInt($modal.find('#gal-live2d-offset-x').val()) || 0,
         offsetY: parseInt($modal.find('#gal-live2d-offset-y').val()) || 0,
-        scale: parseFloat($modal.find('#gal-live2d-scale').val()) || 1.0
+        scale: parseFloat($modal.find('#gal-live2d-scale').val()) || 1.0,
+        scaleBase: normalizeLive2DScaleBase($modal.find('#gal-live2d-scale-base').val()),
       };
 
       // 收集精度设置

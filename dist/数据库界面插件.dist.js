@@ -5018,8 +5018,84 @@ const __awaiter =
   }
 
   // ============================================
-  // TTS 音色配置 (LittleWhiteBox)
+  // TTS 音色配置 (Providers)
   // ============================================
+
+  const TTS_PROVIDER = {
+    LITTLEWHITEBOX: 'littlewhitebox',
+    GPT_SOVITS_V2: 'gpt_sovits_v2',
+  };
+
+  function getTTSProvider() {
+    try {
+      return settings?.ttsProvider || TTS_PROVIDER.LITTLEWHITEBOX;
+    } catch (e) {
+      return TTS_PROVIDER.LITTLEWHITEBOX;
+    }
+  }
+
+  function getGptSoVitsConfig() {
+    const defaults = {
+      apiUrl: 'http://127.0.0.1:9880',
+      endpoint: '/tts',
+      useCorsProxy: true,
+      mediaType: 'wav',
+      streamingMode: true,
+      textLang: 'auto',
+      textSplitMethod: 'cut5',
+      speedFactor: 1,
+      voices: [],
+    };
+
+    try {
+      const cfg = settings?.gptSoVits || {};
+      return Object.assign(Object.assign({}, defaults), cfg, { voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices });
+    } catch (e) {
+      return defaults;
+    }
+  }
+
+  function normalizeGptSoVitsVoice(voice) {
+    if (!voice) return null;
+    const name = String(voice.name || voice.voice || voice.speaker || '').trim();
+    if (!name) return null;
+
+    const refAudioPath = String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || '').trim();
+    const promptText = String(voice.promptText || voice.prompt_text || '').trim();
+    const promptLang = String(voice.promptLang || voice.prompt_lang || '').trim();
+    const textLang = String(voice.textLang || voice.text_lang || '').trim();
+    const desc = String(voice.desc || voice.description || '').trim();
+
+    return {
+      name,
+      value: name,
+      source: TTS_PROVIDER.GPT_SOVITS_V2,
+      resourceId: null,
+      desc: desc || 'GPT-SoVITS',
+      gptSoVits: {
+        refAudioPath,
+        promptText,
+        promptLang,
+        textLang,
+      },
+    };
+  }
+
+  async function getGptSoVitsVoiceListAsync() {
+    const cfg = getGptSoVitsConfig();
+    const list = Array.isArray(cfg.voices) ? cfg.voices : [];
+    return list.map(normalizeGptSoVitsVoice).filter(Boolean);
+  }
+
+  function getGptSoVitsVoiceList() {
+    try {
+      const cfg = getGptSoVitsConfig();
+      const list = Array.isArray(cfg.voices) ? cfg.voices : [];
+      return list.map(normalizeGptSoVitsVoice).filter(Boolean);
+    } catch (e) {
+      return [];
+    }
+  }
 
   // 缓存 LittleWhiteBox TTS 数据
   let _lwbTtsCache = null;
@@ -5047,6 +5123,11 @@ const __awaiter =
    * @returns {Promise<Array<{name: string, value: string, source: string, resourceId: string}>>}
    */
   async function getTTSVoiceListAsync() {
+    const provider = getTTSProvider();
+    if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
+      return getGptSoVitsVoiceListAsync();
+    }
+
     // 1. 优先从服务器文件获取（最可靠的方式）
     const now = Date.now();
     if (!_lwbTtsCache || (now - _lwbTtsCacheTime) > LWB_TTS_CACHE_MS) {
@@ -5102,6 +5183,11 @@ const __awaiter =
    * @returns {Array<{name: string, value: string, source: string, resourceId: string}>}
    */
   function getTTSVoiceList() {
+    const provider = getTTSProvider();
+    if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
+      return getGptSoVitsVoiceList();
+    }
+
     // 如果有缓存，先返回缓存
     if (_lwbTtsCache) {
       return _lwbTtsCache;
@@ -5825,6 +5911,20 @@ ${extraRule}
     ttsEnabled: true, // 是否启用TTS
     ttsAutoPlay: true, // 是否自动播放
     ttsDefaultSpeaker: '', // 默认TTS音色（空则使用角色名）
+    // TTS 引擎选择: 'littlewhitebox' | 'gpt_sovits_v2'
+    ttsProvider: 'littlewhitebox',
+    // GPT-SoVITS (api_v2.py) 配置
+    gptSoVits: {
+      apiUrl: 'http://127.0.0.1:9880',
+      endpoint: '/tts',
+      useCorsProxy: true, // 走酒馆 /proxy 或 corsProxy，解决跨域与口型同步取流
+      mediaType: 'wav', // wav | ogg | raw
+      streamingMode: true,
+      textLang: 'auto', // text_lang: auto/zh/en/ja/...
+      textSplitMethod: 'cut5',
+      speedFactor: 1,
+      voices: [], // [{ name, desc?, refAudioPath, promptText?, promptLang?, textLang? }]
+    },
     // 加强模式设置
     enhancedMode: {
       enabled: false,
@@ -6016,10 +6116,11 @@ ${extraRule}
     updateUI() {},
   };
   // ============================================
-  // TTS 管理器 (LittleWhiteBox 集成)
+  // TTS 管理器 (LittleWhiteBox / GPT-SoVITS)
   // ============================================
   const TTSManager = {
     enabled: true,
+    provider: TTS_PROVIDER.LITTLEWHITEBOX,
     autoPlay: true, // 是否自动播放
     isPlaying: false, // 当前是否正在播放
     isLoading: false, // 是否正在加载TTS
@@ -6027,34 +6128,64 @@ ${extraRule}
     currentSegmentId: null, // 当前播放的段落ID
     littleWhiteBox: null, // LittleWhiteBox 引用
 
+    _refreshProviderState() {
+      const provider = getTTSProvider();
+      this.provider = provider;
+
+      // LittleWhiteBox：需要探测到插件对象才可用
+      if (provider === TTS_PROVIDER.LITTLEWHITEBOX) {
+        // 检测 xiaobaixTts（LittleWhiteBox 的 TTS 对象）
+        if (topWindow.xiaobaixTts) {
+          this.xiaobaixTts = topWindow.xiaobaixTts;
+          console.log(`[${SCRIPT_NAME}] TTSManager: 已连接到 xiaobaixTts`);
+        }
+        // 尝试获取 LittleWhiteBox 引用（备用）
+        else if (topWindow.LittleWhiteBox) {
+          this.littleWhiteBox = topWindow.LittleWhiteBox;
+          console.log(`[${SCRIPT_NAME}] TTSManager: 已连接到 LittleWhiteBox`);
+        }
+
+        if (!this.xiaobaixTts && !this.littleWhiteBox) {
+          console.warn(`[${SCRIPT_NAME}] TTSManager: 未找到 xiaobaixTts/LittleWhiteBox，将禁用TTS`);
+          this.enabled = false;
+          return false;
+        }
+
+        this.enabled = true;
+        return true;
+      }
+
+      // GPT-SoVITS：仅依赖 HTTP API，可用性在 speak 时再校验
+      if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
+        this.enabled = true;
+        return true;
+      }
+
+      // 未知 provider：保持可用，但可能在 speak 时失败
+      this.enabled = true;
+      return true;
+    },
+
+    _onPlaybackEnded(reason = 'unknown') {
+      console.log(`[${SCRIPT_NAME}] TTS: 播放结束 - reason=${reason}`);
+      this.isPlaying = false;
+      this.isLoading = false;
+      this.currentAudio = null;
+      this.currentSegmentId = null;
+      this.hideLoadingIndicator();
+      // ★ 停止口型同步
+      LipSyncManager.stopSync();
+    },
+
     /**
      * 初始化 TTS 管理器
      */
     init() {
-      // 检测 xiaobaixTts（LittleWhiteBox 的 TTS 对象）
-      if (topWindow.xiaobaixTts) {
-        this.xiaobaixTts = topWindow.xiaobaixTts;
-        console.log(`[${SCRIPT_NAME}] TTSManager: 已连接到 xiaobaixTts`);
-      }
-      // 尝试获取 LittleWhiteBox 引用（备用）
-      else if (topWindow.LittleWhiteBox) {
-        this.littleWhiteBox = topWindow.LittleWhiteBox;
-        console.log(`[${SCRIPT_NAME}] TTSManager: 已连接到 LittleWhiteBox`);
-      }
-
-      if (!this.xiaobaixTts && !this.littleWhiteBox) {
-        console.warn(`[${SCRIPT_NAME}] TTSManager: 未找到 xiaobaixTts/LittleWhiteBox，将禁用TTS`);
-        this.enabled = false;
-      }
+      this._refreshProviderState();
 
       // 监听 TTS 完成事件
       $(topWindow).on('tts_complete tts_end', () => {
-        this.isPlaying = false;
-        this.isLoading = false;
-        this.currentAudio = null;
-        this.hideLoadingIndicator();
-        // ★ 停止口型同步
-        LipSyncManager.stopSync();
+        this._onPlaybackEnded('littlewhitebox_event');
       });
     },
 
@@ -6083,6 +6214,15 @@ ${extraRule}
       console.log(`[${SCRIPT_NAME}] TTS: 中止当前播放`);
 
       try {
+        // 方式0: 停止当前 audio（GPT-SoVITS 或其他自建播放）
+        if (this.currentAudio && typeof this.currentAudio.pause === 'function') {
+          try { this.currentAudio.pause(); } catch (e) {}
+          try {
+            this.currentAudio.src = '';
+            if (typeof this.currentAudio.load === 'function') this.currentAudio.load();
+          } catch (e) {}
+        }
+
         // 方式1: 使用 xiaobaixTts.player 的方法（主要方式）
         if (this.xiaobaixTts && this.xiaobaixTts.player) {
           const player = this.xiaobaixTts.player;
@@ -6114,12 +6254,16 @@ ${extraRule}
       this.currentAudio = null;
       this.currentSegmentId = null;
       this.hideLoadingIndicator();
+      LipSyncManager.stopSync();
     },
 
     /**
      * 获取当前播放的音频元素
      */
     _getCurrentAudioElement() {
+      // 优先返回自建音频（GPT-SoVITS 等）
+      if (this.currentAudio) return this.currentAudio;
+
       // 方式1: 从 xiaobaixTts.player.currentAudio 获取（LittleWhiteBox 播放器）
       if (this.xiaobaixTts?.player?.currentAudio) {
         return this.xiaobaixTts.player.currentAudio;
@@ -6153,6 +6297,7 @@ ${extraRule}
 
     // 优先获取 LittleWhiteBox 播放器音频（避免拿到错误的 DOM audio）
     _getPreferredAudioElement() {
+      if (this.currentAudio) return this.currentAudio;
       if (this.xiaobaixTts?.player?.currentAudio) {
         return this.xiaobaixTts.player.currentAudio;
       }
@@ -6219,6 +6364,106 @@ ${extraRule}
       }
 
       return originalUrl;
+    },
+
+    _buildGptSoVitsTtsUrl(text, resolvedVoice) {
+      const cfg = getGptSoVitsConfig();
+      const base = String(cfg.apiUrl || '').replace(/\/$/, '');
+      const endpointRaw = String(cfg.endpoint || '/tts');
+      const endpoint = endpointRaw.startsWith('/') ? endpointRaw : `/${endpointRaw}`;
+      if (!base) return '';
+
+      try {
+        const url = new URL(base + endpoint);
+        const vcfg = resolvedVoice?.gptSoVits || {};
+
+        const textLang = String(vcfg.textLang || cfg.textLang || 'auto').trim() || 'auto';
+        const promptLang = String(vcfg.promptLang || 'zh').trim() || 'zh';
+        const refAudioPath = String(vcfg.refAudioPath || '').trim();
+        const promptText = String(vcfg.promptText || '').trim();
+
+        url.searchParams.set('text', text);
+        url.searchParams.set('text_lang', textLang);
+        url.searchParams.set('ref_audio_path', refAudioPath);
+        url.searchParams.set('prompt_lang', promptLang);
+        url.searchParams.set('prompt_text', promptText);
+
+        if (cfg.textSplitMethod) url.searchParams.set('text_split_method', String(cfg.textSplitMethod));
+        if (cfg.mediaType) url.searchParams.set('media_type', String(cfg.mediaType));
+        url.searchParams.set('streaming_mode', cfg.streamingMode ? 'true' : 'false');
+        if (cfg.speedFactor) url.searchParams.set('speed_factor', String(cfg.speedFactor));
+
+        return url.toString();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 生成URL失败`, e);
+        return '';
+      }
+    },
+
+    async _speakWithGptSoVits(segment, segmentId, resolvedVoice) {
+      const cfg = getGptSoVitsConfig();
+      const vcfg = resolvedVoice?.gptSoVits || {};
+
+      if (!cfg.apiUrl) {
+        showToast('GPT-SoVITS: 请先在设置中填写 API 地址');
+        return false;
+      }
+      if (!vcfg.refAudioPath) {
+        showToast('GPT-SoVITS: 当前音色缺少 refAudioPath');
+        return false;
+      }
+
+      const directUrl = this._buildGptSoVitsTtsUrl(segment.text, resolvedVoice);
+      if (!directUrl) {
+        showToast('GPT-SoVITS: 无法生成请求URL');
+        return false;
+      }
+
+      const audioUrl = cfg.useCorsProxy ? this._getProxiedAudioUrl(directUrl) : directUrl;
+
+      const audio = new Audio();
+      audio.crossOrigin = 'anonymous';
+      audio.src = audioUrl;
+
+      // 记录当前播放实例（供口型同步与 stop() 使用）
+      this.currentAudio = audio;
+      this.currentSegmentId = segmentId;
+
+      const onEnded = () => {
+        if (this.currentAudio === audio) {
+          this._onPlaybackEnded('gpt_sovits_audio_ended');
+        }
+      };
+      const onError = e => {
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: audio error`, e);
+        showToast('GPT-SoVITS 播放失败（检查地址/代理/CORS）');
+        onEnded();
+      };
+
+      audio.addEventListener('ended', onEnded, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+
+      try {
+        await audio.play();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: play() 失败`, e);
+        showToast('GPT-SoVITS 播放被浏览器拦截（需要用户交互）');
+        onEnded();
+        return false;
+      }
+
+      this.isPlaying = true;
+
+      // ★ 口型同步集成（监听 playing 事件）
+      const hasLive2D = Live2DManager.models.has(segment.speaker);
+      console.log(`[${SCRIPT_NAME}] TTS: 检查口型同步 - hasLive2D=${hasLive2D}, speaker=${segment.speaker}`);
+      if (hasLive2D) {
+        this._startLipSyncOnPlay(segment.speaker);
+      } else {
+        this._startLipSyncWhenModelReady(segment.speaker);
+      }
+
+      return true;
     },
 
     /**
@@ -13669,117 +13914,26 @@ ${extraRule}
     }
 
 
-    /* === ��ʷ��¼����ƶ���ȫ�� (History Panel Fullscreen) === */
+    /* === 历史记录弹窗移动端统一修复（合并重复补丁块） === */
     @media screen and (max-width: 48rem) {
-        /* 1. ģ̬������ */
         #gal-history-modal {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            margin: 0 !important;
             padding: 0 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-        }
-
-        /* 2. �������ȫ���� */
-        #gal-history-modal .gal-history-panel {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: 100% !important;
-            max-height: 100% !important;
-            border-radius: 0 !important;
-            top: 0 !important;
-            left: 0 !important;
-            transform: none !important;
-            display: flex !important;
-            flex-direction: column !important;
-            margin: 0 !important;
-        }
-
-        /* 3. ͷ������ */
-        #gal-history-modal .gal-history-header {
-            flex-shrink: 0 !important;
-            padding: 0.625rem 0.938rem !important;
-            border-bottom: 1px solid #eee !important;
-        }
-
-        /* 4. ����������Ӧ */
-        #gal-history-modal .gal-history-body {
-            flex: 1 !important;
-            height: auto !important; /* �� flex ��Ч */
-            max-height: none !important;
-            overflow-y: auto !important;
-            padding: 0.938rem !important;
-        }
-    }
-
-
-    /* === ��ʷ��¼���ɼ���ǿ�� (History Panel Visibility Hardening) === */
-    @media screen and (max-width: 48rem) {
-        /* ǿ�Ƹ��� ID ѡ������ȷ��ģ̬��ɼ� */
-        #gal-history-modal {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
             z-index: var(--gal-z-modal-critical) !important;
             background: rgba(0,0,0,0.85) !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            display: flex !important;
-        }
-
-        /* ȷ���������㼶��ȷ */
-        #gal-history-modal .gal-history-panel {
-            z-index: var(--gal-z-modal-critical) !important; /* �ȱ�����һ�� */
-            background: #fff !important;
-            width: 100% !important;
-            height: 100% !important;
-            transform: none !important; /* ���ÿ��ܴ��ڵ� scale ���� */
-            opacity: 1 !important;
-        }
-    }
-
-
-    /* === ��ʷ��¼���ɼ����޸� (Visibility Fix) === */
-    @media screen and (max-width: 48rem) {
-        #gal-history-modal {
-            /* ǿ�ƶ�λ�ͳߴ磬��ֹ����ʽ�۵� */
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: var(--gal-z-modal-critical) !important; /* ȷ�����ϲ� */
-            background: rgba(0,0,0,0.85) !important;
-            display: flex !important;
-            /* ȷ�����ݿɼ� */
             visibility: visible !important;
             opacity: 1 !important;
-        }
-    }
-
-
-    /* === ��ʷ��¼����ӿڵ�λ�޸� (Viewport Units Fix) === */
-    @media screen and (max-width: 48rem) {
-        #gal-history-modal {
-            /* ���� 100%�������ӿڵ�λ����ֹ�������߶�Ϊ0���²���ʾ */
-            width: 100vw !important;
-            height: 100vh !important;
-            
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: auto !important;
-            bottom: auto !important;
-            z-index: var(--gal-z-modal-critical) !important;
-            background: rgba(0,0,0,0.85) !important;
-            display: flex !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            visibility: visible !important;
         }
 
         #gal-history-modal .gal-history-panel {
+            position: relative !important;
             width: 100vw !important;
             height: 100vh !important;
             max-width: none !important;
@@ -13787,6 +13941,26 @@ ${extraRule}
             margin: 0 !important;
             border: none !important;
             border-radius: 0 !important;
+            background: #fff !important;
+            transform: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+            z-index: var(--gal-z-modal-critical) !important;
+            opacity: 1 !important;
+        }
+
+        #gal-history-modal .gal-history-header {
+            flex-shrink: 0 !important;
+            padding: 0.625rem 0.938rem !important;
+            border-bottom: 1px solid #eee !important;
+        }
+
+        #gal-history-modal .gal-history-body {
+            flex: 1 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: auto !important;
+            padding: 0.938rem !important;
         }
     }
 
@@ -23063,8 +23237,8 @@ ${extraRule}
    * @param {boolean} userDismissed - 是否是用户主动关闭（点击空白处）
    */
   function hideGalgameChoices(userDismissed = false) {
-    const targetDoc = topWindow.document;
-    $(targetDoc).find('#gal-layer-choices').removeClass('active');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).find('#gal-layer-choices').removeClass('active');
     galgameChoicesVisible = false;
     // 如果还有选项，确保按钮是显示的
     if (pendingOptions && pendingOptions.length > 0) {
@@ -23078,8 +23252,8 @@ ${extraRule}
   function handleChoiceSelection(optionValue) {
     console.log(`[${SCRIPT_NAME}] 用户选择了选项: ${optionValue}`);
     // 隐藏选项面板
-    const targetDoc = topWindow.document;
-    $(targetDoc).find('#gal-layer-choices').removeClass('active');
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).find('#gal-layer-choices').removeClass('active');
     galgameChoicesVisible = false;
     // 隐藏按钮（因为已经选了）
     // hidePendingChoicesButton(); // ★ 用户要求保留按钮显示

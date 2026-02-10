@@ -2934,10 +2934,113 @@ const __awaiter =
     characterId: null,         // 当前调整的角色
     originalConfig: null,      // 原始配置 (用于取消时恢复)
     $toolbar: null,            // 浮动工具栏 jQuery 对象
+    $guide: null,              // 位置参考框
     isDragging: false,         // 是否正在拖拽
     dragStart: { x: 0, y: 0 }, // 拖拽起始位置
     modelStart: { x: 0, y: 0 },// 模型起始位置
     lastPinchDistance: 0,      // 双指缩放距离
+    currentSlot: 'left',       // 当前角色槽位
+    _stagePushed: false,       // 是否已 pushMount
+    _onResize: null,           // resize 监听器
+
+    // 进入编辑前，清理其它窗口并确保主界面可见
+    prepareEditContext() {
+      const _$ = topWindow.jQuery || $;
+
+      // 确保预览挂载不会残留
+      try {
+        Live2DStage.popMount();
+      } catch (e) {}
+
+      // 关闭其它窗口与临时面板
+      const dismissSelectors = [
+        '#gal-custom-popup',
+        '#gal-history-modal',
+        '#gal-character-sprites-modal',
+        '#gal-settings-panel',
+        '#gal-asset-manager-modal',
+        '#gal-pack-manager-modal',
+        '#gal-transfer-modal',
+        '#gal-batch-bg-upload-modal',
+        '#gal-bg-upload-modal',
+        '#gal-live2d-settings-modal',
+        '#gal-prompts-modal',
+        '#gal-free-input-modal',
+        '#gal-import-pack-selector',
+        '.gal-input-modal',
+        '.gal-config-modal',
+        '.gal-z-dropdown',
+      ];
+      dismissSelectors.forEach(sel => {
+        try {
+          _$(sel).remove();
+        } catch (e) {}
+      });
+
+      let $overlay = _$('#gal-global-overlay');
+      if (!$overlay.length) {
+        $overlay = ensureGlobalOverlay();
+      }
+
+      if (!$overlay.length) {
+        const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+        if (_toastr) {
+          _toastr.error('未找到游戏主界面');
+        }
+        return false;
+      }
+
+      if (!$overlay.hasClass('active')) {
+        showGlobalOverlay();
+      } else {
+        setChatScrollLock(true);
+        syncOverlayHeightToChatViewport($overlay[0], { force: true });
+        adjustGameContentScale();
+      }
+
+      return true;
+    },
+
+    _removeGuide() {
+      const _$ = topWindow.jQuery || $;
+      _$('#gal-live2d-position-guide').remove();
+      this.$guide = null;
+    },
+
+    _createGuide() {
+      const _$ = topWindow.jQuery || $;
+      this._removeGuide();
+
+      const $gameContent = _$('#gal-global-overlay .gal-game-content');
+      if (!$gameContent.length) return;
+
+      const label = this.currentSlot === 'right' ? '右侧角色调整区域' : '左侧角色调整区域';
+      const guideHtml = `
+        <div id="gal-live2d-position-guide" class="gal-live2d-position-guide">
+          <div class="gal-live2d-position-guide-box">
+            <span class="gal-live2d-position-guide-label">${label}</span>
+          </div>
+        </div>
+      `;
+
+      $gameContent.append(guideHtml);
+      this.$guide = _$('#gal-live2d-position-guide');
+      this._updateGuideRect();
+    },
+
+    _updateGuideRect() {
+      if (!this.$guide || !this.$guide.length) return;
+      const rect = Live2DStage.slots[this.currentSlot]?.rect;
+      if (!rect) return;
+
+      const $box = this.$guide.find('.gal-live2d-position-guide-box');
+      $box.css({
+        left: `${Math.round(rect.x)}px`,
+        top: `${Math.round(rect.y)}px`,
+        width: `${Math.round(rect.width)}px`,
+        height: `${Math.round(rect.height)}px`,
+      });
+    },
 
     // 进入调整模式
     async enter(characterId) {
@@ -2948,6 +3051,8 @@ const __awaiter =
       const _$ = topWindow.jQuery || $;
       this.characterId = characterId;
       this.isActive = true;
+      this._stagePushed = false;
+      this.currentSlot = 'left';
 
       // 保存原始配置
       const config = getLive2DConfig(characterId);
@@ -2968,7 +3073,18 @@ const __awaiter =
         return;
       }
 
-      // 在主界面 gal-game-content 中创建全屏调整容器
+      if (!this.prepareEditContext()) {
+        this.isActive = false;
+        return;
+      }
+
+      const waitFrame = () => new Promise(resolve => {
+        (topWindow.requestAnimationFrame || requestAnimationFrame)(() => resolve());
+      });
+      await waitFrame();
+      await waitFrame();
+
+      // 直接挂载到主界面真实舞台，确保所见即所得
       const $gameContent = _$('#gal-global-overlay .gal-game-content');
       if (!$gameContent.length) {
         const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
@@ -2979,58 +3095,30 @@ const __awaiter =
         return;
       }
 
-      // 移除已有的调整容器
-      _$('#gal-live2d-position-edit-container').remove();
+      const existingSlot = Live2DStage.instances.get(characterId)?.slot;
+      this.currentSlot = existingSlot === 'right' ? 'right' : 'left';
 
-      // 获取实际槽位的尺寸作为参考（模拟实际显示效果）
-      let slotWidth = 200;
-      let slotHeight = 400;
-      const $existingSlot = _$('#gal-global-overlay .gal-char-slot').first();
-      if ($existingSlot.length) {
-        slotWidth = $existingSlot.width() || 200;
-        slotHeight = $existingSlot.height() || 400;
-      }
-
-      // 创建调整容器，使用与实际槽位相同的尺寸
-      // 放在游戏内容区域中央，尺寸模拟实际槽位
-      const fullscreenContainerHtml = `
-        <div id="gal-live2d-position-edit-container" class="gal-z-dropdown" style="
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          width: ${slotWidth}px;
-          height: ${slotHeight}px;
-          pointer-events: none;
-          border: 2px dashed rgba(0, 210, 255, 0.5);
-          border-radius: 8px;
-          box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
-          background: rgba(0, 0, 0, 0.1);
-        ">
-          <div class="gal-live2d-canvas-container" style="width: 100%; height: 100%; position: relative;"></div>
-        </div>
-      `;
-      $gameContent.append(fullscreenContainerHtml);
-
-      const $mainContainer = _$('#gal-live2d-position-edit-container .gal-live2d-canvas-container');
-      this._tempContainerCreated = true;
-
-      // 复用同一个舞台：pushMount 到调整容器并挂载模型（避免“又创建一个 app”）
-      const containerEl = $mainContainer.get(0);
+      // 复用同一个舞台：挂载到主界面，使用 story 模式保持真实尺寸与位置
+      const containerEl = $gameContent.get(0);
       if (containerEl) {
-        Live2DStage.pushMount(containerEl, { mode: 'single', focusCharacterId: characterId });
-        const attached = Live2DStage.attach(characterId, model, 'left', { entering: false });
+        Live2DStage.pushMount(containerEl, { mode: 'story', focusCharacterId: characterId });
+        this._stagePushed = true;
+        const attached = Live2DStage.attach(characterId, model, this.currentSlot, { entering: false });
         if (!attached) {
-          Live2DStage.popMount();
+          if (this._stagePushed) {
+            Live2DStage.popMount();
+            this._stagePushed = false;
+          }
           const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
           if (_toastr) {
             _toastr.error('模型渲染失败');
           }
           this.isActive = false;
-          _$('#gal-live2d-position-edit-container').remove();
-          this._tempContainerCreated = false;
           return;
         }
+        this.currentSlot = Live2DStage.instances.get(characterId)?.slot === 'right' ? 'right' : 'left';
+        Live2DStage.updateLayout();
+        this._createGuide();
       }
 
       // 等待一帧确保渲染完成
@@ -3046,10 +3134,11 @@ const __awaiter =
           _toastr.error('模型渲染失败');
         }
         this.isActive = false;
-        if (this._tempContainerCreated) {
-          _$('.gal-position-edit-temp').remove();
-          this._tempContainerCreated = false;
+        if (this._stagePushed) {
+          Live2DStage.popMount();
+          this._stagePushed = false;
         }
+        this._removeGuide();
         return;
       }
 
@@ -3069,7 +3158,7 @@ const __awaiter =
         this.updateDisplay(transform.offsetX, transform.offsetY, transform.scale);
       }
 
-      console.log(`[Live2DPositionEditor] 进入调整模式: ${characterId}, 容器已就绪`);
+      console.log(`[Live2DPositionEditor] 进入调整模式: ${characterId}, 槽位=${this.currentSlot}`);
     },
 
     // 退出调整模式
@@ -3116,13 +3205,10 @@ const __awaiter =
         }
       }
 
-      // 如果创建了临时容器，清理它
-      if (this._tempContainerCreated) {
-        // 恢复舞台挂载（不销毁全局 app/canvas）
+      // 恢复舞台挂载（不销毁全局 app/canvas）
+      if (this._stagePushed) {
         Live2DStage.popMount();
-        _$('#gal-live2d-position-edit-container').remove();
-        _$('.gal-position-edit-temp').remove();
-        this._tempContainerCreated = false;
+        this._stagePushed = false;
       }
 
       // 移除工具栏
@@ -3130,10 +3216,12 @@ const __awaiter =
         this.$toolbar.remove();
         this.$toolbar = null;
       }
+      this._removeGuide();
 
       this.isActive = false;
       this.characterId = null;
       this.originalConfig = null;
+      this.currentSlot = 'left';
 
       console.log(`[Live2DPositionEditor] 退出调整模式: ${characterId}, 保存: ${save}`);
     },
@@ -3149,6 +3237,7 @@ const __awaiter =
       this.$toolbar.find('#gal-pos-x-slider').val(offsetX);
       this.$toolbar.find('#gal-pos-y-slider').val(offsetY);
       this.$toolbar.find('#gal-pos-scale-slider').val(scale);
+      this._updateGuideRect();
     },
 
     // 创建浮动工具栏 (使用滑条控件)
@@ -3157,88 +3246,45 @@ const __awaiter =
 
       // 移除已有工具栏
       _$('#gal-live2d-position-toolbar').remove();
-      _$('#gal-live2d-position-hint').remove();
 
       const transform = Live2DManager.getCurrentTransform(this.characterId) || { offsetX: 0, offsetY: 0, scale: 1 };
       const self = this;
 
       const toolbarHtml = `
-        <div id="gal-live2d-position-toolbar" class="gal-z-critical" style="
-          position: fixed;
-          bottom: 20px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(50, 50, 70, 0.98));
-          backdrop-filter: blur(10px);
-          border-radius: 16px;
-          padding: 16px 24px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-          color: #fff;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          min-width: 320px;
-        ">
+        <div id="gal-live2d-position-toolbar" class="gal-live2d-position-toolbar gal-z-critical">
           <!-- X 位置滑条 -->
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="min-width: 70px; font-size: 0.85rem;">X 偏移:</span>
+          <div class="gal-live2d-position-row">
+            <span class="gal-live2d-position-label">X 偏移:</span>
             <input type="range" id="gal-pos-x-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetX)}"
-              style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-            <span class="gal-pos-x-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetX)}</span>
+              class="gal-live2d-position-slider">
+            <span class="gal-live2d-position-value gal-pos-x-val">${Math.round(transform.offsetX)}</span>
           </div>
 
           <!-- Y 位置滑条 -->
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="min-width: 70px; font-size: 0.85rem;">Y 偏移:</span>
+          <div class="gal-live2d-position-row">
+            <span class="gal-live2d-position-label">Y 偏移:</span>
             <input type="range" id="gal-pos-y-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetY)}"
-              style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-            <span class="gal-pos-y-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetY)}</span>
+              class="gal-live2d-position-slider">
+            <span class="gal-live2d-position-value gal-pos-y-val">${Math.round(transform.offsetY)}</span>
           </div>
 
           <!-- 缩放滑条 -->
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="min-width: 70px; font-size: 0.85rem;">缩放:</span>
+          <div class="gal-live2d-position-row">
+            <span class="gal-live2d-position-label">缩放:</span>
             <input type="range" id="gal-pos-scale-slider" min="0.3" max="2.5" step="0.05" value="${transform.scale.toFixed(2)}"
-              style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-            <span class="gal-pos-scale-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${transform.scale.toFixed(2)}x</span>
+              class="gal-live2d-position-slider">
+            <span class="gal-live2d-position-value gal-pos-scale-val">${transform.scale.toFixed(2)}x</span>
           </div>
 
           <!-- 按钮行 -->
-          <div style="display: flex; gap: 10px; margin-top: 4px; justify-content: flex-end;">
-            <button id="gal-pos-reset" style="
-              padding: 8px 16px;
-              background: rgba(255, 255, 255, 0.1);
-              border: 1px solid rgba(255, 255, 255, 0.2);
-              border-radius: 6px;
-              color: #fff;
-              cursor: pointer;
-              font-size: 0.85rem;
-            ">
+          <div class="gal-live2d-position-actions">
+            <button id="gal-pos-reset" class="gal-live2d-position-btn gal-live2d-position-btn-reset">
               <i class="fa-solid fa-undo"></i> 重置
             </button>
-            <button id="gal-pos-cancel" style="
-              padding: 8px 16px;
-              background: rgba(220, 53, 69, 0.8);
-              border: none;
-              border-radius: 6px;
-              color: #fff;
-              cursor: pointer;
-              font-size: 0.85rem;
-            ">
+            <button id="gal-pos-cancel" class="gal-live2d-position-btn gal-live2d-position-btn-cancel">
               <i class="fa-solid fa-times"></i> 取消
             </button>
-            <button id="gal-pos-save" style="
-              padding: 8px 16px;
-              background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-              border: none;
-              border-radius: 6px;
-              color: #fff;
-              cursor: pointer;
-              font-size: 0.85rem;
-              font-weight: 600;
-            ">
+            <button id="gal-pos-save" class="gal-live2d-position-btn gal-live2d-position-btn-save">
               <i class="fa-solid fa-check"></i> 保存
             </button>
           </div>
@@ -3292,7 +3338,19 @@ const __awaiter =
 
     // 不再需要拖拽和缩放事件绑定
     bindDragEvents() {
-      // 已移除拖拽事件，改用滑条
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      if (this._onResize) {
+        try {
+          _topWindow.removeEventListener('resize', this._onResize);
+        } catch (e) {}
+      }
+      this._onResize = () => {
+        Live2DStage.updateLayout();
+        this._updateGuideRect();
+      };
+      try {
+        _topWindow.addEventListener('resize', this._onResize, { passive: true });
+      } catch (e) {}
     },
 
     bindZoomEvents() {
@@ -3301,9 +3359,13 @@ const __awaiter =
 
     // 解绑事件
     unbindEvents() {
-      // 清理提示
-      const _$ = topWindow.jQuery || $;
-      _$('#gal-live2d-position-hint').remove();
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      if (this._onResize) {
+        try {
+          _topWindow.removeEventListener('resize', this._onResize);
+        } catch (e) {}
+      }
+      this._onResize = null;
     }
   };
 
@@ -5121,6 +5183,7 @@ const __awaiter =
       textLang: 'auto',
       textSplitMethod: 'cut5',
       speedFactor: 1,
+      importPathPrefix: '',
       voices: [],
     };
 
@@ -5141,6 +5204,8 @@ const __awaiter =
     const promptText = String(voice.promptText || voice.prompt_text || '').trim();
     const promptLang = String(voice.promptLang || voice.prompt_lang || '').trim();
     const textLang = String(voice.textLang || voice.text_lang || '').trim();
+    const gptWeightsPath = String(voice.gptWeightsPath || voice.gpt_weights_path || voice.gptPath || voice.gpt || '').trim();
+    const sovitsWeightsPath = String(voice.sovitsWeightsPath || voice.sovits_weights_path || voice.sovitsPath || voice.sovits || '').trim();
     const desc = String(voice.desc || voice.description || '').trim();
 
     return {
@@ -5154,6 +5219,8 @@ const __awaiter =
         promptText,
         promptLang,
         textLang,
+        gptWeightsPath,
+        sovitsWeightsPath,
       },
     };
   }
@@ -5172,6 +5239,192 @@ const __awaiter =
     } catch (e) {
       return [];
     }
+  }
+
+  // ============================================
+  // GPT-SoVITS 音色导入识别（文件夹模型包）
+  // ============================================
+
+  function _getFileExtLower(name) {
+    const s = String(name || '');
+    const idx = s.lastIndexOf('.');
+    return idx >= 0 ? s.slice(idx + 1).toLowerCase() : '';
+  }
+
+  function _stripFileExt(name) {
+    const s = String(name || '');
+    return s.replace(/\.[^./\\]+$/, '');
+  }
+
+  function _normalizePathSep(p) {
+    return String(p || '').replace(/\\/g, '/');
+  }
+
+  function _joinPathPrefix(prefix, relPath) {
+    const p = String(prefix || '').trim();
+    const rel = String(relPath || '').trim();
+    if (!p) return rel;
+
+    const useBackslash = p.includes('\\') && !p.includes('/');
+    const sep = useBackslash ? '\\' : '/';
+
+    const cleanPrefix = p.replace(/[\\/]+$/, '');
+    const cleanRel = rel.replace(/^[\\/]+/, '');
+    if (!cleanRel) return cleanPrefix;
+
+    const normalizedRel = useBackslash ? cleanRel.replace(/[\\/]+/g, '\\') : cleanRel.replace(/[\\/]+/g, '/');
+    return `${cleanPrefix}${sep}${normalizedRel}`;
+  }
+
+  function _inferLangFromText(text) {
+    const t = String(text || '');
+    // 日语：假名优先判断（仅靠汉字无法区分中日）
+    if (/[\u3040-\u30ff]/.test(t)) return 'ja';
+    // 韩语
+    if (/[\uac00-\ud7af]/.test(t)) return 'ko';
+    // 纯英文/拉丁
+    if (/[a-zA-Z]/.test(t) && !/[\u4e00-\u9fff]/.test(t)) return 'en';
+    // 中文（或含汉字的默认归类）
+    if (/[\u4e00-\u9fff]/.test(t)) return 'zh';
+    return 'zh';
+  }
+
+  function _cleanPromptTextFromFilenameBase(baseName) {
+    let t = String(baseName || '').trim();
+    if (!t) return '';
+
+    // 去掉开头的标签 (B)/(C)/（低落）/【xxx】 等
+    t = t.replace(/^[\s\uFEFF]*(?:[(（\[【][^)）\]】]{1,10}[)）\]】])\s*/u, '');
+
+    // 清理末尾连续省略号/点号
+    t = t.replace(/[.…。．.]+$/u, '');
+
+    // 常见：文件名里用多个点做间隔
+    t = t.replace(/\.{3,}/g, '…');
+
+    return t.trim();
+  }
+
+  function _cleanVoiceNameFromWeightsBase(baseName) {
+    let t = String(baseName || '').trim();
+    if (!t) return '';
+
+    // 去掉常见前缀（如 HHW_）
+    t = t.replace(/^[A-Za-z0-9]{2,8}[_-]+/, '');
+
+    // 去掉常见后缀（如 _v2pp / _v2proplus / _v3 等）
+    const suffixes = [
+      /[_-]v\d+(?:proplus|pro|pp|p)?$/i,
+      /[_-](?:v2pp|v2p|v2|v3|v4)$/i,
+      /[_-](?:proplus|pro|pp|p)$/i,
+      /[_-](?:gpt|sovits|so-vits|vits)$/i,
+    ];
+    for (let i = 0; i < 4; i++) {
+      const before = t;
+      for (const re of suffixes) t = t.replace(re, '');
+      if (t === before) break;
+      t = t.trim();
+    }
+
+    return t.trim();
+  }
+
+  function _pickLargestFile(files) {
+    if (!Array.isArray(files) || files.length === 0) return null;
+    return files
+      .slice()
+      .sort((a, b) => (b.size || 0) - (a.size || 0))[0];
+  }
+
+  function _pickBestAudioFile(audioFiles) {
+    if (!Array.isArray(audioFiles) || audioFiles.length === 0) return null;
+
+    const candidates = audioFiles.map(f => {
+      const base = _stripFileExt(f.name);
+      const promptText = _cleanPromptTextFromFilenameBase(base);
+      const ext = _getFileExtLower(f.name);
+      const extScore = ext === 'wav' ? 3 : ext === 'flac' ? 2 : ext === 'ogg' ? 1 : 0;
+      const lenScore = Math.min(200, promptText.length);
+      return { file: f, promptText, score: extScore * 1000 + lenScore };
+    });
+
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].file;
+  }
+
+  function inferGptSoVitsVoicesFromFolderFiles(fileList, importPathPrefix = '') {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (files.length === 0) return [];
+
+    // 按目录分组（支持一次选择父目录导入多个模型包）
+    const groups = new Map(); // dir -> File[]
+    for (const f of files) {
+      const rel = _normalizePathSep(f.webkitRelativePath || f.name || '');
+      const dir = rel.split('/').slice(0, -1).join('/'); // 可能为空
+      const key = dir || '__root__';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(f);
+    }
+
+    const result = [];
+
+    for (const [dirKey, groupFiles] of groups.entries()) {
+      const ckpts = [];
+      const pths = [];
+      const audios = [];
+
+      for (const f of groupFiles) {
+        const ext = _getFileExtLower(f.name);
+        if (ext === 'ckpt') ckpts.push(f);
+        else if (ext === 'pth') pths.push(f);
+        else if (['wav', 'mp3', 'flac', 'ogg', 'm4a'].includes(ext)) audios.push(f);
+      }
+
+      const sovitsFile = _pickLargestFile(pths);
+      let gptFile = null;
+      if (sovitsFile) {
+        const base = _stripFileExt(sovitsFile.name).toLowerCase();
+        gptFile = ckpts.find(f => _stripFileExt(f.name).toLowerCase() === base) || null;
+      }
+      if (!gptFile) gptFile = _pickLargestFile(ckpts);
+
+      const audioFile = _pickBestAudioFile(audios);
+
+      // 推断音色名：优先权重文件名，其次目录名
+      const weightsBase = _stripFileExt((sovitsFile || gptFile || audioFile || {}).name || '');
+      const dirName = dirKey !== '__root__' ? dirKey.split('/').pop() : '';
+      const inferredName = _cleanVoiceNameFromWeightsBase(weightsBase) || _cleanVoiceNameFromWeightsBase(dirName) || '新音色';
+
+      // 推断 promptText：优先参考音频文件名
+      const promptText = audioFile ? _cleanPromptTextFromFilenameBase(_stripFileExt(audioFile.name)) : '';
+      const inferredLang = promptText ? _inferLangFromText(promptText) : 'zh';
+
+      // 生成服务端路径（尽量使用 Electron 的绝对 path，否则用 webkitRelativePath 并补前缀）
+      const toServerPath = f => {
+        const abs = typeof f?.path === 'string' ? String(f.path) : '';
+        if (abs && (abs.includes(':\\') || abs.startsWith('/') || abs.startsWith('\\\\'))) return abs;
+        const rel = _normalizePathSep(f?.webkitRelativePath || f?.name || '');
+        return _joinPathPrefix(importPathPrefix, rel);
+      };
+
+      const voice = {
+        name: inferredName,
+        desc: '文件夹导入',
+        refAudioPath: audioFile ? toServerPath(audioFile) : '',
+        promptText: promptText,
+        promptLang: inferredLang,
+        textLang: inferredLang,
+        gptWeightsPath: gptFile ? toServerPath(gptFile) : '',
+        sovitsWeightsPath: sovitsFile ? toServerPath(sovitsFile) : '',
+      };
+
+      // 至少需要 refAudioPath 才能推理
+      if (voice.refAudioPath) {
+        result.push(voice);
+      }
+    }
+
+    return result;
   }
 
   // 缓存 LittleWhiteBox TTS 数据
@@ -5385,7 +5638,14 @@ const __awaiter =
     voice = voiceList.find(v => v.value === voiceName);
     if (voice) return voice;
 
-    // 3. 未找到，返回默认免费音色
+    // 3. 未找到：按 provider 决定是否允许回退
+    const provider = getTTSProvider();
+    if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
+      console.warn(`[${SCRIPT_NAME}] 未找到 GPT-SoVITS 音色 "${voiceName}"`);
+      return null;
+    }
+
+    // LittleWhiteBox：回退到默认免费音色
     const defaultVoice = voiceList[0];
     if (defaultVoice) {
       console.warn(`[${SCRIPT_NAME}] 未找到音色 "${voiceName}"，使用默认: ${defaultVoice.name}`);
@@ -6000,6 +6260,7 @@ ${extraRule}
       textLang: 'auto', // text_lang: auto/zh/en/ja/...
       textSplitMethod: 'cut5',
       speedFactor: 1,
+      importPathPrefix: '', // 导入文件夹时自动补全路径前缀（相对/绝对均可）
       voices: [], // [{ name, desc?, refAudioPath, promptText?, promptLang?, textLang? }]
     },
     // 加强模式设置
@@ -6204,6 +6465,10 @@ ${extraRule}
     currentAudio: null, // 当前音频对象
     currentSegmentId: null, // 当前播放的段落ID
     littleWhiteBox: null, // LittleWhiteBox 引用
+
+    // GPT-SoVITS：当前已加载的权重（避免每句重复切换）
+    _gptSoVitsActiveWeights: { gpt: null, sovits: null },
+    _gptSoVitsSwitchTask: Promise.resolve(),
 
     _refreshProviderState() {
       const provider = getTTSProvider();
@@ -6443,6 +6708,86 @@ ${extraRule}
       return originalUrl;
     },
 
+    _buildGptSoVitsApiUrl(pathname, queryParams = {}) {
+      const cfg = getGptSoVitsConfig();
+      const base = String(cfg.apiUrl || '').replace(/\/$/, '');
+      if (!base) return '';
+
+      const p = String(pathname || '').trim();
+      const endpoint = p.startsWith('/') ? p : `/${p}`;
+
+      try {
+        const url = new URL(base + endpoint);
+        for (const [k, v] of Object.entries(queryParams || {})) {
+          if (v === undefined || v === null) continue;
+          url.searchParams.set(k, String(v));
+        }
+        return url.toString();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 构造API URL失败`, e);
+        return '';
+      }
+    },
+
+    async _fetchGptSoVitsApi(pathname, queryParams = {}) {
+      const cfg = getGptSoVitsConfig();
+      const directUrl = this._buildGptSoVitsApiUrl(pathname, queryParams);
+      if (!directUrl) throw new Error('invalid apiUrl');
+
+      const url = cfg.useCorsProxy ? this._getProxiedAudioUrl(directUrl) : directUrl;
+      const resp = await fetch(url, { method: 'GET' });
+      const text = await resp.text().catch(() => '');
+      if (!resp.ok) {
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+      return text;
+    },
+
+    _enqueueGptSoVitsSwitch(taskFn) {
+      const run = () => Promise.resolve().then(taskFn);
+      this._gptSoVitsSwitchTask = (this._gptSoVitsSwitchTask || Promise.resolve()).then(run, run);
+      return this._gptSoVitsSwitchTask;
+    },
+
+    async _setGptSoVitsWeights(kind, weightsPath) {
+      const path = kind === 'gpt' ? '/set_gpt_weights' : '/set_sovits_weights';
+      console.log(`[${SCRIPT_NAME}] GPT-SoVITS: 切换${kind}权重 -> ${weightsPath}`);
+      const text = await this._fetchGptSoVitsApi(path, { weights_path: weightsPath });
+      try {
+        const data = JSON.parse(text);
+        if (data?.message && data.message !== 'success') {
+          throw new Error(data.message);
+        }
+      } catch (e) {
+        // 兼容：代理/服务端可能返回纯文本 "success"
+        const trimmed = String(text || '').trim();
+        if (trimmed && trimmed.toLowerCase() !== 'success') {
+          // 不强制报错：只记录，避免因非标准返回阻断播放
+          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: set weights 返回非标准响应:`, trimmed);
+        }
+      }
+      return true;
+    },
+
+    async _ensureGptSoVitsWeights(resolvedVoice) {
+      const vcfg = resolvedVoice?.gptSoVits || {};
+      const desiredGpt = String(vcfg.gptWeightsPath || '').trim();
+      const desiredSovits = String(vcfg.sovitsWeightsPath || '').trim();
+      if (!desiredGpt && !desiredSovits) return true;
+
+      return this._enqueueGptSoVitsSwitch(async () => {
+        if (desiredGpt && desiredGpt !== this._gptSoVitsActiveWeights.gpt) {
+          await this._setGptSoVitsWeights('gpt', desiredGpt);
+          this._gptSoVitsActiveWeights.gpt = desiredGpt;
+        }
+        if (desiredSovits && desiredSovits !== this._gptSoVitsActiveWeights.sovits) {
+          await this._setGptSoVitsWeights('sovits', desiredSovits);
+          this._gptSoVitsActiveWeights.sovits = desiredSovits;
+        }
+        return true;
+      });
+    },
+
     _buildGptSoVitsTtsUrl(text, resolvedVoice) {
       const cfg = getGptSoVitsConfig();
       const base = String(cfg.apiUrl || '').replace(/\/$/, '');
@@ -6487,6 +6832,15 @@ ${extraRule}
       }
       if (!vcfg.refAudioPath) {
         showToast('GPT-SoVITS: 当前音色缺少 refAudioPath');
+        return false;
+      }
+
+      // ★ 可选：按音色自动切换 GPT/SoVITS 权重
+      try {
+        await this._ensureGptSoVitsWeights(resolvedVoice);
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 权重切换失败`, e);
+        showToast(`GPT-SoVITS 权重切换失败: ${e?.message || e}`);
         return false;
       }
 
@@ -21571,10 +21925,37 @@ ${extraRule}
                          style="width: 120px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
                 </div>
 
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">导入路径前缀 <small style="color:#999;">(可空)</small></span>
+                  <input type="text" id="gal-gpt-sovits-import-prefix" value="${settings.gptSoVits?.importPathPrefix || ''}"
+                         placeholder="例如：output/misaki/ 或 D:\\...\\misaki\\"
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
                 <div style="margin-top: 10px;">
                   <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">音色列表（JSON）</div>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 8px;">
+                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-import-json-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
+                      <i class="fa-solid fa-file-import"></i>
+                      <span>导入JSON</span>
+                    </button>
+                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-import-folder-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
+                      <i class="fa-solid fa-folder-open"></i>
+                      <span>导入文件夹</span>
+                    </button>
+                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-export-json-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
+                      <i class="fa-solid fa-file-export"></i>
+                      <span>导出JSON</span>
+                    </button>
+                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-add-template-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
+                      <i class="fa-solid fa-plus"></i>
+                      <span>添加模板</span>
+                    </button>
+                    <input type="file" id="gal-gpt-sovits-import-json-file" accept=".json,application/json" style="display:none;">
+                    <input type="file" id="gal-gpt-sovits-import-folder-file" webkitdirectory directory multiple style="display:none;">
+                  </div>
                   <textarea id="gal-gpt-sovits-voices-json" rows="6"
-                            placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh"}]'
+                            placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh","textLang":"zh","gptWeightsPath":"GPT_weights/xxx.ckpt","sovitsWeightsPath":"SoVITS_weights/xxx.pth"}]'
                             style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 0.8rem;"></textarea>
                   <div style="display:flex; gap:10px; margin-top: 10px;">
                     <button class="gal-panel-btn secondary" id="gal-gpt-sovits-voices-save" style="flex: 1; padding: 10px;">
@@ -22480,6 +22861,165 @@ ${extraRule}
         const v = parseFloat($(this).val());
         settings.gptSoVits.speedFactor = isFinite(v) ? v : 1;
         saveSettings();
+      });
+
+      $('#gal-gpt-sovits-import-prefix').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        settings.gptSoVits.importPathPrefix = $(this).val();
+        saveSettings();
+      });
+
+      const setGptSoVitsVoicesTextarea = voices => {
+        try {
+          $('#gal-gpt-sovits-voices-json').val(JSON.stringify(voices || [], null, 2));
+        } catch (e) {
+          $('#gal-gpt-sovits-voices-json').val('[]');
+        }
+      };
+
+      const getVoicesFromTextarea = () => {
+        const raw = $('#gal-gpt-sovits-voices-json').val() || '[]';
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) throw new Error('voices must be array');
+        return parsed;
+      };
+
+      const mergeVoicesByName = (existing, incoming) => {
+        const out = Array.isArray(existing) ? existing.slice() : [];
+        const used = new Set(out.map(v => String(v?.name || '').trim()).filter(Boolean));
+
+        for (const v0 of Array.isArray(incoming) ? incoming : []) {
+          if (!v0) continue;
+          const v = Object.assign({}, v0);
+          const base = String(v.name || '新音色').trim() || '新音色';
+          let name = base;
+          let i = 2;
+          while (used.has(name)) {
+            name = `${base}_${i++}`;
+          }
+          v.name = name;
+          used.add(name);
+          out.push(v);
+        }
+        return out;
+      };
+
+      $('#gal-gpt-sovits-import-json-btn').on('click', function () {
+        $('#gal-gpt-sovits-import-json-file').click();
+      });
+
+      $('#gal-gpt-sovits-import-json-file').on('change', function () {
+        const file = this.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const text = String(reader.result || '');
+            const parsed = JSON.parse(text);
+            if (!Array.isArray(parsed)) {
+              showToast('导入失败：JSON 需为数组');
+              return;
+            }
+
+            settings.gptSoVits = settings.gptSoVits || {};
+            const merged = mergeVoicesByName(settings.gptSoVits.voices || [], parsed);
+            settings.gptSoVits.voices = merged;
+            saveSettings();
+            setGptSoVitsVoicesTextarea(merged);
+            await refreshTtsVoiceOptions();
+            injectCOTToWorldbook().catch(() => {});
+
+            showToast(`已导入音色：${parsed.length} 条`);
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 导入JSON失败:`, e);
+            showToast('导入失败：JSON 解析错误');
+          } finally {
+            // 允许重复选择同一文件
+            $(this).val('');
+          }
+        };
+        reader.readAsText(file);
+      });
+
+      $('#gal-gpt-sovits-import-folder-btn').on('click', function () {
+        $('#gal-gpt-sovits-import-folder-file').click();
+      });
+
+      $('#gal-gpt-sovits-import-folder-file').on('change', async function () {
+        try {
+          const list = this.files;
+          if (!list || list.length === 0) return;
+
+          const prefix = settings.gptSoVits?.importPathPrefix || '';
+          const inferred = inferGptSoVitsVoicesFromFolderFiles(list, prefix);
+
+          if (!inferred || inferred.length === 0) {
+            showToast('未识别到可导入的音色（需要参考音频）');
+            return;
+          }
+
+          settings.gptSoVits = settings.gptSoVits || {};
+          const merged = mergeVoicesByName(settings.gptSoVits.voices || [], inferred);
+          settings.gptSoVits.voices = merged;
+          saveSettings();
+
+          setGptSoVitsVoicesTextarea(merged);
+          await refreshTtsVoiceOptions();
+          injectCOTToWorldbook().catch(() => {});
+
+          showToast(`已从文件夹导入：${inferred.length} 条`);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 导入文件夹失败:`, e);
+          showToast('导入失败：请检查文件夹内容');
+        } finally {
+          // 允许重复选择同一文件夹
+          $(this).val('');
+        }
+      });
+
+      $('#gal-gpt-sovits-export-json-btn').on('click', function () {
+        try {
+          const voices = settings.gptSoVits?.voices || [];
+          const blob = new Blob([JSON.stringify(voices, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'gpt_sovits_voices.json';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          showToast('已导出 gpt_sovits_voices.json');
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 导出失败:`, e);
+          showToast('导出失败');
+        }
+      });
+
+      $('#gal-gpt-sovits-add-template-btn').on('click', async function () {
+        try {
+          const current = getVoicesFromTextarea();
+          const template = {
+            name: '新音色',
+            desc: '手动添加',
+            refAudioPath: '',
+            promptText: '',
+            promptLang: 'zh',
+            textLang: 'zh',
+            gptWeightsPath: '',
+            sovitsWeightsPath: '',
+          };
+          const merged = mergeVoicesByName(current, [template]);
+          settings.gptSoVits = settings.gptSoVits || {};
+          settings.gptSoVits.voices = merged;
+          saveSettings();
+          setGptSoVitsVoicesTextarea(merged);
+          await refreshTtsVoiceOptions();
+          injectCOTToWorldbook().catch(() => {});
+          showToast('已添加一条音色模板');
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 添加模板失败:`, e);
+          showToast('添加失败：请先修复 JSON');
+        }
       });
 
       $('#gal-gpt-sovits-voices-save').on('click', async function () {

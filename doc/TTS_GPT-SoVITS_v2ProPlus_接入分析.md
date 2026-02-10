@@ -70,7 +70,9 @@ GPT-SoVITS（api_v2.py）通常需要：
     "refAudioPath": "wavs/taoyao.wav",
     "promptText": "你好呀，很高兴见到你。",
     "promptLang": "zh",
-    "textLang": "zh"
+    "textLang": "zh",
+    "gptWeightsPath": "GPT_weights_v2ProPlus/taoyao.ckpt",
+    "sovitsWeightsPath": "SoVITS_weights_v2ProPlus/taoyao.pth"
   }
 ]
 ```
@@ -81,6 +83,7 @@ GPT-SoVITS（api_v2.py）通常需要：
 - `promptLang`：对应 `prompt_lang`（推荐）
 - `promptText`：对应 `prompt_text`（推荐）
 - `textLang`：可选（若不填则用全局 `textLang`）
+- `gptWeightsPath/sovitsWeightsPath`：可选；填写后播放前会自动调用 `api_v2.py` 的 `/set_gpt_weights`、`/set_sovits_weights` 切换到对应模型
 - `desc`：UI 展示用（可选）
 
 ### 3.3 请求方式建议：GET `/tts`（兼容代理与口型同步）
@@ -110,6 +113,7 @@ GPT-SoVITS（api_v2.py）通常需要：
 ### 4.3 播放接口统一：`TTSManager.speak() → provider 分发`
 - provider = `gpt_sovits_v2`：
   - 解析到目标 voice profile（拿到 refAudioPath/promptLang/promptText）
+  - （可选）若配置了 `gptWeightsPath/sovitsWeightsPath`，先调用 `/set_gpt_weights`、`/set_sovits_weights` 切换权重（带缓存，避免每句重复切）
   - 构造 `/tts` URL
   - 按需走酒馆代理
   - 用 `new Audio(url)` 播放，并用 `ended/error` 回收状态
@@ -139,9 +143,11 @@ TTS 区块建议从上到下：
    - 代理开关（建议默认开）
    - text_lang / 切分策略 / media_type / streaming / speed
    - 音色列表 JSON + 保存 + 试听
+   - 导入/导出（JSON）
+   - 从文件夹导入（适配“模型包放同一文件夹”：自动识别 ckpt/pth/参考音频，并从音频文件名提取 promptText）
 
 ### 5.2 进一步优化建议
-- 把“音色列表 JSON”升级为表格化编辑器（增删改行），并提供导入/导出按钮
+- 把“音色列表 JSON”升级为表格化编辑器（增删改行）
 - 增加“按 emotion 变体”的可选结构（同一个 name 下按 emotion 选不同 ref 音频）
 - “试听”可直接选择某个音色，而不是依赖默认音色
 
@@ -186,4 +192,3 @@ TTS 区块建议从上到下：
 
 - 增加对 `POST /tts`（JSON body）的支持（更干净，但需要确认酒馆代理是否支持 POST）
 - 若 GPT-SoVITS 服务端提供“模型/权重切换接口”，可在 UI 增加选择并缓存到 voice profile
-

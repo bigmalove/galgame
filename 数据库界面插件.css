@@ -484,6 +484,145 @@
         pointer-events: none;
       }
 
+      /* Live2D 位置调整参考框 */
+      .gal-live2d-position-guide {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 6;
+      }
+
+      .gal-live2d-position-guide-box {
+        position: absolute;
+        border: 0.125rem dashed rgba(0, 210, 255, 0.55);
+        border-radius: 0.625rem;
+        box-shadow: 0 0 1rem rgba(0, 210, 255, 0.28);
+        background: rgba(0, 0, 0, 0.06);
+      }
+
+      .gal-live2d-position-guide-label {
+        position: absolute;
+        top: -1.25rem;
+        left: 0;
+        font-size: 0.72rem;
+        line-height: 1;
+        color: #77dfff;
+        text-shadow: 0 0 0.375rem rgba(0, 0, 0, 0.5);
+        white-space: nowrap;
+      }
+
+      /* Live2D 位置调整工具栏 */
+      .gal-live2d-position-toolbar {
+        position: fixed;
+        left: 50%;
+        bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-50%);
+        width: min(92vw, 36rem);
+        min-width: 20rem;
+        max-height: min(65vh, 33.75rem);
+        overflow-y: auto;
+        padding: 0.9375rem 1.125rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6875rem;
+        border-radius: 0.9375rem;
+        border: 0.0625rem solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+        background: linear-gradient(135deg, rgba(26, 28, 38, 0.97), rgba(42, 46, 64, 0.97));
+        backdrop-filter: blur(0.625rem);
+        box-shadow: 0 0.5rem 1.75rem rgba(0, 0, 0, 0.46);
+      }
+
+      .gal-live2d-position-row {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+      }
+
+      .gal-live2d-position-label {
+        min-width: 4.5rem;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.92);
+      }
+
+      .gal-live2d-position-slider {
+        flex: 1;
+        cursor: pointer;
+        accent-color: #00d2ff;
+      }
+
+      .gal-live2d-position-value {
+        min-width: 2.875rem;
+        text-align: right;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .gal-live2d-position-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.625rem;
+        margin-top: 0.25rem;
+      }
+
+      .gal-live2d-position-btn {
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.85rem;
+      }
+
+      .gal-live2d-position-btn-reset {
+        background: rgba(255, 255, 255, 0.12);
+        border: 0.0625rem solid rgba(255, 255, 255, 0.2);
+      }
+
+      .gal-live2d-position-btn-cancel {
+        background: rgba(220, 53, 69, 0.82);
+      }
+
+      .gal-live2d-position-btn-save {
+        background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+        font-weight: 600;
+      }
+
+      @media screen and (max-width: 48rem), screen and (max-height: 46rem) {
+        .gal-live2d-position-toolbar {
+          top: calc(0.5rem + env(safe-area-inset-top, 0px));
+          bottom: auto;
+          width: calc(100vw - 1rem);
+          min-width: 0;
+          max-height: calc(72vh - env(safe-area-inset-top, 0px));
+          padding: 0.8125rem 0.8125rem 0.75rem;
+          border-radius: 0.75rem;
+        }
+
+        .gal-live2d-position-label {
+          min-width: 3.75rem;
+          font-size: 0.8rem;
+        }
+
+        .gal-live2d-position-value {
+          min-width: 2.5rem;
+          font-size: 0.85rem;
+        }
+
+        .gal-live2d-position-actions {
+          flex-wrap: wrap;
+          justify-content: stretch;
+          margin-top: 0.125rem;
+        }
+
+        .gal-live2d-position-btn {
+          flex: 1 1 calc(50% - 0.3125rem);
+          min-height: 2.25rem;
+          font-size: 0.82rem;
+          padding: 0.5rem 0.625rem;
+        }
+      }
+
       /* 多角色槽位 */
       .gal-char-slot {
         position: relative;

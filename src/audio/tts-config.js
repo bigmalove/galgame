@@ -207,7 +207,7 @@ function inferSource(value) {
 export function inferResourceId(value) {
   const lower = (value || '').toLowerCase();
   if (lower.startsWith('icl_') || lower.startsWith('s_')) return 'seed-icl-2.0';
-  if (lower.includes('_uranus_') || lower.includes('_saturn_')) return 'seed-tts-2.0';
+  if (lower.startsWith('saturn_') || lower.startsWith('uranus_') || lower.includes('_saturn_') || lower.includes('_uranus_')) return 'seed-tts-2.0';
   return 'seed-tts-1.0';
 }
 

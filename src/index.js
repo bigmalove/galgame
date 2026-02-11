@@ -11,7 +11,7 @@ import { DEFAULT_SETTINGS, getSettings, setSettings, loadSettings, saveSettings,
 import { getDb, setDb, getIsEnabled, setIsEnabled, getHideOtherFloors, setHideOtherFloors, getIsSkipping, setIsSkipping, getSkipTimer, setSkipTimer, getIsRewinding, setIsRewinding, REWIND_HOLD_DELAY, getLastGalgameOptionHash, setLastGalgameOptionHash, getGalgameChoicesVisible, setGalgameChoicesVisible, getPendingOptions, setPendingOptions } from './core/state.js';
 import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from './utils/html.js';
 import { getCharacterListFromDatabase } from './utils/chat.js';
-import { getCustomExpressions, saveCustomExpressions, addCustomExpression, removeCustomExpression, updateCustomExpressionEmotion, getAllExpressions, setExpressionsRefs } from './utils/expressions.js';
+import { getCustomExpressions, saveCustomExpressions, addCustomExpression, removeCustomExpression, getAllExpressions, setExpressionsRefs } from './utils/expressions.js';
 import { getGlobalLocationAndTime, updateLocationTimeDisplay } from './utils/location-time.js';
 import { getCachedChatContainer, getCachedGlobalOverlay, invalidateDOMCache } from './utils/dom-cache.js';
 
@@ -54,7 +54,7 @@ import { SpriteManager, setSpriteManagerRefs } from './sprite/sprite-manager.js'
 // === Phase 7: 逻辑层 ===
 import { generateCOTTemplate } from './logic/cot-template.js';
 import { getIsGeneratingResponse, setIsGeneratingResponse, getInitializationTime, getGenerationState, getGenerationTimeoutMs, getVerificationDelayMs, resetGenerationState, checkSillyTavernGenerating, verifyGenerationComplete, startGenerationTimeout, stopGenerationTimeout, setGenerationStateRefs } from './logic/generation-state.js';
-import { parseGalgameContent, EXPRESSION_LIST, EXPRESSION_TAG_MAP, EXPRESSION_EMOTION_MAP, TTS_EMOTION_LIST, getExpressionEmotion, getExpressionTag, setParserRefs } from './logic/parser.js';
+import { parseGalgameContent, EXPRESSION_LIST, EXPRESSION_TAG_MAP, getExpressionTag, setParserRefs } from './logic/parser.js';
 import { WORLDBOOK_NAME, COT_ENTRY_NAME, isCotFormatted, getFormattedContent, saveFormatToSwipe, resetEnhancedModeState, getAvailablePresets, getAvailableProfiles, getAvailableModels, getAvailableWorldbooks, initWorldbookInjectionListener, initEnhancedModeListener, registerTestFunctions, setEnhancedModeRefs } from './logic/enhanced-mode.js';
 import { checkWorldbookExists, injectCOTToWorldbook, enableWorldbookGlobally, disableWorldbookGlobally, setWorldbookRefs } from './logic/worldbook.js';
 import { setupMessageObserver, setMessageObserverRefs } from './logic/message-observer.js';

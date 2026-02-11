@@ -2,7 +2,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
-import { getAllExpressions, getCustomExpressions } from '../utils/expressions.js';
+import { getAllExpressions } from '../utils/expressions.js';
 import { getCharacterTTSVoice } from '../audio/tts-config.js';
 
 // ============================================
@@ -56,25 +56,6 @@ const EXPRESSION_TAG_MAP = {
   搞怪: 'playful, wink, tongue out, silly face',
 };
 
-const EXPRESSION_EMOTION_MAP = {
-  默认: '中性',
-  微笑: '开心',
-  生气: '生气',
-  难过: '悲伤',
-  惊讶: '惊讶',
-  嘲讽: '冷漠',
-  害羞: '害羞',
-  思考: '中性',
-  大笑: '激动',
-  搞怪: '撒娇',
-};
-
-export const TTS_EMOTION_LIST = [
-  '中性', '开心', '悲伤', '生气', '惊讶', '恐惧', '厌恶', '激动', '冷漠', '沮丧',
-  '撒娇', '害羞', '安慰', '鼓励', '咆哮', '焦急', '温柔', '讲故事', '自然讲述',
-  '情感电台', '磁性', '广告营销', '气泡音', '低语', '新闻播报', '娱乐八卦',
-  '方言', '对话', '闲聊', '温暖', '深情', '权威',
-];
 
 const PARSE_CACHE_MAX_SIZE = 30;
 
@@ -89,19 +70,7 @@ export function setParserRefs({ getFormattedContent }) {
 // 导出常量和工具函数
 // ============================================
 
-export { EXPRESSION_LIST, EXPRESSION_TAG_MAP, EXPRESSION_EMOTION_MAP };
-
-export function getExpressionEmotion(expressionName) {
-  if (EXPRESSION_EMOTION_MAP[expressionName]) {
-    return EXPRESSION_EMOTION_MAP[expressionName];
-  }
-  const customExpressions = getCustomExpressions();
-  const custom = customExpressions.find(e => e.name === expressionName);
-  if (custom && custom.emotion) {
-    return custom.emotion;
-  }
-  return '中性';
-}
+export { EXPRESSION_LIST, EXPRESSION_TAG_MAP };
 
 export function getExpressionTag(expressionName) {
   return EXPRESSION_TAG_MAP[expressionName] || `${expressionName} expression`;
@@ -140,11 +109,14 @@ function preprocessSimplifiedFormat(html) {
     const bracketContent = match[2].trim();
     const dialogue = match[3].trim();
 
-    const parts = bracketContent.split(',').map(s => s.trim());
+    // 用 | 分隔：[表情,音色|语气指导]
+    const pipeParts = bracketContent.split('|');
+    const exprVoicePart = pipeParts[0].trim();
+    const context = pipeParts[1] ? pipeParts[1].trim() : null;
+
+    const parts = exprVoicePart.split(',').map(s => s.trim());
     const expression = parts[0];
     const specifiedVoice = parts[1] || null;
-
-    const emotion = getExpressionEmotion(expression);
 
     let voice = null;
     if (specifiedVoice) {
@@ -159,13 +131,12 @@ function preprocessSimplifiedFormat(html) {
       }
     }
 
-    let ttsTag = '[tts:';
     const ttsParts = [];
     if (voice) ttsParts.push(`speaker=${voice}`);
-    ttsParts.push(`emotion=${emotion}`);
-    ttsTag += ttsParts.join(';') + ']';
+    if (context) ttsParts.push(`context=${context}`);
+    const ttsAttr = ttsParts.length > 0 ? ` tts="${ttsParts.join(';')}"` : '';
 
-    const newFormat = `${ttsTag}\n<p><${expression}>${speaker}: "${dialogue}"</p>`;
+    const newFormat = `<p${ttsAttr}><${expression}>${speaker}: "${dialogue}"</p>`;
     result = result.replace(fullMatch, newFormat);
   }
 
@@ -234,7 +205,7 @@ export function parseGalgameContent(html, messageId) {
   }
 
   // 找到 <maintext> 内第一个 Galgame 标签
-  const firstGalMatch = content.match(/<(background|p)\s/i);
+  const firstGalMatch = content.match(/<(background|p)[\s>]/i);
   if (firstGalMatch && firstGalMatch.index > 0) {
     console.log(`[${SCRIPT_NAME}] [DEBUG] 清理 <maintext> 前 ${firstGalMatch.index} 字符的污染内容`);
     content = content.substring(firstGalMatch.index);
@@ -335,7 +306,6 @@ export function parseGalgameContent(html, messageId) {
 
     const config = {
       speaker: defaultSpeaker,
-      emotion: null,
       context: null,
     };
 
@@ -347,7 +317,6 @@ export function parseGalgameContent(html, messageId) {
         const trimmedValue = value.trim();
 
         if (trimmedKey === 'speaker') config.speaker = trimmedValue;
-        else if (trimmedKey === 'emotion') config.emotion = trimmedValue;
         else if (trimmedKey === 'context') config.context = trimmedValue;
       }
     }

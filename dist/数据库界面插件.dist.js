@@ -37,52 +37,6 @@
     \u5927\u7B11: "laughing, open mouth, closed eyes, very happy",
     \u641E\u602A: "playful, wink, tongue out, silly face"
   };
-  var EXPRESSION_EMOTION_MAP = {
-    \u9ED8\u8BA4: "\u4E2D\u6027",
-    \u5FAE\u7B11: "\u5F00\u5FC3",
-    \u751F\u6C14: "\u751F\u6C14",
-    \u96BE\u8FC7: "\u60B2\u4F24",
-    \u60CA\u8BB6: "\u60CA\u8BB6",
-    \u5632\u8BBD: "\u51B7\u6F20",
-    \u5BB3\u7F9E: "\u5BB3\u7F9E",
-    \u601D\u8003: "\u4E2D\u6027",
-    \u5927\u7B11: "\u6FC0\u52A8",
-    \u641E\u602A: "\u6492\u5A07"
-  };
-  var TTS_EMOTION_LIST = [
-    "\u4E2D\u6027",
-    "\u5F00\u5FC3",
-    "\u60B2\u4F24",
-    "\u751F\u6C14",
-    "\u60CA\u8BB6",
-    "\u6050\u60E7",
-    "\u538C\u6076",
-    "\u6FC0\u52A8",
-    "\u51B7\u6F20",
-    "\u6CAE\u4E27",
-    "\u6492\u5A07",
-    "\u5BB3\u7F9E",
-    "\u5B89\u6170",
-    "\u9F13\u52B1",
-    "\u5486\u54EE",
-    "\u7126\u6025",
-    "\u6E29\u67D4",
-    "\u8BB2\u6545\u4E8B",
-    "\u81EA\u7136\u8BB2\u8FF0",
-    "\u60C5\u611F\u7535\u53F0",
-    "\u78C1\u6027",
-    "\u5E7F\u544A\u8425\u9500",
-    "\u6C14\u6CE1\u97F3",
-    "\u4F4E\u8BED",
-    "\u65B0\u95FB\u64AD\u62A5",
-    "\u5A31\u4E50\u516B\u5366",
-    "\u65B9\u8A00",
-    "\u5BF9\u8BDD",
-    "\u95F2\u804A",
-    "\u6E29\u6696",
-    "\u6DF1\u60C5",
-    "\u6743\u5A01"
-  ];
   var RE_GAL_TAGS = /<(p|sprite|maintext|background)[^>]*>/i;
   var RE_CLOSED_P = /<\/p>/i;
   var RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
@@ -2448,7 +2402,7 @@
   function inferResourceId(value) {
     const lower = (value || "").toLowerCase();
     if (lower.startsWith("icl_") || lower.startsWith("s_")) return "seed-icl-2.0";
-    if (lower.includes("_uranus_") || lower.includes("_saturn_")) return "seed-tts-2.0";
+    if (lower.startsWith("saturn_") || lower.startsWith("uranus_") || lower.includes("_saturn_") || lower.includes("_uranus_")) return "seed-tts-2.0";
     return "seed-tts-1.0";
   }
   function getVoiceDesc(value) {
@@ -6708,7 +6662,6 @@ ${lines.join("\n")}`;
         voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? segment.speaker || "" : "\u6843\u592D";
       }
       if (!voiceName) voiceName = "\u6843\u592D";
-      const emotion = ttsConfig.emotion || "\u4E2D\u6027";
       const context = ttsConfig.context || "";
       const resolvedVoice = await resolveVoiceByName(voiceName);
       if (!resolvedVoice) {
@@ -6719,7 +6672,7 @@ ${lines.join("\n")}`;
         return;
       }
       console.log(
-        `[${SCRIPT_NAME}] TTS\u64AD\u653E: provider=${provider}, voiceName=${voiceName}, emotion=${emotion}, text=${segment.text.substring(0, 30)}...`
+        `[${SCRIPT_NAME}] TTS\u64AD\u653E: provider=${provider}, voiceName=${voiceName}, context=${context || "\u65E0"}, text=${segment.text.substring(0, 30)}...`
       );
       this.isLoading = true;
       this.showLoadingIndicator();
@@ -6736,7 +6689,6 @@ ${lines.join("\n")}`;
           await this.xiaobaixTts.speak(segment.text, {
             speaker: speakerValue,
             resourceId,
-            emotion,
             context
           });
           this.isPlaying = true;
@@ -6754,7 +6706,6 @@ ${lines.join("\n")}`;
             message: segment.text,
             speaker: speakerValue,
             resourceId,
-            emotion,
             context
           });
           this.isPlaying = true;
@@ -7987,10 +7938,14 @@ Wallhaven \u662F\u82F1\u6587\u6807\u7B7E\u7CFB\u7EDF\uFF0C\u6807\u7B7E\u5FC5\u98
   - **\u65B0\u89D2\u8272\u9996\u6B21\u51FA\u73B0**: \u5199 \`\u89D2\u8272\u540D[\u8868\u60C5,\u97F3\u8272]\` \u6307\u5B9A\u5408\u9002\u7684\u97F3\u8272
   - **\u540C\u4E00\u89D2\u8272\u540E\u7EED\u5BF9\u8BDD**: \u53EF\u7701\u7565\u97F3\u8272\uFF0C\u7CFB\u7EDF\u81EA\u52A8\u6CBF\u7528
 ${charVoiceBindingText}
+- **\u8BED\u6C14\u6307\u5BFC**\uFF08\u53EF\u9009\uFF09: \u5728\u62EC\u53F7\u5185\u7528 \`|\` \u5206\u9694\uFF0C\u6DFB\u52A0\u8BED\u6C14\u63CF\u8FF0\uFF0C\u7CFB\u7EDF\u4F1A\u4F20\u7ED9TTS\u5F15\u64CE\u4F18\u5316\u8BED\u97F3\u6548\u679C
+  - \u683C\u5F0F: \`<p>\u89D2\u8272\u540D[\u8868\u60C5|\u8BED\u6C14\u63CF\u8FF0]: "\u5BF9\u8BDD\u5185\u5BB9"</p>\` \u6216 \`<p>\u89D2\u8272\u540D[\u8868\u60C5,\u97F3\u8272|\u8BED\u6C14\u63CF\u8FF0]: "\u5BF9\u8BDD\u5185\u5BB9"</p>\`
+  - \u9700\u8981\u7ED3\u5408\u5F53\u524D\u8BED\u5883\u548C\u89D2\u8272\u60C5\u611F\u53D1\u6325\uFF0C\u4F8B\u5982\uFF1A'\u7528\u6492\u5A07\u7684\u8BED\u6C14\u8BF4'\u3001'\u7528\u53CD\u95EE\u7684\u8BED\u6C14\u8D28\u95EE'\u3001'\u5E26\u7740\u54ED\u8154\u59D4\u5C48\u5730\u8BF4'\u3001'\u538B\u4F4E\u58F0\u97F3\u795E\u79D8\u5730\u8BF4'
+  - \u4E0D\u9700\u8981\u6BCF\u53E5\u90FD\u52A0\uFF0C\u5728\u60C5\u611F\u8868\u8FBE\u5F3A\u70C8\u6216\u8BED\u6C14\u7279\u6B8A\u7684\u53F0\u8BCD\u4E0A\u4F7F\u7528\u6548\u679C\u6700\u4F73
 - **\u793A\u4F8B**:
   - \`<p>\u5C11\u5973[\u5FAE\u7B11]: "\u4F60\u597D\u5440\uFF5E"</p>\` \uFF08\u5DF2\u7ED1\u5B9A\u97F3\u8272\u6216\u540E\u7EED\u5BF9\u8BDD\uFF09
-  - \`<p>\u5C06\u519B[\u751F\u6C14,\u591C\u67AD]: "\u9000\u4E0B\uFF01"</p>\` \uFF08\u65B0\u89D2\u8272\u9996\u6B21\u51FA\u73B0\uFF0C\u6307\u5B9A\u97F3\u8272\uFF09
-  - \`<p>\u59D0\u59D0[\u5BB3\u7F9E]: "\u6765\u561B\u2026\u2026\u966A\u6211\u559D\u4E00\u676F\uFF5E"</p>\`
+  - \`<p>\u5C06\u519B[\u751F\u6C14,\u591C\u67AD|\u4F4E\u6C89\u5A01\u4E25\u5730\u547D\u4EE4]: "\u9000\u4E0B\uFF01"</p>\` \uFF08\u65B0\u89D2\u8272\u9996\u6B21\u51FA\u73B0\uFF0C\u6307\u5B9A\u97F3\u8272+\u8BED\u6C14\uFF09
+  - \`<p>\u59D0\u59D0[\u5BB3\u7F9E|\u5E26\u7740\u5A07\u55D4\u6492\u5A07]: "\u6765\u561B\u2026\u2026\u966A\u6211\u559D\u4E00\u676F\uFF5E"</p>\`
 
 ### \u65C1\u767D\u683C\u5F0F
 - \u683C\u5F0F: \`<p>\u65C1\u767D\u5185\u5BB9</p>\`
@@ -8019,17 +7974,18 @@ ${charVoiceBindingText}
   <p>\u5C11\u5973[\u5FAE\u7B11,\u6843\u592D]: "\u4F60\u7EC8\u4E8E\u6765\u4E86\uFF5E"</p>
   <bgm>\u6B4C\u66F2\u540D</bgm>
   <p>\u5979\u6491\u7740\u4F1E\uFF0C\u9759\u9759\u5730\u7AD9\u5728\u90A3\u91CC\u3002</p>
-  <p>\u5C11\u5973[\u60CA\u8BB6]: "\u4E0B\u8FD9\u4E48\u5927\u7684\u96E8\uFF0C\u4F60\u600E\u4E48\u4E0D\u5E26\u4F1E\uFF1F"</p>
-  <p>\u5C11\u5973[\u96BE\u8FC7]: "\u4F1A\u611F\u5192\u7684\u2026\u2026"</p>
+  <p>\u5C11\u5973[\u60CA\u8BB6|\u53C8\u6025\u53C8\u5173\u5FC3\u5730\u8BF4]: "\u4E0B\u8FD9\u4E48\u5927\u7684\u96E8\uFF0C\u4F60\u600E\u4E48\u4E0D\u5E26\u4F1E\uFF1F"</p>
+  <p>\u5C11\u5973[\u96BE\u8FC7|\u5E26\u7740\u5FC3\u75BC\u7684\u8BED\u6C14]: "\u4F1A\u611F\u5192\u7684\u2026\u2026"</p>
 
 </maintext>
 \`\`\`
 
 ## \u91CD\u8981\u63D0\u9192
 1. \u5BF9\u8BDD\u683C\u5F0F: \`<p>\u89D2\u8272\u540D[\u8868\u60C5]: "\u5BF9\u8BDD"</p>\` \u6216 \`<p>\u89D2\u8272\u540D[\u8868\u60C5,\u97F3\u8272]: "\u5BF9\u8BDD"</p>\`
-2. \u65C1\u767D\u683C\u5F0F: \`<p>\u65C1\u767D\u5185\u5BB9</p>\`\uFF08\u65E0\u9700\u4EFB\u4F55\u6807\u8BB0\uFF09
-3. \u65B0\u89D2\u8272\u9996\u6B21\u51FA\u73B0\u65F6\u6307\u5B9A\u97F3\u8272\uFF0C\u540E\u7EED\u81EA\u52A8\u6CBF\u7528
-4. maintext\u6807\u7B7E\u5305\u88F9
+2. \u8BED\u6C14\u6307\u5BFC\uFF08\u53EF\u9009\uFF09: \`<p>\u89D2\u8272\u540D[\u8868\u60C5|\u8BED\u6C14\u63CF\u8FF0]: "\u5BF9\u8BDD"</p>\`
+3. \u65C1\u767D\u683C\u5F0F: \`<p>\u65C1\u767D\u5185\u5BB9</p>\`\uFF08\u65E0\u9700\u4EFB\u4F55\u6807\u8BB0\uFF09
+4. \u65B0\u89D2\u8272\u9996\u6B21\u51FA\u73B0\u65F6\u6307\u5B9A\u97F3\u8272\uFF0C\u540E\u7EED\u81EA\u52A8\u6CBF\u7528
+5. maintext\u6807\u7B7E\u5305\u88F9
 ${extraRule}
 `;
     } else {
@@ -8138,67 +8094,10 @@ ${extraRule}
     \u5927\u7B11: "laughing, open mouth, closed eyes, very happy",
     \u641E\u602A: "playful, wink, tongue out, silly face"
   };
-  var EXPRESSION_EMOTION_MAP2 = {
-    \u9ED8\u8BA4: "\u4E2D\u6027",
-    \u5FAE\u7B11: "\u5F00\u5FC3",
-    \u751F\u6C14: "\u751F\u6C14",
-    \u96BE\u8FC7: "\u60B2\u4F24",
-    \u60CA\u8BB6: "\u60CA\u8BB6",
-    \u5632\u8BBD: "\u51B7\u6F20",
-    \u5BB3\u7F9E: "\u5BB3\u7F9E",
-    \u601D\u8003: "\u4E2D\u6027",
-    \u5927\u7B11: "\u6FC0\u52A8",
-    \u641E\u602A: "\u6492\u5A07"
-  };
-  var TTS_EMOTION_LIST2 = [
-    "\u4E2D\u6027",
-    "\u5F00\u5FC3",
-    "\u60B2\u4F24",
-    "\u751F\u6C14",
-    "\u60CA\u8BB6",
-    "\u6050\u60E7",
-    "\u538C\u6076",
-    "\u6FC0\u52A8",
-    "\u51B7\u6F20",
-    "\u6CAE\u4E27",
-    "\u6492\u5A07",
-    "\u5BB3\u7F9E",
-    "\u5B89\u6170",
-    "\u9F13\u52B1",
-    "\u5486\u54EE",
-    "\u7126\u6025",
-    "\u6E29\u67D4",
-    "\u8BB2\u6545\u4E8B",
-    "\u81EA\u7136\u8BB2\u8FF0",
-    "\u60C5\u611F\u7535\u53F0",
-    "\u78C1\u6027",
-    "\u5E7F\u544A\u8425\u9500",
-    "\u6C14\u6CE1\u97F3",
-    "\u4F4E\u8BED",
-    "\u65B0\u95FB\u64AD\u62A5",
-    "\u5A31\u4E50\u516B\u5366",
-    "\u65B9\u8A00",
-    "\u5BF9\u8BDD",
-    "\u95F2\u804A",
-    "\u6E29\u6696",
-    "\u6DF1\u60C5",
-    "\u6743\u5A01"
-  ];
   var PARSE_CACHE_MAX_SIZE2 = 30;
   var _getFormattedContentRef = null;
   function setParserRefs({ getFormattedContent: getFormattedContent2 }) {
     if (getFormattedContent2) _getFormattedContentRef = getFormattedContent2;
-  }
-  function getExpressionEmotion(expressionName) {
-    if (EXPRESSION_EMOTION_MAP2[expressionName]) {
-      return EXPRESSION_EMOTION_MAP2[expressionName];
-    }
-    const customExpressions = getCustomExpressions();
-    const custom = customExpressions.find((e) => e.name === expressionName);
-    if (custom && custom.emotion) {
-      return custom.emotion;
-    }
-    return "\u4E2D\u6027";
   }
   function getExpressionTag(expressionName) {
     return EXPRESSION_TAG_MAP2[expressionName] || `${expressionName} expression`;
@@ -8224,10 +8123,12 @@ ${extraRule}
       const speaker = match[1].trim();
       const bracketContent = match[2].trim();
       const dialogue = match[3].trim();
-      const parts = bracketContent.split(",").map((s) => s.trim());
+      const pipeParts = bracketContent.split("|");
+      const exprVoicePart = pipeParts[0].trim();
+      const context = pipeParts[1] ? pipeParts[1].trim() : null;
+      const parts = exprVoicePart.split(",").map((s) => s.trim());
       const expression = parts[0];
       const specifiedVoice = parts[1] || null;
-      const emotion = getExpressionEmotion(expression);
       let voice = null;
       if (specifiedVoice) {
         voice = specifiedVoice;
@@ -8240,13 +8141,11 @@ ${extraRule}
           voice = sessionVoiceCache2.get(speaker);
         }
       }
-      let ttsTag = "[tts:";
       const ttsParts = [];
       if (voice) ttsParts.push(`speaker=${voice}`);
-      ttsParts.push(`emotion=${emotion}`);
-      ttsTag += ttsParts.join(";") + "]";
-      const newFormat = `${ttsTag}
-<p><${expression}>${speaker}: "${dialogue}"</p>`;
+      if (context) ttsParts.push(`context=${context}`);
+      const ttsAttr = ttsParts.length > 0 ? ` tts="${ttsParts.join(";")}"` : "";
+      const newFormat = `<p${ttsAttr}><${expression}>${speaker}: "${dialogue}"</p>`;
       result = result.replace(fullMatch, newFormat);
     }
     return result;
@@ -8290,7 +8189,7 @@ ${extraRule}
         content = maintextStart[1];
       }
     }
-    const firstGalMatch = content.match(/<(background|p)\s/i);
+    const firstGalMatch = content.match(/<(background|p)[\s>]/i);
     if (firstGalMatch && firstGalMatch.index > 0) {
       console.log(`[${SCRIPT_NAME}] [DEBUG] \u6E05\u7406 <maintext> \u524D ${firstGalMatch.index} \u5B57\u7B26\u7684\u6C61\u67D3\u5185\u5BB9`);
       content = content.substring(firstGalMatch.index);
@@ -8374,7 +8273,6 @@ ${extraRule}
       if (!ttsString) return null;
       const config = {
         speaker: defaultSpeaker,
-        emotion: null,
         context: null
       };
       const pairs = ttsString.split(";");
@@ -8384,7 +8282,6 @@ ${extraRule}
           const trimmedKey = key.trim();
           const trimmedValue = value.trim();
           if (trimmedKey === "speaker") config.speaker = trimmedValue;
-          else if (trimmedKey === "emotion") config.emotion = trimmedValue;
           else if (trimmedKey === "context") config.context = trimmedValue;
         }
       }
@@ -19024,7 +18921,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
                             \u9884\u8BBE\u8868\u60C5 (\u4E0D\u53EF\u7F16\u8F91)
                         </label>
                         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
-                            ${EXPRESSION_LIST2.map((e) => `<span class="gal-tag gal-preset-tag" title="TTS\u60C5\u7EEA: ${EXPRESSION_EMOTION_MAP2[e]}">${e}</span>`).join("")}
+                            ${EXPRESSION_LIST2.map((e) => `<span class="gal-tag gal-preset-tag">${e}</span>`).join("")}
                         </div>
                     </div>
                     <div style="margin-bottom: 15px;">
@@ -19036,10 +18933,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       (e) => `
                                 <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
                                     <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
-                                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff; color: #333;">
-                                        <option value="">TTS\u60C5\u7EEA: \u81EA\u52A8(\u4E2D\u6027)</option>
-                                        ${TTS_EMOTION_LIST2.map((em) => `<option value="${em}" ${e.emotion === em ? "selected" : ""}>${em}</option>`).join("")}
-                                    </select>
                                     <i class="fa-solid fa-xmark gal-remove-expr" title="\u5220\u9664" style="cursor: pointer; color: #999; padding: 5px;"></i>
                                 </div>
                             `
@@ -19080,10 +18973,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         $list.html(currentCustomExpressions.map((e) => `
                 <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
                     <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
-                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff; color: #333;">
-                        <option value="">TTS\u60C5\u7EEA: \u81EA\u52A8(\u4E2D\u6027)</option>
-                        ${TTS_EMOTION_LIST2.map((em) => `<option value="${em}" ${e.emotion === em ? "selected" : ""}>${em}</option>`).join("")}
-                    </select>
                     <i class="fa-solid fa-xmark gal-remove-expr" title="\u5220\u9664" style="cursor: pointer; color: #999; padding: 5px;"></i>
                 </div>
             `).join(""));
@@ -19098,11 +18987,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         $("#gal-new-expression-input").val("");
         renderCustomExpressions();
       }
-    });
-    $("#gal-custom-expressions-list").on("change", ".gal-expr-emotion-select", function() {
-      const exprName = $(this).attr("data-expr");
-      const newEmotion = $(this).val();
-      updateCustomExpressionEmotion(exprName, newEmotion);
     });
     $("#gal-custom-expressions-list").on("click", ".gal-remove-expr", function() {
       const exprToRemove = $(this).closest(".gal-custom-expr-row").attr("data-expr");

@@ -475,7 +475,6 @@ export const TTSManager = {
       voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? (segment.speaker || '') : '桃夭';
     }
     if (!voiceName) voiceName = '桃夭';
-    const emotion = ttsConfig.emotion || '中性';
     const context = ttsConfig.context || '';
 
     const resolvedVoice = await resolveVoiceByName(voiceName);
@@ -488,7 +487,7 @@ export const TTSManager = {
     }
 
     console.log(
-      `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, emotion=${emotion}, text=${segment.text.substring(0, 30)}...`,
+      `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, context=${context || '无'}, text=${segment.text.substring(0, 30)}...`,
     );
 
     this.isLoading = true;
@@ -510,7 +509,6 @@ export const TTSManager = {
         await this.xiaobaixTts.speak(segment.text, {
           speaker: speakerValue,
           resourceId: resourceId,
-          emotion: emotion,
           context: context,
         });
         this.isPlaying = true;
@@ -529,7 +527,6 @@ export const TTSManager = {
           message: segment.text,
           speaker: speakerValue,
           resourceId: resourceId,
-          emotion: emotion,
           context: context,
         });
         this.isPlaying = true;

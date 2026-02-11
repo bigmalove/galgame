@@ -8,8 +8,8 @@ import { getCharAppearancePrompt, setCharAppearancePrompt, getComfyUISettings, g
 import { ComfyUIAPI } from '../image-gen/comfyui-api.js';
 import { DEFAULT_COMFYUI_SETTINGS } from '../core/settings.js';
 import { getTTSVoiceListAsync, getCharacterTTSVoice, setCharacterTTSVoice } from '../audio/tts-config.js';
-import { getCustomExpressions, addCustomExpression, removeCustomExpression, updateCustomExpressionEmotion } from '../utils/expressions.js';
-import { EXPRESSION_LIST, EXPRESSION_EMOTION_MAP, TTS_EMOTION_LIST, getExpressionTag } from '../logic/parser.js';
+import { getCustomExpressions, addCustomExpression, removeCustomExpression } from '../utils/expressions.js';
+import { EXPRESSION_LIST, getExpressionTag } from '../logic/parser.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
@@ -1294,7 +1294,7 @@ export function showCustomExpressionManager(onCloseCallback) {
                             预设表情 (不可编辑)
                         </label>
                         <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
-                            ${EXPRESSION_LIST.map(e => `<span class="gal-tag gal-preset-tag" title="TTS情绪: ${EXPRESSION_EMOTION_MAP[e]}">${e}</span>`).join('')}
+                            ${EXPRESSION_LIST.map(e => `<span class="gal-tag gal-preset-tag">${e}</span>`).join('')}
                         </div>
                     </div>
                     <div style="margin-bottom: 15px;">
@@ -1309,10 +1309,6 @@ export function showCustomExpressionManager(onCloseCallback) {
                                       e => `
                                 <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
                                     <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
-                                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff; color: #333;">
-                                        <option value="">TTS情绪: 自动(中性)</option>
-                                        ${TTS_EMOTION_LIST.map(em => `<option value="${em}" ${e.emotion === em ? 'selected' : ''}>${em}</option>`).join('')}
-                                    </select>
                                     <i class="fa-solid fa-xmark gal-remove-expr" title="删除" style="cursor: pointer; color: #999; padding: 5px;"></i>
                                 </div>
                             `,
@@ -1356,10 +1352,6 @@ export function showCustomExpressionManager(onCloseCallback) {
       $list.html(currentCustomExpressions.map(e => `
                 <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
                     <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
-                    <select class="gal-expr-emotion-select" data-expr="${e.name}" style="flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fff; color: #333;">
-                        <option value="">TTS情绪: 自动(中性)</option>
-                        ${TTS_EMOTION_LIST.map(em => `<option value="${em}" ${e.emotion === em ? 'selected' : ''}>${em}</option>`).join('')}
-                    </select>
                     <i class="fa-solid fa-xmark gal-remove-expr" title="删除" style="cursor: pointer; color: #999; padding: 5px;"></i>
                 </div>
             `).join(''));
@@ -1370,11 +1362,6 @@ export function showCustomExpressionManager(onCloseCallback) {
   $('#gal-add-expression-btn').on('click', () => {
     const newExpr = $('#gal-new-expression-input').val().trim();
     if (newExpr) { addCustomExpression(newExpr); $('#gal-new-expression-input').val(''); renderCustomExpressions(); }
-  });
-  $('#gal-custom-expressions-list').on('change', '.gal-expr-emotion-select', function () {
-    const exprName = $(this).attr('data-expr');
-    const newEmotion = $(this).val();
-    updateCustomExpressionEmotion(exprName, newEmotion);
   });
   $('#gal-custom-expressions-list').on('click', '.gal-remove-expr', function () {
     const exprToRemove = $(this).closest('.gal-custom-expr-row').attr('data-expr');

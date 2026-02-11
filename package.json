@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "build": "node esbuild.config.js",
-    "dev": "node esbuild.config.js --watch",
-    "deploy": "node esbuild.config.js && scp dist/数据库界面插件.dist.js yu:~/SillyTavern/public/"
+    "dev": "node esbuild.config.js --watch"
   },
   "devDependencies": {
     "esbuild": "^0.24.0"

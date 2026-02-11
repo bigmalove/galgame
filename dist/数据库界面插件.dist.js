@@ -5182,6 +5182,291 @@ const __awaiter =
     return 'set_weights';
   }
 
+  function _toFiniteNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function _safeObject(value) {
+    return value && typeof value === 'object' ? value : {};
+  }
+
+  function _safeArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function _normalizeExpressionLookupKey(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '');
+  }
+
+  function _buildGptSoVitsModelId(seed = 'model') {
+    const base = String(seed || 'model')
+      .trim()
+      .replace(/[^\w\u4e00-\u9fff.-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase();
+    const ts = Date.now().toString(36);
+    const rnd = Math.floor(Math.random() * 1e6).toString(36);
+    return `${base || 'model'}_${ts}_${rnd}`;
+  }
+
+  function _normalizeGptSoVitsRefAudio(ref, index = 0, defaults = {}) {
+    const raw = _safeObject(ref);
+    const path = _normalizePathSep(String(raw.path || raw.refAudioPath || raw.ref_audio_path || '').trim());
+    if (!path) return null;
+
+    const idRaw = String(raw.id || raw.refId || '').trim() || `ref_${index + 1}`;
+    const id = idRaw.replace(/[^\w\u4e00-\u9fff.-]+/g, '_');
+    const name = String(raw.name || raw.label || id || `参考音频${index + 1}`).trim() || `参考音频${index + 1}`;
+
+    return {
+      id,
+      name,
+      path,
+      promptText: String(raw.promptText || raw.prompt_text || defaults.promptText || '').trim(),
+      promptLang: String(raw.promptLang || raw.prompt_lang || defaults.promptLang || 'zh').trim() || 'zh',
+      textLang: String(raw.textLang || raw.text_lang || defaults.textLang || 'auto').trim() || 'auto',
+    };
+  }
+
+  function _normalizeGptSoVitsModel(model, globalDefaults = {}, index = 0) {
+    const raw = _safeObject(model);
+    const paths = _safeObject(raw.paths);
+    const params = _safeObject(raw.params);
+
+    const name = String(raw.name || raw.modelName || raw.voice || raw.speaker || '').trim();
+    if (!name) return null;
+
+    const id =
+      String(raw.id || '').trim().replace(/[^\w\u4e00-\u9fff.-]+/g, '_') ||
+      _buildGptSoVitsModelId(name || `model_${index + 1}`);
+    const enabled = raw.enabled !== false;
+    const desc = String(raw.desc || raw.description || '').trim();
+
+    const modelParams = {
+      promptText: String(params.promptText || params.prompt_text || raw.promptText || raw.prompt_text || '').trim(),
+      promptLang: String(params.promptLang || params.prompt_lang || raw.promptLang || raw.prompt_lang || 'zh').trim() || 'zh',
+      textLang: String(params.textLang || params.text_lang || raw.textLang || raw.text_lang || globalDefaults.textLang || 'auto').trim() || 'auto',
+      textSplitMethod:
+        String(params.textSplitMethod || params.text_split_method || raw.textSplitMethod || raw.text_split_method || globalDefaults.textSplitMethod || 'cut5').trim() || 'cut5',
+      speedFactor: _toFiniteNumber(params.speedFactor ?? params.speed_factor ?? raw.speedFactor ?? raw.speed_factor, _toFiniteNumber(globalDefaults.speedFactor, 1)),
+      mediaType: String(params.mediaType || params.media_type || raw.mediaType || raw.media_type || globalDefaults.mediaType || 'wav').trim() || 'wav',
+      streamingMode: !!(params.streamingMode ?? params.streaming_mode ?? raw.streamingMode ?? raw.streaming_mode ?? globalDefaults.streamingMode),
+      modelSwitchMode: normalizeGptSoVitsSwitchMode(params.modelSwitchMode || raw.modelSwitchMode || globalDefaults.modelSwitchMode || 'set_weights'),
+      setModelEndpoint:
+        String(params.setModelEndpoint || raw.setModelEndpoint || globalDefaults.setModelEndpoint || '/set_model').trim() || '/set_model',
+      strictWeightSwitch: !!(params.strictWeightSwitch ?? raw.strictWeightSwitch ?? globalDefaults.strictWeightSwitch),
+    };
+
+    const gptWeightsPath = _normalizePathSep(
+      String(paths.gptWeightsPath || paths.gpt_weights_path || raw.gptWeightsPath || raw.gpt_weights_path || '').trim(),
+    );
+    const sovitsWeightsPath = _normalizePathSep(
+      String(paths.sovitsWeightsPath || paths.sovits_weights_path || raw.sovitsWeightsPath || raw.sovits_weights_path || '').trim(),
+    );
+    const defaultRefAudioPath = _normalizePathSep(
+      String(paths.defaultRefAudioPath || raw.defaultRefAudioPath || raw.refAudioPath || raw.ref_audio_path || '').trim(),
+    );
+
+    const refAudioCandidates = [
+      ..._safeArray(raw.refAudios),
+      ..._safeArray(raw.references),
+      ..._safeArray(raw.refAudioList),
+    ];
+    if (defaultRefAudioPath) {
+      refAudioCandidates.unshift({
+        id: String(raw.defaultRefId || 'ref_default').trim() || 'ref_default',
+        name: '默认',
+        path: defaultRefAudioPath,
+        promptText: modelParams.promptText,
+        promptLang: modelParams.promptLang,
+        textLang: modelParams.textLang,
+      });
+    }
+
+    const refAudios = [];
+    const refIds = new Set();
+    const refPaths = new Set();
+    for (const [refIndex, item] of refAudioCandidates.entries()) {
+      const normalized = _normalizeGptSoVitsRefAudio(item, refIndex, modelParams);
+      if (!normalized) continue;
+      if (refPaths.has(normalized.path)) continue;
+
+      let nextId = normalized.id || `ref_${refAudios.length + 1}`;
+      let dedupe = 2;
+      while (refIds.has(nextId)) {
+        nextId = `${normalized.id}_${dedupe++}`;
+      }
+      normalized.id = nextId;
+
+      refIds.add(nextId);
+      refPaths.add(normalized.path);
+      refAudios.push(normalized);
+    }
+
+    let defaultRefId = String(raw.defaultRefId || '').trim();
+    if (defaultRefId && !refAudios.some(item => item.id === defaultRefId)) {
+      defaultRefId = '';
+    }
+    if (!defaultRefId && defaultRefAudioPath) {
+      defaultRefId = refAudios.find(item => item.path === defaultRefAudioPath)?.id || '';
+    }
+    if (!defaultRefId && refAudios.length > 0) {
+      defaultRefId = refAudios[0].id;
+    }
+
+    const resolvedDefaultRefPath =
+      refAudios.find(item => item.id === defaultRefId)?.path || defaultRefAudioPath || refAudios[0]?.path || '';
+
+    const rawMap = raw.expressionRefMap || raw.expressionMap || {};
+    const expressionRefMap = {};
+    const assignExpression = (expr, refId) => {
+      const exprText = String(expr || '').trim();
+      const resolvedRefId = String(refId || '').trim();
+      if (!exprText || !resolvedRefId) return;
+      if (!refAudios.some(item => item.id === resolvedRefId)) return;
+      expressionRefMap[exprText] = resolvedRefId;
+    };
+    if (Array.isArray(rawMap)) {
+      rawMap.forEach(item => assignExpression(item?.expression, item?.refId || item?.refAudioId));
+    } else if (rawMap && typeof rawMap === 'object') {
+      Object.entries(rawMap).forEach(([expr, refId]) => assignExpression(expr, refId));
+    }
+
+    return {
+      id,
+      name,
+      enabled,
+      desc,
+      paths: {
+        gptWeightsPath,
+        sovitsWeightsPath,
+        defaultRefAudioPath: resolvedDefaultRefPath,
+      },
+      params: modelParams,
+      refAudios,
+      defaultRefId,
+      expressionRefMap,
+    };
+  }
+
+  function _normalizeGptSoVitsModelsForStore(modelList, globalDefaults = {}) {
+    const out = [];
+    const idSet = new Set();
+    const nameSet = new Set();
+
+    for (const [index, model] of _safeArray(modelList).entries()) {
+      const normalized = _normalizeGptSoVitsModel(model, globalDefaults, index);
+      if (!normalized) continue;
+
+      let id = normalized.id;
+      while (idSet.has(id)) id = _buildGptSoVitsModelId(id);
+      normalized.id = id;
+      idSet.add(id);
+
+      const baseName = normalized.name;
+      let nextName = baseName;
+      let dedupe = 2;
+      while (nameSet.has(nextName)) {
+        nextName = `${baseName}_${dedupe++}`;
+      }
+      normalized.name = nextName;
+      nameSet.add(nextName);
+
+      out.push(normalized);
+    }
+
+    return out;
+  }
+
+  function _buildRuntimeVoiceFromModel(model, globalCfg = {}) {
+    if (!model || model.enabled === false) return null;
+    const params = _safeObject(model.params);
+    const refs = _safeArray(model.refAudios);
+    const defaultRef =
+      refs.find(item => item.id === model.defaultRefId) ||
+      refs.find(item => item.path === model?.paths?.defaultRefAudioPath) ||
+      refs[0] ||
+      null;
+
+    const promptText = String(defaultRef?.promptText || params.promptText || '').trim();
+    const promptLang = String(defaultRef?.promptLang || params.promptLang || 'zh').trim() || 'zh';
+    const textLang = String(defaultRef?.textLang || params.textLang || globalCfg.textLang || 'auto').trim() || 'auto';
+
+    return {
+      name: model.name,
+      value: model.name,
+      source: TTS_PROVIDER.GPT_SOVITS_V2,
+      resourceId: null,
+      desc: model.desc || 'GPT-SoVITS',
+      gptSoVitsModel: model,
+      gptSoVits: {
+        refAudioPath: String(defaultRef?.path || model?.paths?.defaultRefAudioPath || '').trim(),
+        promptText,
+        promptLang,
+        textLang,
+        gptWeightsPath: String(model?.paths?.gptWeightsPath || '').trim(),
+        sovitsWeightsPath: String(model?.paths?.sovitsWeightsPath || '').trim(),
+        textSplitMethod: String(params.textSplitMethod || globalCfg.textSplitMethod || 'cut5').trim() || 'cut5',
+        speedFactor: _toFiniteNumber(params.speedFactor, _toFiniteNumber(globalCfg.speedFactor, 1)),
+        mediaType: String(params.mediaType || globalCfg.mediaType || 'wav').trim() || 'wav',
+        streamingMode: !!(params.streamingMode ?? globalCfg.streamingMode),
+        modelSwitchMode: normalizeGptSoVitsSwitchMode(params.modelSwitchMode || globalCfg.modelSwitchMode || 'set_weights'),
+        setModelEndpoint: String(params.setModelEndpoint || globalCfg.setModelEndpoint || '/set_model').trim() || '/set_model',
+        strictWeightSwitch: !!(params.strictWeightSwitch ?? globalCfg.strictWeightSwitch),
+      },
+    };
+  }
+
+  function _legacyVoicesToModels(voiceList, globalDefaults = {}) {
+    const models = [];
+    for (const [index, voice] of _safeArray(voiceList).entries()) {
+      const cfg = toGptSoVitsVoiceConfig(voice);
+      if (!cfg) continue;
+      models.push({
+        id: _buildGptSoVitsModelId(cfg.name || `model_${index + 1}`),
+        name: cfg.name || `模型${index + 1}`,
+        enabled: true,
+        desc: cfg.desc || '',
+        paths: {
+          gptWeightsPath: cfg.gptWeightsPath || '',
+          sovitsWeightsPath: cfg.sovitsWeightsPath || '',
+          defaultRefAudioPath: cfg.refAudioPath || '',
+        },
+        params: {
+          promptText: cfg.promptText || '',
+          promptLang: cfg.promptLang || 'zh',
+          textLang: cfg.textLang || globalDefaults.textLang || 'auto',
+          textSplitMethod: globalDefaults.textSplitMethod || 'cut5',
+          speedFactor: _toFiniteNumber(globalDefaults.speedFactor, 1),
+          mediaType: globalDefaults.mediaType || 'wav',
+          streamingMode: !!globalDefaults.streamingMode,
+          modelSwitchMode: normalizeGptSoVitsSwitchMode(globalDefaults.modelSwitchMode || 'set_weights'),
+          setModelEndpoint: String(globalDefaults.setModelEndpoint || '/set_model').trim() || '/set_model',
+          strictWeightSwitch: !!globalDefaults.strictWeightSwitch,
+        },
+        refAudios: cfg.refAudioPath
+          ? [
+              {
+                id: 'ref_default',
+                name: '默认',
+                path: cfg.refAudioPath,
+                promptText: cfg.promptText || '',
+                promptLang: cfg.promptLang || 'zh',
+                textLang: cfg.textLang || globalDefaults.textLang || 'auto',
+              },
+            ]
+          : [],
+        defaultRefId: cfg.refAudioPath ? 'ref_default' : '',
+        expressionRefMap: {},
+      });
+    }
+    return _normalizeGptSoVitsModelsForStore(models, globalDefaults);
+  }
+
   function getGptSoVitsConfig() {
     const defaults = {
       apiUrl: 'http://127.0.0.1:9880',
@@ -5193,19 +5478,29 @@ const __awaiter =
       textSplitMethod: 'cut5',
       speedFactor: 1,
       strictWeightSwitch: false,
-      probeOnAudioError: false,
       modelSwitchMode: 'set_weights', // set_weights(api_v2.py) | set_model(api.py) | none
       setModelEndpoint: '/set_model',
       importPathPrefix: '',
       voices: [],
+      models: [],
     };
 
     try {
       const cfg = settings?.gptSoVits || {};
-      return Object.assign(Object.assign({}, defaults), cfg, {
+      const merged = Object.assign(Object.assign({}, defaults), cfg, {
         modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || defaults.modelSwitchMode),
         setModelEndpoint: String(cfg.setModelEndpoint || defaults.setModelEndpoint).trim() || defaults.setModelEndpoint,
         voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices,
+        models: Array.isArray(cfg.models) ? cfg.models : defaults.models,
+      });
+
+      const normalizedModels =
+        merged.models.length > 0
+          ? _normalizeGptSoVitsModelsForStore(merged.models, merged)
+          : _legacyVoicesToModels(merged.voices, merged);
+
+      return Object.assign({}, merged, {
+        models: normalizedModels,
       });
     } catch (e) {
       return defaults;
@@ -5217,12 +5512,12 @@ const __awaiter =
     const name = String(voice.name || voice.voice || voice.speaker || '').trim();
     if (!name) return null;
 
-    const refAudioPath = String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || '').trim();
+    const refAudioPath = _normalizePathSep(String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || '').trim());
     const promptText = String(voice.promptText || voice.prompt_text || '').trim();
     const promptLang = String(voice.promptLang || voice.prompt_lang || '').trim();
     const textLang = String(voice.textLang || voice.text_lang || '').trim();
-    const gptWeightsPath = String(voice.gptWeightsPath || voice.gpt_weights_path || voice.gptPath || voice.gpt || '').trim();
-    const sovitsWeightsPath = String(voice.sovitsWeightsPath || voice.sovits_weights_path || voice.sovitsPath || voice.sovits || '').trim();
+    const gptWeightsPath = _normalizePathSep(String(voice.gptWeightsPath || voice.gpt_weights_path || voice.gptPath || voice.gpt || '').trim());
+    const sovitsWeightsPath = _normalizePathSep(String(voice.sovitsWeightsPath || voice.sovits_weights_path || voice.sovitsPath || voice.sovits || '').trim());
     const desc = String(voice.desc || voice.description || '').trim();
 
     return {
@@ -5272,12 +5567,12 @@ const __awaiter =
     return {
       name: normalized.name,
       desc,
-      refAudioPath: String(cfg.refAudioPath || '').trim(),
+      refAudioPath: _normalizePathSep(String(cfg.refAudioPath || '').trim()),
       promptText: String(cfg.promptText || '').trim(),
       promptLang: String(cfg.promptLang || '').trim(),
       textLang: String(cfg.textLang || '').trim(),
-      gptWeightsPath: String(cfg.gptWeightsPath || '').trim(),
-      sovitsWeightsPath: String(cfg.sovitsWeightsPath || '').trim(),
+      gptWeightsPath: _normalizePathSep(String(cfg.gptWeightsPath || '').trim()),
+      sovitsWeightsPath: _normalizePathSep(String(cfg.sovitsWeightsPath || '').trim()),
     };
   }
 
@@ -5313,6 +5608,10 @@ const __awaiter =
 
   async function getGptSoVitsVoiceListAsync() {
     const cfg = getGptSoVitsConfig();
+    const modelList = _safeArray(cfg.models);
+    if (modelList.length > 0) {
+      return modelList.map(model => _buildRuntimeVoiceFromModel(model, cfg)).filter(Boolean);
+    }
     const list = Array.isArray(cfg.voices) ? cfg.voices : [];
     return list.map(normalizeGptSoVitsVoice).filter(Boolean);
   }
@@ -5320,6 +5619,10 @@ const __awaiter =
   function getGptSoVitsVoiceList() {
     try {
       const cfg = getGptSoVitsConfig();
+      const modelList = _safeArray(cfg.models);
+      if (modelList.length > 0) {
+        return modelList.map(model => _buildRuntimeVoiceFromModel(model, cfg)).filter(Boolean);
+      }
       const list = Array.isArray(cfg.voices) ? cfg.voices : [];
       return list.map(normalizeGptSoVitsVoice).filter(Boolean);
     } catch (e) {
@@ -5343,7 +5646,29 @@ const __awaiter =
   }
 
   function _normalizePathSep(p) {
-    return String(p || '').replace(/\\/g, '/');
+    let s = String(p || '');
+    if (!s) return '';
+
+    // Normalize invisible/variant separator chars copied from rich text or docs.
+    s = s
+      .replace(/[\u200B-\u200D\uFEFF\u2060]/g, '')
+      .replace(/\uFF3C/g, '\\') // full-width backslash
+      .replace(/\uFF0F/g, '/') // full-width slash
+      .replace(/\u2215/g, '/'); // division slash
+
+    s = s.trim();
+    if (
+      (s.startsWith('"') && s.endsWith('"')) ||
+      (s.startsWith("'") && s.endsWith("'"))
+    ) {
+      s = s.slice(1, -1).trim();
+    }
+
+    try {
+      s = s.normalize('NFC');
+    } catch (e) {}
+
+    return s.replace(/\\/g, '/');
   }
 
   function _isAbsoluteFsPath(pathStr) {
@@ -5576,7 +5901,7 @@ const __awaiter =
       // 生成服务端路径（尽量使用 Electron 的绝对 path，否则用 webkitRelativePath 并补前缀）
       const toServerPath = f => {
         const abs = typeof f?.path === 'string' ? String(f.path) : '';
-        if (_isAbsoluteFsPath(abs)) return abs;
+        if (_isAbsoluteFsPath(abs)) return _normalizePathSep(abs);
         const rel = _normalizePathSep(f?.webkitRelativePath || f?.name || '');
         return _joinPathPrefix(importPathPrefix, rel);
       };
@@ -5618,6 +5943,152 @@ const __awaiter =
     }
 
     return result;
+  }
+
+  function _inferExpressionTagFromAudioName(baseName) {
+    const name = String(baseName || '').trim().toLowerCase();
+    if (!name) return '';
+    const rules = [
+      { tag: '开心', patterns: ['happy', 'smile', 'laugh', 'joy', '开心', '高兴', '喜悦', '愉快', '兴奋'] },
+      { tag: '生气', patterns: ['angry', 'mad', 'rage', '生气', '愤怒', '恼火'] },
+      { tag: '悲伤', patterns: ['sad', 'cry', 'sob', '悲伤', '难过', '伤心'] },
+      { tag: '惊讶', patterns: ['surprise', 'wow', '惊讶', '震惊', '吃惊'] },
+      { tag: '害羞', patterns: ['shy', 'blush', '害羞', '脸红'] },
+      { tag: '冷静', patterns: ['calm', 'normal', 'neutral', '平静', '冷静', '默认', 'normal'] },
+    ];
+    for (const rule of rules) {
+      if (rule.patterns.some(pattern => name.includes(pattern))) return rule.tag;
+    }
+    return '';
+  }
+
+  function inferGptSoVitsModelsFromFolderFiles(fileList, importPathPrefix = '') {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (files.length === 0) return [];
+
+    const groups = new Map(); // dir -> File[]
+    for (const f of files) {
+      const rel = _normalizePathSep(f.webkitRelativePath || f.name || '');
+      const dir = rel.split('/').slice(0, -1).join('/');
+      const key = dir || '__root__';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(f);
+    }
+
+    const cfg = getGptSoVitsConfig();
+    const models = [];
+
+    for (const [dirKey, groupFiles] of groups.entries()) {
+      const ckpts = [];
+      const pths = [];
+      const audios = [];
+
+      for (const f of groupFiles) {
+        const ext = _getFileExtLower(f.name);
+        if (ext === 'ckpt') ckpts.push(f);
+        else if (ext === 'pth') pths.push(f);
+        else if (['wav', 'mp3', 'flac', 'ogg', 'm4a'].includes(ext)) audios.push(f);
+      }
+
+      if (ckpts.length === 0 && pths.length === 0 && audios.length === 0) continue;
+
+      const toServerPath = f => {
+        const abs = typeof f?.path === 'string' ? String(f.path) : '';
+        if (_isAbsoluteFsPath(abs)) return _normalizePathSep(abs);
+        const rel = _normalizePathSep(f?.webkitRelativePath || f?.name || '');
+        return _joinPathPrefix(importPathPrefix, rel);
+      };
+
+      const audioCandidates = audios
+        .map(file => {
+          const base = _stripFileExt(file.name);
+          const promptText = _cleanPromptTextFromFilenameBase(base);
+          const inferredTag = _inferExpressionTagFromAudioName(base);
+          return { file, promptText, inferredTag };
+        })
+        .filter(item => !!item.file);
+      const bestAudio = _pickBestAudioFile(audios);
+      const weightCandidatesRaw = _collectWeightCandidates(ckpts, pths);
+      const weightCandidates = weightCandidatesRaw.length > 0 ? weightCandidatesRaw : [{ gptFile: null, sovitsFile: null }];
+      const dirName = dirKey !== '__root__' ? dirKey.split('/').pop() : '';
+      const groupNameUsed = new Set();
+
+      for (const pair of weightCandidates) {
+        const gptFile = pair.gptFile || null;
+        const sovitsFile = pair.sovitsFile || null;
+        const weightsBase = _stripFileExt((sovitsFile || gptFile || bestAudio || {}).name || '');
+        const baseName = _cleanVoiceNameFromWeightsBase(weightsBase) || _cleanVoiceNameFromWeightsBase(dirName) || '新模型';
+
+        let modelName = baseName;
+        let idx = 2;
+        while (groupNameUsed.has(modelName)) {
+          modelName = `${baseName}_${idx++}`;
+        }
+        groupNameUsed.add(modelName);
+
+        const refAudios = [];
+        const expressionRefMap = {};
+        const defaultRefBase = bestAudio ? _normalizePathSep(toServerPath(bestAudio)) : '';
+
+        audioCandidates.forEach((item, audioIndex) => {
+          const path = _normalizePathSep(toServerPath(item.file));
+          if (!path) return;
+          const id = `ref_${audioIndex + 1}`;
+          const name = _stripFileExt(item.file.name) || `参考音频${audioIndex + 1}`;
+          const text = String(item.promptText || '').trim();
+          const lang = text ? _inferLangFromText(text) : 'zh';
+          refAudios.push({
+            id,
+            name,
+            path,
+            promptText: text,
+            promptLang: lang,
+            textLang: lang,
+          });
+          if (item.inferredTag && !expressionRefMap[item.inferredTag]) {
+            expressionRefMap[item.inferredTag] = id;
+          }
+        });
+
+        const defaultRef = refAudios.find(item => item.path === defaultRefBase) || refAudios[0] || null;
+        const defaultPromptText = String(defaultRef?.promptText || '').trim();
+        const defaultLang = defaultPromptText ? _inferLangFromText(defaultPromptText) : 'zh';
+
+        const model = {
+          id: _buildGptSoVitsModelId(modelName),
+          name: modelName,
+          enabled: true,
+          desc: '文件夹导入',
+          paths: {
+            gptWeightsPath: gptFile ? _normalizePathSep(toServerPath(gptFile)) : '',
+            sovitsWeightsPath: sovitsFile ? _normalizePathSep(toServerPath(sovitsFile)) : '',
+            defaultRefAudioPath: defaultRef?.path || '',
+          },
+          params: {
+            promptText: defaultPromptText,
+            promptLang: defaultRef?.promptLang || defaultLang,
+            textLang: defaultRef?.textLang || defaultLang,
+            textSplitMethod: cfg.textSplitMethod || 'cut5',
+            speedFactor: _toFiniteNumber(cfg.speedFactor, 1),
+            mediaType: cfg.mediaType || 'wav',
+            streamingMode: !!cfg.streamingMode,
+            modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || 'set_weights'),
+            setModelEndpoint: String(cfg.setModelEndpoint || '/set_model').trim() || '/set_model',
+            strictWeightSwitch: !!cfg.strictWeightSwitch,
+          },
+          refAudios,
+          defaultRefId: defaultRef?.id || '',
+          expressionRefMap,
+        };
+
+        // 至少要有参考音频，模型才可直接用于推理。
+        if (model.paths.defaultRefAudioPath) {
+          models.push(model);
+        }
+      }
+    }
+
+    return _normalizeGptSoVitsModelsForStore(models, cfg);
   }
 
   // 缓存 LittleWhiteBox TTS 数据
@@ -6454,10 +6925,10 @@ ${extraRule}
       textSplitMethod: 'cut5',
       speedFactor: 1,
       strictWeightSwitch: false, // true=切权重失败即中断播放；false=失败时继续使用当前模型
-      probeOnAudioError: false, // true=音频报错时额外发起一次 /tts 诊断请求（会增加推理负载）
       modelSwitchMode: 'set_weights', // set_weights(api_v2.py) | set_model(api.py) | none
       setModelEndpoint: '/set_model', // modelSwitchMode=set_model 时使用
-      importPathPrefix: '', // 导入文件夹时自动补全路径前缀（相对/绝对均可）
+      importPathPrefix: '', // 服务端路径前缀/根目录（用于解析相对路径；可为空）
+      models: [], // 新结构：模型配置列表（含三大件/参数/参考音频映射）
       voices: [], // [{ name, desc?, refAudioPath, promptText?, promptLang?, textLang? }]
     },
     // 加强模式设置
@@ -6672,9 +7143,68 @@ ${extraRule}
     _gptSoVitsResolvedProxyRoute: '',
     _gptSoVitsWeightSwitchUnavailable: false,
     _gptSoVitsWeightSwitchWarned: false,
+    _gptSoVitsAbortController: null,
+    _gptSoVitsAbortSessionId: 0,
+    _gptSoVitsCurrentObjectUrl: '',
 
     _isPlaybackSessionActive(sessionId) {
       return Number(sessionId) > 0 && Number(sessionId) === Number(this._activePlaybackSessionId || 0);
+    },
+
+    _abortGptSoVitsFetch(reason = 'unknown') {
+      if (!this._gptSoVitsAbortController) return;
+      try {
+        this._gptSoVitsAbortController.abort();
+      } catch (e) {}
+      this._gptSoVitsAbortController = null;
+      this._gptSoVitsAbortSessionId = 0;
+    },
+
+    _ensureGptSoVitsAbortController(playbackSessionId) {
+      const sid = Number(playbackSessionId) || 0;
+      if (!sid || typeof AbortController === 'undefined') return null;
+      if (!this._isPlaybackSessionActive(sid)) return null;
+      if (this._gptSoVitsAbortController && Number(this._gptSoVitsAbortSessionId || 0) === sid) {
+        return this._gptSoVitsAbortController;
+      }
+      this._abortGptSoVitsFetch('new-session');
+      this._gptSoVitsAbortSessionId = sid;
+      this._gptSoVitsAbortController = new AbortController();
+      return this._gptSoVitsAbortController;
+    },
+
+    _getGptSoVitsAbortSignal(playbackSessionId) {
+      return this._ensureGptSoVitsAbortController(playbackSessionId)?.signal;
+    },
+
+    _revokeGptSoVitsObjectUrl() {
+      const url = String(this._gptSoVitsCurrentObjectUrl || '').trim();
+      if (!url) return;
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {}
+      this._gptSoVitsCurrentObjectUrl = '';
+    },
+
+    _resolveGptSoVitsServerPath(pathStr, cfg = null) {
+      let raw = _normalizePathSep(pathStr);
+      if (!raw) return '';
+
+      // URL-like paths should be used as-is.
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) return raw;
+
+      // Compatibility: allow users to paste URL-encoded local paths.
+      if (/%[0-9a-fA-F]{2}/.test(raw)) {
+        try {
+          raw = _normalizePathSep(decodeURIComponent(raw));
+        } catch (e) {}
+      }
+
+      // Force POSIX-like separators for GPT-SoVITS file paths.
+      if (_isAbsoluteFsPath(raw)) return _normalizePathSep(raw);
+
+      const prefix = _normalizePathSep(String((cfg || getGptSoVitsConfig())?.importPathPrefix || '').trim());
+      return _normalizePathSep(_joinPathPrefix(prefix, raw));
     },
 
     _refreshProviderState() {
@@ -6721,6 +7251,7 @@ ${extraRule}
       this.isLoading = false;
       this.currentAudio = null;
       this.currentSegmentId = null;
+      this._revokeGptSoVitsObjectUrl();
       this.hideLoadingIndicator();
       // ★ 停止口型同步
       LipSyncManager.stopSync();
@@ -6759,9 +7290,13 @@ ${extraRule}
     stop() {
       // 先失效旧会话，避免旧异步任务稍后回流播放
       this._activePlaybackSessionId = Number(this._activePlaybackSessionId || 0) + 1;
+      this._abortGptSoVitsFetch('stop');
 
       // 如果没有在播放或加载，直接返回
-      if (!this.isPlaying && !this.isLoading) return;
+      if (!this.isPlaying && !this.isLoading) {
+        this._revokeGptSoVitsObjectUrl();
+        return;
+      }
 
       console.log(`[${SCRIPT_NAME}] TTS: 中止当前播放`);
 
@@ -6774,6 +7309,7 @@ ${extraRule}
             if (typeof this.currentAudio.load === 'function') this.currentAudio.load();
           } catch (e) {}
         }
+        this._revokeGptSoVitsObjectUrl();
 
         // 方式1: 使用 xiaobaixTts.player 的方法（主要方式）
         if (this.xiaobaixTts && this.xiaobaixTts.player) {
@@ -6913,7 +7449,14 @@ ${extraRule}
 
     _shouldAttachStProxyHeaders(route, url) {
       const r = String(route || '').trim();
-      if (r === 'proxy_path_relative' || r === 'proxy_path_origin' || r === 'proxy_query_relative' || r === 'proxy_query_origin') {
+      if (
+        r === 'proxy_path_relative' ||
+        r === 'proxy_path_origin' ||
+        r === 'proxy_path_raw_relative' ||
+        r === 'proxy_path_raw_origin' ||
+        r === 'proxy_query_relative' ||
+        r === 'proxy_query_origin'
+      ) {
         return true;
       }
       if (r === 'helper' && this._isLikelyStProxyUrl(url)) {
@@ -6967,34 +7510,235 @@ ${extraRule}
       return /failed to fetch|networkerror|cors|forbiddenerror|invalid csrf token|blocked/i.test(msg);
     },
 
-    async _sendNoCorsGet(url) {
-      const targetUrl = String(url || '').trim();
-      if (!targetUrl) return false;
-      try {
-        await fetch(targetUrl, {
-          method: 'GET',
-          mode: 'no-cors',
-          cache: 'no-store',
-          credentials: 'omit',
-        });
-        return true;
-      } catch (e) {
-        return false;
-      }
+    _isLikelyGptSoVitsTtsPayloadError(message) {
+      const msg = String(message || '').toLowerCase();
+      return (
+        /http\s*400|http400|bad request|unprocessable|422|validation|value_error|required field|field required/.test(msg) ||
+        /text_lang|prompt_lang|ref_audio_path|refer_audio_path|prompt_text|media_type|streaming_mode|text_split_method/.test(msg)
+      );
     },
 
-    async _tryNoCorsModelSwitch(pathname, queryParams = {}, label = 'switch') {
-      const cfg = getGptSoVitsConfig();
-      if (cfg.useCorsProxy === false) return false;
+    _buildGptSoVitsTtsPayloadVariants(payload) {
+      const base = Object.assign({}, payload || {});
+      const variants = [];
+      const seen = new Set();
 
-      const directUrl = this._buildGptSoVitsApiUrl(pathname, queryParams);
-      if (!directUrl) return false;
+      const addVariant = v => {
+        const cleaned = {};
+        for (const [k, val] of Object.entries(v || {})) {
+          if (val === undefined || val === null || val === '') continue;
+          cleaned[k] = val;
+        }
+        const sig = JSON.stringify(cleaned);
+        if (seen.has(sig)) return;
+        seen.add(sig);
+        variants.push(cleaned);
+      };
 
-      const ok = await this._sendNoCorsGet(directUrl);
-      if (ok) {
-        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: ${label} 已发送 no-cors 盲切换请求（无法读取返回）`);
+      const pickMinimal = src => {
+        const out = {};
+        ['text', 'text_lang', 'ref_audio_path', 'refer_audio_path', 'prompt_lang', 'prompt_text'].forEach(key => {
+          const v = src?.[key];
+          if (v === undefined || v === null || v === '') return;
+          out[key] = v;
+        });
+        return out;
+      };
+
+      addVariant(base);
+      addVariant(Object.assign({}, base, { text_lang: 'auto' }));
+      addVariant(Object.assign({}, base, { text_lang: 'auto', prompt_lang: 'auto' }));
+
+      const minimal = pickMinimal(base);
+      addVariant(minimal);
+      addVariant(Object.assign({}, minimal, { text_lang: 'auto' }));
+      addVariant(Object.assign({}, minimal, { text_lang: 'auto', prompt_lang: 'auto' }));
+
+      const refPath = String(minimal.ref_audio_path || base.ref_audio_path || '').trim();
+      if (/^[a-zA-Z]:\//.test(refPath)) {
+        const winRef = refPath.replace(/\//g, '\\');
+        addVariant(Object.assign({}, base, { ref_audio_path: winRef }));
+        addVariant(Object.assign({}, minimal, { ref_audio_path: winRef, text_lang: 'auto' }));
       }
-      return ok;
+
+      // Some local files use compatibility-width chars (e.g. "２" vs "2").
+      // Try NFKC variants as a fallback without mutating user's saved config.
+      try {
+        const nfkcRef = refPath ? String(refPath).normalize('NFKC') : '';
+        if (nfkcRef && nfkcRef !== refPath) {
+          addVariant(Object.assign({}, base, { ref_audio_path: nfkcRef }));
+          addVariant(Object.assign({}, minimal, { ref_audio_path: nfkcRef, text_lang: 'auto' }));
+          if (/^[a-zA-Z]:\//.test(nfkcRef)) {
+            const nfkcWinRef = nfkcRef.replace(/\//g, '\\');
+            addVariant(Object.assign({}, base, { ref_audio_path: nfkcWinRef }));
+            addVariant(Object.assign({}, minimal, { ref_audio_path: nfkcWinRef, text_lang: 'auto' }));
+          }
+        }
+      } catch (e) {}
+
+      try {
+        const promptText = String(minimal.prompt_text || base.prompt_text || '').trim();
+        const nfkcPrompt = promptText ? String(promptText).normalize('NFKC') : '';
+        if (nfkcPrompt && nfkcPrompt !== promptText) {
+          addVariant(Object.assign({}, base, { prompt_text: nfkcPrompt }));
+          addVariant(Object.assign({}, minimal, { prompt_text: nfkcPrompt, text_lang: 'auto' }));
+        }
+      } catch (e) {}
+
+      if (minimal.ref_audio_path) {
+        const alias = Object.assign({}, minimal, { text_lang: 'auto', refer_audio_path: minimal.ref_audio_path });
+        delete alias.ref_audio_path;
+        addVariant(alias);
+      }
+
+      return variants.length > 0 ? variants : [base];
+    },
+
+    _looksLikeAudioArrayBuffer(arrayBuffer) {
+      if (!arrayBuffer || typeof arrayBuffer.byteLength !== 'number' || arrayBuffer.byteLength < 4) return false;
+      const u8 = new Uint8Array(arrayBuffer);
+      const hasPrefix = bytes => {
+        if (!Array.isArray(bytes) || bytes.length === 0 || u8.length < bytes.length) return false;
+        for (let i = 0; i < bytes.length; i++) {
+          if (u8[i] !== bytes[i]) return false;
+        }
+        return true;
+      };
+      // WAV: RIFF....WAVE
+      if (
+        u8.length >= 12 &&
+        hasPrefix([0x52, 0x49, 0x46, 0x46]) &&
+        u8[8] === 0x57 &&
+        u8[9] === 0x41 &&
+        u8[10] === 0x56 &&
+        u8[11] === 0x45
+      ) {
+        return true;
+      }
+      // OGG/FLAC/MP3(ID3 or frame sync)
+      if (hasPrefix([0x4f, 0x67, 0x67, 0x53])) return true; // OggS
+      if (hasPrefix([0x66, 0x4c, 0x61, 0x43])) return true; // fLaC
+      if (hasPrefix([0x49, 0x44, 0x33])) return true; // ID3
+      if (u8[0] === 0xff && (u8[1] & 0xe0) === 0xe0) return true; // MP3 frame
+      return false;
+    },
+
+    _extractGptSoVitsAudioRefFromText(text) {
+      const raw = String(text || '').trim();
+      if (!raw) return '';
+
+      let parsed = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e) {}
+
+      const pickRefFromObject = obj => {
+        if (!obj || typeof obj !== 'object') return '';
+        const keys = [
+          'audio_url',
+          'audioUrl',
+          'url',
+          'audio_path',
+          'audioPath',
+          'wav_path',
+          'wavPath',
+          'path',
+          'output_path',
+          'outputPath',
+          'file',
+          'filename',
+          'data',
+          'audio',
+        ];
+        for (const k of keys) {
+          const v = obj[k];
+          if (typeof v === 'string' && v.trim()) return v.trim();
+        }
+        return '';
+      };
+
+      if (typeof parsed === 'string' && parsed.trim()) return parsed.trim();
+      if (parsed && typeof parsed === 'object') {
+        const picked = pickRefFromObject(parsed);
+        if (picked) return picked;
+      }
+
+      if (/^(https?:\/\/|\/|\.\/|\.\.\/)/i.test(raw)) return raw;
+      return '';
+    },
+
+    async _fetchGptSoVitsAudioBlobFromRef(audioRef, playbackSessionId = null) {
+      const refRaw = String(audioRef || '').trim();
+      if (!refRaw) return null;
+
+      if (/^data:audio\//i.test(refRaw)) {
+        try {
+          const resp = await fetch(refRaw);
+          if (!resp.ok) return null;
+          const blob = await resp.blob();
+          return blob && blob.size > 0 ? blob : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      const cfg = getGptSoVitsConfig();
+      const base = String(cfg.apiUrl || '').replace(/\/+$/, '');
+      const directUrlCandidates = [];
+      const seen = new Set();
+      const addDirect = u => {
+        const s = String(u || '').trim();
+        if (!s || seen.has(s)) return;
+        seen.add(s);
+        directUrlCandidates.push(s);
+      };
+
+      if (/^https?:\/\//i.test(refRaw)) {
+        addDirect(refRaw);
+      } else if (refRaw.startsWith('/')) {
+        addDirect(refRaw);
+        if (base) {
+          try {
+            addDirect(new URL(refRaw, `${base}/`).toString());
+          } catch (e) {}
+        }
+      } else if (base) {
+        try {
+          addDirect(new URL(refRaw, `${base}/`).toString());
+        } catch (e) {}
+      }
+
+      for (const directUrl of directUrlCandidates) {
+        const isAbsoluteHttp = /^https?:\/\//i.test(directUrl);
+        const candidates = isAbsoluteHttp
+          ? this._buildGptSoVitsApiCandidates(directUrl, !!cfg.useCorsProxy)
+          : [{ route: 'direct', url: directUrl }];
+        for (const candidate of candidates) {
+          if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return null;
+          try {
+            const route = candidate.route;
+            const url = candidate.url;
+            const headers = this._shouldAttachStProxyHeaders(route, url) ? this._getSillyTavernRequestHeaders() : {};
+            const signal = Number(playbackSessionId) > 0 ? this._getGptSoVitsAbortSignal(playbackSessionId) : null;
+            const resp = await fetch(url, { method: 'GET', headers, signal: signal || undefined });
+            if (!resp.ok) continue;
+            const blob = await resp.blob();
+            if (!blob || blob.size === 0) continue;
+            const ct = String(resp.headers?.get('content-type') || '').toLowerCase();
+            if (ct.startsWith('audio/') || ct.includes('octet-stream')) {
+              this._rememberGptSoVitsProxyRoute(route, url);
+              return blob;
+            }
+            const ab = await blob.arrayBuffer();
+            if (this._looksLikeAudioArrayBuffer(ab)) {
+              this._rememberGptSoVitsProxyRoute(route, url);
+              return blob;
+            }
+          } catch (e) {}
+        }
+      }
+
+      return null;
     },
 
     _buildGptSoVitsProxyUrl(route, directUrl) {
@@ -7004,9 +7748,26 @@ ${extraRule}
       const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
       const origin = String(_topWindow.location?.origin || window.location?.origin || '').replace(/\/+$/, '');
       const encoded = encodeURIComponent(targetUrl);
+      const buildProxyPathRawTarget = url => {
+        const raw = String(url || '').trim();
+        if (!raw) return '';
+        const noHash = raw.split('#')[0] || raw;
+        const qIdx = noHash.indexOf('?');
+        if (qIdx < 0) return noHash;
+        const base = noHash.slice(0, qIdx);
+        const query = noHash.slice(qIdx + 1);
+        return `${base}%3F${query.replace(/&/g, '%26').replace(/=/g, '%3D')}`;
+      };
+      const rawTarget = buildProxyPathRawTarget(targetUrl);
 
       if (route === 'helper') {
         return this._getGptSoVitsProxyUrlFromHelpers(targetUrl);
+      }
+      if (route === 'proxy_path_raw_relative') {
+        return rawTarget ? `/proxy/${rawTarget}` : '';
+      }
+      if (route === 'proxy_path_raw_origin') {
+        return origin && rawTarget ? `${origin}/proxy/${rawTarget}` : '';
       }
       if (route === 'proxy_path_relative') {
         return `/proxy/${encoded}`;
@@ -7030,20 +7791,6 @@ ${extraRule}
       const candidates = [];
       const seen = new Set();
 
-      const canTryDirect = (() => {
-        try {
-          const directHost = new URL(String(directUrl || ''), window.location.href).hostname;
-          const pageHost = String(window.location.hostname || '');
-          const isLoopback = directHost === '127.0.0.1' || directHost === 'localhost';
-          const pageIsLoopback = pageHost === '127.0.0.1' || pageHost === 'localhost';
-          // 远程设备访问酒馆页面时：direct 指向 127.0.0.1/localhost 一定会打到“客户端本机”，必然失败
-          if (isLoopback && !pageIsLoopback) return false;
-          return true;
-        } catch (e) {
-          return true;
-        }
-      })();
-
       const addCandidate = route => {
         const built = this._buildGptSoVitsProxyUrl(route, directUrl);
         const url = String(built || '').trim();
@@ -7061,11 +7808,12 @@ ${extraRule}
       if (preferred) addCandidate(preferred);
 
       addCandidate('helper');
+      addCandidate('proxy_path_raw_relative'); // 与酒馆 /proxy/http://host/path%3F... 兼容
+      addCandidate('proxy_path_raw_origin');
       addCandidate('proxy_path_relative'); // 与 LittleWhiteBox 对齐：/proxy/<encoded-url>
       addCandidate('proxy_path_origin');
       addCandidate('proxy_query_relative');
       addCandidate('proxy_query_origin');
-      if (canTryDirect) addCandidate('direct');
 
       return candidates;
     },
@@ -7074,6 +7822,59 @@ ${extraRule}
       if (Number(status) !== 404) return false;
       const body = String(text || '');
       return /not found|cannot\s+(get|post)\s+\/proxy|<title>\s*not found\s*<\/title>/i.test(body);
+    },
+
+    _summarizeGptSoVitsApiText(text) {
+      const trimmed = String(text || '').trim();
+      if (!trimmed) return '';
+
+      // SillyTavern may return an HTML error page for /proxy failures.
+      if (trimmed.startsWith('<')) {
+        const pre = trimmed.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+        if (pre?.[1]) {
+          return String(pre[1])
+            .replace(/\[\d{1,3}m/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+        const title = trimmed.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        if (title?.[1]) {
+          return String(title[1]).replace(/\s+/g, ' ').trim();
+        }
+        return 'html response';
+      }
+
+      // GPT-SoVITS api_v2.py returns JSON like {"message":"...","Exception":"..."} on errors.
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          const data = JSON.parse(trimmed);
+          if (Array.isArray(data)) return trimmed;
+          let detailMsg = '';
+          const detail = data?.detail;
+          if (Array.isArray(detail)) {
+            detailMsg = detail
+              .slice(0, 3)
+              .map(item => {
+                if (typeof item === 'string') return item;
+                if (!item || typeof item !== 'object') return String(item);
+                const loc = Array.isArray(item.loc) ? item.loc.filter(Boolean).join('.') : '';
+                const msg = String(item.msg || item.message || item.type || '').trim();
+                return loc ? `${loc}: ${msg || 'invalid value'}` : msg || 'invalid value';
+              })
+              .join(' | ');
+          } else if (detail && typeof detail === 'object') {
+            detailMsg = String(detail.message || detail.msg || detail.error || '').trim();
+          } else if (detail !== undefined && detail !== null) {
+            detailMsg = String(detail).trim();
+          }
+          const msg = String(data?.message || data?.error || '').trim();
+          const ex = String(data?.Exception || data?.exception || data?.traceback || data?.trace || '').trim();
+          if (msg && ex && ex !== msg) return `${msg}: ${ex}`;
+          return msg || detailMsg || ex || trimmed;
+        } catch (e) {}
+      }
+
+      return trimmed;
     },
 
     _rememberGptSoVitsProxyRoute(route, url) {
@@ -7107,6 +7908,7 @@ ${extraRule}
 
       // 无 helper/无记忆链路时，默认尝试酒馆 /proxy（与 _requestGptSoVitsApi 的候选链路对齐）
       const fallbackUrl =
+        this._buildGptSoVitsProxyUrl('proxy_path_raw_relative', directUrl) ||
         this._buildGptSoVitsProxyUrl('proxy_path_relative', directUrl) ||
         this._buildGptSoVitsProxyUrl('proxy_query_relative', directUrl);
       return fallbackUrl || directUrl;
@@ -7133,7 +7935,7 @@ ${extraRule}
       }
     },
 
-    async _requestGptSoVitsApi(method, pathname, queryParams = {}, jsonBody = undefined) {
+    async _requestGptSoVitsApi(method, pathname, queryParams = {}, jsonBody = undefined, playbackSessionId = null) {
       const cfg = getGptSoVitsConfig();
       const httpMethod = String(method || 'GET').trim().toUpperCase() || 'GET';
       const directUrl = this._buildGptSoVitsApiUrl(pathname, httpMethod === 'GET' ? queryParams : {});
@@ -7152,6 +7954,8 @@ ${extraRule}
         } else if (Object.keys(stProxyHeaders).length > 0) {
           options.headers = stProxyHeaders;
         }
+        const signal = Number(playbackSessionId) > 0 ? this._getGptSoVitsAbortSignal(playbackSessionId) : null;
+        if (signal) options.signal = signal;
         const resp = await fetch(url, options);
         const text = await resp.text().catch(() => '');
         return { ok: resp.ok, status: resp.status, text, url };
@@ -7173,10 +7977,11 @@ ${extraRule}
             continue;
           }
 
-          const detail = String(result.text || '').trim();
+          const detail = this._summarizeGptSoVitsApiText(result.text);
           lastError = new Error(detail || `HTTP ${result.status}`);
           routeErrors.push(`${route}:${detail || `HTTP${result.status}`}`);
         } catch (e) {
+          if (e?.name === 'AbortError') throw e;
           const message = e?.message || String(e || 'unknown error');
           lastError = new Error(message);
           routeErrors.push(`${route}:${message}`);
@@ -7191,12 +7996,131 @@ ${extraRule}
       throw new Error(`request failed: ${httpMethod} ${pathname || ''}`);
     },
 
-    async _fetchGptSoVitsApi(pathname, queryParams = {}) {
-      return this._requestGptSoVitsApi('GET', pathname, queryParams);
+    async _fetchGptSoVitsApi(pathname, queryParams = {}, playbackSessionId = null) {
+      return this._requestGptSoVitsApi('GET', pathname, queryParams, undefined, playbackSessionId);
     },
 
-    async _postGptSoVitsApi(pathname, jsonBody = {}) {
-      return this._requestGptSoVitsApi('POST', pathname, {}, jsonBody);
+    async _postGptSoVitsApi(pathname, jsonBody = {}, playbackSessionId = null) {
+      return this._requestGptSoVitsApi('POST', pathname, {}, jsonBody, playbackSessionId);
+    },
+
+    async _postGptSoVitsTtsBlob(payload, playbackSessionId = null) {
+      const cfg = getGptSoVitsConfig();
+      const endpointRaw = String(cfg.endpoint || '/tts');
+      const endpoint = endpointRaw.startsWith('/') ? endpointRaw : `/${endpointRaw}`;
+      const directUrl = this._buildGptSoVitsApiUrl(endpoint, {});
+      if (!directUrl) throw new Error('invalid apiUrl');
+
+      const candidates = this._buildGptSoVitsApiCandidates(directUrl, !!cfg.useCorsProxy);
+      let lastError = null;
+      const routeErrors = [];
+
+      const requestBlob = async (url, route) => {
+        const options = {
+          method: 'POST',
+          headers: {
+            ...(this._shouldAttachStProxyHeaders(route, url) ? this._getSillyTavernRequestHeaders() : {}),
+            'Content-Type': 'application/json',
+            Accept: 'audio/wav, audio/*;q=0.9, application/octet-stream;q=0.8, */*;q=0.5',
+          },
+          body: JSON.stringify(payload || {}),
+        };
+        const signal = Number(playbackSessionId) > 0 ? this._getGptSoVitsAbortSignal(playbackSessionId) : null;
+        if (signal) options.signal = signal;
+        const resp = await fetch(url, options);
+        const contentType = String(resp.headers?.get('content-type') || '').toLowerCase();
+        const blob = await resp.blob().catch(() => null);
+        if (!resp.ok) {
+          const text = blob ? await blob.text().catch(() => '') : '';
+          return { ok: false, status: resp.status, text, contentType };
+        }
+        if (!blob || blob.size === 0) {
+          return { ok: false, status: resp.status, text: 'empty response body', contentType };
+        }
+
+        const isAudioByHeader = contentType.startsWith('audio/') || contentType.includes('octet-stream');
+        if (isAudioByHeader) {
+          return { ok: true, status: resp.status, blob, contentType };
+        }
+
+        try {
+          const ab = await blob.arrayBuffer();
+          if (this._looksLikeAudioArrayBuffer(ab)) {
+            return { ok: true, status: resp.status, blob, contentType: contentType || 'audio/unknown' };
+          }
+        } catch (e) {}
+
+        const text = await blob.text().catch(() => '');
+        const audioRef = this._extractGptSoVitsAudioRefFromText(text);
+        if (audioRef) {
+          const fetchedBlob = await this._fetchGptSoVitsAudioBlobFromRef(audioRef, playbackSessionId);
+          if (fetchedBlob && fetchedBlob.size > 0) {
+            return { ok: true, status: resp.status, blob: fetchedBlob, contentType: 'audio/derived' };
+          }
+        }
+
+        return { ok: false, status: resp.status, text: text || `unexpected content-type: ${contentType}`, contentType };
+      };
+
+      for (const candidate of candidates) {
+        const route = candidate.route;
+        const isDirect = route === 'direct';
+        if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return null;
+
+        try {
+          const result = await requestBlob(candidate.url, route);
+          if (result.ok) {
+            this._rememberGptSoVitsProxyRoute(route, candidate.url);
+            return result.blob;
+          }
+
+          if (!isDirect && this._isGptSoVitsProxyNotFound(result.status, result.text)) {
+            routeErrors.push(`${route}:HTTP404(proxy-not-found)`);
+            continue;
+          }
+
+          const detail = this._summarizeGptSoVitsApiText(result.text);
+          lastError = new Error(detail || `HTTP ${result.status}`);
+          routeErrors.push(`${route}:${detail || `HTTP${result.status}`}`);
+        } catch (e) {
+          if (e?.name === 'AbortError') throw e;
+          const message = e?.message || String(e || 'unknown error');
+          lastError = new Error(message);
+          routeErrors.push(`${route}:${message}`);
+        }
+      }
+
+      if (lastError) {
+        const compactRoutes = routeErrors.slice(0, 4).join(' | ');
+        const detail = compactRoutes ? `${lastError.message} [routes: ${compactRoutes}]` : lastError.message;
+        throw new Error(detail);
+      }
+      throw new Error('tts request failed');
+    },
+
+    async _requestGptSoVitsTtsBlobWithCompat(payload, playbackSessionId = null) {
+      const variants = this._buildGptSoVitsTtsPayloadVariants(payload);
+      let lastError = null;
+
+      for (let i = 0; i < variants.length; i++) {
+        const body = variants[i];
+        try {
+          return await this._postGptSoVitsTtsBlob(body, playbackSessionId);
+        } catch (e) {
+          if (e?.name === 'AbortError') throw e;
+          lastError = e;
+          const msg = String(e?.message || e || '').replace(/\s+/g, ' ').trim();
+          const canRetry =
+            i < variants.length - 1 && this._isLikelyGptSoVitsTtsPayloadError(msg);
+          if (!canRetry) break;
+          if (i === 0) {
+            console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: /tts 参数兼容重试已启用（text_lang/payload fallback）`);
+          }
+          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: /tts 第${i + 1}次失败，尝试兼容参数`, msg);
+        }
+      }
+
+      throw lastError || new Error('tts request failed');
     },
 
     _enqueueGptSoVitsSwitch(taskFn, playbackSessionId = null) {
@@ -7210,18 +8134,13 @@ ${extraRule}
       return this._gptSoVitsSwitchTask;
     },
 
-    async _setGptSoVitsWeights(kind, weightsPath) {
+    async _setGptSoVitsWeights(kind, weightsPath, playbackSessionId = null) {
       const path = kind === 'gpt' ? '/set_gpt_weights' : '/set_sovits_weights';
       console.log(`[${SCRIPT_NAME}] GPT-SoVITS: 切换${kind}权重 -> ${weightsPath}`);
       let text = '';
       try {
-        text = await this._fetchGptSoVitsApi(path, { weights_path: weightsPath });
+        text = await this._fetchGptSoVitsApi(path, { weights_path: weightsPath }, playbackSessionId);
       } catch (e) {
-        const msg = e?.message || String(e || 'unknown error');
-        if (this._looksLikeGptSoVitsFetchBlocked(msg)) {
-          const blindOk = await this._tryNoCorsModelSwitch(path, { weights_path: weightsPath }, `set_${kind}_weights`);
-          if (blindOk) return true;
-        }
         throw e;
       }
       try {
@@ -7240,9 +8159,9 @@ ${extraRule}
       return true;
     },
 
-    async _setGptSoVitsModelPair(gptWeightsPath, sovitsWeightsPath) {
+    async _setGptSoVitsModelPair(gptWeightsPath, sovitsWeightsPath, playbackSessionId = null, endpointOverride = '') {
       const cfg = getGptSoVitsConfig();
-      const endpointRaw = String(cfg.setModelEndpoint || '/set_model').trim() || '/set_model';
+      const endpointRaw = String(endpointOverride || cfg.setModelEndpoint || '/set_model').trim() || '/set_model';
       const endpoint = endpointRaw.startsWith('/') ? endpointRaw : `/${endpointRaw}`;
       const endpointCandidates = endpoint.endsWith('/') ? [endpoint] : [endpoint, `${endpoint}/`];
       const payload = {
@@ -7271,10 +8190,11 @@ ${extraRule}
       let postError = null;
       for (const ep of endpointCandidates) {
         try {
-          const text = await this._postGptSoVitsApi(ep, payload);
+          const text = await this._postGptSoVitsApi(ep, payload, playbackSessionId);
           validateResponse(text, 'set_model(POST)');
           return true;
         } catch (e) {
+          if (e?.name === 'AbortError') throw e;
           postError = e;
         }
       }
@@ -7283,10 +8203,11 @@ ${extraRule}
       let getError = null;
       for (const ep of endpointCandidates) {
         try {
-          const text = await this._fetchGptSoVitsApi(ep, payload);
+          const text = await this._fetchGptSoVitsApi(ep, payload, playbackSessionId);
           validateResponse(text, 'set_model(GET)');
           return true;
         } catch (e) {
+          if (e?.name === 'AbortError') throw e;
           getError = e;
         }
       }
@@ -7295,23 +8216,113 @@ ${extraRule}
       const getMsg = getError?.message || String(getError || 'get failed');
       const fullMsg = `set_model POST失败(${postMsg}); GET回退失败(${getMsg})`;
 
-      if (this._looksLikeGptSoVitsFetchBlocked(`${postMsg} | ${getMsg}`)) {
-        for (const ep of endpointCandidates) {
-          const blindOk = await this._tryNoCorsModelSwitch(ep, payload, 'set_model');
-          if (blindOk) return true;
+      throw new Error(fullMsg);
+    },
+
+    _collectGptSoVitsExpressionCandidates(segment) {
+      const out = [];
+      const append = value => {
+        const text = String(value || '').trim();
+        if (!text) return;
+        text
+          .split(/[,，|/]/)
+          .map(item => item.trim())
+          .filter(Boolean)
+          .forEach(item => {
+            if (!out.includes(item)) out.push(item);
+          });
+      };
+
+      append(segment?.expression);
+      append(segment?.tts?.emotion);
+      return out;
+    },
+
+    _resolveGptSoVitsRefProfile(resolvedVoice, segment, cfg) {
+      const vcfg = resolvedVoice?.gptSoVits || {};
+      const modelCfg = resolvedVoice?.gptSoVitsModel || null;
+      const modelParams = modelCfg?.params || {};
+      const refs = _safeArray(modelCfg?.refAudios);
+      const map = _safeObject(modelCfg?.expressionRefMap);
+
+      const basePromptText = String(vcfg.promptText || modelParams.promptText || '').trim();
+      const basePromptLang = String(vcfg.promptLang || modelParams.promptLang || 'zh').trim() || 'zh';
+      const baseTextLang = String(vcfg.textLang || modelParams.textLang || cfg.textLang || 'auto').trim() || 'auto';
+
+      const defaultRef =
+        refs.find(item => item.id === modelCfg?.defaultRefId) ||
+        refs.find(item => item.path === modelCfg?.paths?.defaultRefAudioPath) ||
+        refs[0] ||
+        null;
+
+      const fallback = {
+        refAudioPath: String(vcfg.refAudioPath || defaultRef?.path || modelCfg?.paths?.defaultRefAudioPath || '').trim(),
+        promptText: basePromptText,
+        promptLang: basePromptLang,
+        textLang: baseTextLang,
+        matchedExpression: '',
+        matchedRefId: '',
+      };
+
+      if (!modelCfg || refs.length === 0) return fallback;
+
+      const normalizedMap = {};
+      for (const [expr, refId] of Object.entries(map)) {
+        const exprKey = _normalizeExpressionLookupKey(expr);
+        const refValue = String(refId || '').trim();
+        if (!exprKey || !refValue) continue;
+        normalizedMap[exprKey] = refValue;
+      }
+
+      const candidates = this._collectGptSoVitsExpressionCandidates(segment);
+      let matchedRef = null;
+      let matchedExpression = '';
+
+      for (const expr of candidates) {
+        const directRefId = String(map?.[expr] || '').trim();
+        const normalizedExpr = _normalizeExpressionLookupKey(expr);
+        const mappedRef = directRefId || normalizedMap[normalizedExpr] || '';
+        if (!mappedRef) continue;
+
+        matchedRef =
+          refs.find(item => item.id === mappedRef) ||
+          refs.find(item => item.path === mappedRef) ||
+          refs.find(item => item.name === mappedRef) ||
+          null;
+        if (matchedRef) {
+          matchedExpression = expr;
+          break;
         }
       }
 
-      throw new Error(fullMsg);
+      if (!matchedRef) {
+        matchedRef = defaultRef;
+      }
+      if (!matchedRef) return fallback;
+
+      return {
+        refAudioPath: String(matchedRef.path || fallback.refAudioPath || '').trim(),
+        promptText: String(matchedRef.promptText || basePromptText || '').trim(),
+        promptLang: String(matchedRef.promptLang || basePromptLang || 'zh').trim() || 'zh',
+        textLang: String(matchedRef.textLang || baseTextLang || 'auto').trim() || 'auto',
+        matchedExpression,
+        matchedRefId: String(matchedRef.id || '').trim(),
+      };
     },
 
     async _ensureGptSoVitsWeights(resolvedVoice, playbackSessionId = null) {
       const cfg = getGptSoVitsConfig();
-      const strictWeightSwitch = !!cfg.strictWeightSwitch;
-      const switchMode = normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode);
+      const modelCfg = resolvedVoice?.gptSoVitsModel || null;
       const vcfg = resolvedVoice?.gptSoVits || {};
-      const desiredGpt = String(vcfg.gptWeightsPath || '').trim();
-      const desiredSovits = String(vcfg.sovitsWeightsPath || '').trim();
+      const modelParams = modelCfg?.params || {};
+      const modelPaths = modelCfg?.paths || {};
+      const strictWeightSwitch = !!(vcfg.strictWeightSwitch ?? modelParams.strictWeightSwitch ?? cfg.strictWeightSwitch);
+      const switchMode = normalizeGptSoVitsSwitchMode(vcfg.modelSwitchMode || modelParams.modelSwitchMode || cfg.modelSwitchMode);
+      const setModelEndpoint = String(vcfg.setModelEndpoint || modelParams.setModelEndpoint || cfg.setModelEndpoint || '/set_model').trim() || '/set_model';
+      const desiredGptRaw = String(vcfg.gptWeightsPath || modelPaths.gptWeightsPath || '').trim();
+      const desiredSovitsRaw = String(vcfg.sovitsWeightsPath || modelPaths.sovitsWeightsPath || '').trim();
+      const desiredGpt = this._resolveGptSoVitsServerPath(desiredGptRaw, cfg);
+      const desiredSovits = this._resolveGptSoVitsServerPath(desiredSovitsRaw, cfg);
       if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
       if (switchMode === 'none') return false;
       if (!desiredGpt && !desiredSovits) return true;
@@ -7338,7 +8349,7 @@ ${extraRule}
 
           try {
             console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: set_weights 接口不可用，自动回退 set_model`);
-            await this._setGptSoVitsModelPair(desiredGpt, desiredSovits);
+            await this._setGptSoVitsModelPair(desiredGpt, desiredSovits, playbackSessionId, setModelEndpoint);
             this._gptSoVitsActiveWeights.gpt = desiredGpt;
             this._gptSoVitsActiveWeights.sovits = desiredSovits;
             return true;
@@ -7359,10 +8370,11 @@ ${extraRule}
 
             try {
               if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
-              await this._setGptSoVitsModelPair(desiredGpt, desiredSovits);
+              await this._setGptSoVitsModelPair(desiredGpt, desiredSovits, playbackSessionId, setModelEndpoint);
               this._gptSoVitsActiveWeights.gpt = desiredGpt;
               this._gptSoVitsActiveWeights.sovits = desiredSovits;
             } catch (e) {
+              if (e?.name === 'AbortError') return false;
               setModelError = e?.message || String(e || 'unknown error');
               setModelFetchBlocked = /failed to fetch/i.test(setModelError);
               console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: set_model 切换失败`, e);
@@ -7373,15 +8385,16 @@ ${extraRule}
               try {
                 if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
                 if (desiredGpt && desiredGpt !== this._gptSoVitsActiveWeights.gpt) {
-                  await this._setGptSoVitsWeights('gpt', desiredGpt);
+                  await this._setGptSoVitsWeights('gpt', desiredGpt, playbackSessionId);
                   this._gptSoVitsActiveWeights.gpt = desiredGpt;
                 }
                 if (desiredSovits && desiredSovits !== this._gptSoVitsActiveWeights.sovits) {
-                  await this._setGptSoVitsWeights('sovits', desiredSovits);
+                  await this._setGptSoVitsWeights('sovits', desiredSovits, playbackSessionId);
                   this._gptSoVitsActiveWeights.sovits = desiredSovits;
                 }
                 setModelError = '';
               } catch (fallbackErr) {
+                if (fallbackErr?.name === 'AbortError') return false;
                 const fallbackMsg = fallbackErr?.message || String(fallbackErr || 'unknown error');
                 setModelError = `${setModelError} | fallback_set_weights: ${fallbackMsg}`;
               }
@@ -7421,9 +8434,10 @@ ${extraRule}
         if (desiredGpt && desiredGpt !== this._gptSoVitsActiveWeights.gpt) {
           try {
             if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
-            await this._setGptSoVitsWeights('gpt', desiredGpt);
+            await this._setGptSoVitsWeights('gpt', desiredGpt, playbackSessionId);
             this._gptSoVitsActiveWeights.gpt = desiredGpt;
           } catch (e) {
+            if (e?.name === 'AbortError') return false;
             const msg = e?.message || String(e || 'unknown error');
             if (await trySetModelFallback(msg)) {
               return true;
@@ -7448,9 +8462,10 @@ ${extraRule}
         if (desiredSovits && desiredSovits !== this._gptSoVitsActiveWeights.sovits) {
           try {
             if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
-            await this._setGptSoVitsWeights('sovits', desiredSovits);
+            await this._setGptSoVitsWeights('sovits', desiredSovits, playbackSessionId);
             this._gptSoVitsActiveWeights.sovits = desiredSovits;
           } catch (e) {
+            if (e?.name === 'AbortError') return false;
             const msg = e?.message || String(e || 'unknown error');
             if (await trySetModelFallback(msg)) {
               return true;
@@ -7485,125 +8500,82 @@ ${extraRule}
       }, playbackSessionId);
     },
 
-    _buildGptSoVitsTtsUrl(text, resolvedVoice) {
-      const cfg = getGptSoVitsConfig();
-      const base = String(cfg.apiUrl || '').replace(/\/$/, '');
-      const endpointRaw = String(cfg.endpoint || '/tts');
-      const endpoint = endpointRaw.startsWith('/') ? endpointRaw : `/${endpointRaw}`;
-      if (!base) return '';
-
-      try {
-        const url = new URL(base + endpoint);
-        const vcfg = resolvedVoice?.gptSoVits || {};
-
-        const textLang = String(vcfg.textLang || cfg.textLang || 'auto').trim() || 'auto';
-        const promptLang = String(vcfg.promptLang || 'zh').trim() || 'zh';
-        const refAudioPath = String(vcfg.refAudioPath || '').trim();
-        const promptText = String(vcfg.promptText || '').trim();
-        const requestedStreaming = !!cfg.streamingMode;
-        const effectiveStreaming = false; // HTMLAudio 直连时优先稳定性，强制非流式
-        if (requestedStreaming && !this._gptSoVitsStreamingWarned) {
-          this._gptSoVitsStreamingWarned = true;
-          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 浏览器播放链路已自动关闭 streaming_mode 以提高兼容性`);
-        }
-
-        url.searchParams.set('text', text);
-        url.searchParams.set('text_lang', textLang);
-        url.searchParams.set('ref_audio_path', refAudioPath);
-        url.searchParams.set('prompt_lang', promptLang);
-        url.searchParams.set('prompt_text', promptText);
-
-        if (cfg.textSplitMethod) url.searchParams.set('text_split_method', String(cfg.textSplitMethod));
-        if (cfg.mediaType) url.searchParams.set('media_type', String(cfg.mediaType));
-        url.searchParams.set('streaming_mode', effectiveStreaming ? 'true' : 'false');
-        if (cfg.speedFactor) url.searchParams.set('speed_factor', String(cfg.speedFactor));
-
-        return url.toString();
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 生成URL失败`, e);
-        return '';
-      }
-    },
-
-    async _diagnoseGptSoVitsTtsFailure(directUrl) {
-      const cfg = getGptSoVitsConfig();
-      if (!cfg.probeOnAudioError) return '';
-      const debugUrl = cfg.useCorsProxy ? this._getProxiedAudioUrl(directUrl) : directUrl;
-      try {
-        const resp = await fetch(debugUrl, { method: 'GET' });
-        const contentType = String(resp.headers?.get('content-type') || '').toLowerCase();
-        if (resp.ok && contentType.startsWith('audio/')) {
-          return '';
-        }
-
-        const text = await resp.text().catch(() => '');
-        if (!resp.ok) {
-          return text || `HTTP ${resp.status}`;
-        }
-
-        const trimmed = String(text || '').trim();
-        if (!trimmed) return '';
-        if (contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          try {
-            const data = JSON.parse(trimmed);
-            return data?.message || data?.detail || trimmed;
-          } catch (e) {
-            return trimmed;
-          }
-        }
-        return '';
-      } catch (e) {
-        return e?.message || String(e || '');
-      }
-    },
-
     async _speakWithGptSoVits(segment, segmentId, resolvedVoice, playbackSessionId = null) {
       const cfg = getGptSoVitsConfig();
       const vcfg = resolvedVoice?.gptSoVits || {};
+      const modelCfg = resolvedVoice?.gptSoVitsModel || null;
+      const modelParams = modelCfg?.params || {};
       if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
 
       if (!cfg.apiUrl) {
         showToast('GPT-SoVITS: 请先在设置中填写 API 地址');
         return false;
       }
-      if (!vcfg.refAudioPath) {
-        const voiceName = String(resolvedVoice?.name || '未命名音色').trim();
-        showToast(`GPT-SoVITS: 音色「${voiceName}」缺少 refAudioPath`);
+
+      const refProfile = this._resolveGptSoVitsRefProfile(resolvedVoice, segment, cfg);
+      const refAudioPath = this._resolveGptSoVitsServerPath(refProfile.refAudioPath, cfg);
+      if (!refAudioPath) {
+        const voiceName = String(resolvedVoice?.name || '未命名模型').trim();
+        showToast(`GPT-SoVITS: 模型「${voiceName}」缺少默认参考音频路径`);
         return false;
       }
 
-      // ★ 可选：按音色自动切换 GPT/SoVITS 权重
+      // ★ GPT-SoVITS 的 /set_* 与 /tts 都会改变服务端“全局状态”，必须串行，避免多段落/多角色并发抢模型
+      const ensureWeightsPromise = this._ensureGptSoVitsWeights(resolvedVoice, playbackSessionId);
+
+      const textLang = String(refProfile.textLang || vcfg.textLang || modelParams.textLang || cfg.textLang || 'auto').trim() || 'auto';
+      const promptLang = String(refProfile.promptLang || vcfg.promptLang || modelParams.promptLang || 'zh').trim() || 'zh';
+      const promptText = String(refProfile.promptText || vcfg.promptText || modelParams.promptText || '').trim();
+      const activeTextSplitMethod = String(vcfg.textSplitMethod || modelParams.textSplitMethod || cfg.textSplitMethod || 'cut5').trim() || 'cut5';
+      const activeMediaType = String(vcfg.mediaType || modelParams.mediaType || cfg.mediaType || 'wav').trim() || 'wav';
+      const activeSpeedFactor = _toFiniteNumber(vcfg.speedFactor ?? modelParams.speedFactor ?? cfg.speedFactor, 1);
+      const requestedStreaming = !!(vcfg.streamingMode ?? modelParams.streamingMode ?? cfg.streamingMode);
+      const effectiveStreaming = false; // 浏览器播放优先稳定性，强制非流式
+      if (requestedStreaming && !this._gptSoVitsStreamingWarned) {
+        this._gptSoVitsStreamingWarned = true;
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 浏览器播放链路已自动关闭 streaming_mode 以提高兼容性`);
+      }
+
+      const payload = {
+        text: String(segment.text || ''),
+        text_lang: textLang,
+        ref_audio_path: refAudioPath,
+        prompt_lang: promptLang,
+        prompt_text: promptText,
+        text_split_method: activeTextSplitMethod,
+        media_type: activeMediaType,
+        streaming_mode: effectiveStreaming,
+        speed_factor: activeSpeedFactor,
+      };
+      for (const [k, v] of Object.entries(payload)) {
+        if (v === undefined || v === null || v === '') delete payload[k];
+      }
+
+      let blob = null;
       try {
-        await this._ensureGptSoVitsWeights(resolvedVoice, playbackSessionId);
+        blob = await this._enqueueGptSoVitsSwitch(async () => {
+          if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return null;
+          await ensureWeightsPromise;
+          if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return null;
+          return await this._requestGptSoVitsTtsBlobWithCompat(payload, playbackSessionId);
+        }, playbackSessionId);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 权重切换失败`, e);
-        showToast(`GPT-SoVITS 权重切换失败: ${e?.message || e}`);
+        if (e?.name === 'AbortError') return false;
+        const msg = String(e?.message || e || '').replace(/\s+/g, ' ').trim();
+        if (/ref_audio_path.*not exists|not exists|no such file or directory|系统找不到指定的文件|找不到文件/i.test(msg)) {
+          const briefPath = refAudioPath.length > 96 ? `${refAudioPath.slice(0, 96)}...` : refAudioPath;
+          showToast(`GPT-SoVITS: refAudioPath 不存在或不可访问，请核对路径（${briefPath}）`);
+        }
+        const clipped = msg.length > 120 ? `${msg.slice(0, 120)}...` : msg;
+        showToast(`GPT-SoVITS 合成失败: ${clipped || 'unknown error'}`);
         return false;
       }
+      if (!blob) return false;
       if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
 
-      const directUrl = this._buildGptSoVitsTtsUrl(segment.text, resolvedVoice);
-      if (!directUrl) {
-        showToast('GPT-SoVITS: 无法生成请求URL');
-        return false;
-      }
-
-      const audioUrl = cfg.useCorsProxy ? this._getProxiedAudioUrl(directUrl) : directUrl;
-      const isProxyUrl = cfg.useCorsProxy && audioUrl !== directUrl;
-      let isSameOriginUrl = false;
-      try {
-        const targetOrigin = new URL(audioUrl, window.location.href).origin;
-        const selfOrigin = window.location.origin;
-        isSameOriginUrl = targetOrigin === selfOrigin;
-      } catch (e) {}
-
-      const audio = new Audio();
-      if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
-      // 仅在同源或代理成功时启用 CORS 模式，避免直连跨域被浏览器拒绝加载
-      if (isProxyUrl || isSameOriginUrl) {
-        audio.crossOrigin = 'anonymous';
-      }
-      audio.src = audioUrl;
+      const objectUrl = URL.createObjectURL(blob);
+      const audio = new Audio(objectUrl);
+      this._gptSoVitsCurrentObjectUrl = objectUrl;
 
       // 记录当前播放实例（供口型同步与 stop() 使用）
       this.currentAudio = audio;
@@ -7613,20 +8585,16 @@ ${extraRule}
         if (this.currentAudio === audio) {
           this._onPlaybackEnded('gpt_sovits_audio_ended');
         }
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch (e) {}
+        if (this._gptSoVitsCurrentObjectUrl === objectUrl) {
+          this._gptSoVitsCurrentObjectUrl = '';
+        }
       };
       const onError = e => {
         console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: audio error`, e);
-        this._diagnoseGptSoVitsTtsFailure(directUrl)
-          .then(detail => {
-            const msg = String(detail || '').replace(/\s+/g, ' ').trim();
-            if (msg) {
-              const clipped = msg.length > 100 ? `${msg.slice(0, 100)}...` : msg;
-              showToast(`GPT-SoVITS 播放失败: ${clipped}`);
-            } else {
-              showToast('GPT-SoVITS 播放失败（检查地址/代理/CORS）');
-            }
-          })
-          .catch(() => showToast('GPT-SoVITS 播放失败（检查地址/代理/CORS）'));
+        showToast('GPT-SoVITS 播放失败（音频解码/格式不受支持）');
         onEnded();
       };
 
@@ -7843,6 +8811,7 @@ ${extraRule}
       }
       const playbackSessionId = Number(this._activePlaybackSessionId || 0) + 1;
       this._activePlaybackSessionId = playbackSessionId;
+      this._abortGptSoVitsFetch('new-speak');
 
       // provider 可能在设置中切换：尽量在播放前刷新一次状态
       const provider = getTTSProvider();
@@ -7869,7 +8838,7 @@ ${extraRule}
       if (!resolvedVoice) {
         console.error(`[${SCRIPT_NAME}] TTS播放失败: 无法解析音色 "${voiceName}" (provider=${provider})`);
         if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
-          showToast('GPT-SoVITS: 请先在设置中配置音色列表');
+          showToast('GPT-SoVITS: 请先在设置中配置模型列表');
         }
         return;
       }
@@ -26256,6 +27225,513 @@ ${extraRule}
   // ============================================
   // 设置面板
   // ============================================
+  function _escapeHtmlLite(text) {
+    return String(text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function _modelToLegacyVoice(model) {
+    if (!model) return null;
+    const refs = _safeArray(model.refAudios);
+    const defRef =
+      refs.find(item => item.id === model.defaultRefId) ||
+      refs.find(item => item.path === model?.paths?.defaultRefAudioPath) ||
+      refs[0] ||
+      null;
+    const params = _safeObject(model.params);
+    return {
+      name: String(model.name || '').trim(),
+      desc: String(model.desc || '').trim(),
+      refAudioPath: String(defRef?.path || model?.paths?.defaultRefAudioPath || '').trim(),
+      promptText: String(defRef?.promptText || params.promptText || '').trim(),
+      promptLang: String(defRef?.promptLang || params.promptLang || 'zh').trim() || 'zh',
+      textLang: String(defRef?.textLang || params.textLang || 'auto').trim() || 'auto',
+      gptWeightsPath: String(model?.paths?.gptWeightsPath || '').trim(),
+      sovitsWeightsPath: String(model?.paths?.sovitsWeightsPath || '').trim(),
+    };
+  }
+
+  function _saveGptSoVitsModelsToSettings(models) {
+    settings.gptSoVits = settings.gptSoVits || {};
+    const cfg = getGptSoVitsConfig();
+    const normalized = _normalizeGptSoVitsModelsForStore(models, cfg);
+    settings.gptSoVits.models = normalized;
+    settings.gptSoVits.voices = normalized.map(_modelToLegacyVoice).filter(Boolean);
+    saveSettings();
+    return normalized;
+  }
+
+  function _getGptSoVitsModelsForManager() {
+    const cfg = getGptSoVitsConfig();
+    return _normalizeGptSoVitsModelsForStore(cfg.models, cfg);
+  }
+
+  function _buildDefaultGptSoVitsModel() {
+    const cfg = getGptSoVitsConfig();
+    const model = _normalizeGptSoVitsModel(
+      {
+        id: _buildGptSoVitsModelId('model'),
+        name: '新模型',
+        enabled: true,
+        desc: '',
+        paths: {
+          gptWeightsPath: '',
+          sovitsWeightsPath: '',
+          defaultRefAudioPath: '',
+        },
+        params: {
+          promptText: '',
+          promptLang: 'zh',
+          textLang: cfg.textLang || 'auto',
+          textSplitMethod: cfg.textSplitMethod || 'cut5',
+          speedFactor: _toFiniteNumber(cfg.speedFactor, 1),
+          mediaType: cfg.mediaType || 'wav',
+          streamingMode: !!cfg.streamingMode,
+          modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || 'set_weights'),
+          setModelEndpoint: cfg.setModelEndpoint || '/set_model',
+          strictWeightSwitch: !!cfg.strictWeightSwitch,
+        },
+        refAudios: [],
+        defaultRefId: '',
+        expressionRefMap: {},
+      },
+      cfg,
+      0,
+    );
+    return model;
+  }
+
+  function showGptSoVitsModelEditor(modelInput, options = {}) {
+    const onSave = typeof options.onSave === 'function' ? options.onSave : null;
+    const working = _normalizeGptSoVitsModel(modelInput || _buildDefaultGptSoVitsModel(), getGptSoVitsConfig(), 0) || _buildDefaultGptSoVitsModel();
+
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).find('#gal-gpt-model-editor-modal').remove();
+
+    const buildRefOptions = refs => {
+      return _safeArray(refs)
+        .map(ref => `<option value="${_escapeHtmlLite(ref.id)}">${_escapeHtmlLite(ref.name || ref.id)}</option>`)
+        .join('');
+    };
+
+    const mapRows = Object.entries(working.expressionRefMap || {}).map(([expression, refId]) => ({ expression, refId }));
+    const refs = _safeArray(working.refAudios);
+    const mapRowsHtml =
+      mapRows.length > 0
+        ? mapRows
+            .map(
+              row => `
+              <div class="gal-gpt-map-row" data-map-row>
+                <input type="text" data-field="expression" value="${_escapeHtmlLite(row.expression)}" placeholder="表情标签（如 开心）">
+                <select data-field="refId">${buildRefOptions(refs)}</select>
+                <button class="gal-action-btn" data-action="remove-map" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            `,
+            )
+            .join('')
+        : '';
+
+    const refsHtml =
+      refs.length > 0
+        ? refs
+            .map(
+              ref => `
+            <div class="gal-gpt-ref-row" data-ref-row>
+              <input type="text" data-field="id" value="${_escapeHtmlLite(ref.id)}" placeholder="ref id">
+              <input type="text" data-field="name" value="${_escapeHtmlLite(ref.name)}" placeholder="显示名">
+              <input type="text" data-field="path" value="${_escapeHtmlLite(ref.path)}" placeholder="参考音频路径">
+              <input type="text" data-field="promptText" value="${_escapeHtmlLite(ref.promptText || '')}" placeholder="参考文本">
+              <input type="text" data-field="promptLang" value="${_escapeHtmlLite(ref.promptLang || 'zh')}" placeholder="promptLang">
+              <input type="text" data-field="textLang" value="${_escapeHtmlLite(ref.textLang || 'auto')}" placeholder="textLang">
+              <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          `,
+            )
+            .join('')
+        : '';
+
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-gpt-model-editor-modal">
+        <div class="gal-input-box" style="width:min(1080px,96vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+          <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
+            <div style="font-weight:700;">GPT-SoVITS 模型编辑</div>
+            <button class="gal-action-btn" id="gal-gpt-model-editor-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+          </div>
+          <div style="padding:14px;overflow:auto;display:flex;flex-direction:column;gap:14px;background:var(--SmartThemeFormBg,#fff);">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">
+              <label>模型名<input type="text" id="gal-gpt-model-name" value="${_escapeHtmlLite(working.name)}"></label>
+              <label>备注<input type="text" id="gal-gpt-model-desc" value="${_escapeHtmlLite(working.desc || '')}"></label>
+              <label style="display:flex;align-items:center;gap:8px;padding-top:24px;">
+                <input type="checkbox" id="gal-gpt-model-enabled" ${working.enabled ? 'checked' : ''}>
+                <span>启用模型</span>
+              </label>
+            </div>
+
+            <div>
+              <div style="font-weight:700;margin-bottom:6px;">路径三大件</div>
+              <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+                <input type="text" id="gal-gpt-model-gpt-path" value="${_escapeHtmlLite(working.paths?.gptWeightsPath || '')}" placeholder="gptWeightsPath (*.ckpt)">
+                <input type="text" id="gal-gpt-model-sovits-path" value="${_escapeHtmlLite(working.paths?.sovitsWeightsPath || '')}" placeholder="sovitsWeightsPath (*.pth)">
+                <input type="text" id="gal-gpt-model-default-ref-path" value="${_escapeHtmlLite(working.paths?.defaultRefAudioPath || '')}" placeholder="defaultRefAudioPath">
+              </div>
+            </div>
+
+            <div>
+              <div style="font-weight:700;margin-bottom:6px;">配置参数</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
+                <input type="text" id="gal-gpt-model-prompt-text" value="${_escapeHtmlLite(working.params?.promptText || '')}" placeholder="promptText">
+                <input type="text" id="gal-gpt-model-prompt-lang" value="${_escapeHtmlLite(working.params?.promptLang || 'zh')}" placeholder="promptLang">
+                <input type="text" id="gal-gpt-model-text-lang" value="${_escapeHtmlLite(working.params?.textLang || 'auto')}" placeholder="textLang">
+                <input type="text" id="gal-gpt-model-split" value="${_escapeHtmlLite(working.params?.textSplitMethod || 'cut5')}" placeholder="textSplitMethod">
+                <input type="number" id="gal-gpt-model-speed" value="${_escapeHtmlLite(working.params?.speedFactor ?? 1)}" min="0.1" max="4" step="0.05" placeholder="speedFactor">
+                <input type="text" id="gal-gpt-model-media" value="${_escapeHtmlLite(working.params?.mediaType || 'wav')}" placeholder="mediaType">
+                <input type="text" id="gal-gpt-model-switch-mode" value="${_escapeHtmlLite(working.params?.modelSwitchMode || 'set_weights')}" placeholder="modelSwitchMode">
+                <input type="text" id="gal-gpt-model-set-endpoint" value="${_escapeHtmlLite(working.params?.setModelEndpoint || '/set_model')}" placeholder="setModelEndpoint">
+                <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="gal-gpt-model-streaming" ${working.params?.streamingMode ? 'checked' : ''}>streamingMode</label>
+                <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="gal-gpt-model-strict" ${working.params?.strictWeightSwitch ? 'checked' : ''}>strictWeightSwitch</label>
+              </div>
+            </div>
+
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-weight:700;">参考音频列表</div>
+                <button class="gal-action-btn" id="gal-gpt-add-ref-row" style="padding:6px 10px;"><i class="fa-solid fa-plus"></i> 添加参考音频</button>
+              </div>
+              <div id="gal-gpt-ref-list" style="display:flex;flex-direction:column;gap:6px;">${refsHtml}</div>
+            </div>
+
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-weight:700;">表情标签 -> 参考音频映射</div>
+                <button class="gal-action-btn" id="gal-gpt-add-map-row" style="padding:6px 10px;"><i class="fa-solid fa-plus"></i> 添加映射</button>
+              </div>
+              <div id="gal-gpt-map-list" style="display:flex;flex-direction:column;gap:6px;">${mapRowsHtml}</div>
+            </div>
+          </div>
+          <div style="padding:12px 14px;border-top:1px solid #ddd;display:flex;gap:8px;justify-content:flex-end;background:#f8fafc;">
+            <button class="gal-action-btn" id="gal-gpt-model-editor-cancel">取消</button>
+            <button class="gal-action-btn primary" id="gal-gpt-model-editor-save"><i class="fa-solid fa-save"></i> 保存模型</button>
+          </div>
+        </div>
+      </div>
+      <style>
+        #gal-gpt-model-editor-modal input, #gal-gpt-model-editor-modal select { width:100%; box-sizing:border-box; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; background:#fff; color:#111; }
+        #gal-gpt-model-editor-modal label { font-size:0.86rem; color:#334155; display:flex; flex-direction:column; gap:4px; }
+        #gal-gpt-model-editor-modal .gal-gpt-ref-row, #gal-gpt-model-editor-modal .gal-gpt-map-row { display:grid; gap:6px; align-items:center; }
+        #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:120px 140px minmax(180px,1fr) minmax(120px,1fr) 90px 90px auto; }
+        #gal-gpt-model-editor-modal .gal-gpt-map-row { grid-template-columns:minmax(160px,1fr) minmax(180px,1fr) auto; }
+        @media (max-width: 900px) {
+          #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:1fr; }
+          #gal-gpt-model-editor-modal .gal-gpt-map-row { grid-template-columns:1fr; }
+          #gal-gpt-model-editor-modal .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+        }
+      </style>
+    `;
+
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-gpt-model-editor-modal');
+
+    const close = () => $modal.remove();
+    $modal.on('click', e => {
+      if (e.target === $modal[0]) close();
+    });
+    $modal.find('#gal-gpt-model-editor-close, #gal-gpt-model-editor-cancel').on('click', close);
+
+    const createRefRow = () => {
+      $('#gal-gpt-ref-list').append(`
+        <div class="gal-gpt-ref-row" data-ref-row>
+          <input type="text" data-field="id" value="ref_${Date.now().toString(36)}" placeholder="ref id">
+          <input type="text" data-field="name" value="参考音频" placeholder="显示名">
+          <input type="text" data-field="path" value="" placeholder="参考音频路径">
+          <input type="text" data-field="promptText" value="" placeholder="参考文本">
+          <input type="text" data-field="promptLang" value="zh" placeholder="promptLang">
+          <input type="text" data-field="textLang" value="auto" placeholder="textLang">
+          <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      `);
+    };
+
+    const buildMapRefSelectOptions = () => {
+      const refsNow = [];
+      $('#gal-gpt-ref-list [data-ref-row]').each(function () {
+        const id = String($(this).find('[data-field="id"]').val() || '').trim();
+        const name = String($(this).find('[data-field="name"]').val() || '').trim() || id;
+        if (!id) return;
+        refsNow.push({ id, name });
+      });
+      return refsNow
+        .map(item => `<option value="${_escapeHtmlLite(item.id)}">${_escapeHtmlLite(item.name)}</option>`)
+        .join('');
+    };
+
+    const createMapRow = () => {
+      $('#gal-gpt-map-list').append(`
+        <div class="gal-gpt-map-row" data-map-row>
+          <input type="text" data-field="expression" value="" placeholder="表情标签（如 开心）">
+          <select data-field="refId">${buildMapRefSelectOptions()}</select>
+          <button class="gal-action-btn" data-action="remove-map" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      `);
+    };
+
+    $('#gal-gpt-add-ref-row').on('click', createRefRow);
+    $('#gal-gpt-add-map-row').on('click', createMapRow);
+
+    $modal.on('click', '[data-action="remove-ref"]', function () {
+      $(this).closest('[data-ref-row]').remove();
+    });
+    $modal.on('click', '[data-action="remove-map"]', function () {
+      $(this).closest('[data-map-row]').remove();
+    });
+
+    $('#gal-gpt-model-editor-save').on('click', async () => {
+      const refs = [];
+      $('#gal-gpt-ref-list [data-ref-row]').each(function () {
+        const id = String($(this).find('[data-field="id"]').val() || '').trim();
+        const name = String($(this).find('[data-field="name"]').val() || '').trim();
+        const path = String($(this).find('[data-field="path"]').val() || '').trim();
+        const promptText = String($(this).find('[data-field="promptText"]').val() || '').trim();
+        const promptLang = String($(this).find('[data-field="promptLang"]').val() || 'zh').trim() || 'zh';
+        const textLang = String($(this).find('[data-field="textLang"]').val() || 'auto').trim() || 'auto';
+        if (!id && !path) return;
+        refs.push({ id, name, path, promptText, promptLang, textLang });
+      });
+
+      const expressionRefMap = {};
+      $('#gal-gpt-map-list [data-map-row]').each(function () {
+        const expression = String($(this).find('[data-field="expression"]').val() || '').trim();
+        const refId = String($(this).find('[data-field="refId"]').val() || '').trim();
+        if (!expression || !refId) return;
+        expressionRefMap[expression] = refId;
+      });
+
+      const modelDraft = {
+        id: working.id,
+        name: String($('#gal-gpt-model-name').val() || '').trim(),
+        desc: String($('#gal-gpt-model-desc').val() || '').trim(),
+        enabled: $('#gal-gpt-model-enabled').is(':checked'),
+        paths: {
+          gptWeightsPath: String($('#gal-gpt-model-gpt-path').val() || '').trim(),
+          sovitsWeightsPath: String($('#gal-gpt-model-sovits-path').val() || '').trim(),
+          defaultRefAudioPath: String($('#gal-gpt-model-default-ref-path').val() || '').trim(),
+        },
+        params: {
+          promptText: String($('#gal-gpt-model-prompt-text').val() || '').trim(),
+          promptLang: String($('#gal-gpt-model-prompt-lang').val() || 'zh').trim() || 'zh',
+          textLang: String($('#gal-gpt-model-text-lang').val() || 'auto').trim() || 'auto',
+          textSplitMethod: String($('#gal-gpt-model-split').val() || 'cut5').trim() || 'cut5',
+          speedFactor: _toFiniteNumber($('#gal-gpt-model-speed').val(), 1),
+          mediaType: String($('#gal-gpt-model-media').val() || 'wav').trim() || 'wav',
+          streamingMode: $('#gal-gpt-model-streaming').is(':checked'),
+          modelSwitchMode: normalizeGptSoVitsSwitchMode($('#gal-gpt-model-switch-mode').val()),
+          setModelEndpoint: String($('#gal-gpt-model-set-endpoint').val() || '/set_model').trim() || '/set_model',
+          strictWeightSwitch: $('#gal-gpt-model-strict').is(':checked'),
+        },
+        refAudios: refs,
+        defaultRefId: '',
+        expressionRefMap,
+      };
+
+      const normalized = _normalizeGptSoVitsModel(modelDraft, getGptSoVitsConfig(), 0);
+      if (!normalized) {
+        showToast('模型保存失败：模型名不能为空');
+        return;
+      }
+
+      if (typeof onSave === 'function') {
+        await onSave(normalized);
+      }
+      close();
+    });
+
+    // 初始化映射下拉值
+    $modal.find('[data-map-row]').each(function (idx) {
+      const refId = mapRows[idx]?.refId || '';
+      if (refId) {
+        $(this).find('[data-field="refId"]').val(refId);
+      }
+    });
+  }
+
+  function showGptSoVitsModelManager(options = {}) {
+    const onChanged = typeof options.onChanged === 'function' ? options.onChanged : null;
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).find('#gal-gpt-model-manager-modal').remove();
+
+    const modalHtml = `
+      <div class="gal-input-modal" id="gal-gpt-model-manager-modal">
+        <div class="gal-input-box" style="width:min(1100px,96vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+          <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
+            <div style="font-weight:700;">GPT-SoVITS 模型管理</div>
+            <button class="gal-action-btn" id="gal-gpt-model-manager-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+          </div>
+          <div style="padding:12px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;flex-wrap:wrap;background:#f8fafc;">
+            <button class="gal-action-btn primary" id="gal-gpt-model-add"><i class="fa-solid fa-plus"></i> 新增模型</button>
+            <button class="gal-action-btn" id="gal-gpt-model-import-folder"><i class="fa-solid fa-folder-open"></i> 文件夹导入</button>
+            <input type="file" id="gal-gpt-model-import-folder-file" webkitdirectory directory multiple style="display:none;">
+            <input type="text" id="gal-gpt-model-search" placeholder="搜索模型名..." style="flex:1;min-width:220px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;">
+          </div>
+          <div id="gal-gpt-model-list" style="padding:12px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;background:var(--SmartThemeFormBg,#fff);"></div>
+        </div>
+      </div>
+      <style>
+        #gal-gpt-model-manager-modal .gal-gpt-model-card { border:1px solid #e2e8f0; border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; background:linear-gradient(180deg,#fff,#f8fbff); }
+        #gal-gpt-model-manager-modal .gal-gpt-model-meta { font-size:0.78rem; color:#64748b; line-height:1.35; }
+        #gal-gpt-model-manager-modal .gal-gpt-model-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        #gal-gpt-model-manager-modal .gal-gpt-model-actions .gal-action-btn { padding:6px 10px; font-size:0.8rem; }
+        @media (max-width: 900px) {
+          #gal-gpt-model-manager-modal .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+          #gal-gpt-model-manager-modal #gal-gpt-model-list { grid-template-columns:1fr; }
+        }
+      </style>
+    `;
+    $(mountRoot).append(modalHtml);
+    const $modal = $(mountRoot).find('#gal-gpt-model-manager-modal');
+
+    let models = _getGptSoVitsModelsForManager();
+
+    const close = () => $modal.remove();
+    $modal.on('click', e => {
+      if (e.target === $modal[0]) close();
+    });
+    $('#gal-gpt-model-manager-close').on('click', close);
+
+    const saveModels = async nextModels => {
+      models = _saveGptSoVitsModelsToSettings(nextModels);
+      if (typeof onChanged === 'function') {
+        await onChanged(models);
+      }
+      renderList();
+    };
+
+    const renderList = () => {
+      const keyword = String($('#gal-gpt-model-search').val() || '').trim().toLowerCase();
+      const $list = $('#gal-gpt-model-list');
+      $list.empty();
+
+      const filtered = models.filter(model => String(model.name || '').toLowerCase().includes(keyword));
+      if (filtered.length === 0) {
+        $list.html('<div style="color:#94a3b8;">暂无模型，可点击「新增模型」或「文件夹导入」。</div>');
+        return;
+      }
+
+      filtered.forEach(model => {
+        const refCount = _safeArray(model.refAudios).length;
+        const mapCount = Object.keys(model.expressionRefMap || {}).length;
+        const gptPath = String(model?.paths?.gptWeightsPath || '').trim();
+        const sovitsPath = String(model?.paths?.sovitsWeightsPath || '').trim();
+        const refPath = String(model?.paths?.defaultRefAudioPath || '').trim();
+        const card = `
+          <div class="gal-gpt-model-card" data-model-id="${_escapeHtmlLite(model.id)}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="font-weight:700;color:#0f172a;">${_escapeHtmlLite(model.name)}</div>
+              <span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${model.enabled ? '#dcfce7' : '#fee2e2'};color:${model.enabled ? '#166534' : '#991b1b'};">${model.enabled ? '已启用' : '已停用'}</span>
+            </div>
+            <div style="font-size:0.78rem;color:#475569;">${_escapeHtmlLite(model.desc || '无备注')}</div>
+            <div class="gal-gpt-model-meta">参考音频 ${refCount} 条 | 表情映射 ${mapCount} 条</div>
+            <div class="gal-gpt-model-meta">CKPT: ${_escapeHtmlLite(gptPath || '(未设置)')}</div>
+            <div class="gal-gpt-model-meta">PTH: ${_escapeHtmlLite(sovitsPath || '(未设置)')}</div>
+            <div class="gal-gpt-model-meta">默认参考: ${_escapeHtmlLite(refPath || '(未设置)')}</div>
+            <div class="gal-gpt-model-actions">
+              <button class="gal-action-btn primary" data-action="edit"><i class="fa-solid fa-pen"></i> 编辑</button>
+              <button class="gal-action-btn" data-action="copy"><i class="fa-solid fa-copy"></i> 复制</button>
+              <button class="gal-action-btn" data-action="set-default"><i class="fa-solid fa-star"></i> 设为默认</button>
+              <button class="gal-action-btn" data-action="delete"><i class="fa-solid fa-trash"></i> 删除</button>
+            </div>
+          </div>
+        `;
+        $list.append(card);
+      });
+    };
+
+    $('#gal-gpt-model-search').on('input', renderList);
+
+    $('#gal-gpt-model-add').on('click', () => {
+      showGptSoVitsModelEditor(_buildDefaultGptSoVitsModel(), {
+        onSave: async model => {
+          const merged = models.concat([model]);
+          await saveModels(merged);
+          showToast(`已新增模型：${model.name}`);
+        },
+      });
+    });
+
+    $('#gal-gpt-model-import-folder').on('click', () => $('#gal-gpt-model-import-folder-file').click());
+    $('#gal-gpt-model-import-folder-file').on('change', async function () {
+      try {
+        const list = this.files;
+        if (!list || list.length === 0) return;
+        const prefix = settings.gptSoVits?.importPathPrefix || '';
+        const imported = inferGptSoVitsModelsFromFolderFiles(list, prefix);
+        if (!imported.length) {
+          showToast('未识别到可导入模型（至少需要参考音频）');
+          return;
+        }
+
+        const next = models.concat(imported);
+        await saveModels(next);
+        showToast(`已导入模型 ${imported.length} 条`);
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 模型导入失败:`, e);
+        showToast('模型导入失败，请检查目录结构');
+      } finally {
+        $(this).val('');
+      }
+    });
+
+    $modal.on('click', '[data-model-id] [data-action]', function () {
+      const $card = $(this).closest('[data-model-id]');
+      const id = String($card.attr('data-model-id') || '').trim();
+      const action = String($(this).attr('data-action') || '').trim();
+      const index = models.findIndex(item => item.id === id);
+      if (index < 0) return;
+      const target = models[index];
+
+      if (action === 'edit') {
+        showGptSoVitsModelEditor(target, {
+          onSave: async model => {
+            const next = models.slice();
+            next[index] = model;
+            await saveModels(next);
+            showToast(`已更新模型：${model.name}`);
+          },
+        });
+        return;
+      }
+
+      if (action === 'copy') {
+        const copied = Object.assign({}, JSON.parse(JSON.stringify(target || {})), {
+          id: _buildGptSoVitsModelId(target.name || 'model'),
+          name: `${target.name}_副本`,
+        });
+        void saveModels(models.concat([copied])).then(() => showToast(`已复制模型：${copied.name}`));
+        return;
+      }
+
+      if (action === 'set-default') {
+        settings.ttsDefaultSpeaker = target.name;
+        saveSettings();
+        if (typeof onChanged === 'function') {
+          void onChanged(models);
+        }
+        showToast(`默认音色已切换为：${target.name}`);
+        return;
+      }
+
+      if (action === 'delete') {
+        if (!confirm(`确定删除模型「${target.name}」吗？`)) return;
+        const next = models.filter(item => item.id !== id);
+        void saveModels(next).then(() => showToast(`已删除模型：${target.name}`));
+      }
+    });
+
+    renderList();
+  }
+
   function showSettingsPanel() {
     return __awaiter(this, void 0, void 0, function* () {
       const existingPanel = $('#gal-settings-panel');
@@ -26531,116 +28007,22 @@ ${extraRule}
                 </div>
 
                 <div class="gal-settings-row">
-                  <span class="gal-settings-label">使用酒馆代理 <small style="color:#999;">(建议开)</small></span>
+                  <span class="gal-settings-label">使用酒馆代理 <small style="color:#999;">(建议开，需要编辑 SillyTavern 根目录的 config.yaml，设置enableCorsProxy为true，重启酒馆（重启容器/进程，不是刷新）)</small></span>
                   <label class="gal-switch">
                     <input type="checkbox" id="gal-gpt-sovits-proxy" ${settings.gptSoVits?.useCorsProxy ? 'checked' : ''}>
                     <span class="gal-switch-slider"></span>
                   </label>
                 </div>
 
-                <div class="gal-settings-row">
-                  <span class="gal-settings-label">text_lang</span>
-                  <input type="text" id="gal-gpt-sovits-text-lang" value="${settings.gptSoVits?.textLang || 'auto'}"
-                         placeholder="auto/zh/en/ja..."
-                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+                  <button class="gal-panel-btn" id="gal-gpt-sovits-open-model-manager" style="padding: 10px 12px; flex: 1; min-width: 200px;">
+                    <i class="fa-solid fa-layer-group"></i>
+                    <span>打开模型管理面板</span>
+                  </button>
                 </div>
-
-                <div class="gal-settings-row">
-                  <span class="gal-settings-label">切分策略</span>
-                  <input type="text" id="gal-gpt-sovits-split" value="${settings.gptSoVits?.textSplitMethod || 'cut5'}"
-                         placeholder="cut5"
-                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
-                </div>
-
-                <div class="gal-settings-row">
-                  <span class="gal-settings-label">media_type</span>
-                  <select id="gal-gpt-sovits-media-type" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 160px;">
-                    <option value="wav" ${(settings.gptSoVits?.mediaType || 'wav') === 'wav' ? 'selected' : ''}>wav</option>
-                    <option value="ogg" ${(settings.gptSoVits?.mediaType || '') === 'ogg' ? 'selected' : ''}>ogg</option>
-                    <option value="raw" ${(settings.gptSoVits?.mediaType || '') === 'raw' ? 'selected' : ''}>raw</option>
-                  </select>
-                </div>
-
-                <div class="gal-settings-row">
-                  <span class="gal-settings-label">streaming_mode</span>
-                  <label class="gal-switch">
-                    <input type="checkbox" id="gal-gpt-sovits-streaming" ${(settings.gptSoVits?.streamingMode ?? false) ? 'checked' : ''}>
-                    <span class="gal-switch-slider"></span>
-                  </label>
-                </div>
-
-                <div class="gal-settings-row">
-                  <span class="gal-settings-label">speed_factor</span>
-                  <input type="number" id="gal-gpt-sovits-speed" value="${settings.gptSoVits?.speedFactor ?? 1}"
-                         min="0.5" max="2" step="0.05"
-                         style="width: 120px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
-                </div>
-
-                <div class="gal-settings-row">
-                  <span class="gal-settings-label">模型切换方式</span>
-                  <select id="gal-gpt-sovits-switch-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 230px;">
-                    <option value="set_weights" ${normalizeGptSoVitsSwitchMode(settings.gptSoVits?.modelSwitchMode) === 'set_weights' ? 'selected' : ''}>set_weights（api_v2.py）</option>
-                    <option value="set_model" ${normalizeGptSoVitsSwitchMode(settings.gptSoVits?.modelSwitchMode) === 'set_model' ? 'selected' : ''}>set_model（api.py）</option>
-                    <option value="none" ${normalizeGptSoVitsSwitchMode(settings.gptSoVits?.modelSwitchMode) === 'none' ? 'selected' : ''}>不自动切模型</option>
-                  </select>
-                </div>
-
-                <div class="gal-settings-row" id="gal-gpt-sovits-set-model-endpoint-row" style="${normalizeGptSoVitsSwitchMode(settings.gptSoVits?.modelSwitchMode) === 'set_model' ? '' : 'display: none;'}">
-                  <span class="gal-settings-label">set_model endpoint</span>
-                  <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${settings.gptSoVits?.setModelEndpoint || '/set_model'}"
-                         placeholder="/set_model"
-                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
-                </div>
-
-                <div class="gal-settings-row">
-                  <span class="gal-settings-label">服务端路径前缀/根目录 <small style="color:#999;">(浏览器导入相对路径时使用)</small></span>
-                  <input type="text" id="gal-gpt-sovits-import-prefix" value="${settings.gptSoVits?.importPathPrefix || ''}"
-                         placeholder="例如：output/ 或 voices/（若已是绝对路径可留空）"
-                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
-                </div>
-
-                <div style="margin-top: 10px;">
-                  <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">音色列表（JSON）</div>
-                  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 8px;">
-                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-import-json-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
-                      <i class="fa-solid fa-file-import"></i>
-                      <span>导入JSON</span>
-                    </button>
-                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-import-folder-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
-                      <i class="fa-solid fa-folder-open"></i>
-                      <span>选择文件夹导入</span>
-                    </button>
-                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-export-json-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
-                      <i class="fa-solid fa-file-export"></i>
-                      <span>导出JSON</span>
-                    </button>
-                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-add-template-btn" style="padding: 8px 10px; flex: 1; min-width: 140px;">
-                      <i class="fa-solid fa-plus"></i>
-                      <span>添加模板</span>
-                    </button>
-                    <input type="file" id="gal-gpt-sovits-import-json-file" accept=".json,application/json" style="display:none;">
-                    <input type="file" id="gal-gpt-sovits-import-folder-file" webkitdirectory directory multiple style="display:none;">
-                  </div>
-                  <textarea id="gal-gpt-sovits-voices-json" rows="6"
-                            placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh","textLang":"zh","gptWeightsPath":"GPT_weights/xxx.ckpt","sovitsWeightsPath":"SoVITS_weights/xxx.pth"}]'
-                            style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 0.8rem;"></textarea>
-                  <div style="display:flex; gap:10px; margin-top: 10px;">
-                    <button class="gal-panel-btn secondary" id="gal-gpt-sovits-voices-save" style="flex: 1; padding: 10px;">
-                      <i class="fa-solid fa-floppy-disk"></i>
-                      <span>保存音色列表</span>
-                    </button>
-                    <button class="gal-panel-btn" id="gal-gpt-sovits-test" style="flex: 1; padding: 10px;">
-                      <i class="fa-solid fa-play"></i>
-                      <span>试听</span>
-                    </button>
-                  </div>
-                  <input type="text" id="gal-gpt-sovits-test-text" value="你好，这是一段 GPT-SoVITS 配音测试。"
-                         style="width: 100%; margin-top: 10px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem;"
-                         placeholder="试听文本">
-                  <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
-                    提示：选择文件夹只读取文件名/相对路径，不上传文件；最终路径需是 GPT-SoVITS 服务端可访问路径。
-                  </p>
-                </div>
+                <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
+                  复杂配置（模型参数、三大件路径、参考音频与表情映射、文件夹导入）已迁移到模型管理面板。
+                </p>
               </div>
             </div>
 
@@ -27097,20 +28479,11 @@ ${extraRule}
 
         const providerHint =
           provider === TTS_PROVIDER.GPT_SOVITS_V2
-            ? `GPT-SoVITS：音色名用于 speaker 匹配；可用音色 ${usableCount}/${voiceList.length}。缺 refAudioPath 的条目不会触发 /tts。`
+            ? `GPT-SoVITS：模型名用于 speaker 匹配；可用模型 ${usableCount}/${voiceList.length}。缺参考音频的条目不会触发 /tts。`
             : 'LittleWhiteBox：未指定/未绑定时使用此默认音色。';
-        const emptyHint = voiceList.length === 0 ? '（当前音色列表为空）' : '';
+        const emptyHint = voiceList.length === 0 ? (provider === TTS_PROVIDER.GPT_SOVITS_V2 ? '（当前模型列表为空）' : '（当前音色列表为空）') : '';
         if ($hint.length) $hint.text(providerHint + emptyHint);
       };
-
-      // GPT-SoVITS 音色 JSON 文本框初始化
-      if ($('#gal-gpt-sovits-voices-json').length) {
-        try {
-          $('#gal-gpt-sovits-voices-json').val(JSON.stringify(settings.gptSoVits?.voices || [], null, 2));
-        } catch (e) {
-          $('#gal-gpt-sovits-voices-json').val('[]');
-        }
-      }
 
       refreshTtsVoiceOptions();
       // 关闭
@@ -27516,7 +28889,7 @@ ${extraRule}
         saveSettings();
       });
 
-      // GPT-SoVITS 配置项
+      // GPT-SoVITS 配置项（精简）
       $('#gal-gpt-sovits-url').on('change', function () {
         settings.gptSoVits = settings.gptSoVits || {};
         settings.gptSoVits.apiUrl = $(this).val().trim();
@@ -27527,288 +28900,15 @@ ${extraRule}
         settings.gptSoVits.useCorsProxy = $(this).is(':checked');
         saveSettings();
       });
-      $('#gal-gpt-sovits-text-lang').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        settings.gptSoVits.textLang = $(this).val().trim() || 'auto';
-        saveSettings();
-      });
-      $('#gal-gpt-sovits-split').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        settings.gptSoVits.textSplitMethod = $(this).val().trim() || 'cut5';
-        saveSettings();
-      });
-      $('#gal-gpt-sovits-media-type').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        settings.gptSoVits.mediaType = $(this).val();
-        saveSettings();
-      });
-      $('#gal-gpt-sovits-streaming').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        settings.gptSoVits.streamingMode = $(this).is(':checked');
-        saveSettings();
-      });
-      $('#gal-gpt-sovits-speed').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        const v = parseFloat($(this).val());
-        settings.gptSoVits.speedFactor = isFinite(v) ? v : 1;
-        saveSettings();
-      });
-
-      $('#gal-gpt-sovits-switch-mode').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        const mode = normalizeGptSoVitsSwitchMode($(this).val());
-        settings.gptSoVits.modelSwitchMode = mode;
-        $('#gal-gpt-sovits-set-model-endpoint-row').toggle(mode === 'set_model');
-        saveSettings();
-      });
-
-      $('#gal-gpt-sovits-set-model-endpoint').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        settings.gptSoVits.setModelEndpoint = String($(this).val() || '').trim() || '/set_model';
-        saveSettings();
-      });
-
-      $('#gal-gpt-sovits-import-prefix').on('change', function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        settings.gptSoVits.importPathPrefix = String($(this).val() || '').trim();
-        saveSettings();
-      });
-
-      const setGptSoVitsVoicesTextarea = voices => {
-        try {
-          $('#gal-gpt-sovits-voices-json').val(JSON.stringify(voices || [], null, 2));
-        } catch (e) {
-          $('#gal-gpt-sovits-voices-json').val('[]');
-        }
-      };
-
-      const getVoicesFromTextarea = () => {
-        const raw = $('#gal-gpt-sovits-voices-json').val() || '[]';
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) throw new Error('voices must be array');
-        return normalizeGptSoVitsVoicesForStore(parsed);
-      };
-
-      const mergeVoicesByName = (existing, incoming) => {
-        const out = Array.isArray(existing) ? existing.slice() : [];
-        const used = new Set(out.map(v => String(v?.name || '').trim()).filter(Boolean));
-
-        for (const v0 of Array.isArray(incoming) ? incoming : []) {
-          if (!v0) continue;
-          const v = Object.assign({}, v0);
-          const base = String(v.name || '新音色').trim() || '新音色';
-          let name = base;
-          let i = 2;
-          while (used.has(name)) {
-            name = `${base}_${i++}`;
-          }
-          v.name = name;
-          used.add(name);
-          out.push(v);
-        }
-        return out;
-      };
-
-      $('#gal-gpt-sovits-import-json-btn').on('click', function () {
-        $('#gal-gpt-sovits-import-json-file').click();
-      });
-
-      $('#gal-gpt-sovits-import-json-file').on('change', function () {
-        const file = this.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const text = String(reader.result || '');
-            const parsed = JSON.parse(text);
-            if (!Array.isArray(parsed)) {
-              showToast('导入失败：JSON 需为数组');
-              return;
-            }
-
-            const normalizedIncoming = normalizeGptSoVitsVoicesForStore(parsed);
-            settings.gptSoVits = settings.gptSoVits || {};
-            const existingNormalized = normalizeGptSoVitsVoicesForStore(settings.gptSoVits.voices || []).voices;
-            const merged = mergeVoicesByName(existingNormalized, normalizedIncoming.voices);
-            settings.gptSoVits.voices = merged;
-            saveSettings();
-            setGptSoVitsVoicesTextarea(merged);
+      $('#gal-gpt-sovits-open-model-manager').on('click', function () {
+        showGptSoVitsModelManager({
+          onChanged: async () => {
             await refreshTtsVoiceOptions();
             injectCOTToWorldbook().catch(() => {});
-
-            let msg = `已导入音色：${normalizedIncoming.voices.length} 条`;
-            if (normalizedIncoming.ignoredCount > 0) {
-              msg += `，忽略无效条目 ${normalizedIncoming.ignoredCount} 条`;
-            }
-            if (normalizedIncoming.missingRefCount > 0) {
-              msg += `，其中 ${normalizedIncoming.missingRefCount} 条缺 refAudioPath`;
-            }
-            showToast(msg);
-          } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 导入JSON失败:`, e);
-            showToast('导入失败：JSON 解析错误');
-          } finally {
-            // 允许重复选择同一文件
-            $(this).val('');
-          }
-        };
-        reader.readAsText(file);
+          },
+        });
       });
 
-      $('#gal-gpt-sovits-import-folder-btn').on('click', function () {
-        $('#gal-gpt-sovits-import-folder-file').click();
-      });
-
-      $('#gal-gpt-sovits-import-folder-file').on('change', async function () {
-        try {
-          const list = this.files;
-          if (!list || list.length === 0) return;
-
-          const prefix = settings.gptSoVits?.importPathPrefix || '';
-          const inferred = inferGptSoVitsVoicesFromFolderFiles(list, prefix);
-
-          if (!inferred || inferred.length === 0) {
-            showToast('未识别到可导入的音色（需要参考音频）');
-            return;
-          }
-
-          const normalizedIncoming = normalizeGptSoVitsVoicesForStore(inferred);
-          settings.gptSoVits = settings.gptSoVits || {};
-          const existingNormalized = normalizeGptSoVitsVoicesForStore(settings.gptSoVits.voices || []).voices;
-          const merged = mergeVoicesByName(existingNormalized, normalizedIncoming.voices);
-          settings.gptSoVits.voices = merged;
-          saveSettings();
-
-          setGptSoVitsVoicesTextarea(merged);
-          await refreshTtsVoiceOptions();
-          injectCOTToWorldbook().catch(() => {});
-
-          const hasRelativePath = normalizedIncoming.voices.some(v => !_isAbsoluteFsPath(v.refAudioPath || ''));
-          let msg = `已从文件夹导入：${normalizedIncoming.voices.length} 条`;
-          if (hasRelativePath && !String(prefix || '').trim()) {
-            msg += '（当前为相对路径，必要时请填写服务端路径前缀/根目录）';
-          }
-          showToast(msg);
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 导入文件夹失败:`, e);
-          showToast('导入失败：请检查文件夹内容');
-        } finally {
-          // 允许重复选择同一文件夹
-          $(this).val('');
-        }
-      });
-
-      $('#gal-gpt-sovits-export-json-btn').on('click', function () {
-        try {
-          const voices = settings.gptSoVits?.voices || [];
-          const blob = new Blob([JSON.stringify(voices, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'gpt_sovits_voices.json';
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-          showToast('已导出 gpt_sovits_voices.json');
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 导出失败:`, e);
-          showToast('导出失败');
-        }
-      });
-
-      $('#gal-gpt-sovits-add-template-btn').on('click', async function () {
-        try {
-          const currentResult = getVoicesFromTextarea();
-          const current = currentResult.voices;
-          const template = {
-            name: '新音色',
-            desc: '手动添加',
-            refAudioPath: '',
-            promptText: '',
-            promptLang: 'zh',
-            textLang: 'zh',
-            gptWeightsPath: '',
-            sovitsWeightsPath: '',
-          };
-          const merged = mergeVoicesByName(current, [template]);
-          settings.gptSoVits = settings.gptSoVits || {};
-          settings.gptSoVits.voices = merged;
-          saveSettings();
-          setGptSoVitsVoicesTextarea(merged);
-          await refreshTtsVoiceOptions();
-          injectCOTToWorldbook().catch(() => {});
-          showToast('已添加一条音色模板');
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 添加模板失败:`, e);
-          showToast('添加失败：请先修复 JSON');
-        }
-      });
-
-      $('#gal-gpt-sovits-voices-save').on('click', async function () {
-        settings.gptSoVits = settings.gptSoVits || {};
-        const raw = $('#gal-gpt-sovits-voices-json').val() || '[]';
-        let parsed = null;
-        try {
-          parsed = JSON.parse(raw);
-        } catch (e) {
-          showToast('音色列表 JSON 解析失败');
-          return;
-        }
-        if (!Array.isArray(parsed)) {
-          showToast('音色列表必须是数组');
-          return;
-        }
-        const normalized = normalizeGptSoVitsVoicesForStore(parsed);
-        settings.gptSoVits.voices = normalized.voices;
-        saveSettings();
-        setGptSoVitsVoicesTextarea(normalized.voices);
-
-        await refreshTtsVoiceOptions();
-
-        let msg = `GPT-SoVITS 音色列表已保存：${normalized.voices.length} 条`;
-        if (normalized.ignoredCount > 0) {
-          msg += `（忽略无效条目 ${normalized.ignoredCount} 条）`;
-        }
-        if (normalized.missingRefCount > 0) {
-          msg += `（${normalized.missingRefCount} 条缺 refAudioPath）`;
-        }
-        injectCOTToWorldbook()
-          .then(() => showToast(`${msg}，COT已更新`))
-          .catch(() => showToast(msg));
-      });
-
-      $('#gal-gpt-sovits-test').on('click', () => {
-        if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) {
-          showToast('请先将 TTS 引擎切换为 GPT-SoVITS');
-          return;
-        }
-
-        const text = ($('#gal-gpt-sovits-test-text').val() || '').trim() || '你好，这是一段 GPT-SoVITS 配音测试。';
-        const selectedVoiceName = String($('#gal-tts-default-speaker').val() || '').trim();
-        const gptVoices = getGptSoVitsVoiceList();
-        const selectedVoice = gptVoices.find(v => v.name === selectedVoiceName) || null;
-        const selectedUsable = !!selectedVoice && isGptSoVitsVoiceUsable(selectedVoice);
-        const fallbackVoice = pickFirstUsableGptSoVitsVoice(gptVoices);
-        const targetVoice = selectedUsable ? selectedVoice : fallbackVoice;
-        const voiceName = targetVoice?.name || '';
-        if (!voiceName) {
-          showToast('请先配置至少一个可用音色（refAudioPath 不能为空）');
-          return;
-        }
-
-        if (selectedVoiceName !== voiceName) {
-          settings.ttsDefaultSpeaker = voiceName;
-          saveSettings();
-          $('#gal-tts-default-speaker').val(voiceName);
-          showToast(`已自动切换试听音色：${voiceName}`);
-        }
-
-        TTSManager.stop();
-        TTSManager.speak(
-          { type: 'dialogue', speaker: '', text, tts: { speaker: voiceName } },
-          `gpt_sovits_test_${Date.now()}`,
-        );
-      });
       // 立绘管理
       $('#gal-open-sprite-manager').on('click', () => {
         $panel.remove();

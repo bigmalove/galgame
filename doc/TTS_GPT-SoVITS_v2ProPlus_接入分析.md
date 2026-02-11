@@ -86,12 +86,12 @@ GPT-SoVITS（api_v2.py）通常需要：
 - `gptWeightsPath/sovitsWeightsPath`：可选；填写后播放前会自动调用 `api_v2.py` 的 `/set_gpt_weights`、`/set_sovits_weights` 切换到对应模型
 - `desc`：UI 展示用（可选）
 
-### 3.3 请求方式建议：GET `/tts`（兼容代理与口型同步）
-为了最大化兼容性（特别是 **SillyTavern 的 /proxy/corsProxy** 代理能力），前端优先使用：
-- `GET {apiUrl}{endpoint}?text=...&text_lang=...&ref_audio_path=...&prompt_lang=...&prompt_text=...&...`
+### 3.3 请求方式建议：POST `/tts`（返回音频 blob，浏览器播放更稳）
+为了最大化兼容性（尤其是 **局域网跨机** + **SillyTavern `/proxy`**），前端优先使用：
+- `POST {apiUrl}{endpoint}`，JSON body 传参（避免 GET URL 过长、编码复杂）
 
 并支持一个开关：
-- `useCorsProxy=true`：将 URL 交给酒馆代理（同源），便于口型同步读取音频流
+- `useCorsProxy=true`：所有请求都走酒馆代理（同源），避免 CORS / Mixed Content；拿到音频 blob 后用 `blob:` URL 播放，口型同步也更稳定。
 
 ---
 
@@ -112,11 +112,11 @@ GPT-SoVITS（api_v2.py）通常需要：
 
 ### 4.3 播放接口统一：`TTSManager.speak() → provider 分发`
 - provider = `gpt_sovits_v2`：
-  - 解析到目标 voice profile（拿到 refAudioPath/promptLang/promptText）
+  - 解析到目标 voice profile（拿到 `refAudioPath/promptLang/promptText`）
   - （可选）若配置了 `gptWeightsPath/sovitsWeightsPath`，先调用 `/set_gpt_weights`、`/set_sovits_weights` 切换权重（带缓存，避免每句重复切）
-  - 构造 `/tts` URL
-  - 按需走酒馆代理
-  - 用 `new Audio(url)` 播放，并用 `ended/error` 回收状态
+  - 关键：`切权重 -> /tts` 必须串行（GPT-SoVITS 服务端是“全局当前模型”）
+  - `POST /tts` 拿到音频 blob → `URL.createObjectURL(blob)` → `new Audio(blobUrl).play()`
+  - stop/切段时：Abort 未完成的 fetch，并回收 `blob:` URL
   - `segment.speaker` 存在时才启用口型同步（便于“试听”不等待模型）
 
 - provider = `littlewhitebox`：
@@ -182,6 +182,9 @@ TTS 区块建议从上到下：
 - 检查 `API地址` 是否可从酒馆页面访问（同机不同端口通常可）
 - 如果是 https 页面访问 http 本地端口，可能被浏览器 mixed content 阻止（建议同源或代理）
 
+补充（局域网跨机最常见误区）：
+- 当 `useCorsProxy=true` 且请求走 `/proxy` 时，`http://127.0.0.1:9880` 指向的是 **酒馆服务器所在机器**，不是你当前浏览器这台机器。
+
 ### 7.3 refAudioPath 无效
 - `refAudioPath` 是 GPT-SoVITS 服务器“运行环境里的路径”，不是酒馆本地路径
 - 先在 GPT-SoVITS WebUI/命令行验证该路径可用
@@ -190,5 +193,5 @@ TTS 区块建议从上到下：
 
 ## 8. 后续扩展方向（可选）
 
-- 增加对 `POST /tts`（JSON body）的支持（更干净，但需要确认酒馆代理是否支持 POST）
-- 若 GPT-SoVITS 服务端提供“模型/权重切换接口”，可在 UI 增加选择并缓存到 voice profile
+- 若要做真正的 `streaming_mode`（边合成边播），需要引入更复杂的浏览器端播放链路（如 MediaSource/AudioWorklet）或后端转发。
+- 若 GPT-SoVITS 服务端提供“模型/权重切换接口”以外的多模型能力，可在 UI 增加选择并缓存到 voice profile。

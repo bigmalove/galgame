@@ -82,7 +82,7 @@ const __awaiter =
       if (this.loadPromise) return this.loadPromise;
 
       this.isLoading = true;
-      this.loadPromise = new Promise((resolve) => {
+      this.loadPromise = new Promise(resolve => {
         // 再次检查是否已存在
         if (window.gsap) {
           this.gsap = window.gsap;
@@ -130,134 +130,181 @@ const __awaiter =
       const randomDelay = Math.random() * 0.5;
       const tl = this.gsap.timeline({ repeat: -1, yoyo: true });
       tl.to(el, {
-        y: -3, scaleY: 1.008, scaleX: 0.998, rotation: 0.3,
-        duration: 2 + Math.random() * 0.5, ease: "sine.inOut", delay: randomDelay
+        y: -3,
+        scaleY: 1.008,
+        scaleX: 0.998,
+        rotation: 0.3,
+        duration: 2 + Math.random() * 0.5,
+        ease: 'sine.inOut',
+        delay: randomDelay,
       }).to(el, {
-        y: 0, scaleY: 1, scaleX: 1, rotation: -0.2,
-        duration: 2 + Math.random() * 0.5, ease: "sine.inOut"
+        y: 0,
+        scaleY: 1,
+        scaleX: 1,
+        rotation: -0.2,
+        duration: 2 + Math.random() * 0.5,
+        ease: 'sine.inOut',
       });
       this.animations.set(characterId, { ...(this.animations.get(characterId) || {}), breathing: tl });
     },
 
     stopBreathing(characterId) {
       const anims = this.animations.get(characterId);
-      if (anims?.breathing) { anims.breathing.kill(); anims.breathing = null; }
+      if (anims?.breathing) {
+        anims.breathing.kill();
+        anims.breathing = null;
+      }
     },
 
     playExpressionTransition(element, callback) {
-      if (!this.gsap || !element) { callback?.(); return; }
+      if (!this.gsap || !element) {
+        callback?.();
+        return;
+      }
       const el = element instanceof jQuery ? element[0] : element;
       const tl = this.gsap.timeline({ onComplete: callback });
-      tl.to(el, { scale: 1.02, filter: "brightness(1.15)", duration: 0.1, ease: "power2.out" })
-        .to(el, { scale: 1, filter: "brightness(1)", duration: 0.25, ease: "elastic.out(1, 0.5)" });
+      tl.to(el, { scale: 1.02, filter: 'brightness(1.15)', duration: 0.1, ease: 'power2.out' }).to(el, {
+        scale: 1,
+        filter: 'brightness(1)',
+        duration: 0.25,
+        ease: 'elastic.out(1, 0.5)',
+      });
     },
 
     playEmotionAnimation(element, emotion, characterId) {
       if (!this.gsap || !element) return;
       const el = element instanceof jQuery ? element[0] : element;
       const anims = this.animations.get(characterId);
-      if (anims?.emotion) { anims.emotion.kill(); }
+      if (anims?.emotion) {
+        anims.emotion.kill();
+      }
       let emotionTl;
-      switch(emotion) {
+      switch (emotion) {
         case 'happy':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { y: -15, duration: 0.15, ease: "power2.out" })
-            .to(el, { y: 0, duration: 0.3, ease: "bounce.out" })
+          emotionTl
+            .to(el, { y: -15, duration: 0.15, ease: 'power2.out' })
+            .to(el, { y: 0, duration: 0.3, ease: 'bounce.out' })
             .to(el, { scale: 1.03, duration: 0.1 }, 0)
             .to(el, { scale: 1, duration: 0.2 }, 0.25);
           break;
         case 'angry':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { x: -5, duration: 0.05 }).to(el, { x: 5, duration: 0.05 })
-            .to(el, { x: -4, duration: 0.05 }).to(el, { x: 4, duration: 0.05 })
-            .to(el, { x: -2, duration: 0.05 }).to(el, { x: 0, duration: 0.05 })
-            .to(el, { filter: "saturate(1.2) brightness(1.05)", duration: 0.1 }, 0)
-            .to(el, { filter: "saturate(1) brightness(1)", duration: 0.3 }, 0.3);
+          emotionTl
+            .to(el, { x: -5, duration: 0.05 })
+            .to(el, { x: 5, duration: 0.05 })
+            .to(el, { x: -4, duration: 0.05 })
+            .to(el, { x: 4, duration: 0.05 })
+            .to(el, { x: -2, duration: 0.05 })
+            .to(el, { x: 0, duration: 0.05 })
+            .to(el, { filter: 'saturate(1.2) brightness(1.05)', duration: 0.1 }, 0)
+            .to(el, { filter: 'saturate(1) brightness(1)', duration: 0.3 }, 0.3);
           break;
         case 'sad':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { y: 8, scale: 0.98, duration: 0.4, ease: "power2.out" })
-            .to(el, { rotation: -1, duration: 0.8, ease: "sine.inOut" })
-            .to(el, { rotation: 1, duration: 0.8, ease: "sine.inOut" })
-            .to(el, { y: 0, scale: 1, rotation: 0, duration: 0.5, ease: "power2.out" });
+          emotionTl
+            .to(el, { y: 8, scale: 0.98, duration: 0.4, ease: 'power2.out' })
+            .to(el, { rotation: -1, duration: 0.8, ease: 'sine.inOut' })
+            .to(el, { rotation: 1, duration: 0.8, ease: 'sine.inOut' })
+            .to(el, { y: 0, scale: 1, rotation: 0, duration: 0.5, ease: 'power2.out' });
           break;
         case 'surprised':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { y: -10, scale: 1.08, duration: 0.12, ease: "power3.out" })
-            .to(el, { y: 0, scale: 1, duration: 0.4, ease: "elastic.out(1, 0.4)" });
+          emotionTl
+            .to(el, { y: -10, scale: 1.08, duration: 0.12, ease: 'power3.out' })
+            .to(el, { y: 0, scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.4)' });
           break;
         case 'shy':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { scale: 0.96, rotation: -3, duration: 0.2, ease: "power2.out" })
-            .to(el, { rotation: 2, duration: 0.3, ease: "sine.inOut" })
-            .to(el, { rotation: -1, duration: 0.25, ease: "sine.inOut" })
-            .to(el, { scale: 1, rotation: 0, duration: 0.3, ease: "power2.out" });
+          emotionTl
+            .to(el, { scale: 0.96, rotation: -3, duration: 0.2, ease: 'power2.out' })
+            .to(el, { rotation: 2, duration: 0.3, ease: 'sine.inOut' })
+            .to(el, { rotation: -1, duration: 0.25, ease: 'sine.inOut' })
+            .to(el, { scale: 1, rotation: 0, duration: 0.3, ease: 'power2.out' });
           break;
         case 'think':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { rotation: 5, y: -5, duration: 0.4, ease: "power2.out" })
-            .to(el, { y: -3, duration: 0.6, ease: "sine.inOut", yoyo: true, repeat: 1 })
-            .to(el, { rotation: 0, y: 0, duration: 0.3, ease: "power2.out" });
+          emotionTl
+            .to(el, { rotation: 5, y: -5, duration: 0.4, ease: 'power2.out' })
+            .to(el, { y: -3, duration: 0.6, ease: 'sine.inOut', yoyo: true, repeat: 1 })
+            .to(el, { rotation: 0, y: 0, duration: 0.3, ease: 'power2.out' });
           break;
         case 'laugh':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { scale: 1.05, duration: 0.1 })
-            .to(el, { y: -3, duration: 0.08, yoyo: true, repeat: 5, ease: "none" })
-            .to(el, { scale: 1, y: 0, duration: 0.2, ease: "power2.out" });
+          emotionTl
+            .to(el, { scale: 1.05, duration: 0.1 })
+            .to(el, { y: -3, duration: 0.08, yoyo: true, repeat: 5, ease: 'none' })
+            .to(el, { scale: 1, y: 0, duration: 0.2, ease: 'power2.out' });
           break;
         case 'mock':
           emotionTl = this.gsap.timeline();
-          emotionTl.to(el, { scaleX: 1.03, rotation: -2, duration: 0.15 })
-            .to(el, { rotation: 2, duration: 0.2, ease: "sine.inOut" })
-            .to(el, { rotation: -1, duration: 0.15, ease: "sine.inOut" })
-            .to(el, { scaleX: 1, rotation: 0, duration: 0.2, ease: "power2.out" });
+          emotionTl
+            .to(el, { scaleX: 1.03, rotation: -2, duration: 0.15 })
+            .to(el, { rotation: 2, duration: 0.2, ease: 'sine.inOut' })
+            .to(el, { rotation: -1, duration: 0.15, ease: 'sine.inOut' })
+            .to(el, { scaleX: 1, rotation: 0, duration: 0.2, ease: 'power2.out' });
           break;
-        default: return;
+        default:
+          return;
       }
       this.animations.set(characterId, { ...(this.animations.get(characterId) || {}), emotion: emotionTl });
     },
 
     playEnterAnimation(element, direction, characterId, callback) {
-      if (!this.gsap || !element) { callback?.(); return; }
+      if (!this.gsap || !element) {
+        callback?.();
+        return;
+      }
       const el = element instanceof jQuery ? element[0] : element;
       const startX = direction === 'left' ? -150 : direction === 'right' ? 150 : 0;
       const startY = direction === 'center' ? 50 : 0;
       this.gsap.set(el, { x: startX, y: startY, opacity: 0, scale: 0.9 });
       const tl = this.gsap.timeline({
-        onComplete: () => { this.startBreathing(el, characterId); callback?.(); }
+        onComplete: () => {
+          this.startBreathing(el, characterId);
+          callback?.();
+        },
       });
-      tl.to(el, { x: 0, y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.2)" })
-        .to(el, { y: 3, duration: 0.08, ease: "power2.in" })
-        .to(el, { y: 0, duration: 0.15, ease: "power2.out" });
+      tl.to(el, { x: 0, y: 0, opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(1.2)' })
+        .to(el, { y: 3, duration: 0.08, ease: 'power2.in' })
+        .to(el, { y: 0, duration: 0.15, ease: 'power2.out' });
     },
 
     playExitAnimation(element, direction, characterId, callback) {
-      if (!this.gsap || !element) { callback?.(); return; }
+      if (!this.gsap || !element) {
+        callback?.();
+        return;
+      }
       const el = element instanceof jQuery ? element[0] : element;
       this.stopBreathing(characterId);
       const endX = direction === 'left' ? -150 : 150;
-      this.gsap.to(el, { x: endX, opacity: 0, scale: 0.85, duration: 0.4, ease: "power2.in", onComplete: callback });
+      this.gsap.to(el, { x: endX, opacity: 0, scale: 0.85, duration: 0.4, ease: 'power2.in', onComplete: callback });
     },
 
     setFocus(element, isSpeaking, characterId) {
       if (!this.gsap || !element) return;
       const el = element instanceof jQuery ? element[0] : element;
       if (isSpeaking) {
-        this.gsap.to(el, { filter: "brightness(1.05)", scale: 1.02, opacity: 1, duration: 0.3, ease: "power2.out" });
+        this.gsap.to(el, { filter: 'brightness(1.05)', scale: 1.02, opacity: 1, duration: 0.3, ease: 'power2.out' });
       } else {
-        this.gsap.to(el, { filter: "brightness(0.7)", scale: 0.98, opacity: 0.9, duration: 0.3, ease: "power2.out" });
+        this.gsap.to(el, { filter: 'brightness(0.7)', scale: 0.98, opacity: 0.9, duration: 0.3, ease: 'power2.out' });
       }
     },
 
     cleanup(characterId) {
       const anims = this.animations.get(characterId);
       if (anims) {
-        anims.breathing?.kill(); anims.emotion?.kill(); anims.transition?.kill();
+        anims.breathing?.kill();
+        anims.emotion?.kill();
+        anims.transition?.kill();
         this.animations.delete(characterId);
       }
     },
 
-    cleanupAll() { this.animations.forEach((_, id) => this.cleanup(id)); this.animations.clear(); }
+    cleanupAll() {
+      this.animations.forEach((_, id) => this.cleanup(id));
+      this.animations.clear();
+    },
   };
 
   // ============================================
@@ -388,10 +435,10 @@ const __awaiter =
     },
 
     async _getFromCache() {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         try {
           const request = indexedDB.open(DB_NAME, DB_VERSION);
-          request.onsuccess = (e) => {
+          request.onsuccess = e => {
             const database = e.target.result;
             if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
               database.close();
@@ -418,10 +465,10 @@ const __awaiter =
     },
 
     async _saveToCache(data) {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         try {
           const request = indexedDB.open(DB_NAME, DB_VERSION);
-          request.onsuccess = (e) => {
+          request.onsuccess = e => {
             const database = e.target.result;
             if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
               database.close();
@@ -449,10 +496,10 @@ const __awaiter =
     },
 
     async clearCache() {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         try {
           const request = indexedDB.open(DB_NAME, DB_VERSION);
-          request.onsuccess = (e) => {
+          request.onsuccess = e => {
             const database = e.target.result;
             if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
               database.close();
@@ -475,17 +522,17 @@ const __awaiter =
           resolve();
         }
       });
-    }
+    },
   };
 
   // ============================================
   // Live2D 核心渲染管理器
   // ============================================
   const Live2DManager = {
-    models: new Map(),        // characterId -> PIXI.Live2DModel
-    containers: new Map(),    // characterId -> { app, canvas }
+    models: new Map(), // characterId -> PIXI.Live2DModel
+    containers: new Map(), // characterId -> { app, canvas }
     loadingModels: new Map(), // characterId -> Promise<PIXI.Live2DModel|null>
-    renderLocks: new Map(),   // characterId -> Promise<void>
+    renderLocks: new Map(), // characterId -> Promise<void>
     modelBlobUrls: new Map(), // characterId -> Set<string>
     cachedDetachedAt: new Map(), // characterId -> timestamp (已退场缓存)
     maxDetachedCache: 3,
@@ -543,9 +590,9 @@ const __awaiter =
           const blob = new Blob([payload], { type: 'application/octet-stream' });
           const blobUrl = topURL.createObjectURL(blob);
 
-          const ok = await new Promise((resolve) => {
+          const ok = await new Promise(resolve => {
             let done = false;
-            const finish = (value) => {
+            const finish = value => {
               if (done) return;
               done = true;
               resolve(!!value);
@@ -577,10 +624,9 @@ const __awaiter =
         } catch (e) {
           return false;
         }
-      })()
-        .finally(() => {
-          this.xhrBlobUrlSupportPromise = null;
-        });
+      })().finally(() => {
+        this.xhrBlobUrlSupportPromise = null;
+      });
 
       const supported = await this.xhrBlobUrlSupportPromise;
       this.xhrBlobUrlSupport = supported;
@@ -591,7 +637,9 @@ const __awaiter =
       this.xhrBlobUrlSupport = false;
       if (!this.hasLoggedBlobUrlDisabled) {
         this.hasLoggedBlobUrlDisabled = true;
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 已禁用 Blob URL（XHR 不兼容或加载失败: ${reason}），将回退使用 Data URL`);
+        console.warn(
+          `[${SCRIPT_NAME}] Live2DManager: 已禁用 Blob URL（XHR 不兼容或加载失败: ${reason}），将回退使用 Data URL`,
+        );
       }
     },
 
@@ -763,7 +811,7 @@ const __awaiter =
         console.error(`[${SCRIPT_NAME}] Live2DManager: PIXI.live2d 未就绪`, {
           PIXI: !!_topWindow.PIXI,
           live2d: !!_topWindow.PIXI?.live2d,
-          Live2DModel: !!_topWindow.PIXI?.live2d?.Live2DModel
+          Live2DModel: !!_topWindow.PIXI?.live2d?.Live2DModel,
         });
         return false;
       }
@@ -818,7 +866,7 @@ const __awaiter =
         const PIXI = _topWindow.PIXI;
         const { Live2DModel } = PIXI.live2d;
 
-        const loadFromUrl = async (modelUrl) => {
+        const loadFromUrl = async modelUrl => {
           // ★ 修复1: 使用 Live2DModel.from() 的完整选项并等待加载完成
           const model = await Live2DModel.from(modelUrl, {
             autoUpdate: true,
@@ -826,7 +874,7 @@ const __awaiter =
           });
 
           // ★ 修复2: 等待所有纹理完全加载（带超时和最大重试限制）
-          await new Promise((resolve) => {
+          await new Promise(resolve => {
             let retryCount = 0;
             const maxRetries = 30; // 最多等待 3 秒
 
@@ -870,8 +918,11 @@ const __awaiter =
                 console.log(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${textures.length} 张)`);
                 resolve(true);
               } else {
-                if (retryCount % 5 === 0) { // 每 500ms 输出一次日志
-                  console.log(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+                if (retryCount % 5 === 0) {
+                  // 每 500ms 输出一次日志
+                  console.log(
+                    `[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`,
+                  );
                 }
                 setTimeout(checkTextures, 100);
               }
@@ -918,9 +969,7 @@ const __awaiter =
 
         let usedBlobForLocal = false;
         try {
-          const modelUrl = isRemote
-            ? await buildRemoteModelUrl()
-            : await buildLocalModelUrl(true);
+          const modelUrl = isRemote ? await buildRemoteModelUrl() : await buildLocalModelUrl(true);
           usedBlobForLocal = !isRemote && String(modelUrl || '').startsWith('blob:');
 
           const model = await loadFromUrl(modelUrl);
@@ -943,7 +992,7 @@ const __awaiter =
           throw e;
         }
       })()
-        .catch((e) => {
+        .catch(e => {
           this._revokeModelBlobUrls(characterId);
           console.error(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载失败:`, e);
           return null;
@@ -963,7 +1012,7 @@ const __awaiter =
       const modifiedModelJson = JSON.parse(JSON.stringify(modelData.modelJson));
       const topURL = _topWindow.URL || URL;
 
-      const registerBlob = (blob) => {
+      const registerBlob = blob => {
         const url = topURL.createObjectURL(blob);
         this._registerModelBlobUrl(characterId, url);
         return url;
@@ -974,7 +1023,7 @@ const __awaiter =
         return registerBlob(blob);
       };
 
-      const normalizePath = (p) => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
+      const normalizePath = p => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
 
       const isModel3 = !!modifiedModelJson?.FileReferences;
 
@@ -1048,7 +1097,7 @@ const __awaiter =
               } else {
                 modifiedModelJson.FileReferences.Expressions.push({
                   Name: expr.name,
-                  File: exprUrl
+                  File: exprUrl,
                 });
               }
             }
@@ -1078,8 +1127,10 @@ const __awaiter =
             texMap.set(normalizePath(tex.name), tex.data);
           }
 
-          const getByBasename = (target) => {
-            const base = String(target || '').split('/').pop();
+          const getByBasename = target => {
+            const base = String(target || '')
+              .split('/')
+              .pop();
             if (!base) return null;
             const matches = [];
             for (const [k, v] of texMap.entries()) {
@@ -1114,7 +1165,7 @@ const __awaiter =
           }
         }
 
-        const guessMime = (filePath) => {
+        const guessMime = filePath => {
           const lower = String(filePath || '').toLowerCase();
           return lower.endsWith('.json') ? 'application/json' : 'application/octet-stream';
         };
@@ -1196,7 +1247,7 @@ const __awaiter =
       const modifiedModelJson = JSON.parse(JSON.stringify(modelData.modelJson));
 
       // 辅助函数：ArrayBuffer 转 Base64
-      const arrayBufferToBase64 = (buffer) => {
+      const arrayBufferToBase64 = buffer => {
         const bytes = new Uint8Array(buffer);
         let binary = '';
         for (let i = 0; i < bytes.length; i++) {
@@ -1206,7 +1257,7 @@ const __awaiter =
       };
 
       // 辅助函数：Blob 转 Data URL
-      const blobToDataUrl = (blob) => {
+      const blobToDataUrl = blob => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
@@ -1221,7 +1272,7 @@ const __awaiter =
         return `data:${mimeType};base64,${base64}`;
       };
 
-      const normalizePath = (p) => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
+      const normalizePath = p => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
       const isModel3 = !!modifiedModelJson?.FileReferences;
 
       if (isModel3) {
@@ -1284,7 +1335,7 @@ const __awaiter =
             } else {
               modifiedModelJson.FileReferences.Expressions.push({
                 Name: expr.name,
-                File: exprDataUrl
+                File: exprDataUrl,
               });
             }
           }
@@ -1310,8 +1361,10 @@ const __awaiter =
             texMap.set(normalizePath(tex.name), tex.data);
           }
 
-          const getByBasename = (target) => {
-            const base = String(target || '').split('/').pop();
+          const getByBasename = target => {
+            const base = String(target || '')
+              .split('/')
+              .pop();
             if (!base) return null;
             const matches = [];
             for (const [k, v] of texMap.entries()) {
@@ -1345,7 +1398,7 @@ const __awaiter =
           }
         }
 
-        const guessMime = (filePath) => {
+        const guessMime = filePath => {
           const lower = String(filePath || '').toLowerCase();
           return lower.endsWith('.json') ? 'application/json' : 'application/octet-stream';
         };
@@ -1451,7 +1504,7 @@ const __awaiter =
 
       const modifiedModelJson = JSON.parse(JSON.stringify(modelJson));
 
-      const resolveUrl = (p) => {
+      const resolveUrl = p => {
         if (typeof p !== 'string') return p;
         const raw = p.trim();
         if (!raw) return p;
@@ -1465,7 +1518,7 @@ const __awaiter =
         return abs;
       };
 
-      const rewriteCubism3 = (refs) => {
+      const rewriteCubism3 = refs => {
         if (!refs || typeof refs !== 'object') return;
 
         if (typeof refs.Moc === 'string') refs.Moc = resolveUrl(refs.Moc);
@@ -1508,8 +1561,10 @@ const __awaiter =
           }
         }
 
-        if (typeof modifiedModelJson.physics === 'string') modifiedModelJson.physics = resolveUrl(modifiedModelJson.physics);
-        if (typeof modifiedModelJson.Physics === 'string') modifiedModelJson.Physics = resolveUrl(modifiedModelJson.Physics);
+        if (typeof modifiedModelJson.physics === 'string')
+          modifiedModelJson.physics = resolveUrl(modifiedModelJson.physics);
+        if (typeof modifiedModelJson.Physics === 'string')
+          modifiedModelJson.Physics = resolveUrl(modifiedModelJson.Physics);
         if (typeof modifiedModelJson.pose === 'string') modifiedModelJson.pose = resolveUrl(modifiedModelJson.pose);
         if (typeof modifiedModelJson.Pose === 'string') modifiedModelJson.Pose = resolveUrl(modifiedModelJson.Pose);
 
@@ -1553,10 +1608,13 @@ const __awaiter =
       // 同一角色渲染串行化，避免并发创建多个 renderer/context
       const prevRender = this.renderLocks.get(characterId) || Promise.resolve();
       let releaseRender;
-      const currentRender = new Promise((resolve) => {
+      const currentRender = new Promise(resolve => {
         releaseRender = resolve;
       });
-      this.renderLocks.set(characterId, prevRender.then(() => currentRender));
+      this.renderLocks.set(
+        characterId,
+        prevRender.then(() => currentRender),
+      );
       await prevRender;
 
       try {
@@ -1613,178 +1671,188 @@ const __awaiter =
           return true;
         }
 
-      let model = this.models.get(characterId);
-      const existingContainer = this.containers.get(characterId);
+        let model = this.models.get(characterId);
+        const existingContainer = this.containers.get(characterId);
 
-      // 检查是否渲染到同一个容器 - 如果是，直接复用不需要重建
-      if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
-        console.log(`[${SCRIPT_NAME}] Live2DManager: 复用现有渲染 ${characterId}`);
-        return true;
-      }
+        // 检查是否渲染到同一个容器 - 如果是，直接复用不需要重建
+        if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
+          console.log(`[${SCRIPT_NAME}] Live2DManager: 复用现有渲染 ${characterId}`);
+          return true;
+        }
 
-      // 容器变化或强制重载时，必须销毁并重建模型，避免跨 WebGL Context 复用导致渲染异常
-      const needReload = forceReload || (model && existingContainer && existingContainer.containerElement !== containerElement);
-      if (needReload) {
-        this.cleanup(characterId);
-        model = null;
-      }
+        // 容器变化或强制重载时，必须销毁并重建模型，避免跨 WebGL Context 复用导致渲染异常
+        const needReload =
+          forceReload || (model && existingContainer && existingContainer.containerElement !== containerElement);
+        if (needReload) {
+          this.cleanup(characterId);
+          model = null;
+        }
 
-      // 如果没有模型，加载它
-      if (!model) {
-        model = await this.loadModel(characterId, false);
-        if (!model) return false;
-      }
+        // 如果没有模型，加载它
+        if (!model) {
+          model = await this.loadModel(characterId, false);
+          if (!model) return false;
+        }
 
-      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
-      const PIXI = _topWindow.PIXI;
+        const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+        const PIXI = _topWindow.PIXI;
 
-      // 获取用户配置
-      const config = getLive2DConfig(characterId);
-      const qualityConfig = config.quality || {};
-      let containerWidth = containerElement.clientWidth || containerElement.offsetWidth;
-      let containerHeight = containerElement.clientHeight || containerElement.offsetHeight;
+        // 获取用户配置
+        const config = getLive2DConfig(characterId);
+        const qualityConfig = config.quality || {};
+        let containerWidth = containerElement.clientWidth || containerElement.offsetWidth;
+        let containerHeight = containerElement.clientHeight || containerElement.offsetHeight;
 
-      // 确保容器有尺寸
-      if (containerWidth <= 0 || containerHeight <= 0) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 容器尺寸无效 (${containerWidth}x${containerHeight})，使用默认值`);
-        containerWidth = 400;
-        containerHeight = 600;
-      }
+        // 确保容器有尺寸
+        if (containerWidth <= 0 || containerHeight <= 0) {
+          console.warn(
+            `[${SCRIPT_NAME}] Live2DManager: 容器尺寸无效 (${containerWidth}x${containerHeight})，使用默认值`,
+          );
+          containerWidth = 400;
+          containerHeight = 600;
+        }
 
-      const transformConfig = this._normalizeTransform(characterId, config.transform || {}, containerWidth, containerHeight);
+        const transformConfig = this._normalizeTransform(
+          characterId,
+          config.transform || {},
+          containerWidth,
+          containerHeight,
+        );
 
-      // 获取设备像素比以提高清晰度 (支持用户自定义)
-      let dpr;
-      if (qualityConfig.devicePixelRatio === 'auto' || !qualityConfig.devicePixelRatio) {
-        dpr = _topWindow.devicePixelRatio || 1;
-      } else {
-        dpr = parseFloat(qualityConfig.devicePixelRatio) || 1;
-      }
-      // 应用纹理精度倍率
-      dpr *= (qualityConfig.textureResolution || 1.0);
+        // 获取设备像素比以提高清晰度 (支持用户自定义)
+        let dpr;
+        if (qualityConfig.devicePixelRatio === 'auto' || !qualityConfig.devicePixelRatio) {
+          dpr = _topWindow.devicePixelRatio || 1;
+        } else {
+          dpr = parseFloat(qualityConfig.devicePixelRatio) || 1;
+        }
+        // 应用纹理精度倍率
+        dpr *= qualityConfig.textureResolution || 1.0;
 
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 容器尺寸 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: 容器尺寸 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
 
-      // 在 topWindow 中创建 canvas - 维持在槽位范围内，避免多角色互相覆盖
-      const canvas = _topWindow.document.createElement('canvas');
-      const renderWidth = containerWidth;
-      const renderHeight = containerHeight;
-      canvas.width = Math.max(1, Math.floor(renderWidth * dpr));
-      canvas.height = Math.max(1, Math.floor(renderHeight * dpr));
+        // 在 topWindow 中创建 canvas - 维持在槽位范围内，避免多角色互相覆盖
+        const canvas = _topWindow.document.createElement('canvas');
+        const renderWidth = containerWidth;
+        const renderHeight = containerHeight;
+        canvas.width = Math.max(1, Math.floor(renderWidth * dpr));
+        canvas.height = Math.max(1, Math.floor(renderHeight * dpr));
 
-      // Live2D 依赖 WebGL：手动创建 WebGL Context，避免 PIXI 自动降级到 Canvas 导致 gl 为 undefined
-      const glContext =
-        canvas.getContext('webgl2', {
-          alpha: true,
+        // Live2D 依赖 WebGL：手动创建 WebGL Context，避免 PIXI 自动降级到 Canvas 导致 gl 为 undefined
+        const glContext =
+          canvas.getContext('webgl2', {
+            alpha: true,
+            antialias: true,
+            preserveDrawingBuffer: true,
+            premultipliedAlpha: true,
+          }) ||
+          canvas.getContext('webgl', {
+            alpha: true,
+            antialias: true,
+            preserveDrawingBuffer: true,
+            premultipliedAlpha: true,
+          });
+
+        if (!glContext) {
+          console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL 不可用，无法渲染 Live2D`);
+          try {
+            showToast('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
+          } catch {}
+          return false;
+        }
+        canvas.style.cssText = `width: ${renderWidth}px; height: ${renderHeight}px; position: absolute; top: 0; left: 0; pointer-events: none;`;
+        containerElement.style.position = 'relative';
+        containerElement.style.overflow = 'hidden';
+        containerElement.appendChild(canvas);
+
+        // ★ 修复5: 改进 PIXI Application 配置
+        const app = new PIXI.Application({
+          view: canvas,
+          context: glContext,
+          backgroundAlpha: 0,
+          autoStart: false,
+          width: renderWidth,
+          height: renderHeight,
+          resolution: dpr,
+          autoDensity: true,
           antialias: true,
           preserveDrawingBuffer: true,
-          premultipliedAlpha: true,
-        }) ||
-        canvas.getContext('webgl', {
-          alpha: true,
-          antialias: true,
-          preserveDrawingBuffer: true,
-          premultipliedAlpha: true,
         });
 
-      if (!glContext) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL 不可用，无法渲染 Live2D`);
-        try {
-          showToast('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
-        } catch {}
-        return false;
-      }
-      canvas.style.cssText = `width: ${renderWidth}px; height: ${renderHeight}px; position: absolute; top: 0; left: 0; pointer-events: none;`;
-      containerElement.style.position = 'relative';
-      containerElement.style.overflow = 'hidden';
-      containerElement.appendChild(canvas);
+        if (!app.renderer?.gl) {
+          console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL Renderer 初始化失败`, app.renderer);
+          try {
+            app.destroy(true);
+          } catch {}
+          try {
+            if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+          } catch {}
+          try {
+            showToast('WebGL Renderer 初始化失败，Live2D 无法渲染');
+          } catch {}
+          return false;
+        }
 
-      // ★ 修复5: 改进 PIXI Application 配置
-      const app = new PIXI.Application({
-        view: canvas,
-        context: glContext,
-        backgroundAlpha: 0,
-        autoStart: false,
-        width: renderWidth,
-        height: renderHeight,
-        resolution: dpr,
-        autoDensity: true,
-        antialias: true,
-        preserveDrawingBuffer: true,
-      });
+        // 计算模型缩放 - 贴合槽位尺寸，确保双角色同时可见
+        model.scale.set(1);
+        const modelWidth = model.width || model.internalModel?.width || 500;
+        const modelHeight = model.height || model.internalModel?.height || 800;
+        const safePadding = Math.min(0.08, Math.max(0.0, Number(config?.safePadding) || 0.03));
+        const scaleBaseMode = normalizeLive2DScaleBase(transformConfig.scaleBase);
+        const overlayRefHeight = getOverlayReferenceHeight(containerElement, renderHeight);
+        const refHeight = scaleBaseMode === 'height' ? overlayRefHeight : renderHeight;
+        const baseScale = calculateLive2DBaseScale(
+          renderWidth,
+          refHeight,
+          modelWidth,
+          modelHeight,
+          safePadding,
+          scaleBaseMode,
+        );
 
-      if (!app.renderer?.gl) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL Renderer 初始化失败`, app.renderer);
-        try {
-          app.destroy(true);
-        } catch {}
-        try {
-          if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
-        } catch {}
-        try {
-          showToast('WebGL Renderer 初始化失败，Live2D 无法渲染');
-        } catch {}
-        return false;
-      }
+        // 应用用户自定义缩放
+        const userScale = transformConfig.scale || 1.0;
+        const finalScale = baseScale * userScale;
 
-      // 计算模型缩放 - 贴合槽位尺寸，确保双角色同时可见
-      model.scale.set(1);
-      const modelWidth = model.width || model.internalModel?.width || 500;
-      const modelHeight = model.height || model.internalModel?.height || 800;
-      const safePadding = Math.min(0.08, Math.max(0.0, Number(config?.safePadding) || 0.03));
-      const scaleBaseMode = normalizeLive2DScaleBase(transformConfig.scaleBase);
-      const overlayRefHeight = getOverlayReferenceHeight(containerElement, renderHeight);
-      const refHeight = scaleBaseMode === 'height' ? overlayRefHeight : renderHeight;
-      const baseScale = calculateLive2DBaseScale(
-        renderWidth,
-        refHeight,
-        modelWidth,
-        modelHeight,
-        safePadding,
-        scaleBaseMode,
-      );
+        console.log(
+          `[${SCRIPT_NAME}] Live2DManager: 模型尺寸 ${modelWidth}x${modelHeight}, 基础缩放: ${baseScale}, 用户缩放: ${userScale}, 最终缩放: ${finalScale}`,
+        );
 
-      // 应用用户自定义缩放
-      const userScale = transformConfig.scale || 1.0;
-      const finalScale = baseScale * userScale;
+        model.scale.set(finalScale);
+        model.anchor.set(0.5, 0.5);
 
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 模型尺寸 ${modelWidth}x${modelHeight}, 基础缩放: ${baseScale}, 用户缩放: ${userScale}, 最终缩放: ${finalScale}`);
+        // 应用用户自定义偏移 - 以槽位中心为基准
+        const offsetX = transformConfig.offsetX || 0;
+        const offsetY = transformConfig.offsetY || 0;
+        model.x = renderWidth / 2 + offsetX;
+        model.y = renderHeight / 2 + offsetY;
+        model.visible = true;
+        model.alpha = 1;
 
-      model.scale.set(finalScale);
-      model.anchor.set(0.5, 0.5);
+        app.stage.addChild(model);
 
-      // 应用用户自定义偏移 - 以槽位中心为基准
-      const offsetX = transformConfig.offsetX || 0;
-      const offsetY = transformConfig.offsetY || 0;
-      model.x = renderWidth / 2 + offsetX;
-      model.y = renderHeight / 2 + offsetY;
-      model.visible = true;
-      model.alpha = 1;
+        // 强制渲染一帧确保显示
+        app.renderer.render(app.stage);
+        // 保持渲染循环运行，避免切段后出现画布空白导致角色“消失”
+        if (!app.ticker?.started) {
+          app.start();
+        }
 
-      app.stage.addChild(model);
+        this.containers.set(characterId, {
+          app,
+          canvas,
+          baseScale: baseScale,
+          containerElement,
+          width: containerWidth,
+          height: containerHeight,
+          renderWidth,
+          renderHeight,
+        });
 
-      // 强制渲染一帧确保显示
-      app.renderer.render(app.stage);
-      // 保持渲染循环运行，避免切段后出现画布空白导致角色“消失”
-      if (!app.ticker?.started) {
-        app.start();
-      }
-
-      this.containers.set(characterId, {
-        app,
-        canvas,
-        baseScale: baseScale,
-        containerElement,
-        width: containerWidth,
-        height: containerHeight,
-        renderWidth,
-        renderHeight,
-      });
-
-      console.log(
-        `[${SCRIPT_NAME}] Live2DManager: 渲染 ${characterId} 完成 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
-      );
-      return true;
+        console.log(
+          `[${SCRIPT_NAME}] Live2DManager: 渲染 ${characterId} 完成 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
+        );
+        return true;
       } finally {
         if (typeof releaseRender === 'function') {
           releaseRender();
@@ -1910,10 +1978,10 @@ const __awaiter =
 
       // 尝试多种参数名 (不同模型命名不同)
       const paramNames = [
-        'ParamMouthOpenY',      // Cubism 4 标准
+        'ParamMouthOpenY', // Cubism 4 标准
         'PARAM_MOUTH_OPEN_Y',
         'ParamMouthOpen',
-        'ParamA',               // Cubism 2/3
+        'ParamA', // Cubism 2/3
         'Param_Mouth_Open',
         'mouth_open',
       ];
@@ -1925,7 +1993,9 @@ const __awaiter =
             coreModel.setParameterValueById(paramName, clampedValue);
             return true;
           }
-        } catch (e) { continue; }
+        } catch (e) {
+          continue;
+        }
       }
       return false;
     },
@@ -1941,9 +2011,7 @@ const __awaiter =
         const count = coreModel.getParameterCount();
         for (let i = 0; i < count; i++) {
           const id = coreModel.getParameterId(i);
-          if (id.toLowerCase().includes('mouth') ||
-              id.toLowerCase().includes('lip') ||
-              id === 'ParamA') {
+          if (id.toLowerCase().includes('mouth') || id.toLowerCase().includes('lip') || id === 'ParamA') {
             params.push(id);
           }
         }
@@ -1953,16 +2021,16 @@ const __awaiter =
 
     _matchExpression(model, targetExpression) {
       const expressionMap = {
-        '默认': ['normal', 'default', 'neutral', 'idle'],
-        '微笑': ['smile', 'happy', 'joy', 'glad'],
-        '生气': ['angry', 'anger', 'mad', 'rage'],
-        '难过': ['sad', 'sorrow', 'cry', 'upset'],
-        '惊讶': ['surprised', 'shock', 'amazed', 'wow'],
-        '嘲讽': ['smirk', 'mock', 'sneer', 'tease'],
-        '害羞': ['shy', 'blush', 'embarrassed', 'bashful'],
-        '思考': ['think', 'ponder', 'confused', 'wonder'],
-        '大笑': ['laugh', 'lol', 'haha', 'giggle'],
-        '搞怪': ['playful', 'wink', 'silly', 'fun'],
+        默认: ['normal', 'default', 'neutral', 'idle'],
+        微笑: ['smile', 'happy', 'joy', 'glad'],
+        生气: ['angry', 'anger', 'mad', 'rage'],
+        难过: ['sad', 'sorrow', 'cry', 'upset'],
+        惊讶: ['surprised', 'shock', 'amazed', 'wow'],
+        嘲讽: ['smirk', 'mock', 'sneer', 'tease'],
+        害羞: ['shy', 'blush', 'embarrassed', 'bashful'],
+        思考: ['think', 'ponder', 'confused', 'wonder'],
+        大笑: ['laugh', 'lol', 'haha', 'giggle'],
+        搞怪: ['playful', 'wink', 'silly', 'fun'],
       };
 
       const candidates = expressionMap[targetExpression] || [targetExpression.toLowerCase()];
@@ -2028,7 +2096,10 @@ const __awaiter =
       const model = this.models.get(characterId);
       const container = this.containers.get(characterId);
       if (!model || !container) {
-        console.warn(`[Live2DManager] enableInteraction 失败: 模型或容器不存在`, { model: !!model, container: !!container });
+        console.warn(`[Live2DManager] enableInteraction 失败: 模型或容器不存在`, {
+          model: !!model,
+          container: !!container,
+        });
         return false;
       }
 
@@ -2093,9 +2164,9 @@ const __awaiter =
       return {
         offsetX: model.x - renderWidth / 2,
         offsetY: model.y - (isStage ? renderHeight : renderHeight / 2),
-        scale: model.scale.x / baseScale
+        scale: model.scale.x / baseScale,
       };
-    }
+    },
   };
 
   // ============================================
@@ -2189,8 +2260,7 @@ const __awaiter =
       if (!this.canvas) {
         this.canvas = _topWindow.document.createElement('canvas');
         this.canvas.className = 'gal-live2d-stage-canvas';
-        this.canvas.style.cssText =
-          'position:absolute; inset:0; width:100%; height:100%; pointer-events:none;';
+        this.canvas.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; pointer-events:none;';
       }
 
       try {
@@ -2395,7 +2465,7 @@ const __awaiter =
         let rightCenterX = width * 0.68;
         let domSlotWidth = width * 0.3;
 
-        const toLocalRect = (el) => {
+        const toLocalRect = el => {
           if (!el) return null;
           const cw = Number(el.clientWidth) || Number(el.offsetWidth) || 0;
           const ch = Number(el.clientHeight) || Number(el.offsetHeight) || 0;
@@ -2432,7 +2502,7 @@ const __awaiter =
         let virtualWidth = Math.max(width * 0.45, domSlotWidth * 1.7);
         virtualWidth = Math.max(1, Math.min(width, Math.floor(virtualWidth)));
 
-        const clampX = (x) => Math.max(0, Math.min(width - virtualWidth, Math.floor(x)));
+        const clampX = x => Math.max(0, Math.min(width - virtualWidth, Math.floor(x)));
         const leftX = clampX(leftCenterX - virtualWidth / 2);
         const rightX = clampX(rightCenterX - virtualWidth / 2);
 
@@ -2578,7 +2648,12 @@ const __awaiter =
       if (!rect || rect.width <= 0 || rect.height <= 0) return false;
 
       const config = getLive2DConfig(characterId);
-      const transformConfig = Live2DManager._normalizeTransform(characterId, config.transform || {}, rect.width, rect.height);
+      const transformConfig = Live2DManager._normalizeTransform(
+        characterId,
+        config.transform || {},
+        rect.width,
+        rect.height,
+      );
 
       const safePadding = Math.min(0.08, Math.max(0.0, Number(config?.safePadding) || 0.03));
       const bounds = inst.bounds || { x: 0, y: 0, width: inst.model.width || 500, height: inst.model.height || 800 };
@@ -2640,9 +2715,9 @@ const __awaiter =
     // 配置
     config: {
       fftSize: 256,
-      smoothingFactor: 0.5,  // 降低平滑度，反应更灵敏
-      sensitivity: 2.5,      // 提高灵敏度
-      minThreshold: 0.01,    // 降低噪声门限
+      smoothingFactor: 0.5, // 降低平滑度，反应更灵敏
+      sensitivity: 2.5, // 提高灵敏度
+      minThreshold: 0.01, // 降低噪声门限
     },
 
     // 初始化 AudioContext
@@ -2660,8 +2735,8 @@ const __awaiter =
       const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
       const AudioContextClass = _topWindow.AudioContext || _topWindow.webkitAudioContext;
       if (!AudioContextClass) {
-          console.warn(`[${SCRIPT_NAME}] LipSync: 浏览器不支持 Web Audio API`);
-          return;
+        console.warn(`[${SCRIPT_NAME}] LipSync: 浏览器不支持 Web Audio API`);
+        return;
       }
 
       this.audioContext = new AudioContextClass();
@@ -2752,7 +2827,9 @@ const __awaiter =
       try {
         // 断开旧连接
         if (this.source) {
-          try { this.source.disconnect(); } catch (e) {}
+          try {
+            this.source.disconnect();
+          } catch (e) {}
         }
 
         // 检查是否需要使用代理（非本地/非数据 URL）
@@ -2868,7 +2945,9 @@ const __awaiter =
         }
       }
 
-      console.log(`[${SCRIPT_NAME}] LipSync: ▶️ 开始口型同步 - characterId=${characterId}, AudioContext.state=${this.audioContext?.state}`);
+      console.log(
+        `[${SCRIPT_NAME}] LipSync: ▶️ 开始口型同步 - characterId=${characterId}, AudioContext.state=${this.audioContext?.state}`,
+      );
 
       // 诊断：检测音量数据
       let frameCount = 0;
@@ -2922,28 +3001,30 @@ const __awaiter =
     cleanup() {
       this.stopSync();
       if (this.source) {
-        try { this.source.disconnect(); } catch (e) {}
+        try {
+          this.source.disconnect();
+        } catch (e) {}
         this.source = null;
       }
-    }
+    },
   };
 
   // ============================================
   // Live2D 位置调整编辑器
   // ============================================
   const Live2DPositionEditor = {
-    isActive: false,           // 是否处于调整模式
-    characterId: null,         // 当前调整的角色
-    originalConfig: null,      // 原始配置 (用于取消时恢复)
-    $toolbar: null,            // 浮动工具栏 jQuery 对象
-    $guide: null,              // 位置参考框
-    isDragging: false,         // 是否正在拖拽
+    isActive: false, // 是否处于调整模式
+    characterId: null, // 当前调整的角色
+    originalConfig: null, // 原始配置 (用于取消时恢复)
+    $toolbar: null, // 浮动工具栏 jQuery 对象
+    $guide: null, // 位置参考框
+    isDragging: false, // 是否正在拖拽
     dragStart: { x: 0, y: 0 }, // 拖拽起始位置
-    modelStart: { x: 0, y: 0 },// 模型起始位置
-    lastPinchDistance: 0,      // 双指缩放距离
-    currentSlot: 'left',       // 当前角色槽位
-    _stagePushed: false,       // 是否已 pushMount
-    _onResize: null,           // resize 监听器
+    modelStart: { x: 0, y: 0 }, // 模型起始位置
+    lastPinchDistance: 0, // 双指缩放距离
+    currentSlot: 'left', // 当前角色槽位
+    _stagePushed: false, // 是否已 pushMount
+    _onResize: null, // resize 监听器
 
     // 进入编辑前，清理其它窗口并确保主界面可见
     prepareEditContext() {
@@ -3080,9 +3161,10 @@ const __awaiter =
         return;
       }
 
-      const waitFrame = () => new Promise(resolve => {
-        (topWindow.requestAnimationFrame || requestAnimationFrame)(() => resolve());
-      });
+      const waitFrame = () =>
+        new Promise(resolve => {
+          (topWindow.requestAnimationFrame || requestAnimationFrame)(() => resolve());
+        });
       await waitFrame();
       await waitFrame();
 
@@ -3298,34 +3380,34 @@ const __awaiter =
       this.$toolbar = _$(mountRoot).find('#gal-live2d-position-toolbar');
 
       // 绑定滑条事件
-      this.$toolbar.find('#gal-pos-x-slider').on('input', function() {
+      this.$toolbar.find('#gal-pos-x-slider').on('input', function () {
         const val = parseInt(_$(this).val());
         self.$toolbar.find('.gal-pos-x-val').text(val);
         const currentY = parseInt(self.$toolbar.find('#gal-pos-y-slider').val()) || 0;
         Live2DManager.setOffset(self.characterId, val, currentY);
       });
 
-      this.$toolbar.find('#gal-pos-y-slider').on('input', function() {
+      this.$toolbar.find('#gal-pos-y-slider').on('input', function () {
         const val = parseInt(_$(this).val());
         self.$toolbar.find('.gal-pos-y-val').text(val);
         const currentX = parseInt(self.$toolbar.find('#gal-pos-x-slider').val()) || 0;
         Live2DManager.setOffset(self.characterId, currentX, val);
       });
 
-      this.$toolbar.find('#gal-pos-scale-slider').on('input', function() {
+      this.$toolbar.find('#gal-pos-scale-slider').on('input', function () {
         const val = parseFloat(_$(this).val());
         self.$toolbar.find('.gal-pos-scale-val').text(val.toFixed(2) + 'x');
         Live2DManager.setScale(self.characterId, val);
       });
 
       // 绑定按钮事件
-      this.$toolbar.find('#gal-pos-reset').on('click', function() {
+      this.$toolbar.find('#gal-pos-reset').on('click', function () {
         self.resetToDefault();
       });
-      this.$toolbar.find('#gal-pos-cancel').on('click', function() {
+      this.$toolbar.find('#gal-pos-cancel').on('click', function () {
         self.exit(false);
       });
-      this.$toolbar.find('#gal-pos-save').on('click', function() {
+      this.$toolbar.find('#gal-pos-save').on('click', function () {
         self.exit(true);
       });
     },
@@ -3368,7 +3450,7 @@ const __awaiter =
         } catch (e) {}
       }
       this._onResize = null;
-    }
+    },
   };
 
   // ============================================
@@ -3403,7 +3485,9 @@ const __awaiter =
     async uploadZip(file, characterId) {
       const JSZip = await this._loadJSZip();
 
-      console.log(`[${SCRIPT_NAME}] Live2DUploader: 开始解析 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      console.log(
+        `[${SCRIPT_NAME}] Live2DUploader: 开始解析 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+      );
 
       const zip = await JSZip.loadAsync(file);
 
@@ -3417,9 +3501,7 @@ const __awaiter =
       const modelJson = JSON.parse(modelJsonText);
 
       const entryPathLower = String(modelJsonEntry.path || '').toLowerCase();
-      const isModel3 =
-        entryPathLower.endsWith('model3.json') ||
-        !!modelJson?.FileReferences;
+      const isModel3 = entryPathLower.endsWith('model3.json') || !!modelJson?.FileReferences;
       const isModel2 =
         !isModel3 &&
         (typeof modelJson?.model === 'string' ||
@@ -3467,12 +3549,8 @@ const __awaiter =
           textures: await this._extractTexturesV2(zip, modelDir, modelJson),
           motions: await this._extractMotionsV2(zip, modelDir, modelJson),
           expressions: await this._extractExpressionsV2(zip, modelDir, modelJson),
-          physics: physicsPath
-            ? await this._extractFileOptional(zip, modelDir, physicsPath)
-            : null,
-          pose: posePath
-            ? await this._extractFileOptional(zip, modelDir, posePath)
-            : null,
+          physics: physicsPath ? await this._extractFileOptional(zip, modelDir, physicsPath) : null,
+          pose: posePath ? await this._extractFileOptional(zip, modelDir, posePath) : null,
           uploadTime: Date.now(),
           fileSize: file.size,
         };
@@ -3696,7 +3774,10 @@ const __awaiter =
         }
       }
 
-      const extractedCount = Object.values(motions).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
+      const extractedCount = Object.values(motions).reduce(
+        (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
+        0,
+      );
 
       // 如果 modelJson 中没有动作配置，自动扫描 .mtn 文件
       if (extractedCount === 0) {
@@ -3766,7 +3847,10 @@ const __awaiter =
           try {
             const data = await this._extractFile(zip, baseDir, filePath);
             // 从文件名提取表情名称（去掉 .exp3.json 后缀）
-            const name = filePath.replace(/\.exp3\.json$/i, '').split('/').pop();
+            const name = filePath
+              .replace(/\.exp3\.json$/i, '')
+              .split('/')
+              .pop();
             expressions.push({
               name: name,
               file: filePath,
@@ -3783,9 +3867,7 @@ const __awaiter =
       }
 
       return expressions;
-    }
-    ,
-
+    },
     async _extractExpressionsV2(zip, baseDir, modelJson) {
       const expressions = [];
       const exprList = modelJson?.expressions || modelJson?.Expressions || [];
@@ -3824,7 +3906,10 @@ const __awaiter =
         for (const filePath of scannedExprs) {
           try {
             const data = await this._extractFile(zip, baseDir, filePath);
-            const name = filePath.replace(/\.exp\.json$/i, '').split('/').pop();
+            const name = filePath
+              .replace(/\.exp\.json$/i, '')
+              .split('/')
+              .pop();
             expressions.push({
               name: name,
               file: filePath,
@@ -3841,7 +3926,7 @@ const __awaiter =
       }
 
       return expressions;
-    }
+    },
   };
 
   // ============================================
@@ -3854,7 +3939,14 @@ const __awaiter =
     return scaleBase === 'fit' ? 'fit' : 'height';
   }
 
-  function calculateLive2DBaseScale(rectWidth, rectHeight, boundsWidth, boundsHeight, safePadding = 0.03, scaleBase = 'fit') {
+  function calculateLive2DBaseScale(
+    rectWidth,
+    rectHeight,
+    boundsWidth,
+    boundsHeight,
+    safePadding = 0.03,
+    scaleBase = 'fit',
+  ) {
     const safeRectWidth = Math.max(1, Number(rectWidth) || 0);
     const safeRectHeight = Math.max(1, Number(rectHeight) || 0);
     const safeBoundsWidth = Math.max(1, Number(boundsWidth) || 0);
@@ -3864,9 +3956,7 @@ const __awaiter =
 
     const widthRatio = safeRectWidth / safeBoundsWidth;
     const heightRatio = safeRectHeight / safeBoundsHeight;
-    const fitScale = resolvedScaleBase === 'height'
-      ? heightRatio
-      : Math.min(widthRatio, heightRatio);
+    const fitScale = resolvedScaleBase === 'height' ? heightRatio : Math.min(widthRatio, heightRatio);
     const baseScale = fitScale * (1 - safePaddingRatio);
     return Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1;
   }
@@ -3892,20 +3982,20 @@ const __awaiter =
     return {
       // 位置和大小设置
       transform: {
-        offsetX: 0,        // 水平偏移 (像素)
-        offsetY: 0,        // 垂直偏移 (像素)
-        scale: 1.0,        // 缩放倍率 (0.5-2.0)
-        scaleBase: 'height',  // 缩放基准：fit | height
+        offsetX: 0, // 水平偏移 (像素)
+        offsetY: 0, // 垂直偏移 (像素)
+        scale: 1.0, // 缩放倍率 (0.5-2.0)
+        scaleBase: 'height', // 缩放基准：fit | height
       },
       // 纹理精度设置
       quality: {
-        textureResolution: 1.0,  // 0.5=低精度 1.0=正常 2.0=高精度
-        devicePixelRatio: 'auto' // 'auto' | 0.5 | 1.0 | 2.0
+        textureResolution: 1.0, // 0.5=低精度 1.0=正常 2.0=高精度
+        devicePixelRatio: 'auto', // 'auto' | 0.5 | 1.0 | 2.0
       },
       // 表情标签映射 (游戏表情标签 -> Live2D表情名)
       expressionMapping: {},
       // 动作映射 (游戏表情标签 -> 动作配置)
-      motionMapping: {}
+      motionMapping: {},
     };
   }
 
@@ -3923,7 +4013,7 @@ const __awaiter =
         transform: { ...defaultConfig.transform, ...charConfig.transform },
         quality: { ...defaultConfig.quality, ...charConfig.quality },
         expressionMapping: charConfig.expressionMapping || {},
-        motionMapping: charConfig.motionMapping || {}
+        motionMapping: charConfig.motionMapping || {},
       };
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 读取 Live2D 配置失败:`, e);
@@ -3951,12 +4041,12 @@ const __awaiter =
       ...partialConfig,
       transform: { ...currentConfig.transform, ...(partialConfig.transform || {}) },
       quality: { ...currentConfig.quality, ...(partialConfig.quality || {}) },
-      expressionMapping: partialConfig.expressionMapping !== undefined
-        ? partialConfig.expressionMapping
-        : currentConfig.expressionMapping,
-      motionMapping: partialConfig.motionMapping !== undefined
-        ? partialConfig.motionMapping
-        : currentConfig.motionMapping
+      expressionMapping:
+        partialConfig.expressionMapping !== undefined
+          ? partialConfig.expressionMapping
+          : currentConfig.expressionMapping,
+      motionMapping:
+        partialConfig.motionMapping !== undefined ? partialConfig.motionMapping : currentConfig.motionMapping,
     };
     setLive2DConfig(characterId, newConfig);
     return newConfig;
@@ -4024,9 +4114,12 @@ const __awaiter =
 
       const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
       if (typeof _topWindow.requestIdleCallback === 'function') {
-        _topWindow.requestIdleCallback(() => {
-          run();
-        }, { timeout: 2000 });
+        _topWindow.requestIdleCallback(
+          () => {
+            run();
+          },
+          { timeout: 2000 },
+        );
       } else {
         setTimeout(() => {
           run();
@@ -4160,45 +4253,45 @@ const __awaiter =
   // Live2D 表情动画映射增强
   // ============================================
   const EXPRESSION_LIVE2D_MAP = {
-    '默认': {
+    默认: {
       expressions: ['normal', 'default', 'neutral', 'idle', 'base'],
-      motions: ['idle', 'normal', 'wait']
+      motions: ['idle', 'normal', 'wait'],
     },
-    '微笑': {
+    微笑: {
       expressions: ['smile', 'happy', 'joy', 'glad', 'pleased'],
-      motions: ['happy', 'smile', 'joy']
+      motions: ['happy', 'smile', 'joy'],
     },
-    '生气': {
+    生气: {
       expressions: ['angry', 'anger', 'mad', 'rage', 'annoyed'],
-      motions: ['angry', 'rage', 'mad']
+      motions: ['angry', 'rage', 'mad'],
     },
-    '难过': {
+    难过: {
       expressions: ['sad', 'sorrow', 'cry', 'upset', 'depressed'],
-      motions: ['sad', 'cry', 'sorrow']
+      motions: ['sad', 'cry', 'sorrow'],
     },
-    '惊讶': {
+    惊讶: {
       expressions: ['surprised', 'shock', 'amazed', 'wow', 'astonished'],
-      motions: ['surprised', 'shock', 'amazed']
+      motions: ['surprised', 'shock', 'amazed'],
     },
-    '嘲讽': {
+    嘲讽: {
       expressions: ['smirk', 'mock', 'sneer', 'tease', 'sarcastic'],
-      motions: ['mock', 'tease']
+      motions: ['mock', 'tease'],
     },
-    '害羞': {
+    害羞: {
       expressions: ['shy', 'blush', 'embarrassed', 'bashful', 'timid'],
-      motions: ['shy', 'embarrassed', 'blush']
+      motions: ['shy', 'embarrassed', 'blush'],
     },
-    '思考': {
+    思考: {
       expressions: ['think', 'ponder', 'confused', 'wonder', 'curious'],
-      motions: ['think', 'ponder', 'wonder']
+      motions: ['think', 'ponder', 'wonder'],
     },
-    '大笑': {
+    大笑: {
       expressions: ['laugh', 'lol', 'haha', 'giggle', 'rofl'],
-      motions: ['laugh', 'giggle', 'haha']
+      motions: ['laugh', 'giggle', 'haha'],
     },
-    '搞怪': {
+    搞怪: {
       expressions: ['playful', 'wink', 'silly', 'fun', 'mischievous'],
-      motions: ['playful', 'wink', 'fun']
+      motions: ['playful', 'wink', 'fun'],
     },
   };
 
@@ -4338,10 +4431,11 @@ const __awaiter =
       const expressionManager = model.internalModel?.motionManager?.expressionManager;
 
       // 尝试多种路径获取表情定义
-      let definitions = expressionManager?.definitions
-        || expressionManager?.expressions
-        || model.internalModel?.settings?.expressions
-        || [];
+      let definitions =
+        expressionManager?.definitions ||
+        expressionManager?.expressions ||
+        model.internalModel?.settings?.expressions ||
+        [];
 
       // 如果还是空的，尝试从 modelSettings 获取
       if (definitions.length === 0) {
@@ -4373,10 +4467,7 @@ const __awaiter =
       }
 
       // 尝试多种路径获取动作组
-      let groups = motionManager.motionGroups
-        || motionManager.groups
-        || motionManager.definitions
-        || {};
+      let groups = motionManager.motionGroups || motionManager.groups || motionManager.definitions || {};
 
       // 如果是空对象，尝试从 modelSettings 获取
       if (Object.keys(groups).length === 0) {
@@ -4481,55 +4572,59 @@ const __awaiter =
     const _toastr = topWindow.toastr || toastr;
 
     // 上传按钮点击
-    _$(topWindow.document).off('click.live2dupload').on('click.live2dupload', '.gal-live2d-upload', async function() {
-      const characterId = _$(this).data('char-id');
+    _$(topWindow.document)
+      .off('click.live2dupload')
+      .on('click.live2dupload', '.gal-live2d-upload', async function () {
+        const characterId = _$(this).data('char-id');
 
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.zip';
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.zip';
 
-      input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        input.onchange = async e => {
+          const file = e.target.files[0];
+          if (!file) return;
 
-        const row = _$(topWindow.document).find(`.gal-live2d-row[data-char-id="${characterId}"]`);
-        const status = row.find('.gal-live2d-status');
+          const row = _$(topWindow.document).find(`.gal-live2d-row[data-char-id="${characterId}"]`);
+          const status = row.find('.gal-live2d-status');
 
-        try {
-          status.text('上传中...');
+          try {
+            status.text('上传中...');
 
-          await Live2DUploader.uploadZip(file, characterId);
+            await Live2DUploader.uploadZip(file, characterId);
 
-          _toastr.success(`Live2D 模型上传成功: ${characterId}`);
-          await updateLive2DRowState(characterId);
+            _toastr.success(`Live2D 模型上传成功: ${characterId}`);
+            await updateLive2DRowState(characterId);
 
-          if (Live2DManager.models.has(characterId)) {
-            Live2DManager.cleanup(characterId);
+            if (Live2DManager.models.has(characterId)) {
+              Live2DManager.cleanup(characterId);
+            }
+          } catch (err) {
+            console.error(`[${SCRIPT_NAME}] Live2D 上传失败:`, err);
+            _toastr.error(`上传失败: ${err.message}`);
+            status.text('上传失败');
           }
-        } catch (err) {
-          console.error(`[${SCRIPT_NAME}] Live2D 上传失败:`, err);
-          _toastr.error(`上传失败: ${err.message}`);
-          status.text('上传失败');
-        }
-      };
+        };
 
-      input.click();
-    });
+        input.click();
+      });
 
     // 远程URL按钮点击
-    _$(topWindow.document).off('click.live2durl').on('click.live2durl', '.gal-live2d-url', async function() {
-      const characterId = _$(this).data('char-id');
-      const exampleUrl = 'https://cdn.jsdelivr.net/gh/Eikanya/Live2d-model/Live2D/Senko_Normals/senko.model3.json';
+    _$(topWindow.document)
+      .off('click.live2durl')
+      .on('click.live2durl', '.gal-live2d-url', async function () {
+        const characterId = _$(this).data('char-id');
+        const exampleUrl = 'https://cdn.jsdelivr.net/gh/Eikanya/Live2d-model/Live2D/Senko_Normals/senko.model3.json';
 
-      let currentUrl = '';
-      try {
-        const existing = await getLive2DModel(characterId);
-        if (existing?.source === 'remote' && typeof existing.modelUrl === 'string') {
-          currentUrl = existing.modelUrl;
-        }
-      } catch (e) {}
+        let currentUrl = '';
+        try {
+          const existing = await getLive2DModel(characterId);
+          if (existing?.source === 'remote' && typeof existing.modelUrl === 'string') {
+            currentUrl = existing.modelUrl;
+          }
+        } catch (e) {}
 
-      const modalHtml = `
+        const modalHtml = `
         <div class="gal-live2d-remote-url-panel">
           <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
             输入 Live2D 的 <code>model3.json</code> / <code>model.json</code> URL：
@@ -4548,87 +4643,91 @@ const __awaiter =
         </div>
       `;
 
-      showCustomPopupPanel(`Live2D 远程URL - ${characterId}`, modalHtml);
+        showCustomPopupPanel(`Live2D 远程URL - ${characterId}`, modalHtml);
 
-      const mountRoot = getModalMountRoot();
-      const $popup = _$(mountRoot).find('#gal-custom-popup');
-      $popup.find('#gal-live2d-remote-url-input').val(currentUrl || '');
+        const mountRoot = getModalMountRoot();
+        const $popup = _$(mountRoot).find('#gal-custom-popup');
+        $popup.find('#gal-live2d-remote-url-input').val(currentUrl || '');
 
-      const closePopup = () => {
-        try {
-          $popup.remove();
-        } catch (e) {}
-      };
+        const closePopup = () => {
+          try {
+            $popup.remove();
+          } catch (e) {}
+        };
 
-      $popup.find('#gal-live2d-remote-url-cancel').on('click', closePopup);
-      $popup.find('#gal-live2d-remote-url-save').on('click', async () => {
-        const inputVal = $popup.find('#gal-live2d-remote-url-input').val();
-        const url = String(inputVal || '').trim();
-        const lowerUrl = url.toLowerCase();
+        $popup.find('#gal-live2d-remote-url-cancel').on('click', closePopup);
+        $popup.find('#gal-live2d-remote-url-save').on('click', async () => {
+          const inputVal = $popup.find('#gal-live2d-remote-url-input').val();
+          const url = String(inputVal || '').trim();
+          const lowerUrl = url.toLowerCase();
 
-        if (!url) {
-          _toastr.error('URL 不能为空');
-          return;
-        }
-        if (!(lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://'))) {
-          _toastr.error('URL 必须以 http:// 或 https:// 开头');
-          return;
-        }
-        if (!/\.json(\?|#|$)/i.test(url)) {
-          _toastr.warning('URL 看起来不是 .json 结尾（仍会尝试加载）');
-        }
-
-        try {
-          await saveLive2DModel({
-            modelId: characterId,
-            source: 'remote',
-            modelUrl: url,
-            uploadTime: Date.now(),
-            fileSize: 0,
-          });
-
-          _toastr.success(`Live2D 远程URL已保存: ${characterId}`);
-          await updateLive2DRowState(characterId);
-
-          if (Live2DManager.models.has(characterId)) {
-            Live2DManager.cleanup(characterId);
+          if (!url) {
+            _toastr.error('URL 不能为空');
+            return;
+          }
+          if (!(lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://'))) {
+            _toastr.error('URL 必须以 http:// 或 https:// 开头');
+            return;
+          }
+          if (!/\.json(\?|#|$)/i.test(url)) {
+            _toastr.warning('URL 看起来不是 .json 结尾（仍会尝试加载）');
           }
 
-          closePopup();
-        } catch (err) {
-          console.error(`[${SCRIPT_NAME}] Live2D 远程URL保存失败:`, err);
-          _toastr.error(`保存失败: ${err.message}`);
-        }
+          try {
+            await saveLive2DModel({
+              modelId: characterId,
+              source: 'remote',
+              modelUrl: url,
+              uploadTime: Date.now(),
+              fileSize: 0,
+            });
+
+            _toastr.success(`Live2D 远程URL已保存: ${characterId}`);
+            await updateLive2DRowState(characterId);
+
+            if (Live2DManager.models.has(characterId)) {
+              Live2DManager.cleanup(characterId);
+            }
+
+            closePopup();
+          } catch (err) {
+            console.error(`[${SCRIPT_NAME}] Live2D 远程URL保存失败:`, err);
+            _toastr.error(`保存失败: ${err.message}`);
+          }
+        });
       });
-    });
 
     // 删除按钮点击
-    _$(topWindow.document).off('click.live2ddelete').on('click.live2ddelete', '.gal-live2d-delete', async function() {
-      const characterId = _$(this).data('char-id');
+    _$(topWindow.document)
+      .off('click.live2ddelete')
+      .on('click.live2ddelete', '.gal-live2d-delete', async function () {
+        const characterId = _$(this).data('char-id');
 
-      if (!confirm(`确定删除角色 "${characterId}" 的 Live2D 模型吗？`)) return;
+        if (!confirm(`确定删除角色 "${characterId}" 的 Live2D 模型吗？`)) return;
 
-      try {
-        await deleteLive2DModel(characterId);
-        setCharacterUseLive2D(characterId, false);
-        Live2DManager.cleanup(characterId);
+        try {
+          await deleteLive2DModel(characterId);
+          setCharacterUseLive2D(characterId, false);
+          Live2DManager.cleanup(characterId);
 
-        _toastr.success('Live2D 模型已删除');
-        await updateLive2DRowState(characterId);
-      } catch (err) {
-        console.error(`[${SCRIPT_NAME}] Live2D 删除失败:`, err);
-        _toastr.error(`删除失败: ${err.message}`);
-      }
-    });
+          _toastr.success('Live2D 模型已删除');
+          await updateLive2DRowState(characterId);
+        } catch (err) {
+          console.error(`[${SCRIPT_NAME}] Live2D 删除失败:`, err);
+          _toastr.error(`删除失败: ${err.message}`);
+        }
+      });
 
     // 开关切换
-    _$(topWindow.document).off('change.live2dtoggle').on('change.live2dtoggle', '.gal-live2d-toggle', function() {
-      const characterId = _$(this).data('char-id');
-      const useLive2D = this.checked;
-      setCharacterUseLive2D(characterId, useLive2D);
+    _$(topWindow.document)
+      .off('change.live2dtoggle')
+      .on('change.live2dtoggle', '.gal-live2d-toggle', function () {
+        const characterId = _$(this).data('char-id');
+        const useLive2D = this.checked;
+        setCharacterUseLive2D(characterId, useLive2D);
 
-      console.log(`[${SCRIPT_NAME}] 角色 ${characterId} Live2D 模式: ${useLive2D ? '启用' : '禁用'}`);
-    });
+        console.log(`[${SCRIPT_NAME}] 角色 ${characterId} Live2D 模式: ${useLive2D ? '启用' : '禁用'}`);
+      });
 
     console.log(`[${SCRIPT_NAME}] Live2D 设置事件已绑定`);
   }
@@ -4699,7 +4798,7 @@ const __awaiter =
 
     getLoadingCount() {
       return this.loadingQueue.size;
-    }
+    },
   };
 
   // LOD 配置
@@ -4788,7 +4887,7 @@ const __awaiter =
         loadedModels: Live2DManager.models.size,
         loadingQueue: Live2DLazyLoader.loadingQueue.size,
       };
-    }
+    },
   };
 
   // 自动性能调节
@@ -4852,11 +4951,11 @@ const __awaiter =
 
     // ===== 缓存层 =====
     cache: {
-      sprites: new Map(),      // characterId_expression -> blobUrl
-      backgrounds: new Map(),  // sceneName -> blobUrl
-      segments: new Map(),     // mesId -> { currentIndex, segments }
-      voices: new Map(),       // 角色名 -> 音色名 (会话级)
-      parse: new Map(),        // 解析结果缓存
+      sprites: new Map(), // characterId_expression -> blobUrl
+      backgrounds: new Map(), // sceneName -> blobUrl
+      segments: new Map(), // mesId -> { currentIndex, segments }
+      voices: new Map(), // 角色名 -> 音色名 (会话级)
+      parse: new Map(), // 解析结果缓存
       dom: {
         $chatContainer: null,
         $globalOverlay: null,
@@ -4905,9 +5004,9 @@ const __awaiter =
 
     // ===== 图包状态 =====
     imagePack: {
-      currentPackId: null,  // 当前活动图包ID
+      currentPackId: null, // 当前活动图包ID
       renderScope: 'current', // 'current' | 'all' - 默认仅当前图包
-      packs: [],            // 图包列表缓存
+      packs: [], // 图包列表缓存
     },
 
     // ===== 存储 Keys 统一定义 =====
@@ -4980,7 +5079,9 @@ const __awaiter =
         try {
           const saved = localStorage.getItem(key);
           return saved ? JSON.parse(saved) : defaultValue;
-        } catch { return defaultValue; }
+        } catch {
+          return defaultValue;
+        }
       },
       set(key, value) {
         try {
@@ -5176,7 +5277,9 @@ const __awaiter =
   }
 
   function normalizeGptSoVitsSwitchMode(mode) {
-    const s = String(mode || '').trim().toLowerCase();
+    const s = String(mode || '')
+      .trim()
+      .toLowerCase();
     if (s === 'none' || s === 'off' || s === 'disabled') return 'none';
     if (s === 'set_model' || s === 'model') return 'set_model';
     return 'set_weights';
@@ -5241,23 +5344,51 @@ const __awaiter =
     if (!name) return null;
 
     const id =
-      String(raw.id || '').trim().replace(/[^\w\u4e00-\u9fff.-]+/g, '_') ||
-      _buildGptSoVitsModelId(name || `model_${index + 1}`);
+      String(raw.id || '')
+        .trim()
+        .replace(/[^\w\u4e00-\u9fff.-]+/g, '_') || _buildGptSoVitsModelId(name || `model_${index + 1}`);
     const enabled = raw.enabled !== false;
     const desc = String(raw.desc || raw.description || '').trim();
 
     const modelParams = {
       promptText: String(params.promptText || params.prompt_text || raw.promptText || raw.prompt_text || '').trim(),
-      promptLang: String(params.promptLang || params.prompt_lang || raw.promptLang || raw.prompt_lang || 'zh').trim() || 'zh',
-      textLang: String(params.textLang || params.text_lang || raw.textLang || raw.text_lang || globalDefaults.textLang || 'auto').trim() || 'auto',
+      promptLang:
+        String(params.promptLang || params.prompt_lang || raw.promptLang || raw.prompt_lang || 'zh').trim() || 'zh',
+      textLang:
+        String(
+          params.textLang || params.text_lang || raw.textLang || raw.text_lang || globalDefaults.textLang || 'auto',
+        ).trim() || 'auto',
       textSplitMethod:
-        String(params.textSplitMethod || params.text_split_method || raw.textSplitMethod || raw.text_split_method || globalDefaults.textSplitMethod || 'cut5').trim() || 'cut5',
-      speedFactor: _toFiniteNumber(params.speedFactor ?? params.speed_factor ?? raw.speedFactor ?? raw.speed_factor, _toFiniteNumber(globalDefaults.speedFactor, 1)),
-      mediaType: String(params.mediaType || params.media_type || raw.mediaType || raw.media_type || globalDefaults.mediaType || 'wav').trim() || 'wav',
-      streamingMode: !!(params.streamingMode ?? params.streaming_mode ?? raw.streamingMode ?? raw.streaming_mode ?? globalDefaults.streamingMode),
-      modelSwitchMode: normalizeGptSoVitsSwitchMode(params.modelSwitchMode || raw.modelSwitchMode || globalDefaults.modelSwitchMode || 'set_weights'),
+        String(
+          params.textSplitMethod ||
+            params.text_split_method ||
+            raw.textSplitMethod ||
+            raw.text_split_method ||
+            globalDefaults.textSplitMethod ||
+            'cut5',
+        ).trim() || 'cut5',
+      speedFactor: _toFiniteNumber(
+        params.speedFactor ?? params.speed_factor ?? raw.speedFactor ?? raw.speed_factor,
+        _toFiniteNumber(globalDefaults.speedFactor, 1),
+      ),
+      mediaType:
+        String(
+          params.mediaType || params.media_type || raw.mediaType || raw.media_type || globalDefaults.mediaType || 'wav',
+        ).trim() || 'wav',
+      streamingMode: !!(
+        params.streamingMode ??
+        params.streaming_mode ??
+        raw.streamingMode ??
+        raw.streaming_mode ??
+        globalDefaults.streamingMode
+      ),
+      modelSwitchMode: normalizeGptSoVitsSwitchMode(
+        params.modelSwitchMode || raw.modelSwitchMode || globalDefaults.modelSwitchMode || 'set_weights',
+      ),
       setModelEndpoint:
-        String(params.setModelEndpoint || raw.setModelEndpoint || globalDefaults.setModelEndpoint || '/set_model').trim() || '/set_model',
+        String(
+          params.setModelEndpoint || raw.setModelEndpoint || globalDefaults.setModelEndpoint || '/set_model',
+        ).trim() || '/set_model',
       strictWeightSwitch: !!(params.strictWeightSwitch ?? raw.strictWeightSwitch ?? globalDefaults.strictWeightSwitch),
     };
 
@@ -5265,10 +5396,14 @@ const __awaiter =
       String(paths.gptWeightsPath || paths.gpt_weights_path || raw.gptWeightsPath || raw.gpt_weights_path || '').trim(),
     );
     const sovitsWeightsPath = _normalizePathSep(
-      String(paths.sovitsWeightsPath || paths.sovits_weights_path || raw.sovitsWeightsPath || raw.sovits_weights_path || '').trim(),
+      String(
+        paths.sovitsWeightsPath || paths.sovits_weights_path || raw.sovitsWeightsPath || raw.sovits_weights_path || '',
+      ).trim(),
     );
     const defaultRefAudioPath = _normalizePathSep(
-      String(paths.defaultRefAudioPath || raw.defaultRefAudioPath || raw.refAudioPath || raw.ref_audio_path || '').trim(),
+      String(
+        paths.defaultRefAudioPath || raw.defaultRefAudioPath || raw.refAudioPath || raw.ref_audio_path || '',
+      ).trim(),
     );
 
     const refAudioCandidates = [
@@ -5414,8 +5549,11 @@ const __awaiter =
         speedFactor: _toFiniteNumber(params.speedFactor, _toFiniteNumber(globalCfg.speedFactor, 1)),
         mediaType: String(params.mediaType || globalCfg.mediaType || 'wav').trim() || 'wav',
         streamingMode: !!(params.streamingMode ?? globalCfg.streamingMode),
-        modelSwitchMode: normalizeGptSoVitsSwitchMode(params.modelSwitchMode || globalCfg.modelSwitchMode || 'set_weights'),
-        setModelEndpoint: String(params.setModelEndpoint || globalCfg.setModelEndpoint || '/set_model').trim() || '/set_model',
+        modelSwitchMode: normalizeGptSoVitsSwitchMode(
+          params.modelSwitchMode || globalCfg.modelSwitchMode || 'set_weights',
+        ),
+        setModelEndpoint:
+          String(params.setModelEndpoint || globalCfg.setModelEndpoint || '/set_model').trim() || '/set_model',
         strictWeightSwitch: !!(params.strictWeightSwitch ?? globalCfg.strictWeightSwitch),
       },
     };
@@ -5480,6 +5618,7 @@ const __awaiter =
       strictWeightSwitch: false,
       modelSwitchMode: 'set_weights', // set_weights(api_v2.py) | set_model(api.py) | none
       setModelEndpoint: '/set_model',
+      rootDir: '',
       importPathPrefix: '',
       voices: [],
       models: [],
@@ -5487,9 +5626,13 @@ const __awaiter =
 
     try {
       const cfg = settings?.gptSoVits || {};
+      const normalizedRootDir = _normalizePathSep(String(cfg.rootDir || cfg.importPathPrefix || '').trim());
+      const normalizedImportPrefix = _normalizePathSep(String(cfg.importPathPrefix || normalizedRootDir || '').trim());
       const merged = Object.assign(Object.assign({}, defaults), cfg, {
         modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || defaults.modelSwitchMode),
         setModelEndpoint: String(cfg.setModelEndpoint || defaults.setModelEndpoint).trim() || defaults.setModelEndpoint,
+        rootDir: normalizedRootDir || normalizedImportPrefix,
+        importPathPrefix: normalizedImportPrefix || normalizedRootDir,
         voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices,
         models: Array.isArray(cfg.models) ? cfg.models : defaults.models,
       });
@@ -5512,12 +5655,18 @@ const __awaiter =
     const name = String(voice.name || voice.voice || voice.speaker || '').trim();
     if (!name) return null;
 
-    const refAudioPath = _normalizePathSep(String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || '').trim());
+    const refAudioPath = _normalizePathSep(
+      String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || '').trim(),
+    );
     const promptText = String(voice.promptText || voice.prompt_text || '').trim();
     const promptLang = String(voice.promptLang || voice.prompt_lang || '').trim();
     const textLang = String(voice.textLang || voice.text_lang || '').trim();
-    const gptWeightsPath = _normalizePathSep(String(voice.gptWeightsPath || voice.gpt_weights_path || voice.gptPath || voice.gpt || '').trim());
-    const sovitsWeightsPath = _normalizePathSep(String(voice.sovitsWeightsPath || voice.sovits_weights_path || voice.sovitsPath || voice.sovits || '').trim());
+    const gptWeightsPath = _normalizePathSep(
+      String(voice.gptWeightsPath || voice.gpt_weights_path || voice.gptPath || voice.gpt || '').trim(),
+    );
+    const sovitsWeightsPath = _normalizePathSep(
+      String(voice.sovitsWeightsPath || voice.sovits_weights_path || voice.sovitsPath || voice.sovits || '').trim(),
+    );
     const desc = String(voice.desc || voice.description || '').trim();
 
     return {
@@ -5657,10 +5806,7 @@ const __awaiter =
       .replace(/\u2215/g, '/'); // division slash
 
     s = s.trim();
-    if (
-      (s.startsWith('"') && s.endsWith('"')) ||
-      (s.startsWith("'") && s.endsWith("'"))
-    ) {
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
       s = s.slice(1, -1).trim();
     }
 
@@ -5775,9 +5921,7 @@ const __awaiter =
 
   function _pickLargestFile(files) {
     if (!Array.isArray(files) || files.length === 0) return null;
-    return files
-      .slice()
-      .sort((a, b) => (b.size || 0) - (a.size || 0))[0];
+    return files.slice().sort((a, b) => (b.size || 0) - (a.size || 0))[0];
   }
 
   function _pickBestAudioFile(audioFiles) {
@@ -5797,7 +5941,9 @@ const __awaiter =
   }
 
   function _weightsStemKey(fileName) {
-    let stem = String(_stripFileExt(fileName) || '').toLowerCase().trim();
+    let stem = String(_stripFileExt(fileName) || '')
+      .toLowerCase()
+      .trim();
     if (!stem) return '';
 
     // 统一分隔符，便于在同目录里做 GPT/SoVITS 配对
@@ -5898,24 +6044,24 @@ const __awaiter =
       const promptText = audioFile ? _cleanPromptTextFromFilenameBase(_stripFileExt(audioFile.name)) : '';
       const inferredLang = promptText ? _inferLangFromText(promptText) : 'zh';
 
-      // 生成服务端路径（尽量使用 Electron 的绝对 path，否则用 webkitRelativePath 并补前缀）
+      // 只接受绝对路径：避免 importPathPrefix + 相对路径 造成“旧目录 + 新文件名”错配。
       const toServerPath = f => {
-        const abs = typeof f?.path === 'string' ? String(f.path) : '';
-        if (_isAbsoluteFsPath(abs)) return _normalizePathSep(abs);
-        const rel = _normalizePathSep(f?.webkitRelativePath || f?.name || '');
-        return _joinPathPrefix(importPathPrefix, rel);
+        const abs = _normalizePathSep(typeof f?.path === 'string' ? String(f.path) : '');
+        return _isAbsoluteFsPath(abs) ? abs : '';
       };
 
       const dirName = dirKey !== '__root__' ? dirKey.split('/').pop() : '';
       const weightCandidatesRaw = _collectWeightCandidates(ckpts, pths);
-      const weightCandidates = weightCandidatesRaw.length > 0 ? weightCandidatesRaw : [{ gptFile: null, sovitsFile: null }];
+      const weightCandidates =
+        weightCandidatesRaw.length > 0 ? weightCandidatesRaw : [{ gptFile: null, sovitsFile: null }];
       const groupNameUsed = new Set();
 
       for (const pair of weightCandidates) {
         const gptFile = pair.gptFile || null;
         const sovitsFile = pair.sovitsFile || null;
         const weightsBase = _stripFileExt((sovitsFile || gptFile || audioFile || {}).name || '');
-        const baseName = _cleanVoiceNameFromWeightsBase(weightsBase) || _cleanVoiceNameFromWeightsBase(dirName) || '新音色';
+        const baseName =
+          _cleanVoiceNameFromWeightsBase(weightsBase) || _cleanVoiceNameFromWeightsBase(dirName) || '新音色';
 
         let inferredName = baseName;
         let idx = 2;
@@ -5946,7 +6092,9 @@ const __awaiter =
   }
 
   function _inferExpressionTagFromAudioName(baseName) {
-    const name = String(baseName || '').trim().toLowerCase();
+    const name = String(baseName || '')
+      .trim()
+      .toLowerCase();
     if (!name) return '';
     const rules = [
       { tag: '开心', patterns: ['happy', 'smile', 'laugh', 'joy', '开心', '高兴', '喜悦', '愉快', '兴奋'] },
@@ -5962,13 +6110,25 @@ const __awaiter =
     return '';
   }
 
-  function inferGptSoVitsModelsFromFolderFiles(fileList, importPathPrefix = '') {
+  function inferGptSoVitsModelsFromFolderFiles(fileList, importPathPrefix = '', importOptions = {}) {
     const files = Array.from(fileList || []).filter(Boolean);
     if (files.length === 0) return [];
+    const normalizedImportPrefix = _normalizePathSep(String(importPathPrefix || '').trim());
+    const rootHintRaw = String(importOptions?.relativeRootName || '').trim();
+    const normalizedRootHint = _normalizePathSep(rootHintRaw).replace(/^[\\/]+|[\\/]+$/g, '');
+    const normalizeRelativePath = file => {
+      let rel = _normalizePathSep(String(file?.webkitRelativePath || file?.name || '').trim()).replace(/^[\\/]+/, '');
+      if (!rel) return '';
+      if (!normalizedRootHint) return rel;
+      const lowerRel = rel.toLowerCase();
+      const lowerRoot = normalizedRootHint.toLowerCase();
+      if (lowerRel === lowerRoot || lowerRel.startsWith(`${lowerRoot}/`)) return rel;
+      return `${normalizedRootHint}/${rel}`;
+    };
 
     const groups = new Map(); // dir -> File[]
     for (const f of files) {
-      const rel = _normalizePathSep(f.webkitRelativePath || f.name || '');
+      const rel = normalizeRelativePath(f);
       const dir = rel.split('/').slice(0, -1).join('/');
       const key = dir || '__root__';
       if (!groups.has(key)) groups.set(key, []);
@@ -5992,11 +6152,16 @@ const __awaiter =
 
       if (ckpts.length === 0 && pths.length === 0 && audios.length === 0) continue;
 
+      // 绝对路径优先；浏览器目录选择器拿不到绝对路径时，回退到相对路径 + prefix。
       const toServerPath = f => {
-        const abs = typeof f?.path === 'string' ? String(f.path) : '';
-        if (_isAbsoluteFsPath(abs)) return _normalizePathSep(abs);
-        const rel = _normalizePathSep(f?.webkitRelativePath || f?.name || '');
-        return _joinPathPrefix(importPathPrefix, rel);
+        const abs = _normalizePathSep(typeof f?.path === 'string' ? String(f.path) : '');
+        if (_isAbsoluteFsPath(abs)) return abs;
+
+        const rel = normalizeRelativePath(f);
+        if (!rel) return '';
+
+        const prefixed = _normalizePathSep(_joinPathPrefix(normalizedImportPrefix, rel));
+        return prefixed || rel;
       };
 
       const audioCandidates = audios
@@ -6009,7 +6174,8 @@ const __awaiter =
         .filter(item => !!item.file);
       const bestAudio = _pickBestAudioFile(audios);
       const weightCandidatesRaw = _collectWeightCandidates(ckpts, pths);
-      const weightCandidates = weightCandidatesRaw.length > 0 ? weightCandidatesRaw : [{ gptFile: null, sovitsFile: null }];
+      const weightCandidates =
+        weightCandidatesRaw.length > 0 ? weightCandidatesRaw : [{ gptFile: null, sovitsFile: null }];
       const dirName = dirKey !== '__root__' ? dirKey.split('/').pop() : '';
       const groupNameUsed = new Set();
 
@@ -6017,7 +6183,8 @@ const __awaiter =
         const gptFile = pair.gptFile || null;
         const sovitsFile = pair.sovitsFile || null;
         const weightsBase = _stripFileExt((sovitsFile || gptFile || bestAudio || {}).name || '');
-        const baseName = _cleanVoiceNameFromWeightsBase(weightsBase) || _cleanVoiceNameFromWeightsBase(dirName) || '新模型';
+        const baseName =
+          _cleanVoiceNameFromWeightsBase(weightsBase) || _cleanVoiceNameFromWeightsBase(dirName) || '新模型';
 
         let modelName = baseName;
         let idx = 2;
@@ -6091,6 +6258,271 @@ const __awaiter =
     return _normalizeGptSoVitsModelsForStore(models, cfg);
   }
 
+  const GPT_SOVITS_AUTO_IMPORT_GPT_DIRS = [
+    'GPT_weights',
+    'GPT_weights_v2',
+    'GPT_weights_v2Pro',
+    'GPT_weights_v2ProPlus',
+    'GPT_weights_v3',
+    'GPT_weights_v4',
+  ];
+  const GPT_SOVITS_AUTO_IMPORT_SOVITS_DIRS = [
+    'SoVITS_weights',
+    'SoVITS_weights_v2',
+    'SoVITS_weights_v2Pro',
+    'SoVITS_weights_v2ProPlus',
+    'SoVITS_weights_v3',
+    'SoVITS_weights_v4',
+  ];
+  let _gptSoVitsRootAutoImportFsWarned = false;
+
+  function _getNodeFsBridge() {
+    const hostList = [];
+    try {
+      hostList.push(window);
+    } catch (e) {}
+    try {
+      const host = typeof window.parent !== 'undefined' ? window.parent : window;
+      if (host && !hostList.includes(host)) hostList.push(host);
+    } catch (e) {}
+
+    for (const host of hostList) {
+      const req = typeof host?.require === 'function' ? host.require : null;
+      if (!req) continue;
+      try {
+        const fs = req('fs');
+        const fsp = fs?.promises || req('fs/promises');
+        const path = req('path');
+        if (fsp && path) {
+          return { fsp, path };
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  async function _walkNodeFsCollectByExt(fsp, pathModule, baseDir, expectedExt) {
+    const out = [];
+    const stack = [String(baseDir || '').trim()];
+    const visited = new Set();
+    while (stack.length > 0) {
+      const current = String(stack.pop() || '').trim();
+      if (!current) continue;
+      const currentKey = _normalizePathSep(current).toLowerCase();
+      if (visited.has(currentKey)) continue;
+      visited.add(currentKey);
+
+      let entries = [];
+      try {
+        entries = await fsp.readdir(current, { withFileTypes: true });
+      } catch (e) {
+        continue;
+      }
+
+      for (const entry of entries) {
+        const name = String(entry?.name || '').trim();
+        if (!name) continue;
+        const full = pathModule.join(current, name);
+        if (entry?.isDirectory?.()) {
+          stack.push(full);
+          continue;
+        }
+        if (!entry?.isFile?.()) continue;
+        if (_getFileExtLower(name) !== expectedExt) continue;
+        out.push({
+          name,
+          path: _normalizePathSep(full),
+        });
+      }
+    }
+    return out;
+  }
+
+  async function inferGptSoVitsModelsFromRootDir(rootDirInput = '') {
+    const rootDir = _normalizePathSep(String(rootDirInput || '').trim());
+    if (!rootDir) {
+      return { models: [], rootDir, totalWeightFiles: 0, error: 'empty-root' };
+    }
+
+    const bridge = _getNodeFsBridge();
+    if (!bridge?.fsp || !bridge?.path) {
+      return { models: [], rootDir, totalWeightFiles: 0, error: 'fs-unavailable' };
+    }
+
+    const { fsp, path: pathModule } = bridge;
+    const rootNative = pathModule.resolve(pathModule.sep === '\\' ? rootDir.replace(/\//g, '\\') : rootDir);
+
+    try {
+      const stat = await fsp.stat(rootNative);
+      if (!stat?.isDirectory?.()) {
+        return { models: [], rootDir, totalWeightFiles: 0, error: 'root-not-found' };
+      }
+    } catch (e) {
+      return { models: [], rootDir, totalWeightFiles: 0, error: 'root-not-found' };
+    }
+
+    const collectFromSubDirs = async (subDirs, expectedExt, kind) => {
+      const all = [];
+      for (const subDirName of subDirs) {
+        const abs = pathModule.join(rootNative, subDirName);
+        const files = await _walkNodeFsCollectByExt(fsp, pathModule, abs, expectedExt);
+        files.forEach(file => {
+          all.push(
+            Object.assign({}, file, {
+              kind,
+              folder: subDirName,
+              baseName: _stripFileExt(file.name),
+            }),
+          );
+        });
+      }
+      return all;
+    };
+
+    const [gptFiles, sovitsFiles] = await Promise.all([
+      collectFromSubDirs(GPT_SOVITS_AUTO_IMPORT_GPT_DIRS, 'ckpt', 'gpt'),
+      collectFromSubDirs(GPT_SOVITS_AUTO_IMPORT_SOVITS_DIRS, 'pth', 'sovits'),
+    ]);
+
+    const pairMap = new Map();
+    const addToPairMap = (file, field) => {
+      const key = String(file?.baseName || '')
+        .trim()
+        .toLowerCase();
+      if (!key) return;
+      if (!pairMap.has(key)) {
+        pairMap.set(key, {
+          baseName: String(file.baseName || '').trim(),
+          gpt: [],
+          sovits: [],
+        });
+      }
+      pairMap.get(key)[field].push(file);
+    };
+
+    gptFiles.forEach(file => addToPairMap(file, 'gpt'));
+    sovitsFiles.forEach(file => addToPairMap(file, 'sovits'));
+
+    const cfg = getGptSoVitsConfig();
+    const discovered = [];
+    const usedNames = new Set();
+
+    Array.from(pairMap.values())
+      .sort((a, b) => String(a.baseName || '').localeCompare(String(b.baseName || ''), 'zh-Hans-CN'))
+      .forEach((pairGroup, groupIndex) => {
+        const gptList = _safeArray(pairGroup.gpt).sort((a, b) =>
+          String(a?.path || '').localeCompare(String(b?.path || ''), 'en'),
+        );
+        const sovitsList = _safeArray(pairGroup.sovits).sort((a, b) =>
+          String(a?.path || '').localeCompare(String(b?.path || ''), 'en'),
+        );
+        const count = Math.max(gptList.length, sovitsList.length, 1);
+
+        for (let i = 0; i < count; i++) {
+          const gptFile = gptList[i] || gptList[0] || null;
+          const sovitsFile = sovitsList[i] || sovitsList[0] || null;
+          if (!gptFile && !sovitsFile) continue;
+
+          const baseName = _cleanVoiceNameFromWeightsBase(pairGroup.baseName) || pairGroup.baseName || '模型';
+          let modelName = baseName;
+          let seq = 2;
+          while (usedNames.has(modelName.toLowerCase())) {
+            modelName = `${baseName}_${seq++}`;
+          }
+          usedNames.add(modelName.toLowerCase());
+
+          const normalized = _normalizeGptSoVitsModel(
+            {
+              id: _buildGptSoVitsModelId(modelName),
+              name: modelName,
+              enabled: true,
+              desc: '根目录自动导入',
+              paths: {
+                gptWeightsPath: _normalizePathSep(String(gptFile?.path || '').trim()),
+                sovitsWeightsPath: _normalizePathSep(String(sovitsFile?.path || '').trim()),
+                defaultRefAudioPath: '',
+              },
+              params: {
+                promptText: '',
+                promptLang: 'zh',
+                textLang: cfg.textLang || 'auto',
+                textSplitMethod: cfg.textSplitMethod || 'cut5',
+                speedFactor: _toFiniteNumber(cfg.speedFactor, 1),
+                mediaType: cfg.mediaType || 'wav',
+                streamingMode: !!cfg.streamingMode,
+                modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || 'set_weights'),
+                setModelEndpoint: String(cfg.setModelEndpoint || '/set_model').trim() || '/set_model',
+                strictWeightSwitch: !!cfg.strictWeightSwitch,
+              },
+              refAudios: [],
+              defaultRefId: '',
+              expressionRefMap: {},
+            },
+            cfg,
+            groupIndex + i,
+          );
+          if (normalized) discovered.push(normalized);
+        }
+      });
+
+    return {
+      models: _normalizeGptSoVitsModelsForStore(discovered, cfg),
+      rootDir: _normalizePathSep(rootNative),
+      totalWeightFiles: gptFiles.length + sovitsFiles.length,
+      error: '',
+    };
+  }
+
+  function mergeAutoImportedGptSoVitsModels(currentModels, discoveredModels, cfg = getGptSoVitsConfig()) {
+    const next = _normalizeGptSoVitsModelsForStore(_safeArray(currentModels), cfg);
+    let added = 0;
+    let updated = 0;
+
+    _safeArray(discoveredModels).forEach(item => {
+      const incoming = _normalizeGptSoVitsModel(item, cfg, 0);
+      if (!incoming) return;
+      const incomingName = String(incoming.name || '')
+        .trim()
+        .toLowerCase();
+      if (!incomingName) return;
+
+      const index = next.findIndex(model => String(model?.name || '').trim().toLowerCase() === incomingName);
+      if (index < 0) {
+        next.push(incoming);
+        added += 1;
+        return;
+      }
+
+      const current = next[index];
+      const prevGpt = String(current?.paths?.gptWeightsPath || '').trim();
+      const prevSovits = String(current?.paths?.sovitsWeightsPath || '').trim();
+      const nextGpt = String(incoming?.paths?.gptWeightsPath || '').trim() || prevGpt;
+      const nextSovits = String(incoming?.paths?.sovitsWeightsPath || '').trim() || prevSovits;
+
+      if (nextGpt === prevGpt && nextSovits === prevSovits) return;
+
+      next[index] = _normalizeGptSoVitsModel(
+        Object.assign({}, current, {
+          desc: String(current?.desc || '').trim() || String(incoming?.desc || '').trim(),
+          paths: Object.assign({}, _safeObject(current.paths), {
+            gptWeightsPath: nextGpt,
+            sovitsWeightsPath: nextSovits,
+          }),
+        }),
+        cfg,
+        index,
+      );
+      updated += 1;
+    });
+
+    return {
+      models: _normalizeGptSoVitsModelsForStore(next, cfg),
+      added,
+      updated,
+      changed: added > 0 || updated > 0,
+    };
+  }
+
   // 缓存 LittleWhiteBox TTS 数据
   let _lwbTtsCache = null;
   let _lwbTtsCacheTime = 0;
@@ -6124,7 +6556,7 @@ const __awaiter =
 
     // 1. 优先从服务器文件获取（最可靠的方式）
     const now = Date.now();
-    if (!_lwbTtsCache || (now - _lwbTtsCacheTime) > LWB_TTS_CACHE_MS) {
+    if (!_lwbTtsCache || now - _lwbTtsCacheTime > LWB_TTS_CACHE_MS) {
       const mySpeakers = await fetchLittleWhiteBoxTTSConfig();
       if (mySpeakers && mySpeakers.length > 0) {
         _lwbTtsCache = mySpeakers.map(s => ({
@@ -6132,7 +6564,7 @@ const __awaiter =
           value: s.value,
           source: s.source || (isFreeVoice(s.value) ? 'free' : 'auth'),
           resourceId: s.resourceId || inferResourceId(s.value),
-          desc: getVoiceDesc(s.value)
+          desc: getVoiceDesc(s.value),
         }));
         _lwbTtsCacheTime = now;
         return _lwbTtsCache;
@@ -6152,7 +6584,7 @@ const __awaiter =
           value: s.value,
           source: s.source || (isFreeVoice(s.value) ? 'free' : 'auth'),
           resourceId: s.resourceId || inferResourceId(s.value),
-          desc: getVoiceDesc(s.value)
+          desc: getVoiceDesc(s.value),
         }));
       }
     }
@@ -6164,7 +6596,7 @@ const __awaiter =
         value: v.value,
         source: inferSource(v.value),
         resourceId: inferResourceId(v.value),
-        desc: v.scene || '预设音色'
+        desc: v.scene || '预设音色',
       }));
     }
 
@@ -6198,7 +6630,7 @@ const __awaiter =
           value: s.value,
           source: s.source || (isFreeVoice(s.value) ? 'free' : 'auth'),
           resourceId: s.resourceId || inferResourceId(s.value),
-          desc: getVoiceDesc(s.value)
+          desc: getVoiceDesc(s.value),
         }));
       }
     }
@@ -6210,7 +6642,7 @@ const __awaiter =
         value: v.value,
         source: inferSource(v.value),
         resourceId: inferResourceId(v.value),
-        desc: v.scene || '预设音色'
+        desc: v.scene || '预设音色',
       }));
     }
 
@@ -6222,8 +6654,19 @@ const __awaiter =
    * 判断是否为免费音色
    */
   function isFreeVoice(value) {
-    const freeVoices = ['female_1', 'female_2', 'female_3', 'female_4', 'female_5', 'female_6', 'female_7',
-                        'male_1', 'male_2', 'male_3', 'male_4'];
+    const freeVoices = [
+      'female_1',
+      'female_2',
+      'female_3',
+      'female_4',
+      'female_5',
+      'female_6',
+      'female_7',
+      'male_1',
+      'male_2',
+      'male_3',
+      'male_4',
+    ];
     return freeVoices.includes(value);
   }
 
@@ -6256,10 +6699,17 @@ const __awaiter =
    */
   function getVoiceDesc(value) {
     const descMap = {
-      'female_1': '温柔少女(免费)', 'female_2': '清冷女声(免费)', 'female_3': '成熟御姐(免费)',
-      'female_4': '元气少女(免费)', 'female_5': '甜美声线(免费)', 'female_6': '邻家女孩(免费)',
-      'female_7': '活泼萝莉(免费)', 'male_1': '沉稳男声(免费)', 'male_2': '儒雅公子(免费)',
-      'male_3': '阳光少年(免费)', 'male_4': '磁性低音(免费)'
+      female_1: '温柔少女(免费)',
+      female_2: '清冷女声(免费)',
+      female_3: '成熟御姐(免费)',
+      female_4: '元气少女(免费)',
+      female_5: '甜美声线(免费)',
+      female_6: '邻家女孩(免费)',
+      female_7: '活泼萝莉(免费)',
+      male_1: '沉稳男声(免费)',
+      male_2: '儒雅公子(免费)',
+      male_3: '阳光少年(免费)',
+      male_4: '磁性低音(免费)',
     };
     return descMap[value] || '自定义音色';
   }
@@ -6288,31 +6738,54 @@ const __awaiter =
    * @param {string} voiceName - 音色显示名称（如"呆萌川妹"）
    * @returns {Promise<{name: string, value: string, source: string, resourceId: string|null}|null>}
    */
+  function normalizeVoiceNameForLookup(voiceName) {
+    let name = String(voiceName || '').trim();
+    if (!name) return '';
+
+    // 兼容旧提示词/回复里出现的 "音色名(文件夹导入)"、"音色名（备注）" 形式
+    for (let i = 0; i < 3; i++) {
+      const next = name.replace(/\s*[（(][^()（）]{1,40}[)）]\s*$/u, '').trim();
+      if (next === name) break;
+      name = next;
+    }
+    return name;
+  }
+
   async function resolveVoiceByName(voiceName) {
-    if (!voiceName) return null;
+    const requestedName = String(voiceName || '').trim();
+    if (!requestedName) return null;
 
     // 获取所有可用音色
     const voiceList = await getTTSVoiceListAsync();
 
     // 1. 先按名称查找
-    let voice = voiceList.find(v => v.name === voiceName);
+    let voice = voiceList.find(v => v.name === requestedName);
     if (voice) return voice;
 
     // 2. 如果已经是 value，直接返回
-    voice = voiceList.find(v => v.value === voiceName);
+    voice = voiceList.find(v => v.value === requestedName);
     if (voice) return voice;
 
-    // 3. 未找到：按 provider 决定是否允许回退
+    // 3. 兼容带备注后缀（如 "高松灯(文件夹导入)"）的写法
+    const normalizedName = normalizeVoiceNameForLookup(requestedName);
+    if (normalizedName && normalizedName !== requestedName) {
+      voice = voiceList.find(v => v.name === normalizedName);
+      if (voice) return voice;
+      voice = voiceList.find(v => v.value === normalizedName);
+      if (voice) return voice;
+    }
+
+    // 4. 未找到：按 provider 决定是否允许回退
     const provider = getTTSProvider();
     if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
-      console.warn(`[${SCRIPT_NAME}] 未找到 GPT-SoVITS 音色 "${voiceName}"`);
+      console.warn(`[${SCRIPT_NAME}] 未找到 GPT-SoVITS 音色 "${requestedName}"`);
       return null;
     }
 
-    // LittleWhiteBox：回退到默认免费音色
+    // 5. LittleWhiteBox：回退到默认免费音色
     const defaultVoice = voiceList[0];
     if (defaultVoice) {
-      console.warn(`[${SCRIPT_NAME}] 未找到音色 "${voiceName}"，使用默认: ${defaultVoice.name}`);
+      console.warn(`[${SCRIPT_NAME}] 未找到音色 "${requestedName}"，使用默认: ${defaultVoice.name}`);
       return defaultVoice;
     }
 
@@ -6322,7 +6795,7 @@ const __awaiter =
   // 为了保持兼容性，保留 TTS_VOICE_LIST 作为 getter
   Object.defineProperty(window, 'TTS_VOICE_LIST', {
     get: getTTSVoiceList,
-    configurable: true
+    configurable: true,
   });
 
   // CHAR_TTS_VOICE_KEY 和 TTS_ENABLED_KEY 已移至 GalgameStore.STORAGE_KEYS（兼容代理层）
@@ -6342,7 +6815,7 @@ const __awaiter =
   }
 
   /**
-   * 设置TTS启用状态
+   * 设置Tcons启用状态
    * @param {boolean} enabled - 是否启用
    */
   function setTTSEnabled(enabled) {
@@ -6419,7 +6892,8 @@ const __awaiter =
 
       // 构建TTS音色列表（异步获取）
       const ttsVoiceList = yield getTTSVoiceListAsync();
-      const ttsVoiceListText = ttsVoiceList.map(v => `${v.name}(${v.desc})`).join(', ');
+      const ttsVoiceNames = Array.from(new Set(ttsVoiceList.map(v => String(v?.name || '').trim()).filter(Boolean)));
+      const ttsVoiceListText = ttsVoiceNames.length > 0 ? ttsVoiceNames.join(', ') : '（暂无可用音色）';
 
       // 获取角色音色绑定
       const charVoiceMap = getAllCharacterTTSVoices();
@@ -6754,14 +7228,14 @@ ${extraRule}
 
   // 生成状态追踪 - 多维度验证
   const generationState = {
-    isGenerating: false,      // 是否正在生成
-    startTime: 0,             // 生成开始时间
-    lastMessageId: null,      // 上次处理的消息ID
-    pendingMessageId: null,   // 等待生成的消息ID
-    verificationTimer: null,  // 验证定时器
+    isGenerating: false, // 是否正在生成
+    startTime: 0, // 生成开始时间
+    lastMessageId: null, // 上次处理的消息ID
+    pendingMessageId: null, // 等待生成的消息ID
+    verificationTimer: null, // 验证定时器
   };
   const GENERATION_TIMEOUT_MS = 120000; // 2分钟超时保护
-  const VERIFICATION_DELAY_MS = 2000;   // 验证延迟（等待消息同步）
+  const VERIFICATION_DELAY_MS = 2000; // 验证延迟（等待消息同步）
 
   /**
    * 重置生成状态 - 多维度验证失败后的安全重置
@@ -6802,7 +7276,9 @@ ${extraRule}
    * 结合 MESSAGE_RECEIVED 和 SillyTavern 状态验证
    */
   function verifyGenerationComplete(messageId) {
-    console.log(`[${SCRIPT_NAME}] 验证生成完成 - messageId: ${messageId}, pendingId: ${generationState.pendingMessageId}`);
+    console.log(
+      `[${SCRIPT_NAME}] 验证生成完成 - messageId: ${messageId}, pendingId: ${generationState.pendingMessageId}`,
+    );
 
     // 如果当前没有等待的生成，忽略
     if (!generationState.isGenerating && !isGeneratingResponse) {
@@ -6927,6 +7403,7 @@ ${extraRule}
       strictWeightSwitch: false, // true=切权重失败即中断播放；false=失败时继续使用当前模型
       modelSwitchMode: 'set_weights', // set_weights(api_v2.py) | set_model(api.py) | none
       setModelEndpoint: '/set_model', // modelSwitchMode=set_model 时使用
+      rootDir: '', // GPT-SoVITS 本地根目录（用于自动扫描权重）
       importPathPrefix: '', // 服务端路径前缀/根目录（用于解析相对路径；可为空）
       models: [], // 新结构：模型配置列表（含三大件/参数/参考音频映射）
       voices: [], // [{ name, desc?, refAudioPath, promptText?, promptLang?, textLang? }]
@@ -7303,7 +7780,9 @@ ${extraRule}
       try {
         // 方式0: 停止当前 audio（GPT-SoVITS 或其他自建播放）
         if (this.currentAudio && typeof this.currentAudio.pause === 'function') {
-          try { this.currentAudio.pause(); } catch (e) {}
+          try {
+            this.currentAudio.pause();
+          } catch (e) {}
           try {
             this.currentAudio.src = '';
             if (typeof this.currentAudio.load === 'function') this.currentAudio.load();
@@ -7510,11 +7989,25 @@ ${extraRule}
       return /failed to fetch|networkerror|cors|forbiddenerror|invalid csrf token|blocked/i.test(msg);
     },
 
-    _isLikelyGptSoVitsTtsPayloadError(message) {
+    _isGptSoVitsRefAudioDurationError(message) {
       const msg = String(message || '').toLowerCase();
       return (
-        /http\s*400|http400|bad request|unprocessable|422|validation|value_error|required field|field required/.test(msg) ||
-        /text_lang|prompt_lang|ref_audio_path|refer_audio_path|prompt_text|media_type|streaming_mode|text_split_method/.test(msg)
+        /参考音频.*(3\s*[-~]\s*10|3到10|3-10).*秒/.test(msg) ||
+        /reference audio.*(3\s*[-~]\s*10|3 to 10).*seconds?/.test(msg) ||
+        /outside.*3\s*[-~]\s*10.*seconds?/.test(msg)
+      );
+    },
+
+    _isLikelyGptSoVitsTtsPayloadError(message) {
+      if (this._isGptSoVitsRefAudioDurationError(message)) return false;
+      const msg = String(message || '').toLowerCase();
+      return (
+        /http\s*400|http400|bad request|unprocessable|422|validation|value_error|required field|field required/.test(
+          msg,
+        ) ||
+        /text_lang|prompt_lang|ref_audio_path|refer_audio_path|prompt_text|media_type|streaming_mode|text_split_method/.test(
+          msg,
+        )
       );
     },
 
@@ -7903,7 +8396,9 @@ ${extraRule}
 
       if (!this._gptSoVitsProxyWarned) {
         this._gptSoVitsProxyWarned = true;
-        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 未检测到代理 helper，音频将尝试使用酒馆 /proxy（若不可用再回退直连）`);
+        console.warn(
+          `[${SCRIPT_NAME}] GPT-SoVITS: 未检测到代理 helper，音频将尝试使用酒馆 /proxy（若不可用再回退直连）`,
+        );
       }
 
       // 无 helper/无记忆链路时，默认尝试酒馆 /proxy（与 _requestGptSoVitsApi 的候选链路对齐）
@@ -7937,7 +8432,10 @@ ${extraRule}
 
     async _requestGptSoVitsApi(method, pathname, queryParams = {}, jsonBody = undefined, playbackSessionId = null) {
       const cfg = getGptSoVitsConfig();
-      const httpMethod = String(method || 'GET').trim().toUpperCase() || 'GET';
+      const httpMethod =
+        String(method || 'GET')
+          .trim()
+          .toUpperCase() || 'GET';
       const directUrl = this._buildGptSoVitsApiUrl(pathname, httpMethod === 'GET' ? queryParams : {});
       if (!directUrl) throw new Error('invalid apiUrl');
 
@@ -8109,9 +8607,11 @@ ${extraRule}
         } catch (e) {
           if (e?.name === 'AbortError') throw e;
           lastError = e;
-          const msg = String(e?.message || e || '').replace(/\s+/g, ' ').trim();
-          const canRetry =
-            i < variants.length - 1 && this._isLikelyGptSoVitsTtsPayloadError(msg);
+          const msg = String(e?.message || e || '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (this._isGptSoVitsRefAudioDurationError(msg)) break;
+          const canRetry = i < variants.length - 1 && this._isLikelyGptSoVitsTtsPayloadError(msg);
           if (!canRetry) break;
           if (i === 0) {
             console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: /tts 参数兼容重试已启用（text_lang/payload fallback）`);
@@ -8256,7 +8756,9 @@ ${extraRule}
         null;
 
       const fallback = {
-        refAudioPath: String(vcfg.refAudioPath || defaultRef?.path || modelCfg?.paths?.defaultRefAudioPath || '').trim(),
+        refAudioPath: String(
+          vcfg.refAudioPath || defaultRef?.path || modelCfg?.paths?.defaultRefAudioPath || '',
+        ).trim(),
         promptText: basePromptText,
         promptLang: basePromptLang,
         textLang: baseTextLang,
@@ -8316,9 +8818,17 @@ ${extraRule}
       const vcfg = resolvedVoice?.gptSoVits || {};
       const modelParams = modelCfg?.params || {};
       const modelPaths = modelCfg?.paths || {};
-      const strictWeightSwitch = !!(vcfg.strictWeightSwitch ?? modelParams.strictWeightSwitch ?? cfg.strictWeightSwitch);
-      const switchMode = normalizeGptSoVitsSwitchMode(vcfg.modelSwitchMode || modelParams.modelSwitchMode || cfg.modelSwitchMode);
-      const setModelEndpoint = String(vcfg.setModelEndpoint || modelParams.setModelEndpoint || cfg.setModelEndpoint || '/set_model').trim() || '/set_model';
+      const strictWeightSwitch = !!(
+        vcfg.strictWeightSwitch ??
+        modelParams.strictWeightSwitch ??
+        cfg.strictWeightSwitch
+      );
+      const switchMode = normalizeGptSoVitsSwitchMode(
+        vcfg.modelSwitchMode || modelParams.modelSwitchMode || cfg.modelSwitchMode,
+      );
+      const setModelEndpoint =
+        String(vcfg.setModelEndpoint || modelParams.setModelEndpoint || cfg.setModelEndpoint || '/set_model').trim() ||
+        '/set_model';
       const desiredGptRaw = String(vcfg.gptWeightsPath || modelPaths.gptWeightsPath || '').trim();
       const desiredSovitsRaw = String(vcfg.sovitsWeightsPath || modelPaths.sovitsWeightsPath || '').trim();
       const desiredGpt = this._resolveGptSoVitsServerPath(desiredGptRaw, cfg);
@@ -8339,8 +8849,7 @@ ${extraRule}
         if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
         const failures = [];
         const trySetModelFallback = async triggerMsg => {
-          const canFallback =
-            switchMode === 'set_weights' && !!desiredGpt && !!desiredSovits && !strictWeightSwitch;
+          const canFallback = switchMode === 'set_weights' && !!desiredGpt && !!desiredSovits && !strictWeightSwitch;
           if (!canFallback) return false;
 
           const msg = String(triggerMsg || '');
@@ -8428,7 +8937,9 @@ ${extraRule}
         }
 
         if (switchMode === 'set_model' && (!desiredGpt || !desiredSovits)) {
-          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: modelSwitchMode=set_model 但音色缺少双权重路径，回退 set_weights 逻辑`);
+          console.warn(
+            `[${SCRIPT_NAME}] GPT-SoVITS: modelSwitchMode=set_model 但音色缺少双权重路径，回退 set_weights 逻辑`,
+          );
         }
 
         if (desiredGpt && desiredGpt !== this._gptSoVitsActiveWeights.gpt) {
@@ -8523,10 +9034,13 @@ ${extraRule}
       // ★ GPT-SoVITS 的 /set_* 与 /tts 都会改变服务端“全局状态”，必须串行，避免多段落/多角色并发抢模型
       const ensureWeightsPromise = this._ensureGptSoVitsWeights(resolvedVoice, playbackSessionId);
 
-      const textLang = String(refProfile.textLang || vcfg.textLang || modelParams.textLang || cfg.textLang || 'auto').trim() || 'auto';
-      const promptLang = String(refProfile.promptLang || vcfg.promptLang || modelParams.promptLang || 'zh').trim() || 'zh';
+      const textLang =
+        String(refProfile.textLang || vcfg.textLang || modelParams.textLang || cfg.textLang || 'auto').trim() || 'auto';
+      const promptLang =
+        String(refProfile.promptLang || vcfg.promptLang || modelParams.promptLang || 'zh').trim() || 'zh';
       const promptText = String(refProfile.promptText || vcfg.promptText || modelParams.promptText || '').trim();
-      const activeTextSplitMethod = String(vcfg.textSplitMethod || modelParams.textSplitMethod || cfg.textSplitMethod || 'cut5').trim() || 'cut5';
+      const activeTextSplitMethod =
+        String(vcfg.textSplitMethod || modelParams.textSplitMethod || cfg.textSplitMethod || 'cut5').trim() || 'cut5';
       const activeMediaType = String(vcfg.mediaType || modelParams.mediaType || cfg.mediaType || 'wav').trim() || 'wav';
       const activeSpeedFactor = _toFiniteNumber(vcfg.speedFactor ?? modelParams.speedFactor ?? cfg.speedFactor, 1);
       const requestedStreaming = !!(vcfg.streamingMode ?? modelParams.streamingMode ?? cfg.streamingMode);
@@ -8561,10 +9075,16 @@ ${extraRule}
         }, playbackSessionId);
       } catch (e) {
         if (e?.name === 'AbortError') return false;
-        const msg = String(e?.message || e || '').replace(/\s+/g, ' ').trim();
-        if (/ref_audio_path.*not exists|not exists|no such file or directory|系统找不到指定的文件|找不到文件/i.test(msg)) {
+        const msg = String(e?.message || e || '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (
+          /ref_audio_path.*not exists|not exists|no such file or directory|系统找不到指定的文件|找不到文件/i.test(msg)
+        ) {
           const briefPath = refAudioPath.length > 96 ? `${refAudioPath.slice(0, 96)}...` : refAudioPath;
           showToast(`GPT-SoVITS: refAudioPath 不存在或不可访问，请核对路径（${briefPath}）`);
+        } else if (this._isGptSoVitsRefAudioDurationError(msg)) {
+          showToast('GPT-SoVITS: 参考音频需在 3-10 秒内，请更换参考音频');
         }
         const clipped = msg.length > 120 ? `${msg.slice(0, 120)}...` : msg;
         showToast(`GPT-SoVITS 合成失败: ${clipped || 'unknown error'}`);
@@ -8612,7 +9132,9 @@ ${extraRule}
       }
 
       if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) {
-        try { audio.pause(); } catch (e) {}
+        try {
+          audio.pause();
+        } catch (e) {}
         try {
           audio.src = '';
           if (typeof audio.load === 'function') audio.load();
@@ -8697,7 +9219,12 @@ ${extraRule}
       const tryBind = () => {
         const preferredAudio = this._getPreferredAudioElement();
         const audioElement = preferredAudio || this._getCurrentAudioElement();
-        console.log(`[${SCRIPT_NAME}] LipSync: 获取音频元素 -`, audioElement ? `src=${audioElement.src?.substring(0, 50)}... paused=${audioElement.paused} currentTime=${audioElement.currentTime}` : 'null');
+        console.log(
+          `[${SCRIPT_NAME}] LipSync: 获取音频元素 -`,
+          audioElement
+            ? `src=${audioElement.src?.substring(0, 50)}... paused=${audioElement.paused} currentTime=${audioElement.currentTime}`
+            : 'null',
+        );
 
         if (!audioElement) {
           if (Date.now() - startTime < maxWait && !hasStarted) {
@@ -8827,7 +9354,7 @@ ${extraRule}
       // 优先级: tts.speaker > boundVoice > settings.ttsDefaultSpeaker > (provider fallback)
       let voiceName = ttsConfig.speaker || boundVoice || settings.ttsDefaultSpeaker;
       if (!voiceName) {
-        voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? (segment.speaker || '') : '桃夭';
+        voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? segment.speaker || '' : '桃夭';
       }
       if (!voiceName) voiceName = '桃夭';
       const emotion = ttsConfig.emotion || '中性';
@@ -8870,8 +9397,8 @@ ${extraRule}
         // 方式1: 使用 xiaobaixTts.speak（主要方式）
         if (this.xiaobaixTts && typeof this.xiaobaixTts.speak === 'function') {
           await this.xiaobaixTts.speak(segment.text, {
-            speaker: speakerValue,   // ★ 使用 value 而不是 name
-            resourceId: resourceId,  // ★ 自动推断 resourceId
+            speaker: speakerValue, // ★ 使用 value 而不是 name
+            resourceId: resourceId, // ★ 自动推断 resourceId
             emotion: emotion,
             context: context,
           });
@@ -8891,8 +9418,8 @@ ${extraRule}
         if (this.littleWhiteBox && typeof this.littleWhiteBox.callGenerate === 'function') {
           await this.littleWhiteBox.callGenerate({
             message: segment.text,
-            speaker: speakerValue,   // ★ 使用 value 而不是 name
-            resourceId: resourceId,  // ★ 自动推断 resourceId
+            speaker: speakerValue, // ★ 使用 value 而不是 name
+            resourceId: resourceId, // ★ 自动推断 resourceId
             emotion: emotion,
             context: context,
           });
@@ -9096,7 +9623,9 @@ ${extraRule}
     console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: 开始获取 ${characterId}_${expression}`);
     try {
       const spriteUrl = await getSprite(characterId, expression);
-      console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: getSprite返回 = ${spriteUrl ? spriteUrl.substring(0, 50) + '...' : 'null'}`);
+      console.log(
+        `[${SCRIPT_NAME}] getSpriteAsBase64: getSprite返回 = ${spriteUrl ? spriteUrl.substring(0, 50) + '...' : 'null'}`,
+      );
       if (!spriteUrl) {
         console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: 未找到立绘 ${characterId}_${expression}`);
         return null;
@@ -9119,10 +9648,10 @@ ${extraRule}
 
       if (width > maxSize || height > maxSize) {
         if (width > height) {
-          height = Math.round(height * maxSize / width);
+          height = Math.round((height * maxSize) / width);
           width = maxSize;
         } else {
-          width = Math.round(width * maxSize / height);
+          width = Math.round((width * maxSize) / height);
           height = maxSize;
         }
       }
@@ -9135,7 +9664,9 @@ ${extraRule}
 
       // 转换为JPEG格式的base64，质量0.7
       const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-      console.log(`[${SCRIPT_NAME}] getSpriteAsBase64: 压缩完成，原尺寸 ${img.width}x${img.height} -> ${width}x${height}，base64长度: ${compressedBase64.length}`);
+      console.log(
+        `[${SCRIPT_NAME}] getSpriteAsBase64: 压缩完成，原尺寸 ${img.width}x${img.height} -> ${width}x${height}，base64长度: ${compressedBase64.length}`,
+      );
 
       return compressedBase64;
     } catch (error) {
@@ -9167,15 +9698,19 @@ ${extraRule}
       if (imageBase64) {
         contentParts.push({
           type: 'image_url',
-          image_url: { url: imageBase64 }
+          image_url: { url: imageBase64 },
         });
-        console.log(`[${SCRIPT_NAME}] 已添加角色立绘到多模态消息: ${name}（${expr}），base64长度: ${imageBase64.length}`);
+        console.log(
+          `[${SCRIPT_NAME}] 已添加角色立绘到多模态消息: ${name}（${expr}），base64长度: ${imageBase64.length}`,
+        );
       } else {
         console.warn(`[${SCRIPT_NAME}] 无法获取角色立绘: ${name}（${expr}）`);
       }
     }
 
-    console.log(`[${SCRIPT_NAME}] buildBananaAppearanceMultimodalContent: 最终contentParts数量 = ${contentParts.length}`);
+    console.log(
+      `[${SCRIPT_NAME}] buildBananaAppearanceMultimodalContent: 最终contentParts数量 = ${contentParts.length}`,
+    );
     // 如果有图片，返回多模态格式；否则返回纯文本
     return contentParts.length > 1 ? contentParts : textPrompt;
   }
@@ -9516,7 +10051,7 @@ ${extraRule}
 
           // 1. 如果当前节点就是文本节点，返回它
           if (this.isTextNode(node)) return nodeId;
-
+cons
           // 2. 如果是中间节点 (如 ConditioningCombine, LoraLoader 等)，尝试追踪其输入
           const inputsToCheck = ['conditioning', 'conditioning_1', 'conditioning_2', 'clip', 'samples'];
           for (const inputName of inputsToCheck) {
@@ -9746,11 +10281,11 @@ ${extraRule}
 
         // 去重：移除意思相近的标签（简化版）
         const similarTags = {
-          'study': ['library', 'book', 'bookshelf'],
-          'library': ['study', 'book'],
-          'bedroom': ['room', 'bed'],
-          'room': ['interior', 'indoors'],
-          'interior': ['room', 'indoors'],
+          study: ['library', 'book', 'bookshelf'],
+          library: ['study', 'book'],
+          bedroom: ['room', 'bed'],
+          room: ['interior', 'indoors'],
+          interior: ['room', 'indoors'],
         };
 
         filteredTags = filteredTags.filter((tag, index) => {
@@ -9830,9 +10365,7 @@ ${extraRule}
       if (!ws.enabled) return null;
 
       // 清理标签：移除空标签和过长标签
-      const cleanTags = tags
-        .map(t => t.trim())
-        .filter(t => t && t.length > 0 && t.length < 30);
+      const cleanTags = tags.map(t => t.trim()).filter(t => t && t.length > 0 && t.length < 30);
 
       if (cleanTags.length === 0) {
         console.warn(`[${SCRIPT_NAME}] Wallhaven: 没有有效的搜索标签`);
@@ -9905,7 +10438,7 @@ ${extraRule}
           response = await fetch(apiUrl, {
             method: 'GET',
             headers: {
-              'Accept': 'application/json',
+              Accept: 'application/json',
             },
           });
           if (response.ok) {
@@ -9948,14 +10481,14 @@ ${extraRule}
             response = await fetch(proxyUrl, {
               method: 'GET',
               headers: {
-                'Accept': 'application/json',
+                Accept: 'application/json',
               },
             });
             if (response.ok) {
               const data = await response.json();
               if (data.data && data.data.length > 0) {
                 if (this.cache.size >= 20) this.cache.delete(this.cache.keys().next().value);
-              this.cache.set(cacheKey, data.data);
+                this.cache.set(cacheKey, data.data);
                 return this.selectImage(data.data);
               }
             }
@@ -10476,7 +11009,7 @@ ${extraRule}
             id: DEFAULT_PACK_ID,
             name: DEFAULT_PACK_NAME,
             createdAt: new Date().toISOString(),
-            isDefault: true
+            isDefault: true,
           };
           packStore.add(defaultPack);
 
@@ -10567,7 +11100,7 @@ ${extraRule}
   function getLive2DModel(characterId) {
     return __awaiter(this, void 0, void 0, function* () {
       if (!db) yield initDB();
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         try {
           if (!db.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
             resolve(null);
@@ -10626,7 +11159,7 @@ ${extraRule}
   function getAllLive2DModels() {
     return __awaiter(this, void 0, void 0, function* () {
       if (!db) yield initDB();
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         try {
           if (!db.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
             resolve([]);
@@ -10646,56 +11179,61 @@ ${extraRule}
 
   // 保存立绘
   function saveSprite(characterId_1, expression_1, imageBlob_1) {
-    return __awaiter(this, arguments, void 0, function* (characterId, expression, imageBlob, imageUrl = null, packId = null) {
-      if (!db) yield initDB();
-      // 如果未指定packId，使用当前图包
-      const targetPackId = packId || getCurrentPackId();
-      return new Promise((resolve, reject) => {
-        const id = `${characterId}_${expression}`;
+    return __awaiter(
+      this,
+      arguments,
+      void 0,
+      function* (characterId, expression, imageBlob, imageUrl = null, packId = null) {
+        if (!db) yield initDB();
+        // 如果未指定packId，使用当前图包
+        const targetPackId = packId || getCurrentPackId();
+        return new Promise((resolve, reject) => {
+          const id = `${characterId}_${expression}`;
 
-        // ★ 先撤销旧的 blob URL（如果存在且是 blob: 类型）
-        const oldBlobUrl = characterSprites.get(id);
-        if (oldBlobUrl && oldBlobUrl.startsWith('blob:')) {
-          try {
-            (topWindow.URL || URL).revokeObjectURL(oldBlobUrl);
-            console.log(`[${SCRIPT_NAME}] 已撤销旧的 blob URL: ${id}`);
-          } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
+          // ★ 先撤销旧的 blob URL（如果存在且是 blob: 类型）
+          const oldBlobUrl = characterSprites.get(id);
+          if (oldBlobUrl && oldBlobUrl.startsWith('blob:')) {
+            try {
+              (topWindow.URL || URL).revokeObjectURL(oldBlobUrl);
+              console.log(`[${SCRIPT_NAME}] 已撤销旧的 blob URL: ${id}`);
+            } catch (e) {
+              console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
+            }
           }
-        }
-        // ★ 立即从缓存中删除旧记录，确保后续能获取新数据
-        characterSprites.delete(id);
+          // ★ 立即从缓存中删除旧记录，确保后续能获取新数据
+          characterSprites.delete(id);
 
-        const transaction = db.transaction([STORE_SPRITES], 'readwrite');
-        const store = transaction.objectStore(STORE_SPRITES);
-        const data = {
-          id,
-          characterId,
-          expression,
-          imageBlob,
-          imageUrl,
-          packId: targetPackId,
-          lastModified: new Date().toISOString(),
-        };
-        const request = store.put(data);
-        request.onsuccess = () => {
-          // 更新缓存
-          let blobUrl;
-          if (imageUrl) {
-            blobUrl = imageUrl;
-          } else if (imageBlob) {
-            // ★ 使用 topWindow.URL
-            blobUrl = (topWindow.URL || URL).createObjectURL(imageBlob);
-          }
-          if (blobUrl) {
-            characterSprites.set(id, blobUrl);
-          }
-          console.log(`[${SCRIPT_NAME}] 立绘已保存: ${id} (图包: ${targetPackId})`);
-          resolve(blobUrl);
-        };
-        request.onerror = () => reject(request.error);
-      });
-    });
+          const transaction = db.transaction([STORE_SPRITES], 'readwrite');
+          const store = transaction.objectStore(STORE_SPRITES);
+          const data = {
+            id,
+            characterId,
+            expression,
+            imageBlob,
+            imageUrl,
+            packId: targetPackId,
+            lastModified: new Date().toISOString(),
+          };
+          const request = store.put(data);
+          request.onsuccess = () => {
+            // 更新缓存
+            let blobUrl;
+            if (imageUrl) {
+              blobUrl = imageUrl;
+            } else if (imageBlob) {
+              // ★ 使用 topWindow.URL
+              blobUrl = (topWindow.URL || URL).createObjectURL(imageBlob);
+            }
+            if (blobUrl) {
+              characterSprites.set(id, blobUrl);
+            }
+            console.log(`[${SCRIPT_NAME}] 立绘已保存: ${id} (图包: ${targetPackId})`);
+            resolve(blobUrl);
+          };
+          request.onerror = () => reject(request.error);
+        });
+      },
+    );
   }
 
   // 批量保存立绘
@@ -11206,7 +11744,7 @@ ${extraRule}
         id: `pack_${Date.now()}`,
         name: name,
         createdAt: new Date().toISOString(),
-        isDefault: false
+        isDefault: false,
       };
       return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_IMAGE_PACKS], 'readwrite');
@@ -11328,7 +11866,7 @@ ${extraRule}
   }
 
   /**
-   * 转移背景到指定图包
+   * 转let到指定图包
    * @param {Array<string>} sceneNames - 场景名列表
    * @param {string} targetPackId - 目标图包ID
    * @returns {Promise<number>} 转移数量
@@ -11379,11 +11917,11 @@ ${extraRule}
       let bgCount = 0;
 
       // 转移立绘
-      yield new Promise((resolve) => {
+      yield new Promise(resolve => {
         const transaction = db.transaction([STORE_SPRITES], 'readwrite');
         const store = transaction.objectStore(STORE_SPRITES);
         const request = store.openCursor();
-        request.onsuccess = (event) => {
+        request.onsuccess = event => {
           const cursor = event.target.result;
           if (cursor) {
             const sprite = cursor.value;
@@ -11401,11 +11939,11 @@ ${extraRule}
       });
 
       // 转移背景
-      yield new Promise((resolve) => {
+      yield new Promise(resolve => {
         const transaction = db.transaction([STORE_BACKGROUNDS], 'readwrite');
         const store = transaction.objectStore(STORE_BACKGROUNDS);
         const request = store.openCursor();
-        request.onsuccess = (event) => {
+        request.onsuccess = event => {
           const cursor = event.target.result;
           if (cursor) {
             const bg = cursor.value;
@@ -11439,7 +11977,7 @@ ${extraRule}
       let bgCount = 0;
 
       // 统计立绘
-      yield new Promise((resolve) => {
+      yield new Promise(resolve => {
         const transaction = db.transaction([STORE_SPRITES], 'readonly');
         const store = transaction.objectStore(STORE_SPRITES);
         const index = store.index('packId');
@@ -11452,7 +11990,7 @@ ${extraRule}
       });
 
       // 统计背景
-      yield new Promise((resolve) => {
+      yield new Promise(resolve => {
         const transaction = db.transaction([STORE_BACKGROUNDS], 'readonly');
         const store = transaction.objectStore(STORE_BACKGROUNDS);
         const index = store.index('packId');
@@ -11589,7 +12127,9 @@ ${extraRule}
     },
     // 角色ID归一化（用于比较，不改变原始ID）
     normalizeCharacterId(characterId) {
-      return String(characterId || '').trim().toLowerCase();
+      return String(characterId || '')
+        .trim()
+        .toLowerCase();
     },
     _nextLive2DRenderSeq(characterId) {
       const next = (this.live2dRenderSeq.get(characterId) || 0) + 1;
@@ -11659,7 +12199,15 @@ ${extraRule}
           }
           this.slotOwners.set(info.slot, charId);
           const spriteUrl = yield getSprite(charId, info.expression || '默认');
-          yield this.updateCharacterSprite($overlay, charId, info.expression || '默认', spriteUrl, info.slot, false, renderToken);
+          yield this.updateCharacterSprite(
+            $overlay,
+            charId,
+            info.expression || '默认',
+            spriteUrl,
+            info.slot,
+            false,
+            renderToken,
+          );
         }
       });
     },
@@ -11803,7 +12351,7 @@ ${extraRule}
 
         // 使用GSAP时不需要CSS入场动画类
         const useGSAP = SpriteAnimationManager.gsap !== null;
-        const enterClass = (!useGSAP && isEntering) ? `entering-${slot}` : '';
+        const enterClass = !useGSAP && isEntering ? `entering-${slot}` : '';
         const emotion = this.emotionMap[expression] || '';
         const emotionAttr = emotion ? `data-emotion="${emotion}"` : '';
 
@@ -11816,7 +12364,8 @@ ${extraRule}
 
         // ★ 优化：检查是否已有 Live2D 容器且角色相同，避免重复渲染
         const $existingContainer = $slot.find('.gal-char-container[data-character="' + characterId + '"]');
-        const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr('data-live2d') === 'true';
+        const isExistingLive2D =
+          hasLive2D && $existingContainer.length > 0 && $existingContainer.attr('data-live2d') === 'true';
 
         // 如果只是表情变化且已有 Live2D 容器，只更新表情，不重新渲染
         if (isExistingLive2D && !isEntering) {
@@ -11952,9 +12501,7 @@ ${extraRule}
         }
         if ($element && $element.length) {
           // 防止角色因中断动画残留在退出态而“消失”
-          $element
-            .removeClass('exiting-left exiting-right')
-            .css({ display: '', visibility: 'visible' });
+          $element.removeClass('exiting-left exiting-right').css({ display: '', visibility: 'visible' });
           const isSpeaking = speakerId !== null && charId === speakerId;
           // 使用GSAP焦点动画
           SpriteAnimationManager.setFocus($element, isSpeaking, charId);
@@ -12148,7 +12695,8 @@ ${extraRule}
     // 匹配简化格式: <p>角色名[表情] 或 <p>角色名[表情,音色]
     // 支持: 角色名[表情]: "对话" 或 角色名[表情,音色]: "对话"
     // 更新：支持换行符 ([\s\S]+?)
-    const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*["“\"'「『（(]([\s\S]+?)["”\"'」』）)]\s*<\/p>/gi;
+    const simplifiedPattern =
+      /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*["“\"'「『（(]([\s\S]+?)["”\"'」』）)]\s*<\/p>/gi;
 
     let result = html;
     let match;
@@ -12341,7 +12889,9 @@ ${extraRule}
         bananaPrompt: lastBg.bananaPrompt,
       };
       result.backgroundChanges = backgroundChanges; // ★ 保存所有背景切换点供生成使用
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 消息包含 ${backgroundChanges.length} 个背景切换点，最终背景: "${lastBg.scene}"`);
+      console.log(
+        `[${SCRIPT_NAME}] [DEBUG] 消息包含 ${backgroundChanges.length} 个背景切换点，最终背景: "${lastBg.scene}"`,
+      );
     }
 
     // 辅助函数：获取指定位置之前最后一次出现的背景
@@ -12490,7 +13040,9 @@ ${extraRule}
         }
         // ★ DEBUG: 记录前3个段落的背景绑定
         if (result.segments.length < 3) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${match.index} 背景:${seg.backgroundScene || 'null'} 文本:${seg.text.substring(0, 20)}...`);
+          console.log(
+            `[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${match.index} 背景:${seg.backgroundScene || 'null'} 文本:${seg.text.substring(0, 20)}...`,
+          );
         }
         result.segments.push(seg);
       }
@@ -13214,7 +13766,7 @@ ${extraRule}
           await triggerSlash(`/profile quiet=true ${config.secondGenerate.profileName}`);
           console.log(`[${SCRIPT_NAME}] 已切换到连接配置: ${config.secondGenerate.profileName}`);
           await new Promise(r => setTimeout(r, 300));
-        }
+  cons    }
 
         // 切换模型
         if (config.secondGenerate.useModel && config.secondGenerate.modelName) {
@@ -17377,11 +17929,7 @@ ${extraRule}
 
     const viewportHeight = Math.max(
       1,
-      Math.floor(
-        Number(topWindow.innerHeight)
-        || Number(targetDoc.documentElement?.clientHeight)
-        || 0,
-      ),
+      Math.floor(Number(topWindow.innerHeight) || Number(targetDoc.documentElement?.clientHeight) || 0),
     );
     const lastViewportHeight = Number(overlayHeightLockState.lastViewportHeight) || 0;
     const viewportChanged = Math.abs(viewportHeight - lastViewportHeight) > OVERLAY_HEIGHT_RECALC_THRESHOLD;
@@ -17452,15 +18000,15 @@ ${extraRule}
     if (!$gameContainer.length) return;
 
     $gameContainer.css({
-      'transform': '',
-      'width': '',
-      'height': '',
-      'position': '',
-      'left': '',
-      'right': '',
-      'top': '',
-      'bottom': '',
-      'margin': '',
+      transform: '',
+      width: '',
+      height: '',
+      position: '',
+      left: '',
+      right: '',
+      top: '',
+      bottom: '',
+      margin: '',
     });
   }
   /**
@@ -17568,7 +18116,9 @@ ${extraRule}
     const currentIndex = state.currentIndex;
     const isEnd = currentIndex >= total - 1;
 
-    console.log(`[${SCRIPT_NAME}] updateNextBtnForGeneratingState - isEnd=${isEnd}, isGeneratingResponse=${isGeneratingResponse}`);
+    console.log(
+      `[${SCRIPT_NAME}] updateNextBtnForGeneratingState - isEnd=${isEnd}, isGeneratingResponse=${isGeneratingResponse}`,
+    );
 
     // 只有在最后一段且正在生成时才显示动画
     if (!isEnd || !isGeneratingResponse) return;
@@ -17618,7 +18168,9 @@ ${extraRule}
     const currentIndex = state.currentIndex;
     const isEnd = currentIndex >= total - 1;
 
-    console.log(`[${SCRIPT_NAME}] refreshNextBtnDisplay - isEnd=${isEnd}, isGeneratingResponse=${isGeneratingResponse}`);
+    console.log(
+      `[${SCRIPT_NAME}] refreshNextBtnDisplay - isEnd=${isEnd}, isGeneratingResponse=${isGeneratingResponse}`,
+    );
 
     if (isEnd) {
       // 最后一段：检查是否正在生成
@@ -17752,7 +18304,7 @@ ${extraRule}
   // 监听窗口大小变化，自动调整游戏内容缩放
   function setupGameContentResizeListener() {
     let resizeTimer = null;
-    let isProcessing = false;
+    leletsProcessing = false;
 
     const handleResize = () => {
       // 防抖处理，避免频繁调用（手机端用更长的延迟）
@@ -17996,7 +18548,9 @@ ${extraRule}
         // ★ 关键修复：如果段落数量变化较大（>5），重置到第一段（可能是新消息）
         const segmentCountDiff = Math.abs(state.segments.length - segments.length);
         if (segmentCountDiff > 5) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] 段落数变化较大 (${state.segments.length} -> ${segments.length})，重置到第一段`);
+          console.log(
+            `[${SCRIPT_NAME}] [DEBUG] 段落数变化较大 (${state.segments.length} -> ${segments.length})，重置到第一段`,
+          );
           state.currentIndex = 0;
         }
         state.segments = segments;
@@ -18007,7 +18561,8 @@ ${extraRule}
         console.log(`[${SCRIPT_NAME}] [DEBUG] 更新状态，当前索引: ${state.currentIndex}, 段落数: ${segments.length}`);
       }
       // 重置 SpriteManager（仅当切换到新消息时，防止流式输出导致重复入场动画）
-      const isNewMessage = String(currentDisplayMesId === null || currentDisplayMesId === undefined ? '' : currentDisplayMesId) !== mesKey;
+      const isNewMessage =
+        String(currentDisplayMesId === null || currentDisplayMesId === undefined ? '' : currentDisplayMesId) !== mesKey;
       if (isNewMessage) {
         SpriteManager.reset($overlay);
       }
@@ -18040,24 +18595,29 @@ ${extraRule}
       const expression = displaySegment.expression || '默认';
       yield SpriteManager.updateSprite($overlay, speaker, expression, renderToken);
       // ★ 段落级背景跟随：优先使用段落绑定的背景，否则使用消息级别的背景
-      const sceneToApply = displaySegment.backgroundScene || ((_a = parsedContent.currentBackground) === null || _a === void 0 ? void 0 : _a.scene);
+      const sceneToApply =
+        displaySegment.backgroundScene ||
+        ((_a = parsedContent.currentBackground) === null || _a === void 0 ? void 0 : _a.scene);
       if (sceneToApply) {
         yield SpriteManager.applySceneTint($overlay, sceneToApply);
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 应用背景场景: "${sceneToApply}" (段落 ${currentIndex + 1}/${segments.length})`);
+        console.log(
+          `[${SCRIPT_NAME}] [DEBUG] 应用背景场景: "${sceneToApply}" (段落 ${currentIndex + 1}/${segments.length})`,
+        );
       }
       // 更新NEXT按钮状态
       const $nextBtn = $overlay.find('[data-action="next"]');
       // ★ 再次尝试获取下一段，直接判断是否真的有下一段内容
       // 这是最可靠的判断方式，不依赖于索引计算
       const hasNextSegment = !!segments[currentIndex + 1];
-      console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - hasNextSegment=${hasNextSegment}, isGeneratingResponse=${isGeneratingResponse}`);
+      console.log(
+        `[${SCRIPT_NAME}] updateGlobalOverlayContent - hasNextSegment=${hasNextSegment}, isGeneratingResponse=${isGeneratingResponse}`,
+      );
       if (!hasNextSegment) {
         // 最后一段：检查是否正在生成
         if (isGeneratingResponse) {
           console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 启动动画`);
           updateNextBtnForGeneratingState();
         } else {
-          console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 显示END`);
           stopNextBtnAnimation();
           $nextBtn.html('END <i class="fa-solid fa-check"></i>');
         }
@@ -18311,7 +18871,7 @@ ${extraRule}
     });
     // 全屏切换
     $(doc).on('click', '#gal-global-overlay [data-action="toggle-fullscreen"]', function (e) {
-      e.stopPropagation();
+      lettopPropagation();
       toggleFullscreen();
     });
 
@@ -18338,7 +18898,7 @@ ${extraRule}
 
     // 辅助函数：关闭移动端菜单
     function closeMobileMenu() {
-        $('#gal-mobile-menu').removeClass('active');
+      $('#gal-mobile-menu').removeClass('active');
     }
 
     // 判断是否处于“按钮适配移动端”状态（仅此时才显示上拉菜单）
@@ -18356,13 +18916,13 @@ ${extraRule}
 
       // 仅在“按钮适配移动端”时切换上拉菜单
       if (isMobileMenuMode()) {
-          const $menu = $('#gal-mobile-menu');
-          if ($menu.hasClass('active')) {
-              $menu.removeClass('active');
-          } else {
-              $menu.addClass('active');
-          }
-          return;
+        const $menu = $('#gal-mobile-menu');
+        if ($menu.hasClass('active')) {
+          $menu.removeClass('active');
+        } else {
+          $menu.addClass('active');
+        }
+        return;
       }
 
       // 非移动端：确保关闭上拉菜单并直接打开设置
@@ -18382,15 +18942,15 @@ ${extraRule}
 
     // 移动端菜单 - 点击任意菜单项自动关闭菜单
     $(doc).on('click', '#gal-mobile-menu .gal-menu-btn', function (e) {
-        // 注意：不要阻止冒泡，否则无法触发 log/close-mode 的通用处理函数
-        closeMobileMenu();
+      // 注意：不要阻止冒泡，否则无法触发 log/close-mode 的通用处理函数
+      closeMobileMenu();
     });
 
     // 点击外部关闭菜单
     $(doc).on('click', function (e) {
-        if (!$(e.target).closest('#gal-mobile-menu, [data-action="config"]').length) {
-            closeMobileMenu();
-        }
+      if (!$(e.target).closest('#gal-mobile-menu, [data-action="config"]').length) {
+        closeMobileMenu();
+      }
     });
 
     // LOG按钮
@@ -18616,11 +19176,18 @@ ${extraRule}
       yield SpriteManager.updateSprite($overlay, speaker, expression, expectedRenderToken);
       if (isRenderTokenStale()) return false;
       // ★ 段落级背景跟随：优先使用段落绑定的背景，否则使用消息级别的背景
-      const sceneToApply = segment.backgroundScene || ((_b = (_a = state.parsedContent) === null || _a === void 0 ? void 0 : _a.currentBackground) === null || _b === void 0 ? void 0 : _b.scene);
+      const sceneToApply =
+        segment.backgroundScene ||
+        ((_b = (_a = state.parsedContent) === null || _a === void 0 ? void 0 : _a.currentBackground) === null ||
+        _b === void 0
+          ? void 0
+          : _b.scene);
       if (sceneToApply) {
         yield SpriteManager.applySceneTint($overlay, sceneToApply);
         if (isRenderTokenStale()) return false;
-        console.log(`[${SCRIPT_NAME}] [DEBUG] updateOverlaySegmentDisplay 应用背景: "${sceneToApply}" (段落 ${currentIndex + 1}/${total})`);
+        console.log(
+          `[${SCRIPT_NAME}] [DEBUG] updateOverlaySegmentDisplay 应用背景: "${sceneToApply}" (段落 ${currentIndex + 1}/${total})`,
+        );
       }
       return true;
     });
@@ -19190,7 +19757,10 @@ ${extraRule}
     // 异步获取 TTS 音色列表
     const ttsVoiceList = await getTTSVoiceListAsync();
     const ttsVoiceOptions = ttsVoiceList
-      .map(v => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`)
+      .map(
+        v =>
+          `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`,
+      )
       .join('');
 
     const modalHtml = `
@@ -20761,7 +21331,11 @@ ${extraRule}
               count++;
               // 自动注册缺失的表情标签
               const expr = s.expression;
-              if (!allExpressions.includes(expr) && !newExpressions.includes(expr) && !customs.find(e => e.name === expr)) {
+              if (
+                !allExpressions.includes(expr) &&
+                !newExpressions.includes(expr) &&
+                !customs.find(e => e.name === expr)
+              ) {
                 newExpressions.push(expr);
                 customs.push({ name: expr, emotion: null });
               }
@@ -21480,21 +22054,22 @@ ${extraRule}
    */
   function showImportPackSelector(suggestedName = null) {
     return __awaiter(this, void 0, void 0, function* () {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         // 获取所有图包
-        getAllImagePacks().then(packs => {
-          const currentPackId = getCurrentPackId();
-          const currentPack = packs.find(p => p.id === currentPackId);
-          const currentPackName = currentPack ? currentPack.name : '当前图包';
+        getAllImagePacks()
+          .then(packs => {
+            const currentPackId = getCurrentPackId();
+            const currentPack = packs.find(p => p.id === currentPackId);
+            const currentPackName = currentPack ? currentPack.name : '当前图包';
 
-          // 构建图包选项HTML
-          const packOptions = packs.map(p =>
-            `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (当前)' : ''}</option>`
-          ).join('');
+            // 构建图包选项HTML
+            const packOptions = packs
+              .map(p => `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (当前)' : ''}</option>`)
+              .join('');
 
-          const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
+            const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
 
-          const dialogHtml = `
+            const dialogHtml = `
             <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
               <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
                 <div class="gal-input-title" style="margin-bottom: 20px;">
@@ -21536,71 +22111,74 @@ ${extraRule}
             </div>
           `;
 
-          const mountRoot = getModalMountRoot();
-          $(mountRoot).append(dialogHtml);
-          const $dialog = $(mountRoot).find('#gal-import-pack-selector');
+            const mountRoot = getModalMountRoot();
+            $(mountRoot).append(dialogHtml);
+            const $dialog = $(mountRoot).find('#gal-import-pack-selector');
 
-          // 单选按钮切换逻辑
-          $dialog.find('input[name="import-target"]').on('change', function() {
-            const value = $(this).val();
-            const $existingSelect = $dialog.find('#gal-import-existing-pack');
-            const $newInput = $dialog.find('#gal-import-new-pack-name');
+            // 单选按钮切换逻辑
+            $dialog.find('input[name="import-target"]').on('change', function () {
+              const value = $(this).val();
+              const $existingSelect = $dialog.find('#gal-import-existing-pack');
+              const $newInput = $dialog.find('#gal-import-new-pack-name');
 
-            $existingSelect.prop('disabled', value !== 'existing').css('opacity', value === 'existing' ? 1 : 0.6);
-            $newInput.prop('disabled', value !== 'new').css('opacity', value === 'new' ? 1 : 0.6);
+              $existingSelect.prop('disabled', value !== 'existing').css('opacity', value === 'existing' ? 1 : 0.6);
+              $newInput.prop('disabled', value !== 'new').css('opacity', value === 'new' ? 1 : 0.6);
 
-            // 更新边框样式
-            $dialog.find('label').css('border-color', '#ddd');
-            $(this).closest('label').css('border-color', '#3498db');
-          });
+              // 更新边框样式
+              $dialog.find('label').css('border-color', '#ddd');
+              $(this).closest('label').css('border-color', '#3498db');
+            });
 
-          // 确认按钮
-          $dialog.find('#gal-import-pack-confirm').on('click', () => {
-            const targetType = $dialog.find('input[name="import-target"]:checked').val();
-            let targetPackId = null;
+            // 确认按钮
+            $dialog.find('#gal-import-pack-confirm').on('click', () => {
+              const targetType = $dialog.find('input[name="import-target"]:checked').val();
+              let targetPackId = null;
 
-            if (targetType === 'current') {
-              targetPackId = currentPackId;
-            } else if (targetType === 'existing') {
-              targetPackId = $dialog.find('#gal-import-existing-pack').val();
-            } else if (targetType === 'new') {
-              const newName = $dialog.find('#gal-import-new-pack-name').val().trim();
-              if (!newName) {
-                showToast('请输入新图包名称');
+              if (targetType === 'current') {
+                targetPackId = currentPackId;
+              } else if (targetType === 'existing') {
+                targetPackId = $dialog.find('#gal-import-existing-pack').val();
+              } else if (targetType === 'new') {
+                const newName = $dialog.find('#gal-import-new-pack-name').val().trim();
+                if (!newName) {
+                  showToast('请输入新图包名称');
+                  return;
+                }
+                // 创建新图包
+                createImagePack(newName)
+                  .then(newPack => {
+                    $dialog.remove();
+                    resolve(newPack.id);
+                  })
+                  .catch(err => {
+                    showToast('创建图包失败: ' + err.message);
+                  });
                 return;
               }
-              // 创建新图包
-              createImagePack(newName).then(newPack => {
-                $dialog.remove();
-                resolve(newPack.id);
-              }).catch(err => {
-                showToast('创建图包失败: ' + err.message);
-              });
-              return;
-            }
 
-            $dialog.remove();
-            resolve(targetPackId);
-          });
+              $dialog.remove();
+              resolve(targetPackId);
+            });
 
-          // 取消按钮
-          $dialog.find('#gal-import-pack-cancel').on('click', () => {
-            $dialog.remove();
-            resolve(null);
-          });
-
-          // 点击背景关闭
-          $dialog.on('click', function(e) {
-            if (e.target === this) {
+            // 取消按钮
+            $dialog.find('#gal-import-pack-cancel').on('click', () => {
               $dialog.remove();
               resolve(null);
-            }
+            });
+
+            // 点击背景关闭
+            $dialog.on('click', function (e) {
+              if (e.target === this) {
+                $dialog.remove();
+                resolve(null);
+              }
+            });
+          })
+          .catch(err => {
+            console.error('获取图包列表失败:', err);
+            showToast('获取图包列表失败');
+            resolve(null);
           });
-        }).catch(err => {
-          console.error('获取图包列表失败:', err);
-          showToast('获取图包列表失败');
-          resolve(null);
-        });
       });
     });
   }
@@ -21727,7 +22305,11 @@ ${extraRule}
           const newExpressions = [];
           for (const sprite of spriteBatch) {
             const expr = sprite.expression;
-            if (!allExpressions.includes(expr) && !newExpressions.includes(expr) && !customs.find(e => e.name === expr)) {
+            if (
+              !allExpressions.includes(expr) &&
+              !newExpressions.includes(expr) &&
+              !customs.find(e => e.name === expr)
+            ) {
               newExpressions.push(expr);
               customs.push({ name: expr, emotion: null });
             }
@@ -21933,12 +22515,16 @@ ${extraRule}
                     <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
                   </button>
                   <div class="gal-pack-menu gal-z-dropdown" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden;">
-                    ${allPacks.map(pack => `
+                    ${allPacks
+                      .map(
+                        pack => `
                       <div class="gal-pack-item ${pack.id === currentPackId ? 'active' : ''}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? 'background: #e9ecef; font-weight: 700;' : ''}">
                         <span><i class="fa-solid fa-folder${pack.id === currentPackId ? '-open' : ''}" style="margin-right: 8px; color: ${pack.id === currentPackId ? '#6f42c1' : '#666'};"></i>${pack.name}</span>
                         ${pack.isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">默认</span>' : ''}
                       </div>
-                    `).join('')}
+                    `,
+                      )
+                      .join('')}
                     <div style="border-top: 2px solid #eee;">
                       <div class="gal-pack-item" id="gal-add-pack-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #28a745;">
                         <i class="fa-solid fa-plus"></i> <span>新建图包</span>
@@ -22777,7 +23363,12 @@ ${extraRule}
       $modal.find('#gal-wallhaven-customtags').on('change', function () {
         if (!settings.wallhaven) settings.wallhaven = {};
         const tags = $(this).val();
-        settings.wallhaven.customTags = tags ? tags.split(',').map(t => t.trim()).filter(t => t) : [];
+        settings.wallhaven.customTags = tags
+          ? tags
+              .split(',')
+              .map(t => t.trim())
+              .filter(t => t)
+          : [];
         saveSettings();
       });
 
@@ -22907,7 +23498,7 @@ ${extraRule}
           const appearanceData = {
             characterId: name,
             characterName: name,
-            expression: expr
+            expression: expr,
             // 注意：不存储 imageBase64，生成时实时获取
           };
 
@@ -22963,7 +23554,7 @@ ${extraRule}
           const response = await fetch(modelsUrl, {
             method: 'GET',
             headers: {
-              'Authorization': `Bearer ${proxyKey}`,
+              Authorization: `Bearer ${proxyKey}`,
               'Content-Type': 'application/json',
             },
           });
@@ -23081,10 +23672,10 @@ ${extraRule}
             let width, height;
             if (ratioW >= ratioH) {
               width = 1024;
-              height = Math.round(1024 * ratioH / ratioW);
+              height = Math.round((1024 * ratioH) / ratioW);
             } else {
               height = 1024;
-              width = Math.round(1024 * ratioW / ratioH);
+              width = Math.round((1024 * ratioW) / ratioH);
             }
 
             requestBody.size = `${width}x${height}`;
@@ -23097,7 +23688,7 @@ ${extraRule}
           const response = await fetch(genUrl, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${proxyKey}`,
+              Authorization: `Bearer ${proxyKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(requestBody),
@@ -23132,7 +23723,6 @@ ${extraRule}
 
           console.log(`[${SCRIPT_NAME}] 大香蕉生图: 生成成功`);
           showToast('背景图片生成成功，点击下方按钮可保存到背景库');
-
         } catch (e) {
           console.error(`[${SCRIPT_NAME}] 大香蕉生图失败:`, e);
           showToast(`生成失败: ${e.message}`);
@@ -23222,11 +23812,14 @@ ${extraRule}
         showCharacterSpritesModal(charId);
       });
       // 角色卡片悬停显示操作按钮
-      $modal.find('.gal-character-card').on('mouseenter', function () {
-        $(this).find('.gal-char-actions').css('opacity', '1');
-      }).on('mouseleave', function () {
-        $(this).find('.gal-char-actions').css('opacity', '0');
-      });
+      $modal
+        .find('.gal-character-card')
+        .on('mouseenter', function () {
+          $(this).find('.gal-char-actions').css('opacity', '1');
+        })
+        .on('mouseleave', function () {
+          $(this).find('.gal-char-actions').css('opacity', '0');
+        });
       // 转移角色到其他图包
       $modal.find('.gal-char-transfer').on('click', function (e) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -23346,13 +23939,19 @@ ${extraRule}
         // 更新按钮样式
         const $btn = $(this);
         if (newScope === 'current') {
-          $btn.css({ background: '#fd7e14', borderColor: '#fd7e14' })
-              .attr('title', '仅当前图包资源')
-              .find('i').removeClass('fa-globe').addClass('fa-bullseye');
+          $btn
+            .css({ background: '#fd7e14', borderColor: '#fd7e14' })
+            .attr('title', '仅当前图包资源')
+            .find('i')
+            .removeClass('fa-globe')
+            .addClass('fa-bullseye');
         } else {
-          $btn.css({ background: '#20c997', borderColor: '#20c997' })
-              .attr('title', '搜索所有图包资源')
-              .find('i').removeClass('fa-bullseye').addClass('fa-globe');
+          $btn
+            .css({ background: '#20c997', borderColor: '#20c997' })
+            .attr('title', '搜索所有图包资源')
+            .find('i')
+            .removeClass('fa-bullseye')
+            .addClass('fa-globe');
         }
         showToast(newScope === 'current' ? '已切换为：仅当前图包' : '已切换为：搜索所有图包');
 
@@ -23407,7 +24006,10 @@ ${extraRule}
           getAllImagePacks().then(packs => {
             const currentPack = packs.find(p => p.id === currentPackId);
             const defaultName = currentPack ? currentPack.name : '图包';
-            const packageName = prompt(`将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`, `${defaultName}_${new Date().toISOString().slice(0, 10)}`);
+            const packageName = prompt(
+              `将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`,
+              `${defaultName}_${new Date().toISOString().slice(0, 10)}`,
+            );
             if (!packageName) return;
             AssetIO.exportAllAssets(null, packageName);
           });
@@ -23422,7 +24024,10 @@ ${extraRule}
           getAllImagePacks().then(packs => {
             const currentPack = packs.find(p => p.id === currentPackId);
             const defaultName = currentPack ? currentPack.name : '图包';
-            const packageName = prompt(`将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`, `${defaultName}_${new Date().toISOString().slice(0, 10)}`);
+            const packageName = prompt(
+              `将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`,
+              `${defaultName}_${new Date().toISOString().slice(0, 10)}`,
+            );
             if (!packageName) return;
 
             const input = prompt(
@@ -23614,12 +24219,10 @@ ${extraRule}
       const allTags = [...new Set([...Object.keys(existingMappings), ...gameExpressionTags])];
 
       // 预生成选项 HTML，避免每次循环重复生成
-      const exprOptionsHtml = expressionList.length > 0
-        ? expressionList.map(e => `<option value="${e}">${e}</option>`).join('')
-        : '';
-      const motionOptionsHtml = motionGroups.length > 0
-        ? motionGroups.map(g => `<option value="${g}">${g}</option>`).join('')
-        : '';
+      const exprOptionsHtml =
+        expressionList.length > 0 ? expressionList.map(e => `<option value="${e}">${e}</option>`).join('') : '';
+      const motionOptionsHtml =
+        motionGroups.length > 0 ? motionGroups.map(g => `<option value="${g}">${g}</option>`).join('') : '';
 
       for (const tag of allTags) {
         const currentExpr = existingMappings[tag] || '';
@@ -23672,11 +24275,11 @@ ${extraRule}
               $mappingContainer.data('loaded', true);
 
               // 设置选中值（必须在 DOM 插入后）
-              $mappingContainer.find('.gal-expr-mapping-select').each(function() {
+              $mappingContainer.find('.gal-expr-mapping-select').each(function () {
                 const current = $(this).data('current');
                 if (current) $(this).val(current);
               });
-              $mappingContainer.find('.gal-motion-mapping-select').each(function() {
+              $mappingContainer.find('.gal-motion-mapping-select').each(function () {
                 const current = $(this).data('current');
                 const disabled = $(this).data('disabled');
                 if (disabled) {
@@ -23798,7 +24401,7 @@ ${extraRule}
                     <span>低 (0.5x) - 加载更快，节省内存</span>
                   </label>
                   <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="radio" name="textureResolution" value="1.0" ${(!qualityConfig.textureResolution || qualityConfig.textureResolution === 1.0) ? 'checked' : ''}>
+                    <input type="radio" name="textureResolution" value="1.0" ${!qualityConfig.textureResolution || qualityConfig.textureResolution === 1.0 ? 'checked' : ''}>
                     <span>正常 (1.0x) - 推荐</span>
                   </label>
                   <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -23811,7 +24414,7 @@ ${extraRule}
                 <h4 style="margin: 0 0 12px 0; color: ${THEME.dark};">设备像素比</h4>
                 <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                   <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                    <input type="radio" name="devicePixelRatio" value="auto" ${(!qualityConfig.devicePixelRatio || qualityConfig.devicePixelRatio === 'auto') ? 'checked' : ''}>
+                    <input type="radio" name="devicePixelRatio" value="auto" ${!qualityConfig.devicePixelRatio || qualityConfig.devicePixelRatio === 'auto' ? 'checked' : ''}>
                     <span>自动</span>
                   </label>
                   <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
@@ -23861,22 +24464,27 @@ ${extraRule}
     loadModelDataAsync();
 
     // 标签页切换
-    $modal.find('.gal-settings-tab').on('click', function() {
+    $modal.find('.gal-settings-tab').on('click', function () {
       const tab = _$(this).data('tab');
-      $modal.find('.gal-settings-tab').removeClass('active').css({ color: '#666', borderBottom: '2px solid transparent' });
-      _$(this).addClass('active').css({ color: THEME.accent, borderBottom: `2px solid ${THEME.accent}` });
+      $modal
+        .find('.gal-settings-tab')
+        .removeClass('active')
+        .css({ color: '#666', borderBottom: '2px solid transparent' });
+      _$(this)
+        .addClass('active')
+        .css({ color: THEME.accent, borderBottom: `2px solid ${THEME.accent}` });
       $modal.find('.gal-settings-panel').hide();
       $modal.find(`.gal-settings-panel[data-panel="${tab}"]`).show();
     });
 
     // 缩放滑块 (基础绑定，完整功能在下方实时预览部分)
-    $modal.find('#gal-live2d-scale').on('input', function() {
+    $modal.find('#gal-live2d-scale').on('input', function () {
       const val = parseFloat(_$(this).val());
       $modal.find('#gal-live2d-scale-value').text(val.toFixed(1) + 'x');
     });
 
     // 重置变换
-    $modal.find('#gal-live2d-reset-transform').on('click', function() {
+    $modal.find('#gal-live2d-reset-transform').on('click', function () {
       $modal.find('#gal-live2d-offset-x').val(0);
       $modal.find('#gal-live2d-offset-y').val(0);
       $modal.find('#gal-live2d-scale').val(1.0);
@@ -23888,7 +24496,7 @@ ${extraRule}
     });
 
     // 偏移按钮
-    $modal.find('.gal-offset-btn').on('click', function() {
+    $modal.find('.gal-offset-btn').on('click', function () {
       const dir = _$(this).data('dir');
       const delta = parseInt(_$(this).data('delta'));
       const $input = $modal.find(`#gal-live2d-offset-${dir}`);
@@ -23896,16 +24504,16 @@ ${extraRule}
       // 触发 change 事件
       $input.trigger('change');
     });
-    $modal.find('#gal-live2d-auto-match').on('click', function() {
+    $modal.find('#gal-live2d-auto-match').on('click', function () {
       if (!model) return;
-      $modal.find('.gal-expr-mapping-select').each(function() {
+      $modal.find('.gal-expr-mapping-select').each(function () {
         const tag = _$(this).data('tag');
         const matched = matchLive2DExpression(model, tag, null);
         if (matched) {
           _$(this).val(matched);
         }
       });
-      $modal.find('.gal-motion-mapping-select').each(function() {
+      $modal.find('.gal-motion-mapping-select').each(function () {
         const tag = _$(this).data('tag');
         const matched = matchLive2DMotion(model, tag, null);
         if (matched) {
@@ -23915,18 +24523,18 @@ ${extraRule}
     });
 
     // 清空映射
-    $modal.find('#gal-live2d-clear-mapping').on('click', function() {
+    $modal.find('#gal-live2d-clear-mapping').on('click', function () {
       $modal.find('.gal-expr-mapping-select').val('');
       $modal.find('.gal-motion-mapping-select').val('');
     });
 
     // 关闭/取消
-    $modal.find('#gal-live2d-settings-close, #gal-live2d-settings-cancel').on('click', function() {
+    $modal.find('#gal-live2d-settings-close, #gal-live2d-settings-cancel').on('click', function () {
       $modal.remove();
     });
 
     // 开始调整位置 - 关闭弹窗并进入位置调整模式
-    $modal.find('#gal-live2d-start-position-edit').on('click', async function() {
+    $modal.find('#gal-live2d-start-position-edit').on('click', async function () {
       // 先应用当前弹窗中的设置
       const currentTransform = {
         offsetX: parseInt($modal.find('#gal-live2d-offset-x').val()) || 0,
@@ -23946,7 +24554,7 @@ ${extraRule}
     });
 
     // 保存设置
-    $modal.find('#gal-live2d-settings-save').on('click', function() {
+    $modal.find('#gal-live2d-settings-save').on('click', function () {
       // 收集变换设置
       const newTransform = {
         offsetX: parseInt($modal.find('#gal-live2d-offset-x').val()) || 0,
@@ -23958,7 +24566,7 @@ ${extraRule}
       // 收集精度设置
       const newQuality = {
         textureResolution: parseFloat($modal.find('input[name="textureResolution"]:checked').val()) || 1.0,
-        devicePixelRatio: $modal.find('input[name="devicePixelRatio"]:checked').val()
+        devicePixelRatio: $modal.find('input[name="devicePixelRatio"]:checked').val(),
       };
       if (newQuality.devicePixelRatio !== 'auto') {
         newQuality.devicePixelRatio = parseFloat(newQuality.devicePixelRatio);
@@ -23966,7 +24574,7 @@ ${extraRule}
 
       // 收集表情映射
       const newExpressionMapping = {};
-      $modal.find('.gal-expr-mapping-select').each(function() {
+      $modal.find('.gal-expr-mapping-select').each(function () {
         const tag = _$(this).data('tag');
         const val = _$(this).val();
         if (val) {
@@ -23976,7 +24584,7 @@ ${extraRule}
 
       // 收集动作映射
       const newMotionMapping = {};
-      $modal.find('.gal-motion-mapping-select').each(function() {
+      $modal.find('.gal-motion-mapping-select').each(function () {
         const tag = _$(this).data('tag');
         const val = _$(this).val();
         if (val === '__disabled__') {
@@ -23991,7 +24599,7 @@ ${extraRule}
         transform: newTransform,
         quality: newQuality,
         expressionMapping: newExpressionMapping,
-        motionMapping: newMotionMapping
+        motionMapping: newMotionMapping,
       };
       setLive2DConfig(characterId, newConfig);
 
@@ -24249,7 +24857,9 @@ ${extraRule}
 
         $toggle.prop('disabled', !hasModel);
         $toggle.prop('checked', useLive2D && hasModel);
-        $uploadBtn.html(hasModel ? '<i class="fa-solid fa-sync"></i> 更换模型' : '<i class="fa-solid fa-upload"></i> 上传模型');
+        $uploadBtn.html(
+          hasModel ? '<i class="fa-solid fa-sync"></i> 更换模型' : '<i class="fa-solid fa-upload"></i> 上传模型',
+        );
         $deleteBtn.css('display', hasModel ? '' : 'none');
         $previewBtn.css('display', hasModel ? '' : 'none');
         $settingsBtn.css('display', hasModel ? '' : 'none');
@@ -24264,19 +24874,19 @@ ${extraRule}
       })();
 
       // Live2D 开关切换
-      $('#gal-char-live2d-toggle').on('change', function() {
+      $('#gal-char-live2d-toggle').on('change', function () {
         const useLive2D = this.checked;
         setCharacterUseLive2D(characterId, useLive2D);
         showToast(useLive2D ? `已启用 ${characterId} 的 Live2D` : `已禁用 ${characterId} 的 Live2D`);
       });
 
       // Live2D 上传按钮
-      $('#gal-char-live2d-upload').on('click', function() {
+      $('#gal-char-live2d-upload').on('click', function () {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.zip';
 
-        input.onchange = async (e) => {
+        input.onchange = async e => {
           const file = e.target.files[0];
           if (!file) return;
 
@@ -24311,7 +24921,7 @@ ${extraRule}
       });
 
       // Live2D 删除按钮
-      $('#gal-char-live2d-delete').on('click', async function() {
+      $('#gal-char-live2d-delete').on('click', async function () {
         if (!confirm(`确定删除角色 "${characterId}" 的 Live2D 模型吗？`)) return;
 
         try {
@@ -24334,7 +24944,7 @@ ${extraRule}
       });
 
       // Live2D 预览按钮
-      $('#gal-char-live2d-preview').on('click', async function() {
+      $('#gal-char-live2d-preview').on('click', async function () {
         const $previewContainer = $('#gal-char-live2d-preview-container');
         const $previewCanvas = $('#gal-char-live2d-preview-canvas');
         const $exprSelect = $('#gal-char-live2d-expr-select');
@@ -24352,7 +24962,9 @@ ${extraRule}
 
         // 显示预览
         $previewContainer.show();
-        $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fff;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem;"></i></div>');
+        $previewCanvas.html(
+          '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fff;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem;"></i></div>',
+        );
 
         // 重置缩放滑块
         $zoomSlider.val(1);
@@ -24362,7 +24974,9 @@ ${extraRule}
           // 加载模型
           const model = await Live2DManager.loadModel(characterId);
           if (!model) {
-            $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">模型加载失败</div>');
+            $previewCanvas.html(
+              '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">模型加载失败</div>',
+            );
             return;
           }
 
@@ -24371,7 +24985,9 @@ ${extraRule}
           Live2DStage.pushMount($previewCanvas[0], { mode: 'single', focusCharacterId: characterId });
           if (!Live2DStage.attach(characterId, model, 'left', { entering: false })) {
             Live2DStage.popMount();
-            $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败：无法挂载舞台</div>');
+            $previewCanvas.html(
+              '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败：无法挂载舞台</div>',
+            );
             return;
           }
 
@@ -24397,29 +25013,33 @@ ${extraRule}
             $motionSelect.append('<option value="" disabled>无可用动作</option>');
           }
 
-          console.log(`[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情: ${expressions.length}, 动作组: ${motionGroups.length}`);
+          console.log(
+            `[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情: ${expressions.length}, 动作组: ${motionGroups.length}`,
+          );
         } catch (err) {
           console.error(`[${SCRIPT_NAME}] Live2D 预览失败:`, err);
-          $previewCanvas.html(`<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败: ${err.message}</div>`);
+          $previewCanvas.html(
+            `<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败: ${err.message}</div>`,
+          );
         }
       });
 
       // Live2D 预览关闭按钮
-      $('#gal-char-live2d-preview-close').on('click', function() {
+      $('#gal-char-live2d-preview-close').on('click', function () {
         const $previewContainer = $('#gal-char-live2d-preview-container');
         Live2DStage.popMount();
         $previewContainer.hide();
       });
 
       // Live2D 缩放控制
-      $('#gal-char-live2d-zoom').on('input', function() {
+      $('#gal-char-live2d-zoom').on('input', function () {
         const zoomFactor = parseFloat($(this).val());
         $('#gal-char-live2d-zoom-value').text(Math.round(zoomFactor * 100) + '%');
         Live2DManager.setZoom(characterId, zoomFactor);
       });
 
       // Live2D 表情选择
-      $('#gal-char-live2d-expr-select').on('change', function() {
+      $('#gal-char-live2d-expr-select').on('change', function () {
         const value = $(this).val();
         if (!value) return;
 
@@ -24436,7 +25056,7 @@ ${extraRule}
       });
 
       // Live2D 动作选择
-      $('#gal-char-live2d-motion-select').on('change', function() {
+      $('#gal-char-live2d-motion-select').on('change', function () {
         const value = $(this).val();
         if (!value) return;
 
@@ -24448,12 +25068,12 @@ ${extraRule}
           model.motion(value, 0, 'FORCE');
           console.log(`[${SCRIPT_NAME}] 播放动作: ${value}`);
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] 动作播放失败:`, e);
+          letsole.warn(`[${SCRIPT_NAME}] 动作播放失败:`, e);
         }
       });
 
       // Live2D 设置按钮
-      $('#gal-char-live2d-settings').on('click', async function() {
+      $('#gal-char-live2d-settings').on('click', async function () {
         await showLive2DSettingsModal(characterId);
       });
 
@@ -24516,11 +25136,12 @@ ${extraRule}
                 </button>
               </div>
               <div class="gal-pack-list" style="display: flex; flex-direction: column; gap: 10px;">
-                ${allPacks.map(pack => {
-                  const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0 };
-                  const isDefault = pack.id === DEFAULT_PACK_ID;
-                  const isCurrent = pack.id === currentPackId;
-                  return `
+                ${allPacks
+                  .map(pack => {
+                    const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0 };
+                    const isDefault = pack.id === DEFAULT_PACK_ID;
+                    const isCurrent = pack.id === currentPackId;
+                    return `
                     <div class="gal-pack-row" data-pack-id="${pack.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: ${isCurrent ? '#e8f4fd' : '#f8f9fa'}; border: 2px solid ${isCurrent ? '#0d6efd' : '#dee2e6'}; border-radius: 8px;">
                       <div style="display: flex; align-items: center; gap: 12px;">
                         <i class="fa-solid fa-folder${isCurrent ? '-open' : ''}" style="font-size: 1.5rem; color: ${isCurrent ? '#0d6efd' : '#6c757d'};"></i>
@@ -24530,7 +25151,7 @@ ${extraRule}
                             ${isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">默认</span>' : ''}
                             ${isCurrent ? '<span style="font-size: 0.7rem; background: #0d6efd; color: #fff; padding: 2px 6px; border-radius: 3px;">当前</span>' : ''}
                           </div>
-                          <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">
+    let                   <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">
                             <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘 &nbsp;|&nbsp;
                             <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景
                           </div>
@@ -24543,7 +25164,8 @@ ${extraRule}
                       </div>
                     </div>
                   `;
-                }).join('')}
+                  })
+                  .join('')}
               </div>
             </div>
           </div>
@@ -24587,13 +25209,15 @@ ${extraRule}
         const currentName = $row.find('.pack-name-display').text();
         const newName = prompt('请输入新名称：', currentName);
         if (newName && newName.trim() && newName.trim() !== currentName) {
-          renameImagePack(packId, newName.trim()).then(() => {
-            $modal.remove();
-            showPackManagerModal();
-            showToast('已重命名图包');
-          }).catch(err => {
-            alert('重命名失败：' + err.message);
-          });
+          renameImagePack(packId, newName.trim())
+            .then(() => {
+              $modal.remove();
+              showPackManagerModal();
+              showToast('已重命名图包');
+            })
+            .catch(err => {
+              alert('重命名失败：' + err.message);
+            });
         }
       });
 
@@ -24603,13 +25227,15 @@ ${extraRule}
         const $row = $(this).closest('.gal-pack-row');
         const packName = $row.find('.pack-name-display').text();
         if (confirm(`确定要删除图包"${packName}"吗？\n\n该图包内的所有资源将被转移到"未定义"图包。`)) {
-          deleteImagePack(packId).then(() => {
-            $modal.remove();
-            showPackManagerModal();
-            showToast('已删除图包，资源已转移');
-          }).catch(err => {
-            alert('删除失败：' + err.message);
-          });
+          deleteImagePack(packId)
+            .then(() => {
+              $modal.remove();
+              showPackManagerModal();
+              showToast('已删除图包，资源已转移');
+            })
+            .catch(err => {
+              alert('删除失败：' + err.message);
+            });
         }
       });
     });
@@ -24640,9 +25266,14 @@ ${extraRule}
                 将 <strong>${resourceIds.length}</strong> 个${resourceType === 'sprite' ? '立绘' : '背景'}转移到：
               </p>
               <select id="gal-transfer-target" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 6px; font-size: 1rem;">
-                ${allPacks.filter(p => p.id !== currentPackId).map(pack => `
+                ${allPacks
+                  .filter(p => p.id !== currentPackId)
+                  .map(
+                    pack => `
                   <option value="${pack.id}">${pack.name}</option>
-                `).join('')}
+                `,
+                  )
+                  .join('')}
               </select>
               <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
                 <button class="gal-action-btn" id="gal-transfer-cancel" style="padding: 8px 16px;">取消</button>
@@ -24671,19 +25302,22 @@ ${extraRule}
           return;
         }
 
-        const transferPromise = resourceType === 'sprite'
-          ? transferSpritesToPack(resourceIds, targetPackId)
-          : transferBackgroundsToPack(resourceIds, targetPackId);
+        const transferPromise =
+          resourceType === 'sprite'
+            ? transferSpritesToPack(resourceIds, targetPackId)
+            : transferBackgroundsToPack(resourceIds, targetPackId);
 
-        transferPromise.then(count => {
-          $modal.remove();
-          showToast(`已转移 ${count} 个${resourceType === 'sprite' ? '立绘' : '背景'}`);
-          if (typeof onComplete === 'function') {
-            onComplete();
-          }
-        }).catch(err => {
-          alert('转移失败：' + err.message);
-        });
+        transferPromise
+          .then(count => {
+            $modal.remove();
+            showToast(`已转移 ${count} 个${resourceType === 'sprite' ? '立绘' : '背景'}`);
+            if (typeof onComplete === 'function') {
+              onComplete();
+            }
+          })
+          .catch(err => {
+            alert('转移失败：' + err.message);
+          });
       });
     });
   }
@@ -25008,27 +25642,30 @@ ${extraRule}
   // 标签映射表：将模糊/不合适的标签映射到更精确的 Wallhaven 标签
   const WALLHAVEN_TAG_MAPPING = {
     // 场景类型映射
-    'study': 'library',           // study 有歧义，用 library 更准确
-    'chinese': 'asian',           // chinese 标签少，用 asian
-    'japanese': 'asian',          // japanese 标签少，用 asian
-    'room': 'interior',           // room 太泛，用 interior
-    'house': 'building',          // house 用 building
+    study: 'library', // study 有歧义，用 library 更准确
+    chinese: 'asian', // chinese 标签少，用 asian
+    japanese: 'asian', // japanese 标签少，用 asian
+    room: 'interior', // room 太泛，用 interior
+    house: 'building', // house 用 building
     // 排除过于笼统的标签
-    'ancient': '',                // ancient 太泛，移除
-    'traditional': '',            // traditional 太泛，移除
-    'historical': '',             // historical 太泛，移除
-    'background': '',             // background 太泛，移除
-    'scenery': '',                // scenery 太泛，移除
-    'atmosphere': '',             // atmosphere 太泛，移除
-    'detailed': '',               // detailed 不是场景标签
+    ancient: '', // ancient 太泛，移除
+    traditional: '', // traditional 太泛，移除
+    historical: '', // historical 太泛，移除
+    background: '', // background 太泛，移除
+    scenery: '', // scenery 太泛，移除
+    atmosphere: '', // atmosphere 太泛，移除
+    detailed: '', // detailed 不是场景标签
     // 排除生僻标签
-    'calligraphy': '',            // calligraphy 标签少
-    'brushes': '',                // brushes 标签少
+    calligraphy: '', // calligraphy 标签少
+    brushes: '', // brushes 标签少
   };
 
   // 标签清理和优化函数
   function optimizeWallhavenTags(rawTags) {
-    const tagList = rawTags.split(',').map(t => t.trim().toLowerCase()).filter(t => t);
+    const tagList = rawTags
+      .split(',')
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t);
 
     // 1. 映射转换
     let optimized = tagList.map(tag => WALLHAVEN_TAG_MAPPING[tag] || tag).filter(t => t);
@@ -25187,8 +25824,14 @@ ${extraRule}
     if (looseUrlMatch && looseUrlMatch[1]) {
       const url = looseUrlMatch[1];
       // 检查是否可能是图片URL
-      if (url.includes('image') || url.includes('img') || url.includes('pic') ||
-          url.includes('photo') || url.includes('upload') || url.includes('file')) {
+      if (
+        url.includes('image') ||
+        url.includes('img') ||
+        url.includes('pic') ||
+        url.includes('photo') ||
+        url.includes('upload') ||
+        url.includes('file')
+      ) {
         console.log(`[${SCRIPT_NAME}] 大香蕉生图: 解析到可能的图片 URL`);
         return fixLocalhostUrl(url);
       }
@@ -25246,12 +25889,16 @@ ${extraRule}
           // 添加角色外观一致性提示（发送给生图AI）
           const appearances = getBananaCharacterAppearances();
           if (appearances.length > 0) {
-            const appearanceHint = '\n\n### 角色外观参考（必须遵守）\n' +
-              appearances.slice(0, 3).map(a => {
-                const name = a.characterName || a.characterId || '角色';
-                const expr = a.expression || '默认';
-                return `- **${name}**: 默认立绘表情「${expr}」`;
-              }).join('\n') +
+            const appearanceHint =
+              '\n\n### 角色外观参考（必须遵守）\n' +
+              appearances
+                .slice(0, 3)
+                .map(a => {
+                  const name = a.characterName || a.characterId || '角色';
+                  const expr = a.expression || '默认';
+                  return `- **${name}**: 默认立绘表情「${expr}」`;
+                })
+                .join('\n') +
               '\n**重要**: 生成CG时人物外观需与以上立绘保持一致。\n';
             finalPrompt = finalPrompt + appearanceHint;
           }
@@ -25283,7 +25930,7 @@ ${extraRule}
         const response = await fetch(genUrl, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${bs.proxyApiKey || ''}`,
+            Authorization: `Bearer ${bs.proxyApiKey || ''}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -26374,7 +27021,7 @@ ${extraRule}
             </div>
 
             <!-- Tab 切换 -->
-            <div class="gal-tab-header">
+    cons      <div class="gal-tab-header">
               <button class="gal-tab-btn active" data-tab="sprites">
                 <i class="fa-solid fa-user"></i> 立绘管理
               </button>
@@ -27305,61 +27952,196 @@ ${extraRule}
     return model;
   }
 
+  async function _previewGptSoVitsModel(modelInput, options = {}) {
+    const cfg = getGptSoVitsConfig();
+    const normalized = _normalizeGptSoVitsModel(modelInput || _buildDefaultGptSoVitsModel(), cfg, 0);
+    if (!normalized) {
+      showToast('试听失败：模型配置无效');
+      return false;
+    }
+
+    // 深拷贝，避免修改编辑中的草稿对象
+    const model = JSON.parse(JSON.stringify(normalized));
+    const refs = _safeArray(model.refAudios);
+    const forcedRefId = String(options.refId || '').trim();
+    const forcedExpression = String(options.expression || '').trim();
+
+    if (forcedRefId) {
+      const targetRef = refs.find(item => String(item?.id || '').trim() === forcedRefId);
+      if (targetRef) {
+        model.defaultRefId = String(targetRef.id || '').trim();
+        model.paths = Object.assign({}, model.paths, {
+          defaultRefAudioPath: String(targetRef.path || '').trim(),
+        });
+        model.params = Object.assign({}, model.params, {
+          promptText: String(targetRef.promptText || model.params?.promptText || '').trim(),
+          promptLang: String(targetRef.promptLang || model.params?.promptLang || 'zh').trim() || 'zh',
+          textLang: String(targetRef.textLang || model.params?.textLang || 'auto').trim() || 'auto',
+        });
+      }
+    }
+
+    if (forcedExpression && forcedRefId) {
+      model.expressionRefMap = Object.assign({}, _safeObject(model.expressionRefMap), {
+        [forcedExpression]: forcedRefId,
+      });
+    }
+
+    const runtimeVoice = _buildRuntimeVoiceFromModel(model, cfg);
+    if (!runtimeVoice) {
+      showToast('试听失败：请先启用模型并配置参考音频');
+      return false;
+    }
+
+    const sampleText =
+      String(options.sampleText || options.text || model?.params?.promptText || '').trim() || '你好，这是模型试听。';
+    const segment = {
+      type: 'dialogue',
+      speaker: '',
+      text: sampleText,
+      expression: forcedExpression || '默认',
+      tts: {
+        emotion: forcedExpression || '默认',
+      },
+    };
+
+    if (!String(cfg.apiUrl || '').trim()) {
+      showToast('试听失败：请先填写 GPT-SoVITS API 地址');
+      return false;
+    }
+
+    try {
+      TTSManager.stop();
+      const playbackSessionId = Number(TTSManager._activePlaybackSessionId || 0) + 1;
+      TTSManager._activePlaybackSessionId = playbackSessionId;
+      TTSManager._abortGptSoVitsFetch('model-preview');
+      const ok = await TTSManager._speakWithGptSoVits(
+        segment,
+        `model_preview_${Date.now()}`,
+        runtimeVoice,
+        playbackSessionId,
+      );
+      if (!ok) {
+        showToast('试听失败：请检查 API、模型路径和参考音频');
+      }
+      return !!ok;
+    } catch (e) {
+      const msg = String(e?.message || e || '').trim();
+      const brief = msg.length > 80 ? `${msg.slice(0, 80)}...` : msg;
+      showToast(`试听失败：${brief || 'unknown error'}`);
+      return false;
+    }
+  }
+
   function showGptSoVitsModelEditor(modelInput, options = {}) {
     const onSave = typeof options.onSave === 'function' ? options.onSave : null;
-    const working = _normalizeGptSoVitsModel(modelInput || _buildDefaultGptSoVitsModel(), getGptSoVitsConfig(), 0) || _buildDefaultGptSoVitsModel();
+    const working =
+      _normalizeGptSoVitsModel(modelInput || _buildDefaultGptSoVitsModel(), getGptSoVitsConfig(), 0) ||
+      _buildDefaultGptSoVitsModel();
 
     const mountRoot = getModalMountRoot();
     $(mountRoot).find('#gal-gpt-model-editor-modal').remove();
 
-    const buildRefOptions = refs => {
-      return _safeArray(refs)
-        .map(ref => `<option value="${_escapeHtmlLite(ref.id)}">${_escapeHtmlLite(ref.name || ref.id)}</option>`)
+    const expressionPool = Array.from(
+      new Set(
+        getAllExpressions()
+          .map(item => String(item || '').trim())
+          .filter(Boolean),
+      ),
+    );
+    if (!expressionPool.includes('默认')) {
+      expressionPool.unshift('默认');
+    }
+
+    const languageOptions = [
+      { value: 'zh', label: 'zh (中文)' },
+      { value: 'en', label: 'en (English)' },
+      { value: 'ja', label: 'ja (日本語)' },
+      { value: 'ko', label: 'ko (한국어)' },
+      { value: 'auto', label: 'auto (自动)' },
+    ];
+    const splitOptions = [
+      { value: 'cut0', label: 'cut0' },
+      { value: 'cut1', label: 'cut1' },
+      { value: 'cut2', label: 'cut2' },
+      { value: 'cut3', label: 'cut3' },
+      { value: 'cut4', label: 'cut4' },
+      { value: 'cut5', label: 'cut5 (推荐)' },
+    ];
+    const mediaTypeOptions = [
+      { value: 'wav', label: 'wav' },
+      { value: 'ogg', label: 'ogg' },
+      { value: 'aac', label: 'aac' },
+      { value: 'mp3', label: 'mp3' },
+    ];
+    const switchModeOptions = [
+      { value: 'set_weights', label: 'set_weights (api_v2.py)' },
+      { value: 'set_model', label: 'set_model (api.py)' },
+      { value: 'none', label: 'none' },
+    ];
+
+    const renderOptions = (rows, selected = '') => {
+      const selectedText = String(selected || '').trim();
+      const opts = _safeArray(rows)
+        .map(item => {
+          const value = String(item?.value || '').trim();
+          const label = String(item?.label || value).trim() || value;
+          return `<option value="${_escapeHtmlLite(value)}"${value === selectedText ? ' selected' : ''}>${_escapeHtmlLite(label)}</option>`;
+        })
         .join('');
+      if (selectedText && !_safeArray(rows).some(item => String(item?.value || '').trim() === selectedText)) {
+        return `<option value="${_escapeHtmlLite(selectedText)}" selected>${_escapeHtmlLite(selectedText)} (自定义)</option>${opts}`;
+      }
+      return opts;
     };
 
-    const mapRows = Object.entries(working.expressionRefMap || {}).map(([expression, refId]) => ({ expression, refId }));
-    const refs = _safeArray(working.refAudios);
-    const mapRowsHtml =
-      mapRows.length > 0
-        ? mapRows
-            .map(
-              row => `
-              <div class="gal-gpt-map-row" data-map-row>
-                <input type="text" data-field="expression" value="${_escapeHtmlLite(row.expression)}" placeholder="表情标签（如 开心）">
-                <select data-field="refId">${buildRefOptions(refs)}</select>
-                <button class="gal-action-btn" data-action="remove-map" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-              </div>
-            `,
-            )
-            .join('')
-        : '';
+    const renderExpressionOptions = selected => {
+      return renderOptions(
+        expressionPool.map(name => ({ value: name, label: name })),
+        selected,
+      );
+    };
 
-    const refsHtml =
-      refs.length > 0
-        ? refs
-            .map(
-              ref => `
-            <div class="gal-gpt-ref-row" data-ref-row>
-              <input type="text" data-field="id" value="${_escapeHtmlLite(ref.id)}" placeholder="ref id">
-              <input type="text" data-field="name" value="${_escapeHtmlLite(ref.name)}" placeholder="显示名">
-              <input type="text" data-field="path" value="${_escapeHtmlLite(ref.path)}" placeholder="参考音频路径">
-              <input type="text" data-field="promptText" value="${_escapeHtmlLite(ref.promptText || '')}" placeholder="参考文本">
-              <input type="text" data-field="promptLang" value="${_escapeHtmlLite(ref.promptLang || 'zh')}" placeholder="promptLang">
-              <input type="text" data-field="textLang" value="${_escapeHtmlLite(ref.textLang || 'auto')}" placeholder="textLang">
-              <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-            </div>
-          `,
-            )
-            .join('')
-        : '';
+    const refExpressionMap = {};
+    Object.entries(_safeObject(working.expressionRefMap)).forEach(([expression, refId]) => {
+      const expr = String(expression || '').trim();
+      const id = String(refId || '').trim();
+      if (!expr || !id || refExpressionMap[id]) return;
+      refExpressionMap[id] = expr;
+    });
+
+    const refs = _safeArray(working.refAudios);
+    const buildRefRowHtml = (rawRef, idx = 0) => {
+      const ref = _safeObject(rawRef);
+      const id = String(ref.id || '').trim() || `ref_${Date.now().toString(36)}_${idx + 1}`;
+      const expression = String(refExpressionMap[id] || '').trim() || '默认';
+      const name = String(ref.name || '').trim() || `参考音频${idx + 1}`;
+      return `
+        <div class="gal-gpt-ref-row" data-ref-row>
+          <button class="gal-action-btn" data-action="preview-ref" style="padding: 6px 10px;"><i class="fa-solid fa-play"></i></button>
+          <select data-field="expression">${renderExpressionOptions(expression)}</select>
+          <input type="text" data-field="name" value="${_escapeHtmlLite(name)}" placeholder="显示名">
+          <input type="text" data-field="path" value="${_escapeHtmlLite(ref.path || '')}" placeholder="参考音频路径（可手填）">
+          <input type="text" data-field="promptText" value="${_escapeHtmlLite(ref.promptText || '')}" placeholder="payload.prompt_text">
+          <select data-field="promptLang">${renderOptions(languageOptions, ref.promptLang || 'zh')}</select>
+          <select data-field="textLang">${renderOptions(languageOptions, ref.textLang || 'auto')}</select>
+          <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
+          <input type="hidden" data-field="id" value="${_escapeHtmlLite(id)}">
+        </div>
+      `;
+    };
+
+    const refsHtml = refs.length > 0 ? refs.map((ref, idx) => buildRefRowHtml(ref, idx)).join('') : '';
 
     const modalHtml = `
       <div class="gal-input-modal" id="gal-gpt-model-editor-modal">
-        <div class="gal-input-box" style="width:min(1080px,96vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
-          <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
+        <div class="gal-input-box" style="width:min(1480px,98vw);max-width:none;max-height:94vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+          <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;gap:10px;flex-wrap:wrap;">
             <div style="font-weight:700;">GPT-SoVITS 模型编辑</div>
-            <button class="gal-action-btn" id="gal-gpt-model-editor-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+            <div style="display:flex;gap:8px;">
+              <button class="gal-action-btn" id="gal-gpt-model-editor-preview" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-play"></i> 试听当前模型</button>
+              <button class="gal-action-btn" id="gal-gpt-model-editor-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+            </div>
           </div>
           <div style="padding:14px;overflow:auto;display:flex;flex-direction:column;gap:14px;background:var(--SmartThemeFormBg,#fff);">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">
@@ -27374,25 +28156,58 @@ ${extraRule}
             <div>
               <div style="font-weight:700;margin-bottom:6px;">路径三大件</div>
               <div style="display:grid;grid-template-columns:1fr;gap:8px;">
-                <input type="text" id="gal-gpt-model-gpt-path" value="${_escapeHtmlLite(working.paths?.gptWeightsPath || '')}" placeholder="gptWeightsPath (*.ckpt)">
-                <input type="text" id="gal-gpt-model-sovits-path" value="${_escapeHtmlLite(working.paths?.sovitsWeightsPath || '')}" placeholder="sovitsWeightsPath (*.pth)">
-                <input type="text" id="gal-gpt-model-default-ref-path" value="${_escapeHtmlLite(working.paths?.defaultRefAudioPath || '')}" placeholder="defaultRefAudioPath">
+                <label>
+                  <span class="gal-gpt-field-key">paths.gptWeightsPath</span>
+                  <input type="text" id="gal-gpt-model-gpt-path" value="${_escapeHtmlLite(working.paths?.gptWeightsPath || '')}" placeholder="*.ckpt / *.pth / *.safetensors">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">paths.sovitsWeightsPath</span>
+                  <input type="text" id="gal-gpt-model-sovits-path" value="${_escapeHtmlLite(working.paths?.sovitsWeightsPath || '')}" placeholder="*.pth / *.ckpt / *.safetensors">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">paths.defaultRefAudioPath</span>
+                  <input type="text" id="gal-gpt-model-default-ref-path" value="${_escapeHtmlLite(working.paths?.defaultRefAudioPath || '')}" placeholder="默认参考音频路径">
+                </label>
               </div>
             </div>
 
             <div>
               <div style="font-weight:700;margin-bottom:6px;">配置参数</div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
-                <input type="text" id="gal-gpt-model-prompt-text" value="${_escapeHtmlLite(working.params?.promptText || '')}" placeholder="promptText">
-                <input type="text" id="gal-gpt-model-prompt-lang" value="${_escapeHtmlLite(working.params?.promptLang || 'zh')}" placeholder="promptLang">
-                <input type="text" id="gal-gpt-model-text-lang" value="${_escapeHtmlLite(working.params?.textLang || 'auto')}" placeholder="textLang">
-                <input type="text" id="gal-gpt-model-split" value="${_escapeHtmlLite(working.params?.textSplitMethod || 'cut5')}" placeholder="textSplitMethod">
-                <input type="number" id="gal-gpt-model-speed" value="${_escapeHtmlLite(working.params?.speedFactor ?? 1)}" min="0.1" max="4" step="0.05" placeholder="speedFactor">
-                <input type="text" id="gal-gpt-model-media" value="${_escapeHtmlLite(working.params?.mediaType || 'wav')}" placeholder="mediaType">
-                <input type="text" id="gal-gpt-model-switch-mode" value="${_escapeHtmlLite(working.params?.modelSwitchMode || 'set_weights')}" placeholder="modelSwitchMode">
-                <input type="text" id="gal-gpt-model-set-endpoint" value="${_escapeHtmlLite(working.params?.setModelEndpoint || '/set_model')}" placeholder="setModelEndpoint">
-                <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="gal-gpt-model-streaming" ${working.params?.streamingMode ? 'checked' : ''}>streamingMode</label>
-                <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="gal-gpt-model-strict" ${working.params?.strictWeightSwitch ? 'checked' : ''}>strictWeightSwitch</label>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">
+                <label>
+                  <span class="gal-gpt-field-key">payload.prompt_text</span>
+                  <input type="text" id="gal-gpt-model-prompt-text" value="${_escapeHtmlLite(working.params?.promptText || '')}" placeholder="参考文本，可为空">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.prompt_lang</span>
+                  <select id="gal-gpt-model-prompt-lang">${renderOptions(languageOptions, working.params?.promptLang || 'zh')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.text_lang</span>
+                  <select id="gal-gpt-model-text-lang">${renderOptions(languageOptions, working.params?.textLang || 'auto')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.text_split_method</span>
+                  <select id="gal-gpt-model-split">${renderOptions(splitOptions, working.params?.textSplitMethod || 'cut5')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.speed_factor</span>
+                  <input type="number" id="gal-gpt-model-speed" value="${_escapeHtmlLite(working.params?.speedFactor ?? 1)}" min="0.1" max="4" step="0.05">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.media_type</span>
+                  <select id="gal-gpt-model-media">${renderOptions(mediaTypeOptions, working.params?.mediaType || 'wav')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">params.modelSwitchMode</span>
+                  <select id="gal-gpt-model-switch-mode">${renderOptions(switchModeOptions, working.params?.modelSwitchMode || 'set_weights')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">params.setModelEndpoint</span>
+                  <input type="text" id="gal-gpt-model-set-endpoint" value="${_escapeHtmlLite(working.params?.setModelEndpoint || '/set_model')}" placeholder="/set_model">
+                </label>
+                <label class="gal-gpt-checkbox-label"><input type="checkbox" id="gal-gpt-model-streaming" ${working.params?.streamingMode ? 'checked' : ''}><span>params.streamingMode</span></label>
+                <label class="gal-gpt-checkbox-label"><input type="checkbox" id="gal-gpt-model-strict" ${working.params?.strictWeightSwitch ? 'checked' : ''}><span>params.strictWeightSwitch</span></label>
               </div>
             </div>
 
@@ -27402,14 +28217,6 @@ ${extraRule}
                 <button class="gal-action-btn" id="gal-gpt-add-ref-row" style="padding:6px 10px;"><i class="fa-solid fa-plus"></i> 添加参考音频</button>
               </div>
               <div id="gal-gpt-ref-list" style="display:flex;flex-direction:column;gap:6px;">${refsHtml}</div>
-            </div>
-
-            <div>
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                <div style="font-weight:700;">表情标签 -> 参考音频映射</div>
-                <button class="gal-action-btn" id="gal-gpt-add-map-row" style="padding:6px 10px;"><i class="fa-solid fa-plus"></i> 添加映射</button>
-              </div>
-              <div id="gal-gpt-map-list" style="display:flex;flex-direction:column;gap:6px;">${mapRowsHtml}</div>
             </div>
           </div>
           <div style="padding:12px 14px;border-top:1px solid #ddd;display:flex;gap:8px;justify-content:flex-end;background:#f8fafc;">
@@ -27421,122 +28228,262 @@ ${extraRule}
       <style>
         #gal-gpt-model-editor-modal input, #gal-gpt-model-editor-modal select { width:100%; box-sizing:border-box; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; background:#fff; color:#111; }
         #gal-gpt-model-editor-modal label { font-size:0.86rem; color:#334155; display:flex; flex-direction:column; gap:4px; }
-        #gal-gpt-model-editor-modal .gal-gpt-ref-row, #gal-gpt-model-editor-modal .gal-gpt-map-row { display:grid; gap:6px; align-items:center; }
-        #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:120px 140px minmax(180px,1fr) minmax(120px,1fr) 90px 90px auto; }
-        #gal-gpt-model-editor-modal .gal-gpt-map-row { grid-template-columns:minmax(160px,1fr) minmax(180px,1fr) auto; }
+        #gal-gpt-model-editor-modal .gal-gpt-field-key { font-family:Consolas,Monaco,monospace; font-size:0.76rem; color:#475569; }
+        #gal-gpt-model-editor-modal .gal-gpt-checkbox-label { display:flex; align-items:center; gap:8px; padding-top:4px; }
+        #gal-gpt-model-editor-modal .gal-gpt-checkbox-label input { width:auto; }
+        #gal-gpt-model-editor-modal .gal-gpt-path-inline { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
+        #gal-gpt-model-editor-modal .gal-gpt-ref-row { display:grid; gap:6px; align-items:center; grid-template-columns:auto minmax(140px,1fr) minmax(130px,1.2fr) minmax(260px,2fr) minmax(220px,1.6fr) 120px 120px auto; }
+        #gal-gpt-model-editor-modal .gal-gpt-ref-row > [data-action="preview-ref"] { min-width:42px; }
+        @media (max-width: 1280px) {
+          #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:auto minmax(130px,1fr) minmax(120px,1.1fr) minmax(220px,1.8fr) minmax(180px,1.3fr) 110px 110px auto; }
+        }
         @media (max-width: 900px) {
           #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:1fr; }
-          #gal-gpt-model-editor-modal .gal-gpt-map-row { grid-template-columns:1fr; }
           #gal-gpt-model-editor-modal .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+          #gal-gpt-model-editor-modal .gal-input-box > div:nth-child(1),
+          #gal-gpt-model-editor-modal .gal-input-box > div:nth-child(3) { flex:0 0 auto !important; overflow:visible !important; }
+          #gal-gpt-model-editor-modal .gal-input-box > div:nth-child(2) { flex:1 1 auto !important; min-height:0; overflow:auto !important; }
         }
       </style>
     `;
 
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find('#gal-gpt-model-editor-modal');
+    let isPreviewing = false;
+    let refPreviewAudio = null;
 
-    const close = () => $modal.remove();
+    const close = () => {
+      try {
+        if (refPreviewAudio) {
+          refPreviewAudio.pause();
+          refPreviewAudio.src = '';
+          refPreviewAudio = null;
+        }
+      } catch (e) {}
+
+      $modal.find('#gal-gpt-ref-list [data-ref-row]').each(function () {
+        const $row = $(this);
+        const objectUrl = String($row.data('pickedAudioUrl') || '').trim();
+        if (objectUrl) {
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch (e) {}
+          $row.removeData('pickedAudioUrl');
+        }
+        $row.removeData('pickedAudioFile');
+      });
+
+      $modal.remove();
+    };
+
     $modal.on('click', e => {
       if (e.target === $modal[0]) close();
     });
     $modal.find('#gal-gpt-model-editor-close, #gal-gpt-model-editor-cancel').on('click', close);
 
-    const createRefRow = () => {
-      $('#gal-gpt-ref-list').append(`
-        <div class="gal-gpt-ref-row" data-ref-row>
-          <input type="text" data-field="id" value="ref_${Date.now().toString(36)}" placeholder="ref id">
-          <input type="text" data-field="name" value="参考音频" placeholder="显示名">
-          <input type="text" data-field="path" value="" placeholder="参考音频路径">
-          <input type="text" data-field="promptText" value="" placeholder="参考文本">
-          <input type="text" data-field="promptLang" value="zh" placeholder="promptLang">
-          <input type="text" data-field="textLang" value="auto" placeholder="textLang">
-          <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-        </div>
-      `);
-    };
-
-    const buildMapRefSelectOptions = () => {
-      const refsNow = [];
-      $('#gal-gpt-ref-list [data-ref-row]').each(function () {
-        const id = String($(this).find('[data-field="id"]').val() || '').trim();
-        const name = String($(this).find('[data-field="name"]').val() || '').trim() || id;
-        if (!id) return;
-        refsNow.push({ id, name });
-      });
-      return refsNow
-        .map(item => `<option value="${_escapeHtmlLite(item.id)}">${_escapeHtmlLite(item.name)}</option>`)
-        .join('');
-    };
-
-    const createMapRow = () => {
-      $('#gal-gpt-map-list').append(`
-        <div class="gal-gpt-map-row" data-map-row>
-          <input type="text" data-field="expression" value="" placeholder="表情标签（如 开心）">
-          <select data-field="refId">${buildMapRefSelectOptions()}</select>
-          <button class="gal-action-btn" data-action="remove-map" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-        </div>
-      `);
-    };
-
-    $('#gal-gpt-add-ref-row').on('click', createRefRow);
-    $('#gal-gpt-add-map-row').on('click', createMapRow);
-
-    $modal.on('click', '[data-action="remove-ref"]', function () {
-      $(this).closest('[data-ref-row]').remove();
-    });
-    $modal.on('click', '[data-action="remove-map"]', function () {
-      $(this).closest('[data-map-row]').remove();
+    $modal.on('input change', '#gal-gpt-ref-list [data-field="path"]', function () {
+      const $row = $(this).closest('[data-ref-row]');
+      const oldUrl = String($row.data('pickedAudioUrl') || '').trim();
+      if (oldUrl) {
+        try {
+          URL.revokeObjectURL(oldUrl);
+        } catch (e) {}
+        $row.removeData('pickedAudioUrl');
+      }
+      $row.removeData('pickedAudioFile');
     });
 
-    $('#gal-gpt-model-editor-save').on('click', async () => {
+    const collectModelDraft = () => {
       const refs = [];
-      $('#gal-gpt-ref-list [data-ref-row]').each(function () {
-        const id = String($(this).find('[data-field="id"]').val() || '').trim();
+      const expressionRefMap = {};
+
+      $modal.find('#gal-gpt-ref-list [data-ref-row]').each(function (idx) {
+        let id = String($(this).find('[data-field="id"]').val() || '').trim();
         const name = String($(this).find('[data-field="name"]').val() || '').trim();
+        const expression = String($(this).find('[data-field="expression"]').val() || '').trim();
         const path = String($(this).find('[data-field="path"]').val() || '').trim();
         const promptText = String($(this).find('[data-field="promptText"]').val() || '').trim();
         const promptLang = String($(this).find('[data-field="promptLang"]').val() || 'zh').trim() || 'zh';
         const textLang = String($(this).find('[data-field="textLang"]').val() || 'auto').trim() || 'auto';
+
         if (!id && !path) return;
-        refs.push({ id, name, path, promptText, promptLang, textLang });
+        if (!id) id = `ref_${idx + 1}`;
+
+        refs.push({ id, name: name || id, path, promptText, promptLang, textLang });
+        if (expression) {
+          expressionRefMap[expression] = id;
+        }
       });
 
-      const expressionRefMap = {};
-      $('#gal-gpt-map-list [data-map-row]').each(function () {
-        const expression = String($(this).find('[data-field="expression"]').val() || '').trim();
-        const refId = String($(this).find('[data-field="refId"]').val() || '').trim();
-        if (!expression || !refId) return;
-        expressionRefMap[expression] = refId;
-      });
+      const defaultRefPath = String($modal.find('#gal-gpt-model-default-ref-path').val() || '').trim();
+      let defaultRefId = '';
+      if (defaultRefPath) {
+        const byPath = refs.find(item => String(item.path || '').trim() === defaultRefPath);
+        if (byPath) defaultRefId = String(byPath.id || '').trim();
+      }
+      if (!defaultRefId && refs.length > 0) {
+        defaultRefId = String(refs[0].id || '').trim();
+      }
 
-      const modelDraft = {
+      return {
         id: working.id,
-        name: String($('#gal-gpt-model-name').val() || '').trim(),
-        desc: String($('#gal-gpt-model-desc').val() || '').trim(),
-        enabled: $('#gal-gpt-model-enabled').is(':checked'),
+        name: String($modal.find('#gal-gpt-model-name').val() || '').trim(),
+        desc: String($modal.find('#gal-gpt-model-desc').val() || '').trim(),
+        enabled: $modal.find('#gal-gpt-model-enabled').is(':checked'),
         paths: {
-          gptWeightsPath: String($('#gal-gpt-model-gpt-path').val() || '').trim(),
-          sovitsWeightsPath: String($('#gal-gpt-model-sovits-path').val() || '').trim(),
-          defaultRefAudioPath: String($('#gal-gpt-model-default-ref-path').val() || '').trim(),
+          gptWeightsPath: String($modal.find('#gal-gpt-model-gpt-path').val() || '').trim(),
+          sovitsWeightsPath: String($modal.find('#gal-gpt-model-sovits-path').val() || '').trim(),
+          defaultRefAudioPath: defaultRefPath,
         },
         params: {
-          promptText: String($('#gal-gpt-model-prompt-text').val() || '').trim(),
-          promptLang: String($('#gal-gpt-model-prompt-lang').val() || 'zh').trim() || 'zh',
-          textLang: String($('#gal-gpt-model-text-lang').val() || 'auto').trim() || 'auto',
-          textSplitMethod: String($('#gal-gpt-model-split').val() || 'cut5').trim() || 'cut5',
-          speedFactor: _toFiniteNumber($('#gal-gpt-model-speed').val(), 1),
-          mediaType: String($('#gal-gpt-model-media').val() || 'wav').trim() || 'wav',
-          streamingMode: $('#gal-gpt-model-streaming').is(':checked'),
-          modelSwitchMode: normalizeGptSoVitsSwitchMode($('#gal-gpt-model-switch-mode').val()),
-          setModelEndpoint: String($('#gal-gpt-model-set-endpoint').val() || '/set_model').trim() || '/set_model',
-          strictWeightSwitch: $('#gal-gpt-model-strict').is(':checked'),
+          promptText: String($modal.find('#gal-gpt-model-prompt-text').val() || '').trim(),
+          promptLang: String($modal.find('#gal-gpt-model-prompt-lang').val() || 'zh').trim() || 'zh',
+          textLang: String($modal.find('#gal-gpt-model-text-lang').val() || 'auto').trim() || 'auto',
+          textSplitMethod: String($modal.find('#gal-gpt-model-split').val() || 'cut5').trim() || 'cut5',
+          speedFactor: _toFiniteNumber($modal.find('#gal-gpt-model-speed').val(), 1),
+          mediaType: String($modal.find('#gal-gpt-model-media').val() || 'wav').trim() || 'wav',
+          streamingMode: $modal.find('#gal-gpt-model-streaming').is(':checked'),
+          modelSwitchMode: normalizeGptSoVitsSwitchMode($modal.find('#gal-gpt-model-switch-mode').val()),
+          setModelEndpoint: String($modal.find('#gal-gpt-model-set-endpoint').val() || '/set_model').trim() || '/set_model',
+          strictWeightSwitch: $modal.find('#gal-gpt-model-strict').is(':checked'),
         },
         refAudios: refs,
-        defaultRefId: '',
+        defaultRefId,
         expressionRefMap,
       };
+    };
 
-      const normalized = _normalizeGptSoVitsModel(modelDraft, getGptSoVitsConfig(), 0);
+    const runPreview = async ($btn, task) => {
+      if (isPreviewing) return;
+      isPreviewing = true;
+      const original = $btn?.length ? $btn.html() : '';
+      if ($btn?.length) $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i>');
+      $modal.find('#gal-gpt-model-editor-preview').prop('disabled', true);
+      try {
+        await task();
+      } finally {
+        if ($btn?.length) $btn.prop('disabled', false).html(original);
+        $modal.find('#gal-gpt-model-editor-preview').prop('disabled', false);
+        isPreviewing = false;
+      }
+    };
+
+    const playRefAudio = async $row => {
+      if (!$row || !$row.length) return;
+      const path = String($row.find('[data-field="path"]').val() || '').trim();
+      const pickedFile = $row.data('pickedAudioFile');
+
+      let src = '';
+      let objectUrl = '';
+      if (pickedFile && typeof pickedFile === 'object') {
+        try {
+          objectUrl = URL.createObjectURL(pickedFile);
+          src = objectUrl;
+          $row.data('pickedAudioUrl', objectUrl);
+        } catch (e) {
+          objectUrl = '';
+        }
+      }
+
+      if (!src) {
+        src = path;
+      }
+
+      if (!src) {
+        showToast('请先设置参考音频路径');
+        return;
+      }
+
+      try {
+        if (refPreviewAudio) {
+          refPreviewAudio.pause();
+          refPreviewAudio.src = '';
+          refPreviewAudio = null;
+        }
+
+        const audio = new Audio(src);
+        refPreviewAudio = audio;
+
+        if (objectUrl) {
+          const cleanup = () => {
+            try {
+              URL.revokeObjectURL(objectUrl);
+            } catch (e) {}
+            if (String($row.data('pickedAudioUrl') || '').trim() === objectUrl) {
+              $row.removeData('pickedAudioUrl');
+            }
+          };
+          audio.addEventListener('ended', cleanup, { once: true });
+          audio.addEventListener('error', cleanup, { once: true });
+        }
+
+        await audio.play();
+      } catch (e) {
+        if (objectUrl) {
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch (err) {}
+          if (String($row.data('pickedAudioUrl') || '').trim() === objectUrl) {
+            $row.removeData('pickedAudioUrl');
+          }
+        }
+        const msg = String(e?.message || e || '').trim();
+        const brief = msg.length > 80 ? `${msg.slice(0, 80)}...` : msg;
+        showToast(`参考音频试听失败：${brief || '请检查路径或文件权限'}`);
+      }
+    };
+
+    const createRefRow = () => {
+      const idx = $modal.find('#gal-gpt-ref-list [data-ref-row]').length;
+      const id = `ref_${Date.now().toString(36)}_${idx + 1}`;
+      $('#gal-gpt-ref-list').append(
+        buildRefRowHtml(
+          {
+            id,
+            name: `参考音频${idx + 1}`,
+            path: '',
+            promptText: '',
+            promptLang: 'zh',
+            textLang: 'auto',
+          },
+          idx,
+        ),
+      );
+    };
+
+    $('#gal-gpt-add-ref-row').on('click', createRefRow);
+
+    $modal.on('click', '[data-action="remove-ref"]', function () {
+      const $row = $(this).closest('[data-ref-row]');
+      const oldUrl = String($row.data('pickedAudioUrl') || '').trim();
+      if (oldUrl) {
+        try {
+          URL.revokeObjectURL(oldUrl);
+        } catch (e) {}
+      }
+      $row.removeData('pickedAudioUrl');
+      $row.removeData('pickedAudioFile');
+      $row.remove();
+    });
+
+    $modal.find('#gal-gpt-model-editor-preview').on('click', async function () {
+      await runPreview($(this), async () => {
+        const draft = collectModelDraft();
+        await _previewGptSoVitsModel(draft, {
+          sampleText: String($modal.find('#gal-gpt-model-prompt-text').val() || '').trim() || '你好，这是模型试听。',
+        });
+      });
+    });
+
+    $modal.on('click', '[data-action="preview-ref"]', async function () {
+      const $row = $(this).closest('[data-ref-row]');
+      await runPreview($(this), async () => {
+        await playRefAudio($row);
+      });
+    });
+
+    $('#gal-gpt-model-editor-save').on('click', async () => {
+      const normalized = _normalizeGptSoVitsModel(collectModelDraft(), getGptSoVitsConfig(), 0);
       if (!normalized) {
         showToast('模型保存失败：模型名不能为空');
         return;
@@ -27547,14 +28494,6 @@ ${extraRule}
       }
       close();
     });
-
-    // 初始化映射下拉值
-    $modal.find('[data-map-row]').each(function (idx) {
-      const refId = mapRows[idx]?.refId || '';
-      if (refId) {
-        $(this).find('[data-field="refId"]').val(refId);
-      }
-    });
   }
 
   function showGptSoVitsModelManager(options = {}) {
@@ -27564,7 +28503,7 @@ ${extraRule}
 
     const modalHtml = `
       <div class="gal-input-modal" id="gal-gpt-model-manager-modal">
-        <div class="gal-input-box" style="width:min(1100px,96vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+        <div class="gal-input-box" style="width:min(1600px,98vw);max-width:none;max-height:94vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
           <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
             <div style="font-weight:700;">GPT-SoVITS 模型管理</div>
             <button class="gal-action-btn" id="gal-gpt-model-manager-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
@@ -27573,9 +28512,9 @@ ${extraRule}
             <button class="gal-action-btn primary" id="gal-gpt-model-add"><i class="fa-solid fa-plus"></i> 新增模型</button>
             <button class="gal-action-btn" id="gal-gpt-model-import-folder"><i class="fa-solid fa-folder-open"></i> 文件夹导入</button>
             <input type="file" id="gal-gpt-model-import-folder-file" webkitdirectory directory multiple style="display:none;">
-            <input type="text" id="gal-gpt-model-search" placeholder="搜索模型名..." style="flex:1;min-width:220px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;">
+            <input type="text" id="gal-gpt-model-search" placeholder="搜索模型名..." style="flex:1;min-width:260px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;">
           </div>
-          <div id="gal-gpt-model-list" style="padding:12px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;background:var(--SmartThemeFormBg,#fff);"></div>
+          <div id="gal-gpt-model-list" style="padding:12px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;background:var(--SmartThemeFormBg,#fff);"></div>
         </div>
       </div>
       <style>
@@ -27583,8 +28522,14 @@ ${extraRule}
         #gal-gpt-model-manager-modal .gal-gpt-model-meta { font-size:0.78rem; color:#64748b; line-height:1.35; }
         #gal-gpt-model-manager-modal .gal-gpt-model-actions { display:flex; gap:6px; flex-wrap:wrap; }
         #gal-gpt-model-manager-modal .gal-gpt-model-actions .gal-action-btn { padding:6px 10px; font-size:0.8rem; }
+        @media (max-width: 1280px) {
+          #gal-gpt-model-manager-modal #gal-gpt-model-list { grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+        }
         @media (max-width: 900px) {
           #gal-gpt-model-manager-modal .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+          #gal-gpt-model-manager-modal .gal-input-box > div:nth-child(1),
+          #gal-gpt-model-manager-modal .gal-input-box > div:nth-child(2) { flex:0 0 auto !important; overflow:visible !important; }
+          #gal-gpt-model-manager-modal #gal-gpt-model-list { flex:1 1 auto !important; min-height:0; overflow:auto !important; }
           #gal-gpt-model-manager-modal #gal-gpt-model-list { grid-template-columns:1fr; }
         }
       </style>
@@ -27608,12 +28553,147 @@ ${extraRule}
       renderList();
     };
 
+    const getConfiguredRootDir = () => {
+      const cfg = getGptSoVitsConfig();
+      return _normalizePathSep(
+        String(settings.gptSoVits?.rootDir || settings.gptSoVits?.importPathPrefix || cfg.rootDir || cfg.importPathPrefix || '').trim(),
+      );
+    };
+
+    const autoImportModelsFromRootDir = async () => {
+      const rootDir = getConfiguredRootDir();
+      if (!rootDir) return;
+
+      const discovered = await inferGptSoVitsModelsFromRootDir(rootDir);
+      if (discovered.error) {
+        if (discovered.error === 'fs-unavailable') {
+          if (!_gptSoVitsRootAutoImportFsWarned) {
+            _gptSoVitsRootAutoImportFsWarned = true;
+            showToast('当前环境不支持“根目录自动扫描”，请继续使用“文件夹导入”');
+          }
+          return;
+        }
+        if (discovered.error === 'root-not-found') {
+          showToast('GPT-SoVITS 根目录无效，请检查设置');
+        }
+        return;
+      }
+
+      if (!_safeArray(discovered.models).length) return;
+      const merged = mergeAutoImportedGptSoVitsModels(models, discovered.models, getGptSoVitsConfig());
+      if (!merged.changed) return;
+
+      await saveModels(merged.models);
+      showToast(`根目录自动导入完成：新增 ${merged.added}，更新 ${merged.updated}`);
+    };
+
+    const inferSelectedRootFromFiles = fileList => {
+      for (const file of Array.from(fileList || [])) {
+        const rel = _normalizePathSep(String(file?.webkitRelativePath || '').trim()).replace(/^[\\/]+/, '');
+        if (!rel) continue;
+        const firstSeg = String(rel.split('/')[0] || '').trim();
+        if (firstSeg) return firstSeg;
+      }
+      return '';
+    };
+
+    const confirmImportPreview = (fileList, importedModels) => {
+      return new Promise(resolve => {
+        const files = Array.from(fileList || []);
+        const modalId = 'gal-gpt-model-import-preview-modal';
+        $(`#${modalId}`).remove();
+
+        const formatSize = size => {
+          const n = Number(size) || 0;
+          if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+          if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+          if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+          return `${n} B`;
+        };
+
+        const fileRows = files
+          .slice(0, 300)
+          .map(file => {
+            const rel = _normalizePathSep(file.webkitRelativePath || file.name || '');
+            return `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed #e2e8f0;">
+              <code style="word-break:break-all;">${_escapeHtmlLite(rel || file.name || '(unknown)')}</code>
+              <span style="white-space:nowrap;color:#64748b;">${formatSize(file.size)}</span>
+            </div>`;
+          })
+          .join('');
+
+        const modelRows = _safeArray(importedModels)
+          .map(model => {
+            const refCount = _safeArray(model?.refAudios).length;
+            const mapCount = Object.keys(model?.expressionRefMap || {}).length;
+            return `<div style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
+              <div style="font-weight:700;color:#0f172a;">${_escapeHtmlLite(model?.name || '未命名模型')}</div>
+              <div style="font-size:0.8rem;color:#64748b;">参考音频 ${refCount} 条 | 映射 ${mapCount} 条</div>
+            </div>`;
+          })
+          .join('');
+
+        const hasMore = files.length > 300;
+        const previewHtml = `
+          <div class="gal-input-modal" id="${modalId}">
+            <div class="gal-input-box" style="width:min(1280px,96vw);max-width:none;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+              <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
+                <div style="font-weight:700;">文件夹导入预览</div>
+                <button class="gal-action-btn" id="${modalId}-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+              </div>
+              <div style="padding:12px;overflow:auto;display:grid;grid-template-columns:1.2fr 1fr;gap:12px;background:var(--SmartThemeFormBg,#fff);">
+                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:220px;">
+                  <div style="font-weight:700;margin-bottom:8px;">已选择文件 (${files.length})</div>
+                  <div style="max-height:52vh;overflow:auto;">${fileRows || '<div style="color:#94a3b8;">没有可显示的文件</div>'}</div>
+                  ${hasMore ? `<div style="margin-top:8px;color:#64748b;font-size:0.78rem;">仅展示前 300 个文件，其余 ${files.length - 300} 个未展开。</div>` : ''}
+                </div>
+                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:220px;">
+                  <div style="font-weight:700;margin-bottom:8px;">识别到模型 (${_safeArray(importedModels).length})</div>
+                  <div style="display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;">${modelRows || '<div style="color:#94a3b8;">未识别到可导入模型</div>'}</div>
+                </div>
+              </div>
+              <div style="padding:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px;background:#f8fafc;">
+                <button class="gal-action-btn" id="${modalId}-cancel">取消</button>
+                <button class="gal-action-btn primary" id="${modalId}-confirm"><i class="fa-solid fa-file-import"></i> 确认导入</button>
+              </div>
+            </div>
+            <style>
+              @media (max-width: 900px) {
+                #${modalId} .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+                #${modalId} .gal-input-box > div:nth-child(1),
+                #${modalId} .gal-input-box > div:nth-child(3) { flex:0 0 auto !important; overflow:visible !important; }
+                #${modalId} .gal-input-box > div:nth-child(2) { flex:1 1 auto !important; min-height:0; overflow:auto !important; grid-template-columns:1fr !important; }
+              }
+            </style>
+          </div>
+        `;
+
+        $(mountRoot).append(previewHtml);
+        const $preview = $(`#${modalId}`);
+        const finish = ok => {
+          $preview.remove();
+          resolve(!!ok);
+        };
+        $preview.on('click', function (e) {
+          if (e.target === this) finish(false);
+        });
+        $preview.find(`#${modalId}-close, #${modalId}-cancel`).on('click', () => finish(false));
+        $preview.find(`#${modalId}-confirm`).on('click', () => finish(true));
+      });
+    };
+
     const renderList = () => {
-      const keyword = String($('#gal-gpt-model-search').val() || '').trim().toLowerCase();
+      const keyword = String($('#gal-gpt-model-search').val() || '')
+        .trim()
+        .toLowerCase();
       const $list = $('#gal-gpt-model-list');
       $list.empty();
 
-      const filtered = models.filter(model => String(model.name || '').toLowerCase().includes(keyword));
+      const filtered = models.filter(model =>
+        String(model.name || '')
+          .toLowerCase()
+          .includes(keyword),
+      );
       if (filtered.length === 0) {
         $list.html('<div style="color:#94a3b8;">暂无模型，可点击「新增模型」或「文件夹导入」。</div>');
         return;
@@ -27638,6 +28718,7 @@ ${extraRule}
             <div class="gal-gpt-model-meta">默认参考: ${_escapeHtmlLite(refPath || '(未设置)')}</div>
             <div class="gal-gpt-model-actions">
               <button class="gal-action-btn primary" data-action="edit"><i class="fa-solid fa-pen"></i> 编辑</button>
+              <button class="gal-action-btn" data-action="preview"><i class="fa-solid fa-play"></i> 试听</button>
               <button class="gal-action-btn" data-action="copy"><i class="fa-solid fa-copy"></i> 复制</button>
               <button class="gal-action-btn" data-action="set-default"><i class="fa-solid fa-star"></i> 设为默认</button>
               <button class="gal-action-btn" data-action="delete"><i class="fa-solid fa-trash"></i> 删除</button>
@@ -27660,21 +28741,98 @@ ${extraRule}
       });
     });
 
-    $('#gal-gpt-model-import-folder').on('click', () => $('#gal-gpt-model-import-folder-file').click());
+    $('#gal-gpt-model-import-folder').on('click', () => {
+      const importPrefix = getConfiguredRootDir();
+      if (!importPrefix) {
+        showToast('请先填写“模型总目录”后再导入');
+        return;
+      }
+      const rootName = String(importPrefix.split('/').filter(Boolean).pop() || '').trim();
+      const tips = [
+        `当前模型总目录：${rootName || importPrefix}`,
+        '请在系统选择器中直接选择这个总目录，不要点进子目录。',
+        '出现“将 N 个文件上传到此网站”提示后，请直接点“上传”。',
+      ].join('\n');
+      const ok = window.confirm(`文件夹导入说明\n\n${tips}`);
+      if (!ok) return;
+      $('#gal-gpt-model-import-folder-file').click();
+    });
     $('#gal-gpt-model-import-folder-file').on('change', async function () {
       try {
         const list = this.files;
         if (!list || list.length === 0) return;
-        const prefix = settings.gptSoVits?.importPathPrefix || '';
-        const imported = inferGptSoVitsModelsFromFolderFiles(list, prefix);
+        const hasAbsolutePath = Array.from(list).some(file => {
+          const abs = _normalizePathSep(String(file?.path || '').trim());
+          return _isAbsoluteFsPath(abs);
+        });
+        const importPrefix = getConfiguredRootDir();
+        if (!importPrefix) {
+          showToast('请先填写“模型总目录”后再导入');
+          return;
+        }
+        const expectedRootName = String(importPrefix.split('/').filter(Boolean).pop() || '').trim();
+        const relativeRootName = (() => {
+          try {
+            const entries = this?.webkitEntries;
+            if (!entries || entries.length === 0) return '';
+
+            // 优先从 fullPath 提取首段目录名（最稳定）。
+            for (const entry of Array.from(entries)) {
+              const fullPath = _normalizePathSep(String(entry?.fullPath || '').trim()).replace(/^[\\/]+/, '');
+              if (fullPath) {
+                const firstSeg = String(fullPath.split('/')[0] || '').trim();
+                if (firstSeg) return firstSeg;
+              }
+            }
+
+            // 其次使用目录条目名。
+            for (const entry of Array.from(entries)) {
+              if (entry?.isDirectory) {
+                const dirName = _normalizePathSep(String(entry?.name || '').trim()).replace(/^[\\/]+|[\\/]+$/g, '');
+                if (dirName) return dirName;
+              }
+            }
+          } catch (e) {}
+          return '';
+        })();
+        const fallbackRootName = inferSelectedRootFromFiles(list);
+        const selectedRootName = String(relativeRootName || fallbackRootName || '').trim();
+        if (expectedRootName && selectedRootName && expectedRootName.toLowerCase() !== selectedRootName.toLowerCase()) {
+          showToast(`文件夹导入必须选择总目录：${expectedRootName}`);
+          return;
+        }
+        if (!hasAbsolutePath) {
+          showToast('当前浏览器未返回绝对路径：将按“模型总目录 + 相对路径”导入');
+        }
+        const imported = inferGptSoVitsModelsFromFolderFiles(list, importPrefix, {
+          relativeRootName: expectedRootName || selectedRootName,
+        });
         if (!imported.length) {
           showToast('未识别到可导入模型（至少需要参考音频）');
           return;
         }
 
-        const next = models.concat(imported);
+        const ok = await confirmImportPreview(list, imported);
+        if (!ok) return;
+
+        const next = models.slice();
+        let replacedCount = 0;
+        imported.forEach(model => {
+          const modelName = String(model?.name || '').trim();
+          const existedIndex = next.findIndex(item => String(item?.name || '').trim() === modelName);
+          if (existedIndex >= 0) {
+            next[existedIndex] = model;
+            replacedCount += 1;
+          } else {
+            next.push(model);
+          }
+        });
         await saveModels(next);
-        showToast(`已导入模型 ${imported.length} 条`);
+        if (replacedCount > 0) {
+          showToast(`已导入 ${imported.length} 条，覆盖同名模型 ${replacedCount} 条`);
+        } else {
+          showToast(`已导入模型 ${imported.length} 条`);
+        }
       } catch (e) {
         console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 模型导入失败:`, e);
         showToast('模型导入失败，请检查目录结构');
@@ -27699,6 +28857,13 @@ ${extraRule}
             await saveModels(next);
             showToast(`已更新模型：${model.name}`);
           },
+        });
+        return;
+      }
+
+      if (action === 'preview') {
+        void _previewGptSoVitsModel(target, {
+          sampleText: String(target?.params?.promptText || '').trim() || '你好，这是模型试听。',
         });
         return;
       }
@@ -27730,6 +28895,7 @@ ${extraRule}
     });
 
     renderList();
+    void autoImportModelsFromRootDir();
   }
 
   function showSettingsPanel() {
@@ -28007,6 +29173,20 @@ ${extraRule}
                 </div>
 
                 <div class="gal-settings-row">
+                  <span class="gal-settings-label">GPT-SoVITS 根目录 <small style="color:#999;">(打开模型面板时自动扫描 GPT_weights*/SoVITS_weights*,暂未实装)</small></span>
+                  <input type="text" id="gal-gpt-sovits-root-dir" value="${settings.gptSoVits?.rootDir || settings.gptSoVits?.importPathPrefix || ''}"
+                         placeholder="D:/GPT-SoVITS"
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">模型总目录 <small style="color:#999;">(导入时按“总目录 + 文件夹相对路径”生成)</small></span>
+                  <input type="text" id="gal-gpt-sovits-import-prefix" value="${settings.gptSoVits?.importPathPrefix || settings.gptSoVits?.rootDir || ''}"
+                         placeholder="D:/模型总目录"
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
+                <div class="gal-settings-row">
                   <span class="gal-settings-label">使用酒馆代理 <small style="color:#999;">(建议开，需要编辑 SillyTavern 根目录的 config.yaml，设置enableCorsProxy为true，重启酒馆（重启容器/进程，不是刷新）)</small></span>
                   <label class="gal-switch">
                     <input type="checkbox" id="gal-gpt-sovits-proxy" ${settings.gptSoVits?.useCorsProxy ? 'checked' : ''}>
@@ -28021,7 +29201,7 @@ ${extraRule}
                   </button>
                 </div>
                 <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
-                  复杂配置（模型参数、三大件路径、参考音频与表情映射、文件夹导入）已迁移到模型管理面板。
+                  复杂配置（模型参数、路径、参考音频与表情映射、文件夹导入）。
                 </p>
               </div>
             </div>
@@ -28481,7 +29661,12 @@ ${extraRule}
           provider === TTS_PROVIDER.GPT_SOVITS_V2
             ? `GPT-SoVITS：模型名用于 speaker 匹配；可用模型 ${usableCount}/${voiceList.length}。缺参考音频的条目不会触发 /tts。`
             : 'LittleWhiteBox：未指定/未绑定时使用此默认音色。';
-        const emptyHint = voiceList.length === 0 ? (provider === TTS_PROVIDER.GPT_SOVITS_V2 ? '（当前模型列表为空）' : '（当前音色列表为空）') : '';
+        const emptyHint =
+          voiceList.length === 0
+            ? provider === TTS_PROVIDER.GPT_SOVITS_V2
+              ? '（当前模型列表为空）'
+              : '（当前音色列表为空）'
+            : '';
         if ($hint.length) $hint.text(providerHint + emptyHint);
       };
 
@@ -28534,7 +29719,7 @@ ${extraRule}
       });
       $('#gal-dialog-opacity').on('input', function () {
         const transparency = parseInt($(this).val()); // 透明度 0-100
-        settings.dialogOpacity = 1 - (transparency / 100); // 转换为 opacity 1.0-0
+        settings.dialogOpacity = 1 - transparency / 100; // 转换为 opacity 1.0-0
         $('#gal-dialog-opacity-value').text(transparency + '%');
         applySettingsToUI();
         saveSettings();
@@ -28725,7 +29910,7 @@ ${extraRule}
                                     color: #333;
                                 ">${escapeHtml(prompts.systemPrompt)}</pre>
                             </div>
-
+let
                             <div style="margin-bottom: 20px;">
                                 <div style="font-weight: 600; margin-bottom: 8px; color: #1976d2;">
                                     <i class="fa-solid fa-file-alt"></i> 第一次生成结果 (firstResult)
@@ -28869,7 +30054,9 @@ ${extraRule}
         $('#gal-gpt-sovits-config').toggle(settings.ttsProvider === TTS_PROVIDER.GPT_SOVITS_V2);
 
         // 刷新 TTSManager provider 状态
-        try { TTSManager._refreshProviderState(); } catch (e) {}
+        try {
+          TTSManager._refreshProviderState();
+        } catch (e) {}
 
         await refreshTtsVoiceOptions();
 
@@ -28898,6 +30085,22 @@ ${extraRule}
       $('#gal-gpt-sovits-proxy').on('change', function () {
         settings.gptSoVits = settings.gptSoVits || {};
         settings.gptSoVits.useCorsProxy = $(this).is(':checked');
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-root-dir').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        const nextRoot = _normalizePathSep($(this).val().trim());
+        settings.gptSoVits.rootDir = nextRoot;
+        settings.gptSoVits.importPathPrefix = nextRoot;
+        $('#gal-gpt-sovits-import-prefix').val(nextRoot);
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-import-prefix').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        const nextPrefix = _normalizePathSep($(this).val().trim());
+        settings.gptSoVits.importPathPrefix = nextPrefix;
+        settings.gptSoVits.rootDir = nextPrefix;
+        $('#gal-gpt-sovits-root-dir').val(nextPrefix);
         saveSettings();
       });
       $('#gal-gpt-sovits-open-model-manager').on('click', function () {
@@ -29074,7 +30277,7 @@ ${extraRule}
     const opacity = settings.dialogOpacity;
     $('.gal-text-panel').css({
       'background-color': `rgba(255, 255, 255, ${opacity})`,
-      'background-image': `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
+      'background-image': `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`,
     });
     // 立绘显示/隐藏
     if (settings.showSprites) {
@@ -29136,13 +30339,13 @@ ${extraRule}
       'text-shadow': '',
       '-webkit-text-stroke': '',
       'background-color': '',
-      'padding': '',
+      padding: '',
       'border-radius': '',
-      'color': ''
+      color: '',
     });
     $nameBadge.css({
       'text-shadow': '',
-      '-webkit-text-stroke': ''
+      '-webkit-text-stroke': '',
     });
 
     // 根据特效类型应用样式
@@ -29151,10 +30354,10 @@ ${extraRule}
         // 阴影增强：多层阴影确保任何背景下都清晰
         $dialogText.css({
           'text-shadow': '0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5)',
-          'color': '#fff'
+          color: '#fff',
         });
         $nameBadge.css({
-          'text-shadow': '0 0 4px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.5)'
+          'text-shadow': '0 0 4px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.5)',
         });
         break;
 
@@ -29162,10 +30365,10 @@ ${extraRule}
         // 发光效果：霓虹灯式发光
         $dialogText.css({
           'text-shadow': '0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(0,210,255,0.4)',
-          'color': '#fff'
+          color: '#fff',
         });
         $nameBadge.css({
-          'text-shadow': '0 0 5px rgba(0,210,255,0.8), 0 0 10px rgba(0,210,255,0.5)'
+          'text-shadow': '0 0 5px rgba(0,210,255,0.8), 0 0 10px rgba(0,210,255,0.5)',
         });
         break;
 
@@ -29174,11 +30377,11 @@ ${extraRule}
         $dialogText.css({
           '-webkit-text-stroke': '1.5px rgba(0,0,0,0.8)',
           'text-shadow': '0 2px 4px rgba(0,0,0,0.3)',
-          'color': '#fff'
+          color: '#fff',
         });
         $nameBadge.css({
           '-webkit-text-stroke': '1px rgba(0,0,0,0.6)',
-          'text-shadow': '0 1px 2px rgba(0,0,0,0.3)'
+          'text-shadow': '0 1px 2px rgba(0,0,0,0.3)',
         });
         break;
 
@@ -29193,7 +30396,7 @@ ${extraRule}
         $textPanel.addClass('text-effect-gradient');
         $dialogText.css({
           'text-shadow': '0 1px 2px rgba(0,0,0,0.3)',
-          'color': '#fff'
+          color: '#fff',
         });
         break;
 
@@ -29202,10 +30405,10 @@ ${extraRule}
         $textPanel.addClass('text-effect-text-bg');
         $dialogText.css({
           'background-color': 'rgba(0,0,0,0.6)',
-          'padding': '8px 12px',
+          padding: '8px 12px',
           'border-radius': '8px',
-          'color': '#fff',
-          'text-shadow': '0 1px 2px rgba(0,0,0,0.3)'
+          color: '#fff',
+          'text-shadow': '0 1px 2px rgba(0,0,0,0.3)',
         });
         break;
 
@@ -29225,9 +30428,7 @@ ${extraRule}
         $lastAiMes = $(this);
       }
     });
-    console.log(
-      `[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}`,
-    );
+    console.log(`[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}`);
     // 处理最后一条AI消息（只处理最后一条，避免不必要的开销）
     if ($lastAiMes && $lastAiMes.length) {
       processNewMessage($lastAiMes[0]);

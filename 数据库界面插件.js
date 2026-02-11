@@ -5618,6 +5618,7 @@ const __awaiter =
       strictWeightSwitch: false,
       modelSwitchMode: 'set_weights', // set_weights(api_v2.py) | set_model(api.py) | none
       setModelEndpoint: '/set_model',
+      rootDir: '',
       importPathPrefix: '',
       voices: [],
       models: [],
@@ -5625,9 +5626,13 @@ const __awaiter =
 
     try {
       const cfg = settings?.gptSoVits || {};
+      const normalizedRootDir = _normalizePathSep(String(cfg.rootDir || cfg.importPathPrefix || '').trim());
+      const normalizedImportPrefix = _normalizePathSep(String(cfg.importPathPrefix || normalizedRootDir || '').trim());
       const merged = Object.assign(Object.assign({}, defaults), cfg, {
         modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || defaults.modelSwitchMode),
         setModelEndpoint: String(cfg.setModelEndpoint || defaults.setModelEndpoint).trim() || defaults.setModelEndpoint,
+        rootDir: normalizedRootDir || normalizedImportPrefix,
+        importPathPrefix: normalizedImportPrefix || normalizedRootDir,
         voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices,
         models: Array.isArray(cfg.models) ? cfg.models : defaults.models,
       });
@@ -6039,12 +6044,10 @@ const __awaiter =
       const promptText = audioFile ? _cleanPromptTextFromFilenameBase(_stripFileExt(audioFile.name)) : '';
       const inferredLang = promptText ? _inferLangFromText(promptText) : 'zh';
 
-      // 生成服务端路径（尽量使用 Electron 的绝对 path，否则用 webkitRelativePath 并补前缀）
+      // 只接受绝对路径：避免 importPathPrefix + 相对路径 造成“旧目录 + 新文件名”错配。
       const toServerPath = f => {
-        const abs = typeof f?.path === 'string' ? String(f.path) : '';
-        if (_isAbsoluteFsPath(abs)) return _normalizePathSep(abs);
-        const rel = _normalizePathSep(f?.webkitRelativePath || f?.name || '');
-        return _joinPathPrefix(importPathPrefix, rel);
+        const abs = _normalizePathSep(typeof f?.path === 'string' ? String(f.path) : '');
+        return _isAbsoluteFsPath(abs) ? abs : '';
       };
 
       const dirName = dirKey !== '__root__' ? dirKey.split('/').pop() : '';
@@ -6107,13 +6110,25 @@ const __awaiter =
     return '';
   }
 
-  function inferGptSoVitsModelsFromFolderFiles(fileList, importPathPrefix = '') {
+  function inferGptSoVitsModelsFromFolderFiles(fileList, importPathPrefix = '', importOptions = {}) {
     const files = Array.from(fileList || []).filter(Boolean);
     if (files.length === 0) return [];
+    const normalizedImportPrefix = _normalizePathSep(String(importPathPrefix || '').trim());
+    const rootHintRaw = String(importOptions?.relativeRootName || '').trim();
+    const normalizedRootHint = _normalizePathSep(rootHintRaw).replace(/^[\\/]+|[\\/]+$/g, '');
+    const normalizeRelativePath = file => {
+      let rel = _normalizePathSep(String(file?.webkitRelativePath || file?.name || '').trim()).replace(/^[\\/]+/, '');
+      if (!rel) return '';
+      if (!normalizedRootHint) return rel;
+      const lowerRel = rel.toLowerCase();
+      const lowerRoot = normalizedRootHint.toLowerCase();
+      if (lowerRel === lowerRoot || lowerRel.startsWith(`${lowerRoot}/`)) return rel;
+      return `${normalizedRootHint}/${rel}`;
+    };
 
     const groups = new Map(); // dir -> File[]
     for (const f of files) {
-      const rel = _normalizePathSep(f.webkitRelativePath || f.name || '');
+      const rel = normalizeRelativePath(f);
       const dir = rel.split('/').slice(0, -1).join('/');
       const key = dir || '__root__';
       if (!groups.has(key)) groups.set(key, []);
@@ -6137,11 +6152,16 @@ const __awaiter =
 
       if (ckpts.length === 0 && pths.length === 0 && audios.length === 0) continue;
 
+      // 绝对路径优先；浏览器目录选择器拿不到绝对路径时，回退到相对路径 + prefix。
       const toServerPath = f => {
-        const abs = typeof f?.path === 'string' ? String(f.path) : '';
-        if (_isAbsoluteFsPath(abs)) return _normalizePathSep(abs);
-        const rel = _normalizePathSep(f?.webkitRelativePath || f?.name || '');
-        return _joinPathPrefix(importPathPrefix, rel);
+        const abs = _normalizePathSep(typeof f?.path === 'string' ? String(f.path) : '');
+        if (_isAbsoluteFsPath(abs)) return abs;
+
+        const rel = normalizeRelativePath(f);
+        if (!rel) return '';
+
+        const prefixed = _normalizePathSep(_joinPathPrefix(normalizedImportPrefix, rel));
+        return prefixed || rel;
       };
 
       const audioCandidates = audios
@@ -6236,6 +6256,271 @@ const __awaiter =
     }
 
     return _normalizeGptSoVitsModelsForStore(models, cfg);
+  }
+
+  const GPT_SOVITS_AUTO_IMPORT_GPT_DIRS = [
+    'GPT_weights',
+    'GPT_weights_v2',
+    'GPT_weights_v2Pro',
+    'GPT_weights_v2ProPlus',
+    'GPT_weights_v3',
+    'GPT_weights_v4',
+  ];
+  const GPT_SOVITS_AUTO_IMPORT_SOVITS_DIRS = [
+    'SoVITS_weights',
+    'SoVITS_weights_v2',
+    'SoVITS_weights_v2Pro',
+    'SoVITS_weights_v2ProPlus',
+    'SoVITS_weights_v3',
+    'SoVITS_weights_v4',
+  ];
+  let _gptSoVitsRootAutoImportFsWarned = false;
+
+  function _getNodeFsBridge() {
+    const hostList = [];
+    try {
+      hostList.push(window);
+    } catch (e) {}
+    try {
+      const host = typeof window.parent !== 'undefined' ? window.parent : window;
+      if (host && !hostList.includes(host)) hostList.push(host);
+    } catch (e) {}
+
+    for (const host of hostList) {
+      const req = typeof host?.require === 'function' ? host.require : null;
+      if (!req) continue;
+      try {
+        const fs = req('fs');
+        const fsp = fs?.promises || req('fs/promises');
+        const path = req('path');
+        if (fsp && path) {
+          return { fsp, path };
+        }
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  async function _walkNodeFsCollectByExt(fsp, pathModule, baseDir, expectedExt) {
+    const out = [];
+    const stack = [String(baseDir || '').trim()];
+    const visited = new Set();
+    while (stack.length > 0) {
+      const current = String(stack.pop() || '').trim();
+      if (!current) continue;
+      const currentKey = _normalizePathSep(current).toLowerCase();
+      if (visited.has(currentKey)) continue;
+      visited.add(currentKey);
+
+      let entries = [];
+      try {
+        entries = await fsp.readdir(current, { withFileTypes: true });
+      } catch (e) {
+        continue;
+      }
+
+      for (const entry of entries) {
+        const name = String(entry?.name || '').trim();
+        if (!name) continue;
+        const full = pathModule.join(current, name);
+        if (entry?.isDirectory?.()) {
+          stack.push(full);
+          continue;
+        }
+        if (!entry?.isFile?.()) continue;
+        if (_getFileExtLower(name) !== expectedExt) continue;
+        out.push({
+          name,
+          path: _normalizePathSep(full),
+        });
+      }
+    }
+    return out;
+  }
+
+  async function inferGptSoVitsModelsFromRootDir(rootDirInput = '') {
+    const rootDir = _normalizePathSep(String(rootDirInput || '').trim());
+    if (!rootDir) {
+      return { models: [], rootDir, totalWeightFiles: 0, error: 'empty-root' };
+    }
+
+    const bridge = _getNodeFsBridge();
+    if (!bridge?.fsp || !bridge?.path) {
+      return { models: [], rootDir, totalWeightFiles: 0, error: 'fs-unavailable' };
+    }
+
+    const { fsp, path: pathModule } = bridge;
+    const rootNative = pathModule.resolve(pathModule.sep === '\\' ? rootDir.replace(/\//g, '\\') : rootDir);
+
+    try {
+      const stat = await fsp.stat(rootNative);
+      if (!stat?.isDirectory?.()) {
+        return { models: [], rootDir, totalWeightFiles: 0, error: 'root-not-found' };
+      }
+    } catch (e) {
+      return { models: [], rootDir, totalWeightFiles: 0, error: 'root-not-found' };
+    }
+
+    const collectFromSubDirs = async (subDirs, expectedExt, kind) => {
+      const all = [];
+      for (const subDirName of subDirs) {
+        const abs = pathModule.join(rootNative, subDirName);
+        const files = await _walkNodeFsCollectByExt(fsp, pathModule, abs, expectedExt);
+        files.forEach(file => {
+          all.push(
+            Object.assign({}, file, {
+              kind,
+              folder: subDirName,
+              baseName: _stripFileExt(file.name),
+            }),
+          );
+        });
+      }
+      return all;
+    };
+
+    const [gptFiles, sovitsFiles] = await Promise.all([
+      collectFromSubDirs(GPT_SOVITS_AUTO_IMPORT_GPT_DIRS, 'ckpt', 'gpt'),
+      collectFromSubDirs(GPT_SOVITS_AUTO_IMPORT_SOVITS_DIRS, 'pth', 'sovits'),
+    ]);
+
+    const pairMap = new Map();
+    const addToPairMap = (file, field) => {
+      const key = String(file?.baseName || '')
+        .trim()
+        .toLowerCase();
+      if (!key) return;
+      if (!pairMap.has(key)) {
+        pairMap.set(key, {
+          baseName: String(file.baseName || '').trim(),
+          gpt: [],
+          sovits: [],
+        });
+      }
+      pairMap.get(key)[field].push(file);
+    };
+
+    gptFiles.forEach(file => addToPairMap(file, 'gpt'));
+    sovitsFiles.forEach(file => addToPairMap(file, 'sovits'));
+
+    const cfg = getGptSoVitsConfig();
+    const discovered = [];
+    const usedNames = new Set();
+
+    Array.from(pairMap.values())
+      .sort((a, b) => String(a.baseName || '').localeCompare(String(b.baseName || ''), 'zh-Hans-CN'))
+      .forEach((pairGroup, groupIndex) => {
+        const gptList = _safeArray(pairGroup.gpt).sort((a, b) =>
+          String(a?.path || '').localeCompare(String(b?.path || ''), 'en'),
+        );
+        const sovitsList = _safeArray(pairGroup.sovits).sort((a, b) =>
+          String(a?.path || '').localeCompare(String(b?.path || ''), 'en'),
+        );
+        const count = Math.max(gptList.length, sovitsList.length, 1);
+
+        for (let i = 0; i < count; i++) {
+          const gptFile = gptList[i] || gptList[0] || null;
+          const sovitsFile = sovitsList[i] || sovitsList[0] || null;
+          if (!gptFile && !sovitsFile) continue;
+
+          const baseName = _cleanVoiceNameFromWeightsBase(pairGroup.baseName) || pairGroup.baseName || '模型';
+          let modelName = baseName;
+          let seq = 2;
+          while (usedNames.has(modelName.toLowerCase())) {
+            modelName = `${baseName}_${seq++}`;
+          }
+          usedNames.add(modelName.toLowerCase());
+
+          const normalized = _normalizeGptSoVitsModel(
+            {
+              id: _buildGptSoVitsModelId(modelName),
+              name: modelName,
+              enabled: true,
+              desc: '根目录自动导入',
+              paths: {
+                gptWeightsPath: _normalizePathSep(String(gptFile?.path || '').trim()),
+                sovitsWeightsPath: _normalizePathSep(String(sovitsFile?.path || '').trim()),
+                defaultRefAudioPath: '',
+              },
+              params: {
+                promptText: '',
+                promptLang: 'zh',
+                textLang: cfg.textLang || 'auto',
+                textSplitMethod: cfg.textSplitMethod || 'cut5',
+                speedFactor: _toFiniteNumber(cfg.speedFactor, 1),
+                mediaType: cfg.mediaType || 'wav',
+                streamingMode: !!cfg.streamingMode,
+                modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || 'set_weights'),
+                setModelEndpoint: String(cfg.setModelEndpoint || '/set_model').trim() || '/set_model',
+                strictWeightSwitch: !!cfg.strictWeightSwitch,
+              },
+              refAudios: [],
+              defaultRefId: '',
+              expressionRefMap: {},
+            },
+            cfg,
+            groupIndex + i,
+          );
+          if (normalized) discovered.push(normalized);
+        }
+      });
+
+    return {
+      models: _normalizeGptSoVitsModelsForStore(discovered, cfg),
+      rootDir: _normalizePathSep(rootNative),
+      totalWeightFiles: gptFiles.length + sovitsFiles.length,
+      error: '',
+    };
+  }
+
+  function mergeAutoImportedGptSoVitsModels(currentModels, discoveredModels, cfg = getGptSoVitsConfig()) {
+    const next = _normalizeGptSoVitsModelsForStore(_safeArray(currentModels), cfg);
+    let added = 0;
+    let updated = 0;
+
+    _safeArray(discoveredModels).forEach(item => {
+      const incoming = _normalizeGptSoVitsModel(item, cfg, 0);
+      if (!incoming) return;
+      const incomingName = String(incoming.name || '')
+        .trim()
+        .toLowerCase();
+      if (!incomingName) return;
+
+      const index = next.findIndex(model => String(model?.name || '').trim().toLowerCase() === incomingName);
+      if (index < 0) {
+        next.push(incoming);
+        added += 1;
+        return;
+      }
+
+      const current = next[index];
+      const prevGpt = String(current?.paths?.gptWeightsPath || '').trim();
+      const prevSovits = String(current?.paths?.sovitsWeightsPath || '').trim();
+      const nextGpt = String(incoming?.paths?.gptWeightsPath || '').trim() || prevGpt;
+      const nextSovits = String(incoming?.paths?.sovitsWeightsPath || '').trim() || prevSovits;
+
+      if (nextGpt === prevGpt && nextSovits === prevSovits) return;
+
+      next[index] = _normalizeGptSoVitsModel(
+        Object.assign({}, current, {
+          desc: String(current?.desc || '').trim() || String(incoming?.desc || '').trim(),
+          paths: Object.assign({}, _safeObject(current.paths), {
+            gptWeightsPath: nextGpt,
+            sovitsWeightsPath: nextSovits,
+          }),
+        }),
+        cfg,
+        index,
+      );
+      updated += 1;
+    });
+
+    return {
+      models: _normalizeGptSoVitsModelsForStore(next, cfg),
+      added,
+      updated,
+      changed: added > 0 || updated > 0,
+    };
   }
 
   // 缓存 LittleWhiteBox TTS 数据
@@ -6453,31 +6738,54 @@ const __awaiter =
    * @param {string} voiceName - 音色显示名称（如"呆萌川妹"）
    * @returns {Promise<{name: string, value: string, source: string, resourceId: string|null}|null>}
    */
+  function normalizeVoiceNameForLookup(voiceName) {
+    let name = String(voiceName || '').trim();
+    if (!name) return '';
+
+    // 兼容旧提示词/回复里出现的 "音色名(文件夹导入)"、"音色名（备注）" 形式
+    for (let i = 0; i < 3; i++) {
+      const next = name.replace(/\s*[（(][^()（）]{1,40}[)）]\s*$/u, '').trim();
+      if (next === name) break;
+      name = next;
+    }
+    return name;
+  }
+
   async function resolveVoiceByName(voiceName) {
-    if (!voiceName) return null;
+    const requestedName = String(voiceName || '').trim();
+    if (!requestedName) return null;
 
     // 获取所有可用音色
     const voiceList = await getTTSVoiceListAsync();
 
     // 1. 先按名称查找
-    let voice = voiceList.find(v => v.name === voiceName);
+    let voice = voiceList.find(v => v.name === requestedName);
     if (voice) return voice;
 
     // 2. 如果已经是 value，直接返回
-    voice = voiceList.find(v => v.value === voiceName);
+    voice = voiceList.find(v => v.value === requestedName);
     if (voice) return voice;
 
-    // 3. 未找到：按 provider 决定是否允许回退
+    // 3. 兼容带备注后缀（如 "高松灯(文件夹导入)"）的写法
+    const normalizedName = normalizeVoiceNameForLookup(requestedName);
+    if (normalizedName && normalizedName !== requestedName) {
+      voice = voiceList.find(v => v.name === normalizedName);
+      if (voice) return voice;
+      voice = voiceList.find(v => v.value === normalizedName);
+      if (voice) return voice;
+    }
+
+    // 4. 未找到：按 provider 决定是否允许回退
     const provider = getTTSProvider();
     if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
-      console.warn(`[${SCRIPT_NAME}] 未找到 GPT-SoVITS 音色 "${voiceName}"`);
+      console.warn(`[${SCRIPT_NAME}] 未找到 GPT-SoVITS 音色 "${requestedName}"`);
       return null;
     }
 
-    // LittleWhiteBox：回退到默认免费音色
+    // 5. LittleWhiteBox：回退到默认免费音色
     const defaultVoice = voiceList[0];
     if (defaultVoice) {
-      console.warn(`[${SCRIPT_NAME}] 未找到音色 "${voiceName}"，使用默认: ${defaultVoice.name}`);
+      console.warn(`[${SCRIPT_NAME}] 未找到音色 "${requestedName}"，使用默认: ${defaultVoice.name}`);
       return defaultVoice;
     }
 
@@ -6584,7 +6892,8 @@ const __awaiter =
 
       // 构建TTS音色列表（异步获取）
       const ttsVoiceList = yield getTTSVoiceListAsync();
-      const ttsVoiceListText = ttsVoiceList.map(v => `${v.name}(${v.desc})`).join(', ');
+      const ttsVoiceNames = Array.from(new Set(ttsVoiceList.map(v => String(v?.name || '').trim()).filter(Boolean)));
+      const ttsVoiceListText = ttsVoiceNames.length > 0 ? ttsVoiceNames.join(', ') : '（暂无可用音色）';
 
       // 获取角色音色绑定
       const charVoiceMap = getAllCharacterTTSVoices();
@@ -7094,6 +7403,7 @@ ${extraRule}
       strictWeightSwitch: false, // true=切权重失败即中断播放；false=失败时继续使用当前模型
       modelSwitchMode: 'set_weights', // set_weights(api_v2.py) | set_model(api.py) | none
       setModelEndpoint: '/set_model', // modelSwitchMode=set_model 时使用
+      rootDir: '', // GPT-SoVITS 本地根目录（用于自动扫描权重）
       importPathPrefix: '', // 服务端路径前缀/根目录（用于解析相对路径；可为空）
       models: [], // 新结构：模型配置列表（含三大件/参数/参考音频映射）
       voices: [], // [{ name, desc?, refAudioPath, promptText?, promptLang?, textLang? }]
@@ -7679,7 +7989,17 @@ ${extraRule}
       return /failed to fetch|networkerror|cors|forbiddenerror|invalid csrf token|blocked/i.test(msg);
     },
 
+    _isGptSoVitsRefAudioDurationError(message) {
+      const msg = String(message || '').toLowerCase();
+      return (
+        /参考音频.*(3\s*[-~]\s*10|3到10|3-10).*秒/.test(msg) ||
+        /reference audio.*(3\s*[-~]\s*10|3 to 10).*seconds?/.test(msg) ||
+        /outside.*3\s*[-~]\s*10.*seconds?/.test(msg)
+      );
+    },
+
     _isLikelyGptSoVitsTtsPayloadError(message) {
+      if (this._isGptSoVitsRefAudioDurationError(message)) return false;
       const msg = String(message || '').toLowerCase();
       return (
         /http\s*400|http400|bad request|unprocessable|422|validation|value_error|required field|field required/.test(
@@ -8290,6 +8610,7 @@ ${extraRule}
           const msg = String(e?.message || e || '')
             .replace(/\s+/g, ' ')
             .trim();
+          if (this._isGptSoVitsRefAudioDurationError(msg)) break;
           const canRetry = i < variants.length - 1 && this._isLikelyGptSoVitsTtsPayloadError(msg);
           if (!canRetry) break;
           if (i === 0) {
@@ -8762,6 +9083,8 @@ ${extraRule}
         ) {
           const briefPath = refAudioPath.length > 96 ? `${refAudioPath.slice(0, 96)}...` : refAudioPath;
           showToast(`GPT-SoVITS: refAudioPath 不存在或不可访问，请核对路径（${briefPath}）`);
+        } else if (this._isGptSoVitsRefAudioDurationError(msg)) {
+          showToast('GPT-SoVITS: 参考音频需在 3-10 秒内，请更换参考音频');
         }
         const clipped = msg.length > 120 ? `${msg.slice(0, 120)}...` : msg;
         showToast(`GPT-SoVITS 合成失败: ${clipped || 'unknown error'}`);
@@ -8940,7 +9263,7 @@ ${extraRule}
           if (hasStarted) return;
           hasStarted = true;
           console.log(`[${SCRIPT_NAME}] LipSync: 🎵 音频开始播放，启动口型同步`);
-    let   this._bindLipSyncToAudio(audioElement, characterId);
+          this._bindLipSyncToAudio(audioElement, characterId);
         };
 
         // 监听 playing 事件（更可靠）
@@ -9639,7 +9962,7 @@ ${extraRule}
 
     // 辅助：从节点输入反向追踪源头
     traceBackInput(workflow, nodeId, inputName) {
-      consnst node = workflow[nodeId];
+      const node = workflow[nodeId];
       if (!node || !node.inputs || !node.inputs[inputName]) return null;
 
       const link = node.inputs[inputName];
@@ -10128,7 +10451,7 @@ cons
           }
         } catch (e) {
           lastError = e;
-    let   console.warn(`[${SCRIPT_NAME}] Wallhaven: 直接请求失败，尝试备用方案`);
+          console.warn(`[${SCRIPT_NAME}] Wallhaven: 直接请求失败，尝试备用方案`);
         }
 
         // 方式2: 通过 SillyTavern 代理请求
@@ -14591,7 +14914,8 @@ cons
         // 最后一段：检查是否正在生成
         if (isGeneratingResponse) {
           console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 启动动画`);
-          upda else {
+          updateNextBtnForGeneratingState();
+        } else {
           stopNextBtnAnimation();
           $nextBtn.html('END <i class="fa-solid fa-check"></i>');
         }
@@ -17973,7 +18297,7 @@ cons
 
           // 更新进度（节流，减少 UI 刷新开销）
           const now = Date.now();
-      cons  if (totalLength > 0) {
+          if (totalLength > 0) {
             const percent = Math.round((receivedLength / totalLength) * 100);
             const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
             const total = (totalLength / 1024 / 1024).toFixed(1);
@@ -23926,6 +24250,87 @@ cons
     return model;
   }
 
+  async function _previewGptSoVitsModel(modelInput, options = {}) {
+    const cfg = getGptSoVitsConfig();
+    const normalized = _normalizeGptSoVitsModel(modelInput || _buildDefaultGptSoVitsModel(), cfg, 0);
+    if (!normalized) {
+      showToast('试听失败：模型配置无效');
+      return false;
+    }
+
+    // 深拷贝，避免修改编辑中的草稿对象
+    const model = JSON.parse(JSON.stringify(normalized));
+    const refs = _safeArray(model.refAudios);
+    const forcedRefId = String(options.refId || '').trim();
+    const forcedExpression = String(options.expression || '').trim();
+
+    if (forcedRefId) {
+      const targetRef = refs.find(item => String(item?.id || '').trim() === forcedRefId);
+      if (targetRef) {
+        model.defaultRefId = String(targetRef.id || '').trim();
+        model.paths = Object.assign({}, model.paths, {
+          defaultRefAudioPath: String(targetRef.path || '').trim(),
+        });
+        model.params = Object.assign({}, model.params, {
+          promptText: String(targetRef.promptText || model.params?.promptText || '').trim(),
+          promptLang: String(targetRef.promptLang || model.params?.promptLang || 'zh').trim() || 'zh',
+          textLang: String(targetRef.textLang || model.params?.textLang || 'auto').trim() || 'auto',
+        });
+      }
+    }
+
+    if (forcedExpression && forcedRefId) {
+      model.expressionRefMap = Object.assign({}, _safeObject(model.expressionRefMap), {
+        [forcedExpression]: forcedRefId,
+      });
+    }
+
+    const runtimeVoice = _buildRuntimeVoiceFromModel(model, cfg);
+    if (!runtimeVoice) {
+      showToast('试听失败：请先启用模型并配置参考音频');
+      return false;
+    }
+
+    const sampleText =
+      String(options.sampleText || options.text || model?.params?.promptText || '').trim() || '你好，这是模型试听。';
+    const segment = {
+      type: 'dialogue',
+      speaker: '',
+      text: sampleText,
+      expression: forcedExpression || '默认',
+      tts: {
+        emotion: forcedExpression || '默认',
+      },
+    };
+
+    if (!String(cfg.apiUrl || '').trim()) {
+      showToast('试听失败：请先填写 GPT-SoVITS API 地址');
+      return false;
+    }
+
+    try {
+      TTSManager.stop();
+      const playbackSessionId = Number(TTSManager._activePlaybackSessionId || 0) + 1;
+      TTSManager._activePlaybackSessionId = playbackSessionId;
+      TTSManager._abortGptSoVitsFetch('model-preview');
+      const ok = await TTSManager._speakWithGptSoVits(
+        segment,
+        `model_preview_${Date.now()}`,
+        runtimeVoice,
+        playbackSessionId,
+      );
+      if (!ok) {
+        showToast('试听失败：请检查 API、模型路径和参考音频');
+      }
+      return !!ok;
+    } catch (e) {
+      const msg = String(e?.message || e || '').trim();
+      const brief = msg.length > 80 ? `${msg.slice(0, 80)}...` : msg;
+      showToast(`试听失败：${brief || 'unknown error'}`);
+      return false;
+    }
+  }
+
   function showGptSoVitsModelEditor(modelInput, options = {}) {
     const onSave = typeof options.onSave === 'function' ? options.onSave : null;
     const working =
@@ -23935,57 +24340,106 @@ cons
     const mountRoot = getModalMountRoot();
     $(mountRoot).find('#gal-gpt-model-editor-modal').remove();
 
-    const buildRefOptions = refs => {
-      return _safeArray(refs)
-        .map(ref => `<option value="${_escapeHtmlLite(ref.id)}">${_escapeHtmlLite(ref.name || ref.id)}</option>`)
+    const expressionPool = Array.from(
+      new Set(
+        getAllExpressions()
+          .map(item => String(item || '').trim())
+          .filter(Boolean),
+      ),
+    );
+    if (!expressionPool.includes('默认')) {
+      expressionPool.unshift('默认');
+    }
+
+    const languageOptions = [
+      { value: 'zh', label: 'zh (中文)' },
+      { value: 'en', label: 'en (English)' },
+      { value: 'ja', label: 'ja (日本語)' },
+      { value: 'ko', label: 'ko (한국어)' },
+      { value: 'auto', label: 'auto (自动)' },
+    ];
+    const splitOptions = [
+      { value: 'cut0', label: 'cut0' },
+      { value: 'cut1', label: 'cut1' },
+      { value: 'cut2', label: 'cut2' },
+      { value: 'cut3', label: 'cut3' },
+      { value: 'cut4', label: 'cut4' },
+      { value: 'cut5', label: 'cut5 (推荐)' },
+    ];
+    const mediaTypeOptions = [
+      { value: 'wav', label: 'wav' },
+      { value: 'ogg', label: 'ogg' },
+      { value: 'aac', label: 'aac' },
+      { value: 'mp3', label: 'mp3' },
+    ];
+    const switchModeOptions = [
+      { value: 'set_weights', label: 'set_weights (api_v2.py)' },
+      { value: 'set_model', label: 'set_model (api.py)' },
+      { value: 'none', label: 'none' },
+    ];
+
+    const renderOptions = (rows, selected = '') => {
+      const selectedText = String(selected || '').trim();
+      const opts = _safeArray(rows)
+        .map(item => {
+          const value = String(item?.value || '').trim();
+          const label = String(item?.label || value).trim() || value;
+          return `<option value="${_escapeHtmlLite(value)}"${value === selectedText ? ' selected' : ''}>${_escapeHtmlLite(label)}</option>`;
+        })
         .join('');
+      if (selectedText && !_safeArray(rows).some(item => String(item?.value || '').trim() === selectedText)) {
+        return `<option value="${_escapeHtmlLite(selectedText)}" selected>${_escapeHtmlLite(selectedText)} (自定义)</option>${opts}`;
+      }
+      return opts;
     };
 
-    const mapRows = Object.entries(working.expressionRefMap || {}).map(([expression, refId]) => ({
-      expression,
-      refId,
-    }));
-    const refs = _safeArray(working.refAudios);
-    const mapRowsHtml =
-      mapRows.length > 0
-        ? mapRows
-            .map(
-              row => `
-              <div class="gal-gpt-map-row" data-map-row>
-                <input type="text" data-field="expression" value="${_escapeHtmlLite(row.expression)}" placeholder="表情标签（如 开心）">
-                <select data-field="refId">${buildRefOptions(refs)}</select>
-                <button class="gal-action-btn" data-action="remove-map" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-              </div>
-            `,
-            )
-            .join('')
-        : '';
+    const renderExpressionOptions = selected => {
+      return renderOptions(
+        expressionPool.map(name => ({ value: name, label: name })),
+        selected,
+      );
+    };
 
-    const refsHtml =
-      refs.length > 0
-        ? refs
-            .map(
-              ref => `
-            <div class="gal-gpt-ref-row" data-ref-row>
-              <input type="text" data-field="id" value="${_escapeHtmlLite(ref.id)}" placeholder="ref id">
-              <input type="text" data-field="name" value="${_escapeHtmlLite(ref.name)}" placeholder="显示名">
-              <input type="text" data-field="path" value="${_escapeHtmlLite(ref.path)}" placeholder="参考音频路径">
-              <input type="text" data-field="promptText" value="${_escapeHtmlLite(ref.promptText || '')}" placeholder="参考文本">
-              <input type="text" data-field="promptLang" value="${_escapeHtmlLite(ref.promptLang || 'zh')}" placeholder="promptLang">
-              <input type="text" data-field="textLang" value="${_escapeHtmlLite(ref.textLang || 'auto')}" placeholder="textLang">
-              <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-            </div>
-          `,
-            )
-            .join('')
-        : '';
+    const refExpressionMap = {};
+    Object.entries(_safeObject(working.expressionRefMap)).forEach(([expression, refId]) => {
+      const expr = String(expression || '').trim();
+      const id = String(refId || '').trim();
+      if (!expr || !id || refExpressionMap[id]) return;
+      refExpressionMap[id] = expr;
+    });
+
+    const refs = _safeArray(working.refAudios);
+    const buildRefRowHtml = (rawRef, idx = 0) => {
+      const ref = _safeObject(rawRef);
+      const id = String(ref.id || '').trim() || `ref_${Date.now().toString(36)}_${idx + 1}`;
+      const expression = String(refExpressionMap[id] || '').trim() || '默认';
+      const name = String(ref.name || '').trim() || `参考音频${idx + 1}`;
+      return `
+        <div class="gal-gpt-ref-row" data-ref-row>
+          <button class="gal-action-btn" data-action="preview-ref" style="padding: 6px 10px;"><i class="fa-solid fa-play"></i></button>
+          <select data-field="expression">${renderExpressionOptions(expression)}</select>
+          <input type="text" data-field="name" value="${_escapeHtmlLite(name)}" placeholder="显示名">
+          <input type="text" data-field="path" value="${_escapeHtmlLite(ref.path || '')}" placeholder="参考音频路径（可手填）">
+          <input type="text" data-field="promptText" value="${_escapeHtmlLite(ref.promptText || '')}" placeholder="payload.prompt_text">
+          <select data-field="promptLang">${renderOptions(languageOptions, ref.promptLang || 'zh')}</select>
+          <select data-field="textLang">${renderOptions(languageOptions, ref.textLang || 'auto')}</select>
+          <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
+          <input type="hidden" data-field="id" value="${_escapeHtmlLite(id)}">
+        </div>
+      `;
+    };
+
+    const refsHtml = refs.length > 0 ? refs.map((ref, idx) => buildRefRowHtml(ref, idx)).join('') : '';
 
     const modalHtml = `
       <div class="gal-input-modal" id="gal-gpt-model-editor-modal">
-        <div class="gal-input-box" style="width:min(1080px,96vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
-          <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
+        <div class="gal-input-box" style="width:min(1480px,98vw);max-width:none;max-height:94vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+          <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;gap:10px;flex-wrap:wrap;">
             <div style="font-weight:700;">GPT-SoVITS 模型编辑</div>
-            <button class="gal-action-btn" id="gal-gpt-model-editor-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+            <div style="display:flex;gap:8px;">
+              <button class="gal-action-btn" id="gal-gpt-model-editor-preview" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-play"></i> 试听当前模型</button>
+              <button class="gal-action-btn" id="gal-gpt-model-editor-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+            </div>
           </div>
           <div style="padding:14px;overflow:auto;display:flex;flex-direction:column;gap:14px;background:var(--SmartThemeFormBg,#fff);">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">
@@ -24000,25 +24454,58 @@ cons
             <div>
               <div style="font-weight:700;margin-bottom:6px;">路径三大件</div>
               <div style="display:grid;grid-template-columns:1fr;gap:8px;">
-                <input type="text" id="gal-gpt-model-gpt-path" value="${_escapeHtmlLite(working.paths?.gptWeightsPath || '')}" placeholder="gptWeightsPath (*.ckpt)">
-                <input type="text" id="gal-gpt-model-sovits-path" value="${_escapeHtmlLite(working.paths?.sovitsWeightsPath || '')}" placeholder="sovitsWeightsPath (*.pth)">
-                <input type="text" id="gal-gpt-model-default-ref-path" value="${_escapeHtmlLite(working.paths?.defaultRefAudioPath || '')}" placeholder="defaultRefAudioPath">
+                <label>
+                  <span class="gal-gpt-field-key">paths.gptWeightsPath</span>
+                  <input type="text" id="gal-gpt-model-gpt-path" value="${_escapeHtmlLite(working.paths?.gptWeightsPath || '')}" placeholder="*.ckpt / *.pth / *.safetensors">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">paths.sovitsWeightsPath</span>
+                  <input type="text" id="gal-gpt-model-sovits-path" value="${_escapeHtmlLite(working.paths?.sovitsWeightsPath || '')}" placeholder="*.pth / *.ckpt / *.safetensors">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">paths.defaultRefAudioPath</span>
+                  <input type="text" id="gal-gpt-model-default-ref-path" value="${_escapeHtmlLite(working.paths?.defaultRefAudioPath || '')}" placeholder="默认参考音频路径">
+                </label>
               </div>
             </div>
 
             <div>
               <div style="font-weight:700;margin-bottom:6px;">配置参数</div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
-                <input type="text" id="gal-gpt-model-prompt-text" value="${_escapeHtmlLite(working.params?.promptText || '')}" placeholder="promptText">
-                <input type="text" id="gal-gpt-model-prompt-lang" value="${_escapeHtmlLite(working.params?.promptLang || 'zh')}" placeholder="promptLang">
-                <input type="text" id="gal-gpt-model-text-lang" value="${_escapeHtmlLite(working.params?.textLang || 'auto')}" placeholder="textLang">
-                <input type="text" id="gal-gpt-model-split" value="${_escapeHtmlLite(working.params?.textSplitMethod || 'cut5')}" placeholder="textSplitMethod">
-                <input type="number" id="gal-gpt-model-speed" value="${_escapeHtmlLite(working.params?.speedFactor ?? 1)}" min="0.1" max="4" step="0.05" placeholder="speedFactor">
-                <input type="text" id="gal-gpt-model-media" value="${_escapeHtmlLite(working.params?.mediaType || 'wav')}" placeholder="mediaType">
-                <input type="text" id="gal-gpt-model-switch-mode" value="${_escapeHtmlLite(working.params?.modelSwitchMode || 'set_weights')}" placeholder="modelSwitchMode">
-                <input type="text" id="gal-gpt-model-set-endpoint" value="${_escapeHtmlLite(working.params?.setModelEndpoint || '/set_model')}" placeholder="setModelEndpoint">
-                <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="gal-gpt-model-streaming" ${working.params?.streamingMode ? 'checked' : ''}>streamingMode</label>
-                <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="gal-gpt-model-strict" ${working.params?.strictWeightSwitch ? 'checked' : ''}>strictWeightSwitch</label>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">
+                <label>
+                  <span class="gal-gpt-field-key">payload.prompt_text</span>
+                  <input type="text" id="gal-gpt-model-prompt-text" value="${_escapeHtmlLite(working.params?.promptText || '')}" placeholder="参考文本，可为空">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.prompt_lang</span>
+                  <select id="gal-gpt-model-prompt-lang">${renderOptions(languageOptions, working.params?.promptLang || 'zh')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.text_lang</span>
+                  <select id="gal-gpt-model-text-lang">${renderOptions(languageOptions, working.params?.textLang || 'auto')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.text_split_method</span>
+                  <select id="gal-gpt-model-split">${renderOptions(splitOptions, working.params?.textSplitMethod || 'cut5')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.speed_factor</span>
+                  <input type="number" id="gal-gpt-model-speed" value="${_escapeHtmlLite(working.params?.speedFactor ?? 1)}" min="0.1" max="4" step="0.05">
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">payload.media_type</span>
+                  <select id="gal-gpt-model-media">${renderOptions(mediaTypeOptions, working.params?.mediaType || 'wav')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">params.modelSwitchMode</span>
+                  <select id="gal-gpt-model-switch-mode">${renderOptions(switchModeOptions, working.params?.modelSwitchMode || 'set_weights')}</select>
+                </label>
+                <label>
+                  <span class="gal-gpt-field-key">params.setModelEndpoint</span>
+                  <input type="text" id="gal-gpt-model-set-endpoint" value="${_escapeHtmlLite(working.params?.setModelEndpoint || '/set_model')}" placeholder="/set_model">
+                </label>
+                <label class="gal-gpt-checkbox-label"><input type="checkbox" id="gal-gpt-model-streaming" ${working.params?.streamingMode ? 'checked' : ''}><span>params.streamingMode</span></label>
+                <label class="gal-gpt-checkbox-label"><input type="checkbox" id="gal-gpt-model-strict" ${working.params?.strictWeightSwitch ? 'checked' : ''}><span>params.strictWeightSwitch</span></label>
               </div>
             </div>
 
@@ -24028,14 +24515,6 @@ cons
                 <button class="gal-action-btn" id="gal-gpt-add-ref-row" style="padding:6px 10px;"><i class="fa-solid fa-plus"></i> 添加参考音频</button>
               </div>
               <div id="gal-gpt-ref-list" style="display:flex;flex-direction:column;gap:6px;">${refsHtml}</div>
-            </div>
-
-            <div>
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                <div style="font-weight:700;">表情标签 -> 参考音频映射</div>
-                <button class="gal-action-btn" id="gal-gpt-add-map-row" style="padding:6px 10px;"><i class="fa-solid fa-plus"></i> 添加映射</button>
-              </div>
-              <div id="gal-gpt-map-list" style="display:flex;flex-direction:column;gap:6px;">${mapRowsHtml}</div>
             </div>
           </div>
           <div style="padding:12px 14px;border-top:1px solid #ddd;display:flex;gap:8px;justify-content:flex-end;background:#f8fafc;">
@@ -24047,122 +24526,262 @@ cons
       <style>
         #gal-gpt-model-editor-modal input, #gal-gpt-model-editor-modal select { width:100%; box-sizing:border-box; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; background:#fff; color:#111; }
         #gal-gpt-model-editor-modal label { font-size:0.86rem; color:#334155; display:flex; flex-direction:column; gap:4px; }
-        #gal-gpt-model-editor-modal .gal-gpt-ref-row, #gal-gpt-model-editor-modal .gal-gpt-map-row { display:grid; gap:6px; align-items:center; }
-        #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:120px 140px minmax(180px,1fr) minmax(120px,1fr) 90px 90px auto; }
-        #gal-gpt-model-editor-modal .gal-gpt-map-row { grid-template-columns:minmax(160px,1fr) minmax(180px,1fr) auto; }
+        #gal-gpt-model-editor-modal .gal-gpt-field-key { font-family:Consolas,Monaco,monospace; font-size:0.76rem; color:#475569; }
+        #gal-gpt-model-editor-modal .gal-gpt-checkbox-label { display:flex; align-items:center; gap:8px; padding-top:4px; }
+        #gal-gpt-model-editor-modal .gal-gpt-checkbox-label input { width:auto; }
+        #gal-gpt-model-editor-modal .gal-gpt-path-inline { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
+        #gal-gpt-model-editor-modal .gal-gpt-ref-row { display:grid; gap:6px; align-items:center; grid-template-columns:auto minmax(140px,1fr) minmax(130px,1.2fr) minmax(260px,2fr) minmax(220px,1.6fr) 120px 120px auto; }
+        #gal-gpt-model-editor-modal .gal-gpt-ref-row > [data-action="preview-ref"] { min-width:42px; }
+        @media (max-width: 1280px) {
+          #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:auto minmax(130px,1fr) minmax(120px,1.1fr) minmax(220px,1.8fr) minmax(180px,1.3fr) 110px 110px auto; }
+        }
         @media (max-width: 900px) {
           #gal-gpt-model-editor-modal .gal-gpt-ref-row { grid-template-columns:1fr; }
-          #gal-gpt-model-editor-modal .gal-gpt-map-row { grid-template-columns:1fr; }
           #gal-gpt-model-editor-modal .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+          #gal-gpt-model-editor-modal .gal-input-box > div:nth-child(1),
+          #gal-gpt-model-editor-modal .gal-input-box > div:nth-child(3) { flex:0 0 auto !important; overflow:visible !important; }
+          #gal-gpt-model-editor-modal .gal-input-box > div:nth-child(2) { flex:1 1 auto !important; min-height:0; overflow:auto !important; }
         }
       </style>
     `;
 
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find('#gal-gpt-model-editor-modal');
+    let isPreviewing = false;
+    let refPreviewAudio = null;
 
-    const close = () => $modal.remove();
+    const close = () => {
+      try {
+        if (refPreviewAudio) {
+          refPreviewAudio.pause();
+          refPreviewAudio.src = '';
+          refPreviewAudio = null;
+        }
+      } catch (e) {}
+
+      $modal.find('#gal-gpt-ref-list [data-ref-row]').each(function () {
+        const $row = $(this);
+        const objectUrl = String($row.data('pickedAudioUrl') || '').trim();
+        if (objectUrl) {
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch (e) {}
+          $row.removeData('pickedAudioUrl');
+        }
+        $row.removeData('pickedAudioFile');
+      });
+
+      $modal.remove();
+    };
+
     $modal.on('click', e => {
       if (e.target === $modal[0]) close();
     });
     $modal.find('#gal-gpt-model-editor-close, #gal-gpt-model-editor-cancel').on('click', close);
 
-    const createRefRow = () => {
-      $('#gal-gpt-ref-list').append(`
-        <div class="gal-gpt-ref-row" data-ref-row>
-          <input type="text" data-field="id" value="ref_${Date.now().toString(36)}" placeholder="ref id">
-          <input type="text" data-field="name" value="参考音频" placeholder="显示名">
-          <input type="text" data-field="path" value="" placeholder="参考音频路径">
-          <input type="text" data-field="promptText" value="" placeholder="参考文本">
-          <input type="text" data-field="promptLang" value="zh" placeholder="promptLang">
-          <input type="text" data-field="textLang" value="auto" placeholder="textLang">
-          <button class="gal-action-btn" data-action="remove-ref" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-        </div>
-      `);
-    };
-
-    const buildMapRefSelectOptions = () => {
-      const refsNow = [];
-      $('#gal-gpt-ref-list [data-ref-row]').each(function () {
-        const id = String($(this).find('[data-field="id"]').val() || '').trim();
-        const name = String($(this).find('[data-field="name"]').val() || '').trim() || id;
-        if (!id) return;
-        refsNow.push({ id, name });
-      });
-      return refsNow
-        .map(item => `<option value="${_escapeHtmlLite(item.id)}">${_escapeHtmlLite(item.name)}</option>`)
-        .join('');
-    };
-
-    const createMapRow = () => {
-      $('#gal-gpt-map-list').append(`
-        <div class="gal-gpt-map-row" data-map-row>
-          <input type="text" data-field="expression" value="" placeholder="表情标签（如 开心）">
-          <select data-field="refId">${buildMapRefSelectOptions()}</select>
-          <button class="gal-action-btn" data-action="remove-map" style="padding: 6px 10px;"><i class="fa-solid fa-trash"></i></button>
-        </div>
-      `);
-    };
-
-    $('#gal-gpt-add-ref-row').on('click', createRefRow);
-    $('#gal-gpt-add-map-row').on('click', createMapRow);
-
-    $modal.on('click', '[data-action="remove-ref"]', function () {
-      $(this).closest('[data-ref-row]').remove();
-    });
-    $modal.on('click', '[data-action="remove-map"]', function () {
-      $(this).closest('[data-map-row]').remove();
+    $modal.on('input change', '#gal-gpt-ref-list [data-field="path"]', function () {
+      const $row = $(this).closest('[data-ref-row]');
+      const oldUrl = String($row.data('pickedAudioUrl') || '').trim();
+      if (oldUrl) {
+        try {
+          URL.revokeObjectURL(oldUrl);
+        } catch (e) {}
+        $row.removeData('pickedAudioUrl');
+      }
+      $row.removeData('pickedAudioFile');
     });
 
-    $('#gal-gpt-model-editor-save').on('click', async () => {
+    const collectModelDraft = () => {
       const refs = [];
-      $('#gal-gpt-ref-list [data-ref-row]').each(function () {
-        const id = String($(this).find('[data-field="id"]').val() || '').trim();
+      const expressionRefMap = {};
+
+      $modal.find('#gal-gpt-ref-list [data-ref-row]').each(function (idx) {
+        let id = String($(this).find('[data-field="id"]').val() || '').trim();
         const name = String($(this).find('[data-field="name"]').val() || '').trim();
+        const expression = String($(this).find('[data-field="expression"]').val() || '').trim();
         const path = String($(this).find('[data-field="path"]').val() || '').trim();
         const promptText = String($(this).find('[data-field="promptText"]').val() || '').trim();
         const promptLang = String($(this).find('[data-field="promptLang"]').val() || 'zh').trim() || 'zh';
         const textLang = String($(this).find('[data-field="textLang"]').val() || 'auto').trim() || 'auto';
+
         if (!id && !path) return;
-        refs.push({ id, name, path, promptText, promptLang, textLang });
+        if (!id) id = `ref_${idx + 1}`;
+
+        refs.push({ id, name: name || id, path, promptText, promptLang, textLang });
+        if (expression) {
+          expressionRefMap[expression] = id;
+        }
       });
 
-      const expressionRefMap = {};
-      $('#gal-gpt-map-list [data-map-row]').each(function () {
-        const expression = String($(this).find('[data-field="expression"]').val() || '').trim();
-        const refId = String($(this).find('[data-field="refId"]').val() || '').trim();
-        if (!expression || !refId) return;
-        expressionRefMap[expression] = refId;
-      });
+      const defaultRefPath = String($modal.find('#gal-gpt-model-default-ref-path').val() || '').trim();
+      let defaultRefId = '';
+      if (defaultRefPath) {
+        const byPath = refs.find(item => String(item.path || '').trim() === defaultRefPath);
+        if (byPath) defaultRefId = String(byPath.id || '').trim();
+      }
+      if (!defaultRefId && refs.length > 0) {
+        defaultRefId = String(refs[0].id || '').trim();
+      }
 
-      const modelDraft = {
+      return {
         id: working.id,
-        name: String($('#gal-gpt-model-name').val() || '').trim(),
-        desc: String($('#gal-gpt-model-desc').val() || '').trim(),
-        enabled: $('#gal-gpt-model-enabled').is(':checked'),
+        name: String($modal.find('#gal-gpt-model-name').val() || '').trim(),
+        desc: String($modal.find('#gal-gpt-model-desc').val() || '').trim(),
+        enabled: $modal.find('#gal-gpt-model-enabled').is(':checked'),
         paths: {
-          gptWeightsPath: String($('#gal-gpt-model-gpt-path').val() || '').trim(),
-          sovitsWeightsPath: String($('#gal-gpt-model-sovits-path').val() || '').trim(),
-          defaultRefAudioPath: String($('#gal-gpt-model-default-ref-path').val() || '').trim(),
+          gptWeightsPath: String($modal.find('#gal-gpt-model-gpt-path').val() || '').trim(),
+          sovitsWeightsPath: String($modal.find('#gal-gpt-model-sovits-path').val() || '').trim(),
+          defaultRefAudioPath: defaultRefPath,
         },
         params: {
-          promptText: String($('#gal-gpt-model-prompt-text').val() || '').trim(),
-          promptLang: String($('#gal-gpt-model-prompt-lang').val() || 'zh').trim() || 'zh',
-          textLang: String($('#gal-gpt-model-text-lang').val() || 'auto').trim() || 'auto',
-          textSplitMethod: String($('#gal-gpt-model-split').val() || 'cut5').trim() || 'cut5',
-          speedFactor: _toFiniteNumber($('#gal-gpt-model-speed').val(), 1),
-          mediaType: String($('#gal-gpt-model-media').val() || 'wav').trim() || 'wav',
-          streamingMode: $('#gal-gpt-model-streaming').is(':checked'),
-          modelSwitchMode: normalizeGptSoVitsSwitchMode($('#gal-gpt-model-switch-mode').val()),
-          setModelEndpoint: String($('#gal-gpt-model-set-endpoint').val() || '/set_model').trim() || '/set_model',
-          strictWeightSwitch: $('#gal-gpt-model-strict').is(':checked'),
+          promptText: String($modal.find('#gal-gpt-model-prompt-text').val() || '').trim(),
+          promptLang: String($modal.find('#gal-gpt-model-prompt-lang').val() || 'zh').trim() || 'zh',
+          textLang: String($modal.find('#gal-gpt-model-text-lang').val() || 'auto').trim() || 'auto',
+          textSplitMethod: String($modal.find('#gal-gpt-model-split').val() || 'cut5').trim() || 'cut5',
+          speedFactor: _toFiniteNumber($modal.find('#gal-gpt-model-speed').val(), 1),
+          mediaType: String($modal.find('#gal-gpt-model-media').val() || 'wav').trim() || 'wav',
+          streamingMode: $modal.find('#gal-gpt-model-streaming').is(':checked'),
+          modelSwitchMode: normalizeGptSoVitsSwitchMode($modal.find('#gal-gpt-model-switch-mode').val()),
+          setModelEndpoint: String($modal.find('#gal-gpt-model-set-endpoint').val() || '/set_model').trim() || '/set_model',
+          strictWeightSwitch: $modal.find('#gal-gpt-model-strict').is(':checked'),
         },
         refAudios: refs,
-        defaultRefId: '',
+        defaultRefId,
         expressionRefMap,
       };
+    };
 
-      const normalized = _normalizeGptSoVitsModel(modelDraft, getGptSoVitsConfig(), 0);
+    const runPreview = async ($btn, task) => {
+      if (isPreviewing) return;
+      isPreviewing = true;
+      const original = $btn?.length ? $btn.html() : '';
+      if ($btn?.length) $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i>');
+      $modal.find('#gal-gpt-model-editor-preview').prop('disabled', true);
+      try {
+        await task();
+      } finally {
+        if ($btn?.length) $btn.prop('disabled', false).html(original);
+        $modal.find('#gal-gpt-model-editor-preview').prop('disabled', false);
+        isPreviewing = false;
+      }
+    };
+
+    const playRefAudio = async $row => {
+      if (!$row || !$row.length) return;
+      const path = String($row.find('[data-field="path"]').val() || '').trim();
+      const pickedFile = $row.data('pickedAudioFile');
+
+      let src = '';
+      let objectUrl = '';
+      if (pickedFile && typeof pickedFile === 'object') {
+        try {
+          objectUrl = URL.createObjectURL(pickedFile);
+          src = objectUrl;
+          $row.data('pickedAudioUrl', objectUrl);
+        } catch (e) {
+          objectUrl = '';
+        }
+      }
+
+      if (!src) {
+        src = path;
+      }
+
+      if (!src) {
+        showToast('请先设置参考音频路径');
+        return;
+      }
+
+      try {
+        if (refPreviewAudio) {
+          refPreviewAudio.pause();
+          refPreviewAudio.src = '';
+          refPreviewAudio = null;
+        }
+
+        const audio = new Audio(src);
+        refPreviewAudio = audio;
+
+        if (objectUrl) {
+          const cleanup = () => {
+            try {
+              URL.revokeObjectURL(objectUrl);
+            } catch (e) {}
+            if (String($row.data('pickedAudioUrl') || '').trim() === objectUrl) {
+              $row.removeData('pickedAudioUrl');
+            }
+          };
+          audio.addEventListener('ended', cleanup, { once: true });
+          audio.addEventListener('error', cleanup, { once: true });
+        }
+
+        await audio.play();
+      } catch (e) {
+        if (objectUrl) {
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch (err) {}
+          if (String($row.data('pickedAudioUrl') || '').trim() === objectUrl) {
+            $row.removeData('pickedAudioUrl');
+          }
+        }
+        const msg = String(e?.message || e || '').trim();
+        const brief = msg.length > 80 ? `${msg.slice(0, 80)}...` : msg;
+        showToast(`参考音频试听失败：${brief || '请检查路径或文件权限'}`);
+      }
+    };
+
+    const createRefRow = () => {
+      const idx = $modal.find('#gal-gpt-ref-list [data-ref-row]').length;
+      const id = `ref_${Date.now().toString(36)}_${idx + 1}`;
+      $('#gal-gpt-ref-list').append(
+        buildRefRowHtml(
+          {
+            id,
+            name: `参考音频${idx + 1}`,
+            path: '',
+            promptText: '',
+            promptLang: 'zh',
+            textLang: 'auto',
+          },
+          idx,
+        ),
+      );
+    };
+
+    $('#gal-gpt-add-ref-row').on('click', createRefRow);
+
+    $modal.on('click', '[data-action="remove-ref"]', function () {
+      const $row = $(this).closest('[data-ref-row]');
+      const oldUrl = String($row.data('pickedAudioUrl') || '').trim();
+      if (oldUrl) {
+        try {
+          URL.revokeObjectURL(oldUrl);
+        } catch (e) {}
+      }
+      $row.removeData('pickedAudioUrl');
+      $row.removeData('pickedAudioFile');
+      $row.remove();
+    });
+
+    $modal.find('#gal-gpt-model-editor-preview').on('click', async function () {
+      await runPreview($(this), async () => {
+        const draft = collectModelDraft();
+        await _previewGptSoVitsModel(draft, {
+          sampleText: String($modal.find('#gal-gpt-model-prompt-text').val() || '').trim() || '你好，这是模型试听。',
+        });
+      });
+    });
+
+    $modal.on('click', '[data-action="preview-ref"]', async function () {
+      const $row = $(this).closest('[data-ref-row]');
+      await runPreview($(this), async () => {
+        await playRefAudio($row);
+      });
+    });
+
+    $('#gal-gpt-model-editor-save').on('click', async () => {
+      const normalized = _normalizeGptSoVitsModel(collectModelDraft(), getGptSoVitsConfig(), 0);
       if (!normalized) {
         showToast('模型保存失败：模型名不能为空');
         return;
@@ -24173,14 +24792,6 @@ cons
       }
       close();
     });
-
-    // 初始化映射下拉值
-    $modal.find('[data-map-row]').each(function (idx) {
-      const refId = mapRows[idx]?.refId || '';
-      if (refId) {
-        $(this).find('[data-field="refId"]').val(refId);
-      }
-    });
   }
 
   function showGptSoVitsModelManager(options = {}) {
@@ -24190,7 +24801,7 @@ cons
 
     const modalHtml = `
       <div class="gal-input-modal" id="gal-gpt-model-manager-modal">
-        <div class="gal-input-box" style="width:min(1100px,96vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+        <div class="gal-input-box" style="width:min(1600px,98vw);max-width:none;max-height:94vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
           <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
             <div style="font-weight:700;">GPT-SoVITS 模型管理</div>
             <button class="gal-action-btn" id="gal-gpt-model-manager-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
@@ -24199,9 +24810,9 @@ cons
             <button class="gal-action-btn primary" id="gal-gpt-model-add"><i class="fa-solid fa-plus"></i> 新增模型</button>
             <button class="gal-action-btn" id="gal-gpt-model-import-folder"><i class="fa-solid fa-folder-open"></i> 文件夹导入</button>
             <input type="file" id="gal-gpt-model-import-folder-file" webkitdirectory directory multiple style="display:none;">
-            <input type="text" id="gal-gpt-model-search" placeholder="搜索模型名..." style="flex:1;min-width:220px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;">
+            <input type="text" id="gal-gpt-model-search" placeholder="搜索模型名..." style="flex:1;min-width:260px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;">
           </div>
-          <div id="gal-gpt-model-list" style="padding:12px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;background:var(--SmartThemeFormBg,#fff);"></div>
+          <div id="gal-gpt-model-list" style="padding:12px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;background:var(--SmartThemeFormBg,#fff);"></div>
         </div>
       </div>
       <style>
@@ -24209,8 +24820,14 @@ cons
         #gal-gpt-model-manager-modal .gal-gpt-model-meta { font-size:0.78rem; color:#64748b; line-height:1.35; }
         #gal-gpt-model-manager-modal .gal-gpt-model-actions { display:flex; gap:6px; flex-wrap:wrap; }
         #gal-gpt-model-manager-modal .gal-gpt-model-actions .gal-action-btn { padding:6px 10px; font-size:0.8rem; }
+        @media (max-width: 1280px) {
+          #gal-gpt-model-manager-modal #gal-gpt-model-list { grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); }
+        }
         @media (max-width: 900px) {
           #gal-gpt-model-manager-modal .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+          #gal-gpt-model-manager-modal .gal-input-box > div:nth-child(1),
+          #gal-gpt-model-manager-modal .gal-input-box > div:nth-child(2) { flex:0 0 auto !important; overflow:visible !important; }
+          #gal-gpt-model-manager-modal #gal-gpt-model-list { flex:1 1 auto !important; min-height:0; overflow:auto !important; }
           #gal-gpt-model-manager-modal #gal-gpt-model-list { grid-template-columns:1fr; }
         }
       </style>
@@ -24232,6 +24849,135 @@ cons
         await onChanged(models);
       }
       renderList();
+    };
+
+    const getConfiguredRootDir = () => {
+      const cfg = getGptSoVitsConfig();
+      return _normalizePathSep(
+        String(settings.gptSoVits?.rootDir || settings.gptSoVits?.importPathPrefix || cfg.rootDir || cfg.importPathPrefix || '').trim(),
+      );
+    };
+
+    const autoImportModelsFromRootDir = async () => {
+      const rootDir = getConfiguredRootDir();
+      if (!rootDir) return;
+
+      const discovered = await inferGptSoVitsModelsFromRootDir(rootDir);
+      if (discovered.error) {
+        if (discovered.error === 'fs-unavailable') {
+          if (!_gptSoVitsRootAutoImportFsWarned) {
+            _gptSoVitsRootAutoImportFsWarned = true;
+            showToast('当前环境不支持“根目录自动扫描”，请继续使用“文件夹导入”');
+          }
+          return;
+        }
+        if (discovered.error === 'root-not-found') {
+          showToast('GPT-SoVITS 根目录无效，请检查设置');
+        }
+        return;
+      }
+
+      if (!_safeArray(discovered.models).length) return;
+      const merged = mergeAutoImportedGptSoVitsModels(models, discovered.models, getGptSoVitsConfig());
+      if (!merged.changed) return;
+
+      await saveModels(merged.models);
+      showToast(`根目录自动导入完成：新增 ${merged.added}，更新 ${merged.updated}`);
+    };
+
+    const inferSelectedRootFromFiles = fileList => {
+      for (const file of Array.from(fileList || [])) {
+        const rel = _normalizePathSep(String(file?.webkitRelativePath || '').trim()).replace(/^[\\/]+/, '');
+        if (!rel) continue;
+        const firstSeg = String(rel.split('/')[0] || '').trim();
+        if (firstSeg) return firstSeg;
+      }
+      return '';
+    };
+
+    const confirmImportPreview = (fileList, importedModels) => {
+      return new Promise(resolve => {
+        const files = Array.from(fileList || []);
+        const modalId = 'gal-gpt-model-import-preview-modal';
+        $(`#${modalId}`).remove();
+
+        const formatSize = size => {
+          const n = Number(size) || 0;
+          if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+          if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+          if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+          return `${n} B`;
+        };
+
+        const fileRows = files
+          .slice(0, 300)
+          .map(file => {
+            const rel = _normalizePathSep(file.webkitRelativePath || file.name || '');
+            return `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed #e2e8f0;">
+              <code style="word-break:break-all;">${_escapeHtmlLite(rel || file.name || '(unknown)')}</code>
+              <span style="white-space:nowrap;color:#64748b;">${formatSize(file.size)}</span>
+            </div>`;
+          })
+          .join('');
+
+        const modelRows = _safeArray(importedModels)
+          .map(model => {
+            const refCount = _safeArray(model?.refAudios).length;
+            const mapCount = Object.keys(model?.expressionRefMap || {}).length;
+            return `<div style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
+              <div style="font-weight:700;color:#0f172a;">${_escapeHtmlLite(model?.name || '未命名模型')}</div>
+              <div style="font-size:0.8rem;color:#64748b;">参考音频 ${refCount} 条 | 映射 ${mapCount} 条</div>
+            </div>`;
+          })
+          .join('');
+
+        const hasMore = files.length > 300;
+        const previewHtml = `
+          <div class="gal-input-modal" id="${modalId}">
+            <div class="gal-input-box" style="width:min(1280px,96vw);max-width:none;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+              <div style="padding:14px 16px;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;">
+                <div style="font-weight:700;">文件夹导入预览</div>
+                <button class="gal-action-btn" id="${modalId}-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+              </div>
+              <div style="padding:12px;overflow:auto;display:grid;grid-template-columns:1.2fr 1fr;gap:12px;background:var(--SmartThemeFormBg,#fff);">
+                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:220px;">
+                  <div style="font-weight:700;margin-bottom:8px;">已选择文件 (${files.length})</div>
+                  <div style="max-height:52vh;overflow:auto;">${fileRows || '<div style="color:#94a3b8;">没有可显示的文件</div>'}</div>
+                  ${hasMore ? `<div style="margin-top:8px;color:#64748b;font-size:0.78rem;">仅展示前 300 个文件，其余 ${files.length - 300} 个未展开。</div>` : ''}
+                </div>
+                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:220px;">
+                  <div style="font-weight:700;margin-bottom:8px;">识别到模型 (${_safeArray(importedModels).length})</div>
+                  <div style="display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;">${modelRows || '<div style="color:#94a3b8;">未识别到可导入模型</div>'}</div>
+                </div>
+              </div>
+              <div style="padding:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px;background:#f8fafc;">
+                <button class="gal-action-btn" id="${modalId}-cancel">取消</button>
+                <button class="gal-action-btn primary" id="${modalId}-confirm"><i class="fa-solid fa-file-import"></i> 确认导入</button>
+              </div>
+            </div>
+            <style>
+              @media (max-width: 900px) {
+                #${modalId} .gal-input-box { width:100vw !important; height:100vh; max-height:100vh; border-radius:0; }
+                #${modalId} .gal-input-box > div:nth-child(1),
+                #${modalId} .gal-input-box > div:nth-child(3) { flex:0 0 auto !important; overflow:visible !important; }
+                #${modalId} .gal-input-box > div:nth-child(2) { flex:1 1 auto !important; min-height:0; overflow:auto !important; grid-template-columns:1fr !important; }
+              }
+            </style>
+          </div>
+        `;
+
+        $(mountRoot).append(previewHtml);
+        const $preview = $(`#${modalId}`);
+        const finish = ok => {
+          $preview.remove();
+          resolve(!!ok);
+        };
+        $preview.on('click', function (e) {
+          if (e.target === this) finish(false);
+        });
+        $preview.find(`#${modalId}-close, #${modalId}-cancel`).on('click', () => finish(false));
+        $preview.find(`#${modalId}-confirm`).on('click', () => finish(true));
+      });
     };
 
     const renderList = () => {
@@ -24270,6 +25016,7 @@ cons
             <div class="gal-gpt-model-meta">默认参考: ${_escapeHtmlLite(refPath || '(未设置)')}</div>
             <div class="gal-gpt-model-actions">
               <button class="gal-action-btn primary" data-action="edit"><i class="fa-solid fa-pen"></i> 编辑</button>
+              <button class="gal-action-btn" data-action="preview"><i class="fa-solid fa-play"></i> 试听</button>
               <button class="gal-action-btn" data-action="copy"><i class="fa-solid fa-copy"></i> 复制</button>
               <button class="gal-action-btn" data-action="set-default"><i class="fa-solid fa-star"></i> 设为默认</button>
               <button class="gal-action-btn" data-action="delete"><i class="fa-solid fa-trash"></i> 删除</button>
@@ -24292,21 +25039,98 @@ cons
       });
     });
 
-    $('#gal-gpt-model-import-folder').on('click', () => $('#gal-gpt-model-import-folder-file').click());
+    $('#gal-gpt-model-import-folder').on('click', () => {
+      const importPrefix = getConfiguredRootDir();
+      if (!importPrefix) {
+        showToast('请先填写“模型总目录”后再导入');
+        return;
+      }
+      const rootName = String(importPrefix.split('/').filter(Boolean).pop() || '').trim();
+      const tips = [
+        `当前模型总目录：${rootName || importPrefix}`,
+        '请在系统选择器中直接选择这个总目录，不要点进子目录。',
+        '出现“将 N 个文件上传到此网站”提示后，请直接点“上传”。',
+      ].join('\n');
+      const ok = window.confirm(`文件夹导入说明\n\n${tips}`);
+      if (!ok) return;
+      $('#gal-gpt-model-import-folder-file').click();
+    });
     $('#gal-gpt-model-import-folder-file').on('change', async function () {
       try {
         const list = this.files;
         if (!list || list.length === 0) return;
-        const prefix = settings.gptSoVits?.importPathPrefix || '';
-        const imported = inferGptSoVitsModelsFromFolderFiles(list, prefix);
+        const hasAbsolutePath = Array.from(list).some(file => {
+          const abs = _normalizePathSep(String(file?.path || '').trim());
+          return _isAbsoluteFsPath(abs);
+        });
+        const importPrefix = getConfiguredRootDir();
+        if (!importPrefix) {
+          showToast('请先填写“模型总目录”后再导入');
+          return;
+        }
+        const expectedRootName = String(importPrefix.split('/').filter(Boolean).pop() || '').trim();
+        const relativeRootName = (() => {
+          try {
+            const entries = this?.webkitEntries;
+            if (!entries || entries.length === 0) return '';
+
+            // 优先从 fullPath 提取首段目录名（最稳定）。
+            for (const entry of Array.from(entries)) {
+              const fullPath = _normalizePathSep(String(entry?.fullPath || '').trim()).replace(/^[\\/]+/, '');
+              if (fullPath) {
+                const firstSeg = String(fullPath.split('/')[0] || '').trim();
+                if (firstSeg) return firstSeg;
+              }
+            }
+
+            // 其次使用目录条目名。
+            for (const entry of Array.from(entries)) {
+              if (entry?.isDirectory) {
+                const dirName = _normalizePathSep(String(entry?.name || '').trim()).replace(/^[\\/]+|[\\/]+$/g, '');
+                if (dirName) return dirName;
+              }
+            }
+          } catch (e) {}
+          return '';
+        })();
+        const fallbackRootName = inferSelectedRootFromFiles(list);
+        const selectedRootName = String(relativeRootName || fallbackRootName || '').trim();
+        if (expectedRootName && selectedRootName && expectedRootName.toLowerCase() !== selectedRootName.toLowerCase()) {
+          showToast(`文件夹导入必须选择总目录：${expectedRootName}`);
+          return;
+        }
+        if (!hasAbsolutePath) {
+          showToast('当前浏览器未返回绝对路径：将按“模型总目录 + 相对路径”导入');
+        }
+        const imported = inferGptSoVitsModelsFromFolderFiles(list, importPrefix, {
+          relativeRootName: expectedRootName || selectedRootName,
+        });
         if (!imported.length) {
           showToast('未识别到可导入模型（至少需要参考音频）');
           return;
         }
 
-        const next = models.concat(imported);
+        const ok = await confirmImportPreview(list, imported);
+        if (!ok) return;
+
+        const next = models.slice();
+        let replacedCount = 0;
+        imported.forEach(model => {
+          const modelName = String(model?.name || '').trim();
+          const existedIndex = next.findIndex(item => String(item?.name || '').trim() === modelName);
+          if (existedIndex >= 0) {
+            next[existedIndex] = model;
+            replacedCount += 1;
+          } else {
+            next.push(model);
+          }
+        });
         await saveModels(next);
-        showToast(`已导入模型 ${imported.length} 条`);
+        if (replacedCount > 0) {
+          showToast(`已导入 ${imported.length} 条，覆盖同名模型 ${replacedCount} 条`);
+        } else {
+          showToast(`已导入模型 ${imported.length} 条`);
+        }
       } catch (e) {
         console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 模型导入失败:`, e);
         showToast('模型导入失败，请检查目录结构');
@@ -24331,6 +25155,13 @@ cons
             await saveModels(next);
             showToast(`已更新模型：${model.name}`);
           },
+        });
+        return;
+      }
+
+      if (action === 'preview') {
+        void _previewGptSoVitsModel(target, {
+          sampleText: String(target?.params?.promptText || '').trim() || '你好，这是模型试听。',
         });
         return;
       }
@@ -24362,6 +25193,7 @@ cons
     });
 
     renderList();
+    void autoImportModelsFromRootDir();
   }
 
   function showSettingsPanel() {
@@ -24636,6 +25468,20 @@ cons
                 <div style="font-size: 0.75rem; color: #777; line-height: 1.35; margin: -6px 0 10px 0;">
                   <div>局域网访问酒馆时：若 GPT-SoVITS 与酒馆同机，建议填 <code>http://127.0.0.1:9880</code> 并开启代理。</div>
                   <div>若 GPT-SoVITS 在另一台机器：填那台机器 IP，并确保 API 监听 <code>0.0.0.0</code> 且放行端口。</div>
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">GPT-SoVITS 根目录 <small style="color:#999;">(打开模型面板时自动扫描 GPT_weights*/SoVITS_weights*,暂未实装)</small></span>
+                  <input type="text" id="gal-gpt-sovits-root-dir" value="${settings.gptSoVits?.rootDir || settings.gptSoVits?.importPathPrefix || ''}"
+                         placeholder="D:/GPT-SoVITS"
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                </div>
+
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">模型总目录 <small style="color:#999;">(导入时按“总目录 + 文件夹相对路径”生成)</small></span>
+                  <input type="text" id="gal-gpt-sovits-import-prefix" value="${settings.gptSoVits?.importPathPrefix || settings.gptSoVits?.rootDir || ''}"
+                         placeholder="D:/模型总目录"
+                         style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
                 </div>
 
                 <div class="gal-settings-row">
@@ -25539,6 +26385,22 @@ let
         settings.gptSoVits.useCorsProxy = $(this).is(':checked');
         saveSettings();
       });
+      $('#gal-gpt-sovits-root-dir').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        const nextRoot = _normalizePathSep($(this).val().trim());
+        settings.gptSoVits.rootDir = nextRoot;
+        settings.gptSoVits.importPathPrefix = nextRoot;
+        $('#gal-gpt-sovits-import-prefix').val(nextRoot);
+        saveSettings();
+      });
+      $('#gal-gpt-sovits-import-prefix').on('change', function () {
+        settings.gptSoVits = settings.gptSoVits || {};
+        const nextPrefix = _normalizePathSep($(this).val().trim());
+        settings.gptSoVits.importPathPrefix = nextPrefix;
+        settings.gptSoVits.rootDir = nextPrefix;
+        $('#gal-gpt-sovits-root-dir').val(nextPrefix);
+        saveSettings();
+      });
       $('#gal-gpt-sovits-open-model-manager').on('click', function () {
         showGptSoVitsModelManager({
           onChanged: async () => {
@@ -25798,7 +26660,7 @@ let
         break;
 
       case 'glow':
-      let/ 发光效果：霓虹灯式发光
+        // 发光效果：霓虹灯式发光
         $dialogText.css({
           'text-shadow': '0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(0,210,255,0.4)',
           color: '#fff',

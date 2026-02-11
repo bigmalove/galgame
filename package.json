@@ -1,0 +1,12 @@
+{
+  "name": "galgame-ui-plugin",
+  "version": "2.2.5",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "dev": "node esbuild.config.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

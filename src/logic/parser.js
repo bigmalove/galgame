@@ -342,7 +342,20 @@ export function parseGalgameContent(html, messageId) {
       text = text.replace(expressionTagRegex, '').trim();
     }
 
-    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["\u201c"'「『（(]([\s\S]+)["\u201d"'」』）)]\s*$/);
+    // 提取 [表情|语气描述] 方括号语法，例如 [惊讶|用压低的语气说]
+    let bracketContext = null;
+    const bracketMatch = text.match(/\[([^\]|]+?)(?:\|([^\]]+))?\]/);
+    if (bracketMatch) {
+      if (!expression) {
+        expression = bracketMatch[1].trim();
+      }
+      if (bracketMatch[2]) {
+        bracketContext = bracketMatch[2].trim();
+      }
+      text = text.replace(bracketMatch[0], '').trim();
+    }
+
+    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*[""\"'「『（(]([\s\S]+)[""\"'」』）)]\s*$/);
     if (!dialogueMatch) {
       dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
     }
@@ -382,6 +395,13 @@ export function parseGalgameContent(html, messageId) {
         };
         if (ttsConfigString) {
           segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+        }
+        if (bracketContext) {
+          if (!segResult.tts) {
+            segResult.tts = { speaker: speaker, context: bracketContext };
+          } else if (!segResult.tts.context) {
+            segResult.tts.context = bracketContext;
+          }
         }
         return segResult;
       }

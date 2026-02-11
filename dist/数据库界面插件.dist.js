@@ -1,4 +1,3 @@
-"use strict";
 (() => {
   // src/core/constants.js
   var SCRIPT_ID = "galgame-ui-plugin";
@@ -329,56 +328,7 @@
 
 \u3010\u518D\u6B21\u5F3A\u8C03\u3011
 \u8FD9\u662F\u683C\u5F0F\u5316\u4EFB\u52A1\uFF0C\u4E0D\u662F\u521B\u4F5C\u4EFB\u52A1\u3002\u4F60\u6536\u5230\u7684\u6587\u672C\u5DF2\u7ECF\u662F\u5B8C\u6574\u7684\uFF0C\u4E0D\u9700\u8981\u4E5F\u4E0D\u5141\u8BB8\u7EE7\u7EED\u5199\u4E0B\u53BB\u3002`;
-  function _safeObject(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    return value;
-  }
-  function _safeArray(value) {
-    return Array.isArray(value) ? value : [];
-  }
-  function createDefaultEnhancedModeSettings() {
-    return {
-      enabled: false,
-      secondGenerate: {
-        useProfile: false,
-        profileName: "",
-        useModel: false,
-        modelName: "",
-        usePreset: false,
-        presetName: "",
-        useWorldbooks: false,
-        worldbooks: []
-      }
-    };
-  }
-  function normalizeEnhancedModeSettings(rawEnhancedMode) {
-    const enhanced = _safeObject(rawEnhancedMode);
-    const secondGenerate = _safeObject(enhanced.secondGenerate);
-    const normalizedWorldbooks = Array.from(
-      new Set(
-        _safeArray(secondGenerate.worldbooks).map((name) => String(name || "").trim()).filter(Boolean)
-      )
-    );
-    return {
-      enabled: !!enhanced.enabled,
-      secondGenerate: {
-        useProfile: !!secondGenerate.useProfile,
-        profileName: String(secondGenerate.profileName || "").trim(),
-        useModel: !!secondGenerate.useModel,
-        modelName: String(secondGenerate.modelName || "").trim(),
-        usePreset: !!secondGenerate.usePreset,
-        presetName: String(secondGenerate.presetName || "").trim(),
-        useWorldbooks: !!secondGenerate.useWorldbooks,
-        worldbooks: normalizedWorldbooks
-      }
-    };
-  }
   var _settings = Object.assign({}, DEFAULT_SETTINGS);
-  function ensureEnhancedModeSettings() {
-    _settings.enhancedMode = normalizeEnhancedModeSettings(_settings?.enhancedMode);
-    return _settings.enhancedMode || createDefaultEnhancedModeSettings();
-  }
-  ensureEnhancedModeSettings();
   function getSettings() {
     return _settings;
   }
@@ -410,7 +360,6 @@
           console.log(`[${SCRIPT_NAME}] \u5DF2\u6E05\u9664\u7F13\u5B58\u4E2D\u7684\u81EA\u5B9A\u4E49 systemPrompt`);
         }
         _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
-        _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
         if (_settings.bananaImageGen) {
           if (_settings.bananaImageGen.cgMode === void 0 && _settings.bananaImageGen.sceneMode !== void 0) {
             _settings.bananaImageGen.cgMode = !_settings.bananaImageGen.sceneMode;
@@ -445,7 +394,6 @@
   function saveSettings() {
     const SETTINGS_STORAGE_KEY2 = GalgameStore.STORAGE_KEYS.SETTINGS;
     try {
-      _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY2, JSON.stringify(_settings));
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] \u4FDD\u5B58\u8BBE\u7F6E\u5931\u8D25:`, e);
@@ -688,8 +636,8 @@
   var _showToastRef = null;
   var _getIsEnabledRef = null;
   var _injectCOTRef = null;
-  function setExpressionsRefs({ showToast: showToast6, getIsEnabled: getIsEnabled2, injectCOTToWorldbook: injectCOTToWorldbook2 }) {
-    _showToastRef = showToast6;
+  function setExpressionsRefs({ showToast: showToast5, getIsEnabled: getIsEnabled2, injectCOTToWorldbook: injectCOTToWorldbook2 }) {
+    _showToastRef = showToast5;
     _getIsEnabledRef = getIsEnabled2;
     _injectCOTRef = injectCOTToWorldbook2;
   }
@@ -2273,17 +2221,6 @@
   };
   var TTS_ENABLED_KEY2 = GalgameStore.STORAGE_KEYS.TTS_ENABLED;
   var CHAR_TTS_VOICE_KEY2 = GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE;
-  function normalizeGptSoVitsSwitchMode(mode) {
-    const s = String(mode || "").trim().toLowerCase();
-    if (s === "none" || s === "off" || s === "disabled") return "none";
-    if (s === "set_model" || s === "model") return "set_model";
-    return "set_weights";
-  }
-  function normalizeSetModelEndpoint(endpoint) {
-    const raw = String(endpoint || "").trim();
-    if (!raw) return "/set_model";
-    return raw.startsWith("/") ? raw : `/${raw}`;
-  }
   function getTTSProvider() {
     try {
       const settings = getSettings();
@@ -2298,46 +2235,28 @@
       endpoint: "/tts",
       useCorsProxy: true,
       mediaType: "wav",
-      streamingMode: false,
+      streamingMode: true,
       textLang: "auto",
       textSplitMethod: "cut5",
       speedFactor: 1,
-      strictWeightSwitch: false,
-      probeOnAudioError: false,
-      modelSwitchMode: "set_weights",
-      setModelEndpoint: "/set_model",
-      importPathPrefix: "",
       voices: []
     };
     try {
       const settings = getSettings();
       const cfg = settings?.gptSoVits || {};
-      return Object.assign(
-        Object.assign({}, defaults),
-        cfg,
-        {
-          modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || defaults.modelSwitchMode),
-          setModelEndpoint: normalizeSetModelEndpoint(cfg.setModelEndpoint || defaults.setModelEndpoint),
-          voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices
-        }
-      );
+      return Object.assign(Object.assign({}, defaults), cfg, { voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices });
     } catch (e) {
       return defaults;
     }
   }
   function normalizeGptSoVitsVoice(voice) {
     if (!voice) return null;
-    const rawCfg = voice?.gptSoVits || {};
-    const name = String(voice.name || voice.voice || voice.speaker || rawCfg.name || "").trim();
+    const name = String(voice.name || voice.voice || voice.speaker || "").trim();
     if (!name) return null;
-    const refAudioPath = String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || rawCfg.refAudioPath || "").trim();
-    const promptText = String(voice.promptText || voice.prompt_text || rawCfg.promptText || "").trim();
-    const promptLang = String(voice.promptLang || voice.prompt_lang || rawCfg.promptLang || "").trim();
-    const textLang = String(voice.textLang || voice.text_lang || rawCfg.textLang || "").trim();
-    const gptWeightsPath = String(voice.gptWeightsPath || voice.gpt_weights_path || voice.gptPath || voice.gpt || rawCfg.gptWeightsPath || "").trim();
-    const sovitsWeightsPath = String(voice.sovitsWeightsPath || voice.sovits_weights_path || voice.sovitsPath || voice.sovits || rawCfg.sovitsWeightsPath || "").trim();
-    const modelSwitchMode = normalizeGptSoVitsSwitchMode(voice.modelSwitchMode || voice.model_switch_mode || rawCfg.modelSwitchMode || "");
-    const setModelEndpoint = normalizeSetModelEndpoint(voice.setModelEndpoint || voice.set_model_endpoint || rawCfg.setModelEndpoint || "/set_model");
+    const refAudioPath = String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || "").trim();
+    const promptText = String(voice.promptText || voice.prompt_text || "").trim();
+    const promptLang = String(voice.promptLang || voice.prompt_lang || "").trim();
+    const textLang = String(voice.textLang || voice.text_lang || "").trim();
     const desc = String(voice.desc || voice.description || "").trim();
     return {
       name,
@@ -2349,57 +2268,9 @@
         refAudioPath,
         promptText,
         promptLang,
-        textLang,
-        gptWeightsPath,
-        sovitsWeightsPath,
-        modelSwitchMode,
-        setModelEndpoint
+        textLang
       }
     };
-  }
-  function toGptSoVitsVoiceConfig(voice, globalDefaults = null) {
-    const normalized = normalizeGptSoVitsVoice(voice);
-    if (!normalized) return null;
-    const cfg = normalized.gptSoVits || {};
-    const globalCfg = globalDefaults || getGptSoVitsConfig();
-    const desc = String(voice?.desc || voice?.description || "").trim();
-    return {
-      name: normalized.name,
-      desc,
-      refAudioPath: String(cfg.refAudioPath || "").trim(),
-      promptText: String(cfg.promptText || "").trim(),
-      promptLang: String(cfg.promptLang || "").trim(),
-      textLang: String(cfg.textLang || "").trim(),
-      gptWeightsPath: String(cfg.gptWeightsPath || "").trim(),
-      sovitsWeightsPath: String(cfg.sovitsWeightsPath || "").trim(),
-      modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || globalCfg.modelSwitchMode),
-      setModelEndpoint: normalizeSetModelEndpoint(cfg.setModelEndpoint || globalCfg.setModelEndpoint)
-    };
-  }
-  function isGptSoVitsVoiceUsable(voice) {
-    const cfg = toGptSoVitsVoiceConfig(voice);
-    return !!String(cfg?.refAudioPath || "").trim();
-  }
-  function normalizeGptSoVitsVoicesForStore(voiceList, globalDefaults = null) {
-    const out = [];
-    let ignoredCount = 0;
-    let missingRefCount = 0;
-    for (const voice of Array.isArray(voiceList) ? voiceList : []) {
-      const cfg = toGptSoVitsVoiceConfig(voice, globalDefaults);
-      if (!cfg) {
-        ignoredCount += 1;
-        continue;
-      }
-      if (!cfg.refAudioPath) missingRefCount += 1;
-      out.push(cfg);
-    }
-    return { voices: out, ignoredCount, missingRefCount };
-  }
-  function pickFirstUsableGptSoVitsVoice(voiceList) {
-    for (const voice of Array.isArray(voiceList) ? voiceList : []) {
-      if (isGptSoVitsVoiceUsable(voice)) return voice;
-    }
-    return null;
   }
   async function getGptSoVitsVoiceListAsync() {
     const cfg = getGptSoVitsConfig();
@@ -2572,8 +2443,7 @@
     if (voice) return voice;
     voice = voiceList.find((v) => v.value === voiceName);
     if (voice) return voice;
-    const provider = getTTSProvider();
-    const defaultVoice = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? pickFirstUsableGptSoVitsVoice(voiceList) || voiceList[0] : voiceList[0];
+    const defaultVoice = voiceList[0];
     if (defaultVoice) {
       console.warn(`[${SCRIPT_NAME}] \u672A\u627E\u5230\u97F3\u8272 "${voiceName}"\uFF0C\u4F7F\u7528\u9ED8\u8BA4: ${defaultVoice.name}`);
       return defaultVoice;
@@ -3034,9 +2904,9 @@ ${lines.join("\n")}`;
   // src/live2d/manager.js
   var _Live2DStageRef = null;
   var _showToastRef2 = null;
-  function setLive2DManagerRefs({ Live2DStage: Live2DStage2, showToast: showToast6 }) {
+  function setLive2DManagerRefs({ Live2DStage: Live2DStage2, showToast: showToast5 }) {
     if (Live2DStage2) _Live2DStageRef = Live2DStage2;
-    if (showToast6) _showToastRef2 = showToast6;
+    if (showToast5) _showToastRef2 = showToast5;
   }
   var Live2DManager = {
     models: /* @__PURE__ */ new Map(),
@@ -4365,8 +4235,8 @@ ${lines.join("\n")}`;
 
   // src/live2d/stage.js
   var _showToastRef3 = null;
-  function setLive2DStageRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef3 = showToast6;
+  function setLive2DStageRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef3 = showToast5;
   }
   var Live2DStage = {
     app: null,
@@ -5076,7 +4946,7 @@ ${lines.join("\n")}`;
     return currentDisplayMesId;
   }
   function setCurrentDisplayMesId(mesId) {
-    currentDisplayMesId = mesId === null || mesId === void 0 ? null : String(mesId);
+    currentDisplayMesId = mesId;
   }
   function queueOverlayUpdate(source, updateTask) {
     const run = async () => {
@@ -6852,28 +6722,8 @@ ${lines.join("\n")}`;
 
   // src/audio/tts-manager.js
   var _showToastRef4 = null;
-  function setTTSManagerRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef4 = showToast6;
-  }
-  function showToast(msg) {
-    if (_showToastRef4) _showToastRef4(msg);
-  }
-  function clipText(text, max = 160) {
-    const value = String(text || "");
-    if (value.length <= max) return value;
-    return `${value.slice(0, max)}...`;
-  }
-  function isProxyNotFound(status, bodyText = "") {
-    if (status !== 404) return false;
-    const body = String(bodyText || "").toLowerCase();
-    return body.includes("not found") || body.includes("/proxy") || body.includes("cannot get");
-  }
-  function safeUrl(input) {
-    try {
-      return new URL(String(input || ""));
-    } catch (e) {
-      return null;
-    }
+  function setTTSManagerRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef4 = showToast5;
   }
   var TTSManager = {
     enabled: true,
@@ -6884,16 +6734,9 @@ ${lines.join("\n")}`;
     currentAudio: null,
     currentSegmentId: null,
     littleWhiteBox: null,
-    _gptSoVitsResolvedProxyRoute: "",
-    _gptSoVitsActiveWeights: { gpt: "", sovits: "" },
-    _gptSoVitsWeightSwitchUnavailable: false,
-    _gptSoVitsWeightSwitchWarned: false,
-    _gptSoVitsProxyWarned: false,
-    _gptSoVitsFetchController: null,
     _refreshProviderState() {
       const provider = getTTSProvider();
       this.provider = provider;
-      this.autoPlay = getSettings()?.ttsAutoPlay !== false;
       if (provider === TTS_PROVIDER.LITTLEWHITEBOX) {
         if (topWindow.xiaobaixTts) {
           this.xiaobaixTts = topWindow.xiaobaixTts;
@@ -6938,18 +6781,8 @@ ${lines.join("\n")}`;
     hideLoadingIndicator() {
       $(".gal-char-container").removeClass("tts-active");
     },
-    _abortGptSoVitsFetch(reason = "manual") {
-      if (this._gptSoVitsFetchController) {
-        try {
-          this._gptSoVitsFetchController.abort(reason);
-        } catch (e) {
-        }
-        this._gptSoVitsFetchController = null;
-      }
-    },
     stop() {
       if (!this.isPlaying && !this.isLoading) return;
-      this._abortGptSoVitsFetch("stop");
       console.log(`[${SCRIPT_NAME}] TTS: \u4E2D\u6B62\u5F53\u524D\u64AD\u653E`);
       try {
         if (this.currentAudio && typeof this.currentAudio.pause === "function") {
@@ -7028,73 +6861,48 @@ ${lines.join("\n")}`;
       }
       return null;
     },
-    _isProxyUrl(url) {
-      const parsed = safeUrl(url);
-      if (!parsed) return false;
-      return /^\/proxy(\/|\?|$)/i.test(parsed.pathname);
-    },
-    _buildGptSoVitsProxyUrl(route, originalUrl) {
-      const direct = String(originalUrl || "").trim();
-      if (!direct) return "";
-      const encoded = encodeURIComponent(direct);
-      const origin = window.location?.origin || "";
-      switch (route) {
-        case "proxy_path_relative":
-          return `/proxy/${encoded}`;
-        case "proxy_path_origin":
-          return origin ? `${origin}/proxy/${encoded}` : "";
-        case "proxy_query_relative":
-          return `/proxy?url=${encoded}`;
-        case "proxy_query_origin":
-          return origin ? `${origin}/proxy?url=${encoded}` : "";
-        default:
-          return "";
-      }
-    },
-    _rememberProxyRoute(route, url) {
-      if (!route) return;
-      if (this._gptSoVitsResolvedProxyRoute !== route) {
-        this._gptSoVitsResolvedProxyRoute = route;
-        console.log(`[${SCRIPT_NAME}] GPT-SoVITS \u4EE3\u7406\u8DEF\u7531\u5DF2\u9501\u5B9A: ${route} -> ${clipText(url, 96)}`);
-      }
-    },
     _getProxiedAudioUrl(originalUrl) {
-      const directUrl = String(originalUrl || "").trim();
-      if (!directUrl) return directUrl;
-      if (this._isProxyUrl(directUrl)) return directUrl;
       const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
       if (typeof _topWindow.getCorsProxyUrl === "function") {
         try {
-          const proxied = _topWindow.getCorsProxyUrl(directUrl);
-          if (typeof proxied === "string" && proxied) return proxied;
+          const proxied = _topWindow.getCorsProxyUrl(originalUrl);
+          console.log(`[${SCRIPT_NAME}] LipSync: \u4F7F\u7528 getCorsProxyUrl \u4EE3\u7406\u97F3\u9891`);
+          return proxied;
         } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: getCorsProxyUrl \u5931\u8D25`, e);
         }
       }
       if (typeof _topWindow.enableCorsProxy === "function") {
         try {
-          const proxied = _topWindow.enableCorsProxy(directUrl);
-          if (typeof proxied === "string" && proxied) return proxied;
+          const proxied = _topWindow.enableCorsProxy(originalUrl);
+          if (typeof proxied === "string" && proxied) {
+            console.log(`[${SCRIPT_NAME}] LipSync: \u4F7F\u7528 enableCorsProxy \u4EE3\u7406\u97F3\u9891`);
+            return proxied;
+          }
         } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: enableCorsProxy \u5931\u8D25`, e);
         }
       }
       if (_topWindow.corsProxy?.getProxyUrl) {
         try {
-          const proxied = _topWindow.corsProxy.getProxyUrl(directUrl);
-          if (typeof proxied === "string" && proxied) return proxied;
+          const proxied = _topWindow.corsProxy.getProxyUrl(originalUrl);
+          console.log(`[${SCRIPT_NAME}] LipSync: \u4F7F\u7528 corsProxy.getProxyUrl \u4EE3\u7406\u97F3\u9891`);
+          return proxied;
         } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] LipSync: corsProxy.getProxyUrl \u5931\u8D25`, e);
         }
       }
-      const remembered = String(this._gptSoVitsResolvedProxyRoute || "").trim();
-      if (remembered) {
-        const rememberedUrl = this._buildGptSoVitsProxyUrl(remembered, directUrl);
-        if (rememberedUrl) return rememberedUrl;
+      if (_topWindow.location) {
+        const origin = _topWindow.location.origin;
+        console.log(`[${SCRIPT_NAME}] LipSync: \u4F7F\u7528\u9ED8\u8BA4\u4EE3\u7406\u7AEF\u70B9 /proxy`);
+        return `${origin}/proxy?url=${encodeURIComponent(originalUrl)}`;
       }
-      return this._buildGptSoVitsProxyUrl("proxy_path_relative", directUrl) || this._buildGptSoVitsProxyUrl("proxy_query_relative", directUrl) || directUrl;
+      return originalUrl;
     },
     _buildGptSoVitsTtsUrl(text, resolvedVoice) {
       const cfg = getGptSoVitsConfig();
       const base = String(cfg.apiUrl || "").replace(/\/$/, "");
-      const endpointRaw = String(cfg.endpoint || "/tts").trim();
+      const endpointRaw = String(cfg.endpoint || "/tts");
       const endpoint = endpointRaw.startsWith("/") ? endpointRaw : `/${endpointRaw}`;
       if (!base) return "";
       try {
@@ -7119,170 +6927,20 @@ ${lines.join("\n")}`;
         return "";
       }
     },
-    async _requestGptSoVitsApi(method, pathname, queryParams = {}, jsonBody = void 0) {
-      const cfg = getGptSoVitsConfig();
-      const base = String(cfg.apiUrl || "").replace(/\/$/, "");
-      const pathRaw = String(pathname || "").trim() || "/";
-      const path = pathRaw.startsWith("/") ? pathRaw : `/${pathRaw}`;
-      if (!base) throw new Error("GPT-SoVITS API \u5730\u5740\u4E3A\u7A7A");
-      const directUrlObj = new URL(base + path);
-      Object.entries(queryParams || {}).forEach(([key, value]) => {
-        if (value !== void 0 && value !== null && value !== "") {
-          directUrlObj.searchParams.set(String(key), String(value));
-        }
-      });
-      const directUrl = directUrlObj.toString();
-      const attemptTargets = [];
-      if (!cfg.useCorsProxy) {
-        attemptTargets.push({ route: "direct", url: directUrl });
-      } else {
-        const preferred = String(this._gptSoVitsResolvedProxyRoute || "").trim();
-        const seen = /* @__PURE__ */ new Set();
-        const addTarget = (route, url) => {
-          if (!url || seen.has(url)) return;
-          seen.add(url);
-          attemptTargets.push({ route, url });
-        };
-        if (preferred) addTarget(preferred, this._buildGptSoVitsProxyUrl(preferred, directUrl));
-        addTarget("proxy_path_relative", this._buildGptSoVitsProxyUrl("proxy_path_relative", directUrl));
-        addTarget("proxy_path_origin", this._buildGptSoVitsProxyUrl("proxy_path_origin", directUrl));
-        addTarget("proxy_query_relative", this._buildGptSoVitsProxyUrl("proxy_query_relative", directUrl));
-        addTarget("proxy_query_origin", this._buildGptSoVitsProxyUrl("proxy_query_origin", directUrl));
-        addTarget("direct", directUrl);
-      }
-      const errors = [];
-      for (const target of attemptTargets) {
-        const controller = new AbortController();
-        this._gptSoVitsFetchController = controller;
-        try {
-          const options = {
-            method,
-            mode: "cors",
-            credentials: "omit",
-            signal: controller.signal,
-            headers: {}
-          };
-          if (jsonBody !== void 0) {
-            options.headers["Content-Type"] = "application/json";
-            options.body = JSON.stringify(jsonBody);
-          }
-          const response = await fetch(target.url, options);
-          const text = await response.text();
-          if (response.ok) {
-            if (target.route !== "direct") {
-              this._rememberProxyRoute(target.route, target.url);
-            }
-            return { text, status: response.status, url: target.url, route: target.route };
-          }
-          if (target.route !== "direct" && isProxyNotFound(response.status, text)) {
-            errors.push(`${target.route}:HTTP${response.status}(proxy-not-found)`);
-            continue;
-          }
-          errors.push(`${target.route}:HTTP${response.status}:${clipText(text, 120)}`);
-        } catch (e) {
-          const msg = e?.message || String(e);
-          errors.push(`${target.route}:${msg}`);
-        } finally {
-          if (this._gptSoVitsFetchController === controller) {
-            this._gptSoVitsFetchController = null;
-          }
-        }
-      }
-      throw new Error(`${method} ${path} \u5931\u8D25 -> ${errors.join(" | ")}`);
-    },
-    async _fetchGptSoVitsApi(pathname, queryParams = {}) {
-      const { text } = await this._requestGptSoVitsApi("GET", pathname, queryParams);
-      return text;
-    },
-    async _postGptSoVitsApi(pathname, jsonBody = {}) {
-      const { text } = await this._requestGptSoVitsApi("POST", pathname, {}, jsonBody);
-      return text;
-    },
-    async _setGptSoVitsWeights(kind, weightsPath) {
-      const normalizedKind = kind === "gpt" ? "gpt" : "sovits";
-      const path = String(weightsPath || "").trim();
-      if (!path) return;
-      const endpoint = `/set_${normalizedKind}_weights`;
-      await this._fetchGptSoVitsApi(endpoint, { weights_path: path });
-    },
-    async _setGptSoVitsModelPair(gptWeightsPath, sovitsWeightsPath, endpointOverride = "") {
-      const cfg = getGptSoVitsConfig();
-      const endpoint = String(endpointOverride || cfg.setModelEndpoint || "/set_model").trim() || "/set_model";
-      try {
-        await this._postGptSoVitsApi(endpoint, {
-          gpt_model_path: String(gptWeightsPath || "").trim(),
-          sovits_model_path: String(sovitsWeightsPath || "").trim()
-        });
-        return;
-      } catch (postErr) {
-        await this._fetchGptSoVitsApi(endpoint, {
-          gpt_model_path: String(gptWeightsPath || "").trim(),
-          sovits_model_path: String(sovitsWeightsPath || "").trim()
-        });
-      }
-    },
-    async _ensureGptSoVitsWeights(resolvedVoice) {
-      const cfg = getGptSoVitsConfig();
-      const vcfg = resolvedVoice?.gptSoVits || {};
-      const desiredGpt = String(vcfg.gptWeightsPath || "").trim();
-      const desiredSovits = String(vcfg.sovitsWeightsPath || "").trim();
-      let switchMode = normalizeGptSoVitsSwitchMode(vcfg.modelSwitchMode || cfg.modelSwitchMode);
-      const setModelEndpoint = String(vcfg.setModelEndpoint || cfg.setModelEndpoint || "/set_model").trim() || "/set_model";
-      if (switchMode === "none") return true;
-      if (!desiredGpt && !desiredSovits) return true;
-      if (this._gptSoVitsWeightSwitchUnavailable) return false;
-      if (switchMode === "set_model") {
-        if (desiredGpt && desiredSovits) {
-          try {
-            await this._setGptSoVitsModelPair(desiredGpt, desiredSovits, setModelEndpoint);
-            this._gptSoVitsActiveWeights.gpt = desiredGpt;
-            this._gptSoVitsActiveWeights.sovits = desiredSovits;
-            return true;
-          } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: set_model \u5931\u8D25\uFF0C\u56DE\u9000 set_weights`, e);
-            switchMode = "set_weights";
-          }
-        } else {
-          switchMode = "set_weights";
-        }
-      }
-      if (switchMode === "set_weights") {
-        try {
-          if (desiredGpt && desiredGpt !== this._gptSoVitsActiveWeights.gpt) {
-            await this._setGptSoVitsWeights("gpt", desiredGpt);
-            this._gptSoVitsActiveWeights.gpt = desiredGpt;
-          }
-          if (desiredSovits && desiredSovits !== this._gptSoVitsActiveWeights.sovits) {
-            await this._setGptSoVitsWeights("sovits", desiredSovits);
-            this._gptSoVitsActiveWeights.sovits = desiredSovits;
-          }
-          return true;
-        } catch (e) {
-          if (!this._gptSoVitsWeightSwitchWarned) {
-            this._gptSoVitsWeightSwitchWarned = true;
-            showToast("GPT-SoVITS \u5207\u6362\u6743\u91CD\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5 /proxy \u4E0E set_* \u63A5\u53E3");
-          }
-          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: set_weights \u5931\u8D25`, e);
-          return false;
-        }
-      }
-      return true;
-    },
     async _speakWithGptSoVits(segment, segmentId, resolvedVoice) {
       const cfg = getGptSoVitsConfig();
       const vcfg = resolvedVoice?.gptSoVits || {};
       if (!cfg.apiUrl) {
-        showToast("GPT-SoVITS: \u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199 API \u5730\u5740");
+        if (_showToastRef4) _showToastRef4("GPT-SoVITS: \u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199 API \u5730\u5740");
         return false;
       }
-      if (!String(vcfg.refAudioPath || "").trim()) {
-        showToast("GPT-SoVITS: \u5F53\u524D\u97F3\u8272\u7F3A\u5C11 refAudioPath");
+      if (!vcfg.refAudioPath) {
+        if (_showToastRef4) _showToastRef4("GPT-SoVITS: \u5F53\u524D\u97F3\u8272\u7F3A\u5C11 refAudioPath");
         return false;
       }
-      await this._ensureGptSoVitsWeights(resolvedVoice);
       const directUrl = this._buildGptSoVitsTtsUrl(segment.text, resolvedVoice);
       if (!directUrl) {
-        showToast("GPT-SoVITS: \u65E0\u6CD5\u751F\u6210\u8BF7\u6C42URL");
+        if (_showToastRef4) _showToastRef4("GPT-SoVITS: \u65E0\u6CD5\u751F\u6210\u8BF7\u6C42URL");
         return false;
       }
       const audioUrl = cfg.useCorsProxy ? this._getProxiedAudioUrl(directUrl) : directUrl;
@@ -7298,12 +6956,7 @@ ${lines.join("\n")}`;
       };
       const onError = (e) => {
         console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: audio error`, e);
-        if (!this._gptSoVitsProxyWarned && cfg.useCorsProxy) {
-          this._gptSoVitsProxyWarned = true;
-          showToast("GPT-SoVITS \u4EE3\u7406\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5 /proxy \u8DEF\u7531\u548C CORS \u8BBE\u7F6E");
-        } else {
-          showToast("GPT-SoVITS \u64AD\u653E\u5931\u8D25\uFF08\u68C0\u67E5\u5730\u5740/\u4EE3\u7406/CORS\uFF09");
-        }
+        if (_showToastRef4) _showToastRef4("GPT-SoVITS \u64AD\u653E\u5931\u8D25\uFF08\u68C0\u67E5\u5730\u5740/\u4EE3\u7406/CORS\uFF09");
         onEnded();
       };
       audio.addEventListener("ended", onEnded, { once: true });
@@ -7312,7 +6965,7 @@ ${lines.join("\n")}`;
         await audio.play();
       } catch (e) {
         console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: play() \u5931\u8D25`, e);
-        showToast("GPT-SoVITS \u64AD\u653E\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u9700\u8981\u7528\u6237\u4EA4\u4E92\uFF09");
+        if (_showToastRef4) _showToastRef4("GPT-SoVITS \u64AD\u653E\u88AB\u6D4F\u89C8\u5668\u62E6\u622A\uFF08\u9700\u8981\u7528\u6237\u4EA4\u4E92\uFF09");
         onEnded();
         return false;
       }
@@ -7495,7 +7148,7 @@ ${lines.join("\n")}`;
           await this.xiaobaixTts.speak(segment.text, {
             speaker: speakerValue,
             resourceId,
-            context
+            contextTexts: context ? [context] : []
           });
           this.isPlaying = true;
           this.currentSegmentId = segmentId;
@@ -7512,7 +7165,7 @@ ${lines.join("\n")}`;
             message: segment.text,
             speaker: speakerValue,
             resourceId,
-            context
+            contextTexts: context ? [context] : []
           });
           this.isPlaying = true;
           this.currentSegmentId = segmentId;
@@ -7533,7 +7186,6 @@ ${lines.join("\n")}`;
       }
     },
     speakCurrent(state) {
-      this.autoPlay = getSettings()?.ttsAutoPlay !== false;
       if (!state || !this.autoPlay) return;
       const provider = getTTSProvider();
       if (provider !== this.provider || !this.enabled) {
@@ -7549,8 +7201,8 @@ ${lines.join("\n")}`;
 
   // src/audio/bgm-manager.js
   var _showToastRef5 = null;
-  function setBGMManagerRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef5 = showToast6;
+  function setBGMManagerRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef5 = showToast5;
   }
   var BGMManager = {
     audio: new Audio(),
@@ -7976,14 +7628,14 @@ ${lines.join("\n")}`;
     getMessageSegmentState,
     getSpriteManager,
     updateGlobalOverlayContent: updateGlobalOverlayContent2,
-    showToast: showToast6
+    showToast: showToast5
   }) {
     if (saveBackground2) _saveBackgroundRef = saveBackground2;
     if (getSceneBackgrounds) _getSceneBackgroundsRef = getSceneBackgrounds;
     if (getMessageSegmentState) _getMessageSegmentStateRef = getMessageSegmentState;
     if (getSpriteManager) _getSpriteManagerRef = getSpriteManager;
     if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef = updateGlobalOverlayContent2;
-    if (showToast6) _showToastRef6 = showToast6;
+    if (showToast5) _showToastRef6 = showToast5;
   }
   var WALLHAVEN_TAG_MAPPING = {
     "study": "library",
@@ -8920,7 +8572,7 @@ ${extraRule}
   function preprocessSimplifiedFormat(html) {
     if (!html) return html;
     html = cleanIllegalTags(html);
-    const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*["\u201c"'「『（(]([\s\S]+?)["\u201d"'」』）)]\s*<\/p>/gi;
+    const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*[""\"'「『（(]([\s\S]+?)[""\"'」』）)]\s*<\/p>/gi;
     let result = html;
     let match;
     const regex = new RegExp(simplifiedPattern.source, "gi");
@@ -9109,24 +8761,24 @@ ${extraRule}
         expression = exprMatch[1];
         text = text.replace(expressionTagRegex, "").trim();
       }
-      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["\u201c"'「『（(]([\s\S]+)["\u201d"'」』）)]\s*$/);
+      let bracketContext = null;
+      const bracketMatch = text.match(/\[([^\]|]+?)(?:\|([^\]]+))?\]/);
+      if (bracketMatch) {
+        if (!expression) {
+          expression = bracketMatch[1].trim();
+        }
+        if (bracketMatch[2]) {
+          bracketContext = bracketMatch[2].trim();
+        }
+        text = text.replace(bracketMatch[0], "").trim();
+      }
+      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*[""\"'「『（(]([\s\S]+)[""\"'」』）)]\s*$/);
       if (!dialogueMatch) {
         dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
       }
       if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
-        let speaker = dialogueMatch[1].trim();
+        const speaker = dialogueMatch[1].trim();
         const dialogue = dialogueMatch[2].trim();
-        if (!expression) {
-          const speakerExprMatch = speaker.match(/^([^[\]<>:：]{1,20})\[([^\]]+)\]$/);
-          if (speakerExprMatch) {
-            speaker = speakerExprMatch[1].trim();
-            const bracketContent = speakerExprMatch[2].trim();
-            if (bracketContent) {
-              const exprCandidate = bracketContent.split("|")[0].split(",")[0].trim();
-              if (exprCandidate) expression = exprCandidate;
-            }
-          }
-        }
         if (speaker === "\u65C1\u767D") {
           return {
             type: "narration",
@@ -9144,6 +8796,13 @@ ${extraRule}
           };
           if (ttsConfigString) {
             segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+          }
+          if (bracketContext) {
+            if (!segResult.tts) {
+              segResult.tts = { speaker, context: bracketContext };
+            } else if (!segResult.tts.context) {
+              segResult.tts.context = bracketContext;
+            }
           }
           return segResult;
         }
@@ -9365,17 +9024,17 @@ ${extraRule}
   var _updateNextBtnForGeneratingStateRef2 = null;
   var _updateGeneratingStatusRef2 = null;
   function setEnhancedModeRefs({
-    showToast: showToast6,
+    showToast: showToast5,
     updateGlobalOverlayContent: updateGlobalOverlayContent2,
     updateNextBtnForGeneratingState: updateNextBtnForGeneratingState2,
     updateGeneratingStatus: updateGeneratingStatus2
   }) {
-    if (showToast6) _showToastRef7 = showToast6;
+    if (showToast5) _showToastRef7 = showToast5;
     if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef2 = updateGlobalOverlayContent2;
     if (updateNextBtnForGeneratingState2) _updateNextBtnForGeneratingStateRef2 = updateNextBtnForGeneratingState2;
     if (updateGeneratingStatus2) _updateGeneratingStatusRef2 = updateGeneratingStatus2;
   }
-  function showToast2(msg, duration) {
+  function showToast(msg, duration) {
     if (_showToastRef7) _showToastRef7(msg, duration);
   }
   function isCotFormatted(content) {
@@ -9472,7 +9131,7 @@ ${extraRule}
     };
     const msg = messages[stage];
     if (!msg) return;
-    showToast2(
+    showToast(
       `<i class="fa-solid ${msg.icon}" style="color: #ff9800;"></i> <b>${msg.text}</b><br><small>${msg.sub}</small>`,
       3e3
     );
@@ -9627,16 +9286,13 @@ ${extraRule}
     }
   }
   async function runSecondGeneration(messageId, firstResult) {
-    const config = ensureEnhancedModeSettings();
-    const secondGenerateConfig = config.secondGenerate;
-    const numericMessageId = Number(messageId);
+    const settings = getSettings();
+    const config = settings.enhancedMode;
+    const numericMessageId = parseInt(messageId);
     let streamBuffer = "";
     let lastStreamUpdate = 0;
     const STREAM_INTERVAL = 100;
     try {
-      if (!Number.isInteger(numericMessageId) || numericMessageId < 0) {
-        throw new Error("\u65E0\u6548\u7684\u6D88\u606FID\uFF0C\u65E0\u6CD5\u6267\u884C\u7B2C\u4E8C\u6B21\u751F\u6210");
-      }
       console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u5F00\u59CB\u7B2C\u4E8C\u6B21\u751F\u6210\uFF08COT\u683C\u5F0F\u5316-\u6D41\u5F0F\uFF09`);
       enhancedModeState2.stage = "second_generating";
       showEnhancedProgress("second_generating");
@@ -9649,12 +9305,12 @@ ${extraRule}
         enhancedModeState2.originalWorldbooks = [...originalGlobalWbs];
         enhancedModeState2.worldbooksModified = true;
         let targetWorldbooks = [...originalGlobalWbs];
-        if (!secondGenerateConfig.useWorldbooks) {
+        if (!config.secondGenerate.useWorldbooks) {
           targetWorldbooks = [...originalGlobalWbs];
           console.log(`[${SCRIPT_NAME}] \u7B2C\u4E8C\u6B21\u751F\u6210\u4F7F\u7528\u5F53\u524D\u5168\u5C40\u4E16\u754C\u4E66:`, targetWorldbooks);
-        } else if (secondGenerateConfig.worldbooks && secondGenerateConfig.worldbooks.length > 0) {
-          targetWorldbooks = [...secondGenerateConfig.worldbooks];
-          console.log(`[${SCRIPT_NAME}] \u7B2C\u4E8C\u6B21\u751F\u6210\u4F7F\u7528\u7528\u6237\u6307\u5B9A\u4E16\u754C\u4E66:`, secondGenerateConfig.worldbooks);
+        } else if (config.secondGenerate.worldbooks && config.secondGenerate.worldbooks.length > 0) {
+          targetWorldbooks = [...config.secondGenerate.worldbooks];
+          console.log(`[${SCRIPT_NAME}] \u7B2C\u4E8C\u6B21\u751F\u6210\u4F7F\u7528\u7528\u6237\u6307\u5B9A\u4E16\u754C\u4E66:`, config.secondGenerate.worldbooks);
         } else {
           targetWorldbooks = [];
           console.log(`[${SCRIPT_NAME}] \u7B2C\u4E8C\u6B21\u751F\u6210\u6E05\u7A7A\u7528\u6237\u4E16\u754C\u4E66`);
@@ -9664,19 +9320,19 @@ ${extraRule}
         }
         await rebindGlobalWorldbooks(targetWorldbooks);
         console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F\u7B2C\u4E8C\u6B21\u751F\u6210: \u5DF2\u4E34\u65F6\u9644\u52A0\u811A\u672C\u4E16\u754C\u4E66`, targetWorldbooks);
-        if (secondGenerateConfig.useProfile && secondGenerateConfig.profileName) {
-          await triggerSlash(`/profile quiet=true ${secondGenerateConfig.profileName}`);
-          console.log(`[${SCRIPT_NAME}] \u5DF2\u5207\u6362\u5230\u8FDE\u63A5\u914D\u7F6E: ${secondGenerateConfig.profileName}`);
+        if (config.secondGenerate.useProfile && config.secondGenerate.profileName) {
+          await triggerSlash(`/profile quiet=true ${config.secondGenerate.profileName}`);
+          console.log(`[${SCRIPT_NAME}] \u5DF2\u5207\u6362\u5230\u8FDE\u63A5\u914D\u7F6E: ${config.secondGenerate.profileName}`);
           await new Promise((r) => setTimeout(r, 300));
         }
-        if (secondGenerateConfig.useModel && secondGenerateConfig.modelName) {
-          await triggerSlash(`/model quiet=true ${secondGenerateConfig.modelName}`);
-          console.log(`[${SCRIPT_NAME}] \u5DF2\u5207\u6362\u5230\u6A21\u578B: ${secondGenerateConfig.modelName}`);
+        if (config.secondGenerate.useModel && config.secondGenerate.modelName) {
+          await triggerSlash(`/model quiet=true ${config.secondGenerate.modelName}`);
+          console.log(`[${SCRIPT_NAME}] \u5DF2\u5207\u6362\u5230\u6A21\u578B: ${config.secondGenerate.modelName}`);
           await new Promise((r) => setTimeout(r, 300));
         }
-        if (secondGenerateConfig.usePreset && secondGenerateConfig.presetName) {
-          await triggerSlash(`/preset quiet=true ${secondGenerateConfig.presetName}`);
-          console.log(`[${SCRIPT_NAME}] \u5DF2\u5207\u6362\u5230\u9884\u8BBE: ${secondGenerateConfig.presetName}`);
+        if (config.secondGenerate.usePreset && config.secondGenerate.presetName) {
+          await triggerSlash(`/preset quiet=true ${config.secondGenerate.presetName}`);
+          console.log(`[${SCRIPT_NAME}] \u5DF2\u5207\u6362\u5230\u9884\u8BBE: ${config.secondGenerate.presetName}`);
           await new Promise((r) => setTimeout(r, 300));
         }
         enhancedModeState2.isSecondGeneration = true;
@@ -9737,15 +9393,8 @@ ${firstResult}`;
           if (updatedMsgs && updatedMsgs[0]) {
             const updatedSwipes = [...updatedMsgs[0].swipes];
             updatedSwipes[newSwipeId] = formattedResult;
-            const updatedSwipesInfo = [...updatedMsgs[0].swipes_info || []];
-            updatedSwipesInfo[newSwipeId] = {
-              ...updatedSwipesInfo[newSwipeId] || {},
-              isEnhancedFormat: true,
-              enhancedModeGeneratedAt: Date.now()
-            };
             const finalUpdateData = { ...updatedMsgs[0] };
             finalUpdateData.swipes = updatedSwipes;
-            finalUpdateData.swipes_info = updatedSwipesInfo;
             finalUpdateData.swipe_id = newSwipeId;
             await setChatMessages([finalUpdateData], { refresh: "affected" });
             console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u5DF2\u6700\u7EC8\u66F4\u65B0 swipe[${newSwipeId}]`);
@@ -9775,7 +9424,7 @@ ${firstResult}`;
       }
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F\u7B2C\u4E8C\u6B21\u751F\u6210\u5931\u8D25:`, e);
-      showToast2("\u683C\u5F0F\u5316\u5904\u7406\u5931\u8D25: " + e.message);
+      showToast("\u683C\u5F0F\u5316\u5904\u7406\u5931\u8D25: " + e.message);
       await restoreOriginalConfig();
     } finally {
       resetEnhancedModeState();
@@ -9878,63 +9527,17 @@ ${firstResult}`;
     }
   }
   var enhancedModeListenerRegistered = false;
-  function resolveGenerationMessageId(eventPayload) {
-    const tryParseId = (value) => {
-      const id = Number(value);
-      return Number.isInteger(id) && id >= 0 ? id : null;
-    };
-    let messageId = tryParseId(eventPayload);
-    if (messageId !== null) return messageId;
-    if (eventPayload && typeof eventPayload === "object") {
-      messageId = tryParseId(eventPayload.message_id) ?? tryParseId(eventPayload.messageId) ?? tryParseId(eventPayload.id);
-      if (messageId !== null) return messageId;
-    }
-    try {
-      const latestAssistant = getChatMessages(-1, { role: "assistant", include_swipes: true });
-      const fallbackMessage = latestAssistant?.[0];
-      messageId = tryParseId(fallbackMessage?.message_id);
-      if (messageId !== null) {
-        console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u4F7F\u7528\u6700\u65B0\u52A9\u624B\u6D88\u606F\u515C\u5E95 messageId=${messageId}`);
-        return messageId;
-      }
-    } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u515C\u5E95\u83B7\u53D6 messageId \u5931\u8D25`, e);
-    }
-    return null;
-  }
-  async function getMessageByIdWithRetry(messageId, maxRetries = 8, retryDelayMs = 120) {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const messages = getChatMessages(messageId, { include_swipes: true });
-        const message = messages?.[0];
-        if (message) {
-          return message;
-        }
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u7B2C ${attempt + 1} \u6B21\u83B7\u53D6\u6D88\u606F\u5931\u8D25`, e);
-      }
-      if (attempt < maxRetries) {
-        await new Promise((r) => setTimeout(r, retryDelayMs));
-      }
-    }
-    return null;
-  }
   function initEnhancedModeListener() {
     if (enhancedModeListenerRegistered) {
       console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u76D1\u542C\u5668\u5DF2\u6CE8\u518C\uFF0C\u8DF3\u8FC7`);
       return;
     }
     if (typeof eventOn === "function" && typeof tavern_events !== "undefined" && tavern_events.GENERATION_ENDED) {
-      eventOn(tavern_events.GENERATION_ENDED, async (eventPayload) => {
-        const messageId = resolveGenerationMessageId(eventPayload);
+      eventOn(tavern_events.GENERATION_ENDED, async (messageId) => {
+        const settings = getSettings();
         const isEnabled = getIsEnabled();
-        console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u6536\u5230 GENERATION_ENDED \u4E8B\u4EF6, messageId=${messageId}`, eventPayload);
-        if (messageId === null) {
-          console.warn(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u65E0\u6CD5\u89E3\u6790 messageId\uFF0C\u8DF3\u8FC7\u672C\u6B21`);
-          return;
-        }
-        const enhancedConfig = ensureEnhancedModeSettings();
-        if (!isEnabled || !enhancedConfig.enabled) {
+        console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u6536\u5230 GENERATION_ENDED \u4E8B\u4EF6, messageId=${messageId}`);
+        if (!isEnabled || !settings.enhancedMode?.enabled) {
           console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u672A\u542F\u7528\u6216Galgame\u6A21\u5F0F\u5173\u95ED\uFF0C\u8DF3\u8FC7`);
           return;
         }
@@ -9948,7 +9551,8 @@ ${firstResult}`;
           return;
         }
         try {
-          const message = await getMessageByIdWithRetry(messageId);
+          const messages = getChatMessages(messageId, { include_swipes: true });
+          const message = messages[0];
           if (!message) {
             console.warn(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u65E0\u6CD5\u83B7\u53D6\u6D88\u606F ${messageId}`);
             return;
@@ -9957,19 +9561,19 @@ ${firstResult}`;
             console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u975E assistant \u6D88\u606F\uFF0C\u8DF3\u8FC7`);
             return;
           }
-          const hasEnhancedFormatSwipe = (message.swipes_info || []).some((info) => info?.isEnhancedFormat === true);
-          if (hasEnhancedFormatSwipe) {
-            console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u5DF2\u5B58\u5728 isEnhancedFormat swipe\uFF0C\u8DF3\u8FC7`);
+          const existingFormatted = getFormattedContent(messageId);
+          if (existingFormatted) {
+            console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u5DF2\u5B58\u5728\u683C\u5F0F\u5316 swipe\uFF0C\u8DF3\u8FC7`);
             return;
           }
-          const currentSwipeId = typeof message.swipe_id === "number" ? message.swipe_id : 0;
-          const firstResult = message.swipes?.[currentSwipeId] || message.message;
+          const firstResult = message.swipes?.[message.swipe_id] || message.message;
           if (!firstResult || !firstResult.trim()) {
             console.warn(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u6D88\u606F\u5185\u5BB9\u4E3A\u7A7A`);
             return;
           }
           if (isCotFormatted(firstResult)) {
-            console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u5F53\u524D\u5185\u5BB9\u5DF2\u662F COT\uFF0C\u4ECD\u6267\u884C\u7B2C\u4E8C\u6B21\u751F\u6210`);
+            console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u5F53\u524D\u5185\u5BB9\u5DF2\u662F COT \u683C\u5F0F\uFF0C\u8DF3\u8FC7`);
+            return;
           }
           console.log(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F: \u7B2C\u4E00\u6B21\u751F\u6210\u5B8C\u6210\uFF0C\u5185\u5BB9\u957F\u5EA6=${firstResult.length}`);
           enhancedModeState2.isActive = true;
@@ -9984,7 +9588,7 @@ ${firstResult}`;
           }, 0);
         } catch (e) {
           console.error(`[${SCRIPT_NAME}] \u52A0\u5F3A\u6A21\u5F0F\u5904\u7406\u5931\u8D25:`, e);
-          showToast2("\u52A0\u5F3A\u6A21\u5F0F\u5931\u8D25: " + e.message);
+          showToast("\u52A0\u5F3A\u6A21\u5F0F\u5931\u8D25: " + e.message);
           resetEnhancedModeState();
         }
       });
@@ -10023,10 +9627,10 @@ ${firstResult}`;
         console.log("[\u6D4B\u8BD5] \u5DF2\u6DFB\u52A0 swipe\uFF0C\u65B0 swipes \u6570\u91CF:", newSwipes.length);
         const updated = getChatMessages(messageId, { include_swipes: true });
         console.log("[\u6D4B\u8BD5] \u9A8C\u8BC1\u6210\u529F\uFF0Cswipes \u6570\u91CF:", updated[0]?.swipes?.length);
-        showToast2("\u6D4B\u8BD5\u6210\u529F\uFF01swipes: " + updated[0]?.swipes?.length);
+        showToast("\u6D4B\u8BD5\u6210\u529F\uFF01swipes: " + updated[0]?.swipes?.length);
       } catch (e) {
         console.error("[\u6D4B\u8BD5] \u5931\u8D25:", e);
-        showToast2("\u6D4B\u8BD5\u5931\u8D25: " + e.message);
+        showToast("\u6D4B\u8BD5\u5931\u8D25: " + e.message);
       }
     };
     console.log(`[${SCRIPT_NAME}] \u6D4B\u8BD5\u51FD\u6570\u5DF2\u6CE8\u518C: window.testAddSwipeNoRefresh()`);
@@ -10034,10 +9638,10 @@ ${firstResult}`;
 
   // src/logic/worldbook.js
   var _showToastRef8 = null;
-  function setWorldbookRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef8 = showToast6;
+  function setWorldbookRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef8 = showToast5;
   }
-  function showToast3(msg, duration) {
+  function showToast2(msg, duration) {
     if (_showToastRef8) _showToastRef8(msg, duration);
   }
   async function checkWorldbookExists(worldbookName) {
@@ -10088,7 +9692,7 @@ ${firstResult}`;
         const cotEntry = buildCotEntry(cotTemplate);
         await createOrReplaceWorldbook(WORLDBOOK_NAME2, [cotEntry]);
         console.log(`[${SCRIPT_NAME}] \u4E16\u754C\u4E66\u521B\u5EFA\u6210\u529F`);
-        showToast3("\u5DF2\u521B\u5EFAGalgame\u683C\u5F0F\u89C4\u8303\u4E16\u754C\u4E66");
+        showToast2("\u5DF2\u521B\u5EFAGalgame\u683C\u5F0F\u89C4\u8303\u4E16\u754C\u4E66");
       } else {
         console.log(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66: ${WORLDBOOK_NAME2}`);
         let worldbook;
@@ -10099,7 +9703,7 @@ ${firstResult}`;
           const cotEntry = buildCotEntry(cotTemplate);
           await createOrReplaceWorldbook(WORLDBOOK_NAME2, [cotEntry]);
           console.log(`[${SCRIPT_NAME}] \u4E16\u754C\u4E66\u5DF2\u91CD\u65B0\u521B\u5EFA`);
-          showToast3("\u5DF2\u91CD\u65B0\u521B\u5EFAGalgame\u683C\u5F0F\u89C4\u8303\u4E16\u754C\u4E66");
+          showToast2("\u5DF2\u91CD\u65B0\u521B\u5EFAGalgame\u683C\u5F0F\u89C4\u8303\u4E16\u754C\u4E66");
           return true;
         }
         const existingEntry = worldbook.find((e) => e.name === COT_ENTRY_NAME2);
@@ -10113,12 +9717,12 @@ ${firstResult}`;
             });
           });
           console.log(`[${SCRIPT_NAME}] \u6761\u76EE\u5DF2\u66F4\u65B0`);
-          showToast3("Galgame\u683C\u5F0F\u89C4\u8303\u5DF2\u66F4\u65B0");
+          showToast2("Galgame\u683C\u5F0F\u89C4\u8303\u5DF2\u66F4\u65B0");
         } else {
           const cotEntry = buildCotEntry(cotTemplate);
           await createWorldbookEntries(WORLDBOOK_NAME2, [cotEntry]);
           console.log(`[${SCRIPT_NAME}] \u6761\u76EE\u5DF2\u6DFB\u52A0`);
-          showToast3("Galgame\u683C\u5F0F\u89C4\u8303\u5DF2\u6DFB\u52A0\u5230\u4E16\u754C\u4E66");
+          showToast2("Galgame\u683C\u5F0F\u89C4\u8303\u5DF2\u6DFB\u52A0\u5230\u4E16\u754C\u4E66");
         }
       }
       return true;
@@ -10165,11 +9769,11 @@ ${firstResult}`;
   var sceneBackgrounds2 = GalgameStore.cache.backgrounds;
   var _updateGlobalOverlayContentRef3 = null;
   var _showToastRef9 = null;
-  function setBananaImageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, showToast: showToast6 }) {
+  function setBananaImageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, showToast: showToast5 }) {
     if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
-    if (showToast6) _showToastRef9 = showToast6;
+    if (showToast5) _showToastRef9 = showToast5;
   }
-  function showToast4(msg) {
+  function showToast3(msg) {
     if (_showToastRef9) _showToastRef9(msg);
   }
   async function handleRealTimeBackgroundGeneration(sceneName, tags) {
@@ -10186,7 +9790,7 @@ ${firstResult}`;
     }
     console.log(`[${SCRIPT_NAME}] \u89E6\u53D1\u5B9E\u65F6\u80CC\u666F\u751F\u6210: ${sceneName}, Tags: ${tags}`);
     BGMManager.generatingScenes.add(sceneName);
-    showToast4(`\u6B63\u5728\u751F\u6210\u65B0\u573A\u666F: ${sceneName}...`);
+    showToast3(`\u6B63\u5728\u751F\u6210\u65B0\u573A\u666F: ${sceneName}...`);
     const $bgLayer = $("#gal-global-overlay .gal-layer-bg");
     if ($bgLayer.length) {
       $bgLayer.addClass("generating-bg").removeClass("has-bg");
@@ -10218,7 +9822,7 @@ ${firstResult}`;
           sceneBackgrounds2.set(sceneName, newUrl);
           console.log(`[${SCRIPT_NAME}] [DEBUG] Cache check after set: has("${sceneName}") = ${sceneBackgrounds2.has(sceneName)}`);
           console.log(`[${SCRIPT_NAME}] \u573A\u666F\u751F\u6210\u5E76\u4FDD\u5B58\u6210\u529F: ${sceneName}`);
-          showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5B8C\u6210\uFF01`);
+          showToast3(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5B8C\u6210\uFF01`);
           const $bgLayer2 = $("#gal-global-overlay .gal-layer-bg");
           $bgLayer2.find(".gal-gen-indicator").remove();
           if (getIsEnabled()) {
@@ -10242,7 +9846,7 @@ ${firstResult}`;
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5B9E\u65F6\u80CC\u666F\u751F\u6210\u5931\u8D25:`, e);
-        showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5931\u8D25`);
+        showToast3(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5931\u8D25`);
       } finally {
         BGMManager.generatingScenes.delete(sceneName);
       }
@@ -10426,10 +10030,10 @@ ${firstResult}`;
             }
           }
         }
-        showToast4(`\u573A\u666F\u300C${sceneName}\u300DAI \u80CC\u666F\u5DF2\u751F\u6210`);
+        showToast3(`\u573A\u666F\u300C${sceneName}\u300DAI \u80CC\u666F\u5DF2\u751F\u6210`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE\u5931\u8D25:`, e);
-        showToast4(`\u5927\u9999\u8549\u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
+        showToast3(`\u5927\u9999\u8549\u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
       } finally {
         BGMManager.generatingScenes.delete(sceneName);
       }
@@ -14301,12 +13905,12 @@ ${firstResult}`;
   var _resetGameContentScaleRef = null;
   var _adjustToolbarForSpaceRef = null;
   function setFullscreenRefs({
-    showToast: showToast6,
+    showToast: showToast5,
     adjustGameContentScale: adjustGameContentScale2,
     resetGameContentScale: resetGameContentScale2,
     adjustToolbarForSpace: adjustToolbarForSpace2
   }) {
-    if (showToast6) _showToastRef10 = showToast6;
+    if (showToast5) _showToastRef10 = showToast5;
     if (adjustGameContentScale2) _adjustGameContentScaleRef = adjustGameContentScale2;
     if (resetGameContentScale2) _resetGameContentScaleRef = resetGameContentScale2;
     if (adjustToolbarForSpace2) _adjustToolbarForSpaceRef = adjustToolbarForSpace2;
@@ -14382,7 +13986,7 @@ ${firstResult}`;
   }
 
   // src/ui/toast.js
-  function showToast5(message, duration = 2500) {
+  function showToast4(message, duration = 2500) {
     const mountRoot = getModalMountRoot();
     const $existing = $(mountRoot).find(".gal-toast");
     if ($existing.length) $existing.remove();
@@ -14638,11 +14242,10 @@ ${firstResult}`;
     const $overlay = ensureGlobalOverlay();
     const segments = parsedContent.segments;
     const settings = getSettings();
-    const mesIdStr = String(mesId);
-    let state = messageSegmentState3.get(mesIdStr);
+    let state = messageSegmentState3.get(String(mesId));
     if (!state) {
       state = { currentIndex: 0, segments, parsedContent, renderToken: 0 };
-      messageSegmentState3.set(mesIdStr, state);
+      messageSegmentState3.set(String(mesId), state);
       console.log(`[${SCRIPT_NAME}] [DEBUG] \u65B0\u5EFA\u72B6\u6001\uFF0C\u6BB5\u843D\u6570: ${segments.length}`);
     } else {
       const segmentCountDiff = Math.abs(state.segments.length - segments.length);
@@ -14657,11 +14260,11 @@ ${firstResult}`;
       }
       console.log(`[${SCRIPT_NAME}] [DEBUG] \u66F4\u65B0\u72B6\u6001\uFF0C\u5F53\u524D\u7D22\u5F15: ${state.currentIndex}, \u6BB5\u843D\u6570: ${segments.length}`);
     }
-    const isNewMessage = getCurrentDisplayMesId() !== mesIdStr;
+    const isNewMessage = getCurrentDisplayMesId() !== mesId;
     if (isNewMessage) {
-      console.log(`[${SCRIPT_NAME}] [DEBUG] \u5207\u6362\u6D88\u606F(${getCurrentDisplayMesId()} -> ${mesIdStr})\uFF0C\u4FDD\u7559\u73B0\u6709Live2D\u6A21\u578B\u907F\u514D\u91CD\u8F7D`);
+      SpriteManager.reset($overlay);
     }
-    setCurrentDisplayMesId(mesIdStr);
+    setCurrentDisplayMesId(mesId);
     const renderToken = nextOverlayRenderToken(state);
     $overlay.attr("data-render-token", String(renderToken));
     const currentIndex = Math.min(state.currentIndex, segments.length - 1);
@@ -14719,13 +14322,13 @@ ${firstResult}`;
       stopNextBtnAnimation();
       $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     }
+    $overlay.find(".gal-game-container").attr("data-mes-id", mesId);
     updateLocationTimeDisplay();
     if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
-      const segmentId = `${mesIdStr}_${currentIndex}`;
+      const segmentId = `${mesId}_${currentIndex}`;
       TTSManager.stop();
       TTSManager.speak(displaySegment, segmentId);
     }
-    $overlay.find(".gal-game-container").attr("data-mes-id", mesIdStr);
   }
   async function updateOverlaySegmentDisplay(state, expectedRenderToken = null) {
     if (!state) return false;
@@ -14903,7 +14506,8 @@ ${firstResult}`;
     const merged = [];
     allPs.forEach((p) => {
       if (cgParentPs.has(p)) {
-        merged.push({ type: "cg", speaker: null, text: "", expression: null, cgIndex: cgIdx++ });
+        const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
+        merged.push({ type: "cg", speaker: null, text: "", expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
       } else {
         if (regularIdx < baseSegments.length) {
           merged.push(baseSegments[regularIdx++]);
@@ -14994,7 +14598,7 @@ ${firstResult}`;
     if ($sendTextarea.length && $sendButton.length) {
       $sendTextarea.val(text);
       $sendButton.click();
-      showToast5("\u6D88\u606F\u5DF2\u53D1\u9001");
+      showToast4("\u6D88\u606F\u5DF2\u53D1\u9001");
     } else {
       console.error(`[${SCRIPT_NAME}] \u672A\u627E\u5230\u53D1\u9001\u6309\u94AE`);
     }
@@ -15019,19 +14623,19 @@ ${firstResult}`;
     const $regenerate = $(topWindow.document).find("#option_regenerate");
     if ($regenerate.length) {
       $regenerate.click();
-      showToast5("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
+      showToast4("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
     } else {
       try {
         if (topWindow.SillyTavern && topWindow.SillyTavern.Generate) {
           topWindow.SillyTavern.Generate();
-          showToast5("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
+          showToast4("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
         } else {
           console.warn(`[${SCRIPT_NAME}] \u672A\u627E\u5230 #option_regenerate`);
-          showToast5("\u672A\u627E\u5230\u91CD\u65B0\u751F\u6210\u6309\u94AE");
+          showToast4("\u672A\u627E\u5230\u91CD\u65B0\u751F\u6210\u6309\u94AE");
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u91CD\u65B0\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u91CD\u65B0\u751F\u6210\u5931\u8D25");
+        showToast4("\u91CD\u65B0\u751F\u6210\u5931\u8D25");
         isRerolling = false;
       }
     }
@@ -15064,7 +14668,7 @@ ${firstResult}`;
         setSkipTimer(setTimeout(doSkip, settings.skipSpeed * 1e3));
       } else {
         stopSkipping();
-        showToast5("\u5DF2\u5FEB\u8FDB\u5230\u6700\u540E");
+        showToast4("\u5DF2\u5FEB\u8FDB\u5230\u6700\u540E");
       }
     };
     void doSkip();
@@ -15082,7 +14686,7 @@ ${firstResult}`;
     if (getIsRewinding()) return;
     setIsRewinding(true);
     const settings = getSettings();
-    showToast5("\u5FEB\u901F\u56DE\u9000\u4E2D...");
+    showToast4("\u5FEB\u901F\u56DE\u9000\u4E2D...");
     const $btn = $('#gal-global-overlay [data-action="prev"]');
     $btn.addClass("active");
     const doRewind = async () => {
@@ -15100,7 +14704,7 @@ ${firstResult}`;
         rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
       } else {
         stopRewinding();
-        showToast5("\u5DF2\u56DE\u9000\u5230\u5F00\u5934");
+        showToast4("\u5DF2\u56DE\u9000\u5230\u5F00\u5934");
       }
     };
     void doRewind();
@@ -15128,7 +14732,7 @@ ${firstResult}`;
         TTSManager.speak(prevSegment, segmentId);
       }
     } else {
-      showToast5("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
+      showToast4("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
     }
   }
   function triggerNextSegment() {
@@ -15304,7 +14908,7 @@ ${firstResult}`;
       } else {
         $textarea.val(currentVal + " " + playerChoice).trigger("input").trigger("change");
       }
-      showToast5(`\u5DF2\u9009\u62E9: ${optionValue.substring(0, 20)}${optionValue.length > 20 ? "..." : ""}`);
+      showToast4(`\u5DF2\u9009\u62E9: ${optionValue.substring(0, 20)}${optionValue.length > 20 ? "..." : ""}`);
       if ($sendButton.length) {
         setTimeout(() => {
           $sendButton.click();
@@ -15884,7 +15488,7 @@ ${firstResult}`;
           $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
         }
       }, 150);
-      showToast5("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
+      showToast4("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
     });
     $(doc).on("click", ".gal-open-btn", async function(e) {
       console.log(`[${SCRIPT_NAME}] \u70B9\u51FB\u3010\u8FDB\u5165Galgame\u6A21\u5F0F\u3011\u6309\u94AE`);
@@ -15896,7 +15500,7 @@ ${firstResult}`;
       setIsEnabled(true);
       setCurrentCharEnabled(true);
       updateButtonState();
-      showToast5("\u6B63\u5728\u5F00\u542F Galgame \u6A21\u5F0F...");
+      showToast4("\u6B63\u5728\u5F00\u542F Galgame \u6A21\u5F0F...");
       try {
         await injectCOTToWorldbook();
         await enableWorldbookGlobally();
@@ -15919,7 +15523,7 @@ ${firstResult}`;
           await _updateGlobalOverlayContentRef5(mesId, parsed);
           showGlobalOverlay();
           if (settings.hideOtherFloors) hideNonLastFloors();
-          showToast5("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
+          showToast4("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
         }
       } else {
         if (settings.hideOtherFloors) hideNonLastFloors();
@@ -15971,13 +15575,13 @@ ${firstResult}`;
       }
       closeMobileMenu();
       console.log(`[${SCRIPT_NAME}] \u70B9\u51FB\u8BBE\u7F6E\u6309\u94AE`);
-      showToast5("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
+      showToast4("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
       if (_showSettingsPanelRef2) _showSettingsPanelRef2();
     });
     $(doc).on("click", '#gal-global-overlay [data-action="open-settings"]', function(e) {
       e.stopPropagation();
       closeMobileMenu();
-      showToast5("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
+      showToast4("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
       if (_showSettingsPanelRef2) _showSettingsPanelRef2();
     });
     $(doc).on("click", "#gal-mobile-menu .gal-menu-btn", function() {
@@ -15999,7 +15603,7 @@ ${firstResult}`;
       if (pending && pending.length > 0) {
         renderGalgameChoices(pending);
       } else {
-        showToast5("\u5F53\u524D\u6CA1\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879");
+        showToast4("\u5F53\u524D\u6CA1\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879");
       }
     });
     $(doc).on("click", '#gal-global-overlay [data-action="next"]', async function(e) {
@@ -16018,7 +15622,7 @@ ${firstResult}`;
           TTSManager.speak(nextSegment, segmentId);
         }
       } else {
-        showToast5("\u5DF2\u662F\u6700\u540E\u4E00\u6BB5");
+        showToast4("\u5DF2\u662F\u6700\u540E\u4E00\u6BB5");
       }
     });
     $(doc).on("click", '#gal-global-overlay [data-action="auto"]', function(e) {
@@ -16704,7 +16308,7 @@ ${firstResult}`;
         await enableWorldbookGlobally();
         applyGalgameMode();
         if (settings.hideOtherFloors) hideNonLastFloors();
-        showToast5("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
+        showToast4("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
       } else {
         $(this).removeClass("gal-toggle-on").addClass("gal-toggle-off").html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED</span>');
         await disableWorldbookGlobally();
@@ -16713,7 +16317,7 @@ ${firstResult}`;
           const $lastMes = $("#chat > .mes").last();
           if ($lastMes.length) $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
         }, 150);
-        showToast5("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
+        showToast4("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
       }
     });
     $("#gal-font-size").on("input", function() {
@@ -16772,57 +16376,50 @@ ${firstResult}`;
     });
     $("#gal-enhanced-mode").on("change", function() {
       const enabled = $(this).is(":checked");
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.enabled = enabled;
+      settings.enhancedMode = settings.enhancedMode || {};
+      settings.enhancedMode.enabled = enabled;
       saveSettings();
       $("#gal-enhanced-hint, #gal-enhanced-config").toggle(enabled);
-      showToast5(enabled ? "\u5DF2\u542F\u7528\u52A0\u5F3A\u6A21\u5F0F" : "\u5DF2\u7981\u7528\u52A0\u5F3A\u6A21\u5F0F");
+      showToast4(enabled ? "\u5DF2\u542F\u7528\u52A0\u5F3A\u6A21\u5F0F" : "\u5DF2\u7981\u7528\u52A0\u5F3A\u6A21\u5F0F");
     });
     $("#gal-enhanced-use-profile").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.useProfile = $(this).is(":checked");
+      settings.enhancedMode.secondGenerate.useProfile = $(this).is(":checked");
       saveSettings();
     });
     $("#gal-enhanced-profile-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.profileName = String($(this).val() || "").trim();
+      settings.enhancedMode.secondGenerate.profileName = $(this).val();
       saveSettings();
     });
     $("#gal-enhanced-use-model").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.useModel = $(this).is(":checked");
+      settings.enhancedMode.secondGenerate.useModel = $(this).is(":checked");
       saveSettings();
     });
     $("#gal-enhanced-model-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.modelName = String($(this).val() || "").trim();
+      settings.enhancedMode.secondGenerate.modelName = $(this).val();
       saveSettings();
     });
     $("#gal-enhanced-use-preset").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.usePreset = $(this).is(":checked");
+      settings.enhancedMode.secondGenerate.usePreset = $(this).is(":checked");
       saveSettings();
     });
     $("#gal-enhanced-preset-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.presetName = String($(this).val() || "").trim();
+      settings.enhancedMode.secondGenerate.presetName = $(this).val();
       saveSettings();
     });
     $('input[name="gal-enhanced-worldbook-mode"]').on("change", function() {
       const mode = $(this).val();
-      const enhancedConfig = ensureEnhancedModeSettings();
       if (mode === "default") {
-        enhancedConfig.secondGenerate.useWorldbooks = false;
-        enhancedConfig.secondGenerate.worldbooks = [];
+        settings.enhancedMode.secondGenerate.useWorldbooks = false;
+        settings.enhancedMode.secondGenerate.worldbooks = [];
         $("#gal-enhanced-worldbooks-list").hide();
         $(".gal-enhanced-worldbook-item").prop("checked", false);
       } else if (mode === "none") {
-        enhancedConfig.secondGenerate.useWorldbooks = true;
-        enhancedConfig.secondGenerate.worldbooks = [];
+        settings.enhancedMode.secondGenerate.useWorldbooks = true;
+        settings.enhancedMode.secondGenerate.worldbooks = [];
         $("#gal-enhanced-worldbooks-list").hide();
         $(".gal-enhanced-worldbook-item").prop("checked", false);
       } else if (mode === "custom") {
-        enhancedConfig.secondGenerate.useWorldbooks = true;
+        settings.enhancedMode.secondGenerate.useWorldbooks = true;
         $("#gal-enhanced-worldbooks-list").show();
       }
       saveSettings();
@@ -16832,8 +16429,7 @@ ${firstResult}`;
       $(".gal-enhanced-worldbook-item:checked").each(function() {
         selected.push($(this).val());
       });
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.worldbooks = Array.from(new Set(selected.map((name) => String(name || "").trim()).filter(Boolean)));
+      settings.enhancedMode.secondGenerate.worldbooks = selected;
       if (selected.length === 0) {
         $('input[name="gal-enhanced-worldbook-mode"][value="none"]').prop("checked", true);
         $("#gal-enhanced-worldbooks-list").hide();
@@ -16843,7 +16439,7 @@ ${firstResult}`;
     $("#gal-enhanced-view-prompts").on("click", function() {
       const prompts = enhancedModeState3.lastPrompts;
       if (!prompts) {
-        showToast5("\u6682\u65E0\u63D0\u793A\u8BCD\u8BB0\u5F55");
+        showToast4("\u6682\u65E0\u63D0\u793A\u8BCD\u8BB0\u5F55");
         return;
       }
       const esc = (str) => (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -16882,7 +16478,7 @@ ${prompts.systemPrompt}
 ${prompts.firstResult}
 
 \u3010User Prompt\u3011
-${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F")).catch(() => showToast5("\u590D\u5236\u5931\u8D25"));
+${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F")).catch(() => showToast4("\u590D\u5236\u5931\u8D25"));
       });
     });
     $("#gal-skip-speed").on("input", function() {
@@ -16929,7 +16525,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const $charLayer = $(".gal-layer-character");
       if (enabled) $charLayer.addClass("tts-mode-enabled");
       else $charLayer.removeClass("tts-mode-enabled");
-      injectCOTToWorldbook().then(() => showToast5(enabled ? "TTS\u5DF2\u542F\u7528\uFF0CCOT\u5DF2\u66F4\u65B0" : "TTS\u5DF2\u5173\u95ED\uFF0CCOT\u5DF2\u66F4\u65B0"));
+      injectCOTToWorldbook().then(() => showToast4(enabled ? "TTS\u5DF2\u542F\u7528\uFF0CCOT\u5DF2\u66F4\u65B0" : "TTS\u5DF2\u5173\u95ED\uFF0CCOT\u5DF2\u66F4\u65B0"));
     });
     $("#gal-tts-provider").on("change", async function() {
       settings.ttsProvider = $(this).val();
@@ -16940,7 +16536,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       } catch (e) {
       }
       await refreshTtsVoiceOptions();
-      injectCOTToWorldbook().then(() => showToast5("TTS\u5F15\u64CE\u5DF2\u5207\u6362\uFF0CCOT\u5DF2\u66F4\u65B0")).catch(() => showToast5("TTS\u5F15\u64CE\u5DF2\u5207\u6362"));
+      injectCOTToWorldbook().then(() => showToast4("TTS\u5F15\u64CE\u5DF2\u5207\u6362\uFF0CCOT\u5DF2\u66F4\u65B0")).catch(() => showToast4("TTS\u5F15\u64CE\u5DF2\u5207\u6362"));
     });
     $("#gal-tts-autoplay").on("change", function() {
       settings.ttsAutoPlay = $(this).is(":checked");
@@ -16988,52 +16584,30 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-gpt-sovits-voices-save").on("click", async function() {
       settings.gptSoVits = settings.gptSoVits || {};
-      let parsed = null;
       try {
-        parsed = JSON.parse($("#gal-gpt-sovits-voices-json").val() || "[]");
+        settings.gptSoVits.voices = JSON.parse($("#gal-gpt-sovits-voices-json").val() || "[]");
       } catch (e) {
-        showToast5("\u97F3\u8272\u5217\u8868 JSON \u89E3\u6790\u5931\u8D25");
+        showToast4("JSON \u89E3\u6790\u5931\u8D25");
         return;
       }
-      if (!Array.isArray(parsed)) {
-        showToast5("\u97F3\u8272\u5217\u8868\u5FC5\u987B\u662F\u6570\u7EC4");
+      if (!Array.isArray(settings.gptSoVits.voices)) {
+        showToast4("\u97F3\u8272\u5217\u8868\u5FC5\u987B\u662F\u6570\u7EC4");
         return;
-      }
-      const normalized = normalizeGptSoVitsVoicesForStore(parsed);
-      settings.gptSoVits.voices = normalized.voices;
-      const firstUsable = pickFirstUsableGptSoVitsVoice(getGptSoVitsVoiceList());
-      if (!settings.ttsDefaultSpeaker && firstUsable?.name) {
-        settings.ttsDefaultSpeaker = firstUsable.name;
       }
       saveSettings();
       await refreshTtsVoiceOptions();
-      let msg = `GPT-SoVITS \u97F3\u8272\u5217\u8868\u5DF2\u4FDD\u5B58\uFF1A${normalized.voices.length} \u6761`;
-      if (normalized.ignoredCount > 0) msg += `\uFF08\u5FFD\u7565\u65E0\u6548\u6761\u76EE ${normalized.ignoredCount} \u6761\uFF09`;
-      if (normalized.missingRefCount > 0) msg += `\uFF08${normalized.missingRefCount} \u6761\u7F3A refAudioPath\uFF09`;
-      injectCOTToWorldbook().then(() => showToast5(`${msg}\uFF0CCOT\u5DF2\u66F4\u65B0`)).catch(() => showToast5(msg));
+      injectCOTToWorldbook().then(() => showToast4("\u97F3\u8272\u5217\u8868\u5DF2\u4FDD\u5B58\uFF0CCOT\u5DF2\u66F4\u65B0")).catch(() => showToast4("\u97F3\u8272\u5217\u8868\u5DF2\u4FDD\u5B58"));
     });
     $("#gal-gpt-sovits-test").on("click", () => {
       if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) {
-        showToast5("\u8BF7\u5148\u5207\u6362\u4E3A GPT-SoVITS");
+        showToast4("\u8BF7\u5148\u5207\u6362\u4E3A GPT-SoVITS");
         return;
       }
       const text = ($("#gal-gpt-sovits-test-text").val() || "").trim() || "\u4F60\u597D\uFF0C\u8FD9\u662F\u4E00\u6BB5 GPT-SoVITS \u914D\u97F3\u6D4B\u8BD5\u3002";
-      const selectedVoiceName = String($("#gal-tts-default-speaker").val() || "").trim();
-      const gptVoices = getGptSoVitsVoiceList();
-      const selectedVoice = gptVoices.find((v) => v.name === selectedVoiceName) || null;
-      const selectedUsable = !!String(selectedVoice?.gptSoVits?.refAudioPath || "").trim();
-      const fallbackVoice = pickFirstUsableGptSoVitsVoice(gptVoices);
-      const targetVoice = selectedUsable ? selectedVoice : fallbackVoice;
-      const voiceName = targetVoice?.name || "";
+      const voiceName = $("#gal-tts-default-speaker").val() || (getGptSoVitsVoiceList()[0]?.name || "");
       if (!voiceName) {
-        showToast5("\u8BF7\u5148\u914D\u7F6E\u81F3\u5C11\u4E00\u4E2A\u53EF\u7528\u97F3\u8272\uFF08refAudioPath \u4E0D\u80FD\u4E3A\u7A7A\uFF09");
+        showToast4("\u8BF7\u5148\u914D\u7F6E\u97F3\u8272\u5217\u8868");
         return;
-      }
-      if (selectedVoiceName !== voiceName) {
-        settings.ttsDefaultSpeaker = voiceName;
-        saveSettings();
-        $("#gal-tts-default-speaker").val(voiceName);
-        showToast5(`\u5DF2\u81EA\u52A8\u5207\u6362\u8BD5\u542C\u97F3\u8272\uFF1A${voiceName}`);
       }
       TTSManager.stop();
       TTSManager.speak({ type: "dialogue", speaker: "", text, tts: { speaker: voiceName } }, `gpt_sovits_test_${Date.now()}`);
@@ -17046,9 +16620,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (getIsEnabled()) {
         applyGalgameMode();
         if (settings.hideOtherFloors) hideNonLastFloors();
-        showToast5("\u89C6\u56FE\u5DF2\u5237\u65B0");
+        showToast4("\u89C6\u56FE\u5DF2\u5237\u65B0");
       } else {
-        showToast5("\u8BF7\u5148\u5F00\u542F Galgame \u6A21\u5F0F");
+        showToast4("\u8BF7\u5148\u5F00\u542F Galgame \u6A21\u5F0F");
       }
     });
     $("#gal-comfyui-url").on("change", function() {
@@ -17065,7 +16639,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6D4B\u8BD5\u4E2D...');
       const ok = await ComfyUIAPI.checkConnection();
       $(this).prop("disabled", false).html('<i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5');
-      showToast5(ok ? "ComfyUI \u8FDE\u63A5\u6210\u529F\uFF01" : "ComfyUI \u8FDE\u63A5\u5931\u8D25");
+      showToast4(ok ? "ComfyUI \u8FDE\u63A5\u6210\u529F\uFF01" : "ComfyUI \u8FDE\u63A5\u5931\u8D25");
     });
     function renderWorkflowList() {
       const workflows = getComfyWorkflows();
@@ -17132,9 +16706,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           workflows[id] = { name, json };
           saveComfyWorkflows(workflows);
           renderWorkflowList();
-          showToast5(`\u5DF2\u5BFC\u5165: ${name}`);
+          showToast4(`\u5DF2\u5BFC\u5165: ${name}`);
         } catch (err) {
-          showToast5("\u65E0\u6548\u7684 JSON \u6587\u4EF6");
+          showToast4("\u65E0\u6548\u7684 JSON \u6587\u4EF6");
         }
         $(this).val("");
       };
@@ -17764,7 +17338,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const sceneName = $(this).data("scene");
         if (confirm(`\u786E\u5B9A\u5220\u9664\u80CC\u666F\u300C${sceneName}\u300D\u5417\uFF1F`)) {
           await deleteBackground(sceneName);
-          showToast5(`\u5DF2\u5220\u9664\u80CC\u666F: ${sceneName}`);
+          showToast4(`\u5DF2\u5220\u9664\u80CC\u666F: ${sceneName}`);
           $modal.remove();
           showSpriteConfigModal();
         }
@@ -17937,9 +17511,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-batch-fetch-remote-btn").on("click", async function() {
       const text = $("#gal-batch-remote-urls").val().trim();
-      if (!text) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!text) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       const urls = text.split("\n").map((u) => u.trim()).filter((u) => u);
-      if (urls.length === 0) return showToast5("\u6CA1\u6709\u6709\u6548\u7684\u94FE\u63A5");
+      if (urls.length === 0) return showToast4("\u6CA1\u6709\u6709\u6548\u7684\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u4E0B\u8F7D\u9A8C\u8BC1\u4E2D...');
       let successCount = 0;
       const fetchImage = async (url) => {
@@ -17973,7 +17547,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (successCount > 0) {
         switchToTaggingView();
       } else {
-        showToast5("\u672A\u80FD\u83B7\u53D6\u4EFB\u4F55\u6709\u6548\u56FE\u7247\uFF0C\u8BF7\u68C0\u67E5\u94FE\u63A5");
+        showToast4("\u672A\u80FD\u83B7\u53D6\u4EFB\u4F55\u6709\u6548\u56FE\u7247\uFF0C\u8BF7\u68C0\u67E5\u94FE\u63A5");
       }
     });
     function switchToTaggingView() {
@@ -18057,7 +17631,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!item.name || !item.name.trim()) emptyNames++;
       });
       if (emptyNames > 0) {
-        return showToast5(`\u6709 ${emptyNames} \u5F20\u56FE\u7247\u672A\u586B\u5199\u573A\u666F\u540D\u79F0\uFF0C\u8BF7\u8865\u5145\u5B8C\u6574`);
+        return showToast4(`\u6709 ${emptyNames} \u5F20\u56FE\u7247\u672A\u586B\u5199\u573A\u666F\u540D\u79F0\uFF0C\u8BF7\u8865\u5145\u5B8C\u6574`);
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6B63\u5728\u4FDD\u5B58...');
       let failCount = 0;
@@ -18077,10 +17651,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
       if (failCount === 0) {
-        showToast5(`\u6210\u529F\u6279\u91CF\u4FDD\u5B58 ${batchItems.length} \u5F20\u80CC\u666F\uFF01`);
+        showToast4(`\u6210\u529F\u6279\u91CF\u4FDD\u5B58 ${batchItems.length} \u5F20\u80CC\u666F\uFF01`);
         closeDialog();
       } else {
-        showToast5(`\u4FDD\u5B58\u5B8C\u6210\uFF0C\u4F46\u6709 ${failCount} \u5F20\u5931\u8D25\uFF0C\u8BE6\u60C5\u8BF7\u770B\u63A7\u5236\u53F0`);
+        showToast4(`\u4FDD\u5B58\u5B8C\u6210\uFF0C\u4F46\u6709 ${failCount} \u5F20\u5931\u8D25\uFF0C\u8BE6\u60C5\u8BF7\u770B\u63A7\u5236\u53F0`);
         closeDialog();
       }
     });
@@ -18200,7 +17774,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-bg-fetch-btn").on("click", async function() {
       const url = $("#gal-bg-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -18218,7 +17792,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         };
         reader.readAsDataURL(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -18241,7 +17815,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const prompt2 = $("#gal-bg-comfyui-prompt").val().trim();
       const wfId = $("#gal-bg-comfy-wf-select").val();
       if (!prompt2) {
-        showToast5("\u8BF7\u8F93\u5165\u573A\u666F\u63CF\u8FF0");
+        showToast4("\u8BF7\u8F93\u5165\u573A\u666F\u63CF\u8FF0");
         return;
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u751F\u6210\u4E2D...');
@@ -18276,10 +17850,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         };
         reader.readAsDataURL(file);
-        showToast5("\u80CC\u666F\u751F\u6210\u6210\u529F\uFF01");
+        showToast4("\u80CC\u666F\u751F\u6210\u6210\u529F\uFF01");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] ComfyUI\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u751F\u6210\u5931\u8D25: " + e.message);
+        showToast4("\u751F\u6210\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-image"></i><span>\u751F\u6210\u80CC\u666F</span>');
       }
@@ -18333,14 +17907,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           reader.readAsArrayBuffer(selectedFile);
         });
         await saveBackground(sceneName, blob);
-        showToast5(`\u80CC\u666F\u5DF2\u4FDD\u5B58: ${sceneName}`);
+        showToast4(`\u80CC\u666F\u5DF2\u4FDD\u5B58: ${sceneName}`);
         if (getIsEnabled()) {
           injectCOTToWorldbook().catch((e) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e));
         }
         handleClose();
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u80CC\u666F\u5931\u8D25:`, e);
-        showToast5("\u4FDD\u5B58\u5931\u8D25");
+        showToast4("\u4FDD\u5B58\u5931\u8D25");
         $(this).prop("disabled", false).html('<i class="fa-solid fa-save"></i><span>\u4FDD\u5B58\u80CC\u666F</span>');
       }
     });
@@ -18613,7 +18187,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $modal.find("#gal-appearance-save").on("click", function() {
       const newPrompt = $modal.find("#gal-appearance-prompt-input").val().trim();
       setCharAppearancePrompt(characterId, newPrompt);
-      showToast5(`\u5DF2\u4FDD\u5B58 ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD`);
+      showToast4(`\u5DF2\u4FDD\u5B58 ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD`);
       $modal.remove();
       if (typeof onSave === "function") onSave(newPrompt);
     });
@@ -18622,7 +18196,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $("#gal-banana-appearance-picker").remove();
     const sprites = await getAllSprites();
     if (!sprites || sprites.length === 0) {
-      showToast5("\u6682\u65E0\u53EF\u7528\u7ACB\u7ED8\uFF0C\u8BF7\u5148\u4E0A\u4F20\u7ACB\u7ED8");
+      showToast4("\u6682\u65E0\u53EF\u7528\u7ACB\u7ED8\uFF0C\u8BF7\u5148\u4E0A\u4F20\u7ACB\u7ED8");
       return;
     }
     const grouped = /* @__PURE__ */ new Map();
@@ -18905,14 +18479,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const charName = $("#gal-sprite-character").val().trim() || characterId;
       const voiceName = $("#gal-tts-voice-select").val();
       if (!charName) {
-        showToast5("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       setCharacterTTSVoice(charName, voiceName);
       if (voiceName) {
-        showToast5(`\u5DF2\u7ED1\u5B9A: ${charName} \u2192 ${voiceName}`);
+        showToast4(`\u5DF2\u7ED1\u5B9A: ${charName} \u2192 ${voiceName}`);
       } else {
-        showToast5(`\u5DF2\u6E05\u9664 ${charName} \u7684\u97F3\u8272\u7ED1\u5B9A`);
+        showToast4(`\u5DF2\u6E05\u9664 ${charName} \u7684\u97F3\u8272\u7ED1\u5B9A`);
       }
     });
     $("#gal-sprite-character").on("input", function() {
@@ -18936,7 +18510,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-sprite-fetch-btn").on("click", async function() {
       const url = $("#gal-sprite-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -18946,7 +18520,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const file = new File([blob], "remote_image.png", { type: blob.type });
         handleFileSelect(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -19002,7 +18576,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const wfId = $("#gal-comfy-wf-select").val();
       const checkpointOverride = $("#gal-comfy-checkpoint-select").val();
       if (!charName) {
-        showToast5("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       const appearancePrompt = getCharAppearancePrompt(charName);
@@ -19027,10 +18601,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const fileName = `comfyui_gen_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: "image/png" });
         handleFileSelect(file);
-        showToast5("\u7ACB\u7ED8\u751F\u6210\u6210\u529F\uFF01\u8BF7\u5728\u4E0A\u65B9\u88C1\u526A\u533A\u57DF\u8C03\u6574\u540E\u4FDD\u5B58");
+        showToast4("\u7ACB\u7ED8\u751F\u6210\u6210\u529F\uFF01\u8BF7\u5728\u4E0A\u65B9\u88C1\u526A\u533A\u57DF\u8C03\u6574\u540E\u4FDD\u5B58");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] ComfyUI\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u751F\u6210\u5931\u8D25: " + e.message);
+        showToast4("\u751F\u6210\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-sparkles"></i><span>\u751F\u6210\u7ACB\u7ED8</span>');
       }
@@ -19046,7 +18620,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const canvas = topWindow.document.getElementById("gal-crop-canvas");
       if (!canvas) {
         console.error("[Galgame\u754C\u9762\u63D2\u4EF6] \u672A\u627E\u5230\u88C1\u526A canvas");
-        showToast5("\u88C1\u526A\u533A\u57DF\u521D\u59CB\u5316\u5931\u8D25");
+        showToast4("\u88C1\u526A\u533A\u57DF\u521D\u59CB\u5316\u5931\u8D25");
         return;
       }
       const CANVAS_WIDTH = 640;
@@ -19067,13 +18641,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       };
       reader.onerror = (e) => {
         console.error("[Galgame\u754C\u9762\u63D2\u4EF6] \u6587\u4EF6\u8BFB\u53D6\u9519\u8BEF:", e);
-        showToast5("\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25");
+        showToast4("\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25");
       };
       reader.readAsDataURL(file);
       try {
         await imageLoadPromise;
       } catch (e) {
-        showToast5("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5");
+        showToast4("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5");
         return;
       }
       const ctx = canvas.getContext("2d");
@@ -19208,14 +18782,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const charName = $("#gal-sprite-character").val().trim();
       const expr = $("#gal-sprite-expression").val();
       if (!charName) {
-        showToast5("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       try {
         $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u5904\u7406\u4E2D...');
         const croppedBlob = await cropper.getCroppedBlob(400);
         await saveSprite(charName, expr, croppedBlob);
-        showToast5(`\u5DF2\u4FDD\u5B58: ${charName} - ${expr}`);
+        showToast4(`\u5DF2\u4FDD\u5B58: ${charName} - ${expr}`);
         $modal.remove();
         refreshGalgameViews();
         if (typeof onCloseCallback === "function") {
@@ -19227,7 +18801,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u7ACB\u7ED8\u5931\u8D25:`, e);
-        showToast5("\u4FDD\u5B58\u5931\u8D25");
+        showToast4("\u4FDD\u5B58\u5931\u8D25");
         $(this).prop("disabled", false).html('<i class="fa-solid fa-check"></i><span>\u4FDD\u5B58\u7ACB\u7ED8</span>');
       }
     });
@@ -19458,7 +19032,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     }
     $("#gal-batch-fetch-btn").on("click", async function() {
       const url = $("#gal-batch-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -19468,7 +19042,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const file = new File([blob], "remote_grid.png", { type: blob.type });
         handleFileSelect(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -19649,7 +19223,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         autoDetectGrid(loadedImage);
         renderGridPreview();
         updateMappingUI();
-        showToast5("\u5DF2\u91CD\u65B0\u68C0\u6D4B\u7F51\u683C");
+        showToast4("\u5DF2\u91CD\u65B0\u68C0\u6D4B\u7F51\u683C");
       }
     });
     const handleClose = () => {
@@ -19669,16 +19243,16 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $("#gal-batch-confirm").on("click", async function() {
       const charName = $("#gal-batch-character").val().trim();
       if (!charName) {
-        showToast5("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       if (!loadedImage) {
-        showToast5("\u8BF7\u5148\u4E0A\u4F20\u56FE\u7247");
+        showToast4("\u8BF7\u5148\u4E0A\u4F20\u56FE\u7247");
         return;
       }
       const validMappings = cellMappings.filter((m) => !m.skip && m.expression);
       if (validMappings.length === 0) {
-        showToast5("\u8BF7\u81F3\u5C11\u8BBE\u7F6E\u4E00\u4E2A\u8868\u60C5\u540D\u79F0");
+        showToast4("\u8BF7\u81F3\u5C11\u8BBE\u7F6E\u4E00\u4E2A\u8868\u60C5\u540D\u79F0");
         return;
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u5904\u7406\u4E2D...');
@@ -19726,9 +19300,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
       if (failedCount > 0) {
-        showToast5(`\u4FDD\u5B58\u5B8C\u6210: ${savedCount} \u6210\u529F, ${failedCount} \u5931\u8D25`);
+        showToast4(`\u4FDD\u5B58\u5B8C\u6210: ${savedCount} \u6210\u529F, ${failedCount} \u5931\u8D25`);
       } else {
-        showToast5(`\u5DF2\u4FDD\u5B58 ${savedCount} \u5F20\u7ACB\u7ED8`);
+        showToast4(`\u5DF2\u4FDD\u5B58 ${savedCount} \u5F20\u7ACB\u7ED8`);
       }
       loadedImage = null;
       $previewArea.hide();
@@ -19855,7 +19429,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const suggestedName = json.packageName || json.name;
         targetPackId = await showImportPackSelector(suggestedName);
         if (!targetPackId) {
-          showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
           return;
         }
       }
@@ -19888,10 +19462,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         }
       }
-      showToast5(`\u6210\u529F\u5BFC\u5165 ${count} \u4E2A\u8FDC\u7A0B\u8D44\u6E90\u94FE\u63A5`);
+      showToast4(`\u6210\u529F\u5BFC\u5165 ${count} \u4E2A\u8FDC\u7A0B\u8D44\u6E90\u94FE\u63A5`);
     } catch (e) {
       console.error("JSON\u5BFC\u5165\u5931\u8D25", e);
-      showToast5("JSON\u5BFC\u5165\u5931\u8D25: " + e.message);
+      showToast4("JSON\u5BFC\u5165\u5931\u8D25: " + e.message);
     }
   }
   var AssetIO = {
@@ -19916,7 +19490,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     },
     async exportAllAssets(remoteBaseUrl = null, packageName = null) {
       try {
-        showToast5("\u6B63\u5728\u51C6\u5907\u5BFC\u51FA...");
+        showToast4("\u6B63\u5728\u51C6\u5907\u5BFC\u51FA...");
         const zip = new (await this.loadJSZip())();
         const currentPackId = getCurrentPackId();
         const allPacks = await getAllImagePacks();
@@ -19976,7 +19550,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (remoteBaseUrl) {
           zip.file("remote_assets.json", JSON.stringify(remoteConfig, null, 2));
         }
-        showToast5("\u6B63\u5728\u538B\u7F29\u6253\u5305...");
+        showToast4("\u6B63\u5728\u538B\u7F29\u6253\u5305...");
         const content = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(content);
         const a = document.createElement("a");
@@ -19988,23 +19562,23 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showToast5(`\u5BFC\u51FA\u6210\u529F\uFF01\u5171\u5BFC\u51FA ${sprites.length} \u4E2A\u7ACB\u7ED8\uFF0C${backgrounds.length} \u4E2A\u80CC\u666F`);
+        showToast4(`\u5BFC\u51FA\u6210\u529F\uFF01\u5171\u5BFC\u51FA ${sprites.length} \u4E2A\u7ACB\u7ED8\uFF0C${backgrounds.length} \u4E2A\u80CC\u666F`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5BFC\u51FA\u5931\u8D25:`, e);
-        showToast5("\u5BFC\u51FA\u5931\u8D25: " + e.message);
+        showToast4("\u5BFC\u51FA\u5931\u8D25: " + e.message);
       }
     },
     async importFiles(fileList, targetPackId = null) {
       if (!targetPackId) {
         targetPackId = await showImportPackSelector("\u6587\u4EF6\u5939\u5BFC\u5165");
         if (!targetPackId) {
-          showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
           return false;
         }
       }
       let successCount = 0;
       let failCount = 0;
-      showToast5("\u5F00\u59CB\u5BFC\u5165...");
+      showToast4("\u5F00\u59CB\u5BFC\u5165...");
       for (const file of fileList) {
         try {
           const path = file.webkitRelativePath || file.name;
@@ -20030,7 +19604,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           failCount++;
         }
       }
-      showToast5(`\u5BFC\u5165\u5B8C\u6210: ${successCount} \u6210\u529F, ${failCount} \u5931\u8D25`);
+      showToast4(`\u5BFC\u5165\u5B8C\u6210: ${successCount} \u6210\u529F, ${failCount} \u5931\u8D25`);
       return successCount > 0;
     },
     async importAsSprite(file, packId = null) {
@@ -20070,7 +19644,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!targetPackId) {
           targetPackId = await showImportPackSelector(`GitHub\u5BFC\u5165`);
           if (!targetPackId) {
-            showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+            showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
             return false;
           }
         }
@@ -20098,7 +19672,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!owner || !repo) {
           throw new Error("\u65E0\u6548\u7684 GitHub \u4ED3\u5E93\u5730\u5740");
         }
-        showToast5(`\u6B63\u5728\u83B7\u53D6\u6587\u4EF6\u5217\u8868: ${owner}/${repo}...`);
+        showToast4(`\u6B63\u5728\u83B7\u53D6\u6587\u4EF6\u5217\u8868: ${owner}/${repo}...`);
         const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
@@ -20106,13 +19680,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!Array.isArray(data)) throw new Error("\u8DEF\u5F84\u4E0D\u662F\u4E00\u4E2A\u76EE\u5F55");
         const imageFiles = data.filter((item) => item.type === "file" && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
         if (imageFiles.length === 0) {
-          showToast5("\u8BE5\u76EE\u5F55\u4E0B\u6CA1\u6709\u627E\u5230\u56FE\u7247\u6587\u4EF6");
+          showToast4("\u8BE5\u76EE\u5F55\u4E0B\u6CA1\u6709\u627E\u5230\u56FE\u7247\u6587\u4EF6");
           return;
         }
         if (!confirm(`\u627E\u5230 ${imageFiles.length} \u5F20\u56FE\u7247\uFF0C\u662F\u5426\u5F00\u59CB\u5BFC\u5165\uFF1F`)) return;
         let count = 0;
         for (const item of imageFiles) {
-          showToast5(`\u6B63\u5728\u4E0B\u8F7D (${count + 1}/${imageFiles.length}): ${item.name}`);
+          showToast4(`\u6B63\u5728\u4E0B\u8F7D (${count + 1}/${imageFiles.length}): ${item.name}`);
           try {
             const imgRes = await fetch(item.download_url);
             const blob = await imgRes.blob();
@@ -20127,11 +19701,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
             console.error(`\u4E0B\u8F7D/\u5BFC\u5165 ${item.name} \u5931\u8D25:`, e);
           }
         }
-        showToast5(`GitHub \u5BFC\u5165\u5B8C\u6210\uFF0C\u5171 ${count} \u5F20\u56FE\u7247`);
+        showToast4(`GitHub \u5BFC\u5165\u5B8C\u6210\uFF0C\u5171 ${count} \u5F20\u56FE\u7247`);
         return true;
       } catch (e) {
         console.error("GitHub Import Error:", e);
-        showToast5("GitHub \u5BFC\u5165\u5931\u8D25: " + e.message);
+        showToast4("GitHub \u5BFC\u5165\u5931\u8D25: " + e.message);
         return false;
       }
     }
@@ -20178,11 +19752,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $dialog.find("#gal-remote-zip-confirm").on("click", async function() {
       const url = $dialog.find("#gal-remote-zip-url").val().trim();
       if (!url) {
-        showToast5("\u8BF7\u8F93\u5165ZIP\u6587\u4EF6\u94FE\u63A5");
+        showToast4("\u8BF7\u8F93\u5165ZIP\u6587\u4EF6\u94FE\u63A5");
         return;
       }
       if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        showToast5("\u8BF7\u8F93\u5165\u6709\u6548\u7684 HTTP/HTTPS \u94FE\u63A5");
+        showToast4("\u8BF7\u8F93\u5165\u6709\u6548\u7684 HTTP/HTTPS \u94FE\u63A5");
         return;
       }
       $dialog.remove();
@@ -20193,7 +19767,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     let isCancelled = false;
     const progressController = showImportProgress("\u6B63\u5728\u89E3\u538B\u672C\u5730\u6587\u4EF6...", () => {
       isCancelled = true;
-      showToast5("\u5BFC\u5165\u5DF2\u624B\u52A8\u53D6\u6D88");
+      showToast4("\u5BFC\u5165\u5DF2\u624B\u52A8\u53D6\u6D88");
     });
     try {
       const JSZip = await AssetIO.loadJSZip();
@@ -20211,7 +19785,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast5("ZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("ZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
       } else {
         progressController.close();
       }
@@ -20228,7 +19802,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const progressController = showImportProgress("\u6B63\u5728\u4E0B\u8F7D\u8FDC\u7A0B\u6587\u4EF6...", () => {
       isCancelled = true;
       abortController.abort();
-      showToast5("\u4E0B\u8F7D\u5DF2\u53D6\u6D88");
+      showToast4("\u4E0B\u8F7D\u5DF2\u53D6\u6D88");
     });
     try {
       const response = await fetch(url, { signal: abortController.signal });
@@ -20281,7 +19855,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast5("\u8FDC\u7A0BZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("\u8FDC\u7A0BZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
       } else {
         progressController.close();
       }
@@ -20361,14 +19935,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           } else if (targetType === "new") {
             const newName = $dialog.find("#gal-import-new-pack-name").val().trim();
             if (!newName) {
-              showToast5("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0");
+              showToast4("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0");
               return;
             }
             createImagePack(newName).then((newPack) => {
               $dialog.remove();
               resolve(newPack.id);
             }).catch((err) => {
-              showToast5("\u521B\u5EFA\u56FE\u5305\u5931\u8D25: " + err.message);
+              showToast4("\u521B\u5EFA\u56FE\u5305\u5931\u8D25: " + err.message);
             });
             return;
           }
@@ -20387,7 +19961,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         });
       }).catch((err) => {
         console.error("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25:", err);
-        showToast5("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25");
+        showToast4("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25");
         resolve(null);
       });
     });
@@ -20413,7 +19987,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const suggestedName = packageInfo?.packageName || packageInfo?.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
-        showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+        showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
         return;
       }
     }
@@ -20808,9 +20382,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const voiceName = $("#gal-char-tts-voice-select").val();
       setCharacterTTSVoice(characterId, voiceName);
       if (voiceName) {
-        showToast5(`\u5DF2\u7ED1\u5B9A: ${characterId} \u2192 ${voiceName}`);
+        showToast4(`\u5DF2\u7ED1\u5B9A: ${characterId} \u2192 ${voiceName}`);
       } else {
-        showToast5(`\u5DF2\u6E05\u9664 ${characterId} \u7684\u97F3\u8272\u7ED1\u5B9A`);
+        showToast4(`\u5DF2\u6E05\u9664 ${characterId} \u7684\u97F3\u8272\u7ED1\u5B9A`);
       }
       $modal.remove();
       showCharacterSpritesModal(characterId);
@@ -20841,7 +20415,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $("#gal-char-live2d-toggle").on("change", function() {
       const useLive2D = this.checked;
       setCharacterUseLive2D(characterId, useLive2D);
-      showToast5(useLive2D ? `\u5DF2\u542F\u7528 ${characterId} \u7684 Live2D` : `\u5DF2\u7981\u7528 ${characterId} \u7684 Live2D`);
+      showToast4(useLive2D ? `\u5DF2\u542F\u7528 ${characterId} \u7684 Live2D` : `\u5DF2\u7981\u7528 ${characterId} \u7684 Live2D`);
     });
     $("#gal-char-live2d-upload").on("click", function() {
       const input = document.createElement("input");
@@ -20856,7 +20430,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           $status.text("\u4E0A\u4F20\u4E2D...");
           $uploadBtn.prop("disabled", true);
           await Live2DUploader.uploadZip(file, characterId);
-          showToast5(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
+          showToast4(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
           if (Live2DManager.models.has(characterId)) {
             Live2DManager.cleanup(characterId);
           }
@@ -20864,7 +20438,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           showCharacterSpritesModal(characterId);
         } catch (err) {
           console.error(`[${SCRIPT_NAME}] Live2D \u4E0A\u4F20\u5931\u8D25:`, err);
-          showToast5(`\u4E0A\u4F20\u5931\u8D25: ${err.message}`, "error");
+          showToast4(`\u4E0A\u4F20\u5931\u8D25: ${err.message}`, "error");
           $status.text("\u4E0A\u4F20\u5931\u8D25");
           $uploadBtn.prop("disabled", false);
         }
@@ -20879,12 +20453,12 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (Live2DManager.models.has(characterId)) {
           Live2DManager.cleanup(characterId);
         }
-        showToast5("Live2D \u6A21\u578B\u5DF2\u5220\u9664");
+        showToast4("Live2D \u6A21\u578B\u5DF2\u5220\u9664");
         $modal.remove();
         showCharacterSpritesModal(characterId);
       } catch (err) {
         console.error(`[${SCRIPT_NAME}] Live2D \u5220\u9664\u5931\u8D25:`, err);
-        showToast5(`\u5220\u9664\u5931\u8D25: ${err.message}`, "error");
+        showToast4(`\u5220\u9664\u5931\u8D25: ${err.message}`, "error");
       }
     });
     $("#gal-char-live2d-preview").on("click", async function() {
@@ -20990,7 +20564,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const expr = $btn.attr("data-expr");
       if (confirm(`\u786E\u5B9A\u5220\u9664 ${charId} \u7684\u300C${expr}\u300D\u8868\u60C5\u5417\uFF1F`)) {
         await deleteSprite(charId, expr);
-        showToast5(`\u5DF2\u5220\u9664: ${charId} - ${expr}`);
+        showToast4(`\u5DF2\u5220\u9664: ${charId} - ${expr}`);
         $modal.remove();
         showCharacterSpritesModal(charId);
       }
@@ -21074,7 +20648,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       setCurrentPack(packId);
       $modal.remove();
       showPackManagerModal();
-      showToast5("\u5DF2\u5207\u6362\u56FE\u5305");
+      showToast4("\u5DF2\u5207\u6362\u56FE\u5305");
     });
     $modal.find(".gal-pack-rename-btn").on("click", function() {
       const packId = $(this).data("pack-id");
@@ -21085,7 +20659,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         renameImagePack(packId, newName.trim()).then(() => {
           $modal.remove();
           showPackManagerModal();
-          showToast5("\u5DF2\u91CD\u547D\u540D\u56FE\u5305");
+          showToast4("\u5DF2\u91CD\u547D\u540D\u56FE\u5305");
         }).catch((err) => {
           alert("\u91CD\u547D\u540D\u5931\u8D25\uFF1A" + err.message);
         });
@@ -21101,7 +20675,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         deleteImagePack(packId).then(() => {
           $modal.remove();
           showPackManagerModal();
-          showToast5("\u5DF2\u5220\u9664\u56FE\u5305\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
+          showToast4("\u5DF2\u5220\u9664\u56FE\u5305\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
         }).catch((err) => {
           alert("\u5220\u9664\u5931\u8D25\uFF1A" + err.message);
         });
@@ -21152,7 +20726,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const transferPromise = resourceType === "sprite" ? transferSpritesToPack(resourceIds, targetPackId) : transferBackgroundsToPack(resourceIds, targetPackId);
       transferPromise.then((count) => {
         $modal.remove();
-        showToast5(`\u5DF2\u8F6C\u79FB ${count} \u4E2A${resourceType === "sprite" ? "\u7ACB\u7ED8" : "\u80CC\u666F"}`);
+        showToast4(`\u5DF2\u8F6C\u79FB ${count} \u4E2A${resourceType === "sprite" ? "\u7ACB\u7ED8" : "\u80CC\u666F"}`);
         if (typeof onComplete === "function") onComplete();
       }).catch((err) => {
         alert("\u8F6C\u79FB\u5931\u8D25\uFF1A" + err.message);
@@ -21486,13 +21060,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const timeHtml = $("#gal-custom-time-html").val();
       localStorage.setItem(CUSTOM_LOCATION_HTML_KEY4, locHtml);
       localStorage.setItem(CUSTOM_TIME_HTML_KEY4, timeHtml);
-      showToast5("\u81EA\u5B9A\u4E49\u914D\u7F6E\u5DF2\u4FDD\u5B58");
+      showToast4("\u81EA\u5B9A\u4E49\u914D\u7F6E\u5DF2\u4FDD\u5B58");
     });
     $modal.find("#gal-realtime-bg-gen").on("change", async function() {
       settings.realTimeBackgroundGen = $(this).is(":checked");
       saveSettings();
       if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.realTimeBackgroundGen ? "\u5DF2\u5F00\u542F\u5B9E\u65F6\u80CC\u666F\u751F\u6210\uFF08\u5B9E\u9A8C\u6027\uFF09" : "\u5DF2\u5173\u95ED\u5B9E\u65F6\u80CC\u666F\u751F\u6210");
+      showToast4(settings.realTimeBackgroundGen ? "\u5DF2\u5F00\u542F\u5B9E\u65F6\u80CC\u666F\u751F\u6210\uFF08\u5B9E\u9A8C\u6027\uFF09" : "\u5DF2\u5173\u95ED\u5B9E\u65F6\u80CC\u666F\u751F\u6210");
     });
     bindWallhavenEvents($modal, settings);
     bindBananaEvents($modal, settings);
@@ -21507,7 +21081,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       settings.wallhaven.enabled = $(this).is(":checked");
       saveSettings();
       if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.wallhaven.enabled ? "\u5DF2\u5F00\u542F Wallhaven \u58C1\u7EB8\u641C\u7D22" : "\u5DF2\u5173\u95ED Wallhaven \u58C1\u7EB8\u641C\u7D22");
+      showToast4(settings.wallhaven.enabled ? "\u5DF2\u5F00\u542F Wallhaven \u58C1\u7EB8\u641C\u7D22" : "\u5DF2\u5173\u95ED Wallhaven \u58C1\u7EB8\u641C\u7D22");
     });
     $modal.find("#gal-wallhaven-category").on("change", async function() {
       if (!settings.wallhaven) settings.wallhaven = {};
@@ -21546,13 +21120,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       } else {
         $("#gal-wallhaven-toprange-container").hide();
       }
-      showToast5(`\u6392\u5E8F\u65B9\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+      showToast4(`\u6392\u5E8F\u65B9\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
     });
     $modal.find("#gal-wallhaven-toprange").on("change", function() {
       if (!settings.wallhaven) settings.wallhaven = {};
       settings.wallhaven.topRange = $(this).val();
       saveSettings();
-      showToast5(`\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+      showToast4(`\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
     });
   }
   function bindBananaEvents($modal, settings) {
@@ -21561,7 +21135,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       settings.bananaImageGen.enabled = $(this).is(":checked");
       saveSettings();
       if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.bananaImageGen.enabled ? "\u5DF2\u5F00\u542F\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757" : "\u5DF2\u5173\u95ED\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757");
+      showToast4(settings.bananaImageGen.enabled ? "\u5DF2\u5F00\u542F\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757" : "\u5DF2\u5173\u95ED\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757");
     });
     $modal.find("#gal-banana-proxy-url").on("change", function() {
       if (!settings.bananaImageGen) settings.bananaImageGen = {};
@@ -21623,7 +21197,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (existingIndex >= 0) {
           list[existingIndex] = appearanceData;
         } else if (list.length >= 3) {
-          showToast5("\u6700\u591A\u53EA\u80FD\u6307\u5B9A3\u4E2A\u89D2\u8272");
+          showToast4("\u6700\u591A\u53EA\u80FD\u6307\u5B9A3\u4E2A\u89D2\u8272");
           return;
         } else {
           list.push(appearanceData);
@@ -21646,7 +21220,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const proxyUrl = $modal.find("#gal-banana-proxy-url").val().trim();
       const proxyKey = $modal.find("#gal-banana-proxy-key").val().trim();
       if (!proxyUrl) {
-        showToast5("\u8BF7\u5148\u586B\u5199\u53CD\u4EE3 API \u5730\u5740");
+        showToast4("\u8BF7\u5148\u586B\u5199\u53CD\u4EE3 API \u5730\u5740");
         return;
       }
       $btn.prop("disabled", true).find("i").addClass("fa-spin");
@@ -21658,14 +21232,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const data = await response.json();
         const models = data.data || [];
         $select.html(models.map((m) => `<option value="${m.id}">${m.id}</option>`).join(""));
-        if (models.length > 0) showToast5(`\u83B7\u53D6\u5230 ${models.length} \u4E2A\u6A21\u578B`);
+        if (models.length > 0) showToast4(`\u83B7\u53D6\u5230 ${models.length} \u4E2A\u6A21\u578B`);
         else {
           $select.html('<option value="">\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B</option>');
-          showToast5("\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B");
+          showToast4("\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B");
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u83B7\u53D6\u5927\u9999\u8549\u6A21\u578B\u5217\u8868\u5931\u8D25:`, e);
-        showToast5(`\u83B7\u53D6\u6A21\u578B\u5217\u8868\u5931\u8D25: ${e.message}`);
+        showToast4(`\u83B7\u53D6\u6A21\u578B\u5217\u8868\u5931\u8D25: ${e.message}`);
       } finally {
         $btn.prop("disabled", false).find("i").removeClass("fa-spin");
       }
@@ -21682,15 +21256,15 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const cgMode = $modal.find("#gal-banana-cgmode").is(":checked");
       const defaultSceneSuffix = ", no humans, scenery, background";
       if (!sceneName) {
-        showToast5("\u8BF7\u8F93\u5165\u573A\u666F\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u573A\u666F\u540D\u79F0");
         return;
       }
       if (!proxyUrl) {
-        showToast5("\u8BF7\u5148\u914D\u7F6E\u53CD\u4EE3 API \u5730\u5740");
+        showToast4("\u8BF7\u5148\u914D\u7F6E\u53CD\u4EE3 API \u5730\u5740");
         return;
       }
       if (!model) {
-        showToast5("\u8BF7\u5148\u9009\u62E9\u56FE\u7247\u751F\u6210\u6A21\u578B");
+        showToast4("\u8BF7\u5148\u9009\u62E9\u56FE\u7247\u751F\u6210\u6A21\u578B");
         return;
       }
       let finalPrompt = customPrompt || sceneName;
@@ -21740,10 +21314,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         $modal.find("#gal-banana-preview").show();
         $modal.find("#gal-banana-preview-img").attr("src", imageUrl);
         $modal.find("#gal-banana-save-to-library").data("imageUrl", imageUrl).data("sceneName", sceneName);
-        showToast5("\u80CC\u666F\u56FE\u7247\u751F\u6210\u6210\u529F");
+        showToast4("\u80CC\u666F\u56FE\u7247\u751F\u6210\u6210\u529F");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE\u5931\u8D25:`, e);
-        showToast5(`\u751F\u6210\u5931\u8D25: ${e.message}`);
+        showToast4(`\u751F\u6210\u5931\u8D25: ${e.message}`);
       } finally {
         $btn.prop("disabled", false).html('<i class="fa-solid fa-wand-magic-sparkles"></i> \u751F\u6210\u80CC\u666F\u56FE\u7247');
       }
@@ -21753,7 +21327,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const imageUrl = $btn.data("imageUrl");
       const sceneName = $btn.data("sceneName");
       if (!imageUrl || !sceneName) {
-        showToast5("\u8BF7\u5148\u751F\u6210\u56FE\u7247");
+        showToast4("\u8BF7\u5148\u751F\u6210\u56FE\u7247");
         return;
       }
       $btn.prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u4FDD\u5B58\u4E2D...');
@@ -21769,11 +21343,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         await saveBackground(sceneName, imageBlob, imageUrl);
         sceneBackgrounds.set(sceneName, imageUrl);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e));
-        showToast5(`\u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
+        showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
         $btn.html('<i class="fa-solid fa-check"></i> \u5DF2\u4FDD\u5B58');
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u5230\u80CC\u666F\u5E93\u5931\u8D25`, e);
-        showToast5(`\u4FDD\u5B58\u5931\u8D25: ${e.message}`);
+        showToast4(`\u4FDD\u5B58\u5931\u8D25: ${e.message}`);
         $btn.prop("disabled", false).html('<i class="fa-solid fa-save"></i> \u4FDD\u5B58\u5230\u80CC\u666F\u5E93');
       }
     });
@@ -21808,7 +21382,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const allSpritesAll = await getAllSprites(null, true);
       const charSprites = allSpritesAll.filter((s) => s.characterId === charId);
       if (charSprites.length === 0) {
-        showToast5("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8\u53EF\u8F6C\u79FB", "warning");
+        showToast4("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8\u53EF\u8F6C\u79FB", "warning");
         return;
       }
       const spriteKeys = charSprites.map((s) => `${s.characterId}_${s.expression}`);
@@ -21823,12 +21397,12 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const allSpritesAll = await getAllSprites(null, true);
       const charSprites = allSpritesAll.filter((s) => s.characterId === charId);
       if (charSprites.length === 0) {
-        showToast5("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8", "warning");
+        showToast4("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8", "warning");
         return;
       }
       if (confirm(`\u786E\u5B9A\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684\u6240\u6709 ${charSprites.length} \u4E2A\u7ACB\u7ED8\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\uFF01`)) {
         for (const sprite of charSprites) await deleteSprite(sprite.characterId, sprite.expression);
-        showToast5(`\u5DF2\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684 ${charSprites.length} \u4E2A\u7ACB\u7ED8`);
+        showToast4(`\u5DF2\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684 ${charSprites.length} \u4E2A\u7ACB\u7ED8`);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e2) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e2));
         $modal.remove();
         showAssetManagerModal2("sprites");
@@ -21849,7 +21423,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const scene = $(e.currentTarget).attr("data-scene");
       if (confirm(`\u786E\u5B9A\u5220\u9664\u80CC\u666F\u300C${scene}\u300D\u5417\uFF1F`)) {
         await deleteBackground(scene);
-        showToast5(`\u5DF2\u5220\u9664\u80CC\u666F: ${scene}`);
+        showToast4(`\u5DF2\u5220\u9664\u80CC\u666F: ${scene}`);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e2) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e2));
         $modal.remove();
         showAssetManagerModal2("backgrounds");
@@ -21907,7 +21481,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       } else {
         $btn.css({ background: "#20c997", borderColor: "#20c997" }).attr("title", "\u641C\u7D22\u6240\u6709\u56FE\u5305\u8D44\u6E90").find("i").removeClass("fa-bullseye").addClass("fa-globe");
       }
-      showToast5(newScope === "current" ? "\u5DF2\u5207\u6362\u4E3A\uFF1A\u4EC5\u5F53\u524D\u56FE\u5305" : "\u5DF2\u5207\u6362\u4E3A\uFF1A\u641C\u7D22\u6240\u6709\u56FE\u5305");
+      showToast4(newScope === "current" ? "\u5DF2\u5207\u6362\u4E3A\uFF1A\u4EC5\u5F53\u524D\u56FE\u5305" : "\u5DF2\u5207\u6362\u4E3A\uFF1A\u641C\u7D22\u6240\u6709\u56FE\u5305");
       const currentTab = $modal.find(".gal-tab-btn.active").data("tab") || activeTab || "sprites";
       $modal.remove();
       $(topWindow.document).off(".galMenus").off(".galImportMenu").off(".galPackMenu");
@@ -22169,8 +21743,8 @@ ${baseUrl}`)) return;
   setLive2DManagerRefs({ Live2DStage });
   setLipSyncRefs({ getProxiedAudioUrl: (url) => TTSManager._getProxiedAudioUrl(url) });
   setParserRefs({ getFormattedContent });
-  setExpressionsRefs({ showToast: showToast5, getIsEnabled, injectCOTToWorldbook });
-  setLive2DStageRefs({ showToast: showToast5 });
+  setExpressionsRefs({ showToast: showToast4, getIsEnabled, injectCOTToWorldbook });
+  setLive2DStageRefs({ showToast: showToast4 });
   setPositionEditorRefs({ getModalMountRoot });
   setWallhavenHandlerRefs({
     saveBackground,
@@ -22178,7 +21752,7 @@ ${baseUrl}`)) return;
     getMessageSegmentState: () => GalgameStore.cache.segments,
     getSpriteManager: () => SpriteManager,
     updateGlobalOverlayContent,
-    showToast: showToast5
+    showToast: showToast4
   });
   setSpriteManagerRefs({
     getSprite,
@@ -22189,12 +21763,12 @@ ${baseUrl}`)) return;
     clearBackgroundLayers,
     BGMManager
   });
-  setTTSManagerRefs({ showToast: showToast5 });
-  setBGMManagerRefs({ showToast: showToast5 });
-  setWorldbookRefs({ showToast: showToast5 });
-  setEnhancedModeRefs({ showToast: showToast5 });
+  setTTSManagerRefs({ showToast: showToast4 });
+  setBGMManagerRefs({ showToast: showToast4 });
+  setWorldbookRefs({ showToast: showToast4 });
+  setEnhancedModeRefs({ showToast: showToast4 });
   setCharSettingsRefs({ showCustomPopupPanel, getModalMountRoot });
-  setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast5 });
+  setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast4 });
   setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus });
   setOverlayRefs({ updateOverlaySegmentDisplay });
   setOverlayContentRefs({ renderGalgameChoices });
@@ -22202,11 +21776,11 @@ ${baseUrl}`)) return;
   setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews });
   setGalgameModeRefs({ processNewMessage, applySettingsToUI });
   setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration });
-  setBananaImageRefs({ updateGlobalOverlayContent, showToast: showToast5 });
+  setBananaImageRefs({ updateGlobalOverlayContent, showToast: showToast4 });
   setMessageObserverRefs({ processNewMessage, injectGalgameButton });
   setEventsRefs({ showSettingsPanel, showSpriteUploadDialog, updateGlobalOverlayContent });
   setMenuButtonRefs({ showSettingsPanel });
-  setEnhancedModeRefs({ showToast: showToast5, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
+  setEnhancedModeRefs({ showToast: showToast4, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
   setSettingsPanelRefs({ showAssetManagerModal: showAssetManagerModal2 });
   setSpriteConfigRefs({ showBatchUploadDialog, showSpriteUploadDialog, showBackgroundUploadDialog });
   setAssetManagerRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });

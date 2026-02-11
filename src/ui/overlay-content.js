@@ -361,7 +361,8 @@ export function detectAndCaptureCg(mesId, mesNode, parsed) {
 
   allPs.forEach(p => {
     if (cgParentPs.has(p)) {
-      merged.push({ type: 'cg', speaker: null, text: '', expression: null, cgIndex: cgIdx++ });
+      const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
+      merged.push({ type: 'cg', speaker: null, text: '', expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
     } else {
       if (regularIdx < baseSegments.length) {
         merged.push(baseSegments[regularIdx++]);

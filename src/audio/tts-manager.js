@@ -760,7 +760,7 @@ export const TTSManager = {
         await this.xiaobaixTts.speak(segment.text, {
           speaker: speakerValue,
           resourceId: resourceId,
-          context: context,
+          contextTexts: context ? [context] : [],
         });
         this.isPlaying = true;
         this.currentSegmentId = segmentId;
@@ -778,7 +778,7 @@ export const TTSManager = {
           message: segment.text,
           speaker: speakerValue,
           resourceId: resourceId,
-          context: context,
+          contextTexts: context ? [context] : [],
         });
         this.isPlaying = true;
         this.currentSegmentId = segmentId;

@@ -1,0 +1,40 @@
+{
+  "$schema": "./galgame-ui-plugin.config.schema.json",
+  "schema": "galgame_ui_plugin_config_v1",
+  "assets": {
+    "activePackId": "pack_main",
+    "packs": [
+      {
+        "packId": "pack_main",
+        "name": "主图包",
+        "remoteAssetsUrl": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/remote_assets.json",
+        "remoteBaseUrl": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/"
+      }
+    ]
+  },
+  "live2d": {
+    "enabledMap": {
+      "柚": true
+    },
+    "models": {
+      "柚": {
+        "source": "remote",
+        "modelUrl": "https://example.com/live2d/yuzu/model3.json",
+        "transform": {
+          "slot": "left",
+          "scaleBase": "height",
+          "scale": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      }
+    }
+  },
+  "tts": {
+    "enabled": true,
+    "characterVoice": {
+      "柚": "奥泽美咲"
+    }
+  }
+}
+

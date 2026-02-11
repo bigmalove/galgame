@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Galgame UI Plugin 配置工具</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;600;800&display=swap');
+
+      :root {
+        --bg0: #0b1020;
+        --bg1: #111a33;
+        --ink: #eaf0ff;
+        --muted: rgba(234, 240, 255, 0.72);
+        --panel: rgba(255, 255, 255, 0.06);
+        --panel2: rgba(255, 255, 255, 0.10);
+        --line: rgba(255, 255, 255, 0.16);
+        --shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+        --accent: #00d2ff;
+        --accent2: #ff0055;
+        --ok: #2ce8a3;
+        --warn: #ffcc66;
+        --bad: #ff5b77;
+        --radius: 14px;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family: "Noto Sans SC", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+        background:
+          radial-gradient(800px 420px at 15% 10%, rgba(0, 210, 255, 0.18), transparent 60%),
+          radial-gradient(700px 380px at 80% 35%, rgba(255, 0, 85, 0.14), transparent 62%),
+          linear-gradient(135deg, var(--bg0), var(--bg1));
+      }
+
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 28px 18px 40px;
+      }
+
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-end;
+        margin-bottom: 16px;
+      }
+
+      .title {
+        margin: 0;
+        font-family: "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;
+        font-weight: 400;
+        letter-spacing: 1px;
+        font-size: 30px;
+        line-height: 1.1;
+      }
+      .subtitle {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        max-width: 720px;
+      }
+
+      .badge {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.04);
+        box-shadow: var(--shadow);
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--warn);
+        box-shadow: 0 0 0 4px rgba(255, 204, 102, 0.14);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .panel-h {
+        padding: 14px 14px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        background: linear-gradient(180deg, rgba(255,255,255,0.05), transparent);
+      }
+      .panel-h h2 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.5px;
+      }
+      .panel-b {
+        padding: 14px;
+      }
+
+      .row {
+        display: grid;
+        gap: 10px;
+      }
+      .label {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .file {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      input[type="file"] {
+        width: 100%;
+        padding: 10px;
+        border-radius: 12px;
+        border: 1px dashed rgba(255,255,255,0.18);
+        background: rgba(0,0,0,0.15);
+        color: var(--muted);
+      }
+
+      .btns {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      button {
+        appearance: none;
+        border: 1px solid rgba(255,255,255,0.16);
+        background: rgba(255,255,255,0.06);
+        color: var(--ink);
+        border-radius: 12px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      button:hover { transform: translateY(-1px); background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.24); }
+      button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+      .primary {
+        border-color: rgba(0, 210, 255, 0.55);
+        background: linear-gradient(135deg, rgba(0, 210, 255, 0.18), rgba(255, 0, 85, 0.10));
+      }
+      .danger {
+        border-color: rgba(255, 91, 119, 0.55);
+        background: rgba(255, 91, 119, 0.12);
+      }
+      .ghost {
+        border-color: rgba(255,255,255,0.12);
+        background: rgba(0,0,0,0.10);
+        color: var(--muted);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 310px;
+        resize: vertical;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(0,0,0,0.18);
+        color: rgba(234, 240, 255, 0.92);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+
+      .status {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(0,0,0,0.14);
+        color: var(--muted);
+        font-size: 12px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.06);
+      }
+      .pill .k { color: rgba(234,240,255,0.78); }
+      .pill .v { color: rgba(234,240,255,0.95); font-weight: 800; }
+      .ok { color: var(--ok); }
+      .bad { color: var(--bad); }
+
+      @media (max-width: 980px) {
+        .grid { grid-template-columns: 1fr; }
+        textarea { min-height: 260px; }
+        .hero { align-items: flex-start; flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div>
+          <h1 class="title">Galgame UI Plugin 配置工具</h1>
+          <p class="subtitle">
+            给用 VSCode 写卡的作者：把导出的 <code>galgame-ui-plugin.config.json</code> 注入到角色卡的
+            <code>data.extensions.galgame_ui_plugin</code>，或从角色卡提取/移除这段配置。
+          </p>
+        </div>
+        <div class="badge">
+          <span class="dot" id="healthDot"></span>
+          <span id="healthText">等待载入角色卡...</span>
+        </div>
+      </div>
+
+      <div class="grid">
+        <section class="panel">
+          <div class="panel-h">
+            <h2>输入</h2>
+            <span style="color: var(--muted); font-size: 12px;">不联网，本地处理</span>
+          </div>
+          <div class="panel-b">
+            <div class="row">
+              <div>
+                <div class="label">角色卡（SillyTavern 导出的 .json 或 .png）</div>
+                <div class="file">
+                  <input id="cardFile" type="file" accept=".json,.png,application/json,image/png" />
+                </div>
+              </div>
+
+              <div>
+                <div class="label">配置 JSON（可选，用于“注入”）</div>
+                <div class="file">
+                  <input id="configFile" type="file" accept=".json,application/json" />
+                </div>
+              </div>
+
+              <div class="btns">
+                <button id="btnExtract" class="ghost" disabled>从角色卡提取配置</button>
+                <button id="btnInject" class="primary" disabled>把配置注入角色卡</button>
+                <button id="btnRemove" class="danger" disabled>从角色卡移除配置</button>
+                <button id="btnCopy" class="ghost" disabled>复制配置到剪贴板</button>
+              </div>
+
+              <div class="status" id="statusBox">
+                <span class="pill"><span class="k">角色卡</span><span class="v" id="cardName">未载入</span></span>
+                <span class="pill"><span class="k">spec</span><span class="v" id="cardSpec">-</span></span>
+                <span class="pill"><span class="k">是否含配置</span><span class="v" id="hasCfg">-</span></span>
+                <span class="pill"><span class="k">提示</span><span class="v" id="hint">选择一个角色卡 JSON 或 PNG</span></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-h">
+            <h2>配置预览（galgame_ui_plugin）</h2>
+            <span style="color: var(--muted); font-size: 12px;">支持手动粘贴</span>
+          </div>
+          <div class="panel-b">
+            <textarea id="cfgText" placeholder="这里会显示/粘贴 galgame_ui_plugin 的 JSON（不需要再包一层 galgame_ui_plugin 字段）"></textarea>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      const state = {
+        cardFileName: '',
+        cardFormat: '', // 'json' | 'png'
+        cardPngBytes: null,
+        card: null,
+        config: null,
+      };
+
+      function setHealth(kind, text) {
+        const dot = $('healthDot');
+        const label = $('healthText');
+        if (kind === 'ok') dot.style.background = 'var(--ok)';
+        else if (kind === 'bad') dot.style.background = 'var(--bad)';
+        else dot.style.background = 'var(--warn)';
+        label.textContent = text;
+      }
+
+      function safeJsonParse(text) {
+        try {
+          return { ok: true, value: JSON.parse(text) };
+        } catch (e) {
+          return { ok: false, error: e && e.message ? e.message : String(e) };
+        }
+      }
+
+      function getCardDataObject(card) {
+        if (card && typeof card === 'object' && card.data && typeof card.data === 'object') return card.data;
+        return card;
+      }
+
+      function ensureExtensions(obj) {
+        if (!obj.extensions || typeof obj.extensions !== 'object') obj.extensions = {};
+        return obj.extensions;
+      }
+
+      function hasGalgameConfig(card) {
+        const data = getCardDataObject(card);
+        return !!(data && data.extensions && data.extensions.galgame_ui_plugin);
+      }
+
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function downloadText(text, filename, mime) {
+        const blob = new Blob([text], { type: mime || 'application/json' });
+        downloadBlob(blob, filename);
+      }
+
+      function baseName(fileName) {
+        return String(fileName || '').replace(/\.(json|png)$/i, '');
+      }
+
+      function syncUi() {
+        const card = state.card;
+        const cfgInCard = card ? hasGalgameConfig(card) : false;
+
+        $('cardName').textContent = card ? (getCardDataObject(card).name || card.name || '(未命名)') : '未载入';
+        $('cardSpec').textContent = card ? (card.spec || '-') : '-';
+        $('hasCfg').textContent = card ? (cfgInCard ? '是' : '否') : '-';
+        $('hasCfg').className = 'v ' + (card ? (cfgInCard ? 'ok' : 'bad') : '');
+
+        $('btnExtract').disabled = !card || !cfgInCard;
+        $('btnRemove').disabled = !card || !cfgInCard;
+        $('btnInject').disabled = !card || !getConfigForInject().ok;
+        $('btnCopy').disabled = !getConfigForInject().ok;
+
+        if (!card) {
+          $('hint').textContent = '选择一个角色卡 JSON 或 PNG';
+          setHealth('warn', '等待载入角色卡...');
+          return;
+        }
+
+        if (cfgInCard) {
+          $('hint').textContent = '角色卡已包含 galgame_ui_plugin 配置';
+          setHealth('ok', '角色卡已载入，配置已存在');
+          return;
+        }
+
+        $('hint').textContent = getConfigForInject().ok ? '可注入配置到角色卡' : '需要配置 JSON（文件或粘贴）';
+        setHealth('warn', '角色卡已载入，等待配置');
+      }
+
+      function getConfigForInject() {
+        if (state.config && typeof state.config === 'object') return { ok: true, value: state.config };
+        const text = $('cfgText').value.trim();
+        if (!text) return { ok: false, error: '未提供配置 JSON' };
+        return safeJsonParse(text);
+      }
+
+      async function loadFileJson(file) {
+        const text = await file.text();
+        const parsed = safeJsonParse(text);
+        if (!parsed.ok) throw new Error(parsed.error);
+        return parsed.value;
+      }
+
+      const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+
+      function isPngFile(file) {
+        const name = (file && file.name ? file.name : '').toLowerCase();
+        return name.endsWith('.png') || file.type === 'image/png';
+      }
+
+      function isPngBytes(bytes) {
+        if (!bytes || bytes.length < PNG_SIGNATURE.length) return false;
+        for (let i = 0; i < PNG_SIGNATURE.length; i++) {
+          if (bytes[i] !== PNG_SIGNATURE[i]) return false;
+        }
+        return true;
+      }
+
+      function concatBytes(parts) {
+        const total = parts.reduce((sum, p) => sum + (p ? p.length : 0), 0);
+        const out = new Uint8Array(total);
+        let offset = 0;
+        for (const p of parts) {
+          if (!p || !p.length) continue;
+          out.set(p, offset);
+          offset += p.length;
+        }
+        return out;
+      }
+
+      function encodeAscii(str) {
+        const s = String(str || '');
+        const out = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;
+        return out;
+      }
+
+      function decodeLatin1(bytes) {
+        let out = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          out += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        return out;
+      }
+
+      function u32be(n) {
+        const v = n >>> 0;
+        return new Uint8Array([(v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff]);
+      }
+
+      function parsePngChunks(bytes) {
+        if (!isPngBytes(bytes)) throw new Error('不是 PNG 文件');
+        const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const chunks = [];
+        let offset = 8;
+        while (offset + 8 <= bytes.length) {
+          const length = dv.getUint32(offset, false);
+          offset += 4;
+          const type = decodeLatin1(bytes.subarray(offset, offset + 4));
+          offset += 4;
+          const end = offset + length;
+          if (end + 4 > bytes.length) throw new Error('PNG chunk 数据截断');
+          const data = bytes.subarray(offset, end);
+          offset = end;
+          const crc = dv.getUint32(offset, false);
+          offset += 4;
+          chunks.push({ type, data, crc });
+          if (type === 'IEND') break;
+        }
+        return chunks;
+      }
+
+      function looksLikeCharacterCard(obj) {
+        if (!obj || typeof obj !== 'object') return false;
+        if (typeof obj.spec === 'string' && /chara/i.test(obj.spec)) return true;
+        if (obj.data && typeof obj.data === 'object' && typeof obj.data.name === 'string') return true;
+        if (typeof obj.name === 'string' && (typeof obj.description === 'string' || typeof obj.personality === 'string')) return true;
+        return false;
+      }
+
+      function normalizeBase64(b64) {
+        let s = String(b64 || '').trim().replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+        if (!s) return '';
+        const mod = s.length % 4;
+        if (mod === 2) s += '==';
+        else if (mod === 3) s += '=';
+        else if (mod === 1) return '';
+        return s;
+      }
+
+      function base64ToBytes(b64) {
+        const normalized = normalizeBase64(b64);
+        if (!normalized) throw new Error('无效的 base64');
+        const binary = atob(normalized);
+        const out = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i) & 0xff;
+        return out;
+      }
+
+      function bytesToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+      }
+
+      function tryParseJsonFromMaybeBase64(text) {
+        const trimmed = String(text || '').trim();
+        if (!trimmed) return null;
+
+        try {
+          const direct = JSON.parse(trimmed);
+          if (direct && typeof direct === 'object') return direct;
+        } catch (_) {}
+
+        if (!/^[A-Za-z0-9+/=_-]+$/.test(trimmed) || trimmed.length < 16) return null;
+        try {
+          const decodedBytes = base64ToBytes(trimmed);
+          const decodedText = new TextDecoder('utf-8').decode(decodedBytes);
+          const obj = JSON.parse(decodedText);
+          if (obj && typeof obj === 'object') return obj;
+        } catch (_) {}
+
+        return null;
+      }
+
+      function decodePngTextChunk(chunk) {
+        if (chunk.type === 'tEXt') {
+          const idx = chunk.data.indexOf(0);
+          if (idx < 0) return null;
+          const keyword = decodeLatin1(chunk.data.subarray(0, idx));
+          const text = decodeLatin1(chunk.data.subarray(idx + 1));
+          return { keyword, text, kind: 'tEXt' };
+        }
+
+        if (chunk.type === 'iTXt') {
+          const data = chunk.data;
+          let p = 0;
+          const idx = data.indexOf(0, p);
+          if (idx < 0) return null;
+          const keyword = decodeLatin1(data.subarray(p, idx));
+          p = idx + 1;
+          if (p + 2 > data.length) return null;
+          const compressionFlag = data[p++];
+          const compressionMethod = data[p++];
+
+          const langEnd = data.indexOf(0, p);
+          if (langEnd < 0) return null;
+          p = langEnd + 1; // languageTag ignored
+
+          const transEnd = data.indexOf(0, p);
+          if (transEnd < 0) return null;
+          p = transEnd + 1; // translatedKeyword ignored
+
+          if (compressionFlag === 1) return null; // 压缩 iTXt 需要解压，这里跳过
+          if (compressionMethod !== 0 && compressionMethod !== 1) return null;
+
+          const textBytes = data.subarray(p);
+          const text = new TextDecoder('utf-8').decode(textBytes);
+          return { keyword, text, kind: 'iTXt' };
+        }
+
+        return null;
+      }
+
+      function extractCardFromPngBytes(bytes) {
+        const chunks = parsePngChunks(bytes);
+        const candidates = [];
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          if (!['tEXt', 'iTXt'].includes(chunk.type)) continue;
+          const decoded = decodePngTextChunk(chunk);
+          if (!decoded) continue;
+          const obj = tryParseJsonFromMaybeBase64(decoded.text);
+          if (!looksLikeCharacterCard(obj)) continue;
+
+          let score = 1;
+          const kw = (decoded.keyword || '').toLowerCase();
+          if (kw === 'chara') score += 100;
+          else if (kw === 'ccv3') score += 90;
+          else if (kw.includes('chara')) score += 80;
+          if (obj && typeof obj.spec === 'string' && /chara/i.test(obj.spec)) score += 50;
+
+          candidates.push({ score, card: obj });
+        }
+        candidates.sort((a, b) => b.score - a.score);
+        const best = candidates[0];
+        if (!best) throw new Error('PNG 元数据中未找到导出的角色卡 JSON（请用 SillyTavern 重新导出 PNG/JSON）');
+        return { card: best.card };
+      }
+
+      const CRC32_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+          let c = i;
+          for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+          table[i] = c >>> 0;
+        }
+        return table;
+      })();
+
+      function crc32ForChunk(typeBytes, dataBytes) {
+        let c = 0xffffffff;
+        for (let i = 0; i < typeBytes.length; i++) c = CRC32_TABLE[(c ^ typeBytes[i]) & 0xff] ^ (c >>> 8);
+        for (let i = 0; i < dataBytes.length; i++) c = CRC32_TABLE[(c ^ dataBytes[i]) & 0xff] ^ (c >>> 8);
+        return (c ^ 0xffffffff) >>> 0;
+      }
+
+      function makePngChunkBytes(type, dataBytes) {
+        const typeBytes = encodeAscii(type);
+        const lenBytes = u32be(dataBytes.length);
+        const crcBytes = u32be(crc32ForChunk(typeBytes, dataBytes));
+        return concatBytes([lenBytes, typeBytes, dataBytes, crcBytes]);
+      }
+
+      function getPngTextKeyword(chunk) {
+        const idx = chunk.data.indexOf(0);
+        if (idx < 0) return '';
+        return decodeLatin1(chunk.data.subarray(0, idx));
+      }
+
+      function embedCardIntoPngBytes(originalBytes, cardObj, pretty) {
+        const chunks = parsePngChunks(originalBytes);
+        const jsonText = JSON.stringify(cardObj, null, pretty);
+        const jsonBytes = new TextEncoder().encode(jsonText);
+        const base64 = bytesToBase64(jsonBytes);
+        const newTextData = concatBytes([encodeAscii('chara'), new Uint8Array([0]), encodeAscii(base64)]);
+
+        const removeKeywords = new Set(['chara', 'ccv3']);
+        const cleaned = [];
+        for (const ch of chunks) {
+          if (['tEXt', 'iTXt', 'zTXt'].includes(ch.type)) {
+            const kw = (getPngTextKeyword(ch) || '').toLowerCase();
+            if (removeKeywords.has(kw)) continue;
+          }
+          cleaned.push({ type: ch.type, data: ch.data });
+        }
+
+        const ihdrIndex = cleaned.findIndex((c) => c.type === 'IHDR');
+        const insertAt = ihdrIndex >= 0 ? ihdrIndex + 1 : 0;
+        cleaned.splice(insertAt, 0, { type: 'tEXt', data: newTextData });
+
+        const parts = [PNG_SIGNATURE];
+        for (const ch of cleaned) {
+          parts.push(makePngChunkBytes(ch.type, ch.data));
+        }
+        return concatBytes(parts);
+      }
+
+      $('cardFile').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+        state.card = null;
+        state.cardFileName = file ? file.name : '';
+        state.cardFormat = '';
+        state.cardPngBytes = null;
+        try {
+          if (!file) {
+            syncUi();
+            return;
+          }
+
+          let card;
+          if (isPngFile(file)) {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const parsed = extractCardFromPngBytes(bytes);
+            card = parsed.card;
+            state.cardFormat = 'png';
+            state.cardPngBytes = bytes;
+          } else {
+            card = await loadFileJson(file);
+            state.cardFormat = 'json';
+          }
+
+          if (!card || typeof card !== 'object') throw new Error('角色卡不是对象');
+          state.card = card;
+
+          if (hasGalgameConfig(card)) {
+            const cfg = getCardDataObject(card).extensions.galgame_ui_plugin;
+            $('cfgText').value = JSON.stringify(cfg, null, 2);
+            state.config = cfg;
+          }
+        } catch (err) {
+          setHealth('bad', '角色卡载入失败');
+          alert('角色卡载入失败: ' + (err && err.message ? err.message : String(err)));
+        } finally {
+          syncUi();
+        }
+      });
+
+      $('configFile').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+        state.config = null;
+        try {
+          if (!file) {
+            syncUi();
+            return;
+          }
+          const cfg = await loadFileJson(file);
+          if (!cfg || typeof cfg !== 'object') throw new Error('配置 JSON 不是对象');
+          state.config = cfg;
+          $('cfgText').value = JSON.stringify(cfg, null, 2);
+        } catch (err) {
+          setHealth('bad', '配置载入失败');
+          alert('配置载入失败: ' + (err && err.message ? err.message : String(err)));
+        } finally {
+          syncUi();
+        }
+      });
+
+      $('cfgText').addEventListener('input', () => {
+        state.config = null;
+        syncUi();
+      });
+
+      $('btnExtract').addEventListener('click', () => {
+        try {
+          if (!state.card) return;
+          const data = getCardDataObject(state.card);
+          const cfg = data?.extensions?.galgame_ui_plugin;
+          if (!cfg) throw new Error('角色卡中未找到 galgame_ui_plugin');
+
+          const text = JSON.stringify(cfg, null, 2);
+          $('cfgText').value = text;
+          state.config = cfg;
+
+          const name = (data.name || state.card.name || 'character').toString().trim().replace(/[<>:"/\\|?*]/g, '_');
+          downloadText(text, `galgame-ui-plugin.config.${name}.json`);
+          setHealth('ok', '已提取并下载配置');
+        } catch (err) {
+          setHealth('bad', '提取失败');
+          alert('提取失败: ' + (err && err.message ? err.message : String(err)));
+        } finally {
+          syncUi();
+        }
+      });
+
+      $('btnInject').addEventListener('click', () => {
+        try {
+          if (!state.card) return;
+          const cfgParsed = getConfigForInject();
+          if (!cfgParsed.ok) throw new Error(cfgParsed.error);
+
+          const card = structuredClone ? structuredClone(state.card) : JSON.parse(JSON.stringify(state.card));
+          const data = getCardDataObject(card);
+          const ext = ensureExtensions(data);
+          ext.galgame_ui_plugin = cfgParsed.value;
+
+          if (state.cardFormat === 'png') {
+            if (!state.cardPngBytes) throw new Error('未保存 PNG 原始数据');
+            const outBytes = embedCardIntoPngBytes(state.cardPngBytes, card, 2);
+            const outName = `${baseName(state.cardFileName || 'character')}.patched.png`;
+            downloadBlob(new Blob([outBytes], { type: 'image/png' }), outName);
+          } else {
+            const out = JSON.stringify(card, null, 2);
+            const outName = `${baseName(state.cardFileName || 'character')}.patched.json`;
+            downloadText(out, outName);
+          }
+
+          setHealth('ok', '已注入并下载角色卡');
+        } catch (err) {
+          setHealth('bad', '注入失败');
+          alert('注入失败: ' + (err && err.message ? err.message : String(err)));
+        } finally {
+          syncUi();
+        }
+      });
+
+      $('btnRemove').addEventListener('click', () => {
+        try {
+          if (!state.card) return;
+          const card = structuredClone ? structuredClone(state.card) : JSON.parse(JSON.stringify(state.card));
+          const data = getCardDataObject(card);
+          const ext = ensureExtensions(data);
+          if (Object.prototype.hasOwnProperty.call(ext, 'galgame_ui_plugin')) delete ext.galgame_ui_plugin;
+
+          if (state.cardFormat === 'png') {
+            if (!state.cardPngBytes) throw new Error('未保存 PNG 原始数据');
+            const outBytes = embedCardIntoPngBytes(state.cardPngBytes, card, 2);
+            const outName = `${baseName(state.cardFileName || 'character')}.no-galgame-ui-plugin.png`;
+            downloadBlob(new Blob([outBytes], { type: 'image/png' }), outName);
+          } else {
+            const out = JSON.stringify(card, null, 2);
+            const outName = `${baseName(state.cardFileName || 'character')}.no-galgame-ui-plugin.json`;
+            downloadText(out, outName);
+          }
+
+          setHealth('ok', '已移除并下载角色卡');
+        } catch (err) {
+          setHealth('bad', '移除失败');
+          alert('移除失败: ' + (err && err.message ? err.message : String(err)));
+        } finally {
+          syncUi();
+        }
+      });
+
+      $('btnCopy').addEventListener('click', async () => {
+        try {
+          const cfgParsed = getConfigForInject();
+          if (!cfgParsed.ok) throw new Error(cfgParsed.error);
+          const text = JSON.stringify(cfgParsed.value, null, 2);
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(text);
+            setHealth('ok', '已复制到剪贴板');
+          } else {
+            throw new Error('浏览器不支持 clipboard');
+          }
+        } catch (err) {
+          setHealth('bad', '复制失败');
+          alert('复制失败: ' + (err && err.message ? err.message : String(err)));
+        }
+      });
+
+      syncUi();
+    </script>
+  </body>
+</html>

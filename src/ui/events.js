@@ -113,6 +113,7 @@ export function setupGlobalEventListeners() {
     await disableWorldbookGlobally();
     console.log(`[${SCRIPT_NAME}] Galgame模式关闭（已取消世界书全局启用）`);
 
+    closeEmbeddedViewer();
     restoreOriginalViews();
 
     setTimeout(() => {
@@ -245,6 +246,111 @@ export function setupGlobalEventListeners() {
     if (!$(e.target).closest('#gal-mobile-menu, [data-action="config"]').length) {
       closeMobileMenu();
     }
+  });
+
+  // 查看消息内嵌界面
+  const GAL_TAG_NAMES = new Set(['p', 'background', 'bgm', 'option', 'maintext', 'bgimg', 'whimg', 'bnimg', 'sprite', 'br']);
+  let embeddedViewerState = null; // { nodes: [{node, parent, nextSibling}], $viewer }
+
+  function closeEmbeddedViewer() {
+    if (!embeddedViewerState) return;
+    // 把节点移回原位
+    for (const entry of embeddedViewerState.nodes) {
+      if (entry.nextSibling && entry.nextSibling.parentNode === entry.parent) {
+        entry.parent.insertBefore(entry.node, entry.nextSibling);
+      } else {
+        entry.parent.appendChild(entry.node);
+      }
+    }
+    embeddedViewerState.$viewer.remove();
+    embeddedViewerState = null;
+  }
+
+  $(doc).on('click', '#gal-global-overlay [data-action="view-original"]', function (e) {
+    e.stopPropagation();
+    closeMobileMenu();
+
+    if (embeddedViewerState) {
+      closeEmbeddedViewer();
+      return;
+    }
+
+    const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
+    if (!mesId) {
+      showToast('未找到当前消息');
+      return;
+    }
+
+    const $mes = $(`.mes[mesid="${mesId}"]`);
+    if (!$mes.length) {
+      showToast('未找到消息元素');
+      return;
+    }
+
+    const mesText = $mes.find('.mes_text')[0];
+    if (!mesText) {
+      showToast('未找到消息内容');
+      return;
+    }
+
+    // 收集非 galgame 标签的 DOM 节点
+    const embeddedNodes = [];
+    for (const child of Array.from(mesText.childNodes)) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = child.tagName.toLowerCase();
+        if (!GAL_TAG_NAMES.has(tag)) {
+          embeddedNodes.push(child);
+        }
+      }
+    }
+
+    if (embeddedNodes.length === 0) {
+      showToast('当前消息没有嵌入的界面内容');
+      return;
+    }
+
+    // 读取原始容器尺寸，确保百分比布局的子元素不会塌缩
+    // 临时移除 gal-hidden class（因为 !important 无法被内联样式覆盖）
+    const wasHidden = $mes.hasClass('gal-hidden');
+    if (wasHidden) $mes.removeClass('gal-hidden');
+    const origWidth = mesText.offsetWidth;
+    const origHeight = mesText.offsetHeight;
+    if (wasHidden) $mes.addClass('gal-hidden');
+
+    // 创建弹窗
+    const $viewer = $(`
+      <div class="gal-embedded-viewer">
+        <div class="gal-embedded-viewer-body"></div>
+        <button class="gal-embedded-viewer-close"><i class="fa-solid fa-arrow-left"></i> 返回</button>
+      </div>
+    `);
+
+    const body = $viewer.find('.gal-embedded-viewer-body')[0];
+    // 用原始容器尺寸，防止百分比子元素塌缩
+    if (origWidth > 0) {
+      body.style.width = origWidth + 'px';
+    }
+    if (origHeight > 0) {
+      body.style.height = Math.min(origHeight, topWindow.innerHeight * 0.9) + 'px';
+    }
+
+    // 记录原位置，reparent 到弹窗
+    const nodeEntries = embeddedNodes.map(node => {
+      const entry = { node, parent: node.parentNode, nextSibling: node.nextSibling };
+      body.appendChild(node);
+      return entry;
+    });
+
+    embeddedViewerState = { nodes: nodeEntries, $viewer };
+
+    $(topWindow.document.body).append($viewer);
+
+    // 关闭按钮
+    $viewer.find('.gal-embedded-viewer-close').on('click', () => closeEmbeddedViewer());
+    // 点击背景关闭
+    $viewer.on('click', function (ev) {
+      if (ev.target === $viewer[0]) closeEmbeddedViewer();
+    });
   });
 
   // LOG按钮

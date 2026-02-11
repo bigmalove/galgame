@@ -147,6 +147,9 @@ export function ensureGlobalOverlay() {
                     <button class="gal-menu-btn" data-action="log">
                         <i class="fa-solid fa-list-ul"></i> 历史
                     </button>
+                    <button class="gal-menu-btn" data-action="view-original">
+                        <i class="fa-solid fa-display"></i> 原界面
+                    </button>
                     <button class="gal-menu-btn" data-action="close-mode">
                         <i class="fa-solid fa-power-off"></i> 退出
                     </button>
@@ -157,6 +160,9 @@ export function ensureGlobalOverlay() {
                   </button>
                   <button class="gal-footer-btn" data-action="close-mode" title="退出 Galgame 模式">
                     <i class="fa-solid fa-power-off"></i> <span class="gal-btn-text">CLOSE</span>
+                  </button>
+                  <button class="gal-footer-btn" data-action="view-original" title="查看消息内嵌界面">
+                    <i class="fa-solid fa-display"></i> <span class="gal-btn-text">VIEW</span>
                   </button>
                   <button class="gal-footer-btn" data-action="config" title="设置">
                     <i class="fa-solid fa-gear"></i> <span class="gal-btn-text">CONFIG</span>

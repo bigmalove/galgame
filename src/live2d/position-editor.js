@@ -3,6 +3,7 @@ import { topWindow, $ } from '../core/env.js';
 import { getLive2DConfig, setLive2DConfig, normalizeLive2DScaleBase } from './render-mode.js';
 import { Live2DManager } from './manager.js';
 import { Live2DStage } from './stage.js';
+import { ensureGlobalOverlay, showGlobalOverlay, setChatScrollLock, syncOverlayHeightToChatViewport, adjustGameContentScale } from '../ui/overlay.js';
 
 // 延迟引用: getModalMountRoot (来自 UI 层)
 let _getModalMountRootRef = null;
@@ -18,10 +19,113 @@ export const Live2DPositionEditor = {
   characterId: null,
   originalConfig: null,
   $toolbar: null,
+  $guide: null,
   isDragging: false,
   dragStart: { x: 0, y: 0 },
   modelStart: { x: 0, y: 0 },
   lastPinchDistance: 0,
+  currentSlot: 'left',
+  _stagePushed: false,
+  _onResize: null,
+
+  // 进入编辑前，清理其它窗口并确保主界面可见
+  prepareEditContext() {
+    const _$ = topWindow.jQuery || $;
+
+    // 确保预览挂载不会残留
+    try {
+      Live2DStage.popMount();
+    } catch (e) {}
+
+    // 关闭其它窗口与临时面板
+    const dismissSelectors = [
+      '#gal-custom-popup',
+      '#gal-history-modal',
+      '#gal-character-sprites-modal',
+      '#gal-settings-panel',
+      '#gal-asset-manager-modal',
+      '#gal-pack-manager-modal',
+      '#gal-transfer-modal',
+      '#gal-batch-bg-upload-modal',
+      '#gal-bg-upload-modal',
+      '#gal-live2d-settings-modal',
+      '#gal-prompts-modal',
+      '#gal-free-input-modal',
+      '#gal-import-pack-selector',
+      '.gal-input-modal',
+      '.gal-config-modal',
+      '.gal-z-dropdown',
+    ];
+    dismissSelectors.forEach(sel => {
+      try {
+        _$(sel).remove();
+      } catch (e) {}
+    });
+
+    let $overlay = _$('#gal-global-overlay');
+    if (!$overlay.length) {
+      $overlay = ensureGlobalOverlay();
+    }
+
+    if (!$overlay.length) {
+      const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
+      if (_toastr) {
+        _toastr.error('未找到游戏主界面');
+      }
+      return false;
+    }
+
+    if (!$overlay.hasClass('active')) {
+      showGlobalOverlay();
+    } else {
+      setChatScrollLock(true);
+      syncOverlayHeightToChatViewport($overlay[0], { force: true });
+      adjustGameContentScale();
+    }
+
+    return true;
+  },
+
+  _removeGuide() {
+    const _$ = topWindow.jQuery || $;
+    _$('#gal-live2d-position-guide').remove();
+    this.$guide = null;
+  },
+
+  _createGuide() {
+    const _$ = topWindow.jQuery || $;
+    this._removeGuide();
+
+    const $gameContent = _$('#gal-global-overlay .gal-game-content');
+    if (!$gameContent.length) return;
+
+    const label = this.currentSlot === 'right' ? '右侧角色调整区域' : '左侧角色调整区域';
+    const guideHtml = `
+      <div id="gal-live2d-position-guide" class="gal-live2d-position-guide">
+        <div class="gal-live2d-position-guide-box">
+          <span class="gal-live2d-position-guide-label">${label}</span>
+        </div>
+      </div>
+    `;
+
+    $gameContent.append(guideHtml);
+    this.$guide = _$('#gal-live2d-position-guide');
+    this._updateGuideRect();
+  },
+
+  _updateGuideRect() {
+    if (!this.$guide || !this.$guide.length) return;
+    const rect = Live2DStage.slots[this.currentSlot]?.rect;
+    if (!rect) return;
+
+    const $box = this.$guide.find('.gal-live2d-position-guide-box');
+    $box.css({
+      left: `${Math.round(rect.x)}px`,
+      top: `${Math.round(rect.y)}px`,
+      width: `${Math.round(rect.width)}px`,
+      height: `${Math.round(rect.height)}px`,
+    });
+  },
 
   async enter(characterId) {
     if (this.isActive) {
@@ -31,6 +135,8 @@ export const Live2DPositionEditor = {
     const _$ = topWindow.jQuery || $;
     this.characterId = characterId;
     this.isActive = true;
+    this._stagePushed = false;
+    this.currentSlot = 'left';
 
     const config = getLive2DConfig(characterId);
     this.originalConfig = JSON.parse(JSON.stringify(config.transform || {}));
@@ -49,6 +155,18 @@ export const Live2DPositionEditor = {
       return;
     }
 
+    if (!this.prepareEditContext()) {
+      this.isActive = false;
+      return;
+    }
+
+    const waitFrame = () => new Promise(resolve => {
+      (topWindow.requestAnimationFrame || requestAnimationFrame)(() => resolve());
+    });
+    await waitFrame();
+    await waitFrame();
+
+    // 直接挂载到主界面真实舞台，确保所见即所得
     const $gameContent = _$('#gal-global-overlay .gal-game-content');
     if (!$gameContent.length) {
       const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
@@ -59,53 +177,30 @@ export const Live2DPositionEditor = {
       return;
     }
 
-    _$('#gal-live2d-position-edit-container').remove();
+    const existingSlot = Live2DStage.instances.get(characterId)?.slot;
+    this.currentSlot = existingSlot === 'right' ? 'right' : 'left';
 
-    let slotWidth = 200;
-    let slotHeight = 400;
-    const $existingSlot = _$('#gal-global-overlay .gal-char-slot').first();
-    if ($existingSlot.length) {
-      slotWidth = $existingSlot.width() || 200;
-      slotHeight = $existingSlot.height() || 400;
-    }
-
-    const fullscreenContainerHtml = `
-      <div id="gal-live2d-position-edit-container" class="gal-z-dropdown" style="
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: ${slotWidth}px;
-        height: ${slotHeight}px;
-        pointer-events: none;
-        border: 2px dashed rgba(0, 210, 255, 0.5);
-        border-radius: 8px;
-        box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
-        background: rgba(0, 0, 0, 0.1);
-      ">
-        <div class="gal-live2d-canvas-container" style="width: 100%; height: 100%; position: relative;"></div>
-      </div>
-    `;
-    $gameContent.append(fullscreenContainerHtml);
-
-    const $mainContainer = _$('#gal-live2d-position-edit-container .gal-live2d-canvas-container');
-    this._tempContainerCreated = true;
-
-    const containerEl = $mainContainer.get(0);
+    // 复用同一个舞台：挂载到主界面，使用 story 模式保持真实尺寸与位置
+    const containerEl = $gameContent.get(0);
     if (containerEl) {
-      Live2DStage.pushMount(containerEl, { mode: 'single', focusCharacterId: characterId });
-      const attached = Live2DStage.attach(characterId, model, 'left', { entering: false });
+      Live2DStage.pushMount(containerEl, { mode: 'story', focusCharacterId: characterId });
+      this._stagePushed = true;
+      const attached = Live2DStage.attach(characterId, model, this.currentSlot, { entering: false });
       if (!attached) {
-        Live2DStage.popMount();
+        if (this._stagePushed) {
+          Live2DStage.popMount();
+          this._stagePushed = false;
+        }
         const _toastr = topWindow.toastr || (typeof toastr !== 'undefined' ? toastr : null);
         if (_toastr) {
           _toastr.error('模型渲染失败');
         }
         this.isActive = false;
-        _$('#gal-live2d-position-edit-container').remove();
-        this._tempContainerCreated = false;
         return;
       }
+      this.currentSlot = Live2DStage.instances.get(characterId)?.slot === 'right' ? 'right' : 'left';
+      Live2DStage.updateLayout();
+      this._createGuide();
     }
 
     await new Promise(r => requestAnimationFrame(r));
@@ -119,10 +214,11 @@ export const Live2DPositionEditor = {
         _toastr.error('模型渲染失败');
       }
       this.isActive = false;
-      if (this._tempContainerCreated) {
-        _$('.gal-position-edit-temp').remove();
-        this._tempContainerCreated = false;
+      if (this._stagePushed) {
+        Live2DStage.popMount();
+        this._stagePushed = false;
       }
+      this._removeGuide();
       return;
     }
 
@@ -138,7 +234,7 @@ export const Live2DPositionEditor = {
       this.updateDisplay(transform.offsetX, transform.offsetY, transform.scale);
     }
 
-    console.log(`[Live2DPositionEditor] 进入调整模式: ${characterId}, 容器已就绪`);
+    console.log(`[Live2DPositionEditor] 进入调整模式: ${characterId}, 槽位=${this.currentSlot}`);
   },
 
   exit(save = false) {
@@ -179,21 +275,22 @@ export const Live2DPositionEditor = {
       }
     }
 
-    if (this._tempContainerCreated) {
+    // 恢复舞台挂载（不销毁全局 app/canvas）
+    if (this._stagePushed) {
       Live2DStage.popMount();
-      _$('#gal-live2d-position-edit-container').remove();
-      _$('.gal-position-edit-temp').remove();
-      this._tempContainerCreated = false;
+      this._stagePushed = false;
     }
 
     if (this.$toolbar) {
       this.$toolbar.remove();
       this.$toolbar = null;
     }
+    this._removeGuide();
 
     this.isActive = false;
     this.characterId = null;
     this.originalConfig = null;
+    this.currentSlot = 'left';
 
     console.log(`[Live2DPositionEditor] 退出调整模式: ${characterId}, 保存: ${save}`);
   },
@@ -207,87 +304,52 @@ export const Live2DPositionEditor = {
     this.$toolbar.find('#gal-pos-x-slider').val(offsetX);
     this.$toolbar.find('#gal-pos-y-slider').val(offsetY);
     this.$toolbar.find('#gal-pos-scale-slider').val(scale);
+    this._updateGuideRect();
   },
 
   createToolbar() {
     const _$ = topWindow.jQuery || $;
 
     _$('#gal-live2d-position-toolbar').remove();
-    _$('#gal-live2d-position-hint').remove();
 
     const transform = Live2DManager.getCurrentTransform(this.characterId) || { offsetX: 0, offsetY: 0, scale: 1 };
     const self = this;
 
     const toolbarHtml = `
-      <div id="gal-live2d-position-toolbar" class="gal-z-critical" style="
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(50, 50, 70, 0.98));
-        backdrop-filter: blur(10px);
-        border-radius: 16px;
-        padding: 16px 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        color: #fff;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        min-width: 320px;
-      ">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="min-width: 70px; font-size: 0.85rem;">X 偏移:</span>
+      <div id="gal-live2d-position-toolbar" class="gal-live2d-position-toolbar gal-z-critical">
+        <!-- X 位置滑条 -->
+        <div class="gal-live2d-position-row">
+          <span class="gal-live2d-position-label">X 偏移:</span>
           <input type="range" id="gal-pos-x-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetX)}"
-            style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-          <span class="gal-pos-x-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetX)}</span>
+            class="gal-live2d-position-slider">
+          <span class="gal-live2d-position-value gal-pos-x-val">${Math.round(transform.offsetX)}</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="min-width: 70px; font-size: 0.85rem;">Y 偏移:</span>
+
+        <!-- Y 位置滑条 -->
+        <div class="gal-live2d-position-row">
+          <span class="gal-live2d-position-label">Y 偏移:</span>
           <input type="range" id="gal-pos-y-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetY)}"
-            style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-          <span class="gal-pos-y-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetY)}</span>
+            class="gal-live2d-position-slider">
+          <span class="gal-live2d-position-value gal-pos-y-val">${Math.round(transform.offsetY)}</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="min-width: 70px; font-size: 0.85rem;">缩放:</span>
+
+        <!-- 缩放滑条 -->
+        <div class="gal-live2d-position-row">
+          <span class="gal-live2d-position-label">缩放:</span>
           <input type="range" id="gal-pos-scale-slider" min="0.3" max="2.5" step="0.05" value="${transform.scale.toFixed(2)}"
-            style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-          <span class="gal-pos-scale-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${transform.scale.toFixed(2)}x</span>
+            class="gal-live2d-position-slider">
+          <span class="gal-live2d-position-value gal-pos-scale-val">${transform.scale.toFixed(2)}x</span>
         </div>
-        <div style="display: flex; gap: 10px; margin-top: 4px; justify-content: flex-end;">
-          <button id="gal-pos-reset" style="
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 6px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 0.85rem;
-          ">
+
+        <!-- 按钮行 -->
+        <div class="gal-live2d-position-actions">
+          <button id="gal-pos-reset" class="gal-live2d-position-btn gal-live2d-position-btn-reset">
             <i class="fa-solid fa-undo"></i> 重置
           </button>
-          <button id="gal-pos-cancel" style="
-            padding: 8px 16px;
-            background: rgba(220, 53, 69, 0.8);
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 0.85rem;
-          ">
+          <button id="gal-pos-cancel" class="gal-live2d-position-btn gal-live2d-position-btn-cancel">
             <i class="fa-solid fa-times"></i> 取消
           </button>
-          <button id="gal-pos-save" style="
-            padding: 8px 16px;
-            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 600;
-          ">
+          <button id="gal-pos-save" class="gal-live2d-position-btn gal-live2d-position-btn-save">
             <i class="fa-solid fa-check"></i> 保存
           </button>
         </div>
@@ -337,7 +399,19 @@ export const Live2DPositionEditor = {
   },
 
   bindDragEvents() {
-    // 已移除拖拽事件，改用滑条
+    const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+    if (this._onResize) {
+      try {
+        _topWindow.removeEventListener('resize', this._onResize);
+      } catch (e) {}
+    }
+    this._onResize = () => {
+      Live2DStage.updateLayout();
+      this._updateGuideRect();
+    };
+    try {
+      _topWindow.addEventListener('resize', this._onResize, { passive: true });
+    } catch (e) {}
   },
 
   bindZoomEvents() {
@@ -345,7 +419,12 @@ export const Live2DPositionEditor = {
   },
 
   unbindEvents() {
-    const _$ = topWindow.jQuery || $;
-    _$('#gal-live2d-position-hint').remove();
+    const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+    if (this._onResize) {
+      try {
+        _topWindow.removeEventListener('resize', this._onResize);
+      } catch (e) {}
+    }
+    this._onResize = null;
   }
 };

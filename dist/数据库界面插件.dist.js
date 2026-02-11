@@ -4933,6 +4933,399 @@ ${lines.join("\n")}`;
     }
   };
 
+  // src/ui/overlay.js
+  var currentDisplayMesId = null;
+  var overlayUpdateQueue = Promise.resolve();
+  var chatScrollLockSnapshot = null;
+  var overlayHeightLockState = {
+    lastViewportHeight: 0,
+    lastOverlayHeight: 0
+  };
+  var OVERLAY_HEIGHT_RECALC_THRESHOLD = 24;
+  function getCurrentDisplayMesId() {
+    return currentDisplayMesId;
+  }
+  function setCurrentDisplayMesId(mesId) {
+    currentDisplayMesId = mesId;
+  }
+  function queueOverlayUpdate(source, updateTask) {
+    const run = async () => {
+      try {
+        return await updateTask();
+      } catch (error) {
+        console.error(`[${SCRIPT_NAME}] \u8986\u76D6\u5C42\u66F4\u65B0\u5931\u8D25(${source}):`, error);
+        return false;
+      }
+    };
+    overlayUpdateQueue = overlayUpdateQueue.then(run, run);
+    return overlayUpdateQueue;
+  }
+  function nextOverlayRenderToken(state) {
+    if (!state) return 0;
+    state.renderToken = (Number(state.renderToken) || 0) + 1;
+    return state.renderToken;
+  }
+  function scheduleOverlaySegmentDisplay(state, source = "unknown") {
+    if (!state) return Promise.resolve(false);
+    const token = nextOverlayRenderToken(state);
+    return queueOverlayUpdate(source, () => _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state, token) : Promise.resolve(false));
+  }
+  var _updateOverlaySegmentDisplayRef = null;
+  function setOverlayRefs({ updateOverlaySegmentDisplay: updateOverlaySegmentDisplay2 }) {
+    if (updateOverlaySegmentDisplay2) _updateOverlaySegmentDisplayRef = updateOverlaySegmentDisplay2;
+  }
+  function ensureGlobalOverlay() {
+    const settings = getSettings();
+    const targetDoc = topWindow.document;
+    let $overlay = $(targetDoc).find("#gal-global-overlay");
+    if (!$overlay.length) {
+      const overlayHtml = `
+      <div id="gal-global-overlay">
+        <!-- \u5730\u70B9\u65F6\u95F4\u72B6\u6001\u680F -->
+        <div class="gal-status-bar-container">
+          <div class="gal-location-bar" id="gal-location-bar" title="\u5F53\u524D\u5730\u70B9">
+            <i class="fa-solid fa-location-dot"></i>
+            <span class="gal-location-text" id="gal-location-text">--</span>
+          </div>
+          <div class="gal-time-bar" id="gal-time-bar" title="\u5F53\u524D\u65F6\u95F4">
+            <i class="fa-regular fa-clock"></i>
+            <span class="gal-time-text" id="gal-time-text">--</span>
+          </div>
+        </div>
+
+        <!-- \u5168\u5C4F\u5207\u6362\u6309\u94AE -->
+        <button class="gal-fullscreen-btn" data-action="toggle-fullscreen" title="\u5207\u6362\u5168\u5C4F">
+          <i class="fa-solid fa-expand"></i>
+          <span>\u5168\u5C4F</span>
+        </button>
+
+        <div class="gal-game-container">
+          <!-- \u80CC\u666F\u5C42 -->
+          <div class="gal-layer-bg">
+            <div class="gal-bg-layer gal-bg-base"></div>
+            <div class="gal-bg-layer gal-bg-front"></div>
+          </div>
+
+          <!-- \u6E38\u620F\u5185\u5BB9\u5C42 -->
+          <div class="gal-game-content">
+            <!-- \u7ACB\u7ED8\u5C42 -->
+            <div class="gal-layer-character${settings.speakerGlow ? " glow-enabled" : ""}${settings.speakerBubble ? " bubble-enabled" : ""}${getTTSEnabled() ? " tts-mode-enabled" : ""}">
+              <div class="gal-char-slot slot-left"></div>
+              <div class="gal-char-slot slot-right"></div>
+            </div>
+
+            <!-- \u5BF9\u8BDD\u6846\u5C42 -->
+            <div class="gal-dialog-layer">
+              <button class="gal-sprite-toggle" title="\u663E\u793A/\u9690\u85CF\u7ACB\u7ED8">
+                <span class="gal-eye-icon">\u{1F441}</span>
+              </button>
+              <div class="gal-name-badge">
+                <span>\u65C1\u767D</span>
+              </div>
+
+              <div class="gal-interaction-bar">
+                <button class="gal-action-btn btn-reroll" data-action="reroll" title="\u91CD\u65B0\u751F\u6210">
+                  <i class="fa-solid fa-rotate-right"></i>
+                  <span>\u91CD\u7ED8\u5F53\u524D</span>
+                </button>
+                <button class="gal-action-btn btn-free" data-action="free-input" title="\u81EA\u7531\u8F93\u5165">
+                  <i class="fa-regular fa-keyboard"></i>
+                  <span>\u81EA\u7531\u5BF9\u8BDD</span>
+                </button>
+              </div>
+
+              <div class="gal-text-panel">
+                <p class="gal-dialog-text"></p>
+
+                <!-- \u751F\u6210\u4E2D\u7279\u6548\u6307\u793A\u5668 -->
+                <div class="gal-generating-indicator" id="gal-generating-indicator">
+                  <i class="fa-solid fa-wand-magic-sparkles gal-gen-icon"></i>
+                  <span class="gal-gen-text">\u751F\u6210\u4E2D</span>
+                  <span class="gal-gen-status" id="gal-gen-status">\u6B63\u5728\u521D\u59CB\u5316...</span>
+                  <div class="gal-gen-dots">
+                    <span class="gal-gen-dot"></span>
+                    <span class="gal-gen-dot"></span>
+                    <span class="gal-gen-dot"></span>
+                  </div>
+                </div>
+
+                <div class="gal-bottom-toolbar">
+                  <!-- \u79FB\u52A8\u7AEF\u4E0A\u62C9\u83DC\u5355 -->
+                  <div class="gal-mobile-menu" id="gal-mobile-menu">
+                    <button class="gal-menu-btn" data-action="open-settings">
+                        <i class="fa-solid fa-gear"></i> \u8BBE\u7F6E
+                    </button>
+                    <button class="gal-menu-btn" data-action="log">
+                        <i class="fa-solid fa-list-ul"></i> \u5386\u53F2
+                    </button>
+                    <button class="gal-menu-btn" data-action="close-mode">
+                        <i class="fa-solid fa-power-off"></i> \u9000\u51FA
+                    </button>
+                  </div>
+
+                  <button class="gal-footer-btn" data-action="log" title="\u67E5\u770B\u5386\u53F2">
+                    <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
+                  </button>
+                  <button class="gal-footer-btn" data-action="close-mode" title="\u9000\u51FA Galgame \u6A21\u5F0F">
+                    <i class="fa-solid fa-power-off"></i> <span class="gal-btn-text">CLOSE</span>
+                  </button>
+                  <button class="gal-footer-btn" data-action="config" title="\u8BBE\u7F6E">
+                    <i class="fa-solid fa-gear"></i> <span class="gal-btn-text">CONFIG</span>
+                  </button>
+                  <button class="gal-footer-btn gal-nav-btn" data-action="prev" title="\u4E0A\u4E00\u6BB5">
+                    <i class="fa-solid fa-chevron-left"></i> <span class="gal-btn-text">PREV</span>
+                  </button>
+                  <button class="gal-footer-btn gal-nav-btn" data-action="auto" title="\u81EA\u52A8\u64AD\u653E">
+                    <i class="fa-solid fa-play"></i> <span class="gal-btn-text">AUTO</span>
+                  </button>
+                  <button class="gal-footer-btn gal-nav-btn" data-action="skip" title="\u6309\u4F4F\u5FEB\u8FDB (Ctrl)">
+                    <i class="fa-solid fa-forward"></i> <span class="gal-btn-text">SKIP</span>
+                  </button>
+                  <button class="gal-pending-choices-btn" data-action="show-choices" title="\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879">
+                    <i class="fa-solid fa-list-check" style="font-size:1.1rem"></i> <span class="gal-btn-text">\u9009\u9879</span>
+                  </button>
+                  <button class="gal-footer-btn-next" data-action="next" title="\u4E0B\u4E00\u6BB5">
+                    <span class="gal-btn-text">NEXT</span> <i class="fa-solid fa-chevron-right"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- \u8FDB\u5EA6\u6761 -->
+              <div class="gal-progress-container">
+                <div class="gal-progress-bar"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CG \u5168\u5C4F\u67E5\u770B\u5668 -->
+        <div class="gal-cg-viewer" style="display:none;">
+          <img class="gal-cg-viewer-img" style="display:none;" />
+          <button class="gal-cg-viewer-close" title="\u5173\u95ED">
+            <i class="fa-solid fa-times"></i>
+          </button>
+          <div class="gal-cg-viewer-loading">\u56FE\u7247\u751F\u6210\u4E2D...</div>
+        </div>
+      </div>
+    `;
+      const $chat = $(targetDoc).find("#chat");
+      if ($chat.length) {
+        $chat.append(overlayHtml);
+      } else {
+        $(targetDoc.body).append(overlayHtml);
+      }
+      $overlay = $(targetDoc).find("#gal-global-overlay");
+    }
+    return $overlay;
+  }
+  function renderMainInterface() {
+    const targetDoc = topWindow.document;
+    let container = targetDoc.getElementById("galgame-database-container");
+    if (!container) {
+      container = targetDoc.createElement("div");
+      container.id = "galgame-database-container";
+      container.className = "galgame-database-container";
+      targetDoc.body.appendChild(container);
+      console.log(`[${SCRIPT_NAME}] \u5DF2\u521B\u5EFA galgame-database-container \u5BB9\u5668`);
+    }
+    container.style.display = "block";
+    return container;
+  }
+  function setChatScrollLock(locked) {
+    const targetDoc = topWindow.document;
+    const chatEl = targetDoc.getElementById("chat");
+    if (!chatEl) return;
+    if (locked) {
+      if (!chatScrollLockSnapshot) {
+        chatScrollLockSnapshot = {
+          overflowX: chatEl.style.overflowX || "",
+          overflowY: chatEl.style.overflowY || "",
+          overscrollBehavior: chatEl.style.overscrollBehavior || ""
+        };
+      }
+      chatEl.style.overflowX = "hidden";
+      chatEl.style.overflowY = "hidden";
+      chatEl.style.overscrollBehavior = "contain";
+      return;
+    }
+    if (!chatScrollLockSnapshot) return;
+    chatEl.style.overflowX = chatScrollLockSnapshot.overflowX;
+    chatEl.style.overflowY = chatScrollLockSnapshot.overflowY;
+    chatEl.style.overscrollBehavior = chatScrollLockSnapshot.overscrollBehavior;
+    chatScrollLockSnapshot = null;
+  }
+  function syncOverlayHeightToChatViewport(overlay, { force = false } = {}) {
+    if (!overlay || overlay.classList.contains("fullscreen")) return;
+    const targetDoc = topWindow.document;
+    const chatEl = targetDoc.getElementById("chat");
+    if (!chatEl) return;
+    const viewportHeight = Math.max(
+      1,
+      Math.floor(
+        Number(topWindow.innerHeight) || Number(targetDoc.documentElement?.clientHeight) || 0
+      )
+    );
+    const lastViewportHeight = Number(overlayHeightLockState.lastViewportHeight) || 0;
+    const viewportChanged = Math.abs(viewportHeight - lastViewportHeight) > OVERLAY_HEIGHT_RECALC_THRESHOLD;
+    const lockedHeight = Number(overlayHeightLockState.lastOverlayHeight) || 0;
+    if (!force && !viewportChanged && lockedHeight > 0) {
+      overlay.style.minHeight = "0px";
+      overlay.style.maxHeight = `${lockedHeight}px`;
+      overlay.style.height = `${lockedHeight}px`;
+      return;
+    }
+    const chatHeight = Number(chatEl.clientHeight) || 0;
+    if (!Number.isFinite(chatHeight) || chatHeight <= 0) return;
+    let marginTop = 0;
+    let marginBottom = 0;
+    try {
+      const computed = topWindow.getComputedStyle(overlay);
+      marginTop = parseFloat(computed.marginTop) || 0;
+      marginBottom = parseFloat(computed.marginBottom) || 0;
+    } catch (e) {
+    }
+    const targetHeight = Math.max(120, Math.floor(chatHeight - marginTop - marginBottom));
+    overlay.style.minHeight = "0px";
+    overlay.style.maxHeight = `${targetHeight}px`;
+    overlay.style.height = `${targetHeight}px`;
+    overlayHeightLockState.lastViewportHeight = viewportHeight;
+    overlayHeightLockState.lastOverlayHeight = targetHeight;
+  }
+  function adjustGameContentScale() {
+    const targetDoc = topWindow.document;
+    const overlay = targetDoc.getElementById("gal-global-overlay");
+    if (!overlay) return;
+    if (overlay.classList.contains("fullscreen")) {
+      overlay.style.setProperty("--ui-scale", "1");
+      return;
+    }
+    syncOverlayHeightToChatViewport(overlay);
+    const width = overlay.clientWidth || overlay.getBoundingClientRect().width;
+    if (!width || !Number.isFinite(width)) return;
+    const baseWidth = 1200;
+    const newScale = Math.max(0.01, Math.min(1, width / baseWidth));
+    const currentScale = parseFloat(overlay.style.getPropertyValue("--ui-scale")) || 0;
+    if (Math.abs(currentScale - newScale) < 1e-3) return;
+    overlay.style.setProperty("--ui-scale", String(newScale));
+  }
+  function resetGameContentScale() {
+    const targetDoc = topWindow.document;
+    const overlay = targetDoc.getElementById("gal-global-overlay");
+    if (overlay) {
+      overlay.style.setProperty("--ui-scale", "1");
+    }
+    const $gameContainer = $(targetDoc).find(".gal-game-container");
+    if (!$gameContainer.length) return;
+    $gameContainer.css({
+      "transform": "",
+      "width": "",
+      "height": "",
+      "position": "",
+      "left": "",
+      "right": "",
+      "top": "",
+      "bottom": "",
+      "margin": ""
+    });
+  }
+  function adjustToolbarForSpace() {
+    const overlay = topWindow.document.getElementById("gal-global-overlay");
+    if (!overlay) return;
+    overlay.classList.remove("mobile-mode");
+    overlay.classList.remove("icon-only");
+  }
+  function showGlobalOverlay() {
+    const $overlay = ensureGlobalOverlay();
+    if ($overlay.length) {
+      $overlay.addClass("active");
+      setChatScrollLock(true);
+      overlayHeightLockState.lastViewportHeight = 0;
+      overlayHeightLockState.lastOverlayHeight = 0;
+      setTimeout(() => {
+        syncOverlayHeightToChatViewport($overlay[0], { force: true });
+        adjustGameContentScale();
+        adjustToolbarForSpace();
+      }, 0);
+    } else {
+      console.error(`[${SCRIPT_NAME}] showGlobalOverlay: \u65E0\u6CD5\u83B7\u53D6\u8986\u76D6\u5C42\u5143\u7D20\uFF01`);
+    }
+  }
+  function hideGlobalOverlay() {
+    const targetDoc = topWindow.document;
+    $(targetDoc).find("#gal-global-overlay").removeClass("active");
+    setChatScrollLock(false);
+    overlayHeightLockState.lastViewportHeight = 0;
+    overlayHeightLockState.lastOverlayHeight = 0;
+    console.log(`[${SCRIPT_NAME}] \u9690\u85CF\u5168\u5C40Galgame\u8986\u76D6\u5C42`);
+  }
+  function toggleGlobalOverlay() {
+    const $overlay = ensureGlobalOverlay();
+    if ($overlay.hasClass("active")) {
+      hideGlobalOverlay();
+    } else {
+      showGlobalOverlay();
+    }
+  }
+  function showGeneratingIndicator(statusText = "\u6B63\u5728\u751F\u6210\u5185\u5BB9...") {
+    const $overlay = $("#gal-global-overlay");
+    if ($overlay.length === 0) return;
+    const $indicator = $overlay.find("#gal-generating-indicator");
+    const $status = $overlay.find("#gal-gen-status");
+    if ($indicator.length) {
+      $status.text(statusText);
+      $indicator.addClass("active");
+    }
+  }
+  function hideGeneratingIndicator() {
+    const $overlay = $("#gal-global-overlay");
+    if ($overlay.length === 0) return;
+    const $indicator = $overlay.find("#gal-generating-indicator");
+    if ($indicator.length) {
+      $indicator.removeClass("active");
+    }
+  }
+  function updateGeneratingStatus(statusText) {
+    const $overlay = $("#gal-global-overlay");
+    if ($overlay.length === 0) return;
+    const $status = $overlay.find("#gal-gen-status");
+    if ($status.length) {
+      $status.text(statusText);
+    }
+  }
+  function setupGameContentResizeListener() {
+    let resizeTimer = null;
+    let isProcessing = false;
+    const handleResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (isProcessing) return;
+        isProcessing = true;
+        const $overlay = $(topWindow.document).find("#gal-global-overlay");
+        if ($overlay.hasClass("active")) {
+          if ($overlay.hasClass("fullscreen")) {
+            resetGameContentScale();
+          } else {
+            adjustGameContentScale();
+          }
+          adjustToolbarForSpace();
+        }
+        requestAnimationFrame(() => {
+          isProcessing = false;
+        });
+      }, 200);
+    };
+    topWindow.addEventListener("resize", handleResize);
+    setTimeout(() => {
+      const $overlay = $(topWindow.document).find("#gal-global-overlay");
+      if ($overlay.hasClass("fullscreen")) {
+        resetGameContentScale();
+      } else {
+        adjustGameContentScale();
+      }
+      adjustToolbarForSpace();
+    }, 800);
+  }
+
   // src/live2d/position-editor.js
   var _getModalMountRootRef = null;
   function setPositionEditorRefs({ getModalMountRoot: getModalMountRoot2 }) {
@@ -4943,10 +5336,99 @@ ${lines.join("\n")}`;
     characterId: null,
     originalConfig: null,
     $toolbar: null,
+    $guide: null,
     isDragging: false,
     dragStart: { x: 0, y: 0 },
     modelStart: { x: 0, y: 0 },
     lastPinchDistance: 0,
+    currentSlot: "left",
+    _stagePushed: false,
+    _onResize: null,
+    // 进入编辑前，清理其它窗口并确保主界面可见
+    prepareEditContext() {
+      const _$ = topWindow.jQuery || $;
+      try {
+        Live2DStage.popMount();
+      } catch (e) {
+      }
+      const dismissSelectors = [
+        "#gal-custom-popup",
+        "#gal-history-modal",
+        "#gal-character-sprites-modal",
+        "#gal-settings-panel",
+        "#gal-asset-manager-modal",
+        "#gal-pack-manager-modal",
+        "#gal-transfer-modal",
+        "#gal-batch-bg-upload-modal",
+        "#gal-bg-upload-modal",
+        "#gal-live2d-settings-modal",
+        "#gal-prompts-modal",
+        "#gal-free-input-modal",
+        "#gal-import-pack-selector",
+        ".gal-input-modal",
+        ".gal-config-modal",
+        ".gal-z-dropdown"
+      ];
+      dismissSelectors.forEach((sel) => {
+        try {
+          _$(sel).remove();
+        } catch (e) {
+        }
+      });
+      let $overlay = _$("#gal-global-overlay");
+      if (!$overlay.length) {
+        $overlay = ensureGlobalOverlay();
+      }
+      if (!$overlay.length) {
+        const _toastr = topWindow.toastr || (typeof toastr !== "undefined" ? toastr : null);
+        if (_toastr) {
+          _toastr.error("\u672A\u627E\u5230\u6E38\u620F\u4E3B\u754C\u9762");
+        }
+        return false;
+      }
+      if (!$overlay.hasClass("active")) {
+        showGlobalOverlay();
+      } else {
+        setChatScrollLock(true);
+        syncOverlayHeightToChatViewport($overlay[0], { force: true });
+        adjustGameContentScale();
+      }
+      return true;
+    },
+    _removeGuide() {
+      const _$ = topWindow.jQuery || $;
+      _$("#gal-live2d-position-guide").remove();
+      this.$guide = null;
+    },
+    _createGuide() {
+      const _$ = topWindow.jQuery || $;
+      this._removeGuide();
+      const $gameContent = _$("#gal-global-overlay .gal-game-content");
+      if (!$gameContent.length) return;
+      const label = this.currentSlot === "right" ? "\u53F3\u4FA7\u89D2\u8272\u8C03\u6574\u533A\u57DF" : "\u5DE6\u4FA7\u89D2\u8272\u8C03\u6574\u533A\u57DF";
+      const guideHtml = `
+      <div id="gal-live2d-position-guide" class="gal-live2d-position-guide">
+        <div class="gal-live2d-position-guide-box">
+          <span class="gal-live2d-position-guide-label">${label}</span>
+        </div>
+      </div>
+    `;
+      $gameContent.append(guideHtml);
+      this.$guide = _$("#gal-live2d-position-guide");
+      this._updateGuideRect();
+    },
+    _updateGuideRect() {
+      if (!this.$guide || !this.$guide.length) return;
+      const rect = Live2DStage.slots[this.currentSlot]?.rect;
+      if (!rect) return;
+      const $box = this.$guide.find(".gal-live2d-position-guide-box");
+      $box.css({
+        left: `${Math.round(rect.x)}px`,
+        top: `${Math.round(rect.y)}px`,
+        width: `${Math.round(rect.width)}px`,
+        height: `${Math.round(rect.height)}px`
+      });
+    },
     async enter(characterId) {
       if (this.isActive) {
         this.exit(false);
@@ -4954,6 +5436,8 @@ ${lines.join("\n")}`;
       const _$ = topWindow.jQuery || $;
       this.characterId = characterId;
       this.isActive = true;
+      this._stagePushed = false;
+      this.currentSlot = "left";
       const config = getLive2DConfig(characterId);
       this.originalConfig = JSON.parse(JSON.stringify(config.transform || {}));
       let model = Live2DManager.models.get(characterId);
@@ -4968,6 +5452,15 @@ ${lines.join("\n")}`;
         this.isActive = false;
         return;
       }
+      if (!this.prepareEditContext()) {
+        this.isActive = false;
+        return;
+      }
+      const waitFrame = () => new Promise((resolve) => {
+        (topWindow.requestAnimationFrame || requestAnimationFrame)(() => resolve());
+      });
+      await waitFrame();
+      await waitFrame();
       const $gameContent = _$("#gal-global-overlay .gal-game-content");
       if (!$gameContent.length) {
         const _toastr = topWindow.toastr || (typeof toastr !== "undefined" ? toastr : null);
@@ -4977,49 +5470,28 @@ ${lines.join("\n")}`;
         this.isActive = false;
         return;
       }
-      _$("#gal-live2d-position-edit-container").remove();
-      let slotWidth = 200;
-      let slotHeight = 400;
-      const $existingSlot = _$("#gal-global-overlay .gal-char-slot").first();
-      if ($existingSlot.length) {
-        slotWidth = $existingSlot.width() || 200;
-        slotHeight = $existingSlot.height() || 400;
-      }
-      const fullscreenContainerHtml = `
-      <div id="gal-live2d-position-edit-container" class="gal-z-dropdown" style="
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: ${slotWidth}px;
-        height: ${slotHeight}px;
-        pointer-events: none;
-        border: 2px dashed rgba(0, 210, 255, 0.5);
-        border-radius: 8px;
-        box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
-        background: rgba(0, 0, 0, 0.1);
-      ">
-        <div class="gal-live2d-canvas-container" style="width: 100%; height: 100%; position: relative;"></div>
-      </div>
-    `;
-      $gameContent.append(fullscreenContainerHtml);
-      const $mainContainer = _$("#gal-live2d-position-edit-container .gal-live2d-canvas-container");
-      this._tempContainerCreated = true;
-      const containerEl = $mainContainer.get(0);
+      const existingSlot = Live2DStage.instances.get(characterId)?.slot;
+      this.currentSlot = existingSlot === "right" ? "right" : "left";
+      const containerEl = $gameContent.get(0);
       if (containerEl) {
-        Live2DStage.pushMount(containerEl, { mode: "single", focusCharacterId: characterId });
-        const attached = Live2DStage.attach(characterId, model, "left", { entering: false });
+        Live2DStage.pushMount(containerEl, { mode: "story", focusCharacterId: characterId });
+        this._stagePushed = true;
+        const attached = Live2DStage.attach(characterId, model, this.currentSlot, { entering: false });
         if (!attached) {
-          Live2DStage.popMount();
+          if (this._stagePushed) {
+            Live2DStage.popMount();
+            this._stagePushed = false;
+          }
           const _toastr = topWindow.toastr || (typeof toastr !== "undefined" ? toastr : null);
           if (_toastr) {
             _toastr.error("\u6A21\u578B\u6E32\u67D3\u5931\u8D25");
           }
           this.isActive = false;
-          _$("#gal-live2d-position-edit-container").remove();
-          this._tempContainerCreated = false;
           return;
         }
+        this.currentSlot = Live2DStage.instances.get(characterId)?.slot === "right" ? "right" : "left";
+        Live2DStage.updateLayout();
+        this._createGuide();
       }
       await new Promise((r) => requestAnimationFrame(r));
       model = Live2DManager.models.get(characterId);
@@ -5030,10 +5502,11 @@ ${lines.join("\n")}`;
           _toastr.error("\u6A21\u578B\u6E32\u67D3\u5931\u8D25");
         }
         this.isActive = false;
-        if (this._tempContainerCreated) {
-          _$(".gal-position-edit-temp").remove();
-          this._tempContainerCreated = false;
+        if (this._stagePushed) {
+          Live2DStage.popMount();
+          this._stagePushed = false;
         }
+        this._removeGuide();
         return;
       }
       Live2DManager.enableInteraction(characterId);
@@ -5044,7 +5517,7 @@ ${lines.join("\n")}`;
       if (transform) {
         this.updateDisplay(transform.offsetX, transform.offsetY, transform.scale);
       }
-      console.log(`[Live2DPositionEditor] \u8FDB\u5165\u8C03\u6574\u6A21\u5F0F: ${characterId}, \u5BB9\u5668\u5DF2\u5C31\u7EEA`);
+      console.log(`[Live2DPositionEditor] \u8FDB\u5165\u8C03\u6574\u6A21\u5F0F: ${characterId}, \u69FD\u4F4D=${this.currentSlot}`);
     },
     exit(save = false) {
       if (!this.isActive) return;
@@ -5078,19 +5551,19 @@ ${lines.join("\n")}`;
           Live2DManager.applyTransformConfig(characterId);
         }
       }
-      if (this._tempContainerCreated) {
+      if (this._stagePushed) {
         Live2DStage.popMount();
-        _$("#gal-live2d-position-edit-container").remove();
-        _$(".gal-position-edit-temp").remove();
-        this._tempContainerCreated = false;
+        this._stagePushed = false;
       }
       if (this.$toolbar) {
         this.$toolbar.remove();
         this.$toolbar = null;
       }
+      this._removeGuide();
       this.isActive = false;
       this.characterId = null;
       this.originalConfig = null;
+      this.currentSlot = "left";
       console.log(`[Live2DPositionEditor] \u9000\u51FA\u8C03\u6574\u6A21\u5F0F: ${characterId}, \u4FDD\u5B58: ${save}`);
     },
     updateDisplay(offsetX, offsetY, scale) {
@@ -5102,83 +5575,48 @@ ${lines.join("\n")}`;
       this.$toolbar.find("#gal-pos-x-slider").val(offsetX);
       this.$toolbar.find("#gal-pos-y-slider").val(offsetY);
       this.$toolbar.find("#gal-pos-scale-slider").val(scale);
+      this._updateGuideRect();
     },
     createToolbar() {
       const _$ = topWindow.jQuery || $;
       _$("#gal-live2d-position-toolbar").remove();
-      _$("#gal-live2d-position-hint").remove();
       const transform = Live2DManager.getCurrentTransform(this.characterId) || { offsetX: 0, offsetY: 0, scale: 1 };
       const self = this;
       const toolbarHtml = `
-      <div id="gal-live2d-position-toolbar" class="gal-z-critical" style="
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: linear-gradient(135deg, rgba(30, 30, 40, 0.98), rgba(50, 50, 70, 0.98));
-        backdrop-filter: blur(10px);
-        border-radius: 16px;
-        padding: 16px 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        color: #fff;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        min-width: 320px;
-      ">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="min-width: 70px; font-size: 0.85rem;">X \u504F\u79FB:</span>
+      <div id="gal-live2d-position-toolbar" class="gal-live2d-position-toolbar gal-z-critical">
+        <!-- X \u4F4D\u7F6E\u6ED1\u6761 -->
+        <div class="gal-live2d-position-row">
+          <span class="gal-live2d-position-label">X \u504F\u79FB:</span>
           <input type="range" id="gal-pos-x-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetX)}"
-            style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-          <span class="gal-pos-x-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetX)}</span>
+            class="gal-live2d-position-slider">
+          <span class="gal-live2d-position-value gal-pos-x-val">${Math.round(transform.offsetX)}</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="min-width: 70px; font-size: 0.85rem;">Y \u504F\u79FB:</span>
+
+        <!-- Y \u4F4D\u7F6E\u6ED1\u6761 -->
+        <div class="gal-live2d-position-row">
+          <span class="gal-live2d-position-label">Y \u504F\u79FB:</span>
           <input type="range" id="gal-pos-y-slider" min="-300" max="300" step="5" value="${Math.round(transform.offsetY)}"
-            style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-          <span class="gal-pos-y-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${Math.round(transform.offsetY)}</span>
+            class="gal-live2d-position-slider">
+          <span class="gal-live2d-position-value gal-pos-y-val">${Math.round(transform.offsetY)}</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="min-width: 70px; font-size: 0.85rem;">\u7F29\u653E:</span>
+
+        <!-- \u7F29\u653E\u6ED1\u6761 -->
+        <div class="gal-live2d-position-row">
+          <span class="gal-live2d-position-label">\u7F29\u653E:</span>
           <input type="range" id="gal-pos-scale-slider" min="0.3" max="2.5" step="0.05" value="${transform.scale.toFixed(2)}"
-            style="flex: 1; cursor: pointer; accent-color: #00d2ff;">
-          <span class="gal-pos-scale-val" style="min-width: 45px; text-align: right; font-weight: 600; font-size: 0.9rem;">${transform.scale.toFixed(2)}x</span>
+            class="gal-live2d-position-slider">
+          <span class="gal-live2d-position-value gal-pos-scale-val">${transform.scale.toFixed(2)}x</span>
         </div>
-        <div style="display: flex; gap: 10px; margin-top: 4px; justify-content: flex-end;">
-          <button id="gal-pos-reset" style="
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 6px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 0.85rem;
-          ">
+
+        <!-- \u6309\u94AE\u884C -->
+        <div class="gal-live2d-position-actions">
+          <button id="gal-pos-reset" class="gal-live2d-position-btn gal-live2d-position-btn-reset">
             <i class="fa-solid fa-undo"></i> \u91CD\u7F6E
           </button>
-          <button id="gal-pos-cancel" style="
-            padding: 8px 16px;
-            background: rgba(220, 53, 69, 0.8);
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 0.85rem;
-          ">
+          <button id="gal-pos-cancel" class="gal-live2d-position-btn gal-live2d-position-btn-cancel">
             <i class="fa-solid fa-times"></i> \u53D6\u6D88
           </button>
-          <button id="gal-pos-save" style="
-            padding: 8px 16px;
-            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 600;
-          ">
+          <button id="gal-pos-save" class="gal-live2d-position-btn gal-live2d-position-btn-save">
             <i class="fa-solid fa-check"></i> \u4FDD\u5B58
           </button>
         </div>
@@ -5221,12 +5659,33 @@ ${lines.join("\n")}`;
       this.updateDisplay(0, 0, 1);
     },
     bindDragEvents() {
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      if (this._onResize) {
+        try {
+          _topWindow.removeEventListener("resize", this._onResize);
+        } catch (e) {
+        }
+      }
+      this._onResize = () => {
+        Live2DStage.updateLayout();
+        this._updateGuideRect();
+      };
+      try {
+        _topWindow.addEventListener("resize", this._onResize, { passive: true });
+      } catch (e) {
+      }
     },
     bindZoomEvents() {
     },
     unbindEvents() {
-      const _$ = topWindow.jQuery || $;
-      _$("#gal-live2d-position-hint").remove();
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      if (this._onResize) {
+        try {
+          _topWindow.removeEventListener("resize", this._onResize);
+        } catch (e) {
+        }
+      }
+      this._onResize = null;
     }
   };
 
@@ -10138,6 +10597,145 @@ ${firstResult}`;
         pointer-events: none;
       }
 
+      /* Live2D 位置调整参考框 */
+      .gal-live2d-position-guide {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 6;
+      }
+
+      .gal-live2d-position-guide-box {
+        position: absolute;
+        border: 0.125rem dashed rgba(0, 210, 255, 0.55);
+        border-radius: 0.625rem;
+        box-shadow: 0 0 1rem rgba(0, 210, 255, 0.28);
+        background: rgba(0, 0, 0, 0.06);
+      }
+
+      .gal-live2d-position-guide-label {
+        position: absolute;
+        top: -1.25rem;
+        left: 0;
+        font-size: 0.72rem;
+        line-height: 1;
+        color: #77dfff;
+        text-shadow: 0 0 0.375rem rgba(0, 0, 0, 0.5);
+        white-space: nowrap;
+      }
+
+      /* Live2D 位置调整工具栏 */
+      .gal-live2d-position-toolbar {
+        position: fixed;
+        left: 50%;
+        bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-50%);
+        width: min(92vw, 36rem);
+        min-width: 20rem;
+        max-height: min(65vh, 33.75rem);
+        overflow-y: auto;
+        padding: 0.9375rem 1.125rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6875rem;
+        border-radius: 0.9375rem;
+        border: 0.0625rem solid rgba(255, 255, 255, 0.16);
+        color: #fff;
+        background: linear-gradient(135deg, rgba(26, 28, 38, 0.97), rgba(42, 46, 64, 0.97));
+        backdrop-filter: blur(0.625rem);
+        box-shadow: 0 0.5rem 1.75rem rgba(0, 0, 0, 0.46);
+      }
+
+      .gal-live2d-position-row {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+      }
+
+      .gal-live2d-position-label {
+        min-width: 4.5rem;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.92);
+      }
+
+      .gal-live2d-position-slider {
+        flex: 1;
+        cursor: pointer;
+        accent-color: #00d2ff;
+      }
+
+      .gal-live2d-position-value {
+        min-width: 2.875rem;
+        text-align: right;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .gal-live2d-position-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.625rem;
+        margin-top: 0.25rem;
+      }
+
+      .gal-live2d-position-btn {
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.85rem;
+      }
+
+      .gal-live2d-position-btn-reset {
+        background: rgba(255, 255, 255, 0.12);
+        border: 0.0625rem solid rgba(255, 255, 255, 0.2);
+      }
+
+      .gal-live2d-position-btn-cancel {
+        background: rgba(220, 53, 69, 0.82);
+      }
+
+      .gal-live2d-position-btn-save {
+        background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+        font-weight: 600;
+      }
+
+      @media screen and (max-width: 48rem), screen and (max-height: 46rem) {
+        .gal-live2d-position-toolbar {
+          top: calc(0.5rem + env(safe-area-inset-top, 0px));
+          bottom: auto;
+          width: calc(100vw - 1rem);
+          min-width: 0;
+          max-height: calc(72vh - env(safe-area-inset-top, 0px));
+          padding: 0.8125rem 0.8125rem 0.75rem;
+          border-radius: 0.75rem;
+        }
+
+        .gal-live2d-position-label {
+          min-width: 3.75rem;
+          font-size: 0.8rem;
+        }
+
+        .gal-live2d-position-value {
+          min-width: 2.5rem;
+          font-size: 0.85rem;
+        }
+
+        .gal-live2d-position-actions {
+          flex-wrap: wrap;
+          justify-content: stretch;
+          margin-top: 0.125rem;
+        }
+
+        .gal-live2d-position-btn {
+          flex: 1 1 calc(50% - 0.3125rem);
+          min-height: 2.25rem;
+          font-size: 0.82rem;
+          padding: 0.5rem 0.625rem;
+        }
+      }
+
       /* 多角色槽位 */
       .gal-char-slot {
         position: relative;
@@ -13559,399 +14157,6 @@ ${firstResult}`;
     });
     const $body = $modal.find(".gal-history-body");
     $body.scrollTop($body[0].scrollHeight);
-  }
-
-  // src/ui/overlay.js
-  var currentDisplayMesId = null;
-  var overlayUpdateQueue = Promise.resolve();
-  var chatScrollLockSnapshot = null;
-  var overlayHeightLockState = {
-    lastViewportHeight: 0,
-    lastOverlayHeight: 0
-  };
-  var OVERLAY_HEIGHT_RECALC_THRESHOLD = 24;
-  function getCurrentDisplayMesId() {
-    return currentDisplayMesId;
-  }
-  function setCurrentDisplayMesId(mesId) {
-    currentDisplayMesId = mesId;
-  }
-  function queueOverlayUpdate(source, updateTask) {
-    const run = async () => {
-      try {
-        return await updateTask();
-      } catch (error) {
-        console.error(`[${SCRIPT_NAME}] \u8986\u76D6\u5C42\u66F4\u65B0\u5931\u8D25(${source}):`, error);
-        return false;
-      }
-    };
-    overlayUpdateQueue = overlayUpdateQueue.then(run, run);
-    return overlayUpdateQueue;
-  }
-  function nextOverlayRenderToken(state) {
-    if (!state) return 0;
-    state.renderToken = (Number(state.renderToken) || 0) + 1;
-    return state.renderToken;
-  }
-  function scheduleOverlaySegmentDisplay(state, source = "unknown") {
-    if (!state) return Promise.resolve(false);
-    const token = nextOverlayRenderToken(state);
-    return queueOverlayUpdate(source, () => _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state, token) : Promise.resolve(false));
-  }
-  var _updateOverlaySegmentDisplayRef = null;
-  function setOverlayRefs({ updateOverlaySegmentDisplay: updateOverlaySegmentDisplay2 }) {
-    if (updateOverlaySegmentDisplay2) _updateOverlaySegmentDisplayRef = updateOverlaySegmentDisplay2;
-  }
-  function ensureGlobalOverlay() {
-    const settings = getSettings();
-    const targetDoc = topWindow.document;
-    let $overlay = $(targetDoc).find("#gal-global-overlay");
-    if (!$overlay.length) {
-      const overlayHtml = `
-      <div id="gal-global-overlay">
-        <!-- \u5730\u70B9\u65F6\u95F4\u72B6\u6001\u680F -->
-        <div class="gal-status-bar-container">
-          <div class="gal-location-bar" id="gal-location-bar" title="\u5F53\u524D\u5730\u70B9">
-            <i class="fa-solid fa-location-dot"></i>
-            <span class="gal-location-text" id="gal-location-text">--</span>
-          </div>
-          <div class="gal-time-bar" id="gal-time-bar" title="\u5F53\u524D\u65F6\u95F4">
-            <i class="fa-regular fa-clock"></i>
-            <span class="gal-time-text" id="gal-time-text">--</span>
-          </div>
-        </div>
-
-        <!-- \u5168\u5C4F\u5207\u6362\u6309\u94AE -->
-        <button class="gal-fullscreen-btn" data-action="toggle-fullscreen" title="\u5207\u6362\u5168\u5C4F">
-          <i class="fa-solid fa-expand"></i>
-          <span>\u5168\u5C4F</span>
-        </button>
-
-        <div class="gal-game-container">
-          <!-- \u80CC\u666F\u5C42 -->
-          <div class="gal-layer-bg">
-            <div class="gal-bg-layer gal-bg-base"></div>
-            <div class="gal-bg-layer gal-bg-front"></div>
-          </div>
-
-          <!-- \u6E38\u620F\u5185\u5BB9\u5C42 -->
-          <div class="gal-game-content">
-            <!-- \u7ACB\u7ED8\u5C42 -->
-            <div class="gal-layer-character${settings.speakerGlow ? " glow-enabled" : ""}${settings.speakerBubble ? " bubble-enabled" : ""}${getTTSEnabled() ? " tts-mode-enabled" : ""}">
-              <div class="gal-char-slot slot-left"></div>
-              <div class="gal-char-slot slot-right"></div>
-            </div>
-
-            <!-- \u5BF9\u8BDD\u6846\u5C42 -->
-            <div class="gal-dialog-layer">
-              <button class="gal-sprite-toggle" title="\u663E\u793A/\u9690\u85CF\u7ACB\u7ED8">
-                <span class="gal-eye-icon">\u{1F441}</span>
-              </button>
-              <div class="gal-name-badge">
-                <span>\u65C1\u767D</span>
-              </div>
-
-              <div class="gal-interaction-bar">
-                <button class="gal-action-btn btn-reroll" data-action="reroll" title="\u91CD\u65B0\u751F\u6210">
-                  <i class="fa-solid fa-rotate-right"></i>
-                  <span>\u91CD\u7ED8\u5F53\u524D</span>
-                </button>
-                <button class="gal-action-btn btn-free" data-action="free-input" title="\u81EA\u7531\u8F93\u5165">
-                  <i class="fa-regular fa-keyboard"></i>
-                  <span>\u81EA\u7531\u5BF9\u8BDD</span>
-                </button>
-              </div>
-
-              <div class="gal-text-panel">
-                <p class="gal-dialog-text"></p>
-
-                <!-- \u751F\u6210\u4E2D\u7279\u6548\u6307\u793A\u5668 -->
-                <div class="gal-generating-indicator" id="gal-generating-indicator">
-                  <i class="fa-solid fa-wand-magic-sparkles gal-gen-icon"></i>
-                  <span class="gal-gen-text">\u751F\u6210\u4E2D</span>
-                  <span class="gal-gen-status" id="gal-gen-status">\u6B63\u5728\u521D\u59CB\u5316...</span>
-                  <div class="gal-gen-dots">
-                    <span class="gal-gen-dot"></span>
-                    <span class="gal-gen-dot"></span>
-                    <span class="gal-gen-dot"></span>
-                  </div>
-                </div>
-
-                <div class="gal-bottom-toolbar">
-                  <!-- \u79FB\u52A8\u7AEF\u4E0A\u62C9\u83DC\u5355 -->
-                  <div class="gal-mobile-menu" id="gal-mobile-menu">
-                    <button class="gal-menu-btn" data-action="open-settings">
-                        <i class="fa-solid fa-gear"></i> \u8BBE\u7F6E
-                    </button>
-                    <button class="gal-menu-btn" data-action="log">
-                        <i class="fa-solid fa-list-ul"></i> \u5386\u53F2
-                    </button>
-                    <button class="gal-menu-btn" data-action="close-mode">
-                        <i class="fa-solid fa-power-off"></i> \u9000\u51FA
-                    </button>
-                  </div>
-
-                  <button class="gal-footer-btn" data-action="log" title="\u67E5\u770B\u5386\u53F2">
-                    <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
-                  </button>
-                  <button class="gal-footer-btn" data-action="close-mode" title="\u9000\u51FA Galgame \u6A21\u5F0F">
-                    <i class="fa-solid fa-power-off"></i> <span class="gal-btn-text">CLOSE</span>
-                  </button>
-                  <button class="gal-footer-btn" data-action="config" title="\u8BBE\u7F6E">
-                    <i class="fa-solid fa-gear"></i> <span class="gal-btn-text">CONFIG</span>
-                  </button>
-                  <button class="gal-footer-btn gal-nav-btn" data-action="prev" title="\u4E0A\u4E00\u6BB5">
-                    <i class="fa-solid fa-chevron-left"></i> <span class="gal-btn-text">PREV</span>
-                  </button>
-                  <button class="gal-footer-btn gal-nav-btn" data-action="auto" title="\u81EA\u52A8\u64AD\u653E">
-                    <i class="fa-solid fa-play"></i> <span class="gal-btn-text">AUTO</span>
-                  </button>
-                  <button class="gal-footer-btn gal-nav-btn" data-action="skip" title="\u6309\u4F4F\u5FEB\u8FDB (Ctrl)">
-                    <i class="fa-solid fa-forward"></i> <span class="gal-btn-text">SKIP</span>
-                  </button>
-                  <button class="gal-pending-choices-btn" data-action="show-choices" title="\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879">
-                    <i class="fa-solid fa-list-check" style="font-size:1.1rem"></i> <span class="gal-btn-text">\u9009\u9879</span>
-                  </button>
-                  <button class="gal-footer-btn-next" data-action="next" title="\u4E0B\u4E00\u6BB5">
-                    <span class="gal-btn-text">NEXT</span> <i class="fa-solid fa-chevron-right"></i>
-                  </button>
-                </div>
-              </div>
-
-              <!-- \u8FDB\u5EA6\u6761 -->
-              <div class="gal-progress-container">
-                <div class="gal-progress-bar"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- CG \u5168\u5C4F\u67E5\u770B\u5668 -->
-        <div class="gal-cg-viewer" style="display:none;">
-          <img class="gal-cg-viewer-img" style="display:none;" />
-          <button class="gal-cg-viewer-close" title="\u5173\u95ED">
-            <i class="fa-solid fa-times"></i>
-          </button>
-          <div class="gal-cg-viewer-loading">\u56FE\u7247\u751F\u6210\u4E2D...</div>
-        </div>
-      </div>
-    `;
-      const $chat = $(targetDoc).find("#chat");
-      if ($chat.length) {
-        $chat.append(overlayHtml);
-      } else {
-        $(targetDoc.body).append(overlayHtml);
-      }
-      $overlay = $(targetDoc).find("#gal-global-overlay");
-    }
-    return $overlay;
-  }
-  function renderMainInterface() {
-    const targetDoc = topWindow.document;
-    let container = targetDoc.getElementById("galgame-database-container");
-    if (!container) {
-      container = targetDoc.createElement("div");
-      container.id = "galgame-database-container";
-      container.className = "galgame-database-container";
-      targetDoc.body.appendChild(container);
-      console.log(`[${SCRIPT_NAME}] \u5DF2\u521B\u5EFA galgame-database-container \u5BB9\u5668`);
-    }
-    container.style.display = "block";
-    return container;
-  }
-  function setChatScrollLock(locked) {
-    const targetDoc = topWindow.document;
-    const chatEl = targetDoc.getElementById("chat");
-    if (!chatEl) return;
-    if (locked) {
-      if (!chatScrollLockSnapshot) {
-        chatScrollLockSnapshot = {
-          overflowX: chatEl.style.overflowX || "",
-          overflowY: chatEl.style.overflowY || "",
-          overscrollBehavior: chatEl.style.overscrollBehavior || ""
-        };
-      }
-      chatEl.style.overflowX = "hidden";
-      chatEl.style.overflowY = "hidden";
-      chatEl.style.overscrollBehavior = "contain";
-      return;
-    }
-    if (!chatScrollLockSnapshot) return;
-    chatEl.style.overflowX = chatScrollLockSnapshot.overflowX;
-    chatEl.style.overflowY = chatScrollLockSnapshot.overflowY;
-    chatEl.style.overscrollBehavior = chatScrollLockSnapshot.overscrollBehavior;
-    chatScrollLockSnapshot = null;
-  }
-  function syncOverlayHeightToChatViewport(overlay, { force = false } = {}) {
-    if (!overlay || overlay.classList.contains("fullscreen")) return;
-    const targetDoc = topWindow.document;
-    const chatEl = targetDoc.getElementById("chat");
-    if (!chatEl) return;
-    const viewportHeight = Math.max(
-      1,
-      Math.floor(
-        Number(topWindow.innerHeight) || Number(targetDoc.documentElement?.clientHeight) || 0
-      )
-    );
-    const lastViewportHeight = Number(overlayHeightLockState.lastViewportHeight) || 0;
-    const viewportChanged = Math.abs(viewportHeight - lastViewportHeight) > OVERLAY_HEIGHT_RECALC_THRESHOLD;
-    const lockedHeight = Number(overlayHeightLockState.lastOverlayHeight) || 0;
-    if (!force && !viewportChanged && lockedHeight > 0) {
-      overlay.style.minHeight = "0px";
-      overlay.style.maxHeight = `${lockedHeight}px`;
-      overlay.style.height = `${lockedHeight}px`;
-      return;
-    }
-    const chatHeight = Number(chatEl.clientHeight) || 0;
-    if (!Number.isFinite(chatHeight) || chatHeight <= 0) return;
-    let marginTop = 0;
-    let marginBottom = 0;
-    try {
-      const computed = topWindow.getComputedStyle(overlay);
-      marginTop = parseFloat(computed.marginTop) || 0;
-      marginBottom = parseFloat(computed.marginBottom) || 0;
-    } catch (e) {
-    }
-    const targetHeight = Math.max(120, Math.floor(chatHeight - marginTop - marginBottom));
-    overlay.style.minHeight = "0px";
-    overlay.style.maxHeight = `${targetHeight}px`;
-    overlay.style.height = `${targetHeight}px`;
-    overlayHeightLockState.lastViewportHeight = viewportHeight;
-    overlayHeightLockState.lastOverlayHeight = targetHeight;
-  }
-  function adjustGameContentScale() {
-    const targetDoc = topWindow.document;
-    const overlay = targetDoc.getElementById("gal-global-overlay");
-    if (!overlay) return;
-    if (overlay.classList.contains("fullscreen")) {
-      overlay.style.setProperty("--ui-scale", "1");
-      return;
-    }
-    syncOverlayHeightToChatViewport(overlay);
-    const width = overlay.clientWidth || overlay.getBoundingClientRect().width;
-    if (!width || !Number.isFinite(width)) return;
-    const baseWidth = 1200;
-    const newScale = Math.max(0.01, Math.min(1, width / baseWidth));
-    const currentScale = parseFloat(overlay.style.getPropertyValue("--ui-scale")) || 0;
-    if (Math.abs(currentScale - newScale) < 1e-3) return;
-    overlay.style.setProperty("--ui-scale", String(newScale));
-  }
-  function resetGameContentScale() {
-    const targetDoc = topWindow.document;
-    const overlay = targetDoc.getElementById("gal-global-overlay");
-    if (overlay) {
-      overlay.style.setProperty("--ui-scale", "1");
-    }
-    const $gameContainer = $(targetDoc).find(".gal-game-container");
-    if (!$gameContainer.length) return;
-    $gameContainer.css({
-      "transform": "",
-      "width": "",
-      "height": "",
-      "position": "",
-      "left": "",
-      "right": "",
-      "top": "",
-      "bottom": "",
-      "margin": ""
-    });
-  }
-  function adjustToolbarForSpace() {
-    const overlay = topWindow.document.getElementById("gal-global-overlay");
-    if (!overlay) return;
-    overlay.classList.remove("mobile-mode");
-    overlay.classList.remove("icon-only");
-  }
-  function showGlobalOverlay() {
-    const $overlay = ensureGlobalOverlay();
-    if ($overlay.length) {
-      $overlay.addClass("active");
-      setChatScrollLock(true);
-      overlayHeightLockState.lastViewportHeight = 0;
-      overlayHeightLockState.lastOverlayHeight = 0;
-      setTimeout(() => {
-        syncOverlayHeightToChatViewport($overlay[0], { force: true });
-        adjustGameContentScale();
-        adjustToolbarForSpace();
-      }, 0);
-    } else {
-      console.error(`[${SCRIPT_NAME}] showGlobalOverlay: \u65E0\u6CD5\u83B7\u53D6\u8986\u76D6\u5C42\u5143\u7D20\uFF01`);
-    }
-  }
-  function hideGlobalOverlay() {
-    const targetDoc = topWindow.document;
-    $(targetDoc).find("#gal-global-overlay").removeClass("active");
-    setChatScrollLock(false);
-    overlayHeightLockState.lastViewportHeight = 0;
-    overlayHeightLockState.lastOverlayHeight = 0;
-    console.log(`[${SCRIPT_NAME}] \u9690\u85CF\u5168\u5C40Galgame\u8986\u76D6\u5C42`);
-  }
-  function toggleGlobalOverlay() {
-    const $overlay = ensureGlobalOverlay();
-    if ($overlay.hasClass("active")) {
-      hideGlobalOverlay();
-    } else {
-      showGlobalOverlay();
-    }
-  }
-  function showGeneratingIndicator(statusText = "\u6B63\u5728\u751F\u6210\u5185\u5BB9...") {
-    const $overlay = $("#gal-global-overlay");
-    if ($overlay.length === 0) return;
-    const $indicator = $overlay.find("#gal-generating-indicator");
-    const $status = $overlay.find("#gal-gen-status");
-    if ($indicator.length) {
-      $status.text(statusText);
-      $indicator.addClass("active");
-    }
-  }
-  function hideGeneratingIndicator() {
-    const $overlay = $("#gal-global-overlay");
-    if ($overlay.length === 0) return;
-    const $indicator = $overlay.find("#gal-generating-indicator");
-    if ($indicator.length) {
-      $indicator.removeClass("active");
-    }
-  }
-  function updateGeneratingStatus(statusText) {
-    const $overlay = $("#gal-global-overlay");
-    if ($overlay.length === 0) return;
-    const $status = $overlay.find("#gal-gen-status");
-    if ($status.length) {
-      $status.text(statusText);
-    }
-  }
-  function setupGameContentResizeListener() {
-    let resizeTimer = null;
-    let isProcessing = false;
-    const handleResize = () => {
-      if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        if (isProcessing) return;
-        isProcessing = true;
-        const $overlay = $(topWindow.document).find("#gal-global-overlay");
-        if ($overlay.hasClass("active")) {
-          if ($overlay.hasClass("fullscreen")) {
-            resetGameContentScale();
-          } else {
-            adjustGameContentScale();
-          }
-          adjustToolbarForSpace();
-        }
-        requestAnimationFrame(() => {
-          isProcessing = false;
-        });
-      }, 200);
-    };
-    topWindow.addEventListener("resize", handleResize);
-    setTimeout(() => {
-      const $overlay = $(topWindow.document).find("#gal-global-overlay");
-      if ($overlay.hasClass("fullscreen")) {
-        resetGameContentScale();
-      } else {
-        adjustGameContentScale();
-      }
-      adjustToolbarForSpace();
-    }, 800);
   }
 
   // src/ui/next-btn.js

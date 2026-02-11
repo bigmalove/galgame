@@ -172,7 +172,6 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
       $nameBadge.removeClass('gal-narrator-label');
     }
     $overlay.find('.gal-dialog-text').text(segment.text || '');
-    $cgBtn.hide();
   }
 
   const total = state.segments.length;

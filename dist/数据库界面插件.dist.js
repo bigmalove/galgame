@@ -14143,7 +14143,6 @@ ${firstResult}`;
         $nameBadge.removeClass("gal-narrator-label");
       }
       $overlay.find(".gal-dialog-text").text(segment.text || "");
-      $cgBtn.hide();
     }
     const total = state.segments.length;
     const progressPercent = total > 0 ? (currentIndex + 1) / total * 100 : 0;

@@ -186,6 +186,15 @@ export function ensureGlobalOverlay() {
             </div>
           </div>
         </div>
+
+        <!-- CG 全屏查看器 -->
+        <div class="gal-cg-viewer" style="display:none;">
+          <img class="gal-cg-viewer-img" style="display:none;" />
+          <button class="gal-cg-viewer-close" title="关闭">
+            <i class="fa-solid fa-times"></i>
+          </button>
+          <div class="gal-cg-viewer-loading">图片生成中...</div>
+        </div>
       </div>
     `;
 

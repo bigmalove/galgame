@@ -13,6 +13,7 @@ import { getHistoryFromDatabase, showHistoryModal } from './history.js';
 import { showToast } from './toast.js';
 import { showCustomPopupPanel } from './modal.js';
 import { ensureGlobalOverlay, showGlobalOverlay, scheduleOverlaySegmentDisplay } from './overlay.js';
+import { detectAndCaptureCg } from './overlay-content.js';
 import { showFreeInputModal, triggerReroll, startSkipping, stopSkipping, startRewinding, stopRewinding, triggerPrevSegment, clearRewindHoldTimer, setRewindHoldTimer } from './interaction.js';
 import { renderGalgameChoices } from './choices.js';
 import { updateButtonState } from './menu-button.js';
@@ -157,6 +158,7 @@ export function setupGlobalEventListeners() {
 
     if (contentToProcess) {
       const parsed = parseGalgameContent(contentToProcess);
+      detectAndCaptureCg(mesId, $mes[0], parsed);
       if (parsed.segments.length > 0 && _updateGlobalOverlayContentRef) {
         await _updateGlobalOverlayContentRef(mesId, parsed);
         showGlobalOverlay();
@@ -284,26 +286,8 @@ export function setupGlobalEventListeners() {
     }
   });
 
-  // PREV按钮
-  $(doc).on('click', '#gal-global-overlay [data-action="prev"]', async function (e) {
-    e.stopPropagation();
-    const $overlay = $('#gal-global-overlay');
-    const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
-    const state = messageSegmentState.get(String(mesId));
-    if (!state) return;
-    if (state.currentIndex > 0) {
-      TTSManager.stop();
-      state.currentIndex--;
-      await scheduleOverlaySegmentDisplay(state, 'prev-click');
-      const prevSegment = state.segments[state.currentIndex];
-      if (prevSegment && prevSegment.type === 'dialogue' && settings.ttsEnabled) {
-        const segmentId = `${mesId}_${state.currentIndex}`;
-        TTSManager.speak(prevSegment, segmentId);
-      }
-    } else {
-      showToast('已是第一段');
-    }
-  });
+  // PREV按钮: click 事件由 mouseup 处理器中的 triggerPrevSegment() 处理
+  // 不再单独注册 click，避免 mouseup + click 双重触发导致退两段
 
   // AUTO按钮
   $(doc).on('click', '#gal-global-overlay [data-action="auto"]', function (e) {
@@ -378,6 +362,23 @@ export function setupGlobalEventListeners() {
     const character = $container.data('character') || 'default';
     const expression = $container.data('expression') || '默认';
     if (_showSpriteUploadDialogRef) await _showSpriteUploadDialogRef(character, expression);
+  });
+
+  // 点击 CG 缩略图查看大图
+  $(doc).on('click', '#gal-global-overlay .gal-cg-thumbnail', function (e) {
+    e.stopPropagation();
+    const src = $(this).attr('src');
+    if (!src) return;
+    const $viewer = $('#gal-global-overlay .gal-cg-viewer');
+    $viewer.find('.gal-cg-viewer-img').attr('src', src).show();
+    $viewer.find('.gal-cg-viewer-loading').hide();
+    $viewer.show();
+  });
+
+  // CG 查看器关闭
+  $(doc).on('click', '#gal-global-overlay .gal-cg-viewer', function (e) {
+    e.stopPropagation();
+    $(this).hide();
   });
 
   // 双击立绘修改

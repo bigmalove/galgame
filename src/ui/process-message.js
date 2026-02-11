@@ -10,6 +10,7 @@ import { RE_GAL_TAGS } from '../logic/parser.js';
 import { parseGalgameContent } from '../logic/parser.js';
 import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.js';
 import { showGlobalOverlay } from './overlay.js';
+import { detectAndCaptureCg } from './overlay-content.js';
 import { injectGalgameButton } from './menu-button.js';
 import { renderBGMWidget } from './bgm-widget.js';
 import { hideNonLastFloors } from './galgame-mode.js';
@@ -112,6 +113,9 @@ export function processNewMessage(mesNode) {
       }
     }
   }
+
+  // CG 图片：从 DOM 检测 st-chatu8 渲染的图片
+  detectAndCaptureCg(mesId, mesNode, parsed);
 
   console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed.segments.length}`);
 

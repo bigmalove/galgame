@@ -220,6 +220,12 @@ export function triggerPrevSegment() {
     TTSManager.stop();
     state.currentIndex--;
     scheduleOverlaySegmentDisplay(state, 'trigger-prev');
+    const settings = getSettings();
+    const prevSegment = state.segments[state.currentIndex];
+    if (prevSegment && prevSegment.type === 'dialogue' && settings.ttsEnabled) {
+      const segmentId = `${mesId}_${state.currentIndex}`;
+      TTSManager.speak(prevSegment, segmentId);
+    }
   } else {
     showToast('已是第一段');
   }

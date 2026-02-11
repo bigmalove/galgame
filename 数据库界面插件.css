@@ -905,6 +905,66 @@
         color: #fff;
       }
 
+      /* CG 缩略图 */
+      .gal-cg-thumbnail {
+        max-height: 3.5rem;
+        border-radius: 0.25rem;
+        vertical-align: middle;
+        margin-right: 0.5rem;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      }
+
+      /* CG 全屏查看器 */
+      .gal-cg-viewer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.92);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .gal-cg-viewer-img {
+        max-width: 90%;
+        max-height: 90%;
+        object-fit: contain;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      }
+
+      .gal-cg-viewer-close {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(255,255,255,0.15);
+        border: none;
+        color: #fff;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        transition: background 0.2s ease;
+      }
+
+      .gal-cg-viewer-close:hover {
+        background: rgba(255,255,255,0.3);
+      }
+
+      .gal-cg-viewer-loading {
+        color: rgba(255,255,255,0.6);
+        font-size: 1.1rem;
+      }
+
       /* 生成中状态指示器 */
       .gal-generating-status {
         position: absolute;

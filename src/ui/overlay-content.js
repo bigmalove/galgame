@@ -61,16 +61,30 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
   const displayText = displaySegment.text || '';
   const speaker = displaySegment.speaker;
   const isNarration = displaySegment.type === 'narration';
+  const isCg = displaySegment.type === 'cg';
 
   const $nameBadge = $overlay.find('.gal-name-badge');
-  $nameBadge.find('span').text(speaker || '旁白');
-  if (isNarration) {
-    $nameBadge.addClass('gal-narrator-label');
-  } else {
-    $nameBadge.removeClass('gal-narrator-label');
-  }
 
-  $overlay.find('.gal-dialog-text').text(displayText);
+  if (isCg) {
+    $nameBadge.find('span').text('CG');
+    $nameBadge.removeClass('gal-narrator-label');
+    const cgSrc = getCapturedCgImage(mesId, displaySegment.cgIndex);
+    if (cgSrc) {
+      $overlay.find('.gal-dialog-text').html(
+        '<img class="gal-cg-thumbnail" src="' + cgSrc.replace(/"/g, '&quot;') + '" />'
+      );
+    } else {
+      $overlay.find('.gal-dialog-text').text('图片生成中...');
+    }
+  } else {
+    $nameBadge.find('span').text(speaker || '旁白');
+    if (isNarration) {
+      $nameBadge.addClass('gal-narrator-label');
+    } else {
+      $nameBadge.removeClass('gal-narrator-label');
+    }
+    $overlay.find('.gal-dialog-text').text(displayText);
+  }
 
   const total = segments.length;
   const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
@@ -107,7 +121,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
   $overlay.find('.gal-game-container').attr('data-mes-id', mesId);
   updateLocationTimeDisplay();
 
-  if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration) {
+  if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
     const segmentId = `${mesId}_${currentIndex}`;
     TTSManager.stop();
     TTSManager.speak(displaySegment, segmentId);
@@ -134,16 +148,32 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
 
   const speaker = segment.speaker;
   const isNarration = segment.type === 'narration';
+  const isCg = segment.type === 'cg';
 
   const $nameBadge = $overlay.find('.gal-name-badge');
-  $nameBadge.find('span').text(speaker || '旁白');
-  if (isNarration) {
-    $nameBadge.addClass('gal-narrator-label');
-  } else {
-    $nameBadge.removeClass('gal-narrator-label');
-  }
 
-  $overlay.find('.gal-dialog-text').text(segment.text || '');
+  if (isCg) {
+    $nameBadge.find('span').text('CG');
+    $nameBadge.removeClass('gal-narrator-label');
+    const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
+    const cgSrc = getCapturedCgImage(mesId, segment.cgIndex);
+    if (cgSrc) {
+      $overlay.find('.gal-dialog-text').html(
+        '<img class="gal-cg-thumbnail" src="' + cgSrc.replace(/"/g, '&quot;') + '" />'
+      );
+    } else {
+      $overlay.find('.gal-dialog-text').text('图片生成中...');
+    }
+  } else {
+    $nameBadge.find('span').text(speaker || '旁白');
+    if (isNarration) {
+      $nameBadge.addClass('gal-narrator-label');
+    } else {
+      $nameBadge.removeClass('gal-narrator-label');
+    }
+    $overlay.find('.gal-dialog-text').text(segment.text || '');
+    $cgBtn.hide();
+  }
 
   const total = state.segments.length;
   const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
@@ -231,6 +261,8 @@ export async function refreshOverlayFromLastAiMessage() {
   const parsed = parseGalgameContent(contentToProcess);
   if (parsed.segments.length === 0) return;
 
+  detectAndCaptureCg(mesId, $lastAiMes[0], parsed);
+
   await updateGlobalOverlayContent(mesId, parsed);
   showGlobalOverlay();
   updateLocationTimeDisplay();
@@ -240,6 +272,124 @@ export async function renderGalgameMessage(mesId, parsedContent) {
   await updateGlobalOverlayContent(mesId, parsedContent);
   showGlobalOverlay();
   updateLocationTimeDisplay();
+}
+
+// ============================================
+// CG 图片捕获机制
+// ============================================
+
+const capturedCgImages = new Map(); // mesId -> [imgSrc, ...]
+const cgObservers = new Map(); // mesId -> MutationObserver
+
+export function getCapturedCgImage(mesId, cgIndex) {
+  const images = capturedCgImages.get(String(mesId));
+  return images ? images[cgIndex] || null : null;
+}
+
+function collectCgImages(mesId, mesTextNode, cgCount) {
+  const imgs = mesTextNode.querySelectorAll('.st-chatu8-collapse-content img');
+  const sources = Array.from(imgs)
+    .map(img => img.src || img.getAttribute('src') || '')
+    .filter(src => src && src !== '');
+
+  const existing = capturedCgImages.get(String(mesId)) || [];
+  if (sources.length !== existing.length || sources.some((s, i) => s !== existing[i])) {
+    capturedCgImages.set(String(mesId), sources);
+    refreshCgDisplayIfNeeded(mesId);
+  }
+}
+
+function refreshCgDisplayIfNeeded(mesId) {
+  const $overlay = $('#gal-global-overlay');
+  if (!$overlay.length || !$overlay.hasClass('active')) return;
+
+  const currentMesId = $overlay.find('.gal-game-container').attr('data-mes-id');
+  if (String(currentMesId) !== String(mesId)) return;
+
+  const state = messageSegmentState.get(String(mesId));
+  if (!state) return;
+
+  const currentSegment = state.segments[state.currentIndex];
+  if (!currentSegment || currentSegment.type !== 'cg') return;
+
+  const cgSrc = getCapturedCgImage(mesId, currentSegment.cgIndex);
+  if (cgSrc) {
+    $overlay.find('.gal-dialog-text').html(
+      '<img class="gal-cg-thumbnail" src="' + cgSrc.replace(/"/g, '&quot;') + '" />'
+    );
+  }
+}
+
+/**
+ * 从 DOM 检测 CG 图片并注入段落
+ * 直接扫描 .mes_text 中的 .st-chatu8-collapse-content 容器
+ */
+export function detectAndCaptureCg(mesId, mesNode, parsed) {
+  const mesText = mesNode.querySelector ? mesNode.querySelector('.mes_text') : $(mesNode).find('.mes_text')[0];
+  if (!mesText) return 0;
+
+  const containers = mesText.querySelectorAll('.st-chatu8-collapse-content');
+  if (containers.length === 0) return 0;
+
+  const mesIdStr = String(mesId);
+
+  // 立即抓取图片 src
+  const sources = [];
+  containers.forEach((container, i) => {
+    const img = container.querySelector('img');
+    const src = img ? (img.src || '') : '';
+    sources.push(src);
+  });
+  capturedCgImages.set(mesIdStr, sources.filter(s => s));
+
+  // 确定 CG 在 DOM 中的位置，按 <p> 兄弟顺序插入
+  const cgParentPs = new Set();
+  containers.forEach(c => {
+    const p = c.closest('p');
+    if (p) cgParentPs.add(p);
+  });
+
+  // 移除旧 CG 段落（避免缓存重复）
+  const baseSegments = parsed.segments.filter(s => s.type !== 'cg');
+
+  // 遍历 .mes_text 下的 <p>，按顺序交织普通段落和 CG 段落
+  const allPs = mesText.querySelectorAll(':scope > p');
+  let regularIdx = 0;
+  let cgIdx = 0;
+  const merged = [];
+
+  allPs.forEach(p => {
+    if (cgParentPs.has(p)) {
+      merged.push({ type: 'cg', speaker: null, text: '', expression: null, cgIndex: cgIdx++ });
+    } else {
+      if (regularIdx < baseSegments.length) {
+        merged.push(baseSegments[regularIdx++]);
+      }
+    }
+  });
+  // 追加剩余段落（如长段落切分产生的额外段落）
+  while (regularIdx < baseSegments.length) {
+    merged.push(baseSegments[regularIdx++]);
+  }
+
+  parsed.segments = merged;
+
+  // MutationObserver 监听异步图片加载
+  if (cgObservers.has(mesIdStr)) {
+    cgObservers.get(mesIdStr).disconnect();
+  }
+  const observer = new MutationObserver(() => {
+    collectCgImages(mesIdStr, mesText, containers.length);
+  });
+  observer.observe(mesText, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['src'],
+  });
+  cgObservers.set(mesIdStr, observer);
+
+  return cgIdx;
 }
 
 // 延迟引用

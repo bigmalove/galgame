@@ -10420,6 +10420,66 @@ ${firstResult}`;
         color: #fff;
       }
 
+      /* CG 缩略图 */
+      .gal-cg-thumbnail {
+        max-height: 3.5rem;
+        border-radius: 0.25rem;
+        vertical-align: middle;
+        margin-right: 0.5rem;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      }
+
+      /* CG 全屏查看器 */
+      .gal-cg-viewer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.92);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .gal-cg-viewer-img {
+        max-width: 90%;
+        max-height: 90%;
+        object-fit: contain;
+        border-radius: 0.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      }
+
+      .gal-cg-viewer-close {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(255,255,255,0.15);
+        border: none;
+        color: #fff;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        transition: background 0.2s ease;
+      }
+
+      .gal-cg-viewer-close:hover {
+        background: rgba(255,255,255,0.3);
+      }
+
+      .gal-cg-viewer-loading {
+        color: rgba(255,255,255,0.6);
+        font-size: 1.1rem;
+      }
+
       /* 生成中状态指示器 */
       .gal-generating-status {
         position: absolute;
@@ -13665,6 +13725,15 @@ ${firstResult}`;
             </div>
           </div>
         </div>
+
+        <!-- CG \u5168\u5C4F\u67E5\u770B\u5668 -->
+        <div class="gal-cg-viewer" style="display:none;">
+          <img class="gal-cg-viewer-img" style="display:none;" />
+          <button class="gal-cg-viewer-close" title="\u5173\u95ED">
+            <i class="fa-solid fa-times"></i>
+          </button>
+          <div class="gal-cg-viewer-loading">\u56FE\u7247\u751F\u6210\u4E2D...</div>
+        </div>
       </div>
     `;
       const $chat = $(targetDoc).find("#chat");
@@ -13981,14 +14050,28 @@ ${firstResult}`;
     const displayText = displaySegment.text || "";
     const speaker = displaySegment.speaker;
     const isNarration = displaySegment.type === "narration";
+    const isCg = displaySegment.type === "cg";
     const $nameBadge = $overlay.find(".gal-name-badge");
-    $nameBadge.find("span").text(speaker || "\u65C1\u767D");
-    if (isNarration) {
-      $nameBadge.addClass("gal-narrator-label");
-    } else {
+    if (isCg) {
+      $nameBadge.find("span").text("CG");
       $nameBadge.removeClass("gal-narrator-label");
+      const cgSrc = getCapturedCgImage(mesId, displaySegment.cgIndex);
+      if (cgSrc) {
+        $overlay.find(".gal-dialog-text").html(
+          '<img class="gal-cg-thumbnail" src="' + cgSrc.replace(/"/g, "&quot;") + '" />'
+        );
+      } else {
+        $overlay.find(".gal-dialog-text").text("\u56FE\u7247\u751F\u6210\u4E2D...");
+      }
+    } else {
+      $nameBadge.find("span").text(speaker || "\u65C1\u767D");
+      if (isNarration) {
+        $nameBadge.addClass("gal-narrator-label");
+      } else {
+        $nameBadge.removeClass("gal-narrator-label");
+      }
+      $overlay.find(".gal-dialog-text").text(displayText);
     }
-    $overlay.find(".gal-dialog-text").text(displayText);
     const total = segments.length;
     const progressPercent = total > 0 ? (currentIndex + 1) / total * 100 : 0;
     $overlay.find(".gal-progress-bar").css("width", `${progressPercent}%`);
@@ -14018,7 +14101,7 @@ ${firstResult}`;
     }
     $overlay.find(".gal-game-container").attr("data-mes-id", mesId);
     updateLocationTimeDisplay();
-    if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration) {
+    if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
       const segmentId = `${mesId}_${currentIndex}`;
       TTSManager.stop();
       TTSManager.speak(displaySegment, segmentId);
@@ -14038,14 +14121,30 @@ ${firstResult}`;
     }
     const speaker = segment.speaker;
     const isNarration = segment.type === "narration";
+    const isCg = segment.type === "cg";
     const $nameBadge = $overlay.find(".gal-name-badge");
-    $nameBadge.find("span").text(speaker || "\u65C1\u767D");
-    if (isNarration) {
-      $nameBadge.addClass("gal-narrator-label");
-    } else {
+    if (isCg) {
+      $nameBadge.find("span").text("CG");
       $nameBadge.removeClass("gal-narrator-label");
+      const mesId = $overlay.find(".gal-game-container").attr("data-mes-id");
+      const cgSrc = getCapturedCgImage(mesId, segment.cgIndex);
+      if (cgSrc) {
+        $overlay.find(".gal-dialog-text").html(
+          '<img class="gal-cg-thumbnail" src="' + cgSrc.replace(/"/g, "&quot;") + '" />'
+        );
+      } else {
+        $overlay.find(".gal-dialog-text").text("\u56FE\u7247\u751F\u6210\u4E2D...");
+      }
+    } else {
+      $nameBadge.find("span").text(speaker || "\u65C1\u767D");
+      if (isNarration) {
+        $nameBadge.addClass("gal-narrator-label");
+      } else {
+        $nameBadge.removeClass("gal-narrator-label");
+      }
+      $overlay.find(".gal-dialog-text").text(segment.text || "");
+      $cgBtn.hide();
     }
-    $overlay.find(".gal-dialog-text").text(segment.text || "");
     const total = state.segments.length;
     const progressPercent = total > 0 ? (currentIndex + 1) / total * 100 : 0;
     $overlay.find(".gal-progress-bar").css("width", `${progressPercent}%`);
@@ -14119,6 +14218,7 @@ ${firstResult}`;
     }
     const parsed = parseGalgameContent(contentToProcess);
     if (parsed.segments.length === 0) return;
+    detectAndCaptureCg(mesId, $lastAiMes[0], parsed);
     await updateGlobalOverlayContent(mesId, parsed);
     showGlobalOverlay();
     updateLocationTimeDisplay();
@@ -14127,6 +14227,88 @@ ${firstResult}`;
     await updateGlobalOverlayContent(mesId, parsedContent);
     showGlobalOverlay();
     updateLocationTimeDisplay();
+  }
+  var capturedCgImages = /* @__PURE__ */ new Map();
+  var cgObservers = /* @__PURE__ */ new Map();
+  function getCapturedCgImage(mesId, cgIndex) {
+    const images = capturedCgImages.get(String(mesId));
+    return images ? images[cgIndex] || null : null;
+  }
+  function collectCgImages(mesId, mesTextNode, cgCount) {
+    const imgs = mesTextNode.querySelectorAll(".st-chatu8-collapse-content img");
+    const sources = Array.from(imgs).map((img) => img.src || img.getAttribute("src") || "").filter((src) => src && src !== "");
+    const existing = capturedCgImages.get(String(mesId)) || [];
+    if (sources.length !== existing.length || sources.some((s, i) => s !== existing[i])) {
+      capturedCgImages.set(String(mesId), sources);
+      refreshCgDisplayIfNeeded(mesId);
+    }
+  }
+  function refreshCgDisplayIfNeeded(mesId) {
+    const $overlay = $("#gal-global-overlay");
+    if (!$overlay.length || !$overlay.hasClass("active")) return;
+    const currentMesId = $overlay.find(".gal-game-container").attr("data-mes-id");
+    if (String(currentMesId) !== String(mesId)) return;
+    const state = messageSegmentState3.get(String(mesId));
+    if (!state) return;
+    const currentSegment = state.segments[state.currentIndex];
+    if (!currentSegment || currentSegment.type !== "cg") return;
+    const cgSrc = getCapturedCgImage(mesId, currentSegment.cgIndex);
+    if (cgSrc) {
+      $overlay.find(".gal-dialog-text").html(
+        '<img class="gal-cg-thumbnail" src="' + cgSrc.replace(/"/g, "&quot;") + '" />'
+      );
+    }
+  }
+  function detectAndCaptureCg(mesId, mesNode, parsed) {
+    const mesText = mesNode.querySelector ? mesNode.querySelector(".mes_text") : $(mesNode).find(".mes_text")[0];
+    if (!mesText) return 0;
+    const containers = mesText.querySelectorAll(".st-chatu8-collapse-content");
+    if (containers.length === 0) return 0;
+    const mesIdStr = String(mesId);
+    const sources = [];
+    containers.forEach((container, i) => {
+      const img = container.querySelector("img");
+      const src = img ? img.src || "" : "";
+      sources.push(src);
+    });
+    capturedCgImages.set(mesIdStr, sources.filter((s) => s));
+    const cgParentPs = /* @__PURE__ */ new Set();
+    containers.forEach((c) => {
+      const p = c.closest("p");
+      if (p) cgParentPs.add(p);
+    });
+    const baseSegments = parsed.segments.filter((s) => s.type !== "cg");
+    const allPs = mesText.querySelectorAll(":scope > p");
+    let regularIdx = 0;
+    let cgIdx = 0;
+    const merged = [];
+    allPs.forEach((p) => {
+      if (cgParentPs.has(p)) {
+        merged.push({ type: "cg", speaker: null, text: "", expression: null, cgIndex: cgIdx++ });
+      } else {
+        if (regularIdx < baseSegments.length) {
+          merged.push(baseSegments[regularIdx++]);
+        }
+      }
+    });
+    while (regularIdx < baseSegments.length) {
+      merged.push(baseSegments[regularIdx++]);
+    }
+    parsed.segments = merged;
+    if (cgObservers.has(mesIdStr)) {
+      cgObservers.get(mesIdStr).disconnect();
+    }
+    const observer = new MutationObserver(() => {
+      collectCgImages(mesIdStr, mesText, containers.length);
+    });
+    observer.observe(mesText, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src"]
+    });
+    cgObservers.set(mesIdStr, observer);
+    return cgIdx;
   }
   var _renderGalgameChoicesRef = null;
   function setOverlayContentRefs({ renderGalgameChoices: renderGalgameChoices2 }) {
@@ -14320,6 +14502,12 @@ ${firstResult}`;
       TTSManager.stop();
       state.currentIndex--;
       scheduleOverlaySegmentDisplay(state, "trigger-prev");
+      const settings = getSettings();
+      const prevSegment = state.segments[state.currentIndex];
+      if (prevSegment && prevSegment.type === "dialogue" && settings.ttsEnabled) {
+        const segmentId = `${mesId}_${state.currentIndex}`;
+        TTSManager.speak(prevSegment, segmentId);
+      }
     } else {
       showToast4("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
     }
@@ -14940,6 +15128,7 @@ ${firstResult}`;
         }
       }
     }
+    detectAndCaptureCg(mesId, mesNode, parsed);
     console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage \u89E3\u6790\u5B8C\u6210. Segments: ${parsed.segments.length}`);
     if (parsed.segments.length === 0) {
       if (!settings.smartDetection && contentToProcess && contentToProcess.trim().length > 0) {
@@ -15106,6 +15295,7 @@ ${firstResult}`;
       }
       if (contentToProcess) {
         const parsed = parseGalgameContent(contentToProcess);
+        detectAndCaptureCg(mesId, $mes[0], parsed);
         if (parsed.segments.length > 0 && _updateGlobalOverlayContentRef5) {
           await _updateGlobalOverlayContentRef5(mesId, parsed);
           showGlobalOverlay();
@@ -15212,25 +15402,6 @@ ${firstResult}`;
         showToast4("\u5DF2\u662F\u6700\u540E\u4E00\u6BB5");
       }
     });
-    $(doc).on("click", '#gal-global-overlay [data-action="prev"]', async function(e) {
-      e.stopPropagation();
-      const $overlay = $("#gal-global-overlay");
-      const mesId = $overlay.find(".gal-game-container").attr("data-mes-id");
-      const state = messageSegmentState7.get(String(mesId));
-      if (!state) return;
-      if (state.currentIndex > 0) {
-        TTSManager.stop();
-        state.currentIndex--;
-        await scheduleOverlaySegmentDisplay(state, "prev-click");
-        const prevSegment = state.segments[state.currentIndex];
-        if (prevSegment && prevSegment.type === "dialogue" && settings.ttsEnabled) {
-          const segmentId = `${mesId}_${state.currentIndex}`;
-          TTSManager.speak(prevSegment, segmentId);
-        }
-      } else {
-        showToast4("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
-      }
-    });
     $(doc).on("click", '#gal-global-overlay [data-action="auto"]', function(e) {
       e.stopPropagation();
       const $btn = $(this);
@@ -15298,6 +15469,19 @@ ${firstResult}`;
       const character = $container.data("character") || "default";
       const expression = $container.data("expression") || "\u9ED8\u8BA4";
       if (_showSpriteUploadDialogRef2) await _showSpriteUploadDialogRef2(character, expression);
+    });
+    $(doc).on("click", "#gal-global-overlay .gal-cg-thumbnail", function(e) {
+      e.stopPropagation();
+      const src = $(this).attr("src");
+      if (!src) return;
+      const $viewer = $("#gal-global-overlay .gal-cg-viewer");
+      $viewer.find(".gal-cg-viewer-img").attr("src", src).show();
+      $viewer.find(".gal-cg-viewer-loading").hide();
+      $viewer.show();
+    });
+    $(doc).on("click", "#gal-global-overlay .gal-cg-viewer", function(e) {
+      e.stopPropagation();
+      $(this).hide();
     });
     $(doc).on("dblclick", "#gal-global-overlay .gal-char-img", async function(e) {
       e.stopPropagation();

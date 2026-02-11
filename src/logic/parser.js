@@ -360,6 +360,13 @@ export function parseGalgameContent(html, messageId) {
       dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
     }
 
+    // 验证说话人名称是否合理：真实角色名不含句子标点或数字，且通常不超过10个字符
+    const isValidSpeaker = (name) => {
+      if (name.length > 10) return false;
+      if (/[，,。.、；;！!？?…—–0-9０-９]/.test(name)) return false;
+      return true;
+    };
+
     if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
       let speaker = dialogueMatch[1].trim();
       const dialogue = dialogueMatch[2].trim();
@@ -386,7 +393,7 @@ export function parseGalgameContent(html, messageId) {
         };
       }
 
-      if (speaker.length <= 20 && speaker.length > 0) {
+      if (isValidSpeaker(speaker)) {
         const segResult = {
           type: 'dialogue',
           speaker: speaker,

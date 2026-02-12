@@ -8,6 +8,7 @@ import {
   getCharacterTTSVoice,
   resolveVoiceByName,
   inferResourceId,
+  normalizeGptSoVitsSwitchMode,
 } from './tts-config.js';
 import { Live2DManager } from '../live2d/manager.js';
 import { LipSyncManager } from '../live2d/lip-sync.js';
@@ -16,6 +17,30 @@ import { LipSyncManager } from '../live2d/lip-sync.js';
 let _showToastRef = null;
 export function setTTSManagerRefs({ showToast }) {
   if (showToast) _showToastRef = showToast;
+}
+
+function showToast(msg) {
+  if (_showToastRef) _showToastRef(msg);
+}
+
+function clipText(text, max = 160) {
+  const value = String(text || '');
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}...`;
+}
+
+function isProxyNotFound(status, bodyText = '') {
+  if (status !== 404) return false;
+  const body = String(bodyText || '').toLowerCase();
+  return body.includes('not found') || body.includes('/proxy') || body.includes('cannot get');
+}
+
+function safeUrl(input) {
+  try {
+    return new URL(String(input || ''));
+  } catch (e) {
+    return null;
+  }
 }
 
 // ============================================
@@ -30,10 +55,17 @@ export const TTSManager = {
   currentAudio: null,
   currentSegmentId: null,
   littleWhiteBox: null,
+  _gptSoVitsResolvedProxyRoute: '',
+  _gptSoVitsActiveWeights: { gpt: '', sovits: '' },
+  _gptSoVitsWeightSwitchUnavailable: false,
+  _gptSoVitsWeightSwitchWarned: false,
+  _gptSoVitsProxyWarned: false,
+  _gptSoVitsFetchController: null,
 
   _refreshProviderState() {
     const provider = getTTSProvider();
     this.provider = provider;
+    this.autoPlay = getSettings()?.ttsAutoPlay !== false;
 
     if (provider === TTS_PROVIDER.LITTLEWHITEBOX) {
       if (topWindow.xiaobaixTts) {
@@ -89,9 +121,19 @@ export const TTSManager = {
     $('.gal-char-container').removeClass('tts-active');
   },
 
+  _abortGptSoVitsFetch(reason = 'manual') {
+    if (this._gptSoVitsFetchController) {
+      try {
+        this._gptSoVitsFetchController.abort(reason);
+      } catch (e) {}
+      this._gptSoVitsFetchController = null;
+    }
+  },
+
   stop() {
     if (!this.isPlaying && !this.isLoading) return;
 
+    this._abortGptSoVitsFetch('stop');
     console.log(`[${SCRIPT_NAME}] TTS: 中止当前播放`);
 
     try {
@@ -174,54 +216,83 @@ export const TTSManager = {
     return null;
   },
 
+  _isProxyUrl(url) {
+    const parsed = safeUrl(url);
+    if (!parsed) return false;
+    return /^\/proxy(\/|\?|$)/i.test(parsed.pathname);
+  },
+
+  _buildGptSoVitsProxyUrl(route, originalUrl) {
+    const direct = String(originalUrl || '').trim();
+    if (!direct) return '';
+    const encoded = encodeURIComponent(direct);
+    const origin = window.location?.origin || '';
+
+    switch (route) {
+      case 'proxy_path_relative':
+        return `/proxy/${encoded}`;
+      case 'proxy_path_origin':
+        return origin ? `${origin}/proxy/${encoded}` : '';
+      case 'proxy_query_relative':
+        return `/proxy?url=${encoded}`;
+      case 'proxy_query_origin':
+        return origin ? `${origin}/proxy?url=${encoded}` : '';
+      default:
+        return '';
+    }
+  },
+
+  _rememberProxyRoute(route, url) {
+    if (!route) return;
+    if (this._gptSoVitsResolvedProxyRoute !== route) {
+      this._gptSoVitsResolvedProxyRoute = route;
+      console.log(`[${SCRIPT_NAME}] GPT-SoVITS 代理路由已锁定: ${route} -> ${clipText(url, 96)}`);
+    }
+  },
+
   _getProxiedAudioUrl(originalUrl) {
+    const directUrl = String(originalUrl || '').trim();
+    if (!directUrl) return directUrl;
+    if (this._isProxyUrl(directUrl)) return directUrl;
+
     const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
 
     if (typeof _topWindow.getCorsProxyUrl === 'function') {
       try {
-        const proxied = _topWindow.getCorsProxyUrl(originalUrl);
-        console.log(`[${SCRIPT_NAME}] LipSync: 使用 getCorsProxyUrl 代理音频`);
-        return proxied;
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] LipSync: getCorsProxyUrl 失败`, e);
-      }
+        const proxied = _topWindow.getCorsProxyUrl(directUrl);
+        if (typeof proxied === 'string' && proxied) return proxied;
+      } catch (e) {}
     }
 
     if (typeof _topWindow.enableCorsProxy === 'function') {
       try {
-        const proxied = _topWindow.enableCorsProxy(originalUrl);
-        if (typeof proxied === 'string' && proxied) {
-          console.log(`[${SCRIPT_NAME}] LipSync: 使用 enableCorsProxy 代理音频`);
-          return proxied;
-        }
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] LipSync: enableCorsProxy 失败`, e);
-      }
+        const proxied = _topWindow.enableCorsProxy(directUrl);
+        if (typeof proxied === 'string' && proxied) return proxied;
+      } catch (e) {}
     }
 
     if (_topWindow.corsProxy?.getProxyUrl) {
       try {
-        const proxied = _topWindow.corsProxy.getProxyUrl(originalUrl);
-        console.log(`[${SCRIPT_NAME}] LipSync: 使用 corsProxy.getProxyUrl 代理音频`);
-        return proxied;
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] LipSync: corsProxy.getProxyUrl 失败`, e);
-      }
+        const proxied = _topWindow.corsProxy.getProxyUrl(directUrl);
+        if (typeof proxied === 'string' && proxied) return proxied;
+      } catch (e) {}
     }
 
-    if (_topWindow.location) {
-      const origin = _topWindow.location.origin;
-      console.log(`[${SCRIPT_NAME}] LipSync: 使用默认代理端点 /proxy`);
-      return `${origin}/proxy?url=${encodeURIComponent(originalUrl)}`;
+    const remembered = String(this._gptSoVitsResolvedProxyRoute || '').trim();
+    if (remembered) {
+      const rememberedUrl = this._buildGptSoVitsProxyUrl(remembered, directUrl);
+      if (rememberedUrl) return rememberedUrl;
     }
 
-    return originalUrl;
+    return this._buildGptSoVitsProxyUrl('proxy_path_relative', directUrl)
+      || this._buildGptSoVitsProxyUrl('proxy_query_relative', directUrl)
+      || directUrl;
   },
 
   _buildGptSoVitsTtsUrl(text, resolvedVoice) {
     const cfg = getGptSoVitsConfig();
     const base = String(cfg.apiUrl || '').replace(/\/$/, '');
-    const endpointRaw = String(cfg.endpoint || '/tts');
+    const endpointRaw = String(cfg.endpoint || '/tts').trim();
     const endpoint = endpointRaw.startsWith('/') ? endpointRaw : `/${endpointRaw}`;
     if (!base) return '';
 
@@ -252,22 +323,197 @@ export const TTSManager = {
     }
   },
 
+  async _requestGptSoVitsApi(method, pathname, queryParams = {}, jsonBody = undefined) {
+    const cfg = getGptSoVitsConfig();
+    const base = String(cfg.apiUrl || '').replace(/\/$/, '');
+    const pathRaw = String(pathname || '').trim() || '/';
+    const path = pathRaw.startsWith('/') ? pathRaw : `/${pathRaw}`;
+    if (!base) throw new Error('GPT-SoVITS API 地址为空');
+
+    const directUrlObj = new URL(base + path);
+    Object.entries(queryParams || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        directUrlObj.searchParams.set(String(key), String(value));
+      }
+    });
+    const directUrl = directUrlObj.toString();
+
+    const attemptTargets = [];
+    if (!cfg.useCorsProxy) {
+      attemptTargets.push({ route: 'direct', url: directUrl });
+    } else {
+      const preferred = String(this._gptSoVitsResolvedProxyRoute || '').trim();
+      const seen = new Set();
+      const addTarget = (route, url) => {
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        attemptTargets.push({ route, url });
+      };
+
+      if (preferred) addTarget(preferred, this._buildGptSoVitsProxyUrl(preferred, directUrl));
+      addTarget('proxy_path_relative', this._buildGptSoVitsProxyUrl('proxy_path_relative', directUrl));
+      addTarget('proxy_path_origin', this._buildGptSoVitsProxyUrl('proxy_path_origin', directUrl));
+      addTarget('proxy_query_relative', this._buildGptSoVitsProxyUrl('proxy_query_relative', directUrl));
+      addTarget('proxy_query_origin', this._buildGptSoVitsProxyUrl('proxy_query_origin', directUrl));
+      addTarget('direct', directUrl);
+    }
+
+    const errors = [];
+    for (const target of attemptTargets) {
+      const controller = new AbortController();
+      this._gptSoVitsFetchController = controller;
+
+      try {
+        const options = {
+          method,
+          mode: 'cors',
+          credentials: 'omit',
+          signal: controller.signal,
+          headers: {},
+        };
+
+        if (jsonBody !== undefined) {
+          options.headers['Content-Type'] = 'application/json';
+          options.body = JSON.stringify(jsonBody);
+        }
+
+        const response = await fetch(target.url, options);
+        const text = await response.text();
+
+        if (response.ok) {
+          if (target.route !== 'direct') {
+            this._rememberProxyRoute(target.route, target.url);
+          }
+          return { text, status: response.status, url: target.url, route: target.route };
+        }
+
+        if (target.route !== 'direct' && isProxyNotFound(response.status, text)) {
+          errors.push(`${target.route}:HTTP${response.status}(proxy-not-found)`);
+          continue;
+        }
+
+        errors.push(`${target.route}:HTTP${response.status}:${clipText(text, 120)}`);
+      } catch (e) {
+        const msg = e?.message || String(e);
+        errors.push(`${target.route}:${msg}`);
+      } finally {
+        if (this._gptSoVitsFetchController === controller) {
+          this._gptSoVitsFetchController = null;
+        }
+      }
+    }
+
+    throw new Error(`${method} ${path} 失败 -> ${errors.join(' | ')}`);
+  },
+
+  async _fetchGptSoVitsApi(pathname, queryParams = {}) {
+    const { text } = await this._requestGptSoVitsApi('GET', pathname, queryParams);
+    return text;
+  },
+
+  async _postGptSoVitsApi(pathname, jsonBody = {}) {
+    const { text } = await this._requestGptSoVitsApi('POST', pathname, {}, jsonBody);
+    return text;
+  },
+
+  async _setGptSoVitsWeights(kind, weightsPath) {
+    const normalizedKind = kind === 'gpt' ? 'gpt' : 'sovits';
+    const path = String(weightsPath || '').trim();
+    if (!path) return;
+    const endpoint = `/set_${normalizedKind}_weights`;
+    await this._fetchGptSoVitsApi(endpoint, { weights_path: path });
+  },
+
+  async _setGptSoVitsModelPair(gptWeightsPath, sovitsWeightsPath, endpointOverride = '') {
+    const cfg = getGptSoVitsConfig();
+    const endpoint = String(endpointOverride || cfg.setModelEndpoint || '/set_model').trim() || '/set_model';
+
+    try {
+      await this._postGptSoVitsApi(endpoint, {
+        gpt_model_path: String(gptWeightsPath || '').trim(),
+        sovits_model_path: String(sovitsWeightsPath || '').trim(),
+      });
+      return;
+    } catch (postErr) {
+      await this._fetchGptSoVitsApi(endpoint, {
+        gpt_model_path: String(gptWeightsPath || '').trim(),
+        sovits_model_path: String(sovitsWeightsPath || '').trim(),
+      });
+    }
+  },
+
+  async _ensureGptSoVitsWeights(resolvedVoice) {
+    const cfg = getGptSoVitsConfig();
+    const vcfg = resolvedVoice?.gptSoVits || {};
+
+    const desiredGpt = String(vcfg.gptWeightsPath || '').trim();
+    const desiredSovits = String(vcfg.sovitsWeightsPath || '').trim();
+
+    let switchMode = normalizeGptSoVitsSwitchMode(vcfg.modelSwitchMode || cfg.modelSwitchMode);
+    const setModelEndpoint = String(vcfg.setModelEndpoint || cfg.setModelEndpoint || '/set_model').trim() || '/set_model';
+
+    if (switchMode === 'none') return true;
+    if (!desiredGpt && !desiredSovits) return true;
+    if (this._gptSoVitsWeightSwitchUnavailable) return false;
+
+    if (switchMode === 'set_model') {
+      if (desiredGpt && desiredSovits) {
+        try {
+          await this._setGptSoVitsModelPair(desiredGpt, desiredSovits, setModelEndpoint);
+          this._gptSoVitsActiveWeights.gpt = desiredGpt;
+          this._gptSoVitsActiveWeights.sovits = desiredSovits;
+          return true;
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: set_model 失败，回退 set_weights`, e);
+          switchMode = 'set_weights';
+        }
+      } else {
+        switchMode = 'set_weights';
+      }
+    }
+
+    if (switchMode === 'set_weights') {
+      try {
+        if (desiredGpt && desiredGpt !== this._gptSoVitsActiveWeights.gpt) {
+          await this._setGptSoVitsWeights('gpt', desiredGpt);
+          this._gptSoVitsActiveWeights.gpt = desiredGpt;
+        }
+        if (desiredSovits && desiredSovits !== this._gptSoVitsActiveWeights.sovits) {
+          await this._setGptSoVitsWeights('sovits', desiredSovits);
+          this._gptSoVitsActiveWeights.sovits = desiredSovits;
+        }
+        return true;
+      } catch (e) {
+        if (!this._gptSoVitsWeightSwitchWarned) {
+          this._gptSoVitsWeightSwitchWarned = true;
+          showToast('GPT-SoVITS 切换权重失败，请检查 /proxy 与 set_* 接口');
+        }
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: set_weights 失败`, e);
+        return false;
+      }
+    }
+
+    return true;
+  },
+
   async _speakWithGptSoVits(segment, segmentId, resolvedVoice) {
     const cfg = getGptSoVitsConfig();
     const vcfg = resolvedVoice?.gptSoVits || {};
 
     if (!cfg.apiUrl) {
-      if (_showToastRef) _showToastRef('GPT-SoVITS: 请先在设置中填写 API 地址');
+      showToast('GPT-SoVITS: 请先在设置中填写 API 地址');
       return false;
     }
-    if (!vcfg.refAudioPath) {
-      if (_showToastRef) _showToastRef('GPT-SoVITS: 当前音色缺少 refAudioPath');
+    if (!String(vcfg.refAudioPath || '').trim()) {
+      showToast('GPT-SoVITS: 当前音色缺少 refAudioPath');
       return false;
     }
 
+    await this._ensureGptSoVitsWeights(resolvedVoice);
+
     const directUrl = this._buildGptSoVitsTtsUrl(segment.text, resolvedVoice);
     if (!directUrl) {
-      if (_showToastRef) _showToastRef('GPT-SoVITS: 无法生成请求URL');
+      showToast('GPT-SoVITS: 无法生成请求URL');
       return false;
     }
 
@@ -287,7 +533,12 @@ export const TTSManager = {
     };
     const onError = e => {
       console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: audio error`, e);
-      if (_showToastRef) _showToastRef('GPT-SoVITS 播放失败（检查地址/代理/CORS）');
+      if (!this._gptSoVitsProxyWarned && cfg.useCorsProxy) {
+        this._gptSoVitsProxyWarned = true;
+        showToast('GPT-SoVITS 代理失败，请检查 /proxy 路由和 CORS 设置');
+      } else {
+        showToast('GPT-SoVITS 播放失败（检查地址/代理/CORS）');
+      }
       onEnded();
     };
 
@@ -298,7 +549,7 @@ export const TTSManager = {
       await audio.play();
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: play() 失败`, e);
-      if (_showToastRef) _showToastRef('GPT-SoVITS 播放被浏览器拦截（需要用户交互）');
+      showToast('GPT-SoVITS 播放被浏览器拦截（需要用户交互）');
       onEnded();
       return false;
     }
@@ -550,6 +801,7 @@ export const TTSManager = {
   },
 
   speakCurrent(state) {
+    this.autoPlay = getSettings()?.ttsAutoPlay !== false;
     if (!state || !this.autoPlay) return;
 
     const provider = getTTSProvider();

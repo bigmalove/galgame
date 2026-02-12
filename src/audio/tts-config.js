@@ -14,6 +14,19 @@ export const TTS_PROVIDER = {
 const TTS_ENABLED_KEY = GalgameStore.STORAGE_KEYS.TTS_ENABLED;
 const CHAR_TTS_VOICE_KEY = GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE;
 
+export function normalizeGptSoVitsSwitchMode(mode) {
+  const s = String(mode || '').trim().toLowerCase();
+  if (s === 'none' || s === 'off' || s === 'disabled') return 'none';
+  if (s === 'set_model' || s === 'model') return 'set_model';
+  return 'set_weights';
+}
+
+function normalizeSetModelEndpoint(endpoint) {
+  const raw = String(endpoint || '').trim();
+  if (!raw) return '/set_model';
+  return raw.startsWith('/') ? raw : `/${raw}`;
+}
+
 export function getTTSProvider() {
   try {
     const settings = getSettings();
@@ -29,17 +42,30 @@ export function getGptSoVitsConfig() {
     endpoint: '/tts',
     useCorsProxy: true,
     mediaType: 'wav',
-    streamingMode: true,
+    streamingMode: false,
     textLang: 'auto',
     textSplitMethod: 'cut5',
     speedFactor: 1,
+    strictWeightSwitch: false,
+    probeOnAudioError: false,
+    modelSwitchMode: 'set_weights',
+    setModelEndpoint: '/set_model',
+    importPathPrefix: '',
     voices: [],
   };
 
   try {
     const settings = getSettings();
     const cfg = settings?.gptSoVits || {};
-    return Object.assign(Object.assign({}, defaults), cfg, { voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices });
+    return Object.assign(
+      Object.assign({}, defaults),
+      cfg,
+      {
+        modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || defaults.modelSwitchMode),
+        setModelEndpoint: normalizeSetModelEndpoint(cfg.setModelEndpoint || defaults.setModelEndpoint),
+        voices: Array.isArray(cfg.voices) ? cfg.voices : defaults.voices,
+      },
+    );
   } catch (e) {
     return defaults;
   }
@@ -47,13 +73,18 @@ export function getGptSoVitsConfig() {
 
 export function normalizeGptSoVitsVoice(voice) {
   if (!voice) return null;
-  const name = String(voice.name || voice.voice || voice.speaker || '').trim();
+  const rawCfg = voice?.gptSoVits || {};
+  const name = String(voice.name || voice.voice || voice.speaker || rawCfg.name || '').trim();
   if (!name) return null;
 
-  const refAudioPath = String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || '').trim();
-  const promptText = String(voice.promptText || voice.prompt_text || '').trim();
-  const promptLang = String(voice.promptLang || voice.prompt_lang || '').trim();
-  const textLang = String(voice.textLang || voice.text_lang || '').trim();
+  const refAudioPath = String(voice.refAudioPath || voice.ref_audio_path || voice.ref_audio || voice.ref || rawCfg.refAudioPath || '').trim();
+  const promptText = String(voice.promptText || voice.prompt_text || rawCfg.promptText || '').trim();
+  const promptLang = String(voice.promptLang || voice.prompt_lang || rawCfg.promptLang || '').trim();
+  const textLang = String(voice.textLang || voice.text_lang || rawCfg.textLang || '').trim();
+  const gptWeightsPath = String(voice.gptWeightsPath || voice.gpt_weights_path || voice.gptPath || voice.gpt || rawCfg.gptWeightsPath || '').trim();
+  const sovitsWeightsPath = String(voice.sovitsWeightsPath || voice.sovits_weights_path || voice.sovitsPath || voice.sovits || rawCfg.sovitsWeightsPath || '').trim();
+  const modelSwitchMode = normalizeGptSoVitsSwitchMode(voice.modelSwitchMode || voice.model_switch_mode || rawCfg.modelSwitchMode || '');
+  const setModelEndpoint = normalizeSetModelEndpoint(voice.setModelEndpoint || voice.set_model_endpoint || rawCfg.setModelEndpoint || '/set_model');
   const desc = String(voice.desc || voice.description || '').trim();
 
   return {
@@ -67,8 +98,63 @@ export function normalizeGptSoVitsVoice(voice) {
       promptText,
       promptLang,
       textLang,
+      gptWeightsPath,
+      sovitsWeightsPath,
+      modelSwitchMode,
+      setModelEndpoint,
     },
   };
+}
+
+function toGptSoVitsVoiceConfig(voice, globalDefaults = null) {
+  const normalized = normalizeGptSoVitsVoice(voice);
+  if (!normalized) return null;
+  const cfg = normalized.gptSoVits || {};
+  const globalCfg = globalDefaults || getGptSoVitsConfig();
+  const desc = String(voice?.desc || voice?.description || '').trim();
+
+  return {
+    name: normalized.name,
+    desc,
+    refAudioPath: String(cfg.refAudioPath || '').trim(),
+    promptText: String(cfg.promptText || '').trim(),
+    promptLang: String(cfg.promptLang || '').trim(),
+    textLang: String(cfg.textLang || '').trim(),
+    gptWeightsPath: String(cfg.gptWeightsPath || '').trim(),
+    sovitsWeightsPath: String(cfg.sovitsWeightsPath || '').trim(),
+    modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || globalCfg.modelSwitchMode),
+    setModelEndpoint: normalizeSetModelEndpoint(cfg.setModelEndpoint || globalCfg.setModelEndpoint),
+  };
+}
+
+export function isGptSoVitsVoiceUsable(voice) {
+  const cfg = toGptSoVitsVoiceConfig(voice);
+  return !!String(cfg?.refAudioPath || '').trim();
+}
+
+export function normalizeGptSoVitsVoicesForStore(voiceList, globalDefaults = null) {
+  const out = [];
+  let ignoredCount = 0;
+  let missingRefCount = 0;
+
+  for (const voice of Array.isArray(voiceList) ? voiceList : []) {
+    const cfg = toGptSoVitsVoiceConfig(voice, globalDefaults);
+    if (!cfg) {
+      ignoredCount += 1;
+      continue;
+    }
+    if (!cfg.refAudioPath) missingRefCount += 1;
+    out.push(cfg);
+  }
+
+  return { voices: out, ignoredCount, missingRefCount };
+}
+
+export function pickFirstUsableGptSoVitsVoice(voiceList) {
+  for (const voice of Array.isArray(voiceList) ? voiceList : []) {
+    if (isGptSoVitsVoiceUsable(voice)) return voice;
+  }
+  return null;
 }
 
 export async function getGptSoVitsVoiceListAsync() {
@@ -244,7 +330,10 @@ export async function resolveVoiceByName(voiceName) {
   if (voice) return voice;
   voice = voiceList.find(v => v.value === voiceName);
   if (voice) return voice;
-  const defaultVoice = voiceList[0];
+  const provider = getTTSProvider();
+  const defaultVoice = provider === TTS_PROVIDER.GPT_SOVITS_V2
+    ? (pickFirstUsableGptSoVitsVoice(voiceList) || voiceList[0])
+    : voiceList[0];
   if (defaultVoice) {
     console.warn(`[${SCRIPT_NAME}] 未找到音色 "${voiceName}"，使用默认: ${defaultVoice.name}`);
     return defaultVoice;

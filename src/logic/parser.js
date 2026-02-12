@@ -96,7 +96,7 @@ function preprocessSimplifiedFormat(html) {
 
   html = cleanIllegalTags(html);
 
-  const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*[""\"'「『（(]([\s\S]+?)[""\"'」』）)]\s*<\/p>/gi;
+  const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*["\u201c"'「『（(]([\s\S]+?)["\u201d"'」』）)]\s*<\/p>/gi;
 
   let result = html;
   let match;
@@ -342,14 +342,27 @@ export function parseGalgameContent(html, messageId) {
       text = text.replace(expressionTagRegex, '').trim();
     }
 
-    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*[""\"'「『（(]([\s\S]+)[""\"'」』）)]\s*$/);
+    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["\u201c"'「『（(]([\s\S]+)["\u201d"'」』）)]\s*$/);
     if (!dialogueMatch) {
       dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
     }
 
     if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
-      const speaker = dialogueMatch[1].trim();
+      let speaker = dialogueMatch[1].trim();
       const dialogue = dialogueMatch[2].trim();
+
+      // 兼容 "角色[表情]" 这种直接写在 speaker 内的格式
+      if (!expression) {
+        const speakerExprMatch = speaker.match(/^([^[\]<>:：]{1,20})\[([^\]]+)\]$/);
+        if (speakerExprMatch) {
+          speaker = speakerExprMatch[1].trim();
+          const bracketContent = speakerExprMatch[2].trim();
+          if (bracketContent) {
+            const exprCandidate = bracketContent.split('|')[0].split(',')[0].trim();
+            if (exprCandidate) expression = exprCandidate;
+          }
+        }
+      }
 
       if (speaker === '旁白') {
         return {

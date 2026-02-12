@@ -1,9 +1,9 @@
 import { SCRIPT_NAME, THEME } from '../core/constants.js';
 import { $ } from '../core/env.js';
-import { getSettings, setCurrentCharEnabled, saveSettings } from '../core/settings.js';
+import { ensureEnhancedModeSettings, getSettings, setCurrentCharEnabled, saveSettings } from '../core/settings.js';
 import { getIsEnabled, setIsEnabled, setHideOtherFloors } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
-import { TTS_PROVIDER, getTTSProvider, getGptSoVitsConfig, getTTSVoiceListAsync, getTTSEnabled, setTTSEnabled, getGptSoVitsVoiceList } from '../audio/tts-config.js';
+import { TTS_PROVIDER, getTTSProvider, getGptSoVitsConfig, getTTSVoiceListAsync, getTTSEnabled, setTTSEnabled, getGptSoVitsVoiceList, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice } from '../audio/tts-config.js';
 import { TTSManager } from '../audio/tts-manager.js';
 import { ComfyUIAPI } from '../image-gen/comfyui-api.js';
 import { getComfyUISettings, saveComfyUISettings, getComfyWorkflows, saveComfyWorkflows } from '../image-gen/comfyui-helpers.js';
@@ -673,31 +673,33 @@ export async function showSettingsPanel() {
   // 加强模式
   $('#gal-enhanced-mode').on('change', function () {
     const enabled = $(this).is(':checked');
-    settings.enhancedMode = settings.enhancedMode || {};
-    settings.enhancedMode.enabled = enabled;
+    const enhancedConfig = ensureEnhancedModeSettings();
+    enhancedConfig.enabled = enabled;
     saveSettings();
     $('#gal-enhanced-hint, #gal-enhanced-config').toggle(enabled);
     showToast(enabled ? '已启用加强模式' : '已禁用加强模式');
   });
-  $('#gal-enhanced-use-profile').on('change', function () { settings.enhancedMode.secondGenerate.useProfile = $(this).is(':checked'); saveSettings(); });
-  $('#gal-enhanced-profile-name').on('change', function () { settings.enhancedMode.secondGenerate.profileName = $(this).val(); saveSettings(); });
-  $('#gal-enhanced-use-model').on('change', function () { settings.enhancedMode.secondGenerate.useModel = $(this).is(':checked'); saveSettings(); });
-  $('#gal-enhanced-model-name').on('change', function () { settings.enhancedMode.secondGenerate.modelName = $(this).val(); saveSettings(); });
-  $('#gal-enhanced-use-preset').on('change', function () { settings.enhancedMode.secondGenerate.usePreset = $(this).is(':checked'); saveSettings(); });
-  $('#gal-enhanced-preset-name').on('change', function () { settings.enhancedMode.secondGenerate.presetName = $(this).val(); saveSettings(); });
+  $('#gal-enhanced-use-profile').on('change', function () { const enhancedConfig = ensureEnhancedModeSettings(); enhancedConfig.secondGenerate.useProfile = $(this).is(':checked'); saveSettings(); });
+  $('#gal-enhanced-profile-name').on('change', function () { const enhancedConfig = ensureEnhancedModeSettings(); enhancedConfig.secondGenerate.profileName = String($(this).val() || '').trim(); saveSettings(); });
+  $('#gal-enhanced-use-model').on('change', function () { const enhancedConfig = ensureEnhancedModeSettings(); enhancedConfig.secondGenerate.useModel = $(this).is(':checked'); saveSettings(); });
+  $('#gal-enhanced-model-name').on('change', function () { const enhancedConfig = ensureEnhancedModeSettings(); enhancedConfig.secondGenerate.modelName = String($(this).val() || '').trim(); saveSettings(); });
+  $('#gal-enhanced-use-preset').on('change', function () { const enhancedConfig = ensureEnhancedModeSettings(); enhancedConfig.secondGenerate.usePreset = $(this).is(':checked'); saveSettings(); });
+  $('#gal-enhanced-preset-name').on('change', function () { const enhancedConfig = ensureEnhancedModeSettings(); enhancedConfig.secondGenerate.presetName = String($(this).val() || '').trim(); saveSettings(); });
 
   $('input[name="gal-enhanced-worldbook-mode"]').on('change', function () {
     const mode = $(this).val();
-    if (mode === 'default') { settings.enhancedMode.secondGenerate.useWorldbooks = false; settings.enhancedMode.secondGenerate.worldbooks = []; $('#gal-enhanced-worldbooks-list').hide(); $('.gal-enhanced-worldbook-item').prop('checked', false); }
-    else if (mode === 'none') { settings.enhancedMode.secondGenerate.useWorldbooks = true; settings.enhancedMode.secondGenerate.worldbooks = []; $('#gal-enhanced-worldbooks-list').hide(); $('.gal-enhanced-worldbook-item').prop('checked', false); }
-    else if (mode === 'custom') { settings.enhancedMode.secondGenerate.useWorldbooks = true; $('#gal-enhanced-worldbooks-list').show(); }
+    const enhancedConfig = ensureEnhancedModeSettings();
+    if (mode === 'default') { enhancedConfig.secondGenerate.useWorldbooks = false; enhancedConfig.secondGenerate.worldbooks = []; $('#gal-enhanced-worldbooks-list').hide(); $('.gal-enhanced-worldbook-item').prop('checked', false); }
+    else if (mode === 'none') { enhancedConfig.secondGenerate.useWorldbooks = true; enhancedConfig.secondGenerate.worldbooks = []; $('#gal-enhanced-worldbooks-list').hide(); $('.gal-enhanced-worldbook-item').prop('checked', false); }
+    else if (mode === 'custom') { enhancedConfig.secondGenerate.useWorldbooks = true; $('#gal-enhanced-worldbooks-list').show(); }
     saveSettings();
   });
 
   $(document).on('change', '.gal-enhanced-worldbook-item', function () {
     const selected = [];
     $('.gal-enhanced-worldbook-item:checked').each(function () { selected.push($(this).val()); });
-    settings.enhancedMode.secondGenerate.worldbooks = selected;
+    const enhancedConfig = ensureEnhancedModeSettings();
+    enhancedConfig.secondGenerate.worldbooks = Array.from(new Set(selected.map(name => String(name || '').trim()).filter(Boolean)));
     if (selected.length === 0) { $('input[name="gal-enhanced-worldbook-mode"][value="none"]').prop('checked', true); $('#gal-enhanced-worldbooks-list').hide(); }
     saveSettings();
   });
@@ -776,17 +778,44 @@ export async function showSettingsPanel() {
   $('#gal-gpt-sovits-speed').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; const v = parseFloat($(this).val()); settings.gptSoVits.speedFactor = isFinite(v) ? v : 1; saveSettings(); });
   $('#gal-gpt-sovits-voices-save').on('click', async function () {
     settings.gptSoVits = settings.gptSoVits || {};
-    try { settings.gptSoVits.voices = JSON.parse($('#gal-gpt-sovits-voices-json').val() || '[]'); } catch (e) { showToast('JSON 解析失败'); return; }
-    if (!Array.isArray(settings.gptSoVits.voices)) { showToast('音色列表必须是数组'); return; }
+    let parsed = null;
+    try { parsed = JSON.parse($('#gal-gpt-sovits-voices-json').val() || '[]'); } catch (e) { showToast('音色列表 JSON 解析失败'); return; }
+    if (!Array.isArray(parsed)) { showToast('音色列表必须是数组'); return; }
+
+    const normalized = normalizeGptSoVitsVoicesForStore(parsed);
+    settings.gptSoVits.voices = normalized.voices;
+
+    const firstUsable = pickFirstUsableGptSoVitsVoice(getGptSoVitsVoiceList());
+    if (!settings.ttsDefaultSpeaker && firstUsable?.name) {
+      settings.ttsDefaultSpeaker = firstUsable.name;
+    }
     saveSettings();
     await refreshTtsVoiceOptions();
-    injectCOTToWorldbook().then(() => showToast('音色列表已保存，COT已更新')).catch(() => showToast('音色列表已保存'));
+
+    let msg = `GPT-SoVITS 音色列表已保存：${normalized.voices.length} 条`;
+    if (normalized.ignoredCount > 0) msg += `（忽略无效条目 ${normalized.ignoredCount} 条）`;
+    if (normalized.missingRefCount > 0) msg += `（${normalized.missingRefCount} 条缺 refAudioPath）`;
+    injectCOTToWorldbook().then(() => showToast(`${msg}，COT已更新`)).catch(() => showToast(msg));
   });
   $('#gal-gpt-sovits-test').on('click', () => {
     if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) { showToast('请先切换为 GPT-SoVITS'); return; }
     const text = ($('#gal-gpt-sovits-test-text').val() || '').trim() || '你好，这是一段 GPT-SoVITS 配音测试。';
-    const voiceName = $('#gal-tts-default-speaker').val() || (getGptSoVitsVoiceList()[0]?.name || '');
-    if (!voiceName) { showToast('请先配置音色列表'); return; }
+    const selectedVoiceName = String($('#gal-tts-default-speaker').val() || '').trim();
+    const gptVoices = getGptSoVitsVoiceList();
+    const selectedVoice = gptVoices.find(v => v.name === selectedVoiceName) || null;
+    const selectedUsable = !!String(selectedVoice?.gptSoVits?.refAudioPath || '').trim();
+    const fallbackVoice = pickFirstUsableGptSoVitsVoice(gptVoices);
+    const targetVoice = selectedUsable ? selectedVoice : fallbackVoice;
+    const voiceName = targetVoice?.name || '';
+    if (!voiceName) { showToast('请先配置至少一个可用音色（refAudioPath 不能为空）'); return; }
+
+    if (selectedVoiceName !== voiceName) {
+      settings.ttsDefaultSpeaker = voiceName;
+      saveSettings();
+      $('#gal-tts-default-speaker').val(voiceName);
+      showToast(`已自动切换试听音色：${voiceName}`);
+    }
+
     TTSManager.stop();
     TTSManager.speak({ type: 'dialogue', speaker: '', text, tts: { speaker: voiceName } }, `gpt_sovits_test_${Date.now()}`);
   });

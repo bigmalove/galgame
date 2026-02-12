@@ -118,8 +118,64 @@ export const SYSTEM_PROMPT_FOR_SECOND_GENERATE = `你是Galgame文本格式化�
 【再次强调】
 这是格式化任务，不是创作任务。你收到的文本已经是完整的，不需要也不允许继续写下去。`;
 
+function _safeObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return value;
+}
+
+function _safeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+export function createDefaultEnhancedModeSettings() {
+  return {
+    enabled: false,
+    secondGenerate: {
+      useProfile: false,
+      profileName: '',
+      useModel: false,
+      modelName: '',
+      usePreset: false,
+      presetName: '',
+      useWorldbooks: false,
+      worldbooks: [],
+    },
+  };
+}
+
+export function normalizeEnhancedModeSettings(rawEnhancedMode) {
+  const enhanced = _safeObject(rawEnhancedMode);
+  const secondGenerate = _safeObject(enhanced.secondGenerate);
+  const normalizedWorldbooks = Array.from(
+    new Set(
+      _safeArray(secondGenerate.worldbooks)
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+
+  return {
+    enabled: !!enhanced.enabled,
+    secondGenerate: {
+      useProfile: !!secondGenerate.useProfile,
+      profileName: String(secondGenerate.profileName || '').trim(),
+      useModel: !!secondGenerate.useModel,
+      modelName: String(secondGenerate.modelName || '').trim(),
+      usePreset: !!secondGenerate.usePreset,
+      presetName: String(secondGenerate.presetName || '').trim(),
+      useWorldbooks: !!secondGenerate.useWorldbooks,
+      worldbooks: normalizedWorldbooks,
+    },
+  };
+}
+
 // 当前设置 (getter/setter 模式 - esbuild IIFE 中 export let 不可靠)
 let _settings = Object.assign({}, DEFAULT_SETTINGS);
+export function ensureEnhancedModeSettings() {
+  _settings.enhancedMode = normalizeEnhancedModeSettings(_settings?.enhancedMode);
+  return _settings.enhancedMode || createDefaultEnhancedModeSettings();
+}
+ensureEnhancedModeSettings();
 
 export function getSettings() { return _settings; }
 export function setSettings(v) { _settings = v; }
@@ -157,6 +213,7 @@ export function loadSettings() {
         console.log(`[${SCRIPT_NAME}] 已清除缓存中的自定义 systemPrompt`);
       }
       _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
+      _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       // 兼容旧版 sceneMode -> cgMode
       if (_settings.bananaImageGen) {
         if (_settings.bananaImageGen.cgMode === undefined && _settings.bananaImageGen.sceneMode !== undefined) {
@@ -195,6 +252,7 @@ export function loadSettings() {
 export function saveSettings() {
   const SETTINGS_STORAGE_KEY = GalgameStore.STORAGE_KEYS.SETTINGS;
   try {
+    _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 保存设置失败:`, e);

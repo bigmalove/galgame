@@ -1,6 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
-import { getSettings, SYSTEM_PROMPT_FOR_SECOND_GENERATE } from '../core/settings.js';
+import { ensureEnhancedModeSettings, getSettings, SYSTEM_PROMPT_FOR_SECOND_GENERATE } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { generateCOTTemplate } from './cot-template.js';
@@ -356,15 +356,18 @@ async function updateStreamingSwipe(messageId, swipeId, text) {
 // 第二次生成
 // ============================================
 async function runSecondGeneration(messageId, firstResult) {
-  const settings = getSettings();
-  const config = settings.enhancedMode;
-  const numericMessageId = parseInt(messageId);
+  const config = ensureEnhancedModeSettings();
+  const secondGenerateConfig = config.secondGenerate;
+  const numericMessageId = Number(messageId);
 
   let streamBuffer = '';
   let lastStreamUpdate = 0;
   const STREAM_INTERVAL = 100;
 
   try {
+    if (!Number.isInteger(numericMessageId) || numericMessageId < 0) {
+      throw new Error('无效的消息ID，无法执行第二次生成');
+    }
     console.log(`[${SCRIPT_NAME}] 加强模式: 开始第二次生成（COT格式化-流式）`);
     enhancedModeState.stage = 'second_generating';
     showEnhancedProgress('second_generating');
@@ -380,12 +383,12 @@ async function runSecondGeneration(messageId, firstResult) {
       enhancedModeState.worldbooksModified = true;
 
       let targetWorldbooks = [...originalGlobalWbs];
-      if (!config.secondGenerate.useWorldbooks) {
+      if (!secondGenerateConfig.useWorldbooks) {
         targetWorldbooks = [...originalGlobalWbs];
         console.log(`[${SCRIPT_NAME}] 第二次生成使用当前全局世界书:`, targetWorldbooks);
-      } else if (config.secondGenerate.worldbooks && config.secondGenerate.worldbooks.length > 0) {
-        targetWorldbooks = [...config.secondGenerate.worldbooks];
-        console.log(`[${SCRIPT_NAME}] 第二次生成使用用户指定世界书:`, config.secondGenerate.worldbooks);
+      } else if (secondGenerateConfig.worldbooks && secondGenerateConfig.worldbooks.length > 0) {
+        targetWorldbooks = [...secondGenerateConfig.worldbooks];
+        console.log(`[${SCRIPT_NAME}] 第二次生成使用用户指定世界书:`, secondGenerateConfig.worldbooks);
       } else {
         targetWorldbooks = [];
         console.log(`[${SCRIPT_NAME}] 第二次生成清空用户世界书`);
@@ -398,21 +401,21 @@ async function runSecondGeneration(messageId, firstResult) {
       await rebindGlobalWorldbooks(targetWorldbooks);
       console.log(`[${SCRIPT_NAME}] 加强模式第二次生成: 已临时附加脚本世界书`, targetWorldbooks);
 
-      if (config.secondGenerate.useProfile && config.secondGenerate.profileName) {
-        await triggerSlash(`/profile quiet=true ${config.secondGenerate.profileName}`);
-        console.log(`[${SCRIPT_NAME}] 已切换到连接配置: ${config.secondGenerate.profileName}`);
+      if (secondGenerateConfig.useProfile && secondGenerateConfig.profileName) {
+        await triggerSlash(`/profile quiet=true ${secondGenerateConfig.profileName}`);
+        console.log(`[${SCRIPT_NAME}] 已切换到连接配置: ${secondGenerateConfig.profileName}`);
         await new Promise(r => setTimeout(r, 300));
       }
 
-      if (config.secondGenerate.useModel && config.secondGenerate.modelName) {
-        await triggerSlash(`/model quiet=true ${config.secondGenerate.modelName}`);
-        console.log(`[${SCRIPT_NAME}] 已切换到模型: ${config.secondGenerate.modelName}`);
+      if (secondGenerateConfig.useModel && secondGenerateConfig.modelName) {
+        await triggerSlash(`/model quiet=true ${secondGenerateConfig.modelName}`);
+        console.log(`[${SCRIPT_NAME}] 已切换到模型: ${secondGenerateConfig.modelName}`);
         await new Promise(r => setTimeout(r, 300));
       }
 
-      if (config.secondGenerate.usePreset && config.secondGenerate.presetName) {
-        await triggerSlash(`/preset quiet=true ${config.secondGenerate.presetName}`);
-        console.log(`[${SCRIPT_NAME}] 已切换到预设: ${config.secondGenerate.presetName}`);
+      if (secondGenerateConfig.usePreset && secondGenerateConfig.presetName) {
+        await triggerSlash(`/preset quiet=true ${secondGenerateConfig.presetName}`);
+        console.log(`[${SCRIPT_NAME}] 已切换到预设: ${secondGenerateConfig.presetName}`);
         await new Promise(r => setTimeout(r, 300));
       }
 
@@ -481,9 +484,16 @@ async function runSecondGeneration(messageId, firstResult) {
         if (updatedMsgs && updatedMsgs[0]) {
           const updatedSwipes = [...updatedMsgs[0].swipes];
           updatedSwipes[newSwipeId] = formattedResult;
+          const updatedSwipesInfo = [...(updatedMsgs[0].swipes_info || [])];
+          updatedSwipesInfo[newSwipeId] = {
+            ...(updatedSwipesInfo[newSwipeId] || {}),
+            isEnhancedFormat: true,
+            enhancedModeGeneratedAt: Date.now(),
+          };
 
           const finalUpdateData = { ...updatedMsgs[0] };
           finalUpdateData.swipes = updatedSwipes;
+          finalUpdateData.swipes_info = updatedSwipesInfo;
           finalUpdateData.swipe_id = newSwipeId;
 
           await setChatMessages([finalUpdateData], { refresh: 'affected' });
@@ -645,6 +655,56 @@ export function initWorldbookInjectionListener() {
 // ============================================
 let enhancedModeListenerRegistered = false;
 
+function resolveGenerationMessageId(eventPayload) {
+  const tryParseId = value => {
+    const id = Number(value);
+    return Number.isInteger(id) && id >= 0 ? id : null;
+  };
+
+  let messageId = tryParseId(eventPayload);
+  if (messageId !== null) return messageId;
+
+  if (eventPayload && typeof eventPayload === 'object') {
+    messageId =
+      tryParseId(eventPayload.message_id) ??
+      tryParseId(eventPayload.messageId) ??
+      tryParseId(eventPayload.id);
+    if (messageId !== null) return messageId;
+  }
+
+  try {
+    const latestAssistant = getChatMessages(-1, { role: 'assistant', include_swipes: true });
+    const fallbackMessage = latestAssistant?.[0];
+    messageId = tryParseId(fallbackMessage?.message_id);
+    if (messageId !== null) {
+      console.log(`[${SCRIPT_NAME}] 加强模式: 使用最新助手消息兜底 messageId=${messageId}`);
+      return messageId;
+    }
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 加强模式: 兜底获取 messageId 失败`, e);
+  }
+
+  return null;
+}
+
+async function getMessageByIdWithRetry(messageId, maxRetries = 8, retryDelayMs = 120) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const messages = getChatMessages(messageId, { include_swipes: true });
+      const message = messages?.[0];
+      if (message) {
+        return message;
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 加强模式: 第 ${attempt + 1} 次获取消息失败`, e);
+    }
+    if (attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, retryDelayMs));
+    }
+  }
+  return null;
+}
+
 export function initEnhancedModeListener() {
   if (enhancedModeListenerRegistered) {
     console.log(`[${SCRIPT_NAME}] 加强模式: 监听器已注册，跳过`);
@@ -652,12 +712,17 @@ export function initEnhancedModeListener() {
   }
 
   if (typeof eventOn === 'function' && typeof tavern_events !== 'undefined' && tavern_events.GENERATION_ENDED) {
-    eventOn(tavern_events.GENERATION_ENDED, async messageId => {
-      const settings = getSettings();
+    eventOn(tavern_events.GENERATION_ENDED, async eventPayload => {
+      const messageId = resolveGenerationMessageId(eventPayload);
       const isEnabled = getIsEnabled();
-      console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件, messageId=${messageId}`);
+      console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件, messageId=${messageId}`, eventPayload);
+      if (messageId === null) {
+        console.warn(`[${SCRIPT_NAME}] 加强模式: 无法解析 messageId，跳过本次`);
+        return;
+      }
 
-      if (!isEnabled || !settings.enhancedMode?.enabled) {
+      const enhancedConfig = ensureEnhancedModeSettings();
+      if (!isEnabled || !enhancedConfig.enabled) {
         console.log(`[${SCRIPT_NAME}] 加强模式: 未启用或Galgame模式关闭，跳过`);
         return;
       }
@@ -674,8 +739,7 @@ export function initEnhancedModeListener() {
       }
 
       try {
-        const messages = getChatMessages(messageId, { include_swipes: true });
-        const message = messages[0];
+        const message = await getMessageByIdWithRetry(messageId);
         if (!message) {
           console.warn(`[${SCRIPT_NAME}] 加强模式: 无法获取消息 ${messageId}`);
           return;
@@ -686,21 +750,21 @@ export function initEnhancedModeListener() {
           return;
         }
 
-        const existingFormatted = getFormattedContent(messageId);
-        if (existingFormatted) {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 已存在格式化 swipe，跳过`);
+        const hasEnhancedFormatSwipe = (message.swipes_info || []).some(info => info?.isEnhancedFormat === true);
+        if (hasEnhancedFormatSwipe) {
+          console.log(`[${SCRIPT_NAME}] 加强模式: 已存在 isEnhancedFormat swipe，跳过`);
           return;
         }
 
-        const firstResult = message.swipes?.[message.swipe_id] || message.message;
+        const currentSwipeId = typeof message.swipe_id === 'number' ? message.swipe_id : 0;
+        const firstResult = message.swipes?.[currentSwipeId] || message.message;
         if (!firstResult || !firstResult.trim()) {
           console.warn(`[${SCRIPT_NAME}] 加强模式: 消息内容为空`);
           return;
         }
 
         if (isCotFormatted(firstResult)) {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 当前内容已是 COT 格式，跳过`);
-          return;
+          console.log(`[${SCRIPT_NAME}] 加强模式: 当前内容已是 COT，仍执行第二次生成`);
         }
 
         console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，内容长度=${firstResult.length}`);

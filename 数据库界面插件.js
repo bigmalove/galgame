@@ -7446,9 +7446,54 @@ ${extraRule}
       apiKey: '', // 可选 API Key
     },
   };
+  // 加强模式默认配置工厂（避免对象引用污染）
+  function createDefaultEnhancedModeSettings() {
+    return {
+      enabled: false,
+      secondGenerate: {
+        useProfile: false,
+        profileName: '',
+        useModel: false,
+        modelName: '',
+        usePreset: false,
+        presetName: '',
+        useWorldbooks: false,
+        worldbooks: [],
+      },
+    };
+  }
+  function normalizeEnhancedModeSettings(rawEnhancedMode) {
+    const enhanced = _safeObject(rawEnhancedMode);
+    const secondGenerate = _safeObject(enhanced.secondGenerate);
+    const normalizedWorldbooks = Array.from(
+      new Set(
+        _safeArray(secondGenerate.worldbooks)
+          .map(name => String(name || '').trim())
+          .filter(Boolean),
+      ),
+    );
+    return {
+      enabled: !!enhanced.enabled,
+      secondGenerate: {
+        useProfile: !!secondGenerate.useProfile,
+        profileName: String(secondGenerate.profileName || '').trim(),
+        useModel: !!secondGenerate.useModel,
+        modelName: String(secondGenerate.modelName || '').trim(),
+        usePreset: !!secondGenerate.usePreset,
+        presetName: String(secondGenerate.presetName || '').trim(),
+        useWorldbooks: !!secondGenerate.useWorldbooks,
+        worldbooks: normalizedWorldbooks,
+      },
+    };
+  }
+  function ensureEnhancedModeSettings() {
+    settings.enhancedMode = normalizeEnhancedModeSettings(settings?.enhancedMode);
+    return settings.enhancedMode || createDefaultEnhancedModeSettings();
+  }
   // enhancedModeState 已在兼容代理层定义（使用 GalgameStore.enhancedMode）
   // 当前设置 (全局)
   let settings = Object.assign({}, DEFAULT_SETTINGS);
+  ensureEnhancedModeSettings();
   // 第二次生成使用的系统提示词（硬编码，不缓存到localStorage）
   const SYSTEM_PROMPT_FOR_SECOND_GENERATE = `你是Galgame文本格式化工具。你的唯一任务是将原始文本转换为Galgame 格式。
 
@@ -9493,6 +9538,7 @@ ${extraRule}
           console.log(`[${SCRIPT_NAME}] 已清除缓存中的自定义 systemPrompt`);
         }
         settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
+        settings.enhancedMode = normalizeEnhancedModeSettings(settings.enhancedMode);
         // 兼容旧版 sceneMode -> cgMode
         if (settings.bananaImageGen) {
           if (settings.bananaImageGen.cgMode === undefined && settings.bananaImageGen.sceneMode !== undefined) {
@@ -9516,6 +9562,7 @@ ${extraRule}
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] 加载设置失败:`, e);
     }
+    settings.enhancedMode = normalizeEnhancedModeSettings(settings.enhancedMode);
     // 加载角色卡开关状态
     try {
       const savedChar = topWindow.localStorage.getItem(CHAR_ENABLED_STORAGE_KEY);
@@ -13578,6 +13625,60 @@ cons
   }
 
   /**
+   * 解析 GENERATION_ENDED 事件中的消息ID（兼容不同 payload 形态）
+   */
+  function resolveGenerationMessageId(eventPayload) {
+    const tryParseId = value => {
+      const id = Number(value);
+      return Number.isInteger(id) && id >= 0 ? id : null;
+    };
+
+    let messageId = tryParseId(eventPayload);
+    if (messageId !== null) return messageId;
+
+    if (eventPayload && typeof eventPayload === 'object') {
+      messageId =
+        tryParseId(eventPayload.message_id) ?? tryParseId(eventPayload.messageId) ?? tryParseId(eventPayload.id);
+      if (messageId !== null) return messageId;
+    }
+
+    try {
+      const latestAssistant = getChatMessages(-1, { role: 'assistant', include_swipes: true });
+      const fallbackMessage = latestAssistant?.[0];
+      messageId = tryParseId(fallbackMessage?.message_id);
+      if (messageId !== null) {
+        console.log(`[${SCRIPT_NAME}] 加强模式: 使用最新助手消息兜底 messageId=${messageId}`);
+        return messageId;
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 加强模式: 兜底获取 messageId 失败`, e);
+    }
+
+    return null;
+  }
+
+  /**
+   * 获取消息内容（带重试，避免事件触发早于消息写入）
+   */
+  async function getMessageByIdWithRetry(messageId, maxRetries = 8, retryDelayMs = 120) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const messages = getChatMessages(messageId, { include_swipes: true });
+        const message = messages?.[0];
+        if (message) {
+          return message;
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 加强模式: 第 ${attempt + 1} 次获取消息失败`, e);
+      }
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, retryDelayMs));
+      }
+    }
+    return null;
+  }
+
+  /**
    * 初始化加强模式监听器
    * 监听 GENERATION_ENDED 事件，当启用加强模式时自动触发第二次生成
    */
@@ -13590,11 +13691,17 @@ cons
 
     // 使用酒馆事件监听 GENERATION_ENDED（不再监听 GENERATION_STARTED，避免刷新误触发）
     if (typeof eventOn === 'function' && typeof tavern_events !== 'undefined' && tavern_events.GENERATION_ENDED) {
-      eventOn(tavern_events.GENERATION_ENDED, async messageId => {
-        console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件, messageId=${messageId}`);
+      eventOn(tavern_events.GENERATION_ENDED, async eventPayload => {
+        const messageId = resolveGenerationMessageId(eventPayload);
+        console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件, messageId=${messageId}`, eventPayload);
+        if (messageId === null) {
+          console.warn(`[${SCRIPT_NAME}] 加强模式: 无法解析 messageId，跳过本次`);
+          return;
+        }
 
         // 检查是否启用加强模式（仅在Galgame模式开启时生效）
-        if (!isEnabled || !settings.enhancedMode?.enabled) {
+        const enhancedConfig = ensureEnhancedModeSettings();
+        if (!isEnabled || !enhancedConfig.enabled) {
           console.log(`[${SCRIPT_NAME}] 加强模式: 未启用或Galgame模式关闭，跳过`);
           return;
         }
@@ -13614,8 +13721,7 @@ cons
 
         // 获取第一次生成的消息内容
         try {
-          const messages = getChatMessages(messageId, { include_swipes: true });
-          const message = messages[0];
+          const message = await getMessageByIdWithRetry(messageId);
           if (!message) {
             console.warn(`[${SCRIPT_NAME}] 加强模式: 无法获取消息 ${messageId}`);
             return;
@@ -13627,23 +13733,23 @@ cons
             return;
           }
 
-          // 已存在格式化版本时不再触发第二次生成
-          const existingFormatted = getFormattedContent(messageId);
-          if (existingFormatted) {
-            console.log(`[${SCRIPT_NAME}] 加强模式: 已存在格式化 swipe，跳过`);
+          // 仅当已存在“加强模式生成”的 swipe 时跳过，避免将普通 COT 误判为已完成第二次生成
+          const hasEnhancedFormatSwipe = (message.swipes_info || []).some(info => info?.isEnhancedFormat === true);
+          if (hasEnhancedFormatSwipe) {
+            console.log(`[${SCRIPT_NAME}] 加强模式: 已存在 isEnhancedFormat swipe，跳过`);
             return;
           }
 
-          const firstResult = message.swipes?.[message.swipe_id] || message.message;
+          const currentSwipeId = typeof message.swipe_id === 'number' ? message.swipe_id : 0;
+          const firstResult = message.swipes?.[currentSwipeId] || message.message;
           if (!firstResult || !firstResult.trim()) {
             console.warn(`[${SCRIPT_NAME}] 加强模式: 消息内容为空`);
             return;
           }
 
-          // 当前内容已是 COT 格式，跳过
+          // 首次内容即使已是 COT，也继续执行第二次生成（用于统一模板与二阶段模型处理）
           if (isCotFormatted(firstResult)) {
-            console.log(`[${SCRIPT_NAME}] 加强模式: 当前内容已是 COT 格式，跳过`);
-            return;
+            console.log(`[${SCRIPT_NAME}] 加强模式: 当前内容已是 COT，仍执行第二次生成`);
           }
 
           console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，内容长度=${firstResult.length}`);
@@ -13709,8 +13815,9 @@ cons
    * 参考 generateNewSwipe 脚本的流式写入方式
    */
   async function runSecondGeneration(messageId, firstResult) {
-    const config = settings.enhancedMode;
-    const numericMessageId = parseInt(messageId);
+    const config = ensureEnhancedModeSettings();
+    const secondGenerateConfig = config.secondGenerate;
+    const numericMessageId = Number(messageId);
 
     // 流式写入相关状态
     let streamBuffer = '';
@@ -13718,6 +13825,9 @@ cons
     const STREAM_INTERVAL = 100;
 
     try {
+      if (!Number.isInteger(numericMessageId) || numericMessageId < 0) {
+        throw new Error('无效的消息ID，无法执行第二次生成');
+      }
       console.log(`[${SCRIPT_NAME}] 加强模式: 开始第二次生成（COT格式化-流式）`);
       enhancedModeState.stage = 'second_generating';
       showEnhancedProgress('second_generating');
@@ -13738,14 +13848,14 @@ cons
         let targetWorldbooks = [...originalGlobalWbs];
 
         // 处理用户世界书配置
-        if (!config.secondGenerate.useWorldbooks) {
+        if (!secondGenerateConfig.useWorldbooks) {
           // 选择"不使用自定义世界书(默认选择)"，使用当前全局世界书
           targetWorldbooks = [...originalGlobalWbs];
           console.log(`[${SCRIPT_NAME}] 第二次生成使用当前全局世界书:`, targetWorldbooks);
-        } else if (config.secondGenerate.worldbooks && config.secondGenerate.worldbooks.length > 0) {
+        } else if (secondGenerateConfig.worldbooks && secondGenerateConfig.worldbooks.length > 0) {
           // 使用用户指定的世界书
-          targetWorldbooks = [...config.secondGenerate.worldbooks];
-          console.log(`[${SCRIPT_NAME}] 第二次生成使用用户指定世界书:`, config.secondGenerate.worldbooks);
+          targetWorldbooks = [...secondGenerateConfig.worldbooks];
+          console.log(`[${SCRIPT_NAME}] 第二次生成使用用户指定世界书:`, secondGenerateConfig.worldbooks);
         } else {
           // 用户选择"不使用任何世界书"（但脚本世界书仍需添加）
           targetWorldbooks = [];
@@ -13762,23 +13872,23 @@ cons
         console.log(`[${SCRIPT_NAME}] 加强模式第二次生成: 已临时附加脚本世界书`, targetWorldbooks);
 
         // 切换连接配置
-        if (config.secondGenerate.useProfile && config.secondGenerate.profileName) {
-          await triggerSlash(`/profile quiet=true ${config.secondGenerate.profileName}`);
-          console.log(`[${SCRIPT_NAME}] 已切换到连接配置: ${config.secondGenerate.profileName}`);
+        if (secondGenerateConfig.useProfile && secondGenerateConfig.profileName) {
+          await triggerSlash(`/profile quiet=true ${secondGenerateConfig.profileName}`);
+          console.log(`[${SCRIPT_NAME}] 已切换到连接配置: ${secondGenerateConfig.profileName}`);
           await new Promise(r => setTimeout(r, 300));
-  cons    }
+        }
 
         // 切换模型
-        if (config.secondGenerate.useModel && config.secondGenerate.modelName) {
-          await triggerSlash(`/model quiet=true ${config.secondGenerate.modelName}`);
-          console.log(`[${SCRIPT_NAME}] 已切换到模型: ${config.secondGenerate.modelName}`);
+        if (secondGenerateConfig.useModel && secondGenerateConfig.modelName) {
+          await triggerSlash(`/model quiet=true ${secondGenerateConfig.modelName}`);
+          console.log(`[${SCRIPT_NAME}] 已切换到模型: ${secondGenerateConfig.modelName}`);
           await new Promise(r => setTimeout(r, 300));
         }
 
         // 切换预设
-        if (config.secondGenerate.usePreset && config.secondGenerate.presetName) {
-          await triggerSlash(`/preset quiet=true ${config.secondGenerate.presetName}`);
-          console.log(`[${SCRIPT_NAME}] 已切换到预设: ${config.secondGenerate.presetName}`);
+        if (secondGenerateConfig.usePreset && secondGenerateConfig.presetName) {
+          await triggerSlash(`/preset quiet=true ${secondGenerateConfig.presetName}`);
+          console.log(`[${SCRIPT_NAME}] 已切换到预设: ${secondGenerateConfig.presetName}`);
           await new Promise(r => setTimeout(r, 300));
         }
 
@@ -13858,9 +13968,16 @@ cons
           if (updatedMsgs && updatedMsgs[0]) {
             const updatedSwipes = [...updatedMsgs[0].swipes];
             updatedSwipes[newSwipeId] = formattedResult;
+            const updatedSwipesInfo = [...(updatedMsgs[0].swipes_info || [])];
+            updatedSwipesInfo[newSwipeId] = {
+              ...(updatedSwipesInfo[newSwipeId] || {}),
+              isEnhancedFormat: true,
+              enhancedModeGeneratedAt: Date.now(),
+            };
 
             const finalUpdateData = { ...updatedMsgs[0] };
             finalUpdateData.swipes = updatedSwipes;
+            finalUpdateData.swipes_info = updatedSwipesInfo;
             finalUpdateData.swipe_id = newSwipeId; // 保持在新 swipe 上
 
             await setChatMessages([finalUpdateData], { refresh: 'affected' });
@@ -14602,7 +14719,7 @@ cons
   // 监听窗口大小变化，自动调整游戏内容缩放
   function setupGameContentResizeListener() {
     let resizeTimer = null;
-    leletsProcessing = false;
+    let isProcessing = false;
 
     const handleResize = () => {
       // 防抖处理，避免频繁调用（手机端用更长的延迟）
@@ -15169,7 +15286,7 @@ cons
     });
     // 全屏切换
     $(doc).on('click', '#gal-global-overlay [data-action="toggle-fullscreen"]', function (e) {
-      lettopPropagation();
+      e.stopPropagation();
       toggleFullscreen();
     });
 
@@ -21366,7 +21483,7 @@ cons
           model.motion(value, 0, 'FORCE');
           console.log(`[${SCRIPT_NAME}] 播放动作: ${value}`);
         } catch (e) {
-          letsole.warn(`[${SCRIPT_NAME}] 动作播放失败:`, e);
+          console.warn(`[${SCRIPT_NAME}] 动作播放失败:`, e);
         }
       });
 
@@ -26071,8 +26188,8 @@ cons
       // 加强模式设置
       $('#gal-enhanced-mode').on('change', function () {
         const enabled = $(this).is(':checked');
-        settings.enhancedMode = settings.enhancedMode || {};
-        settings.enhancedMode.enabled = enabled;
+        const enhancedConfig = ensureEnhancedModeSettings();
+        enhancedConfig.enabled = enabled;
         saveSettings();
         $('#gal-enhanced-hint, #gal-enhanced-config').toggle(enabled);
 
@@ -26083,58 +26200,72 @@ cons
       });
       // 加强模式API配置
       $('#gal-enhanced-use-profile').on('change', function () {
-        settings.enhancedMode.secondGenerate.useProfile = $(this).is(':checked');
+        const enhancedConfig = ensureEnhancedModeSettings();
+        enhancedConfig.secondGenerate.useProfile = $(this).is(':checked');
         saveSettings();
       });
       $('#gal-enhanced-profile-name').on('change', function () {
-        settings.enhancedMode.secondGenerate.profileName = $(this).val();
+        const enhancedConfig = ensureEnhancedModeSettings();
+        enhancedConfig.secondGenerate.profileName = String($(this).val() || '').trim();
         saveSettings();
       });
       $('#gal-enhanced-use-model').on('change', function () {
-        settings.enhancedMode.secondGenerate.useModel = $(this).is(':checked');
+        const enhancedConfig = ensureEnhancedModeSettings();
+        enhancedConfig.secondGenerate.useModel = $(this).is(':checked');
         saveSettings();
       });
       $('#gal-enhanced-model-name').on('change', function () {
-        settings.enhancedMode.secondGenerate.modelName = $(this).val();
+        const enhancedConfig = ensureEnhancedModeSettings();
+        enhancedConfig.secondGenerate.modelName = String($(this).val() || '').trim();
         saveSettings();
       });
       $('#gal-enhanced-use-preset').on('change', function () {
-        settings.enhancedMode.secondGenerate.usePreset = $(this).is(':checked');
+        const enhancedConfig = ensureEnhancedModeSettings();
+        enhancedConfig.secondGenerate.usePreset = $(this).is(':checked');
         saveSettings();
       });
       $('#gal-enhanced-preset-name').on('change', function () {
-        settings.enhancedMode.secondGenerate.presetName = $(this).val();
+        const enhancedConfig = ensureEnhancedModeSettings();
+        enhancedConfig.secondGenerate.presetName = String($(this).val() || '').trim();
         saveSettings();
       });
       // 世界书模式选择（不使用自定义/不使用任何/使用指定）
       $('input[name="gal-enhanced-worldbook-mode"]').on('change', function () {
         const mode = $(this).val();
+        const enhancedConfig = ensureEnhancedModeSettings();
         if (mode === 'default') {
           // 选择"不使用自定义世界书(默认选择)"，恢复默认设置
-          settings.enhancedMode.secondGenerate.useWorldbooks = false;
-          settings.enhancedMode.secondGenerate.worldbooks = [];
+          enhancedConfig.secondGenerate.useWorldbooks = false;
+          enhancedConfig.secondGenerate.worldbooks = [];
           $('#gal-enhanced-worldbooks-list').hide();
           $('.gal-enhanced-worldbook-item').prop('checked', false);
         } else if (mode === 'none') {
           // 选择"不使用任何世界书"，启用自定义但清空世界书
-          settings.enhancedMode.secondGenerate.useWorldbooks = true;
-          settings.enhancedMode.secondGenerate.worldbooks = [];
+          enhancedConfig.secondGenerate.useWorldbooks = true;
+          enhancedConfig.secondGenerate.worldbooks = [];
           $('#gal-enhanced-worldbooks-list').hide();
           $('.gal-enhanced-worldbook-item').prop('checked', false);
         } else if (mode === 'custom') {
           // 选择"使用以下世界书"，启用自定义并显示列表
-          settings.enhancedMode.secondGenerate.useWorldbooks = true;
+          enhancedConfig.secondGenerate.useWorldbooks = true;
           $('#gal-enhanced-worldbooks-list').show();
         }
         saveSettings();
       });
       // 世界书多选列表变更
       $(document).on('change', '.gal-enhanced-worldbook-item', function () {
+        const enhancedConfig = ensureEnhancedModeSettings();
         const selectedWorldbooks = [];
         $('.gal-enhanced-worldbook-item:checked').each(function () {
           selectedWorldbooks.push($(this).val());
         });
-        settings.enhancedMode.secondGenerate.worldbooks = selectedWorldbooks;
+        enhancedConfig.secondGenerate.worldbooks = Array.from(
+          new Set(
+            selectedWorldbooks
+              .map(name => String(name || '').trim())
+              .filter(Boolean),
+          ),
+        );
         // 如果没有选择任何世界书，自动切换到"不使用任何世界书"
         if (selectedWorldbooks.length === 0) {
           $('input[name="gal-enhanced-worldbook-mode"][value="none"]').prop('checked', true);

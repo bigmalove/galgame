@@ -1,4 +1,3 @@
-"use strict";
 (() => {
   // src/core/constants.js
   var SCRIPT_ID = "galgame-ui-plugin";
@@ -5188,6 +5187,9 @@ ${lines.join("\n")}`;
                     <button class="gal-menu-btn" data-action="log">
                         <i class="fa-solid fa-list-ul"></i> \u5386\u53F2
                     </button>
+                    <button class="gal-menu-btn" data-action="view-original">
+                        <i class="fa-solid fa-display"></i> \u539F\u754C\u9762
+                    </button>
                     <button class="gal-menu-btn" data-action="close-mode">
                         <i class="fa-solid fa-power-off"></i> \u9000\u51FA
                     </button>
@@ -5198,6 +5200,9 @@ ${lines.join("\n")}`;
                   </button>
                   <button class="gal-footer-btn" data-action="close-mode" title="\u9000\u51FA Galgame \u6A21\u5F0F">
                     <i class="fa-solid fa-power-off"></i> <span class="gal-btn-text">CLOSE</span>
+                  </button>
+                  <button class="gal-footer-btn" data-action="view-original" title="\u67E5\u770B\u6D88\u606F\u5185\u5D4C\u754C\u9762">
+                    <i class="fa-solid fa-display"></i> <span class="gal-btn-text">VIEW</span>
                   </button>
                   <button class="gal-footer-btn" data-action="config" title="\u8BBE\u7F6E">
                     <i class="fa-solid fa-gear"></i> <span class="gal-btn-text">CONFIG</span>
@@ -7495,7 +7500,7 @@ ${lines.join("\n")}`;
           await this.xiaobaixTts.speak(segment.text, {
             speaker: speakerValue,
             resourceId,
-            context
+            contextTexts: context ? [context] : []
           });
           this.isPlaying = true;
           this.currentSegmentId = segmentId;
@@ -7512,7 +7517,7 @@ ${lines.join("\n")}`;
             message: segment.text,
             speaker: speakerValue,
             resourceId,
-            context
+            contextTexts: context ? [context] : []
           });
           this.isPlaying = true;
           this.currentSegmentId = segmentId;
@@ -9109,10 +9114,26 @@ ${extraRule}
         expression = exprMatch[1];
         text = text.replace(expressionTagRegex, "").trim();
       }
-      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["\u201c"'「『（(]([\s\S]+)["\u201d"'」』）)]\s*$/);
+      let bracketContext = null;
+      const bracketMatch = text.match(/\[([^\]|]+?)(?:\|([^\]]+))?\]/);
+      if (bracketMatch) {
+        if (!expression) {
+          expression = bracketMatch[1].trim();
+        }
+        if (bracketMatch[2]) {
+          bracketContext = bracketMatch[2].trim();
+        }
+        text = text.replace(bracketMatch[0], "").trim();
+      }
+      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*[""\"'「『（(]([\s\S]+)[""\"'」』）)]\s*$/);
       if (!dialogueMatch) {
         dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
       }
+      const isValidSpeaker = (name) => {
+        if (name.length > 10) return false;
+        if (/[，,。.、；;！!？?…—–0-9０-９]/.test(name)) return false;
+        return true;
+      };
       if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
         let speaker = dialogueMatch[1].trim();
         const dialogue = dialogueMatch[2].trim();
@@ -9135,7 +9156,7 @@ ${extraRule}
             expression: null
           };
         }
-        if (speaker.length <= 20 && speaker.length > 0) {
+        if (isValidSpeaker(speaker)) {
           const segResult = {
             type: "dialogue",
             speaker,
@@ -9144,6 +9165,13 @@ ${extraRule}
           };
           if (ttsConfigString) {
             segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+          }
+          if (bracketContext) {
+            if (!segResult.tts) {
+              segResult.tts = { speaker, context: bracketContext };
+            } else if (!segResult.tts.context) {
+              segResult.tts.context = bracketContext;
+            }
           }
           return segResult;
         }
@@ -10596,6 +10624,51 @@ ${firstResult}`;
       /* 隐藏非Galgame消息楼层 */
       #chat > .mes.gal-hidden {
         display: none !important;
+      }
+
+      /* 嵌入内容查看弹窗 */
+      .gal-embedded-viewer {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(0.375rem);
+      }
+
+      .gal-embedded-viewer-body {
+        position: relative;
+        max-width: 95vw;
+        max-height: 90vh;
+        overflow: auto;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.5);
+      }
+
+      .gal-embedded-viewer-close {
+        position: fixed;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 100000;
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        border: 0.0625rem solid rgba(255, 255, 255, 0.2);
+        background: linear-gradient(135deg, rgba(30, 30, 40, 0.95), rgba(50, 50, 70, 0.95));
+        backdrop-filter: blur(0.625rem);
+        color: #fff;
+        font-size: 0.85rem;
+        cursor: pointer;
+        box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.4);
+        transition: opacity 0.2s;
+      }
+
+      .gal-embedded-viewer-close:hover {
+        opacity: 0.85;
       }
 
       /* 全屏切换按钮 */
@@ -14933,7 +15006,8 @@ ${firstResult}`;
     const merged = [];
     allPs.forEach((p) => {
       if (cgParentPs.has(p)) {
-        merged.push({ type: "cg", speaker: null, text: "", expression: null, cgIndex: cgIdx++ });
+        const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
+        merged.push({ type: "cg", speaker: null, text: "", expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
       } else {
         if (regularIdx < baseSegments.length) {
           merged.push(baseSegments[regularIdx++]);
@@ -15907,6 +15981,7 @@ ${firstResult}`;
       });
       await disableWorldbookGlobally();
       console.log(`[${SCRIPT_NAME}] Galgame\u6A21\u5F0F\u5173\u95ED\uFF08\u5DF2\u53D6\u6D88\u4E16\u754C\u4E66\u5168\u5C40\u542F\u7528\uFF09`);
+      closeEmbeddedViewer();
       restoreOriginalViews();
       setTimeout(() => {
         const $lastMes = $("#chat > .mes").last();
@@ -16017,6 +16092,85 @@ ${firstResult}`;
       if (!$(e.target).closest('#gal-mobile-menu, [data-action="config"]').length) {
         closeMobileMenu();
       }
+    });
+    const GAL_TAG_NAMES = /* @__PURE__ */ new Set(["p", "background", "bgm", "option", "maintext", "bgimg", "whimg", "bnimg", "sprite", "br"]);
+    let embeddedViewerState = null;
+    function closeEmbeddedViewer() {
+      if (!embeddedViewerState) return;
+      for (const entry of embeddedViewerState.nodes) {
+        if (entry.nextSibling && entry.nextSibling.parentNode === entry.parent) {
+          entry.parent.insertBefore(entry.node, entry.nextSibling);
+        } else {
+          entry.parent.appendChild(entry.node);
+        }
+      }
+      embeddedViewerState.$viewer.remove();
+      embeddedViewerState = null;
+    }
+    $(doc).on("click", '#gal-global-overlay [data-action="view-original"]', function(e) {
+      e.stopPropagation();
+      closeMobileMenu();
+      if (embeddedViewerState) {
+        closeEmbeddedViewer();
+        return;
+      }
+      const mesId = $("#gal-global-overlay .gal-game-container").attr("data-mes-id");
+      if (!mesId) {
+        showToast5("\u672A\u627E\u5230\u5F53\u524D\u6D88\u606F");
+        return;
+      }
+      const $mes = $(`.mes[mesid="${mesId}"]`);
+      if (!$mes.length) {
+        showToast5("\u672A\u627E\u5230\u6D88\u606F\u5143\u7D20");
+        return;
+      }
+      const mesText = $mes.find(".mes_text")[0];
+      if (!mesText) {
+        showToast5("\u672A\u627E\u5230\u6D88\u606F\u5185\u5BB9");
+        return;
+      }
+      const embeddedNodes = [];
+      for (const child of Array.from(mesText.childNodes)) {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          const tag = child.tagName.toLowerCase();
+          if (!GAL_TAG_NAMES.has(tag)) {
+            embeddedNodes.push(child);
+          }
+        }
+      }
+      if (embeddedNodes.length === 0) {
+        showToast5("\u5F53\u524D\u6D88\u606F\u6CA1\u6709\u5D4C\u5165\u7684\u754C\u9762\u5185\u5BB9");
+        return;
+      }
+      const wasHidden = $mes.hasClass("gal-hidden");
+      if (wasHidden) $mes.removeClass("gal-hidden");
+      const origWidth = mesText.offsetWidth;
+      const origHeight = mesText.offsetHeight;
+      if (wasHidden) $mes.addClass("gal-hidden");
+      const $viewer = $(`
+      <div class="gal-embedded-viewer">
+        <div class="gal-embedded-viewer-body"></div>
+        <button class="gal-embedded-viewer-close"><i class="fa-solid fa-arrow-left"></i> \u8FD4\u56DE</button>
+      </div>
+    `);
+      const body = $viewer.find(".gal-embedded-viewer-body")[0];
+      if (origWidth > 0) {
+        body.style.width = origWidth + "px";
+      }
+      if (origHeight > 0) {
+        body.style.height = Math.min(origHeight, topWindow.innerHeight * 0.9) + "px";
+      }
+      const nodeEntries = embeddedNodes.map((node) => {
+        const entry = { node, parent: node.parentNode, nextSibling: node.nextSibling };
+        body.appendChild(node);
+        return entry;
+      });
+      embeddedViewerState = { nodes: nodeEntries, $viewer };
+      $(topWindow.document.body).append($viewer);
+      $viewer.find(".gal-embedded-viewer-close").on("click", () => closeEmbeddedViewer());
+      $viewer.on("click", function(ev) {
+        if (ev.target === $viewer[0]) closeEmbeddedViewer();
+      });
     });
     $(doc).on("click", '#gal-global-overlay [data-action="log"]', function(e) {
       e.stopPropagation();

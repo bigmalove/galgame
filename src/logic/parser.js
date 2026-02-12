@@ -342,10 +342,30 @@ export function parseGalgameContent(html, messageId) {
       text = text.replace(expressionTagRegex, '').trim();
     }
 
-    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["\u201c"'「『（(]([\s\S]+)["\u201d"'」』）)]\s*$/);
+    // 提取 [表情|语气描述] 方括号语法，例如 [惊讶|用压低的语气说]
+    let bracketContext = null;
+    const bracketMatch = text.match(/\[([^\]|]+?)(?:\|([^\]]+))?\]/);
+    if (bracketMatch) {
+      if (!expression) {
+        expression = bracketMatch[1].trim();
+      }
+      if (bracketMatch[2]) {
+        bracketContext = bracketMatch[2].trim();
+      }
+      text = text.replace(bracketMatch[0], '').trim();
+    }
+
+    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*[""\"'「『（(]([\s\S]+)[""\"'」』）)]\s*$/);
     if (!dialogueMatch) {
       dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
     }
+
+    // 验证说话人名称是否合理：真实角色名不含句子标点或数字，且通常不超过10个字符
+    const isValidSpeaker = (name) => {
+      if (name.length > 10) return false;
+      if (/[，,。.、；;！!？?…—–0-9０-９]/.test(name)) return false;
+      return true;
+    };
 
     if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
       let speaker = dialogueMatch[1].trim();
@@ -373,7 +393,7 @@ export function parseGalgameContent(html, messageId) {
         };
       }
 
-      if (speaker.length <= 20 && speaker.length > 0) {
+      if (isValidSpeaker(speaker)) {
         const segResult = {
           type: 'dialogue',
           speaker: speaker,
@@ -382,6 +402,13 @@ export function parseGalgameContent(html, messageId) {
         };
         if (ttsConfigString) {
           segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+        }
+        if (bracketContext) {
+          if (!segResult.tts) {
+            segResult.tts = { speaker: speaker, context: bracketContext };
+          } else if (!segResult.tts.context) {
+            segResult.tts.context = bracketContext;
+          }
         }
         return segResult;
       }

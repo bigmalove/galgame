@@ -213,12 +213,12 @@ export function bindAssetManagerContentEvents($modal, activeTab) {
 function buildSpritesTab(activeTab, allSprites, charactersData) {
   return `
   <div class="gal-tab-pane ${activeTab === 'sprites' ? 'active' : ''}" data-pane="sprites" style="${activeTab !== 'sprites' ? 'display: none;' : ''}">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">已保存 ${allSprites.length} 个立绘，共 ${charactersData.size} 个角色</span>
-      <div style="display: flex; gap: 10px;">
-        <button class="gal-action-btn" id="gal-batch-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>批量上传</span></button>
-        <button class="gal-action-btn primary" id="gal-add-sprite-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>添加立绘</span></button>
-        <button class="gal-action-btn" id="gal-manage-expressions-btn" style="padding: 8px 16px; background: #17a2b8; color: #fff; border: none;"><i class="fa-solid fa-face-smile"></i> <span>表情标签</span></button>
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">已保存 ${allSprites.length} 个立绘，共 ${charactersData.size} 个角色</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>批量上传</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-add-sprite-btn"><i class="fa-solid fa-plus"></i> <span>添加立绘</span></button>
+        <button class="gal-action-btn gal-pane-btn teal" id="gal-manage-expressions-btn"><i class="fa-solid fa-face-smile"></i> <span>表情标签</span></button>
       </div>
     </div>
     ${charactersData.size === 0
@@ -253,11 +253,11 @@ function buildSpritesTab(activeTab, allSprites, charactersData) {
 function buildBackgroundsTab(settings, allBackgrounds) {
   return `
   <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">已保存 ${allBackgrounds.length} 个背景</span>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <button class="gal-action-btn" id="gal-batch-bg-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>批量上传</span></button>
-        <button class="gal-action-btn primary" id="gal-add-bg-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>添加背景</span></button>
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">已保存 ${allBackgrounds.length} 个背景</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-bg-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>批量上传</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-add-bg-btn"><i class="fa-solid fa-plus"></i> <span>添加背景</span></button>
       </div>
     </div>
     ${allBackgrounds.length === 0
@@ -334,6 +334,17 @@ export function buildAssetManagerStyles() {
     .gal-import-progress-bar { height: 100%; background: linear-gradient(90deg, #00d2ff, #00a8cc); width: 0%; transition: width 0.3s ease; }
     .gal-import-progress-text { font-size: 0.9rem; color: #aaa; }
     .gal-import-progress-details { font-size: 0.8rem; color: #888; margin-top: 8px; max-height: 60px; overflow-y: auto; }
+    .gal-pane-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .gal-pane-stat { font-weight: 700; color: ${THEME.dark}; }
+    .gal-pane-actions { display: flex; gap: 10px; align-items: center; }
+    .gal-pane-btn { padding: 8px 16px !important; transform: none !important; box-shadow: none !important; border-radius: 6px !important; font-size: 0.85rem !important; border: none !important; }
+    .gal-pane-btn * { transform: none !important; }
+    .gal-pane-btn.purple { background: #6f42c1; color: #fff; }
+    .gal-pane-btn.purple:hover { background: #5a32a3; color: #fff; }
+    .gal-pane-btn.teal { background: #17a2b8; color: #fff; }
+    .gal-pane-btn.teal:hover { background: #138496; color: #fff; }
+    .gal-pane-btn.primary { background: ${THEME.accent}; color: ${THEME.dark}; }
+    .gal-pane-btn.primary:hover { background: #00a8cc; color: #fff; }
     .gal-imagegen-pills { display:flex; gap:8px; padding:12px 0; flex-wrap:wrap; }
     .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
     .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
@@ -401,12 +412,18 @@ function bindBackgroundEvents($modal, activeTab) {
     if (!$img.length) return;
     const src = $img.attr('src');
     const scene = $(this).data('scene');
-    const $lightbox = $(`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
+    // 全屏时 contain:layout 会困住 position:fixed，需用 absolute 替代
+    const mountRoot = getModalMountRoot();
+    const isFullscreen = mountRoot !== topWindow.document.body;
+    const posStyle = isFullscreen
+      ? 'position:absolute;top:0;left:0;width:100%;height:100%;'
+      : 'position:fixed;top:0;left:0;width:100vw;height:100vh;';
+    const $lightbox = $(`<div style="${posStyle}background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
       <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
       <span style="color:#ccc;font-size:0.9rem;">${scene}</span>
     </div>`);
     $lightbox.on('click', function () { $(this).remove(); });
-    $(getModalMountRoot()).append($lightbox);
+    $(mountRoot).append($lightbox);
   });
   $modal.find('#gal-add-bg-btn').on('click', () => {
     $modal.remove();

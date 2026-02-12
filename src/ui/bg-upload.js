@@ -21,8 +21,11 @@ export function showBatchBackgroundUploadDialog(onCloseCallback) {
   const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-bg-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-          <div class="gal-input-title" style="padding: 15px 25px; border-bottom: 1px solid #eee; flex-shrink: 0; margin: 0;">
+          <div class="gal-input-title" style="padding: 15px 25px; border-bottom: 1px solid #eee; flex-shrink: 0; margin: 0; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-images"></i> 批量上传背景</span>
+            <button id="gal-batch-bg-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
 
           <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
@@ -73,10 +76,7 @@ export function showBatchBackgroundUploadDialog(onCloseCallback) {
 
           <!-- 底部按钮 -->
           <div class="gal-input-actions" style="display: flex; gap: 12px; padding: 15px 25px; border-top: 1px solid #eee; background: #fff; flex-shrink: 0;">
-              <button class="gal-action-btn" id="gal-batch-cancel-btn" style="flex: 1; min-height: 44px; justify-content: center;">
-                <span>取消</span>
-              </button>
-              <button class="gal-action-btn primary" id="gal-batch-save-btn" style="flex: 2; min-height: 44px; justify-content: center; display: none;">
+              <button class="gal-action-btn primary" id="gal-batch-save-btn" style="flex: 1; min-height: 44px; justify-content: center; display: none;">
                 <i class="fa-solid fa-save"></i>
                 <span id="gal-batch-save-text">保存所有背景 (0)</span>
               </button>
@@ -314,7 +314,8 @@ export function showBatchBackgroundUploadDialog(onCloseCallback) {
     });
     if (typeof onCloseCallback === 'function') onCloseCallback();
   }
-  $('#gal-batch-cancel-btn').on('click', closeDialog);
+  $('#gal-batch-bg-close-x').on('click', closeDialog);
+  $modal.on('click', function (e) { if (e.target === this) closeDialog(); });
   // 保存逻辑
   $saveBtn.on('click', async function () {
     let emptyNames = 0;
@@ -359,8 +360,11 @@ export function showBackgroundUploadDialog(onCloseCallback) {
   const modalHtml = `
       <div class="gal-input-modal" id="gal-bg-upload-modal">
         <div class="gal-input-box" style="max-width: 600px; width: 90%; padding: 25px;">
-          <div class="gal-input-title" style="margin-bottom: 20px; font-size: 1.3rem;">
+          <div class="gal-input-title" style="margin-bottom: 20px; font-size: 1.3rem; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-panorama"></i> 添加背景图片</span>
+            <button id="gal-bg-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
 
           <div style="margin-bottom: 15px;">
@@ -439,9 +443,6 @@ export function showBackgroundUploadDialog(onCloseCallback) {
           </div>
 
           <div class="gal-input-actions" style="display: flex; gap: 12px;">
-            <button class="gal-action-btn" id="gal-bg-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-              <span>取消</span>
-            </button>
             <button class="gal-action-btn primary" id="gal-bg-confirm" style="flex: 1; min-height: 44px; justify-content: center;" disabled>
               <i class="fa-solid fa-save"></i>
               <span>保存背景</span>
@@ -601,8 +602,8 @@ export function showBackgroundUploadDialog(onCloseCallback) {
       }
     }
   };
-  // 取消
-  $('#gal-bg-cancel').on('click', handleClose);
+  // 关闭（右上角 X）
+  $('#gal-bg-close-x').on('click', handleClose);
   $modal.on('click', function (e) {
     if (e.target === this) handleClose();
   });

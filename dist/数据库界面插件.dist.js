@@ -5219,22 +5219,6 @@ ${lines.join("\n")}`;
                 </div>
 
                 <div class="gal-bottom-toolbar">
-                  <!-- \u79FB\u52A8\u7AEF\u4E0A\u62C9\u83DC\u5355 -->
-                  <div class="gal-mobile-menu" id="gal-mobile-menu">
-                    <button class="gal-menu-btn" data-action="open-settings">
-                        <i class="fa-solid fa-gear"></i> \u8BBE\u7F6E
-                    </button>
-                    <button class="gal-menu-btn" data-action="log">
-                        <i class="fa-solid fa-list-ul"></i> \u5386\u53F2
-                    </button>
-                    <button class="gal-menu-btn" data-action="view-original">
-                        <i class="fa-solid fa-display"></i> \u539F\u754C\u9762
-                    </button>
-                    <button class="gal-menu-btn" data-action="close-mode">
-                        <i class="fa-solid fa-power-off"></i> \u9000\u51FA
-                    </button>
-                  </div>
-
                   <button class="gal-footer-btn" data-action="log" title="\u67E5\u770B\u5386\u53F2">
                     <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
                   </button>
@@ -5280,6 +5264,19 @@ ${lines.join("\n")}`;
             <i class="fa-solid fa-times"></i>
           </button>
           <div class="gal-cg-viewer-loading">\u56FE\u7247\u751F\u6210\u4E2D...</div>
+        </div>
+
+        <!-- \u79FB\u52A8\u7AEF\u4E0A\u62C9\u83DC\u5355\uFF08\u7F6E\u4E8E overlay \u9876\u5C42\uFF0C\u907F\u514D\u88AB overflow:hidden \u88C1\u526A\uFF09 -->
+        <div class="gal-mobile-menu" id="gal-mobile-menu">
+          <button class="gal-menu-btn" data-action="open-settings">
+              <i class="fa-solid fa-gear"></i> \u8BBE\u7F6E
+          </button>
+          <button class="gal-menu-btn" data-action="log">
+              <i class="fa-solid fa-list-ul"></i> \u5386\u53F2
+          </button>
+          <button class="gal-menu-btn" data-action="view-original">
+              <i class="fa-solid fa-display"></i> \u539F\u754C\u9762
+          </button>
         </div>
       </div>
     `;
@@ -10702,9 +10699,7 @@ ${firstResult}`;
   function injectStyles() {
     const targetDoc = topWindow.document;
     const oldStyle = targetDoc.getElementById(`${SCRIPT_ID}-styles`);
-    if (oldStyle) {
-      oldStyle.remove();
-    }
+    if (oldStyle) oldStyle.remove();
     topWindow[STYLES_INJECTED_FLAG] = true;
     if (!targetDoc.querySelector('link[href*="Noto+Sans+SC"]')) {
       const fontLink = targetDoc.createElement("link");
@@ -10712,3843 +10707,7 @@ ${firstResult}`;
       fontLink.rel = "stylesheet";
       (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
     }
-    const css = `
-      /* ═══════════════════════════════════════════════════════════════
-         Galgame 界面插件 - Cyber Pop 全屏沉浸式主题
-         ═══════════════════════════════════════════════════════════════ */
-
-      /* z-index 统一层级 token（先保持兼容数值，后续可继续收敛） */
-      :root {
-        --gal-z-overlay: 10000;
-        --gal-z-dropdown: 1000;
-        --gal-z-toast: 100000;
-        --gal-z-modal: 100001;
-        --gal-z-modal-critical: 100002;
-      }
-
-      .gal-z-overlay { z-index: var(--gal-z-overlay) !important; }
-      .gal-z-dropdown { z-index: var(--gal-z-dropdown) !important; }
-      .gal-z-toast { z-index: var(--gal-z-toast) !important; }
-      .gal-z-modal { z-index: var(--gal-z-modal) !important; }
-      .gal-z-critical { z-index: var(--gal-z-modal-critical) !important; }
-
-      /* 全局Galgame界面层 - 默认内联模式（在#chat内） */
-      #gal-global-overlay {
-        position: relative !important;
-        width: 100% !important;
-        min-height: 31.25rem;
-        height: 70vh;
-        max-height: 50rem;
-        display: none;
-        background: transparent !important;
-        font-family: 'Noto Sans SC', sans-serif;
-        border-radius: 0.75rem;
-        overflow: visible;
-        margin: 0.625rem 0;
-        contain: layout;
-      }
-
-      /* ★ 无级缩放 - 使用 --ui-scale 统一缩放（由脚本计算） */
-      #gal-global-overlay {
-        --ui-scale: 1;
-      }
-
-      #gal-global-overlay.active {
-        display: block !important;
-      }
-
-      /* 拖拽手柄样式 */
-      .gal-draggable-handle {
-        cursor: move;
-        user-select: none;
-      }
-
-      /* 全屏模式 - 使用!important确保覆盖 */
-      #gal-global-overlay.fullscreen {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        max-height: none !important;
-        min-height: 100vh !important;
-        z-index: var(--gal-z-overlay) !important;
-        border-radius: 0 !important;
-        margin: 0 !important;
-        box-shadow: none !important;
-      }
-
-      /* 隐藏非Galgame消息楼层 */
-      #chat > .mes.gal-hidden {
-        display: none !important;
-      }
-
-      /* 嵌入内容查看弹窗 */
-      .gal-embedded-viewer {
-        position: fixed;
-        inset: 0;
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(0.375rem);
-      }
-
-      .gal-embedded-viewer-body {
-        position: relative;
-        max-width: 95vw;
-        max-height: 90vh;
-        overflow: auto;
-        border-radius: 0.75rem;
-        box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.5);
-      }
-
-      .gal-embedded-viewer-close {
-        position: fixed;
-        top: 0.75rem;
-        right: 0.75rem;
-        z-index: 100000;
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
-        border: 0.0625rem solid rgba(255, 255, 255, 0.2);
-        background: linear-gradient(135deg, rgba(30, 30, 40, 0.95), rgba(50, 50, 70, 0.95));
-        backdrop-filter: blur(0.625rem);
-        color: #fff;
-        font-size: 0.85rem;
-        cursor: pointer;
-        box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.4);
-        transition: opacity 0.2s;
-      }
-
-      .gal-embedded-viewer-close:hover {
-        opacity: 0.85;
-      }
-
-      /* 全屏切换按钮 */
-      .gal-fullscreen-btn {
-        position: absolute;
-        top: 0.938rem;
-        right: 0.938rem;
-        z-index: 100;
-        background: rgba(43, 46, 56, 0.9);
-        color: ${THEME.accent};
-        border: 0.125rem solid ${THEME.accent};
-        padding: 0.625rem 1.125rem;
-        font-size: 0.9rem;
-        font-weight: 700;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        transition: all 0.2s;
-        font-family: 'Barlow', sans-serif;
-        border-radius: 0.25rem;
-        transform: scale(max(var(--ui-scale), 0.85));
-        transform-origin: top right;
-      }
-
-      .gal-fullscreen-btn:hover {
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-      }
-
-      .gal-fullscreen-btn i {
-        font-size: 1rem;
-      }
-
-      /* 地点时间状态栏容器 */
-      .gal-status-bar-container {
-        position: absolute;
-        top: 0.938rem;
-        right: 7.5rem; /* 在全屏按钮左侧 */
-        z-index: 100;
-        display: flex;
-        gap: 0.625rem;
-        align-items: center;
-        transform: scale(max(var(--ui-scale), 0.85));
-        transform-origin: top right;
-      }
-
-      /* 地点状态栏 */
-      .gal-location-bar {
-        background: rgba(43, 46, 56, 0.9);
-        color: #fff;
-        padding: 0 0.938rem;
-        height: 1.875rem;
-        line-height: 1.875rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        border-radius: 0.25rem;
-        border: 1px solid rgba(0, 210, 255, 0.5);
-        white-space: nowrap;
-        max-width: 21.875rem;
-        overflow: hidden; /* 父容器裁剪，防止溢出 */
-        display: flex;
-        align-items: center;
-      }
-
-      .gal-location-bar i {
-        color: ${THEME.accent};
-        margin-right: 0.5rem;
-        font-size: 0.9rem;
-        flex-shrink: 0; /* 图标不许缩小 */
-      }
-
-      .gal-location-text {
-        /* 移除省略号，以便脚本计算真实宽度 */
-        white-space: nowrap;
-        transform-origin: left center;
-        display: inline-block;
-      }
-
-      /* 时间状态栏 */
-      .gal-time-bar {
-        background: rgba(43, 46, 56, 0.9);
-        color: #fff;
-        padding: 0 0.938rem;
-        height: 1.875rem;
-        line-height: 1.875rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        border-radius: 0.25rem;
-        border: 1px solid rgba(255, 0, 85, 0.5);
-        white-space: nowrap;
-        max-width: 16.25rem; /* 增加一点宽度限制 */
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        /* justify-content: center;  移除居中，改为左对齐配合 padding/margin，方便缩放计算 */
-      }
-
-      .gal-time-bar i {
-        color: ${THEME.accentSub};
-        margin-right: 0.5rem;
-        font-size: 0.9rem;
-        flex-shrink: 0;
-      }
-
-      .gal-time-text {
-        white-space: nowrap;
-        transform-origin: left center;
-        display: inline-block;
-      }
-
-      /* 文字自动缩小效果 */
-      .gal-status-bar-container .auto-shrink {
-        display: inline-block;
-        transform-origin: left center;
-      }
-
-      /* 全屏模式下调整位置 */
-      #gal-global-overlay.fullscreen .gal-status-bar-container {
-        right: 8.125rem;
-      }
-
-      /* BGM 悬浮小组件 */
-      .gal-bgm-widget {
-        position: absolute;
-        top: 0.938rem;
-        left: 0.938rem;
-        z-index: 100;
-        background: rgba(43, 46, 56, 0.85);
-        backdrop-filter: blur(0.313rem);
-        padding: 0.5rem 0.938rem;
-        border-radius: 1.25rem;
-        color: #fff;
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        font-size: 0.85rem;
-        box-shadow: 0 0.25rem 0.625rem rgba(0,0,0,0.2);
-        transition: all 0.3s ease;
-        border: 1px solid rgba(255,255,255,0.1);
-        max-width: 2.5rem; /* 默认收起 */
-        overflow: hidden;
-        white-space: nowrap;
-        cursor: pointer;
-      }
-
-      .gal-bgm-widget:hover, .gal-bgm-widget.active {
-          max-width: 18.75rem;
-          background: rgba(43, 46, 56, 0.95);
-      }
-
-      .gal-bgm-icon {
-          color: ${THEME.accent};
-          animation: galSpin 4s linear infinite;
-          animation-play-state: paused;
-          font-size: 1.1rem;
-          min-width: 1.25rem;
-          text-align: center;
-      }
-
-      .gal-bgm-widget.playing .gal-bgm-icon {
-          animation-play-state: running;
-      }
-
-      @keyframes galSpin { 100% { transform: rotate(360deg); } }
-
-      .gal-bgm-info {
-          display: flex;
-          flex-direction: column;
-          line-height: 1.2;
-          overflow: hidden;
-          margin-right: 0.313rem;
-      }
-
-      .gal-bgm-title {
-          font-weight: bold;
-          font-size: 0.8rem;
-          color: ${THEME.accent};
-      }
-
-      .gal-bgm-ctrl {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-      }
-
-      .gal-bgm-btn {
-          background: none;
-          border: none;
-          color: #fff;
-          cursor: pointer;
-          font-size: 0.9rem;
-          padding: 0;
-          width: 1.25rem;
-      }
-      .gal-bgm-btn:hover { color: ${THEME.accent}; }
-
-      .gal-bgm-slider {
-          width: 3.75rem;
-          height: 0.25rem;
-          -webkit-appearance: none;
-          background: rgba(255,255,255,0.3);
-          border-radius: 0.125rem;
-          outline: none;
-      }
-      .gal-bgm-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 0.625rem; height: 0.625rem;
-          background: #fff;
-          border-radius: 50%;
-          cursor: pointer;
-      }
-
-      /* 主容器 - 全屏沉浸式 */
-      .gal-game-container {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        background: transparent;
-        font-family: 'Noto Sans SC', sans-serif;
-        overflow: hidden;
-        border-radius: 0.75rem;
-        box-shadow: 0 0.25rem 1.25rem rgba(0,0,0,0.1);
-        box-sizing: border-box;
-      }
-
-      /* 全屏模式下无边距 */
-      #gal-global-overlay.fullscreen .gal-game-container {
-        border-radius: 0;
-        box-shadow: none;
-        padding: 0;
-      }
-
-      /* 背景层 - 填满整个 container（不缩放） */
-      .gal-layer-bg {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 0;
-        background: #f0f2f5;
-        overflow: hidden;
-      }
-
-      /* 背景切换层（双层交叉淡入） */
-      .gal-bg-layer {
-        position: absolute;
-        inset: 0;
-        background-repeat: no-repeat;
-        background-size: cover;
-        background-position: center;
-        opacity: 1;
-        transform: scale(1);
-        transition: opacity 0.45s ease, transform 0.45s ease;
-        will-change: opacity, transform;
-      }
-
-      .gal-bg-front {
-        opacity: 0;
-        transform: scale(1.03);
-      }
-
-      .gal-bg-front.is-active {
-        opacity: 1;
-        transform: scale(1);
-      }
-
-      .gal-layer-bg.generating-bg .gal-bg-layer {
-        opacity: 0 !important;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .gal-bg-layer {
-          transition: none !important;
-          transform: none !important;
-        }
-        .gal-bg-front {
-          opacity: 0;
-        }
-        .gal-bg-front.is-active {
-          opacity: 1;
-        }
-      }
-
-      /* 游戏内容层 */
-      .gal-game-content {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        z-index: 1;
-      }
-
-      .gal-layer-bg::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background-image: radial-gradient(#ccc 1px, transparent 1px);
-        background-size: 1.25rem 1.25rem;
-        opacity: 0.3;
-        pointer-events: none;
-      }
-
-      /* 有背景图片时隐藏默认点阵图案 */
-      .gal-layer-bg.has-bg::before {
-        display: none;
-      }
-
-      /* ═══════════════════════════════════════════════════════════════
-         背景生成中特效 - 高性能纯CSS动画
-         ═══════════════════════════════════════════════════════════════ */
-      .gal-layer-bg.generating-bg {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      }
-
-      /* 流动渐变背景动画 */
-      @keyframes galGenGradient {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-      }
-
-      /* 扫描线效果 */
-      .gal-layer-bg.generating-bg::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: repeating-linear-gradient(
-          0deg,
-          transparent,
-          transparent 0.125rem,
-          rgba(0, 210, 255, 0.03) 0.125rem,
-          rgba(0, 210, 255, 0.03) 0.25rem
-        );
-        opacity: 0.15;
-        pointer-events: none;
-      }
-
-      @keyframes galGenScanline {
-        0% { transform: translateY(-100%); }
-        100% { transform: translateY(100%); }
-      }
-
-
-      /* ═══════════════════════════════════════════════════════════════
-         立绘动画关键帧
-         ═══════════════════════════════════════════════════════════════ */
-      @keyframes galSpriteSlideInLeft {
-        from { transform: translateX(-6.25rem); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      @keyframes galSpriteSlideInRight {
-        from { transform: translateX(6.25rem); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      @keyframes galSpriteSlideInCenter {
-        from { transform: translateY(3.125rem); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-      @keyframes galSpriteSlideOutLeft {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(-6.25rem); opacity: 0; }
-      }
-      @keyframes galSpriteSlideOutRight {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(6.25rem); opacity: 0; }
-      }
-      @keyframes galSpriteBreathing {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-0.188rem); }
-      }
-      @keyframes galSpriteShake {
-        0%, 100% { transform: translateX(0); }
-        20% { transform: translateX(-0.313rem); }
-        40% { transform: translateX(0.313rem); }
-        60% { transform: translateX(-0.188rem); }
-        80% { transform: translateX(0.188rem); }
-      }
-      @keyframes galSpriteBounce {
-        0% { transform: scale(1); }
-        30% { transform: scale(1.15); }
-        50% { transform: scale(0.95); }
-        70% { transform: scale(1.05); }
-        100% { transform: scale(1); }
-      }
-      @keyframes galSpriteExpressionChange {
-        0% { opacity: 0.7; transform: scale(0.98); }
-        100% { opacity: 1; transform: scale(1); }
-      }
-
-      /* 立绘层 - 多角色布局 (左/中/右) */
-      .gal-layer-character {
-        position: absolute;
-        bottom: 35%;
-        left: 0;
-        width: 100%;
-        height: 55%;
-        z-index: 5;
-        display: flex;
-        justify-content: center;
-        align-items: flex-end;
-        pointer-events: none;
-        padding: 0 3%;
-        gap: 2%;
-      }
-
-      /* Live2D 全局舞台画布：下置到 UI 层下方，避免视觉遮挡按钮/对话框 */
-      .gal-live2d-stage-canvas {
-        z-index: 4;
-        pointer-events: none;
-      }
-
-      /* Live2D 位置调整参考框 */
-      .gal-live2d-position-guide {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        z-index: 6;
-      }
-
-      .gal-live2d-position-guide-box {
-        position: absolute;
-        border: 0.125rem dashed rgba(0, 210, 255, 0.55);
-        border-radius: 0.625rem;
-        box-shadow: 0 0 1rem rgba(0, 210, 255, 0.28);
-        background: rgba(0, 0, 0, 0.06);
-      }
-
-      .gal-live2d-position-guide-label {
-        position: absolute;
-        top: -1.25rem;
-        left: 0;
-        font-size: 0.72rem;
-        line-height: 1;
-        color: #77dfff;
-        text-shadow: 0 0 0.375rem rgba(0, 0, 0, 0.5);
-        white-space: nowrap;
-      }
-
-      /* Live2D 位置调整工具栏 */
-      .gal-live2d-position-toolbar {
-        position: fixed;
-        left: 50%;
-        bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-        transform: translateX(-50%);
-        width: min(92vw, 36rem);
-        min-width: 20rem;
-        max-height: min(65vh, 33.75rem);
-        overflow-y: auto;
-        padding: 0.9375rem 1.125rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.6875rem;
-        border-radius: 0.9375rem;
-        border: 0.0625rem solid rgba(255, 255, 255, 0.16);
-        color: #fff;
-        background: linear-gradient(135deg, rgba(26, 28, 38, 0.97), rgba(42, 46, 64, 0.97));
-        backdrop-filter: blur(0.625rem);
-        box-shadow: 0 0.5rem 1.75rem rgba(0, 0, 0, 0.46);
-      }
-
-      .gal-live2d-position-row {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-      }
-
-      .gal-live2d-position-label {
-        min-width: 4.5rem;
-        font-size: 0.85rem;
-        color: rgba(255, 255, 255, 0.92);
-      }
-
-      .gal-live2d-position-slider {
-        flex: 1;
-        cursor: pointer;
-        accent-color: #00d2ff;
-      }
-
-      .gal-live2d-position-value {
-        min-width: 2.875rem;
-        text-align: right;
-        font-size: 0.9rem;
-        font-weight: 600;
-      }
-
-      .gal-live2d-position-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.625rem;
-        margin-top: 0.25rem;
-      }
-
-      .gal-live2d-position-btn {
-        border: none;
-        border-radius: 0.5rem;
-        padding: 0.5rem 0.875rem;
-        color: #fff;
-        cursor: pointer;
-        font-size: 0.85rem;
-      }
-
-      .gal-live2d-position-btn-reset {
-        background: rgba(255, 255, 255, 0.12);
-        border: 0.0625rem solid rgba(255, 255, 255, 0.2);
-      }
-
-      .gal-live2d-position-btn-cancel {
-        background: rgba(220, 53, 69, 0.82);
-      }
-
-      .gal-live2d-position-btn-save {
-        background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-        font-weight: 600;
-      }
-
-      @media screen and (max-width: 48rem), screen and (max-height: 46rem) {
-        .gal-live2d-position-toolbar {
-          top: calc(0.5rem + env(safe-area-inset-top, 0px));
-          bottom: auto;
-          width: calc(100vw - 1rem);
-          min-width: 0;
-          max-height: calc(72vh - env(safe-area-inset-top, 0px));
-          padding: 0.8125rem 0.8125rem 0.75rem;
-          border-radius: 0.75rem;
-        }
-
-        .gal-live2d-position-label {
-          min-width: 3.75rem;
-          font-size: 0.8rem;
-        }
-
-        .gal-live2d-position-value {
-          min-width: 2.5rem;
-          font-size: 0.85rem;
-        }
-
-        .gal-live2d-position-actions {
-          flex-wrap: wrap;
-          justify-content: stretch;
-          margin-top: 0.125rem;
-        }
-
-        .gal-live2d-position-btn {
-          flex: 1 1 calc(50% - 0.3125rem);
-          min-height: 2.25rem;
-          font-size: 0.82rem;
-          padding: 0.5rem 0.625rem;
-        }
-      }
-
-      /* 多角色槽位 */
-      .gal-char-slot {
-        position: relative;
-        flex: 0 0 30%;
-        max-width: 30%;
-        height: 100%;
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        pointer-events: auto;
-      }
-      .gal-char-slot.slot-left { order: 1; }
-      .gal-char-slot.slot-right { order: 2; }
-
-      .gal-char-container {
-        position: relative;
-        max-height: 100%;
-        /* --base-scale removed to allow inheritance */
-        --state-scale: 1;
-        /* scale moved to .gal-char-img to avoid conflict with transform animations on container */
-        transform-origin: bottom center;
-        max-width: 100%;
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        filter: drop-shadow(0 0.625rem 1.875rem rgba(0,0,0,0.4));
-        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-                    filter 0.3s ease,
-                    opacity 0.3s ease;
-        pointer-events: auto;
-        cursor: pointer;
-        animation: galSpriteBreathing 4s ease-in-out infinite;
-      }
-
-      /* 入场动画 */
-      .gal-char-container.entering-left { animation: galSpriteSlideInLeft 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
-      .gal-char-container.entering-center { animation: galSpriteSlideInCenter 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
-      .gal-char-container.entering-right { animation: galSpriteSlideInRight 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
-
-      /* 退场动画 */
-      .gal-char-container.exiting-left { animation: galSpriteSlideOutLeft 0.4s ease-in forwards; pointer-events: none; }
-      .gal-char-container.exiting-right { animation: galSpriteSlideOutRight 0.4s ease-in forwards; pointer-events: none; }
-
-      /* 表情切换动画 */
-      .gal-char-container.expression-change { animation: galSpriteExpressionChange 0.3s ease-out; }
-
-      /* 说话者状态 - 基础样式 */
-      .gal-char-container.speaking {
-        --state-scale: 1.05;
-        z-index: 10;
-        filter: drop-shadow(0 0.938rem 2.5rem rgba(0,0,0,0.5));
-        position: relative;
-      }
-
-      .gal-char-container.silent {
-        --state-scale: 0.95;
-        filter: drop-shadow(0 0.313rem 0.938rem rgba(0,0,0,0.3));
-        z-index: 4;
-      }
-
-      /* 说话者光晕效果 - 仅在启用时生效 */
-      @keyframes speakingGlow {
-        0%, 100% {
-          filter: drop-shadow(0 0 0.5rem rgba(255, 215, 0, 0.7))
-                  drop-shadow(0 0 0.938rem rgba(255, 180, 0, 0.5))
-                  drop-shadow(0 0.938rem 1.875rem rgba(0,0,0,0.4));
-        }
-        50% {
-          filter: drop-shadow(0 0 0.938rem rgba(255, 215, 0, 0.9))
-                  drop-shadow(0 0 1.875rem rgba(255, 180, 0, 0.7))
-                  drop-shadow(0 0.938rem 1.875rem rgba(0,0,0,0.4));
-        }
-      }
-
-      .gal-layer-character.glow-enabled .gal-char-container.speaking {
-        animation: speakingGlow 2s ease-in-out infinite, galSpriteBreathing 4s ease-in-out infinite;
-      }
-
-      /* 漫画式对话气泡指示器 - 仅在启用时生效 */
-      @keyframes bubbleBounce {
-        0%, 100% { transform: translateY(0) scale(1); }
-        50% { transform: translateY(-0.5rem) scale(1.1); }
-      }
-
-      .gal-layer-character.bubble-enabled .gal-char-container.speaking::before {
-        content: '💬';
-        position: absolute;
-        top: -0.625rem;
-        right: 10%;
-        font-size: 2.5rem;
-        z-index: 100;
-        animation: bubbleBounce 1s ease-in-out infinite;
-        filter: drop-shadow(0.125rem 0.125rem 0.25rem rgba(0,0,0,0.5));
-      }
-
-      /* TTS 模式下的气泡样式 (只要开启TTS就显示喇叭) */
-      .gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking::before {
-        content: '\\f028' !important; /* FontAwesome 喇叭图标 */
-        font-family: "Font Awesome 6 Free";
-        font-weight: 900;
-        color: ${THEME.accent};
-        font-size: 2.2rem;
-      }
-
-      /* === 移动端适配：缩小TTS喇叭 === */
-      @media screen and (max-width: 48rem) {
-          .gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking::before {
-              font-size: 1.5rem !important; /* 移动端缩小字号 */
-              top: -0.3rem !important;      /* 微调位置 */
-              right: 5% !important;         /* 稍微靠里一点，避免贴边 */
-          }
-      }
-
-      /* 情绪特效 - 仅保留动画，移除滤镜 */
-      .gal-char-container[data-emotion="angry"] {
-        animation: galSpriteShake 0.4s ease-in-out 2, galSpriteBreathing 4s ease-in-out 0.8s infinite;
-      }
-      .gal-char-container[data-emotion="surprised"] {
-        animation: galSpriteBounce 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite;
-      }
-
-
-      /* 场景色调 */
-      .gal-layer-character.scene-night {
-        filter: hue-rotate(-10deg) brightness(0.85) saturate(0.9);
-      }
-      .gal-layer-character.scene-night .gal-char-container {
-        filter: drop-shadow(0 0.625rem 1.875rem rgba(0,0,100,0.5));
-      }
-      .gal-layer-character.scene-indoor {
-        filter: sepia(0.08) brightness(1.02);
-      }
-      .gal-layer-character.scene-indoor .gal-char-container {
-        filter: drop-shadow(0 0.625rem 1.875rem rgba(100,50,0,0.3));
-      }
-
-      .gal-char-img {
-        max-height: 100%;
-        max-width: 100%;
-        height: auto;
-        width: auto;
-        object-fit: contain;
-        object-position: bottom center;
-        /* Apply scale here to avoid conflict with container animations */
-        transform: scale(calc(var(--base-scale, 1) * var(--state-scale)));
-        transform-origin: bottom center;
-        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      }
-
-      .gal-char-placeholder {
-        width: 12.5rem;
-        height: 21.875rem;
-        background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(240,240,240,0.9) 100%);
-        border: 0.25rem dashed #ccc;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        color: #999;
-        gap: 0.625rem;
-        border-radius: 0.625rem;
-        cursor: pointer;
-        transition: all 0.3s;
-        pointer-events: auto;
-      }
-
-      .gal-char-placeholder:hover {
-        border-color: ${THEME.accent};
-        color: ${THEME.accent};
-      }
-
-      .gal-char-placeholder i {
-        font-size: 4rem;
-      }
-
-      .gal-char-placeholder span {
-        font-size: 0.9rem;
-        font-weight: 600;
-      }
-
-      /* 对话框层 - 底部悬浮 */
-      .gal-dialog-layer {
-        position: absolute;
-        bottom: 1.25rem;
-        left: 10%;
-        right: 10%;
-        height: 30%; /* 相对高度 */
-        max-width: none;
-        z-index: 30;
-        pointer-events: auto;
-      }
-
-      /* 名字标签 */
-      .gal-name-badge {
-        position: absolute;
-        top: -1.375rem;
-        left: 0;
-        background: ${THEME.dark};
-        color: ${THEME.accent};
-        padding: 0.5rem 2.188rem 0.5rem 1.563rem;
-        font-size: 1.4rem;
-        font-weight: 900;
-        font-family: 'Barlow', sans-serif;
-        transform: skewX(-15deg) scale(var(--ui-scale));
-        transform-origin: bottom left;
-        z-index: 35;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-      }
-
-      .gal-name-badge span {
-        display: block;
-        transform: skewX(15deg);
-      }
-
-      /* 隐藏立绘按钮 - 位于名字标签右侧 */
-      .gal-sprite-toggle {
-        position: absolute;
-        top: -1.375rem;
-        left: auto;
-        right: -2.5rem;
-        width: 2.2rem;
-        height: 2.2rem;
-        background: ${THEME.dark};
-        border: none;
-        border-radius: 0.375rem;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transform: scale(var(--ui-scale));
-        transform-origin: bottom left;
-        z-index: 35;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-        transition: all 0.2s ease;
-        opacity: 0.8;
-      }
-
-      .gal-sprite-toggle:hover {
-        opacity: 1;
-        background: ${THEME.accent};
-      }
-
-      .gal-sprite-toggle:hover .gal-eye-icon {
-        color: ${THEME.dark};
-      }
-
-      .gal-eye-icon {
-        font-size: 1.2rem;
-        color: ${THEME.accent};
-        transition: color 0.2s ease;
-        transform: skewX(0deg);
-      }
-
-      /* 立绘隐藏状态 */
-      .gal-sprite-toggle.sprites-hidden {
-        background: rgba(100, 100, 100, 0.8);
-      }
-
-      .gal-sprite-toggle.sprites-hidden .gal-eye-icon {
-        color: #999;
-      }
-
-      .gal-sprite-toggle.sprites-hidden:hover {
-        background: ${THEME.accent};
-      }
-
-      .gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon {
-        color: ${THEME.dark};
-      }
-
-      /* 立绘层隐藏时的样式 */
-      .gal-layer-character.sprites-hidden {
-        opacity: 0 !important;
-        pointer-events: none !important;
-        transition: opacity 0.3s ease;
-      }
-
-      .gal-narrator-label {
-        background: #666;
-        color: #fff;
-      }
-
-      /* CG 缩略图 */
-      .gal-cg-thumbnail {
-        max-height: 3.5rem;
-        border-radius: 0.25rem;
-        vertical-align: middle;
-        margin-right: 0.5rem;
-        cursor: pointer;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      }
-
-      /* CG 全屏查看器 */
-      .gal-cg-viewer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.92);
-        z-index: 100;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-      }
-
-      .gal-cg-viewer-img {
-        max-width: 90%;
-        max-height: 90%;
-        object-fit: contain;
-        border-radius: 0.5rem;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      }
-
-      .gal-cg-viewer-close {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        background: rgba(255,255,255,0.15);
-        border: none;
-        color: #fff;
-        width: 2.5rem;
-        height: 2.5rem;
-        border-radius: 50%;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.2rem;
-        transition: background 0.2s ease;
-      }
-
-      .gal-cg-viewer-close:hover {
-        background: rgba(255,255,255,0.3);
-      }
-
-      .gal-cg-viewer-loading {
-        color: rgba(255,255,255,0.6);
-        font-size: 1.1rem;
-      }
-
-      /* 生成中状态指示器 */
-      .gal-generating-status {
-        position: absolute;
-        top: -3.75rem;
-        left: 50%;
-        transform: translateX(-50%) scale(0.8);
-        background: linear-gradient(135deg, ${THEME.accent} 0%, #ff6b9d 100%);
-        color: #fff;
-        padding: 0.5rem 1.25rem;
-        font-size: 0.9rem;
-        font-weight: 700;
-        border-radius: 1.25rem;
-        box-shadow: 0 0.25rem 0.938rem rgba(0,0,0,0.3);
-        opacity: 0;
-        transition: all 0.3s ease;
-        pointer-events: none;
-        z-index: 50;
-      }
-
-      .gal-generating-status.show {
-        opacity: 1;
-        transform: translateX(-50%) scale(1);
-      }
-
-      /* 交互栏 - 对话框上方右侧 */
-      .gal-interaction-bar {
-        position: absolute;
-        top: -3.438rem;
-        right: 0;
-        display: flex;
-        gap: 0.938rem;
-        z-index: 35;
-        transform: scale(var(--ui-scale));
-        transform-origin: bottom right;
-      }
-
-      .gal-action-btn {
-        padding: 0.75rem 1.875rem;
-        font-weight: 700;
-        font-size: 1.1rem;
-        cursor: pointer;
-        transform: skewX(-15deg);
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        border: 0.125rem solid transparent;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-        font-family: 'Noto Sans SC', sans-serif;
-        /* 修复默认样式 - 确保按钮可见 */
-        background: ${THEME.white};
-        color: ${THEME.dark};
-        border-color: ${THEME.dark};
-      }
-
-      .gal-action-btn span, .gal-action-btn i {
-        transform: skewX(15deg);
-      }
-
-      /* 基础悬停效果 */
-      .gal-action-btn:hover {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        transform: skewX(-15deg) translateY(-0.188rem);
-        box-shadow: 0.313rem 0.5rem 0 rgba(0,0,0,0.3);
-      }
-
-      .gal-action-btn.btn-reroll {
-        background: ${THEME.white};
-        color: ${THEME.dark};
-        border-color: ${THEME.dark};
-      }
-
-      .gal-action-btn.btn-reroll:hover {
-        background: ${THEME.dark};
-        color: ${THEME.accent};
-        transform: skewX(-15deg) translateY(-0.188rem);
-        box-shadow: 0.313rem 0.5rem 0 ${THEME.accent};
-      }
-
-      .gal-action-btn.btn-free {
-        background: ${THEME.accentSub};
-        color: #fff;
-        border-color: ${THEME.accentSub};
-      }
-
-      .gal-action-btn.btn-free:hover {
-        background: ${THEME.dark};
-        color: ${THEME.accentSub};
-        border-color: ${THEME.dark};
-        transform: skewX(-15deg) translateY(-0.188rem);
-        box-shadow: 0.313rem 0.5rem 0 ${THEME.accentSub};
-      }
-
-      /* 文本主面板 - 布局重构 */
-      .gal-text-panel {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        box-sizing: border-box; /* 确保内边距不撑开容器 */
-
-        /* 视觉样式 */
-        background: rgba(255, 255, 255, 0.95);
-        background-image: linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, 0.1) 95%, rgba(0, 210, 255, 0.1) 100%);
-        background-size: 1.25rem 1.25rem;
-        box-shadow: 0 0.625rem 1.875rem rgba(0,0,0,0.15);
-        border-radius: 0;
-
-        /* 内边距 */
-        padding: 2.5rem 3.75rem 5rem 3.75rem;
-
-        /* 行为控制：允许垂直滚动以防内容被截断，但隐藏滚动条保持美观 */
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        scrollbar-width: none; /* Firefox 隐藏滚动条 */
-      }
-
-      /* Webkit (Chrome/Safari/Edge) 隐藏滚动条 */
-      .gal-text-panel::-webkit-scrollbar {
-        display: none;
-      }
-
-      .gal-dialog-text {
-        font-size: calc(1.25rem * var(--ui-scale) * var(--font-scale, 1));
-        line-height: 1.9;
-        color: #333;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-      }
-
-      /* ========== 文字特效样式 ========== */
-
-      /* 毛玻璃效果 */
-      .gal-text-panel.text-effect-glass {
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        background: rgba(255, 255, 255, 0.7) !important;
-      }
-
-      /* 底部渐变遮罩 */
-      .gal-text-panel.text-effect-gradient::before {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 50%;
-        background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.3) 50%, transparent 100%);
-        pointer-events: none;
-        z-index: 1;
-      }
-
-      .gal-text-panel.text-effect-gradient .gal-dialog-text {
-        position: relative;
-        z-index: 2;
-      }
-
-      .gal-text-panel.text-effect-gradient .gal-name-badge {
-        z-index: 3;
-      }
-
-      /* 独立文字背景 */
-      .gal-text-panel.text-effect-text-bg {
-        background: transparent !important;
-        background-image: none !important;
-        box-shadow: none !important;
-      }
-
-      /* TTS 加载指示器 */
-      .gal-tts-loading {
-        position: absolute;
-        top: auto;
-        bottom: 1rem;
-        right: 1.5rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
-        padding: 0;
-        background: rgba(255, 255, 255, 0.95);
-        border: 0.125rem solid ${THEME.accent};
-        border-radius: 50%;
-        color: ${THEME.accent};
-        box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
-        opacity: 0;
-        transform: scale(0.8);
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        pointer-events: none;
-        z-index: 10;
-      }
-
-      .gal-tts-loading.active {
-        opacity: 1;
-        transform: scale(1);
-      }
-
-      .gal-tts-loading i {
-        font-size: 1rem;
-        color: ${THEME.accent};
-      }
-
-      /* 生成中特效 - 动态打字机效果 */
-      .gal-generating-indicator {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 1.25rem 2.5rem;
-        background: rgba(255, 255, 255, 0.98);
-        border: 0.188rem solid ${THEME.accent};
-        border-radius: 1rem;
-        box-shadow: 0 0.5rem 2rem rgba(0, 210, 255, 0.3);
-        z-index: 20;
-        opacity: 0;
-        visibility: hidden;
-        transition: all 0.3s ease;
-      }
-
-      .gal-generating-indicator.active {
-        opacity: 1;
-        visibility: visible;
-      }
-
-      .gal-generating-indicator .gal-gen-icon {
-        font-size: 2.5rem;
-        color: ${THEME.accent};
-        animation: galGenPulse 1.5s ease-in-out infinite;
-      }
-
-      .gal-generating-indicator .gal-gen-text {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: ${THEME.dark};
-        letter-spacing: 0.05em;
-      }
-
-      .gal-generating-indicator .gal-gen-status {
-        font-size: 0.85rem;
-        color: #666;
-        max-width: 17.5rem;
-        text-align: center;
-        min-height: 1.2em;
-      }
-
-      .gal-generating-indicator .gal-gen-dots {
-        display: flex;
-        gap: 0.375rem;
-        margin-top: 0.25rem;
-      }
-
-      .gal-generating-indicator .gal-gen-dot {
-        width: 0.5rem;
-        height: 0.5rem;
-        background: ${THEME.accent};
-        border-radius: 50%;
-        animation: galGenDotBounce 1.4s ease-in-out infinite both;
-      }
-
-      .gal-generating-indicator .gal-gen-dot:nth-child(1) { animation-delay: -0.32s; }
-      .gal-generating-indicator .gal-gen-dot:nth-child(2) { animation-delay: -0.16s; }
-
-      @keyframes galGenPulse {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.1); opacity: 0.8; }
-      }
-
-      @keyframes galGenDotBounce {
-        0%, 80%, 100% { transform: scale(0); }
-        40% { transform: scale(1); }
-      }
-
-      /* 底部工具栏 - 两端对齐，紧凑布局 */
-      .gal-bottom-toolbar {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: auto;
-        min-height: 3.75rem;
-        padding: 0.625rem 1.875rem 0 1.875rem;
-        box-sizing: border-box;
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
-        pointer-events: none;
-        z-index: 100;
-      }
-
-      .gal-bottom-toolbar > * {
-        pointer-events: auto;
-      }
-
-
-      /* 左侧按钮组容器 */
-      .gal-toolbar-left, .gal-toolbar-right {
-        display: flex;
-        align-items: flex-end;
-        gap: 0.5rem; /* 减小间距 */
-      }
-
-      /* 普通按钮 - 缩小尺寸 */
-      .gal-footer-btn {
-        background: rgba(255, 255, 255, 0.9) !important;
-        color: ${THEME.dark} !important;
-        padding: 0 calc(0.75rem * var(--ui-scale)) !important;
-        font-family: ${THEME.fontEng} !important;
-        font-weight: 800 !important;
-        font-size: calc(0.85rem * var(--ui-scale)) !important;
-        cursor: pointer !important;
-        transition: all 0.2s !important;
-        border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: calc(0.375rem * var(--ui-scale)) !important;
-        height: calc(2.25rem * var(--ui-scale)) !important;
-        transform: skewX(-10deg) !important;
-        box-shadow: calc(0.125rem * var(--ui-scale)) calc(0.125rem * var(--ui-scale)) 0 rgba(0,0,0,0.1) !important;
-        border-radius: 0 !important;
-      }
-
-      .gal-footer-btn i, .gal-footer-btn span {
-        transform: skewX(10deg) !important;
-        font-size: calc(1rem * var(--ui-scale)) !important;
-      }
-
-      .gal-footer-btn:hover {
-        background: ${THEME.dark} !important;
-        color: #fff !important;
-        transform: skewX(-10deg) translateY(-0.125rem) !important;
-        box-shadow: 0.25rem 0.25rem 0 rgba(0,0,0,0.2) !important;
-      }
-
-      /* NEXT 按钮 - 保持醒目但在此基础上微调 */
-      .gal-footer-btn-next {
-        background: ${THEME.dark} !important;
-        color: #fff !important;
-        font-size: calc(1.3rem * var(--ui-scale)) !important;
-        font-weight: 800 !important;
-        padding: 0 calc(2.5rem * var(--ui-scale)) !important;
-        height: calc(3.438rem * var(--ui-scale)) !important;
-        min-width: calc(8.75rem * var(--ui-scale)) !important;
-        border-radius: 0 !important;
-        border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
-        margin-left: calc(0.938rem * var(--ui-scale)) !important;
-        margin-right: calc(-1.875rem) !important;
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: calc(0.625rem * var(--ui-scale)) !important;
-        white-space: nowrap !important;
-        line-height: 1 !important;
-        box-shadow: calc(0.25rem * var(--ui-scale)) calc(0.25rem * var(--ui-scale)) 0 rgba(0,0,0,0.2) !important;
-        flex-shrink: 0 !important;
-        clip-path: polygon(calc(1.563rem * var(--ui-scale)) 0, 100% 0, 100% 100%, 0% 100%) !important;
-        transition: all 0.2s ease !important;
-        transform: none !important;
-      }
-
-      .gal-footer-btn-next:hover {
-        background: ${THEME.accent} !important;
-        color: ${THEME.dark} !important;
-        transform: translateX(-0.188rem) !important;
-      }
-
-      .gal-footer-btn-next i {
-        font-size: 1.1rem !important;
-        margin: 0 !important;
-      }
-
-      /* 进度指示器 */
-      .gal-progress-indicator {
-        font-family: 'Barlow', sans-serif;
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: #888;
-        padding: 0.375rem 0.625rem;
-        display: flex;
-        align-items: center;
-        height: 2.25rem;
-      }
-
-      /* 导航按钮 (PREV, AUTO, SKIP) - 统一样式 */
-      .gal-nav-btn {
-        /* 使用与 .gal-footer-btn 相同的样式 */
-      }
-
-      .gal-nav-btn.active {
-        background: ${THEME.accent} !important;
-        color: ${THEME.dark} !important;
-        box-shadow: inset 1px 1px 0.188rem rgba(0,0,0,0.2) !important;
-      }
-
-      /* AUTO 播放中状态 */
-      .gal-auto-playing {
-        background: ${THEME.accentSub} !important;
-        color: #fff !important;
-        border-color: ${THEME.accentSub} !important;
-        animation: galPulse 1s infinite;
-      }
-
-      @keyframes galPulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.8; }
-      }
-
-      /* 自由输入弹窗 */
-      .gal-input-modal,
-      #gal-free-input-modal {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.5);
-        backdrop-filter: blur(0.25rem);
-        z-index: var(--gal-z-modal) !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: galFadeIn 0.2s ease;
-      }
-
-      /* Live2D 设置弹窗 - 确保最高层级 */
-      #gal-live2d-settings-modal {
-        z-index: var(--gal-z-modal-critical) !important;
-      }
-
-      @keyframes galFadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-
-      .gal-input-box {
-        background: ${THEME.white};
-        border: 0.188rem solid ${THEME.dark};
-        box-shadow: 0.625rem 0.625rem 0 rgba(0,0,0,0.15);
-        width: 90%;
-        max-width: 31.25rem;
-        padding: 1.563rem;
-      }
-
-      .gal-input-title {
-        font-family: 'Barlow', sans-serif;
-        font-size: 1.3rem;
-        font-weight: 800;
-        color: ${THEME.dark};
-        margin-bottom: 0.938rem;
-        transform: skewX(-5deg);
-      }
-
-      .gal-input-title span {
-        transform: skewX(5deg);
-        display: block;
-      }
-
-      .gal-input-field {
-        width: 100%;
-        border: 0.125rem solid ${THEME.dark};
-        padding: 0.75rem 0.938rem;
-        font-size: 1rem;
-        font-family: 'Noto Sans SC', sans-serif;
-        resize: vertical;
-        min-height: 5rem;
-        box-sizing: border-box;
-      }
-
-      .gal-input-field:focus {
-        outline: none;
-        border-color: ${THEME.accent};
-        box-shadow: 0 0 0 0.188rem rgba(0, 210, 255, 0.2);
-      }
-
-      .gal-input-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.625rem;
-        margin-top: 0.938rem;
-      }
-
-      /* Toast 通知 */
-      .gal-toast {
-        position: fixed;
-        bottom: 1.875rem;
-        right: 1.875rem;
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        padding: 0.75rem 1.563rem;
-        font-weight: 600;
-        transform: skewX(-5deg);
-        box-shadow: 0.313rem 0.313rem 0 ${THEME.accent};
-        z-index: var(--gal-z-toast);
-        animation: galToastIn 0.3s ease;
-      }
-
-      .gal-toast span {
-        display: block;
-        transform: skewX(5deg);
-      }
-
-      @keyframes galToastIn {
-        from { opacity: 0; transform: skewX(-5deg) translateY(1.25rem); }
-        to { opacity: 1; transform: skewX(-5deg) translateY(0); }
-      }
-
-      /* 立绘配置弹窗 */
-      .gal-input-modal,
-      .gal-config-modal {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.6);
-        backdrop-filter: blur(0.375rem);
-        z-index: var(--gal-z-modal-critical) !important; /* Fix: Ensure it's above fullscreen overlay (99999) */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      /* 远程压缩导入进度遮罩层 - 强制置顶显示 */
-      .gal-import-progress-overlay {
-        z-index: var(--gal-z-modal-critical) !important;
-      }
-
-      /* 移动端：进度框下移，避免过靠上 */
-      @media screen and (max-width: 48rem) {
-        .gal-import-progress-box {
-          transform: translateY(8vh);
-        }
-      }
-
-      .gal-config-panel {
-        background: ${THEME.white};
-        border: none !important;
-        box-shadow: none !important;
-        width: 100% !important;
-        height: 100% !important;
-        max-width: none !important;
-        max-height: none !important;
-        display: flex;
-        flex-direction: column;
-        border-radius: 0 !important;
-      }
-
-      .gal-config-header {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        padding: 0.938rem 1.563rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .gal-config-title {
-        font-family: 'Barlow', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 800;
-        color: ${THEME.accent};
-      }
-
-      .gal-config-close {
-        background: transparent;
-        border: 0.125rem solid ${THEME.white};
-        color: ${THEME.white};
-        width: 2rem;
-        height: 2rem;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-      }
-
-      .gal-config-close:hover {
-        background: ${THEME.accentSub};
-        border-color: ${THEME.accentSub};
-      }
-
-      .gal-config-body {
-        padding: 1.563rem;
-        overflow-y: auto;
-        flex: 1;
-      }
-
-      .gal-sprite-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(9.375rem, 1fr));
-        gap: 0.938rem;
-      }
-
-      .gal-sprite-card {
-        border: 0.125rem solid #eee;
-        padding: 0.625rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .gal-sprite-card:hover {
-        border-color: ${THEME.accent};
-        box-shadow: 0 0.25rem 0.75rem rgba(0, 210, 255, 0.15);
-      }
-
-      /* 立绘预览图 - 固定2:3长宽比 */
-      .gal-sprite-preview {
-        width: 100%;
-        aspect-ratio: 2 / 3;
-        object-fit: cover;
-        object-position: top center;
-        background: #f9f9f9;
-        border-radius: 0.25rem;
-        margin-bottom: 0.5rem;
-      }
-
-      /* 立绘裁剪工具 */
-      .gal-crop-container {
-        position: relative;
-        width: 100%;
-        overflow: visible;
-        background: #1a1a2e;
-        border-radius: 0.5rem;
-      }
-
-      .gal-crop-canvas-wrapper {
-        position: relative;
-        width: 100%;
-        height: 23.75rem;
-        overflow: hidden;
-        cursor: move;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #1a1a2e;
-        border-radius: 0.5rem 0.5rem 0 0;
-      }
-
-      #gal-crop-canvas {
-        display: block;
-      }
-
-      .gal-crop-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        pointer-events: none;
-      }
-
-      .gal-crop-frame {
-        position: absolute;
-        border: 0.188rem solid ${THEME.accent};
-        box-shadow: 0 0 0 624.938rem rgba(0,0,0,0.6);
-        pointer-events: none;
-      }
-
-      .gal-crop-controls {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.938rem;
-        padding: 0.75rem 1.25rem;
-        background: rgba(0,0,0,0.8);
-        border-radius: 0 0 0.5rem 0.5rem;
-      }
-
-      .gal-crop-controls .gal-crop-btn {
-        padding: 0.5rem 1rem;
-        min-width: 3.75rem;
-        font-size: 0.9rem;
-      }
-
-      .gal-crop-zoom-slider {
-        width: 9.375rem;
-        accent-color: ${THEME.accent};
-      }
-
-      .gal-crop-zoom-label {
-        color: #fff;
-        font-size: 0.85rem;
-        font-weight: 600;
-        min-width: 2.813rem;
-      }
-
-      .gal-crop-btn {
-        padding: 0.5rem 1rem;
-        border: none;
-        border-radius: 0.25rem;
-        cursor: pointer;
-        font-weight: 600;
-        transition: all 0.2s;
-      }
-
-      .gal-crop-btn.reset {
-        background: #666;
-        color: #fff;
-      }
-
-      .gal-crop-btn.reset:hover {
-        background: #888;
-      }
-
-      /* 批量上传网格 */
-      .gal-batch-upload-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.938rem;
-        max-height: 60vh;
-        overflow-y: auto;
-        padding: 0.313rem;
-      }
-
-      .gal-batch-upload-card {
-        border: 0.125rem dashed #ccc;
-        border-radius: 0.5rem;
-        padding: 0.75rem;
-        text-align: center;
-        transition: all 0.2s;
-        background: #fafafa;
-      }
-
-      .gal-batch-upload-card:hover {
-        border-color: ${THEME.accent};
-        background: rgba(0, 210, 255, 0.05);
-      }
-
-      .gal-batch-upload-card.has-image {
-        border-style: solid;
-        border-color: ${THEME.accent};
-      }
-
-      .gal-batch-upload-card .expression-label {
-        font-weight: 700;
-        color: ${THEME.dark};
-        margin-bottom: 0.625rem;
-        font-size: 0.9rem;
-      }
-
-      .gal-batch-upload-card .upload-preview {
-        width: 100%;
-        aspect-ratio: 2 / 3;
-        background: #eee;
-        border-radius: 0.375rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        overflow: hidden;
-        margin-bottom: 0.5rem;
-      }
-
-      .gal-batch-upload-card .upload-preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: top center;
-      }
-
-      .gal-batch-upload-card .upload-preview i {
-        font-size: 2rem;
-        color: #bbb;
-      }
-
-      .gal-batch-upload-card .upload-preview:hover i {
-        color: ${THEME.accent};
-      }
-
-      .gal-batch-upload-card .remove-btn {
-        background: ${THEME.accentSub};
-        color: #fff;
-        border: none;
-        padding: 0.25rem 0.625rem;
-        border-radius: 0.25rem;
-        font-size: 0.75rem;
-        cursor: pointer;
-        display: none;
-      }
-
-      .gal-batch-upload-card.has-image .remove-btn {
-        display: inline-block;
-      }
-
-      .gal-sprite-label {
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: ${THEME.dark};
-        line-height: 1.3;
-      }
-
-      .gal-sprite-label small {
-        font-weight: 400;
-        color: #888;
-      }
-
-      /* 上传卡片 */
-      .gal-upload-card {
-        border: 0.125rem dashed #ccc;
-        padding: 1.25rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        color: #999;
-        min-height: 7.5rem;
-      }
-
-      .gal-upload-card:hover {
-        border-color: ${THEME.accent};
-        color: ${THEME.accent};
-        background: rgba(0, 210, 255, 0.05);
-      }
-
-      .gal-upload-card i {
-        font-size: 2rem;
-      }
-
-      .gal-action-btn.primary {
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-        border-color: ${THEME.accent};
-      }
-
-      .gal-action-btn.primary:hover {
-        background: ${THEME.dark};
-        color: ${THEME.accent};
-      }
-
-      /* ═══════════════════════════════════════════════════════════════
-         选项面板 - 从骰子系统监控并重新渲染
-         ═══════════════════════════════════════════════════════════════ */
-
-      /* 选项层 - 全屏覆盖（无模糊背景） */
-      #gal-layer-choices {
-        position: fixed !important;
-        inset: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        background: rgba(0, 0, 0, 0.4) !important;
-        z-index: var(--gal-z-modal-critical) !important;
-        display: none;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: 0.938rem;
-        padding: 1.25rem;
-      }
-
-      #gal-layer-choices.active {
-        display: flex !important;
-        animation: galFadeIn 0.3s ease;
-      }
-
-      .gal-choices-container {
-        width: 100%;
-        max-width: 32rem;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.75rem;
-        max-height: calc(100vh - 10rem);
-        overflow-y: auto;
-        padding: 0 0.5rem;
-        box-sizing: border-box;
-      }
-
-      /* 选项标题 */
-      .gal-choices-title {
-        font-family: 'Barlow', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 900;
-        color: ${THEME.white};
-        text-transform: uppercase;
-        letter-spacing: 0.125rem;
-        margin-bottom: 0.5rem;
-        transform: skewX(-10deg);
-      }
-
-      .gal-choices-title span {
-        display: block;
-        transform: skewX(10deg);
-      }
-
-      /* 选项卡片 - 缩小字体，自适应宽度 */
-      .gal-choice-card {
-        background: ${THEME.white};
-        color: ${THEME.dark};
-        padding: 0.75rem 1.875rem;
-        min-width: 12.5rem;
-        max-width: 90%;
-        width: auto;
-        text-align: center;
-        font-weight: 600;
-        font-size: 0.95rem;
-        line-height: 1.4;
-        border: 0.125rem solid ${THEME.dark};
-        box-shadow: 0.375rem 0.375rem 0 rgba(0,0,0,0.15);
-        transform: skewX(-8deg);
-        cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        position: relative;
-        overflow: hidden;
-        word-break: break-word;
-      }
-
-      .gal-choice-card span {
-        display: block;
-        transform: skewX(8deg);
-      }
-
-      .gal-choice-card:hover {
-        background: ${THEME.accent};
-        color: #fff;
-        border-color: ${THEME.dark};
-        transform: skewX(-8deg) translate(-0.188rem, -0.188rem);
-        box-shadow: 0.563rem 0.563rem 0 ${THEME.dark};
-      }
-
-      .gal-choice-card::after {
-        content: '';
-        display: none;
-      }
-
-      /* 关闭提示 */
-      .gal-choices-hint {
-        font-size: 0.8rem;
-        color: rgba(255,255,255,0.7);
-        margin-top: 0.938rem;
-      }
-
-      /* 进度条容器 - 在对话框层底部作为边框 */
-      .gal-dialog-layer .gal-progress-container {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 0.375rem;
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 0;
-        margin: 0;
-        z-index: 10;
-        overflow: hidden;
-        position: relative;
-        min-width: 3.75rem;
-      }
-
-      /* 进度条滑块 */
-      .gal-progress-bar {
-        height: 100%;
-        background: linear-gradient(90deg, ${THEME.accent} 0%, #00a8cc 100%);
-        width: 0%;
-        border-radius: 0;
-        transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-        box-shadow: 0 0 0.625rem ${THEME.accent};
-      }
-
-      /* 待选择提示按钮 - 在工具栏内 */
-      .gal-pending-choices-btn {
-        background: linear-gradient(135deg, ${THEME.accentSub} 0%, #cc0044 100%) !important;
-        color: #fff !important;
-        padding: 0 1.25rem !important;
-        font-weight: 700 !important;
-        font-size: 0.85rem !important;
-        cursor: pointer !important;
-        display: flex !important; /* 强制常驻显示 */
-        align-items: center !important;
-        gap: 0.375rem !important;
-        border: 0.125rem solid ${THEME.dark} !important;
-        height: 2.813rem !important;
-        margin-right: 0.313rem !important;
-        border-radius: 0 !important;
-        transform: skewX(-10deg);
-      }
-
-      .gal-pending-choices-btn.show {
-        display: flex !important;
-        -webkit-animation: galPendingPulse 2s ease-in-out infinite !important;
-        animation: galPendingPulse 2s ease-in-out infinite !important;
-      }
-
-      .gal-pending-choices-btn i, .gal-pending-choices-btn span {
-        transform: skewX(10deg) !important;
-      }
-
-      .gal-pending-choices-btn i {
-        font-size: 1.1rem !important;
-        margin: 0 !important;
-      }
-
-      .gal-pending-choices-btn:hover {
-        filter: brightness(1.1) !important;
-        transform: skewX(-10deg) translateY(-0.125rem) !important;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2) !important;
-      }
-
-      @-webkit-keyframes galPendingPulse {
-        0%, 100% {
-            box-shadow:
-                inset 0 0 0.938rem rgba(255,255,255,0.3),
-                0 0 0.938rem rgba(255, 215, 0, 0.6),
-                0 0 1.563rem rgba(255, 215, 0, 0.4),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1);
-        }
-        50% {
-            box-shadow:
-                inset 0 0 1.875rem rgba(255,255,255,0.6),
-                0 0 1.875rem rgba(255, 215, 0, 0.8),
-                0 0 3.125rem rgba(255, 215, 0, 0.5),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1.25);
-        }
-      }
-
-      @keyframes galPendingPulse {
-        0%, 100% {
-            box-shadow:
-                inset 0 0 0.938rem rgba(255,255,255,0.3),
-                0 0 0.938rem rgba(255, 215, 0, 0.6),
-                0 0 1.563rem rgba(255, 215, 0, 0.4),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1);
-        }
-        50% {
-            box-shadow:
-                inset 0 0 1.875rem rgba(255,255,255,0.6),
-                0 0 1.875rem rgba(255, 215, 0, 0.8),
-                0 0 3.125rem rgba(255, 215, 0, 0.5),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1.25);
-        }
-      }
-
-      .gal-pending-choices-btn.gal-new-option-highlight {
-        -webkit-animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
-        animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
-      }
-
-      @-webkit-keyframes galNewOptionPop {
-        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
-        50% { transform: skewX(-10deg) scale(1.1); }
-        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
-      }
-
-      @keyframes galNewOptionPop {
-        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
-        50% { transform: skewX(-10deg) scale(1.1); }
-        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
-      }
-
-      /* Galgame 开启按钮 (注入到消息中) */
-      .gal-open-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.313rem;
-        padding: 0.125rem 0.5rem;
-        background: transparent;
-        color: ${THEME.accent};
-        border: 1px solid ${THEME.accent};
-        border-radius: 0.25rem;
-        font-size: 0.75rem;
-        cursor: pointer;
-        opacity: 0.6;
-        transition: all 0.2s;
-        margin-left: 0.313rem;
-        font-family: 'Noto Sans SC', sans-serif;
-      }
-
-      .gal-open-btn:hover {
-        opacity: 1;
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-      }
-
-      /* 历史记录模态框 */
-      .gal-history-modal {
-        position: fixed !important;
-        top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-        background: rgba(0,0,0,0.85) !important;
-        backdrop-filter: blur(0.313rem) !important;
-        z-index: var(--gal-z-modal-critical) !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: galFadeIn 0.3s ease;
-      }
-
-      .gal-history-panel {
-        background: ${THEME.white};
-        border: 0.125rem solid ${THEME.accent};
-        box-shadow: 0 0 1.25rem rgba(0, 210, 255, 0.3);
-        width: 80%;
-        max-width: 50rem;
-        height: 80vh;
-        display: flex;
-        flex-direction: column;
-        border-radius: 0.5rem;
-        overflow: hidden;
-      }
-
-      .gal-history-header {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        padding: 0.938rem 1.25rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 0.125rem solid ${THEME.accent};
-      }
-
-      .gal-history-title {
-        font-family: 'Noto Sans SC', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-      }
-
-      .gal-history-close {
-        background: transparent;
-        border: none;
-        color: #aaa;
-        font-size: 1.5rem;
-        cursor: pointer;
-        transition: color 0.2s;
-        line-height: 1;
-      }
-
-      .gal-history-close:hover {
-        color: ${THEME.accent};
-      }
-
-      .gal-history-body {
-        flex: 1;
-        overflow-y: auto;
-        padding: 1.25rem;
-        background: #f5f5f5;
-      }
-
-      .gal-history-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.938rem;
-      }
-
-      .gal-history-item {
-        background: #fff;
-        padding: 0;
-        border-radius: 0.5rem;
-        border: 1px solid #eee;
-        box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.05);
-        transition: all 0.2s;
-        overflow: hidden;
-        margin-bottom: 0.625rem;
-      }
-
-      .gal-history-item:hover {
-        box-shadow: 0 0.5rem 1.25rem rgba(0, 210, 255, 0.15);
-        transform: translateY(-0.125rem);
-        border-color: ${THEME.accent};
-      }
-
-      .gal-history-header-row {
-        background: #f8f9fa;
-        padding: 0.625rem 1.25rem;
-        border-bottom: 1px solid #eee;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .gal-history-info-group {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-
-      .gal-history-index {
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-        padding: 0.125rem 0.5rem;
-        border-radius: 0.25rem;
-        font-size: 0.8rem;
-        font-weight: 700;
-        font-family: 'Barlow', sans-serif;
-      }
-
-      .gal-history-time {
-        color: #666;
-        font-size: 0.9rem;
-        font-weight: 600;
-        font-family: 'Noto Sans SC', sans-serif;
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-
-      .gal-history-time i {
-        font-size: 0.8rem;
-        color: #999;
-      }
-
-      .gal-history-content {
-        padding: 1.25rem;
-        font-size: 1.05rem;
-        line-height: 1.8;
-        color: #333;
-        white-space: pre-wrap;
-        text-align: justify;
-      }
-
-      .gal-history-empty {
-        text-align: center;
-        padding: 3.125rem;
-        color: #999;
-        font-style: italic;
-      }
-
-      .galgame-database-container {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        z-index: var(--gal-z-modal-critical) !important;
-        display: none;
-      }
-
-      /* 2024-01-26 更新样式 */
-      .gal-open-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);
-          color: #fff;
-          border: none;
-          border-radius: 1.25rem;
-          font-size: 0.85rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s;
-          box-shadow: 0 0.125rem 0.5rem rgba(0, 210, 255, 0.3);
-      }
-
-      .gal-open-btn:hover {
-          transform: scale(1.05);
-          box-shadow: 0 0.25rem 0.938rem rgba(0, 210, 255, 0.5);
-      }
-
-      /* ═══════════════════════════════════════════════════════════════
-         背景管理实时生成开关 - 美化版
-         ═══════════════════════════════════════════════════════════════ */
-      .gal-realtime-toggle-wrapper {
-        display: flex !important;
-        align-items: center !important;
-        gap: 0.5rem;
-      }
-
-      .gal-realtime-label {
-        font-size: 0.9rem !important;
-        color: #2b2e38 !important;
-        font-weight: 600 !important;
-        white-space: nowrap;
-      }
-
-      .gal-realtime-switch {
-        position: relative;
-        display: inline-block;
-        width: 3.25rem;
-        height: 1.75rem;
-        flex-shrink: 0;
-      }
-
-      .gal-realtime-switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-        position: absolute;
-      }
-
-      .gal-realtime-slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: linear-gradient(145deg, #d0d0d0 0%, #b8b8b8 100%);
-        transition: all 0.3s ease;
-        border-radius: 1.75rem;
-        box-shadow: inset 0 0.125rem 0.25rem rgba(0,0,0,0.2);
-      }
-
-      .gal-realtime-slider::before {
-        content: "";
-        position: absolute;
-        height: 1.375rem;
-        width: 1.375rem;
-        left: 0.188rem;
-        bottom: 0.188rem;
-        background: linear-gradient(145deg, #ffffff 0%, #f5f5f5 100%);
-        transition: transform 0.3s ease;
-        border-radius: 50%;
-        box-shadow: 0 0.125rem 0.313rem rgba(0,0,0,0.3);
-        z-index: 2;
-      }
-
-      .gal-realtime-slider::after {
-        content: "OFF";
-        position: absolute;
-        right: 0.5rem;
-        top: 50%;
-        transform: translateY(-50%);
-        font-size: 0.563rem;
-        font-weight: 700;
-        color: #666;
-        z-index: 1;
-      }
-
-      .gal-realtime-switch input:checked + .gal-realtime-slider {
-        background: linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.accentSub} 100%);
-        box-shadow: inset 0 0.125rem 0.25rem rgba(0,0,0,0.2), 0 0 0.75rem rgba(0, 210, 255, 0.4);
-      }
-
-      .gal-realtime-switch input:checked + .gal-realtime-slider::before {
-        transform: translateX(1.5rem);
-      }
-
-      .gal-realtime-switch input:checked + .gal-realtime-slider::after {
-        content: "ON";
-        left: 0.5rem;
-        right: auto;
-        color: rgba(255,255,255,0.95);
-      }
-@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal, #gal-live2d-settings-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: var(--gal-z-modal-critical) !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
-@media screen and (max-width: 48rem) { /* �����������Ż� */ .gal-input-title { flex-direction: column; align-items: flex-start !important; gap: 0.625rem; padding: 0.625rem 0.938rem !important; height: auto !important; } .gal-input-title span { font-size: 1.2rem !important; } .gal-input-title div { width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.313rem; } /* �����Ҳఴť�� (����/Զ��/����) */ .gal-input-title div > button, .gal-input-title div > div { flex: 1; min-width: auto !important; margin: 0 !important; } .gal-title-btn { padding: 0.25rem 0.625rem !important; font-size: 0.85rem !important; min-width: auto !important; transform: none !important; } .gal-title-btn * { transform: none !important; } /* Tab �����Ż� */ .gal-tab-header { padding: 0 0.625rem !important; gap: 0.625rem !important; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; } .gal-tab-item { padding: 0.625rem 0.5rem !important; font-size: 0.9rem !important; flex-shrink: 0; } /* �ڲ��������Ż� (�����ϴ���) */ .gal-sub-header, .gal-action-bar { flex-direction: column; align-items: stretch !important; gap: 0.625rem; height: auto !important; padding: 0.625rem 0.938rem !important; } .gal-action-group, .gal-filter-group { display: flex !important; flex-wrap: wrap; gap: 0.5rem !important; width: 100%; } .gal-action-btn { margin: 0 !important; flex: 1; min-width: 6.25rem; padding: 0.5rem 0 !important; justify-content: center; transform: none !important; } .gal-action-btn * { transform: none !important; } /* ������������ */ .gal-grid-container { padding: 0.625rem !important; grid-template-columns: repeat(auto-fill, minmax(6.875rem, 1fr)) !important; gap: 0.625rem !important; } /* �ײ��رհ�ť */ .gal-input-box > div:last-child { padding: 0.625rem 0.938rem !important; min-height: auto !important; } #gal-settings-close, #gal-char-sprites-close, #gal-input-cancel { min-height: 2.5rem !important; transform: none !important; } }
-
-    /* === ��Դ������ר�ý��ղ��� (Mobile) === */
-    #gal-asset-manager-modal .gal-asset-header {
-        padding: 0.625rem 0.938rem !important;
-    }
-    
-    #gal-asset-manager-modal .gal-input-title {
-        font-size: 1.1rem !important;
-        margin-bottom: 0.313rem !important;
-    }
-    
-    /* ������ť���ջ� */
-    #gal-asset-manager-modal .gal-action-btn:where(#gal-asset-export, #gal-asset-export-remote, #gal-import-dropdown-btn) {
-        padding: 0.25rem 0.5rem !important;
-        font-size: 0.8rem !important;
-    }
-    
-    /* Tab���ƶ� */
-    #gal-asset-manager-modal .gal-tab-header {
-        padding: 0 0.625rem !important;
-        min-height: 2.5rem !important;
-    }
-    
-    #gal-asset-manager-modal .gal-tab-btn {
-        padding: 0.5rem 0.75rem !important;
-        font-size: 0.9rem !important;
-    }
-
-    /* ������������ */
-    #gal-asset-manager-modal .gal-tab-content {
-        padding: 0.625rem !important;
-    }
-    
-    /* ���������ڲ��Ĳ��������ջ� */
-    #gal-asset-manager-modal .gal-tab-pane > div:first-child {
-        margin-bottom: 0.625rem !important;
-        flex-wrap: wrap;
-    }
-    
-    /* �ײ���ť�� */
-    #gal-asset-manager-modal .gal-input-actions {
-        padding: 0.625rem 0.938rem !important;
-        min-height: auto !important;
-    }
-
-
-    /* === ��Դ�������ƶ����޸� (V2) === */
-    
-    /* �������������������� */
-    #gal-asset-manager-modal .gal-asset-header > div {
-        flex-wrap: wrap !important;
-        gap: 0.625rem !important;
-    }
-    
-    /* ���⣺��ֹ���� */
-    #gal-asset-manager-modal .gal-input-title {
-        white-space: nowrap !important;
-        font-size: 1.2rem !important;
-        width: auto !important;
-    }
-
-    /* �������ܰ�ť��ֻ��ͼ�꣬�������� */
-    #gal-asset-manager-modal .gal-asset-header button span,
-    #gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span {
-        display: none !important; /* �������� */
-    }
-    
-    /* �������ܰ�ť��ͼ��΢�� */
-    #gal-asset-manager-modal .gal-asset-header button i {
-        margin: 0 !important;
-        font-size: 1rem !important;
-    }
-    
-    /* �ָ������˵���������ʾ (��Ϊ���ǵ�����) */
-    #gal-asset-manager-modal .gal-import-menu span {
-        display: inline !important;
-    }
-    
-    /* �в�������ť�� (�����ϴ�/����/����) */
-    #gal-asset-manager-modal .gal-tab-pane > div:first-child {
-        display: flex !important;
-        gap: 0.313rem !important;
-    }
-    
-    #gal-asset-manager-modal .gal-tab-pane > div:first-child button {
-        flex: 1 !important; /* ƽ�ֿ��� */
-        padding: 0.5rem 0.25rem !important; /* ��С�ڱ߾� */
-        font-size: 0.85rem !important;
-        white-space: nowrap !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        gap: 0.25rem !important;
-    }
-    
-    /* �ײ��رհ�ť */
-    #gal-asset-manager-modal .gal-input-actions {
-        padding: 0.5rem !important;
-    }
-    #gal-asset-manager-modal .gal-input-actions button {
-        min-height: 2.25rem !important;
-        padding: 0 !important;
-    }
-
-
-/* === ��Դ������Ĭ����ʽ (Desktop) - �Ƴ�������ʽ === */
-#gal-asset-manager-modal .gal-asset-header {
-    padding: 1.25rem 1.563rem 0.938rem;
-    border-bottom: 1px solid #e0e0e0;
-    flex-shrink: 0;
-}
-#gal-asset-manager-modal .gal-tab-header {
-    display: flex;
-    border-bottom: 0.125rem solid #e0e0e0;
-    padding: 0 1.563rem;
-    flex-shrink: 0;
-}
-#gal-asset-manager-modal .gal-tab-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.25rem 1.563rem;
-}
-
-/* ֮ǰ���ӵ� V3 �ƶ�����ʽ���ڴ�֮�󸲸���ЩĬ����ʽ */
-
-
-#gal-asset-manager-modal .gal-input-actions {
-    padding: 0.938rem 1.563rem;
-    border-top: 1px solid #e0e0e0;
-    flex-shrink: 0;
-}
-
-
-    /* === ��Դ������ȫ������ V3 (Mobile High Density) === */
-    @media screen and (max-width: 48rem) {
-        /* 1. ͷ����һ��ѹ�� & ĥɰ�ʸ� */
-        #gal-asset-manager-modal .gal-asset-header {
-            padding: 0.5rem 0.75rem !important;
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(0.625rem);
-            border-bottom: 1px solid rgba(0,0,0,0.05) !important;
-            display: flex !important;
-            flex-wrap: wrap !important;
-            align-items: center !important;
-            gap: 0.5rem !important;
-        }
-        #gal-asset-manager-modal .gal-input-title {
-            font-size: 1.1rem !important;
-            font-weight: 700 !important;
-            margin-right: auto !important; /* 标题占据左侧剩余空间 */
-        }
-
-        /* 修复：移动端显示实时生成开关 - 防止被压缩 */
-        #gal-asset-manager-modal .gal-realtime-toggle-wrapper {
-            display: flex !important;
-            align-items: center !important;
-            margin-left: 0 !important;
-            transform: scale(0.85);
-            transform-origin: left center;
-            flex-shrink: 0 !important; /* 关键：禁止被flex挤压消失 */
-            min-width: fit-content;
-            margin-right: 0.25rem;
-        }
-
-        /* === 修复 V6：回归 Flexbox 布局，放弃 Grid === */
-
-        /* 1. 顶部容器：作为块级元素，允许内部元素自然堆叠 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child {
-            display: block !important;
-            height: auto !important;
-            padding-bottom: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-            border-bottom: 1px solid rgba(0,0,0,0.05) !important;
-        }
-
-        /* 隐藏"已保存XX背景"文字 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child > span {
-            display: none !important;
-        }
-
-        /* 2. 按钮组容器：Flex 布局，强制换行 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child > div {
-            width: 100% !important;
-            display: flex !important;
-            flex-wrap: wrap !important;
-            justify-content: space-between !important;
-            gap: 0.625rem !important;
-            position: static !important;
-        }
-
-        /* 3. 实时生成开关容器：强制独占一行 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] .gal-realtime-toggle-wrapper {
-            flex: 0 0 100% !important; /* 宽度 100%，禁止压缩/放大 */
-            width: 100% !important;
-            order: -1 !important;      /* 排序第一 */
-
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important; /* 居中对齐 */
-
-            background: rgba(0,0,0,0.03) !important;
-            border-radius: 0.5rem;
-            padding: 0.5rem !important;
-            margin: 0 !important;
-            height: auto !important;
-            min-height: 2.5rem !important; /* 确保有足够高度 */
-
-            visibility: visible !important;
-            opacity: 1 !important;
-            z-index: 10 !important;
-        }
-
-        /* 开关内的文字 */
-        #gal-asset-manager-modal .gal-realtime-label {
-            display: inline-block !important;
-            font-size: 0.9rem !important;
-            color: #444 !important;
-            margin-right: 0.625rem !important;
-            font-weight: bold !important;
-        }
-
-        /* 开关控件本身 */
-        #gal-asset-manager-modal .gal-realtime-switch {
-            display: inline-block !important;
-            transform: scale(1) !important; /* 保持原始大小 */
-            margin: 0 !important;
-        }
-
-        /* 4. 两个大按钮：各占一半宽度（减去间隙） */
-        #gal-batch-bg-upload-btn,
-        #gal-add-bg-btn {
-            flex: 1 1 45% !important; /* 弹性宽度 */
-            width: auto !important;
-            margin: 0 !important;
-        }
-
-        /* ����С��ť��Բ�λ� */
-        #gal-asset-manager-modal .gal-asset-header button {
-            width: 2rem !important;
-            height: 2rem !important;
-            padding: 0 !important;
-            border-radius: 50% !important;
-            background: #fff !important;
-            border: 1px solid #eee !important;
-            color: #555 !important;
-            box-shadow: 0 0.125rem 0.313rem rgba(0,0,0,0.05) !important;
-        }
-        /* ���������˵���λ���� */
-        #gal-asset-manager-modal .gal-import-dropdown {
-            position: static !important; /* ����relative���� */
-        }
-        #gal-import-menu {
-            top: 2.813rem !important;
-            right: 0.625rem !important;
-            width: 12.5rem !important;
-        }
-
-        /* 2. Tab ��������ʽ�л� */
-        #gal-asset-manager-modal .gal-tab-header {
-            min-height: 2.5rem !important;
-            background: #f1f3f5;
-            padding: 0.25rem !important;
-            margin: 0 !important;
-            border: none !important;
-            gap: 0.25rem;
-        }
-        #gal-asset-manager-modal .gal-tab-btn {
-            flex: 1;
-            padding: 0 !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 0.375rem !important;
-            border: none !important;
-            font-size: 0.85rem !important;
-            color: #666;
-            background: transparent;
-        }
-        #gal-asset-manager-modal .gal-tab-btn.active {
-            background: #fff !important;
-            color: #333 !important;
-            box-shadow: 0 1px 0.188rem rgba(0,0,0,0.1) !important;
-            font-weight: bold;
-        }
-
-        /* 3. ���Ĳ������������� */
-        /* �������õ�ͳ���ı� */
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child > span {
-            display: none !important;
-        }
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child .gal-realtime-toggle-wrapper {
-            display: flex !important;
-        }
-        
-        /* ��ť�������� */
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child {
-            margin: 0.625rem !important;
-            gap: 0.5rem !important;
-        }
-        
-        /* ������ť */
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child button {
-            flex: 1 !important;
-            height: 2.25rem !important; 
-            border-radius: 1.125rem !important; /* ȫԲ�� */
-            font-size: 0.85rem !important;
-            box-shadow: 0 0.125rem 0.375rem rgba(0,0,0,0.1) !important;
-            padding: 0 !important;
-        }
-
-        /* 4. ���񲼾��Ż� */
-        .gal-character-grid, .gal-bg-grid {
-            padding: 0 0.625rem 3.75rem 0.625rem !important; /* �ײ������ռ��������ť */
-            gap: 0.5rem !important;
-            grid-template-columns: repeat(3, 1fr) !important; /* ǿ��3�� */
-        }
-        .gal-character-card, .gal-bg-card {
-            box-shadow: none !important;
-            border: 1px solid #eee !important;
-        }
-        /* ���ؿ�Ƭ���һЩ������Ϣ */
-        .gal-character-card > div:last-child > div:last-child {
-            display: none !important; /* ���ر��������ı� */
-        }
-
-        /* 5. �ײ������رհ�ť */
-        #gal-asset-manager-modal .gal-input-actions {
-            position: absolute !important;
-            bottom: 1.25rem;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90% !important;
-            padding: 0 !important;
-            border: none !important;
-            z-index: 100 !important;
-            background: transparent !important;
-        }
-        #gal-asset-manager-modal .gal-input-actions button {
-            width: 100% !important;
-            height: 2.75rem !important;
-            border-radius: 1.375rem !important;
-            background: linear-gradient(135deg, #2c3e50, #000) !important;
-            color: white !important;
-            box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.2) !important;
-            opacity: 0.9;
-        }
-    }
-
-
-    /* === ���ս����޸� (FINAL EMERGENCY FIX) === */
-    @media screen and (max-width: 48rem) {
-        /* ǿ������ Flex ������ȷ��ռ����Ļ */
-        #gal-asset-manager-modal .gal-input-box {
-            display: flex !important;
-            flex-direction: column !important;
-            height: 100% !important;
-            overflow: hidden !important;
-        }
-
-        /* 1. ��������ǿ�Ʋ����У�ǿ�Ƹ߶����� */
-        #gal-asset-manager-modal .gal-asset-header {
-            flex: 0 0 auto !important; /* ���������� */
-            height: 3.125rem !important;   /* ǿ�Ƹ߶� */
-            padding: 0 0.625rem !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            gap: 0.5rem !important;
-            background: #fff !important;
-            border-bottom: 1px solid #eee !important;
-        }
-        #gal-asset-manager-modal .gal-asset-header > div {
-            display: flex !important;
-            align-items: center !important;
-            flex-wrap: nowrap !important; /* ��ֹ���� */
-            gap: 0.5rem !important;
-        }
-
-        /* ������ť���֣������� (Hidden) */
-        #gal-asset-manager-modal .gal-asset-header button span,
-        #gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span {
-            display: none !important;
-        }
-        /* 顶部按钮图标：强制尺寸，禁止flex拉伸 */
-        #gal-asset-manager-modal .gal-asset-header button {
-            flex: 0 0 auto !important;
-            width: 2rem !important;
-            height: 2rem !important;
-            min-width: 2rem !important;
-            max-width: 2rem !important;
-            padding: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            font-size: 0.875rem !important;
-        }
-        #gal-asset-manager-modal .gal-asset-header > div {
-            flex: 0 0 auto !important;
-        }
-
-        /* 2. Tab ����ǿ�Ƹ߶����� */
-        #gal-asset-manager-modal .gal-tab-header {
-            flex: 0 0 auto !important;
-            height: 2.5rem !important;
-            padding: 0.125rem 0.625rem !important;
-            gap: 0.313rem !important;
-            background: #f8f9fa !important;
-            display: flex !important;
-            align-items: center !important;
-        }
-        #gal-asset-manager-modal .gal-tab-btn {
-            flex: 1 !important;
-            height: 2rem !important;
-            padding: 0 !important;
-            font-size: 0.813rem !important;
-            line-height: 2rem !important;
-        }
-
-        /* 3. ��������ǿ��ռ��ʣ��ռ� */
-        #gal-asset-manager-modal .gal-tab-content {
-            flex: 1 1 auto !important;
-            height: 0 !important; /* �ؼ������ flex-grow ������� */
-            padding: 0.625rem !important;
-            padding-bottom: 3.75rem !important; /* ��������ť��λ�� */
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-        }
-        
-        /* 4. �ײ������������� */
-        #gal-asset-manager-modal .gal-input-actions {
-            position: absolute !important;
-            bottom: 0.938rem;
-            left: 5%;
-            width: 90% !important;
-            padding: 0 !important;
-            border: none !important;
-            background: transparent !important;
-            pointer-events: none; /* ����������� */
-        }
-        #gal-asset-manager-modal .gal-input-actions button {
-            pointer-events: auto; /* ��ť�ɵ� */
-            height: 2.5rem !important;
-            border-radius: 1.25rem !important;
-            background: rgba(0,0,0,0.85) !important;
-            color: #fff !important;
-            box-shadow: 0 0.25rem 0.625rem rgba(0,0,0,0.2) !important;
-        }
-    }
-
-
-    /* === ��ʽ���� (Revert to Square Buttons) === */
-    @media screen and (max-width: 48rem) {
-        /* ������ť���ָ�������ʽ */
-        #gal-asset-manager-modal .gal-asset-header button {
-            border-radius: 0.25rem !important; /* �ָ�΢Բ��/���� */
-            width: auto !important;      /* ������������Ӧ (��ͼ��) */
-            padding: 0 0.5rem !important;   /* ��΢�����ڱ߾� */
-            background: transparent !important; /* ȥ��ǿ�ư�ɫ���� */
-            border: 1px solid transparent !important; /* ȥ���߿� */
-            box-shadow: none !important;
-            color: #555 !important;
-        }
-        #gal-asset-manager-modal .gal-asset-header button:active {
-            background: rgba(0,0,0,0.1) !important;
-        }
-        
-        /* Զ�̰���ť������ɫ�ָ� */
-        #gal-asset-manager-modal .gal-asset-header #gal-asset-export-remote {
-            color: #6f42c1 !important;
-        }
-        /* ���밴ť������ɫ�ָ� */
-        #gal-asset-manager-modal .gal-asset-header #gal-import-dropdown-btn {
-            color: #28a745 !important;
-        }
-    }
-
-
-    /* === �޸� Z-Index �� �Ӿ��ָ� (DROPDOWN & UNIFY FIX) === */
-    @media screen and (max-width: 48rem) {
-        /* 1. ����������߲㼶���Ƴ��ױ߿� */
-        #gal-asset-manager-modal .gal-asset-header {
-            z-index: 100 !important; /* �ؼ�������������ݸߣ���ֹ�����˵�����ס */
-            position: relative !important;
-            border-bottom: none !important; /* �Ƴ��ָ��� */
-            box-shadow: none !important;
-            padding-bottom: 0 !important; /* �����·� */
-        }
-
-        /* 2. Tab �����Ƴ����߿�ͳһ���� */
-        #gal-asset-manager-modal .gal-tab-header {
-            z-index: 90 !important;
-            position: relative !important;
-            border-top: none !important;
-            background: #fff !important; /* �� Header ����һ�±��� */
-            margin-top: -1px !important; /* �����ص�������϶ */
-            padding-top: 0 !important;
-        }
-
-        /* 3. �����˵���ȷ�����Զ��� */
-        #gal-asset-manager-modal .gal-import-menu {
-            z-index: var(--gal-z-dropdown) !important;
-            position: absolute !important;
-            top: 100% !important;
-            right: 0 !important;
-             /* �ָ���Ӱ */
-            box-shadow: 0 0.25rem 0.938rem rgba(0,0,0,0.2) !important;
-        }
-        
-        /* ���������˵�������������� */
-        #gal-asset-manager-modal .gal-import-dropdown {
-            position: static !important; /* ����� static �ᵼ�� dropdown �Ҳ�����Ԫ�ض�λ�� */
-            /* ���ˣ����� relative �Ա� menu ��λ */
-            position: relative !important;
-            overflow: visible !important;
-        }
-
-        /* 4. �����Tab��һ�廯΢�� */
-        /* �ñ������ֺ�Tab��ť����������һ��������� */
-        #gal-asset-manager-modal .gal-input-title {
-            margin-bottom: 0 !important;
-        }
-    }
-
-
-    /* === ͷ������޸� (Header Overflow Fix - CRITICAL) === */
-    @media screen and (max-width: 48rem) {
-        /* 1. ǿ��ͷ����ֹ����������������� (�޸��˵����� + �޸�����������) */
-        #gal-asset-manager-modal .gal-asset-header {
-            overflow: visible !important;  /* �ؼ�����ֹ���ɹ������������˵����� */
-            touch-action: none !important; /* ��ֹ��ͷ���������� */
-            z-index: var(--gal-z-dropdown) !important;      /* ȷ�������ϲ� */
-        }
-
-        /* 2. ȷ�������˵�����ʾ */
-        #gal-asset-manager-modal .gal-import-dropdown {
-            overflow: visible !important;
-            position: static !important; /* ��� header �� relative */
-        }
-        
-        #gal-asset-manager-modal .gal-import-menu {
-            position: fixed !important; /* ǿ�� fixed ��λ�����װ��Ѹ��������� */
-            top: 3.438rem !important;       /* �������߶� 3.125rem + 0.313rem */
-            right: 0.625rem !important;
-            z-index: var(--gal-z-dropdown) !important;
-            max-height: 60vh !important;
-            overflow-y: auto !important;
-        }
-    }
-
-
-    /* === �ײ���ť�޸� (Revert Footer to Standard) === */
-    @media screen and (max-width: 48rem) {
-        #gal-asset-manager-modal .gal-input-actions {
-            position: static !important; /* �������� */
-            width: 100% !important;
-            padding: 0.625rem 0.938rem !important;
-            background: #fff !important; /* ʵ�ı��� */
-            border-top: 1px solid #eee !important;
-            transform: none !important;
-            left: auto !important;
-            bottom: auto !important;
-            pointer-events: auto !important;
-            flex-shrink: 0 !important; /* ��ֹ����ѹ */
-        }
-        #gal-asset-manager-modal .gal-input-actions button {
-            width: 100% !important;
-            height: 2.5rem !important;
-            border-radius: 0.25rem !important; /* �ع鷽��Բ�� */
-            background: #f8f9fa !important;
-            color: #333 !important;
-            border: 1px solid #ddd !important;
-            box-shadow: none !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-        #gal-asset-manager-modal .gal-input-actions button:hover,
-        #gal-asset-manager-modal .gal-input-actions button:active {
-            background: #e9ecef !important;
-        }
-        
-        /* �Ƴ�������Ϊ������ť���Ķ��� padding */
-        #gal-asset-manager-modal .gal-tab-content {
-            padding-bottom: 0.625rem !important; 
-        }
-    }
-
-
-    /* === 历史记录弹窗移动端统一修复（合并重复补丁块） === */
-    @media screen and (max-width: 48rem) {
-        #gal-history-modal {
-            position: fixed !important;
-            inset: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            z-index: var(--gal-z-modal-critical) !important;
-            background: rgba(0,0,0,0.85) !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-        }
-
-        #gal-history-modal .gal-history-panel {
-            position: relative !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            max-width: none !important;
-            max-height: none !important;
-            margin: 0 !important;
-            border: none !important;
-            border-radius: 0 !important;
-            background: #fff !important;
-            transform: none !important;
-            display: flex !important;
-            flex-direction: column !important;
-            z-index: var(--gal-z-modal-critical) !important;
-            opacity: 1 !important;
-        }
-
-        #gal-history-modal .gal-history-header {
-            flex-shrink: 0 !important;
-            padding: 0.625rem 0.938rem !important;
-            border-bottom: 1px solid #eee !important;
-        }
-
-        #gal-history-modal .gal-history-body {
-            flex: 1 !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow-y: auto !important;
-            padding: 0.938rem !important;
-        }
-    }
-
-
-    /* ═══════════════════════════════════════════════════════════════
-       移动端适配修复 (Mobile Fixes 2024)
-       对应计划：Galgame UI 移动端 CSS 修复计划
-       ═══════════════════════════════════════════════════════════════ */
-    @media screen and (max-width: 48rem) {
-        /* === 阶段一：核心布局重构 === */
-
-        /* 1. 对话框容器空间优化 */
-        .gal-dialog-layer {
-            left: 2% !important;
-            right: 2% !important;
-            width: 96% !important;
-            bottom: 0.625rem !important;
-            height: 40% !important; /* 增加高度占比至40% */
-            padding-bottom: env(safe-area-inset-bottom); /* 底部安全区 */
-        }
-
-        /* 2. 文本面板内边距压缩 */
-        .gal-text-panel {
-            /* 上 右 下 左 - 减少左右留白，增加可视区域 */
-            padding: 1.563rem 0.938rem 2.813rem 0.938rem !important;
-        }
-
-        /* 3. 排版微调 - 提高阅读效率 */
-        .gal-dialog-text {
-            /* 增大移动端基准字号，并乘上字体缩放变量以支持调节 */
-            /* 默认放大 1.2 倍，基础 1.1rem (约1.1rem)，结果约 1.313rem，此时再调大字体即可生效 */
-            font-size: calc(1.1rem * var(--font-scale, 1.3)) !important;
-            line-height: 1.6 !important;
-        }
-
-        /* 4. 名字标签防遮挡 */
-        .gal-name-badge {
-            top: -1.25rem !important;
-            left: 0 !important;
-            padding: 0.25rem 1.25rem 0.25rem 0.938rem !important;
-            font-size: 1.1rem !important;
-            transform: skewX(-15deg) scale(0.9) !important;
-            transform-origin: bottom left !important;
-        }
-
-        /* 5. 交互栏防遮挡 */
-        .gal-interaction-bar {
-            top: -2.813rem !important;
-            right: 0 !important;
-            transform: scale(0.85) !important;
-            transform-origin: bottom right !important;
-            gap: 0.5rem !important;
-        }
-
-        .gal-action-btn {
-            padding: 0.5rem 1rem !important;
-            font-size: 0.95rem !important;
-        }
-
-        /* === 阶段二：组件与交互修复 === */
-
-        /* 1. BGM组件触控优化 */
-        .gal-bgm-widget {
-            top: 3.75rem !important; /* 下移，避开左上角状态栏(如果移过去)或左侧区域 */
-            padding: 0.375rem 0.625rem !important;
-            gap: 0.375rem !important;
-            font-size: 0.72rem !important;
-            border-radius: 1rem !important;
-            max-width: 2.125rem !important; /* 默认收起 */
-            transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }
-
-        .gal-bgm-icon {
-            font-size: 0.95rem !important;
-            min-width: 1rem !important;
-        }
-
-        .gal-bgm-title {
-            font-size: 0.7rem !important;
-        }
-
-        .gal-bgm-btn {
-            font-size: 0.8rem !important;
-            width: 1rem !important;
-        }
-
-        .gal-bgm-slider {
-            width: 3rem !important;
-            height: 0.188rem !important;
-        }
-
-        .gal-bgm-slider::-webkit-slider-thumb {
-            width: 0.5rem !important;
-            height: 0.5rem !important;
-        }
-
-        /* 允许点击/长按展开 */
-        .gal-bgm-widget:active,
-        .gal-bgm-widget:focus-within,
-        .gal-bgm-widget.active {
-            max-width: 12rem !important;
-            background: rgba(43, 46, 56, 0.98) !important;
-        }
-
-        /* 2. 顶部状态栏防重叠 - 移至左上角堆叠 */
-        .gal-status-bar-container {
-            top: 0.625rem !important;
-            right: auto !important;
-            left: 0.625rem !important;
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 0.375rem !important;
-            transform: scale(0.85) !important;
-            transform-origin: top left !important;
-            pointer-events: none; /* 防止遮挡下方点击 */
-            z-index: 90 !important;
-        }
-
-        .gal-location-bar, .gal-time-bar {
-            max-width: 10rem !important;
-            height: 1.625rem !important;
-            font-size: 0.75rem !important;
-            background: rgba(43, 46, 56, 0.8) !important;
-            backdrop-filter: blur(0.25rem);
-        }
-
-        /* 全屏按钮保持在右上 */
-        .gal-fullscreen-btn {
-            top: 0.625rem !important;
-            right: 0.625rem !important;
-            padding: 0.5rem 0.75rem !important;
-            font-size: 0.8rem !important;
-        }
-
-        /* 3. 底部工具栏触控优化 */
-        .gal-bottom-toolbar {
-            padding: 0 0.625rem 0.625rem 0.625rem !important;
-            min-height: 3.125rem !important;
-            /* 增加底部安全区支撑 */
-            margin-bottom: env(safe-area-inset-bottom);
-        }
-
-        .gal-footer-btn {
-            height: 2.375rem !important;
-            padding: 0 0.625rem !important;
-            min-width: 2.375rem !important; /* 确保图标按钮易点 */
-        }
-
-        /* NEXT 按钮适配 */
-        .gal-footer-btn-next {
-            min-width: 6.25rem !important;
-            height: 2.813rem !important;
-            font-size: 1.1rem !important;
-            margin-left: 0.625rem !important;
-            margin-right: -0.625rem !important; /* 贴边 */
-        }
-
-        /* === 阶段三：层级修正 === */
-
-        /* 确保弹窗最高层级 */
-        .gal-input-modal,
-        .gal-config-modal,
-        .gal-history-modal,
-        #gal-layer-choices {
-            z-index: var(--gal-z-modal-critical) !important; /* Max Int 32 */
-        }
-
-        #gal-layer-choices {
-            justify-content: center !important;
-            align-items: center !important;
-            padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
-            padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
-            height: 100dvh !important;
-            max-height: 100dvh !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .gal-choices-container {
-            width: min(100%, 32rem) !important;
-            max-height: calc(100dvh - 8rem) !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            padding: 0 0.75rem !important;
-        }
-
-        .gal-choices-title,
-        .gal-choices-hint {
-            width: 100% !important;
-            text-align: center !important;
-        }
-
-        .gal-choice-card {
-            max-width: 100% !important;
-            width: 100% !important;
-        }
-
-        /* 确保全屏覆盖层在弹窗之下但在其他元素之上 */
-        #gal-global-overlay.fullscreen {
-            z-index: var(--gal-z-overlay) !important;
-        }
-
-
-        /* 隐藏非关键UI以节省空间 */
-        .gal-progress-indicator {
-            display: none !important;
-        }
-    }
-
-        /* === 修复主界面按钮样式被误覆盖的问题 (Fix Main UI Buttons) === */
-    @media screen and (max-width: 48rem) {
-        /* 强制主界面交互栏按钮保持倾斜风格 */
-        .gal-interaction-bar .gal-action-btn {
-            transform: skewX(-15deg) !important; /* 恢复倾斜 */
-            margin: 0 !important;
-            flex: initial !important; /* 取消 flex: 1 拉伸 */
-            min-width: auto !important; /* 取消最小宽度限制 */
-            width: auto !important;
-            display: flex !important;
-            border-radius: 0 !important; /* 保持锐利边缘 */
-        }
-
-        /* 恢复内部文字/图标的反向倾斜 */
-        .gal-interaction-bar .gal-action-btn *,
-        .gal-interaction-bar .gal-action-btn i,
-        .gal-interaction-bar .gal-action-btn span {
-            transform: skewX(15deg) !important;
-        }
-
-        /* 针对 Reroll 和 Free 按钮的特殊微调 */
-        .gal-interaction-bar .gal-action-btn.btn-reroll,
-        .gal-interaction-bar .gal-action-btn.btn-free {
-             padding: 0.375rem 0.75rem !important; /* 适当的内边距 */
-        }
-    }
-
-    /* === 弹窗全屏防御 (769px - 1000px) === */
-    @media screen and (min-width: 48.0625rem) and (max-width: 62.5rem) {
-        #gal-settings-panel,
-        #gal-asset-manager-modal,
-        #gal-history-modal,
-        .gal-history-modal,
-        .gal-config-modal,
-        .gal-input-modal,
-        #gal-free-input-modal,
-        #gal-batch-bg-upload-modal,
-        #gal-custom-popup,
-        #gal-character-sprites-modal,
-        #gal-layer-choices {
-            position: fixed !important;
-            inset: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            max-width: none !important;
-            max-height: none !important;
-            margin: 0 !important;
-            transform: none !important;
-        }
-
-        #gal-settings-panel .gal-config-panel,
-        .gal-config-modal .gal-config-panel,
-        #gal-asset-manager-modal .gal-input-box,
-        .gal-input-modal .gal-input-box,
-        #gal-history-modal .gal-history-panel,
-        .gal-history-modal .gal-history-panel {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: none !important;
-            max-height: none !important;
-            border-radius: 0 !important;
-            margin: 0 !important;
-        }
-
-        #gal-layer-choices {
-            justify-content: center !important;
-            align-items: center !important;
-            padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
-            padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-        }
-
-        .gal-choices-container {
-            width: min(100%, 34rem) !important;
-            max-height: calc(100dvh - 8rem) !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            padding: 0 0.75rem !important;
-        }
-
-        .gal-choice-card {
-            width: 100% !important;
-            max-width: 100% !important;
-        }
-    }
-
-    /* === 移动端紧凑模式适配 (Compact Mode) - 优化版 === */
-    @media screen and (max-width: 48rem) {
-        /* 1. 隐藏按钮文字，仅显示图标 */
-        .gal-footer-btn .gal-btn-text,
-        .gal-pending-choices-btn .gal-btn-text,
-        .gal-footer-btn-next .gal-btn-text {
-            display: none !important;
-        }
-
-        /* 2. 在移动端隐藏 LOG 和 CLOSE 按钮 (移入上拉菜单) */
-        .gal-footer-btn[data-action="log"],
-        .gal-footer-btn[data-action="close-mode"] {
-            display: none !important;
-        }
-
-        /* 3. 底部工具栏布局优化 */
-        .gal-bottom-toolbar {
-            justify-content: flex-start !important;
-            gap: 0.3rem !important;
-            /* 增加右侧内边距，防止 NEXT 按钮因为倾斜被切掉 */
-            padding: 0 1.5rem 0.5rem 0.5rem !important;
-            overflow: visible !important; /* 允许子元素溢出显示 */
-        }
-
-        /* 4. 普通功能按钮：自动填充 */
-        .gal-footer-btn,
-        .gal-pending-choices-btn {
-            flex: 1 !important;
-            padding: 0 !important;
-            justify-content: center !important;
-            height: 2.5rem !important;
-        }
-
-        .gal-footer-btn i,
-        .gal-pending-choices-btn i {
-            margin: 0 !important;
-            font-size: 1.15rem !important;
-        }
-
-        /* 5. NEXT 按钮：确保完整显示 */
-        .gal-footer-btn-next {
-            flex: 0 0 auto !important;
-            width: 5rem !important;           /* 再宽一点 */
-            min-width: 5rem !important;
-            height: 2.5rem !important;
-            margin-left: 0.5rem !important;
-            padding: 0 !important;
-            justify-content: center !important;
-            margin-right: -0.5rem !important; /*稍微向右贴一点，配合容器padding */
-            z-index: 100 !important;          /* 确保在最上层 */
-        }
-
-        .gal-footer-btn-next i {
-            margin: 0 !important;
-            font-size: 1.6rem !important;
-        }
-    }
-
-    /* === 移动端上拉菜单样式 === */
-    .gal-mobile-menu {
-        display: none;
-        position: absolute;
-        bottom: calc(100% + 0.5rem); /* 始终位于 CONFIG 按钮上方 */
-        left: 0.5rem; /* 与 CONFIG 按钮对齐 */
-        transform: none;
-        background: rgba(255, 255, 255, 0.95);
-        border: 0.125rem solid ${THEME.dark};
-        border-radius: 0;
-        padding: 0.5rem;
-        flex-direction: column;
-        gap: 0.5rem;
-        z-index: 120;
-        min-width: 9rem;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-        backdrop-filter: blur(0.25rem);
-    }
-
-    .gal-mobile-menu.active {
-        display: flex;
-    }
-
-    .gal-mobile-menu .gal-menu-btn {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 0.875rem;
-        color: ${THEME.dark};
-        background: ${THEME.white};
-        border: 0.125rem solid ${THEME.dark};
-        border-radius: 0;
-        cursor: pointer;
-        text-align: left;
-        font-size: 0.85rem;
-        font-weight: 700;
-        font-family: 'Barlow', sans-serif;
-        transition: all 0.2s;
-        box-shadow: 0.188rem 0.188rem 0 rgba(0,0,0,0.12);
-    }
-
-    .gal-mobile-menu .gal-menu-btn:hover {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        transform: translateY(-0.125rem);
-        box-shadow: 0.25rem 0.25rem 0 rgba(0,0,0,0.2);
-    }
-
-    .gal-mobile-menu .gal-menu-btn i {
-        width: 1.2rem;
-        text-align: center;
-    }
-
-    /* === 批量上传立绘窗口移动端适配 === */
-    @media screen and (max-width: 48rem) {
-        /* 批量上传窗口整体调整 */
-        #gal-batch-upload-modal .gal-input-box {
-            width: 100% !important;
-            height: 100vh !important;
-            max-width: 100% !important;
-            border-radius: 0 !important;
-        }
-
-        /* 主布局改为垂直堆叠 */
-        #gal-batch-upload-modal > .gal-input-box > div:last-child {
-            flex-direction: column !important;
-        }
-
-        /* 侧边栏改为顶部横向 */
-        #gal-batch-upload-modal .gal-batch-sidebar {
-            width: 100% !important;
-            border-right: none !important;
-            border-bottom: 1px solid #ddd !important;
-            max-height: 35vh !important;
-            flex-shrink: 0 !important;
-        }
-
-        /* 角色列表横向滚动 */
-        #gal-batch-upload-modal #gal-batch-char-list {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            gap: 0.5rem !important;
-            padding: 0.5rem !important;
-        }
-
-        /* 角色项样式调整 */
-        #gal-batch-upload-modal .gal-batch-char-item {
-            flex-shrink: 0 !important;
-            min-width: 100px !important;
-            max-width: 140px !important;
-        }
-
-        /* 新增角色按钮 */
-        #gal-batch-upload-modal #gal-batch-add-char {
-            white-space: nowrap !important;
-        }
-
-        /* 主内容区域 */
-        #gal-batch-upload-modal .gal-input-box > div:last-child > div:last-child {
-            flex: 1 !important;
-            min-height: 0 !important;
-        }
-
-        /* 上传区域调整 */
-        #gal-batch-upload-modal #gal-grid-upload-area {
-            min-height: 120px !important;
-            padding: 1rem !important;
-        }
-
-        #gal-batch-upload-modal #gal-grid-upload-area i {
-            font-size: 2rem !important;
-        }
-
-        #gal-batch-upload-modal #gal-grid-upload-area span {
-            font-size: 0.95rem !important;
-        }
-
-        /* 网格预览控制区 */
-        #gal-batch-upload-modal #gal-grid-preview-area > div:first-child {
-            padding: 0.75rem !important;
-        }
-
-        /* 网格控制按钮组 */
-        #gal-batch-upload-modal #gal-grid-preview-area > div:first-child > div:first-child {
-            gap: 0.75rem !important;
-        }
-
-        /* 行列控制紧凑布局 */
-        #gal-batch-upload-modal #gal-grid-preview-area > div:first-child > div:first-child > div {
-            gap: 0.375rem !important;
-        }
-
-        #gal-batch-upload-modal #gal-grid-preview-area label {
-            font-size: 0.8rem !important;
-        }
-
-        /* 网格映射容器 */
-        #gal-batch-upload-modal .gal-grid-mapping-container {
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
-            gap: 0.5rem !important;
-        }
-
-        /* 底部按钮区 */
-        #gal-batch-upload-modal .gal-input-actions {
-            padding: 0.75rem 1rem !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-batch-upload-modal .gal-input-actions button {
-            min-height: 40px !important;
-            font-size: 0.9rem !important;
-        }
-
-        /* Tab 标签适配 */
-        #gal-batch-upload-modal .gal-upload-tabs {
-            margin-bottom: 0.75rem !important;
-        }
-
-        #gal-batch-upload-modal .gal-upload-tab {
-            padding: 0.5rem 0.75rem !important;
-            font-size: 0.85rem !important;
-        }
-
-        /* 输入框适配 */
-        #gal-batch-upload-modal input[type="text"] {
-            padding: 0.5rem 0.75rem !important;
-            font-size: 0.9rem !important;
-        }
-
-        /* 标题区域 */
-        #gal-batch-upload-modal .gal-input-title {
-            padding: 0.75rem 1rem !important;
-            font-size: 1rem !important;
-        }
-    }
-
-    /* === 上传角色立绘窗口移动端适配 === */
-    @media screen and (max-width: 48rem) {
-        /* 窗口整体调整 */
-        #gal-sprite-upload-modal .gal-input-box {
-            width: 100% !important;
-            max-width: 100% !important;
-            max-height: 100vh !important;
-            height: 100vh !important;
-            padding: 0.5rem !important; /* 减小整体内边距 */
-            border-radius: 0 !important;
-            overflow-y: auto !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }
-
-        /* 标题 */
-        #gal-sprite-upload-modal .gal-input-title {
-            font-size: 1rem !important; /* 减小字号 */
-            margin-bottom: 0.5rem !important;
-            padding-bottom: 0.375rem !important;
-            border-bottom: 1px solid #eee !important;
-            flex: none !important;
-        }
-
-        /* 输入框区域：改为 Grid 并排布局，节省纵向空间 */
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(2) {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important; /* 左右分栏 */
-            gap: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-            flex: none !important;
-        }
-
-        /* 移除之前的 flex-direction: column 设置 */
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(2) > div {
-            width: auto !important;
-            margin-bottom: 0 !important; /* 移除内部 margin */
-        }
-
-        #gal-sprite-upload-modal label {
-            font-size: 0.8rem !important;
-            margin-bottom: 0.25rem !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-        }
-
-        #gal-sprite-upload-modal input[type="text"],
-        #gal-sprite-upload-modal select {
-            padding: 0.4rem 0.5rem !important; /* 减小输入框高度 */
-            font-size: 0.85rem !important;
-            height: 32px !important; /* 固定较小高度 */
-        }
-
-        /* TTS音色区域：紧凑化 */
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(3) {
-            padding: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-            flex: none !important;
-        }
-
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(3) > div {
-            flex-direction: row !important; /* TTS 尝试水平排列 */
-            flex-wrap: wrap !important;
-            gap: 0.5rem !important;
-            align-items: center !important;
-        }
-
-        #gal-sprite-upload-modal #gal-tts-voice-select {
-            flex: 1 !important;
-            width: auto !important;
-            min-width: 120px !important;
-        }
-
-        #gal-sprite-upload-modal #gal-tts-voice-save-btn {
-            width: auto !important;
-            padding: 0 0.75rem !important;
-            height: 32px !important;
-        }
-
-        /* Tab 标签适配：更扁平 */
-        #gal-sprite-upload-modal .gal-upload-tabs {
-            margin-bottom: 0.5rem !important;
-            flex-wrap: nowrap !important; /* 强制不换行 */
-            overflow-x: auto !important; /* 允许横向滚动 */
-            flex: none !important;
-            min-height: auto !important;
-            gap: 0.25rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-upload-tab {
-            padding: 0.35rem 0.5rem !important; /* 减小 Tab 内边距 */
-            font-size: 0.8rem !important;
-            flex: 1 !important;
-            min-width: auto !important;
-            text-align: center !important;
-            white-space: nowrap !important;
-            border-radius: 0.25rem !important;
-        }
-
-        /* 上传/内容区域：占据剩余空间 */
-        #gal-sprite-upload-modal #gal-upload-content {
-            flex: 1 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            min-height: 0 !important; /* 关键：允许 flex item 压缩 */
-            overflow-y: auto !important;
-        }
-
-        /* 上传卡片 */
-        #gal-sprite-upload-modal #gal-upload-trigger {
-            flex: 1 !important; /* 自动填充剩余高度 */
-            min-height: 120px !important;
-            padding: 0.75rem !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-trigger i {
-            font-size: 2rem !important;
-            margin-bottom: 0.5rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-trigger span {
-            font-size: 1rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-trigger small {
-            font-size: 0.75rem !important;
-        }
-
-        /* 远程链接区域 */
-        #gal-sprite-upload-modal #gal-upload-remote > div {
-            padding: 1rem !important;
-            min-height: 120px !important;
-        }
-
-        /* ComfyUI 区域 */
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:first-child {
-            padding: 0.75rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:first-child i {
-            font-size: 1.25rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:first-child span {
-            font-size: 1rem !important;
-        }
-
-        /* ComfyUI 工作流选择 */
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:nth-child(2) {
-            flex-direction: column !important;
-            gap: 0.75rem !important;
-        }
-
-        /* 裁剪区域 */
-        #gal-sprite-upload-modal #gal-crop-area {
-            margin-bottom: 0.75rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-container {
-            padding: 0.5rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-controls {
-            flex-wrap: wrap !important;
-            gap: 0.5rem !important;
-            padding: 0.5rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-controls input[type="range"] {
-            width: 120px !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-btn {
-            padding: 0.375rem 0.625rem !important;
-            font-size: 0.8rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-controls span {
-            font-size: 0.85rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-crop-area > p {
-            font-size: 0.75rem !important;
-            margin: 0.5rem 0 !important;
-        }
-
-        /* 底部按钮区 */
-        #gal-sprite-upload-modal .gal-input-actions {
-            flex-direction: column !important;
-            gap: 0.5rem !important;
-            margin-top: 0.75rem !important;
-            padding-top: 0.75rem !important;
-            border-top: 1px solid #eee !important;
-        }
-
-        #gal-sprite-upload-modal .gal-input-actions button {
-            width: 100% !important;
-            min-height: 42px !important;
-            padding: 0.625rem 1rem !important;
-            font-size: 0.9rem !important;
-            flex: none !important;
-        }
-
-        /* 按钮文字隐藏图标简化 */
-        #gal-sprite-upload-modal .gal-input-actions button i {
-            margin-right: 0.375rem !important;
-        }
-    }
-
-    /* === 角色立绘管理弹窗移动端适配 === */
-    @media screen and (max-width: 48rem) {
-        #gal-character-sprites-modal .gal-input-box {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: 100% !important;
-            max-height: 100% !important;
-            border-radius: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-box > div:first-child {
-            padding: 0.75rem 1rem 0.5rem !important;
-            flex: 0 0 auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-title {
-            font-size: 1.1rem !important;
-        }
-
-        /* TTS 绑定区域：收紧高度并避免被拉伸 */
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(2) {
-            margin: 0.5rem 0.75rem 0 !important;
-            padding: 0.75rem !important;
-            border-radius: 0.5rem !important;
-            flex: 0 0 auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(2) > div:nth-child(2) {
-            flex-direction: row !important;
-            flex-wrap: wrap !important;
-            align-items: center !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-tts-voice-select {
-            flex: 1 1 10rem !important;
-            width: auto !important;
-            min-width: 10rem !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-tts-save-btn {
-            width: auto !important;
-            padding: 0.5rem 0.75rem !important;
-        }
-
-        /* 列表区内边距收紧，并允许滚动填满剩余空间 */
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(3) {
-            padding: 0.75rem 1rem !important;
-            flex: 1 1 auto !important;
-            min-height: 0 !important;
-            overflow-y: auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(3) > div:first-child {
-            flex-direction: row !important;
-            flex-wrap: wrap !important;
-            align-items: center !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-add-sprite-btn {
-            width: auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-sprite-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-character-sprites-modal .gal-sprite-card {
-            border-radius: 0.375rem !important;
-        }
-
-        #gal-character-sprites-modal .gal-sprite-label {
-            font-size: 0.75rem !important;
-            padding: 0.375rem !important;
-        }
-
-        /* 底部按钮区：改为纵向 */
-        #gal-character-sprites-modal .gal-input-box > div:last-child {
-            flex-direction: column !important;
-            gap: 0.5rem !important;
-            padding: 0.75rem 1rem !important;
-            flex: 0 0 auto !important;
-            margin-top: 0 !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-sprites-back,
-        #gal-character-sprites-modal #gal-char-sprites-close {
-            width: 100% !important;
-            min-height: 40px !important;
-        }
-    }
-
-    /* === 超窄屏优化 (<= 360px) === */
-    @media screen and (max-width: 22.5rem) {
-        #gal-character-sprites-modal .gal-sprite-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-add-sprite-btn {
-            width: 100% !important;
-        }
-    }
+    const css = `:root{--gal-z-overlay: 10000;--gal-z-dropdown: 1000;--gal-z-toast: 100000;--gal-z-modal: 100001;--gal-z-modal-critical: 100002;--gal-accent: #00d2ff;--gal-dark: #2b2e38;--gal-white: #ffffff;--gal-accent-sub: #ff0055;--gal-font-eng: "Barlow", sans-serif}.gal-z-overlay{z-index:var(--gal-z-overlay)!important}.gal-z-dropdown{z-index:var(--gal-z-dropdown)!important}.gal-z-toast{z-index:var(--gal-z-toast)!important}.gal-z-modal{z-index:var(--gal-z-modal)!important}.gal-z-critical{z-index:var(--gal-z-modal-critical)!important}#gal-global-overlay{position:relative!important;width:100%!important;min-height:31.25rem;height:70vh;max-height:50rem;display:none;background:transparent!important;font-family:Noto Sans SC,sans-serif;border-radius:.75rem;overflow:visible;margin:.625rem 0;contain:layout;-webkit-text-size-adjust:100%;text-size-adjust:100%}#gal-global-overlay{--ui-scale: 1;--font-scale: 1}#gal-global-overlay.active{display:block!important}.gal-draggable-handle{cursor:move;user-select:none}#gal-global-overlay.fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-height:none!important;min-height:100vh!important;z-index:var(--gal-z-overlay)!important;border-radius:0!important;margin:0!important;box-shadow:none!important}#chat>.mes.gal-hidden{display:none!important}.gal-embedded-viewer{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#000000b3;backdrop-filter:blur(.375rem)}.gal-embedded-viewer-body{position:relative;max-width:95vw;max-height:90vh;overflow:auto;border-radius:.75rem;box-shadow:0 .5rem 2rem #00000080}.gal-embedded-viewer-close{position:fixed;top:.75rem;right:.75rem;z-index:100000;display:flex;align-items:center;gap:.375rem;padding:.5rem 1rem;border-radius:.5rem;border:.0625rem solid rgba(255,255,255,.2);background:linear-gradient(135deg,#1e1e28f2,#323246f2);backdrop-filter:blur(.625rem);color:#fff;font-size:.85rem;cursor:pointer;box-shadow:0 .25rem 1rem #0006;transition:opacity .2s}.gal-embedded-viewer-close:hover{opacity:.85}@media screen and (max-width: 48rem){.gal-embedded-viewer{align-items:flex-start!important;padding-top:3rem!important;padding-top:calc(3rem + env(safe-area-inset-top))!important}.gal-embedded-viewer-body{max-height:calc(100vh - 4rem)!important;max-height:calc(100dvh - 4rem - env(safe-area-inset-top))!important;max-width:100vw!important;border-radius:0!important}}.gal-fullscreen-btn{position:absolute;top:.938rem;right:.938rem;z-index:100;background:#2b2e38e6;color:var(--gal-accent);border:.125rem solid var(--gal-accent);padding:.625rem 1.125rem;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:all .2s;font-family:Barlow,sans-serif;border-radius:.25rem;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-fullscreen-btn:hover{background:var(--gal-accent);color:var(--gal-dark)}.gal-fullscreen-btn i{font-size:1rem}.gal-status-bar-container{position:absolute;top:.938rem;right:7.5rem;z-index:100;display:flex;gap:.625rem;align-items:center;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-location-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(0,210,255,.5);white-space:nowrap;max-width:21.875rem;overflow:hidden;display:flex;align-items:center}.gal-location-bar i{color:var(--gal-accent);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-location-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-time-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(255,0,85,.5);white-space:nowrap;max-width:16.25rem;overflow:hidden;display:flex;align-items:center}.gal-time-bar i{color:var(--gal-accent-sub);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-time-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-status-bar-container .auto-shrink{display:inline-block;transform-origin:left center}#gal-global-overlay.fullscreen .gal-status-bar-container{right:8.125rem}.gal-bgm-widget{position:absolute;top:.938rem;left:.938rem;z-index:100;background:#2b2e38d9;backdrop-filter:blur(.313rem);padding:.5rem .938rem;border-radius:1.25rem;color:#fff;display:flex;align-items:center;gap:.625rem;font-size:.85rem;box-shadow:0 .25rem .625rem #0003;transition:all .3s ease;border:1px solid rgba(255,255,255,.1);max-width:2.5rem;overflow:hidden;white-space:nowrap;cursor:pointer}.gal-bgm-widget:hover,.gal-bgm-widget.active{max-width:18.75rem;background:#2b2e38f2}.gal-bgm-icon{color:var(--gal-accent);animation:galSpin 4s linear infinite;animation-play-state:paused;font-size:1.1rem;min-width:1.25rem;text-align:center}.gal-bgm-widget.playing .gal-bgm-icon{animation-play-state:running}@keyframes galSpin{to{transform:rotate(360deg)}}.gal-bgm-info{display:flex;flex-direction:column;line-height:1.2;overflow:hidden;margin-right:.313rem}.gal-bgm-title{font-weight:700;font-size:.8rem;color:var(--gal-accent)}.gal-bgm-ctrl{display:flex;align-items:center;gap:.5rem}.gal-bgm-btn{background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem;padding:0;width:1.25rem}.gal-bgm-btn:hover{color:var(--gal-accent)}.gal-bgm-slider{width:3.75rem;height:.25rem;-webkit-appearance:none;background:#ffffff4d;border-radius:.125rem;outline:none}.gal-bgm-slider::-webkit-slider-thumb{-webkit-appearance:none;width:.625rem;height:.625rem;background:#fff;border-radius:50%;cursor:pointer}.gal-game-container{position:relative;width:100%;height:100%;background:transparent;font-family:Noto Sans SC,sans-serif;overflow:hidden;border-radius:.75rem;box-shadow:0 .25rem 1.25rem #0000001a;box-sizing:border-box}#gal-global-overlay.fullscreen .gal-game-container{border-radius:0;box-shadow:none;padding:0}.gal-layer-bg{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;background:#f0f2f5;overflow:hidden}.gal-bg-layer{position:absolute;inset:0;background-repeat:no-repeat;background-size:cover;background-position:center;opacity:1;transform:scale(1);transition:opacity .45s ease,transform .45s ease;will-change:opacity,transform}.gal-bg-front{opacity:0;transform:scale(1.03)}.gal-bg-front.is-active{opacity:1;transform:scale(1)}.gal-layer-bg.generating-bg .gal-bg-layer{opacity:0!important}@media (prefers-reduced-motion: reduce){.gal-bg-layer{transition:none!important;transform:none!important}.gal-bg-front{opacity:0}.gal-bg-front.is-active{opacity:1}}.gal-game-content{position:relative;width:100%;height:100%;z-index:1}.gal-layer-bg:before{content:"";position:absolute;top:0;left:0;width:100%;height:100%;background-image:radial-gradient(#ccc 1px,transparent 1px);background-size:1.25rem 1.25rem;opacity:.3;pointer-events:none}.gal-layer-bg.has-bg:before{display:none}.gal-layer-bg.generating-bg{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)}@keyframes galGenGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}to{background-position:0% 50%}}.gal-layer-bg.generating-bg:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent .125rem,rgba(0,210,255,.03) .125rem,rgba(0,210,255,.03) .25rem);opacity:.15;pointer-events:none}@keyframes galGenScanline{0%{transform:translateY(-100%)}to{transform:translateY(100%)}}@keyframes galSpriteSlideInLeft{0%{transform:translate(-6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInRight{0%{transform:translate(6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInCenter{0%{transform:translateY(3.125rem);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes galSpriteSlideOutLeft{0%{transform:translate(0);opacity:1}to{transform:translate(-6.25rem);opacity:0}}@keyframes galSpriteSlideOutRight{0%{transform:translate(0);opacity:1}to{transform:translate(6.25rem);opacity:0}}@keyframes galSpriteBreathing{0%,to{transform:translateY(0)}50%{transform:translateY(-.188rem)}}@keyframes galSpriteShake{0%,to{transform:translate(0)}20%{transform:translate(-.313rem)}40%{transform:translate(.313rem)}60%{transform:translate(-.188rem)}80%{transform:translate(.188rem)}}@keyframes galSpriteBounce{0%{transform:scale(1)}30%{transform:scale(1.15)}50%{transform:scale(.95)}70%{transform:scale(1.05)}to{transform:scale(1)}}@keyframes galSpriteExpressionChange{0%{opacity:.7;transform:scale(.98)}to{opacity:1;transform:scale(1)}}.gal-layer-character{position:absolute;bottom:35%;left:0;width:100%;height:55%;z-index:5;display:flex;justify-content:center;align-items:flex-end;pointer-events:none;padding:0 3%;gap:2%}.gal-live2d-stage-canvas{z-index:4;pointer-events:none}.gal-live2d-position-guide{position:absolute;inset:0;pointer-events:none;z-index:6}.gal-live2d-position-guide-box{position:absolute;border:.125rem dashed rgba(0,210,255,.55);border-radius:.625rem;box-shadow:0 0 1rem #00d2ff47;background:#0000000f}.gal-live2d-position-guide-label{position:absolute;top:-1.25rem;left:0;font-size:.72rem;line-height:1;color:#77dfff;text-shadow:0 0 .375rem rgba(0,0,0,.5);white-space:nowrap}.gal-live2d-position-toolbar{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translate(-50%);width:min(92vw,36rem);min-width:20rem;max-height:min(65vh,33.75rem);overflow-y:auto;padding:.9375rem 1.125rem;display:flex;flex-direction:column;gap:.6875rem;border-radius:.9375rem;border:.0625rem solid rgba(255,255,255,.16);color:#fff;background:linear-gradient(135deg,#1a1c26f7,#2a2e40f7);backdrop-filter:blur(.625rem);box-shadow:0 .5rem 1.75rem #00000075}.gal-live2d-position-row{display:flex;align-items:center;gap:.625rem}.gal-live2d-position-label{min-width:4.5rem;font-size:.85rem;color:#ffffffeb}.gal-live2d-position-slider{flex:1;cursor:pointer;accent-color:#00d2ff}.gal-live2d-position-value{min-width:2.875rem;text-align:right;font-size:.9rem;font-weight:600}.gal-live2d-position-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.25rem}.gal-live2d-position-btn{border:none;border-radius:.5rem;padding:.5rem .875rem;color:#fff;cursor:pointer;font-size:.85rem}.gal-live2d-position-btn-reset{background:#ffffff1f;border:.0625rem solid rgba(255,255,255,.2)}.gal-live2d-position-btn-cancel{background:#dc3545d1}.gal-live2d-position-btn-save{background:linear-gradient(135deg,#00d2ff,#3a7bd5);font-weight:600}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-live2d-position-toolbar{top:calc(.5rem + env(safe-area-inset-top,0px));bottom:auto;width:calc(100vw - 1rem);min-width:0;max-height:calc(72vh - env(safe-area-inset-top,0px));padding:.8125rem .8125rem .75rem;border-radius:.75rem}.gal-live2d-position-label{min-width:3.75rem;font-size:.8rem}.gal-live2d-position-value{min-width:2.5rem;font-size:.85rem}.gal-live2d-position-actions{flex-wrap:wrap;justify-content:stretch;margin-top:.125rem}.gal-live2d-position-btn{flex:1 1 calc(50% - .3125rem);min-height:2.25rem;font-size:.82rem;padding:.5rem .625rem}}.gal-char-slot{position:relative;flex:0 0 30%;max-width:30%;height:100%;display:flex;align-items:flex-end;justify-content:center;pointer-events:auto}.gal-char-slot.slot-left{order:1}.gal-char-slot.slot-right{order:2}.gal-char-container{position:relative;max-height:100%;--state-scale: 1;transform-origin:bottom center;max-width:100%;display:flex;align-items:flex-end;justify-content:center;filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,0,.4));transition:transform .4s cubic-bezier(.175,.885,.32,1.275),filter .3s ease,opacity .3s ease;pointer-events:auto;cursor:pointer;animation:galSpriteBreathing 4s ease-in-out infinite}.gal-char-container.entering-left{animation:galSpriteSlideInLeft .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-center{animation:galSpriteSlideInCenter .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-right{animation:galSpriteSlideInRight .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.exiting-left{animation:galSpriteSlideOutLeft .4s ease-in forwards;pointer-events:none}.gal-char-container.exiting-right{animation:galSpriteSlideOutRight .4s ease-in forwards;pointer-events:none}.gal-char-container.expression-change{animation:galSpriteExpressionChange .3s ease-out}.gal-char-container.speaking{--state-scale: 1.05;z-index:10;filter:drop-shadow(0 .938rem 2.5rem rgba(0,0,0,.5));position:relative}.gal-char-container.silent{--state-scale: .95;filter:drop-shadow(0 .313rem .938rem rgba(0,0,0,.3));z-index:4}@keyframes speakingGlow{0%,to{filter:drop-shadow(0 0 .5rem rgba(255,215,0,.7)) drop-shadow(0 0 .938rem rgba(255,180,0,.5)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}50%{filter:drop-shadow(0 0 .938rem rgba(255,215,0,.9)) drop-shadow(0 0 1.875rem rgba(255,180,0,.7)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}}.gal-layer-character.glow-enabled .gal-char-container.speaking{animation:speakingGlow 2s ease-in-out infinite,galSpriteBreathing 4s ease-in-out infinite}@keyframes bubbleBounce{0%,to{transform:translateY(0) scale(1)}50%{transform:translateY(-.5rem) scale(1.1)}}.gal-layer-character.bubble-enabled .gal-char-container.speaking:before{content:"?";position:absolute;top:-.625rem;right:10%;font-size:2.5rem;z-index:100;animation:bubbleBounce 1s ease-in-out infinite;filter:drop-shadow(.125rem .125rem .25rem rgba(0,0,0,.5))}.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{content:"\\f028"!important;font-family:"Font Awesome 6 Free";font-weight:900;color:var(--gal-accent);font-size:2.2rem}@media screen and (max-width: 48rem){.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{font-size:1.5rem!important;top:-.3rem!important;right:5%!important}}.gal-char-container[data-emotion=angry]{animation:galSpriteShake .4s ease-in-out 2,galSpriteBreathing 4s ease-in-out .8s infinite}.gal-char-container[data-emotion=surprised]{animation:galSpriteBounce .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-layer-character.scene-night{filter:hue-rotate(-10deg) brightness(.85) saturate(.9)}.gal-layer-character.scene-night .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,100,.5))}.gal-layer-character.scene-indoor{filter:sepia(.08) brightness(1.02)}.gal-layer-character.scene-indoor .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(100,50,0,.3))}.gal-char-img{max-height:100%;max-width:100%;height:auto;width:auto;object-fit:contain;object-position:bottom center;transform:scale(calc(var(--base-scale, 1) * var(--state-scale)));transform-origin:bottom center;transition:opacity .3s ease,transform .3s cubic-bezier(.175,.885,.32,1.275)}.gal-char-placeholder{width:12.5rem;height:21.875rem;background:linear-gradient(135deg,#fffc,#f0f0f0e6);border:.25rem dashed #ccc;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#999;gap:.625rem;border-radius:.625rem;cursor:pointer;transition:all .3s;pointer-events:auto}.gal-char-placeholder:hover{border-color:var(--gal-accent);color:var(--gal-accent)}.gal-char-placeholder i{font-size:4rem}.gal-char-placeholder span{font-size:.9rem;font-weight:600}.gal-dialog-layer{position:absolute;bottom:1.25rem;left:10%;right:10%;height:30%;max-width:none;z-index:30;pointer-events:auto}.gal-name-badge{position:absolute;top:-1.375rem;left:0;background:var(--gal-dark);color:var(--gal-accent);padding:.5rem 2.188rem .5rem 1.563rem;font-size:1.4rem;font-weight:900;font-family:Barlow,sans-serif;transform:skew(-15deg) scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem #0003}.gal-name-badge span{display:block;transform:skew(15deg)}.gal-sprite-toggle{position:absolute;top:-1.375rem;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gal-dark);border:none;border-radius:.375rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem #0003;transition:all .2s ease;opacity:.8}.gal-sprite-toggle:hover{opacity:1;background:var(--gal-accent)}.gal-sprite-toggle:hover .gal-eye-icon{color:var(--gal-dark)}.gal-eye-icon{font-size:1.2rem;color:var(--gal-accent);transition:color .2s ease;transform:skew(0)}.gal-sprite-toggle.sprites-hidden{background:#646464cc}.gal-sprite-toggle.sprites-hidden .gal-eye-icon{color:#999}.gal-sprite-toggle.sprites-hidden:hover{background:var(--gal-accent)}.gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon{color:var(--gal-dark)}.gal-layer-character.sprites-hidden{opacity:0!important;pointer-events:none!important;transition:opacity .3s ease}.gal-narrator-label{background:#666;color:#fff}.gal-cg-thumbnail{max-height:3.5rem;border-radius:.25rem;vertical-align:middle;margin-right:.5rem;cursor:pointer;box-shadow:0 2px 4px #0000004d}.gal-cg-viewer{position:absolute;inset:0;background:#000000eb;z-index:100;display:flex;align-items:center;justify-content:center;cursor:pointer}.gal-cg-viewer-img{max-width:90%;max-height:90%;object-fit:contain;border-radius:.5rem;box-shadow:0 4px 20px #00000080}.gal-cg-viewer-close{position:absolute;top:1rem;right:1rem;background:#ffffff26;border:none;color:#fff;width:2.5rem;height:2.5rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:background .2s ease}.gal-cg-viewer-close:hover{background:#ffffff4d}.gal-cg-viewer-loading{color:#fff9;font-size:1.1rem}.gal-generating-status{position:absolute;top:-3.75rem;left:50%;transform:translate(-50%) scale(.8);background:linear-gradient(135deg,var(--gal-accent) 0%,#ff6b9d 100%);color:#fff;padding:.5rem 1.25rem;font-size:.9rem;font-weight:700;border-radius:1.25rem;box-shadow:0 .25rem .938rem #0000004d;opacity:0;transition:all .3s ease;pointer-events:none;z-index:50}.gal-generating-status.show{opacity:1;transform:translate(-50%) scale(1)}.gal-interaction-bar{position:absolute;top:-3.438rem;right:0;display:flex;gap:.938rem;z-index:35;transform:scale(var(--ui-scale));transform-origin:bottom right}.gal-action-btn{padding:.75rem 1.875rem;font-weight:700;font-size:1.1rem;cursor:pointer;transform:skew(-15deg);display:flex;align-items:center;gap:.625rem;transition:all .2s cubic-bezier(.34,1.56,.64,1);border:.125rem solid transparent;box-shadow:.313rem .313rem #0003;font-family:Noto Sans SC,sans-serif;background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn span,.gal-action-btn i{transform:skew(15deg)}.gal-action-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem #0000004d}.gal-action-btn.btn-reroll{background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn.btn-reroll:hover{background:var(--gal-dark);color:var(--gal-accent);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent)}.gal-action-btn.btn-free{background:var(--gal-accent-sub);color:#fff;border-color:var(--gal-accent-sub)}.gal-action-btn.btn-free:hover{background:var(--gal-dark);color:var(--gal-accent-sub);border-color:var(--gal-dark);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent-sub)}.gal-text-panel{position:relative;width:100%;height:100%;box-sizing:border-box;background:#fffffff2;background-image:linear-gradient(135deg,transparent 0%,transparent 95%,rgba(0,210,255,.1) 95%,rgba(0,210,255,.1) 100%);background-size:1.25rem 1.25rem;box-shadow:0 .625rem 1.875rem #00000026;border-radius:0;padding:2.5rem 3.75rem 5rem;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none}.gal-text-panel::-webkit-scrollbar{display:none}.gal-dialog-text{font-size:calc(1.25rem * var(--ui-scale) * var(--font-scale, 1));line-height:1.9;color:#333;font-weight:500;letter-spacing:.02em}.gal-text-panel.text-effect-glass{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:#ffffffb3!important}.gal-text-panel.text-effect-gradient:before{content:"";position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(0,0,0,.6) 0%,rgba(0,0,0,.3) 50%,transparent 100%);pointer-events:none;z-index:1}.gal-text-panel.text-effect-gradient .gal-dialog-text{position:relative;z-index:2}.gal-text-panel.text-effect-gradient .gal-name-badge{z-index:3}.gal-text-panel.text-effect-text-bg{background:transparent!important;background-image:none!important;box-shadow:none!important}.gal-tts-loading{position:absolute;top:auto;bottom:1rem;right:1.5rem;display:flex;align-items:center;justify-content:center;width:2.5rem;height:2.5rem;padding:0;background:#fffffff2;border:.125rem solid var(--gal-accent);border-radius:50%;color:var(--gal-accent);box-shadow:0 .25rem .75rem #0000001a;opacity:0;transform:scale(.8);transition:all .4s cubic-bezier(.175,.885,.32,1.275);pointer-events:none;z-index:10}.gal-tts-loading.active{opacity:1;transform:scale(1)}.gal-tts-loading i{font-size:1rem;color:var(--gal-accent)}.gal-generating-indicator{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.75rem;padding:1.25rem 2.5rem;background:#fffffffa;border:.188rem solid var(--gal-accent);border-radius:1rem;box-shadow:0 .5rem 2rem #00d2ff4d;z-index:20;opacity:0;visibility:hidden;transition:all .3s ease}.gal-generating-indicator.active{opacity:1;visibility:visible}.gal-generating-indicator .gal-gen-icon{font-size:2.5rem;color:var(--gal-accent);animation:galGenPulse 1.5s ease-in-out infinite}.gal-generating-indicator .gal-gen-text{font-size:1.1rem;font-weight:700;color:var(--gal-dark);letter-spacing:.05em}.gal-generating-indicator .gal-gen-status{font-size:.85rem;color:#666;max-width:17.5rem;text-align:center;min-height:1.2em}.gal-generating-indicator .gal-gen-dots{display:flex;gap:.375rem;margin-top:.25rem}.gal-generating-indicator .gal-gen-dot{width:.5rem;height:.5rem;background:var(--gal-accent);border-radius:50%;animation:galGenDotBounce 1.4s ease-in-out infinite both}.gal-generating-indicator .gal-gen-dot:nth-child(1){animation-delay:-.32s}.gal-generating-indicator .gal-gen-dot:nth-child(2){animation-delay:-.16s}@keyframes galGenPulse{0%,to{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.8}}@keyframes galGenDotBounce{0%,80%,to{transform:scale(0)}40%{transform:scale(1)}}.gal-bottom-toolbar{position:absolute;bottom:0;left:0;width:100%;height:auto;min-height:3.75rem;padding:.625rem 1.875rem 0;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:100;contain:layout style}.gal-bottom-toolbar>*{pointer-events:auto}.gal-toolbar-left,.gal-toolbar-right{display:flex;align-items:flex-end;gap:.5rem}.gal-footer-btn{background:#ffffffe6!important;color:var(--gal-dark)!important;padding:0 calc(.75rem * var(--ui-scale))!important;font-family:var(--gal-font-eng)!important;font-weight:800!important;font-size:calc(.85rem * var(--ui-scale))!important;cursor:pointer!important;transition:background .2s,color .2s,transform .2s,box-shadow .2s!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;display:flex!important;align-items:center!important;gap:calc(.375rem * var(--ui-scale))!important;height:calc(2.25rem * var(--ui-scale))!important;transform:skew(-10deg)!important;box-shadow:calc(.125rem * var(--ui-scale)) calc(.125rem * var(--ui-scale)) 0 #0000001a!important;border-radius:0!important;will-change:transform}.gal-footer-btn i,.gal-footer-btn span{transform:skew(10deg)!important;font-size:calc(1rem * var(--ui-scale))!important}.gal-footer-btn:hover{background:var(--gal-dark)!important;color:#fff!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.25rem .25rem #0003!important}.gal-footer-btn-next{background:var(--gal-dark)!important;color:#fff!important;font-size:calc(1.3rem * var(--ui-scale))!important;font-weight:800!important;padding:0 calc(2.5rem * var(--ui-scale))!important;height:calc(3.438rem * var(--ui-scale))!important;min-width:calc(8.75rem * var(--ui-scale))!important;border-radius:0!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;margin-left:calc(.938rem * var(--ui-scale))!important;margin-right:-1.875rem!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:center!important;gap:calc(.625rem * var(--ui-scale))!important;white-space:nowrap!important;line-height:1!important;box-shadow:calc(.25rem * var(--ui-scale)) calc(.25rem * var(--ui-scale)) 0 #0003!important;flex-shrink:0!important;clip-path:polygon(calc(1.563rem * var(--ui-scale)) 0,100% 0,100% 100%,0% 100%)!important;transition:background .2s ease,color .2s ease,transform .2s ease!important;transform:none!important;will-change:transform}.gal-footer-btn-next:hover{background:var(--gal-accent)!important;color:var(--gal-dark)!important;transform:translate(-.188rem)!important}.gal-footer-btn-next i{font-size:1.1rem!important;margin:0!important}.gal-progress-indicator{font-family:Barlow,sans-serif;font-size:.85rem;font-weight:700;color:#888;padding:.375rem .625rem;display:flex;align-items:center;height:2.25rem}.gal-nav-btn.active{background:var(--gal-accent)!important;color:var(--gal-dark)!important;box-shadow:inset 1px 1px .188rem #0003!important}.gal-auto-playing{background:var(--gal-accent-sub)!important;color:#fff!important;border-color:var(--gal-accent-sub)!important;animation:galPulse 1s infinite}@keyframes galPulse{0%,to{opacity:1}50%{opacity:.8}}.gal-input-modal,#gal-free-input-modal{position:fixed;inset:0;background:#00000080;backdrop-filter:blur(.25rem);z-index:var(--gal-z-modal)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .2s ease}#gal-live2d-settings-modal{z-index:var(--gal-z-modal-critical)!important}@keyframes galFadeIn{0%{opacity:0}to{opacity:1}}.gal-input-box{background:var(--gal-white);border:.188rem solid var(--gal-dark);box-shadow:.625rem .625rem #00000026;width:90%;max-width:31.25rem;padding:1.563rem}.gal-input-title{font-family:Barlow,sans-serif;font-size:1.3rem;font-weight:800;color:var(--gal-dark);margin-bottom:.938rem;transform:skew(-5deg)}.gal-input-title span{transform:skew(5deg);display:block}.gal-input-field{width:100%;border:.125rem solid var(--gal-dark);padding:.75rem .938rem;font-size:1rem;font-family:Noto Sans SC,sans-serif;resize:vertical;min-height:5rem;box-sizing:border-box}.gal-input-field:focus{outline:none;border-color:var(--gal-accent);box-shadow:0 0 0 .188rem #00d2ff33}.gal-input-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.938rem}.gal-toast{position:fixed;bottom:1.875rem;right:1.875rem;background:var(--gal-dark);color:var(--gal-white);padding:.75rem 1.563rem;font-weight:600;transform:skew(-5deg);box-shadow:.313rem .313rem 0 var(--gal-accent);z-index:var(--gal-z-toast);animation:galToastIn .3s ease}.gal-toast span{display:block;transform:skew(5deg)}@keyframes galToastIn{0%{opacity:0;transform:skew(-5deg) translateY(1.25rem)}to{opacity:1;transform:skew(-5deg) translateY(0)}}.gal-input-modal,.gal-config-modal{position:fixed;inset:0;background:#0009;backdrop-filter:blur(.375rem);z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center}.gal-import-progress-overlay{z-index:var(--gal-z-modal-critical)!important}@media screen and (max-width: 48rem){.gal-import-progress-box{transform:translateY(8vh)}}.gal-config-panel{background:var(--gal-white);border:none!important;box-shadow:none!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;display:flex;flex-direction:column;border-radius:0!important}.gal-config-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.563rem;display:flex;justify-content:space-between;align-items:center}.gal-config-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:800;color:var(--gal-accent)}.gal-config-close{background:transparent;border:.125rem solid var(--gal-white);color:var(--gal-white);width:2rem;height:2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}.gal-config-close:hover{background:var(--gal-accent-sub);border-color:var(--gal-accent-sub)}.gal-config-body{padding:1.563rem;overflow-y:auto;flex:1}.gal-sprite-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.375rem,1fr));gap:.938rem}.gal-sprite-card{border:.125rem solid #eee;padding:.625rem;text-align:center;cursor:pointer;transition:all .2s}.gal-sprite-card:hover{border-color:var(--gal-accent);box-shadow:0 .25rem .75rem #00d2ff26}.gal-sprite-preview{width:100%;aspect-ratio:2 / 3;object-fit:cover;object-position:top center;background:#f9f9f9;border-radius:.25rem;margin-bottom:.5rem}.gal-crop-container{position:relative;width:100%;overflow:visible;background:#1a1a2e;border-radius:.5rem}.gal-crop-canvas-wrapper{position:relative;width:100%;height:23.75rem;overflow:hidden;cursor:move;display:flex;align-items:center;justify-content:center;background:#1a1a2e;border-radius:.5rem .5rem 0 0}#gal-crop-canvas{display:block}.gal-crop-overlay{position:absolute;inset:0;pointer-events:none}.gal-crop-frame{position:absolute;border:.188rem solid var(--gal-accent);box-shadow:0 0 0 624.938rem #0009;pointer-events:none}.gal-crop-controls{display:flex;align-items:center;justify-content:center;gap:.938rem;padding:.75rem 1.25rem;background:#000c;border-radius:0 0 .5rem .5rem}.gal-crop-controls .gal-crop-btn{padding:.5rem 1rem;min-width:3.75rem;font-size:.9rem}.gal-crop-zoom-slider{width:9.375rem;accent-color:var(--gal-accent)}.gal-crop-zoom-label{color:#fff;font-size:.85rem;font-weight:600;min-width:2.813rem}.gal-crop-btn{padding:.5rem 1rem;border:none;border-radius:.25rem;cursor:pointer;font-weight:600;transition:all .2s}.gal-crop-btn.reset{background:#666;color:#fff}.gal-crop-btn.reset:hover{background:#888}.gal-batch-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.938rem;max-height:60vh;overflow-y:auto;padding:.313rem}.gal-batch-upload-card{border:.125rem dashed #ccc;border-radius:.5rem;padding:.75rem;text-align:center;transition:all .2s;background:#fafafa}.gal-batch-upload-card:hover{border-color:var(--gal-accent);background:#00d2ff0d}.gal-batch-upload-card.has-image{border-style:solid;border-color:var(--gal-accent)}.gal-batch-upload-card .expression-label{font-weight:700;color:var(--gal-dark);margin-bottom:.625rem;font-size:.9rem}.gal-batch-upload-card .upload-preview{width:100%;aspect-ratio:2 / 3;background:#eee;border-radius:.375rem;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;margin-bottom:.5rem}.gal-batch-upload-card .upload-preview img{width:100%;height:100%;object-fit:cover;object-position:top center}.gal-batch-upload-card .upload-preview i{font-size:2rem;color:#bbb}.gal-batch-upload-card .upload-preview:hover i{color:var(--gal-accent)}.gal-batch-upload-card .remove-btn{background:var(--gal-accent-sub);color:#fff;border:none;padding:.25rem .625rem;border-radius:.25rem;font-size:.75rem;cursor:pointer;display:none}.gal-batch-upload-card.has-image .remove-btn{display:inline-block}.gal-sprite-label{font-size:.85rem;font-weight:700;color:var(--gal-dark);line-height:1.3}.gal-sprite-label small{font-weight:400;color:#888}.gal-upload-card{border:.125rem dashed #ccc;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:#999;min-height:7.5rem}.gal-upload-card:hover{border-color:var(--gal-accent);color:var(--gal-accent);background:#00d2ff0d}.gal-upload-card i{font-size:2rem}.gal-action-btn.primary{background:var(--gal-accent);color:var(--gal-dark);border-color:var(--gal-accent)}.gal-action-btn.primary:hover{background:var(--gal-dark);color:var(--gal-accent)}#gal-layer-choices{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;background:#0006!important;z-index:var(--gal-z-modal-critical)!important;display:none;flex-direction:column;justify-content:center;align-items:center;gap:.938rem;padding:1.25rem}#gal-layer-choices.active{display:flex!important;animation:galFadeIn .3s ease}.gal-choices-container{width:100%;max-width:32rem;display:flex;flex-direction:column;align-items:center;gap:.75rem;max-height:calc(100vh - 10rem);overflow-y:auto;padding:0 .5rem;box-sizing:border-box}.gal-choices-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:900;color:var(--gal-white);text-transform:uppercase;letter-spacing:.125rem;margin-bottom:.5rem;transform:skew(-10deg)}.gal-choices-title span{display:block;transform:skew(10deg)}.gal-choice-card{background:var(--gal-white);color:var(--gal-dark);padding:.75rem 1.875rem;min-width:12.5rem;max-width:90%;width:auto;text-align:center;font-weight:600;font-size:.95rem;line-height:1.4;border:.125rem solid var(--gal-dark);box-shadow:.375rem .375rem #00000026;transform:skew(-8deg);cursor:pointer;transition:all .2s cubic-bezier(.34,1.56,.64,1);position:relative;overflow:hidden;word-break:break-word}.gal-choice-card span{display:block;transform:skew(8deg)}.gal-choice-card:hover{background:var(--gal-accent);color:#fff;border-color:var(--gal-dark);transform:skew(-8deg) translate(-.188rem,-.188rem);box-shadow:.563rem .563rem 0 var(--gal-dark)}.gal-choice-card:after{content:"";display:none}.gal-choices-hint{font-size:.8rem;color:#ffffffb3;margin-top:.938rem}.gal-dialog-layer .gal-progress-container{position:absolute;bottom:0;left:0;width:100%;height:.375rem;background:#0003;border-radius:0;margin:0;z-index:10;overflow:hidden;position:relative;min-width:3.75rem}.gal-progress-bar{height:100%;background:linear-gradient(90deg,var(--gal-accent) 0%,#00a8cc 100%);width:0%;border-radius:0;transition:width .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 0 .625rem var(--gal-accent)}.gal-pending-choices-btn{background:linear-gradient(135deg,var(--gal-accent-sub) 0%,#cc0044 100%)!important;color:#fff!important;padding:0 1.25rem!important;font-weight:700!important;font-size:.85rem!important;cursor:pointer!important;display:flex!important;align-items:center!important;gap:.375rem!important;border:.125rem solid var(--gal-dark)!important;height:2.813rem!important;margin-right:.313rem!important;border-radius:0!important;transform:skew(-10deg)}.gal-pending-choices-btn.show{display:flex!important;-webkit-animation:galPendingPulse 2s ease-in-out infinite!important;animation:galPendingPulse 2s ease-in-out infinite!important}.gal-pending-choices-btn i,.gal-pending-choices-btn span{transform:skew(10deg)!important}.gal-pending-choices-btn i{font-size:1.1rem!important;margin:0!important}.gal-pending-choices-btn:hover{filter:brightness(1.1)!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.313rem .313rem #0003!important}@-webkit-keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}@keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}.gal-pending-choices-btn.gal-new-option-highlight{-webkit-animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important;animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important}@-webkit-keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}@keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}.gal-open-btn{display:inline-flex;align-items:center;gap:.313rem;padding:.125rem .5rem;background:transparent;color:var(--gal-accent);border:1px solid var(--gal-accent);border-radius:.25rem;font-size:.75rem;cursor:pointer;opacity:.6;transition:all .2s;margin-left:.313rem;font-family:Noto Sans SC,sans-serif}.gal-open-btn:hover{opacity:1;background:var(--gal-accent);color:var(--gal-dark)}.gal-history-modal{position:fixed!important;inset:0!important;background:#000000d9!important;backdrop-filter:blur(.313rem)!important;z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .3s ease}.gal-history-panel{background:var(--gal-white);border:.125rem solid var(--gal-accent);box-shadow:0 0 1.25rem #00d2ff4d;width:80%;max-width:50rem;height:80vh;display:flex;flex-direction:column;border-radius:.5rem;overflow:hidden}.gal-history-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.25rem;display:flex;justify-content:space-between;align-items:center;border-bottom:.125rem solid var(--gal-accent)}.gal-history-title{font-family:Noto Sans SC,sans-serif;font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:.625rem}.gal-history-close{background:transparent;border:none;color:#aaa;font-size:1.5rem;cursor:pointer;transition:color .2s;line-height:1}.gal-history-close:hover{color:var(--gal-accent)}.gal-history-body{flex:1;overflow-y:auto;padding:1.25rem;background:#f5f5f5}.gal-history-list{display:flex;flex-direction:column;gap:.938rem}.gal-history-item{background:#fff;padding:0;border-radius:.5rem;border:1px solid #eee;box-shadow:0 .25rem .75rem #0000000d;transition:all .2s;overflow:hidden;margin-bottom:.625rem}.gal-history-item:hover{box-shadow:0 .5rem 1.25rem #00d2ff26;transform:translateY(-.125rem);border-color:var(--gal-accent)}.gal-history-header-row{background:#f8f9fa;padding:.625rem 1.25rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}.gal-history-info-group{display:flex;align-items:center;gap:.75rem}.gal-history-index{background:var(--gal-accent);color:var(--gal-dark);padding:.125rem .5rem;border-radius:.25rem;font-size:.8rem;font-weight:700;font-family:Barlow,sans-serif}.gal-history-time{color:#666;font-size:.9rem;font-weight:600;font-family:Noto Sans SC,sans-serif;display:flex;align-items:center;gap:.375rem}.gal-history-time i{font-size:.8rem;color:#999}.gal-history-content{padding:1.25rem;font-size:1.05rem;line-height:1.8;color:#333;white-space:pre-wrap;text-align:justify}.gal-history-empty{text-align:center;padding:3.125rem;color:#999;font-style:italic}.galgame-database-container{position:fixed!important;top:0!important;left:0!important;width:100%!important;height:100%!important;z-index:var(--gal-z-modal-critical)!important;display:none}.gal-open-btn{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;background:linear-gradient(135deg,var(--gal-accent) 0%,#00a8cc 100%);color:#fff;border:none;border-radius:1.25rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 .125rem .5rem #00d2ff4d}.gal-open-btn:hover{transform:scale(1.05);box-shadow:0 .25rem .938rem #00d2ff80}.gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;gap:.5rem}.gal-realtime-label{font-size:.9rem!important;color:#2b2e38!important;font-weight:600!important;white-space:nowrap}.gal-realtime-switch{position:relative;display:inline-block;width:3.25rem;height:1.75rem;flex-shrink:0}.gal-realtime-switch input{opacity:0;width:0;height:0;position:absolute}.gal-realtime-slider{position:absolute;cursor:pointer;inset:0;background:linear-gradient(145deg,#d0d0d0,#b8b8b8);transition:all .3s ease;border-radius:1.75rem;box-shadow:inset 0 .125rem .25rem #0003}.gal-realtime-slider:before{content:"";position:absolute;height:1.375rem;width:1.375rem;left:.188rem;bottom:.188rem;background:linear-gradient(145deg,#fff,#f5f5f5);transition:transform .3s ease;border-radius:50%;box-shadow:0 .125rem .313rem #0000004d;z-index:2}.gal-realtime-slider:after{content:"OFF";position:absolute;right:.5rem;top:50%;transform:translateY(-50%);font-size:.563rem;font-weight:700;color:#666;z-index:1}.gal-realtime-switch input:checked+.gal-realtime-slider{background:linear-gradient(135deg,var(--gal-accent) 0%,var(--gal-accent-sub) 100%);box-shadow:inset 0 .125rem .25rem #0003,0 0 .75rem #00d2ff66}.gal-realtime-switch input:checked+.gal-realtime-slider:before{transform:translate(1.5rem)}.gal-realtime-switch input:checked+.gal-realtime-slider:after{content:"ON";left:.5rem;right:auto;color:#fffffff2}@media screen and (max-width: 48rem){.gal-input-modal,.gal-config-modal,#gal-settings-panel,#gal-asset-manager-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important;padding:0!important;z-index:var(--gal-z-modal-critical)!important;display:flex!important;align-items:center;justify-content:center}.gal-input-modal .gal-input-box,.gal-config-modal .gal-config-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;display:flex!important;flex-direction:column!important}.gal-config-body,.gal-input-box>div:not(.gal-input-title):not(.gal-input-actions){flex:1;overflow-y:auto!important}}@media screen and (max-width: 48rem){.gal-input-title{flex-direction:column;align-items:flex-start!important;gap:.625rem;padding:.625rem .938rem!important;height:auto!important}.gal-input-title span{font-size:1.2rem!important}.gal-input-title div{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.313rem}.gal-input-title div>button,.gal-input-title div>div{flex:1;min-width:auto!important;margin:0!important}.gal-title-btn{padding:.25rem .625rem!important;font-size:.85rem!important;min-width:auto!important;transform:none!important}.gal-title-btn *{transform:none!important}.gal-tab-header{padding:0 .625rem!important;gap:.625rem!important;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}.gal-tab-item{padding:.625rem .5rem!important;font-size:.9rem!important;flex-shrink:0}.gal-sub-header,.gal-action-bar{flex-direction:column;align-items:stretch!important;gap:.625rem;height:auto!important;padding:.625rem .938rem!important}.gal-action-group,.gal-filter-group{display:flex!important;flex-wrap:wrap;gap:.5rem!important;width:100%}.gal-action-btn{margin:0!important;flex:1;min-width:6.25rem;padding:.5rem 0!important;justify-content:center;transform:none!important}.gal-action-btn *{transform:none!important}.gal-grid-container{padding:.625rem!important;grid-template-columns:repeat(auto-fill,minmax(6.875rem,1fr))!important;gap:.625rem!important}.gal-input-box>div:last-child{padding:.625rem .938rem!important;min-height:auto!important}#gal-settings-close,#gal-char-sprites-close{min-height:2.5rem!important;transform:none!important}}#gal-asset-manager-modal .gal-asset-header{padding:.625rem .938rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;margin-bottom:.313rem!important}#gal-asset-manager-modal .gal-action-btn:where(#gal-asset-export,#gal-asset-export-remote,#gal-import-dropdown-btn){padding:.25rem .5rem!important;font-size:.8rem!important}#gal-asset-manager-modal .gal-tab-header{padding:0 .625rem!important;min-height:2.5rem!important}#gal-asset-manager-modal .gal-tab-btn{padding:.5rem .75rem!important;font-size:.9rem!important}#gal-asset-manager-modal .gal-tab-content{padding:.625rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin-bottom:.625rem!important;flex-wrap:wrap}#gal-asset-manager-modal .gal-input-actions{padding:.625rem .938rem!important;min-height:auto!important}#gal-asset-manager-modal .gal-asset-header>div{flex-wrap:wrap!important;gap:.625rem!important}#gal-asset-manager-modal .gal-input-title{white-space:nowrap!important;font-size:1.2rem!important;width:auto!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button i{margin:0!important;font-size:1rem!important}#gal-asset-manager-modal .gal-import-menu span{display:inline!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{display:flex!important;gap:.313rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;padding:.5rem .25rem!important;font-size:.85rem!important;white-space:nowrap!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:.25rem!important}#gal-asset-manager-modal .gal-input-actions{padding:.5rem!important}#gal-asset-manager-modal .gal-input-actions button{min-height:2.25rem!important;padding:0!important}#gal-asset-manager-modal .gal-asset-header{padding:1.25rem 1.563rem .938rem;border-bottom:1px solid #e0e0e0;flex-shrink:0}#gal-asset-manager-modal .gal-tab-header{display:flex;border-bottom:.125rem solid #e0e0e0;padding:0 1.563rem;flex-shrink:0}#gal-asset-manager-modal .gal-tab-content{flex:1;overflow-y:auto;padding:1.25rem 1.563rem}#gal-asset-manager-modal .gal-input-actions{padding:.938rem 1.563rem;border-top:1px solid #e0e0e0;flex-shrink:0}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{padding:.5rem .75rem!important;background:#fffffff2;backdrop-filter:blur(.625rem);border-bottom:1px solid rgba(0,0,0,.05)!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:.5rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;font-weight:700!important;margin-right:auto!important}#gal-asset-manager-modal .gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;margin-left:0!important;transform:scale(.85);transform-origin:left center;flex-shrink:0!important;min-width:fit-content;margin-right:.25rem}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child{display:block!important;height:auto!important;padding-bottom:.5rem!important;margin-bottom:.5rem!important;border-bottom:1px solid rgba(0,0,0,.05)!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>div{width:100%!important;display:flex!important;flex-wrap:wrap!important;justify-content:space-between!important;gap:.625rem!important;position:static!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds] .gal-realtime-toggle-wrapper{flex:0 0 100%!important;width:100%!important;order:-1!important;display:flex!important;align-items:center!important;justify-content:center!important;background:#00000008!important;border-radius:.5rem;padding:.5rem!important;margin:0!important;height:auto!important;min-height:2.5rem!important;visibility:visible!important;opacity:1!important;z-index:10!important}#gal-asset-manager-modal .gal-realtime-label{display:inline-block!important;font-size:.9rem!important;color:#444!important;margin-right:.625rem!important;font-weight:700!important}#gal-asset-manager-modal .gal-realtime-switch{display:inline-block!important;transform:scale(1)!important;margin:0!important}#gal-batch-bg-upload-btn,#gal-add-bg-btn{flex:1 1 45%!important;width:auto!important;margin:0!important}#gal-asset-manager-modal .gal-asset-header button{width:2rem!important;height:2rem!important;padding:0!important;border-radius:50%!important;background:#fff!important;border:1px solid #eee!important;color:#555!important;box-shadow:0 .125rem .313rem #0000000d!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important}#gal-import-menu{top:2.813rem!important;right:.625rem!important;width:12.5rem!important}#gal-asset-manager-modal .gal-tab-header{min-height:2.5rem!important;background:#f1f3f5;padding:.25rem!important;margin:0!important;border:none!important;gap:.25rem}#gal-asset-manager-modal .gal-tab-btn{flex:1;padding:0!important;display:flex;align-items:center;justify-content:center;border-radius:.375rem!important;border:none!important;font-size:.85rem!important;color:#666;background:transparent}#gal-asset-manager-modal .gal-tab-btn.active{background:#fff!important;color:#333!important;box-shadow:0 1px .188rem #0000001a!important;font-weight:700}#gal-asset-manager-modal .gal-tab-pane>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child .gal-realtime-toggle-wrapper{display:flex!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin:.625rem!important;gap:.5rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;height:2.25rem!important;border-radius:1.125rem!important;font-size:.85rem!important;box-shadow:0 .125rem .375rem #0000001a!important;padding:0!important}.gal-character-grid,.gal-bg-grid{padding:0 .625rem 3.75rem!important;gap:.5rem!important;grid-template-columns:repeat(3,1fr)!important}.gal-character-card,.gal-bg-card{box-shadow:none!important;border:1px solid #eee!important}.gal-character-card>div:last-child>div:last-child{display:none!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:1.25rem;left:50%;transform:translate(-50%);width:90%!important;padding:0!important;border:none!important;z-index:100!important;background:transparent!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.75rem!important;border-radius:1.375rem!important;background:linear-gradient(135deg,#2c3e50,#000)!important;color:#fff!important;box-shadow:0 .25rem .75rem #0003!important;opacity:.9}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-box{display:flex!important;flex-direction:column!important;height:100%!important;overflow:hidden!important}#gal-asset-manager-modal .gal-asset-header{flex:0 0 auto!important;height:3.125rem!important;padding:0 .625rem!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:.5rem!important;background:#fff!important;border-bottom:1px solid #eee!important}#gal-asset-manager-modal .gal-asset-header>div{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:.5rem!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button{flex:0 0 auto!important;width:2rem!important;height:2rem!important;min-width:2rem!important;max-width:2rem!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:.875rem!important}#gal-asset-manager-modal .gal-asset-header>div{flex:0 0 auto!important}#gal-asset-manager-modal .gal-tab-header{flex:0 0 auto!important;height:2.5rem!important;padding:.125rem .625rem!important;gap:.313rem!important;background:#f8f9fa!important;display:flex!important;align-items:center!important}#gal-asset-manager-modal .gal-tab-btn{flex:1!important;height:2rem!important;padding:0!important;font-size:.813rem!important;line-height:2rem!important}#gal-asset-manager-modal .gal-tab-content{flex:1 1 auto!important;height:0!important;padding:.625rem .625rem 3.75rem!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:.938rem;left:5%;width:90%!important;padding:0!important;border:none!important;background:transparent!important;pointer-events:none}#gal-asset-manager-modal .gal-input-actions button{pointer-events:auto;height:2.5rem!important;border-radius:1.25rem!important;background:#000000d9!important;color:#fff!important;box-shadow:0 .25rem .625rem #0003!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header button{border-radius:.25rem!important;width:auto!important;padding:0 .5rem!important;background:transparent!important;border:1px solid transparent!important;box-shadow:none!important;color:#555!important}#gal-asset-manager-modal .gal-asset-header button:active{background:#0000001a!important}#gal-asset-manager-modal .gal-asset-header #gal-asset-export-remote{color:#6f42c1!important}#gal-asset-manager-modal .gal-asset-header #gal-import-dropdown-btn{color:#28a745!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{z-index:100!important;position:relative!important;border-bottom:none!important;box-shadow:none!important;padding-bottom:0!important}#gal-asset-manager-modal .gal-tab-header{z-index:90!important;position:relative!important;border-top:none!important;background:#fff!important;margin-top:-1px!important;padding-top:0!important}#gal-asset-manager-modal .gal-import-menu{z-index:var(--gal-z-dropdown)!important;position:absolute!important;top:100%!important;right:0!important;box-shadow:0 .25rem .938rem #0003!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important;position:relative!important;overflow:visible!important}#gal-asset-manager-modal .gal-input-title{margin-bottom:0!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{overflow:visible!important;touch-action:none!important;z-index:var(--gal-z-dropdown)!important}#gal-asset-manager-modal .gal-import-dropdown{overflow:visible!important;position:static!important}#gal-asset-manager-modal .gal-import-menu{position:fixed!important;top:3.438rem!important;right:.625rem!important;z-index:var(--gal-z-dropdown)!important;max-height:60vh!important;overflow-y:auto!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-actions{position:static!important;width:100%!important;padding:.625rem .938rem!important;background:#fff!important;border-top:1px solid #eee!important;transform:none!important;left:auto!important;bottom:auto!important;pointer-events:auto!important;flex-shrink:0!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.5rem!important;border-radius:.25rem!important;background:#f8f9fa!important;color:#333!important;border:1px solid #ddd!important;box-shadow:none!important;display:flex!important;align-items:center!important;justify-content:center!important}#gal-asset-manager-modal .gal-input-actions button:hover,#gal-asset-manager-modal .gal-input-actions button:active{background:#e9ecef!important}#gal-asset-manager-modal .gal-tab-content{padding-bottom:.625rem!important}}@media screen and (max-width: 48rem){#gal-history-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:var(--gal-z-modal-critical)!important;background:#000000d9!important;visibility:visible!important;opacity:1!important}#gal-history-modal .gal-history-panel{position:relative!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;border:none!important;border-radius:0!important;background:#fff!important;transform:none!important;display:flex!important;flex-direction:column!important;z-index:var(--gal-z-modal-critical)!important;opacity:1!important}#gal-history-modal .gal-history-header{flex-shrink:0!important;padding:.625rem .938rem!important;border-bottom:1px solid #eee!important}#gal-history-modal .gal-history-body{flex:1!important;height:auto!important;max-height:none!important;overflow-y:auto!important;padding:.938rem!important}}@media screen and (max-width: 48rem){#gal-global-overlay *,.gal-input-modal,.gal-config-modal,.gal-history-modal{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.gal-input-modal,.gal-config-modal,.gal-history-modal{background:#000000b3!important}.gal-bgm-widget,.gal-location-bar,.gal-time-bar{background:#2b2e38f2!important}.gal-footer-btn,.gal-footer-btn-next,.gal-pending-choices-btn,.gal-action-btn{box-shadow:none!important}.gal-sprite-card:hover,.gal-character-card:hover,.gal-bg-card:hover{transform:none!important}}@media screen and (max-width: 48rem){.gal-dialog-layer{left:2%!important;right:2%!important;width:96%!important;bottom:.625rem!important;height:40%!important;padding-bottom:env(safe-area-inset-bottom)}.gal-text-panel{padding:1.563rem .938rem 2.813rem!important}.gal-dialog-text{font-size:calc(.88rem * var(--font-scale))!important;line-height:1.6!important}.gal-name-badge{top:-1.25rem!important;left:0!important;padding:.25rem 1.25rem .25rem .938rem!important;font-size:1.1rem!important;transform:skew(-15deg) scale(.9)!important;transform-origin:bottom left!important}.gal-interaction-bar{top:-2.813rem!important;right:0!important;transform:scale(.85)!important;transform-origin:bottom right!important;gap:.5rem!important}.gal-action-btn{padding:.5rem 1rem!important;font-size:.95rem!important}.gal-bgm-widget{top:3.75rem!important;padding:.375rem .625rem!important;gap:.375rem!important;font-size:.72rem!important;border-radius:1rem!important;max-width:2.125rem!important;transition:max-width .3s cubic-bezier(.4,0,.2,1)!important}.gal-bgm-icon{font-size:.95rem!important;min-width:1rem!important}.gal-bgm-title{font-size:.7rem!important}.gal-bgm-btn{font-size:.8rem!important;width:1rem!important}.gal-bgm-slider{width:3rem!important;height:.188rem!important}.gal-bgm-slider::-webkit-slider-thumb{width:.5rem!important;height:.5rem!important}.gal-bgm-widget:active,.gal-bgm-widget:focus-within,.gal-bgm-widget.active{max-width:12rem!important;background:#2b2e38fa!important}.gal-status-bar-container{top:.625rem!important;right:auto!important;left:.625rem!important;flex-direction:column!important;align-items:flex-start!important;gap:.375rem!important;transform:scale(.85)!important;transform-origin:top left!important;pointer-events:none;z-index:90!important}.gal-location-bar,.gal-time-bar{max-width:10rem!important;height:1.625rem!important;font-size:.75rem!important;background:#2b2e38cc!important;backdrop-filter:blur(.25rem)}.gal-fullscreen-btn{top:.625rem!important;right:.625rem!important;padding:.5rem .75rem!important;font-size:.8rem!important}.gal-bottom-toolbar{padding:0 .625rem .625rem!important;min-height:3.125rem!important;margin-bottom:env(safe-area-inset-bottom)}.gal-footer-btn{height:2.375rem!important;padding:0 .625rem!important;min-width:2.375rem!important}.gal-footer-btn-next{min-width:6.25rem!important;height:2.813rem!important;font-size:1.1rem!important;margin-left:.625rem!important;margin-right:-.625rem!important}.gal-input-modal,.gal-config-modal,.gal-history-modal,#gal-layer-choices{z-index:var(--gal-z-modal-critical)!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;height:100dvh!important;max-height:100dvh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}.gal-choices-container{width:min(100%,32rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choices-title,.gal-choices-hint{width:100%!important;text-align:center!important}.gal-choice-card{max-width:100%!important;width:100%!important}#gal-global-overlay.fullscreen{z-index:var(--gal-z-overlay)!important}.gal-progress-indicator{display:none!important}}@media screen and (max-width: 48rem){.gal-interaction-bar .gal-action-btn{transform:skew(-15deg)!important;margin:0!important;flex:initial!important;min-width:auto!important;width:auto!important;display:flex!important;border-radius:0!important}.gal-interaction-bar .gal-action-btn *,.gal-interaction-bar .gal-action-btn i,.gal-interaction-bar .gal-action-btn span{transform:skew(15deg)!important}.gal-interaction-bar .gal-action-btn.btn-reroll,.gal-interaction-bar .gal-action-btn.btn-free{padding:.375rem .75rem!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){#gal-settings-panel,#gal-asset-manager-modal,#gal-history-modal,.gal-history-modal,.gal-config-modal,.gal-input-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-layer-choices,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;inset:0!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important}#gal-settings-panel .gal-config-panel,.gal-config-modal .gal-config-panel,#gal-asset-manager-modal .gal-input-box,.gal-input-modal .gal-input-box,#gal-history-modal .gal-history-panel,.gal-history-modal .gal-history-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}.gal-choices-container{width:min(100%,34rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choice-card{width:100%!important;max-width:100%!important}}@media screen and (max-width: 48rem){.gal-footer-btn .gal-btn-text,.gal-pending-choices-btn .gal-btn-text,.gal-footer-btn-next .gal-btn-text,.gal-footer-btn[data-action=log],.gal-footer-btn[data-action=view-original]{display:none!important}.gal-footer-btn[data-action=close-mode]{order:-1!important}.gal-bottom-toolbar{justify-content:flex-start!important;gap:.3rem!important;padding:0 1.5rem .5rem .5rem!important;overflow:visible!important}.gal-footer-btn,.gal-pending-choices-btn{flex:1!important;padding:0!important;justify-content:center!important;height:2.5rem!important}.gal-footer-btn i,.gal-pending-choices-btn i{margin:0!important;font-size:1.15rem!important}.gal-footer-btn-next{flex:0 0 auto!important;width:5rem!important;min-width:5rem!important;height:2.5rem!important;margin-left:.5rem!important;padding:0!important;justify-content:center!important;margin-right:-.5rem!important;z-index:100!important}.gal-footer-btn-next i{margin:0!important;font-size:1.6rem!important}}.gal-mobile-menu{display:none;position:absolute;bottom:4rem;left:.5rem;transform:none;background:#fffffff2;border:.125rem solid var(--gal-dark);border-radius:0;padding:.5rem;flex-direction:column;gap:.5rem;z-index:200;min-width:9rem;box-shadow:.313rem .313rem #0003;backdrop-filter:blur(.25rem);pointer-events:auto}.gal-mobile-menu.active{display:flex}.gal-mobile-menu .gal-menu-btn{display:flex;align-items:center;gap:.5rem;padding:.5rem .875rem;color:var(--gal-dark);background:var(--gal-white);border:.125rem solid var(--gal-dark);border-radius:0;cursor:pointer;text-align:left;font-size:.85rem;font-weight:700;font-family:Barlow,sans-serif;transition:all .2s;box-shadow:.188rem .188rem #0000001f}.gal-mobile-menu .gal-menu-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:translateY(-.125rem);box-shadow:.25rem .25rem #0003}.gal-mobile-menu .gal-menu-btn i{width:1.2rem;text-align:center}@media screen and (max-width: 48rem){#gal-batch-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-height:100%!important;max-width:100%!important;border-radius:0!important}#gal-batch-upload-modal>.gal-input-box>div:last-child{flex-direction:column!important}#gal-batch-upload-modal .gal-batch-sidebar{width:100%!important;border-right:none!important;border-bottom:1px solid #ddd!important;max-height:none!important;flex-shrink:0!important}#gal-batch-upload-modal .gal-batch-sidebar>div:first-child{padding:6px 8px!important}#gal-batch-upload-modal #gal-batch-add-char{white-space:nowrap!important;padding:4px 10px!important;font-size:.8rem!important;min-height:auto!important}#gal-batch-upload-modal #gal-batch-char-list{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:4px!important;padding:4px 6px!important}#gal-batch-upload-modal .gal-char-item{flex-shrink:0!important;min-width:auto!important;max-width:none!important;padding:5px 10px!important;font-size:.8rem!important;margin-bottom:0!important;border-radius:3px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child{flex:1!important;min-height:0!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child{padding:10px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child{margin-bottom:8px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child label{margin-bottom:4px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child input{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area{min-height:100px!important;padding:.75rem!important}#gal-batch-upload-modal #gal-grid-upload-area i{font-size:1.8rem!important}#gal-batch-upload-modal #gal-grid-upload-area span{font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area small{font-size:.75rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child{padding:.625rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child{gap:.5rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child>div{gap:.25rem!important}#gal-batch-upload-modal #gal-grid-preview-area label{font-size:.75rem!important}#gal-batch-upload-modal .gal-grid-mapping-container{grid-template-columns:repeat(auto-fill,minmax(70px,1fr))!important;gap:.375rem!important;max-height:150px!important}#gal-batch-upload-modal .gal-input-actions{padding:.5rem .75rem!important;padding-bottom:calc(.5rem + env(safe-area-inset-bottom))!important;gap:.5rem!important}#gal-batch-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-batch-upload-modal .gal-upload-tab{padding:6px 10px!important;font-size:.8rem!important}#gal-batch-upload-modal input[type=text]{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:.95rem!important}}@media screen and (max-width: 48rem){#gal-bg-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-bg-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important}#gal-bg-upload-modal .gal-input-title span{transform:none!important;flex:1!important;min-width:0!important}#gal-bg-upload-modal #gal-bg-close-x{flex-shrink:0!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2){margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) label{margin-bottom:.25rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) input{padding:.4rem .5rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal .gal-upload-tab{padding:.3rem .5rem!important;font-size:.8rem!important}#gal-bg-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-upload-card{min-height:70px!important;margin-bottom:.5rem!important;padding:.625rem!important}#gal-bg-upload-modal .gal-upload-card i{font-size:1.5rem!important}#gal-bg-upload-modal .gal-upload-card span{font-size:.85rem!important;margin-top:.25rem!important}#gal-bg-upload-modal .gal-upload-card small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal #gal-upload-remote>div{min-height:70px!important;padding:.625rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child{padding:.5rem!important;margin-bottom:.5rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.1rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child span{font-size:.9rem!important}#gal-bg-upload-modal #gal-bg-comfyui-prompt{height:55px!important;font-size:.8rem!important}#gal-bg-upload-modal #gal-bg-comfyui-generate-btn{min-height:38px!important;font-size:.9rem!important}#gal-bg-upload-modal .gal-input-actions{margin-top:.5rem!important}#gal-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-bg-upload-modal #gal-bg-preview-container{margin-bottom:.5rem!important}}@media screen and (max-width: 48rem){#gal-batch-bg-upload-modal .gal-input-box{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;border-radius:0!important}#gal-batch-bg-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:1rem!important}#gal-batch-bg-upload-modal #gal-batch-step-1{padding:.75rem!important}#gal-batch-bg-upload-modal .gal-upload-card{min-height:120px!important}#gal-batch-bg-upload-modal .gal-upload-card i{font-size:2rem!important}#gal-batch-bg-upload-modal .gal-upload-card span{font-size:.95rem!important;margin-top:.5rem!important}#gal-batch-bg-upload-modal .gal-upload-tab{padding:.375rem .625rem!important;font-size:.85rem!important}#gal-batch-bg-upload-modal .gal-batch-grid-container{padding:.625rem!important}#gal-batch-bg-upload-modal #gal-batch-grid{grid-template-columns:repeat(2,1fr)!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-batch-input-area{padding:.375rem!important}#gal-batch-bg-upload-modal .gal-batch-scene-input{padding:.375rem .5rem!important;font-size:.8rem!important}#gal-batch-bg-upload-modal #gal-batch-step-2>div:last-child{padding:.375rem .75rem!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-input-actions{padding:.5rem .75rem!important;gap:.375rem!important}#gal-batch-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-bg-upload-modal #gal-upload-remote>div{padding:.75rem!important}#gal-batch-bg-upload-modal #gal-batch-remote-urls{height:120px!important;font-size:.8rem!important}}@media screen and (max-width: 48rem){#gal-sprite-upload-modal .gal-input-box{width:100%!important;max-width:100%!important;max-height:100%!important;height:auto!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;padding-bottom:.375rem!important;border-bottom:1px solid #eee!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2){display:grid!important;grid-template-columns:1fr 1fr!important;gap:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2)>div{width:auto!important;margin-bottom:0!important}#gal-sprite-upload-modal label{font-size:.8rem!important;margin-bottom:.25rem!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}#gal-sprite-upload-modal input[type=text],#gal-sprite-upload-modal select{padding:.4rem .5rem!important;font-size:.85rem!important;height:32px!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3){padding:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3)>div{flex-direction:row!important;flex-wrap:wrap!important;gap:.5rem!important;align-items:center!important}#gal-sprite-upload-modal #gal-tts-voice-select{flex:1!important;width:auto!important;min-width:120px!important}#gal-sprite-upload-modal #gal-tts-voice-save-btn{width:auto!important;padding:0 .75rem!important;height:32px!important}#gal-sprite-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important;flex-wrap:nowrap!important;overflow-x:auto!important;flex:none!important;min-height:auto!important;gap:.25rem!important}#gal-sprite-upload-modal .gal-upload-tab{padding:.35rem .5rem!important;font-size:.8rem!important;flex:1!important;min-width:auto!important;text-align:center!important;white-space:nowrap!important;border-radius:.25rem!important}#gal-sprite-upload-modal #gal-upload-content{flex:1!important;display:flex!important;flex-direction:column!important;min-height:0!important;overflow-y:auto!important}#gal-sprite-upload-modal #gal-upload-trigger{flex:1!important;min-height:120px!important;padding:.75rem!important;display:flex!important;flex-direction:column!important;justify-content:center!important}#gal-sprite-upload-modal #gal-upload-trigger i{font-size:2rem!important;margin-bottom:.5rem!important}#gal-sprite-upload-modal #gal-upload-trigger span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-trigger small{font-size:.75rem!important}#gal-sprite-upload-modal #gal-upload-remote>div{padding:1rem!important;min-height:120px!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child{padding:.75rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.25rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:nth-child(2){flex-direction:column!important;gap:.75rem!important}#gal-sprite-upload-modal #gal-crop-area{margin-bottom:.75rem!important}#gal-sprite-upload-modal .gal-crop-container{padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:.5rem!important;padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls input[type=range]{width:120px!important}#gal-sprite-upload-modal .gal-crop-btn{padding:.375rem .625rem!important;font-size:.8rem!important}#gal-sprite-upload-modal .gal-crop-controls span{font-size:.85rem!important}#gal-sprite-upload-modal #gal-crop-area>p{font-size:.75rem!important;margin:.5rem 0!important}#gal-sprite-upload-modal .gal-input-actions{flex-direction:column!important;gap:.5rem!important;margin-top:.75rem!important;padding-top:.75rem!important;border-top:1px solid #eee!important}#gal-sprite-upload-modal .gal-input-actions button{width:100%!important;min-height:42px!important;padding:.625rem 1rem!important;font-size:.9rem!important;flex:none!important}#gal-sprite-upload-modal .gal-input-actions button i{margin-right:.375rem!important}}@media screen and (max-width: 48rem){#gal-character-sprites-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;border-radius:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:.5rem .75rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2){margin:.375rem .75rem 0!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:nth-child(2){flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-tts-voice-select{flex:1 1 8rem!important;width:auto!important;min-width:8rem!important;padding:.375rem .5rem!important;font-size:.8rem!important}#gal-character-sprites-modal #gal-char-tts-save-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2) small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-section{margin:.375rem .75rem!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important;max-height:40vh!important;overflow-y:auto!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:nth-child(2){gap:.375rem!important;flex-wrap:wrap!important}#gal-character-sprites-modal #gal-char-live2d-section .gal-action-btn{padding:.25rem .5rem!important;font-size:.75rem!important}#gal-character-sprites-modal #gal-char-live2d-section small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-container{margin-top:.5rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-canvas{height:250px!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4){padding:.5rem .75rem!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4)>div:first-child{margin-bottom:.5rem!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:.375rem!important}#gal-character-sprites-modal .gal-sprite-card{border-radius:.25rem!important}#gal-character-sprites-modal .gal-sprite-label{font-size:.7rem!important;padding:.25rem!important}#gal-character-sprites-modal #gal-char-sprites-close:hover{color:#333!important}}@media screen and (max-width: 22.5rem){#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:100%!important}}@media screen and (max-width: 48rem){#gal-unified-panel .gal-config-body,#gal-unified-panel [data-l1-pane]{padding:12px!important}#gal-unified-panel .gal-l1-tab-btn{padding:10px 16px!important;font-size:.9rem!important}#gal-unified-panel .gal-l1-tab-btn span{font-size:.85rem!important}#gal-unified-panel .gal-config-close{width:2.5rem!important;height:2.5rem!important;min-width:2.5rem!important;font-size:1.1rem!important}#gal-unified-panel #gal-main-toggle{padding:10px 24px!important;font-size:1rem!important}#gal-unified-panel .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel .gal-settings-label{flex:1 1 100%!important;font-size:.85rem!important}#gal-unified-panel .gal-settings-control{flex:1 1 100%!important;justify-content:flex-start!important}#gal-unified-panel .gal-settings-control input[type=range]{width:100%!important;flex:1!important;min-width:0!important}#gal-unified-panel .gal-range-value{min-width:40px!important;flex-shrink:0!important}#gal-unified-panel .gal-settings-row:has(.gal-switch){flex-wrap:nowrap!important}#gal-unified-panel .gal-settings-row:has(.gal-switch) .gal-settings-label{flex:1 1 auto!important}#gal-unified-panel #gal-tts-provider,#gal-unified-panel #gal-tts-default-speaker{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel #gal-gpt-sovits-media-type{min-width:0!important;width:100%!important}#gal-unified-panel #gal-bg-fill-mode{min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config{padding:8px!important;margin-top:8px!important}#gal-unified-panel #gal-gpt-sovits-config input[type=text],#gal-unified-panel #gal-gpt-sovits-config input[type=number]{margin-left:0!important;flex:1!important;min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row>.gal-settings-label{flex:1 1 100%!important}#gal-unified-panel #gal-gpt-sovits-speed{width:100%!important}#gal-unified-panel #gal-gpt-sovits-voices-json{font-size:.75rem!important}#gal-unified-panel #gal-gpt-sovits-config .gal-panel-btn{padding:8px!important;font-size:.85rem!important}#gal-unified-panel #gal-enhanced-config{padding-left:8px!important}#gal-unified-panel #gal-enhanced-config select{width:100%!important;margin-left:0!important}#gal-unified-panel #gal-enhanced-config>div>div{margin-left:8px!important}#gal-unified-panel #gal-enhanced-worldbooks-list{margin-left:8px!important}#gal-unified-panel .gal-enhanced-worldbook-item,#gal-unified-panel #gal-enhanced-config input[type=checkbox]{width:20px!important;height:20px!important}#gal-unified-panel .gal-switch{width:52px!important;height:30px!important;min-width:52px!important}#gal-unified-panel .gal-switch-slider:before{height:24px!important;width:24px!important}#gal-unified-panel .gal-switch input:checked+.gal-switch-slider:before{transform:translate(22px)!important}#gal-unified-panel .gal-bg-source-selector{padding:8px 10px!important;gap:8px!important;flex-wrap:wrap!important}#gal-unified-panel .gal-bg-source-selector .gal-radio-label{font-size:.8rem!important}#gal-unified-panel .gal-imagegen-pills{gap:6px!important;padding:8px 0!important}#gal-unified-panel .gal-pill{padding:6px 12px!important;font-size:.8rem!important}#gal-unified-panel [data-engine-pane]>div{padding:10px!important}#gal-unified-panel [data-engine-pane] input[type=text],#gal-unified-panel [data-engine-pane] input[type=password],#gal-unified-panel [data-engine-pane] textarea,#gal-unified-panel [data-engine-pane] select{max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel .gal-realtime-switch{min-width:3.25rem!important}#gal-unified-panel .gal-settings-divider{margin:10px 0!important}#gal-unified-panel .gal-settings-section-title{font-size:.9rem!important;margin-bottom:8px!important}#gal-unified-panel .gal-asset-header>div:first-child{flex-wrap:wrap!important;gap:8px!important}#gal-unified-panel #gal-pack-dropdown-btn,#gal-unified-panel #gal-render-scope-btn,#gal-unified-panel #gal-export-dropdown-btn,#gal-unified-panel #gal-import-dropdown-btn{padding:4px 8px!important;font-size:.8rem!important}#gal-unified-panel #gal-export-dropdown-btn>span,#gal-unified-panel #gal-import-dropdown-btn>span{display:none!important}#gal-unified-panel .gal-pack-menu,#gal-unified-panel .gal-export-menu,#gal-unified-panel .gal-import-menu{min-width:160px!important}#gal-unified-panel .gal-tab-header{display:flex!important;flex-wrap:nowrap!important;gap:0!important}#gal-unified-panel .gal-tab-btn{padding:8px 4px!important;font-size:.7rem!important;white-space:nowrap!important;flex:1!important;text-align:center!important;justify-content:center!important;gap:2px!important}#gal-unified-panel .gal-tab-btn i{font-size:.8rem!important;margin-right:2px!important}#gal-unified-panel .gal-pane-header{flex-wrap:wrap;gap:8px}#gal-unified-panel .gal-pane-stat{flex:1 1 100%;font-size:.85rem}#gal-unified-panel .gal-pane-actions{flex:1 1 100%;gap:6px}#gal-unified-panel .gal-pane-btn{padding:6px 8px!important;flex:1;justify-content:center;font-size:.75rem!important;gap:4px!important}#gal-unified-panel .gal-pane-btn>i{font-size:.8rem}#gal-prompts-modal{padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal>div>div:first-child{padding:12px 16px!important;border-radius:0!important}#gal-prompts-modal>div>div:nth-child(2){padding:12px!important}#gal-prompts-modal pre{font-size:.75rem!important;padding:8px!important}#gal-prompts-modal>div>div:last-child{padding:10px 12px!important}#gal-prompts-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-asset-header>div:first-child>div:first-child{gap:6px!important}#gal-unified-panel .gal-asset-header>div:first-child>div:last-child{gap:4px!important}#gal-unified-panel .gal-pack-item,#gal-unified-panel .gal-export-item,#gal-unified-panel .gal-import-item{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-character-grid{grid-template-columns:repeat(3,1fr)!important;gap:8px!important}#gal-unified-panel .gal-character-card>div:last-child{padding:6px!important}#gal-unified-panel .gal-character-card>div:last-child>div:first-child{font-size:.75rem!important}#gal-unified-panel .gal-bg-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}#gal-unified-panel .gal-bg-label{padding:6px!important;font-size:.8rem!important}}.gal-popup-modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:var(--gal-z-modal);padding:20px;box-sizing:border-box}.gal-popup-panel{background:var(--SmartThemeFormBg, #fff);border-radius:12px;max-width:700px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px #0000004d}.gal-popup-header{padding:14px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}.gal-popup-title{font-weight:700;font-size:1.1rem}.gal-popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#666;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background .2s}.gal-popup-close:hover{background:#00000014}.gal-popup-body{padding:20px;overflow-y:auto;flex:1}@media screen and (max-width: 48rem){.gal-input-title{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;transform:none!important;gap:.5rem!important;padding:.5rem 0!important}.gal-input-title>span{transform:none!important;flex:1!important;min-width:0!important;display:inline!important;font-size:1rem!important}.gal-input-title>button,.gal-input-title .gal-close-btn{flex-shrink:0!important;transform:none!important}.gal-input-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important;border-radius:0!important;overflow-y:auto!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box>.gal-input-title{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div:last-child{margin-bottom:0!important}.gal-input-modal .gal-input-box label{margin-bottom:.25rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box input[type=text],.gal-input-modal .gal-input-box select,.gal-input-modal .gal-input-box textarea{padding:.4rem .5rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box small{font-size:.7rem!important;margin-top:.125rem!important}.gal-input-actions{margin-top:.5rem!important;gap:.375rem!important}.gal-input-actions button{min-height:36px!important;font-size:.85rem!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}.gal-popup-header{padding:10px 14px!important}.gal-popup-title{font-size:1rem!important}.gal-popup-body{padding:12px!important}#gal-live2d-settings-modal{padding:0!important}#gal-live2d-settings-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-live2d-settings-modal>div>div:first-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:first-child span{font-size:.95rem!important}#gal-live2d-settings-modal .gal-settings-tab{padding:8px 4px!important;font-size:.85rem!important}#gal-live2d-settings-modal .gal-settings-panel{padding:0!important}#gal-live2d-settings-modal>div>div:nth-child(3){padding:12px!important}#gal-live2d-settings-modal .gal-settings-panel div[style*=grid-template-columns]{grid-template-columns:1fr!important;gap:10px!important}#gal-live2d-settings-modal .gal-mapping-row{flex-wrap:wrap!important;gap:4px!important;padding:6px 0!important}#gal-live2d-settings-modal .gal-mapping-row span:first-child{min-width:50px!important;font-size:.8rem!important}#gal-live2d-settings-modal .gal-mapping-row select{flex:1 1 40%!important;min-width:0!important;font-size:.8rem!important;padding:4px!important}#gal-live2d-settings-modal>div>div:last-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-pack-manager-modal .gal-input-box{width:100%!important}#gal-pack-manager-modal .gal-pack-row{flex-wrap:wrap!important;gap:8px!important}#gal-pack-manager-modal .gal-pack-row>div:last-child{width:100%!important;justify-content:flex-end!important}#gal-transfer-modal .gal-input-box{width:100%!important}#gal-banana-appearance-picker .gal-input-box{max-width:none!important;width:100%!important;height:100%!important;max-height:none!important;border-radius:0!important}#gal-banana-appearance-picker .gal-input-title{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-box{padding:0!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-char-live2d-section>div:nth-child(2){flex-wrap:wrap!important;gap:6px!important}#gal-char-live2d-section .gal-action-btn{padding:4px 8px!important;font-size:.75rem!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]{margin:0 12px!important;padding:10px!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]>div:last-child{flex-direction:column!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))!important;gap:8px!important}#gal-sprite-upload-modal .gal-input-box{padding:12px!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:8px!important}#gal-sprite-upload-modal .gal-input-box>div:nth-child(2){flex-direction:column!important;gap:8px!important}#gal-sprite-upload-modal [style*="linear-gradient(135deg, #f5f7fa"]{padding:10px!important;margin-bottom:10px!important}#gal-sprite-upload-modal .gal-crop-container{margin-bottom:8px!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:6px!important}#gal-expression-manager-modal .gal-input-box{padding:12px!important}#gal-expression-manager-modal .gal-tag{padding:4px 8px!important;font-size:.75rem!important}#gal-expression-manager-modal .gal-input-box>div{margin-bottom:10px!important}#gal-expression-manager-modal .gal-input-box label{margin-bottom:4px!important;font-size:.85rem!important}#gal-expression-manager-modal .gal-input-box>div:last-child>div:last-child{gap:6px!important}#gal-expression-manager-modal #gal-new-expression-input{padding:8px 10px!important;font-size:.85rem!important;min-width:0!important}#gal-expression-manager-modal #gal-add-expression-btn{padding:8px 12px!important;font-size:.85rem!important;white-space:nowrap!important;flex-shrink:0!important}#gal-appearance-prompt-modal .gal-input-box{padding:12px!important}#gal-appearance-prompt-modal textarea{height:100px!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){#gal-live2d-settings-modal{position:fixed!important;inset:0!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important;padding:0!important}#gal-live2d-settings-modal>div{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal{position:fixed!important;inset:0!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}}
 `;
     const styleEl = targetDoc.createElement("style");
     styleEl.id = `${SCRIPT_ID}-styles`;
@@ -15213,12 +11372,14 @@ ${firstResult}`;
     const modalHtml = `
     <div class="gal-input-modal gal-z-critical" id="gal-free-input-modal">
       <div class="gal-input-box">
-        <div class="gal-input-title"><span>\u81EA\u7531\u8F93\u5165</span></div>
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>\u81EA\u7531\u8F93\u5165</span>
+          <button id="gal-free-input-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
         <textarea class="gal-input-field" id="gal-free-input-text" placeholder="\u8F93\u5165\u4F60\u60F3\u8BF4\u7684\u8BDD..."></textarea>
         <div class="gal-input-actions">
-          <button class="gal-action-btn" id="gal-input-cancel">
-            <span>\u53D6\u6D88</span>
-          </button>
           <button class="gal-action-btn primary" id="gal-input-send">
             <i class="fa-solid fa-paper-plane"></i>
             <span>\u53D1\u9001</span>
@@ -15233,7 +11394,7 @@ ${firstResult}`;
     const $input = $(mountRoot).find("#gal-free-input-text");
     makeDraggable($modal.find(".gal-input-box"), $modal.find(".gal-input-title"));
     $input.focus();
-    $modal.find("#gal-input-cancel").on("click", () => $modal.remove());
+    $modal.find("#gal-free-input-close-x").on("click", () => $modal.remove());
     $modal.on("click", function(e) {
       if (e.target === this) $modal.remove();
     });
@@ -16227,6 +12388,15 @@ ${firstResult}`;
       e.stopPropagation();
       if (isMobileMenuMode()) {
         const $menu = $("#gal-mobile-menu");
+        if (!$menu.hasClass("active")) {
+          const $overlay = $("#gal-global-overlay");
+          const overlayRect = $overlay[0].getBoundingClientRect();
+          const btnRect = this.getBoundingClientRect();
+          $menu.css({
+            bottom: overlayRect.bottom - btnRect.top + 8 + "px",
+            left: btnRect.left - overlayRect.left + "px"
+          });
+        }
         $menu.toggleClass("active");
         return;
       }
@@ -17611,9 +13781,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
 
         <!-- \u5E95\u90E8\u6309\u94AE -->
         <div style="padding: 15px 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end;">
-          <button id="gal-live2d-settings-cancel" style="padding: 10px 20px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer;">
-            \u53D6\u6D88
-          </button>
           <button id="gal-live2d-settings-save" style="padding: 10px 20px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
             <i class="fa-solid fa-save"></i> \u4FDD\u5B58\u8BBE\u7F6E
           </button>
@@ -17675,7 +13842,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       $modal.find(".gal-expr-mapping-select").val("");
       $modal.find(".gal-motion-mapping-select").val("");
     });
-    $modal.find("#gal-live2d-settings-close, #gal-live2d-settings-cancel").on("click", function() {
+    $modal.find("#gal-live2d-settings-close").on("click", function() {
       $modal.remove();
     });
     $modal.find("#gal-live2d-start-position-edit").on("click", async function() {
@@ -18012,8 +14179,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-bg-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-          <div class="gal-input-title" style="padding: 15px 25px; border-bottom: 1px solid #eee; flex-shrink: 0; margin: 0;">
+          <div class="gal-input-title" style="padding: 15px 25px; border-bottom: 1px solid #eee; flex-shrink: 0; margin: 0; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-images"></i> \u6279\u91CF\u4E0A\u4F20\u80CC\u666F</span>
+            <button id="gal-batch-bg-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
 
           <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
@@ -18064,10 +14234,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
 
           <!-- \u5E95\u90E8\u6309\u94AE -->
           <div class="gal-input-actions" style="display: flex; gap: 12px; padding: 15px 25px; border-top: 1px solid #eee; background: #fff; flex-shrink: 0;">
-              <button class="gal-action-btn" id="gal-batch-cancel-btn" style="flex: 1; min-height: 44px; justify-content: center;">
-                <span>\u53D6\u6D88</span>
-              </button>
-              <button class="gal-action-btn primary" id="gal-batch-save-btn" style="flex: 2; min-height: 44px; justify-content: center; display: none;">
+              <button class="gal-action-btn primary" id="gal-batch-save-btn" style="flex: 1; min-height: 44px; justify-content: center; display: none;">
                 <i class="fa-solid fa-save"></i>
                 <span id="gal-batch-save-text">\u4FDD\u5B58\u6240\u6709\u80CC\u666F (0)</span>
               </button>
@@ -18285,7 +14452,10 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       });
       if (typeof onCloseCallback === "function") onCloseCallback();
     }
-    $("#gal-batch-cancel-btn").on("click", closeDialog);
+    $("#gal-batch-bg-close-x").on("click", closeDialog);
+    $modal.on("click", function(e) {
+      if (e.target === this) closeDialog();
+    });
     $saveBtn.on("click", async function() {
       let emptyNames = 0;
       batchItems.forEach((item) => {
@@ -18324,8 +14494,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-bg-upload-modal">
         <div class="gal-input-box" style="max-width: 600px; width: 90%; padding: 25px;">
-          <div class="gal-input-title" style="margin-bottom: 20px; font-size: 1.3rem;">
+          <div class="gal-input-title" style="margin-bottom: 20px; font-size: 1.3rem; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-panorama"></i> \u6DFB\u52A0\u80CC\u666F\u56FE\u7247</span>
+            <button id="gal-bg-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
 
           <div style="margin-bottom: 15px;">
@@ -18404,9 +14577,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           </div>
 
           <div class="gal-input-actions" style="display: flex; gap: 12px;">
-            <button class="gal-action-btn" id="gal-bg-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-              <span>\u53D6\u6D88</span>
-            </button>
             <button class="gal-action-btn primary" id="gal-bg-confirm" style="flex: 1; min-height: 44px; justify-content: center;" disabled>
               <i class="fa-solid fa-save"></i>
               <span>\u4FDD\u5B58\u80CC\u666F</span>
@@ -18550,7 +14720,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-bg-cancel").on("click", handleClose);
+    $("#gal-bg-close-x").on("click", handleClose);
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
     });
@@ -18809,8 +14979,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
             <div class="gal-input-modal" id="gal-appearance-prompt-modal">
                 <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
-                    <div class="gal-input-title" style="margin-bottom: 20px;">
+                    <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                         <span><i class="fa-solid fa-palette"></i> ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD</span>
+                        <button id="gal-appearance-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                          <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
@@ -18836,9 +15009,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
                         </div>
                     </div>
                     <div class="gal-input-actions" style="display: flex; gap: 12px;">
-                        <button class="gal-action-btn" id="gal-appearance-cancel" style="flex: 1; min-height: 44px;">
-                            <span>\u53D6\u6D88</span>
-                        </button>
                         <button class="gal-action-btn primary" id="gal-appearance-save" style="flex: 1; min-height: 44px;">
                             <i class="fa-solid fa-save"></i>
                             <span>\u4FDD\u5B58</span>
@@ -18851,7 +15021,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find("#gal-appearance-prompt-modal");
     makeDraggable($modal.find(".gal-input-box"), $modal.find(".gal-input-title"));
-    $modal.find("#gal-appearance-cancel").on("click", () => $modal.remove());
+    $modal.find("#gal-appearance-close-x").on("click", () => $modal.remove());
     $modal.on("click", function(e) {
       if (e.target === this) $modal.remove();
     });
@@ -18956,7 +15126,12 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-sprite-upload-modal">
         <div class="gal-input-box" style="max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 25px;">
-          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem;"><span>\u4E0A\u4F20\u89D2\u8272\u7ACB\u7ED8</span></div>
+          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem; display: flex; align-items: center; justify-content: space-between;">
+            <span>\u4E0A\u4F20\u89D2\u8272\u7ACB\u7ED8</span>
+            <button id="gal-sprite-upload-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
           <div style="margin-bottom: 15px; display: flex; gap: 15px;">
             <div style="flex: 1;">
               <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
@@ -19107,9 +15282,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
             </p>
           </div>
           <div class="gal-input-actions" style="display: flex; gap: 15px; margin-top: 15px;">
-            <button class="gal-action-btn" id="gal-upload-cancel" style="flex: 1; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
-              <span>\u53D6\u6D88</span>
-            </button>
             <button class="gal-action-btn" id="gal-batch-upload-btn" style="flex: 1; background: #666; color: #fff; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
               <i class="fa-solid fa-images"></i>
               <span>\u6279\u91CF\u4E0A\u4F20</span>
@@ -19145,7 +15317,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-upload-cancel").on("click", handleClose);
+    $("#gal-sprite-upload-close-x").on("click", handleClose);
     $("#gal-tts-voice-save-btn").on("click", () => {
       const charName = $("#gal-sprite-character").val().trim() || characterId;
       const voiceName = $("#gal-tts-voice-select").val();
@@ -19490,8 +15662,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="gal-input-title" style="padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0;">
+          <div class="gal-input-title" style="padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-grid-2"></i> \u667A\u80FD\u6279\u91CF\u4E0A\u4F20\u7ACB\u7ED8</span>
+            <button id="gal-batch-upload-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
           <div style="display: flex; flex: 1; overflow: hidden;">
             <div class="gal-batch-sidebar" style="width: 240px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column;">
@@ -19576,10 +15751,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
                     </div>
                 </div>
                 <div class="gal-input-actions" style="display: flex; gap: 12px; padding: 15px 20px; border-top: 1px solid #eee; background: #fff; flex-shrink: 0;">
-                    <button class="gal-action-btn" id="gal-batch-cancel" style="flex: 1; min-height: 44px;">
-                      <span>\u5173\u95ED</span>
-                    </button>
-                    <button class="gal-action-btn primary" id="gal-batch-confirm" style="flex: 2; min-height: 44px;" disabled>
+                    <button class="gal-action-btn primary" id="gal-batch-confirm" style="flex: 1; min-height: 44px;" disabled>
                       <i class="fa-solid fa-save"></i>
                       <span>\u4FDD\u5B58\u6240\u6709\u7ACB\u7ED8</span>
                     </button>
@@ -19915,7 +16087,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-batch-cancel").on("click", handleClose);
+    $("#gal-batch-upload-close-x").on("click", handleClose);
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
     });
@@ -19999,8 +16171,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
             <div class="gal-input-modal" id="gal-expression-manager-modal">
                 <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
-                    <div class="gal-input-title" style="margin-bottom: 20px;">
+                    <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                         <span><i class="fa-solid fa-face-smile"></i> \u7BA1\u7406\u8868\u60C5\u6807\u7B7E</span>
+                        <button id="gal-expr-manager-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                          <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
@@ -20031,11 +16206,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
                                 <i class="fa-solid fa-plus"></i> \u6DFB\u52A0
                             </button>
                         </div>
-                    </div>
-                    <div class="gal-input-actions" style="margin-top: 20px;">
-                        <button class="gal-action-btn" id="gal-expr-manager-close" style="width: 100%; min-height: 44px;">
-                            <span>\u5173\u95ED</span>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -20093,7 +16263,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-expr-manager-close").on("click", handleClose);
+    $("#gal-expr-manager-close-x").on("click", handleClose);
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
     });
@@ -20393,8 +16563,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const dialogHtml = `
     <div class="gal-input-modal" id="gal-remote-zip-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
-        <div class="gal-input-title" style="margin-bottom: 20px;">
+        <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-cloud-arrow-down"></i> \u8FDC\u7A0B\u538B\u7F29\u5305\u5BFC\u5165</span>
+          <button id="gal-remote-zip-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
@@ -20409,9 +16582,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           </small>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 12px;">
-          <button class="gal-action-btn" id="gal-remote-zip-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-            <span>\u53D6\u6D88</span>
-          </button>
           <button class="gal-action-btn primary" id="gal-remote-zip-confirm" style="flex: 1; min-height: 44px; justify-content: center;">
             <i class="fa-solid fa-download"></i>
             <span>\u4E0B\u8F7D\u5E76\u5BFC\u5165</span>
@@ -20424,7 +16594,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     $(mountRoot).append(dialogHtml);
     const $dialog = $(mountRoot).find("#gal-remote-zip-dialog");
     makeDraggable($dialog.find(".gal-input-box"), $dialog.find(".gal-input-title"));
-    $dialog.find("#gal-remote-zip-cancel").on("click", () => $dialog.remove());
+    $dialog.find("#gal-remote-zip-close-x").on("click", () => $dialog.remove());
     $dialog.on("click", function(e) {
       if (e.target === this) $dialog.remove();
     });
@@ -20558,8 +16728,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
-            <div class="gal-input-title" style="margin-bottom: 20px;">
+            <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
               <span><i class="fa-solid fa-box-open"></i> \u9009\u62E9\u5BFC\u5165\u76EE\u6807\u56FE\u5305</span>
+              <button id="gal-import-pack-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
             </div>
             <div style="margin-bottom: 20px;">
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
@@ -20584,9 +16757,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
               <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
                 <i class="fa-solid fa-check"></i> <span>\u786E\u8BA4\u5BFC\u5165</span>
-              </button>
-              <button class="gal-action-btn" id="gal-import-pack-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-                <i class="fa-solid fa-xmark"></i> <span>\u53D6\u6D88</span>
               </button>
             </div>
           </div>
@@ -20628,7 +16798,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           $dialog.remove();
           resolve(resultPackId);
         });
-        $dialog.find("#gal-import-pack-cancel").on("click", () => {
+        $dialog.find("#gal-import-pack-close-x").on("click", () => {
           $dialog.remove();
           resolve(null);
         });
@@ -20803,22 +16973,22 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const errorHtml = `
     <div class="gal-input-modal" id="gal-import-error-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
-        <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c;">
+        <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-circle-exclamation"></i> \u5BFC\u5165\u51FA\u9519</span>
+          <button id="gal-import-error-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="background: #fdf2f2; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 20px; max-height: 300px; overflow-y: auto;">
           ${messages.map((msg) => `<div style="margin-bottom: 5px; color: #721c24; font-size: 0.9rem; white-space: pre-wrap;">${msg}</div>`).join("")}
         </div>
-        <button class="gal-action-btn" id="gal-import-error-close" style="width: 100%; min-height: 44px; justify-content: center;">
-          <span>\u5173\u95ED</span>
-        </button>
       </div>
     </div>
   `;
     const mountRoot = getModalMountRoot();
     $(mountRoot).append(errorHtml);
     const $dialog = $(mountRoot).find("#gal-import-error-dialog");
-    $dialog.find("#gal-import-error-close").on("click", () => $dialog.remove());
+    $dialog.find("#gal-import-error-close-x").on("click", () => $dialog.remove());
     $dialog.on("click", function(e) {
       if (e.target === this) $dialog.remove();
     });
@@ -20900,10 +17070,13 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
   <div class="gal-input-modal" id="gal-character-sprites-modal">
     <div class="gal-input-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-      <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;">
+      <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
         <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
           <span><i class="fa-solid fa-user"></i> ${characterId} \u7684\u7ACB\u7ED8\u7BA1\u7406</span>
         </div>
+        <button id="gal-char-sprites-close" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 25px; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -20998,14 +17171,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
                 `).join("")}
               </div>`}
       </div>
-      <div style="padding: 15px 25px; border-top: 1px solid #e0e0e0; flex-shrink: 0; display: flex; gap: 10px;">
-        <button class="gal-action-btn" id="gal-char-sprites-back" style="flex: 1; min-height: 44px;">
-          <i class="fa-solid fa-arrow-left"></i> <span>\u8FD4\u56DE</span>
-        </button>
-        <button class="gal-action-btn" id="gal-char-sprites-close" style="flex: 1; min-height: 44px;">
-          <span>\u5173\u95ED</span>
-        </button>
-      </div>
+      <!-- \u5E95\u90E8\u6309\u94AE\u680F\u5DF2\u79FB\u9664\uFF0C\u5173\u95ED\u6309\u94AE\u5728\u53F3\u4E0A\u89D2 -->
     </div>
   </div>
   <style>
@@ -21047,11 +17213,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     $modal.find("#gal-char-sprites-close").on("click", handleClose);
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
-    });
-    $("#gal-char-sprites-back").on("click", () => {
-      cleanupLive2DStageMount();
-      $modal.remove();
-      showAssetManagerModal();
     });
     $("#gal-char-add-sprite-btn").on("click", async () => {
       $modal.remove();
@@ -21367,8 +17528,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
     <div class="gal-input-modal" id="gal-transfer-modal">
       <div class="gal-input-box" style="width: 400px;">
-        <div class="gal-input-title">
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-arrow-right-arrow-left"></i> \u8F6C\u79FB\u8D44\u6E90</span>
+          <button id="gal-transfer-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="padding: 20px;">
           <p style="margin-bottom: 15px; color: #333;">
@@ -21380,7 +17544,6 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
             `).join("")}
           </select>
           <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
-            <button class="gal-action-btn" id="gal-transfer-cancel" style="padding: 8px 16px;">\u53D6\u6D88</button>
             <button class="gal-action-btn primary" id="gal-transfer-confirm" style="padding: 8px 16px;">
               <i class="fa-solid fa-check"></i> \u786E\u8BA4\u8F6C\u79FB
             </button>
@@ -21392,7 +17555,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const mountRoot = getModalMountRoot();
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find("#gal-transfer-modal");
-    $modal.find("#gal-transfer-cancel").on("click", () => $modal.remove());
+    $modal.find("#gal-transfer-close-x").on("click", () => $modal.remove());
     $modal.on("click", function(e) {
       if (e.target === this) $modal.remove();
     });
@@ -22113,12 +18276,12 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
   function buildSpritesTab(activeTab, allSprites, charactersData) {
     return `
   <div class="gal-tab-pane ${activeTab === "sprites" ? "active" : ""}" data-pane="sprites" style="${activeTab !== "sprites" ? "display: none;" : ""}">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allSprites.length} \u4E2A\u7ACB\u7ED8\uFF0C\u5171 ${charactersData.size} \u4E2A\u89D2\u8272</span>
-      <div style="display: flex; gap: 10px;">
-        <button class="gal-action-btn" id="gal-batch-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
-        <button class="gal-action-btn primary" id="gal-add-sprite-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u7ACB\u7ED8</span></button>
-        <button class="gal-action-btn" id="gal-manage-expressions-btn" style="padding: 8px 16px; background: #17a2b8; color: #fff; border: none;"><i class="fa-solid fa-face-smile"></i> <span>\u8868\u60C5\u6807\u7B7E</span></button>
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">\u5DF2\u4FDD\u5B58 ${allSprites.length} \u4E2A\u7ACB\u7ED8\uFF0C\u5171 ${charactersData.size} \u4E2A\u89D2\u8272</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-add-sprite-btn"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u7ACB\u7ED8</span></button>
+        <button class="gal-action-btn gal-pane-btn teal" id="gal-manage-expressions-btn"><i class="fa-solid fa-face-smile"></i> <span>\u8868\u60C5\u6807\u7B7E</span></button>
       </div>
     </div>
     ${charactersData.size === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-images" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u89D2\u8272\u6570\u636E\uFF0C\u8BF7\u786E\u4FDD\u5DF2\u52A0\u8F7D\u6570\u636E\u5E93\u811A\u672C\u6216\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p></div>` : `<div class="gal-character-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;">
@@ -22149,11 +18312,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
   function buildBackgroundsTab(settings, allBackgrounds) {
     return `
   <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allBackgrounds.length} \u4E2A\u80CC\u666F</span>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <button class="gal-action-btn" id="gal-batch-bg-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
-        <button class="gal-action-btn primary" id="gal-add-bg-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u80CC\u666F</span></button>
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">\u5DF2\u4FDD\u5B58 ${allBackgrounds.length} \u4E2A\u80CC\u666F</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-bg-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-add-bg-btn"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u80CC\u666F</span></button>
       </div>
     </div>
     ${allBackgrounds.length === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-panorama" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u80CC\u666F\uFF0C\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p><small style="color: #bbb;">\u80CC\u666F\u56FE\u5C06\u6839\u636E &lt;background scene="\u573A\u666F\u540D" /&gt; \u6807\u7B7E\u81EA\u52A8\u5339\u914D</small></div>` : `<div class="gal-bg-grid">${allBackgrounds.map((bg) => `
@@ -22224,6 +18387,17 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     .gal-import-progress-bar { height: 100%; background: linear-gradient(90deg, #00d2ff, #00a8cc); width: 0%; transition: width 0.3s ease; }
     .gal-import-progress-text { font-size: 0.9rem; color: #aaa; }
     .gal-import-progress-details { font-size: 0.8rem; color: #888; margin-top: 8px; max-height: 60px; overflow-y: auto; }
+    .gal-pane-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .gal-pane-stat { font-weight: 700; color: ${THEME.dark}; }
+    .gal-pane-actions { display: flex; gap: 10px; align-items: center; }
+    .gal-pane-btn { padding: 8px 16px !important; transform: none !important; box-shadow: none !important; border-radius: 6px !important; font-size: 0.85rem !important; border: none !important; }
+    .gal-pane-btn * { transform: none !important; }
+    .gal-pane-btn.purple { background: #6f42c1; color: #fff; }
+    .gal-pane-btn.purple:hover { background: #5a32a3; color: #fff; }
+    .gal-pane-btn.teal { background: #17a2b8; color: #fff; }
+    .gal-pane-btn.teal:hover { background: #138496; color: #fff; }
+    .gal-pane-btn.primary { background: ${THEME.accent}; color: ${THEME.dark}; }
+    .gal-pane-btn.primary:hover { background: #00a8cc; color: #fff; }
     .gal-imagegen-pills { display:flex; gap:8px; padding:12px 0; flex-wrap:wrap; }
     .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
     .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
@@ -22293,14 +18467,17 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (!$img.length) return;
       const src = $img.attr("src");
       const scene = $(this).data("scene");
-      const $lightbox = $(`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
+      const mountRoot = getModalMountRoot();
+      const isFullscreen = mountRoot !== topWindow.document.body;
+      const posStyle = isFullscreen ? "position:absolute;top:0;left:0;width:100%;height:100%;" : "position:fixed;top:0;left:0;width:100vw;height:100vh;";
+      const $lightbox = $(`<div style="${posStyle}background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
       <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
       <span style="color:#ccc;font-size:0.9rem;">${scene}</span>
     </div>`);
       $lightbox.on("click", function() {
         $(this).remove();
       });
-      $(getModalMountRoot()).append($lightbox);
+      $(mountRoot).append($lightbox);
     });
     $modal.find("#gal-add-bg-btn").on("click", () => {
       $modal.remove();

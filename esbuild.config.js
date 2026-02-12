@@ -10,14 +10,24 @@ const cssPlugin = {
       if (result.errors.length > 0) return;
 
       const cssFile = path.join(__dirname, '数据库界面插件.css');
-      const css = fs.readFileSync(cssFile, 'utf8')
+      const rawCss = fs.readFileSync(cssFile, 'utf8');
+
+      // 压缩 CSS
+      const minified = esbuild.transformSync(rawCss, {
+        loader: 'css',
+        minify: true,
+      }).code;
+
+      const distDir = path.join(__dirname, 'dist');
+
+      // 内嵌 CSS 到 JS（转义反斜杠和反引号）
+      const escaped = minified
         .replace(/\\/g, '\\\\')
         .replace(/`/g, '\\`');
-      // 注意：不转义 $ 符号，保留 ${THEME.xxx} 模板变量
 
-      const outFile = path.join(__dirname, 'dist', '数据库界面插件.dist.js');
+      const outFile = path.join(distDir, '数据库界面插件.dist.js');
       let js = fs.readFileSync(outFile, 'utf8');
-      js = js.replace('__CSS_PLACEHOLDER__', css);
+      js = js.replace('__CSS_PLACEHOLDER__', escaped);
       fs.writeFileSync(outFile, js, 'utf8');
     });
   },

@@ -222,6 +222,16 @@ export function setupGlobalEventListeners() {
     e.stopPropagation();
     if (isMobileMenuMode()) {
       const $menu = $('#gal-mobile-menu');
+      if (!$menu.hasClass('active')) {
+        // 动态计算菜单位置：在 CONFIG 按钮上方显示
+        const $overlay = $('#gal-global-overlay');
+        const overlayRect = $overlay[0].getBoundingClientRect();
+        const btnRect = this.getBoundingClientRect();
+        $menu.css({
+          bottom: (overlayRect.bottom - btnRect.top + 8) + 'px',
+          left: (btnRect.left - overlayRect.left) + 'px'
+        });
+      }
       $menu.toggleClass('active');
       return;
     }

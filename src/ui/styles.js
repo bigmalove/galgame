@@ -10,9 +10,8 @@ export function injectStyles() {
   const targetDoc = topWindow.document;
   // 强制移除旧样式，确保热重载生效
   const oldStyle = targetDoc.getElementById(`${SCRIPT_ID}-styles`);
-  if (oldStyle) {
-    oldStyle.remove();
-  }
+  if (oldStyle) oldStyle.remove();
+
   topWindow[STYLES_INJECTED_FLAG] = true;
   // 注入字体
   if (!targetDoc.querySelector('link[href*="Noto+Sans+SC"]')) {

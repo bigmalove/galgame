@@ -254,8 +254,11 @@ export function showCharAppearancePromptEditor(characterId, onSave) {
   const modalHtml = `
             <div class="gal-input-modal" id="gal-appearance-prompt-modal">
                 <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
-                    <div class="gal-input-title" style="margin-bottom: 20px;">
+                    <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                         <span><i class="fa-solid fa-palette"></i> ${characterId} 的外貌提示词</span>
+                        <button id="gal-appearance-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                          <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
@@ -281,9 +284,6 @@ export function showCharAppearancePromptEditor(characterId, onSave) {
                         </div>
                     </div>
                     <div class="gal-input-actions" style="display: flex; gap: 12px;">
-                        <button class="gal-action-btn" id="gal-appearance-cancel" style="flex: 1; min-height: 44px;">
-                            <span>取消</span>
-                        </button>
                         <button class="gal-action-btn primary" id="gal-appearance-save" style="flex: 1; min-height: 44px;">
                             <i class="fa-solid fa-save"></i>
                             <span>保存</span>
@@ -296,7 +296,7 @@ export function showCharAppearancePromptEditor(characterId, onSave) {
   $(mountRoot).append(modalHtml);
   const $modal = $(mountRoot).find('#gal-appearance-prompt-modal');
   makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
-  $modal.find('#gal-appearance-cancel').on('click', () => $modal.remove());
+  $modal.find('#gal-appearance-close-x').on('click', () => $modal.remove());
   $modal.on('click', function (e) {
     if (e.target === this) $modal.remove();
   });
@@ -413,7 +413,12 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
   const modalHtml = `
       <div class="gal-input-modal" id="gal-sprite-upload-modal">
         <div class="gal-input-box" style="max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 25px;">
-          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem;"><span>上传角色立绘</span></div>
+          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem; display: flex; align-items: center; justify-content: space-between;">
+            <span>上传角色立绘</span>
+            <button id="gal-sprite-upload-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
           <div style="margin-bottom: 15px; display: flex; gap: 15px;">
             <div style="flex: 1;">
               <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
@@ -564,9 +569,6 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
             </p>
           </div>
           <div class="gal-input-actions" style="display: flex; gap: 15px; margin-top: 15px;">
-            <button class="gal-action-btn" id="gal-upload-cancel" style="flex: 1; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
-              <span>取消</span>
-            </button>
             <button class="gal-action-btn" id="gal-batch-upload-btn" style="flex: 1; background: #666; color: #fff; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
               <i class="fa-solid fa-images"></i>
               <span>批量上传</span>
@@ -598,7 +600,7 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
       try { onCloseCallback(); } catch (e) { console.warn(`[${SCRIPT_NAME}] 回调执行失败:`, e); }
     }
   };
-  $('#gal-upload-cancel').on('click', handleClose);
+  $('#gal-sprite-upload-close-x').on('click', handleClose);
   // TTS音色绑定按钮
   $('#gal-tts-voice-save-btn').on('click', () => {
     const charName = $('#gal-sprite-character').val().trim() || characterId;
@@ -893,8 +895,11 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
   const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="gal-input-title" style="padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0;">
+          <div class="gal-input-title" style="padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-grid-2"></i> 智能批量上传立绘</span>
+            <button id="gal-batch-upload-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
           <div style="display: flex; flex: 1; overflow: hidden;">
             <div class="gal-batch-sidebar" style="width: 240px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column;">
@@ -979,10 +984,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
                     </div>
                 </div>
                 <div class="gal-input-actions" style="display: flex; gap: 12px; padding: 15px 20px; border-top: 1px solid #eee; background: #fff; flex-shrink: 0;">
-                    <button class="gal-action-btn" id="gal-batch-cancel" style="flex: 1; min-height: 44px;">
-                      <span>关闭</span>
-                    </button>
-                    <button class="gal-action-btn primary" id="gal-batch-confirm" style="flex: 2; min-height: 44px;" disabled>
+                    <button class="gal-action-btn primary" id="gal-batch-confirm" style="flex: 1; min-height: 44px;" disabled>
                       <i class="fa-solid fa-save"></i>
                       <span>保存所有立绘</span>
                     </button>
@@ -1244,7 +1246,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
       try { onCloseCallback(); } catch (e) { console.warn(`[${SCRIPT_NAME}] 回调执行失败:`, e); }
     }
   };
-  $('#gal-batch-cancel').on('click', handleClose);
+  $('#gal-batch-upload-close-x').on('click', handleClose);
   $modal.on('click', function (e) { if (e.target === this) handleClose(); });
   // 保存所有
   $('#gal-batch-confirm').on('click', async function () {
@@ -1308,8 +1310,11 @@ export function showCustomExpressionManager(onCloseCallback) {
   const modalHtml = `
             <div class="gal-input-modal" id="gal-expression-manager-modal">
                 <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
-                    <div class="gal-input-title" style="margin-bottom: 20px;">
+                    <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                         <span><i class="fa-solid fa-face-smile"></i> 管理表情标签</span>
+                        <button id="gal-expr-manager-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                          <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
@@ -1346,11 +1351,6 @@ export function showCustomExpressionManager(onCloseCallback) {
                                 <i class="fa-solid fa-plus"></i> 添加
                             </button>
                         </div>
-                    </div>
-                    <div class="gal-input-actions" style="margin-top: 20px;">
-                        <button class="gal-action-btn" id="gal-expr-manager-close" style="width: 100%; min-height: 44px;">
-                            <span>关闭</span>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -1397,6 +1397,6 @@ export function showCustomExpressionManager(onCloseCallback) {
       try { onCloseCallback(); } catch (e) { console.warn(`[${SCRIPT_NAME}] 回调执行失败:`, e); }
     }
   };
-  $('#gal-expr-manager-close').on('click', handleClose);
+  $('#gal-expr-manager-close-x').on('click', handleClose);
   $modal.on('click', function (e) { if (e.target === this) handleClose(); });
 }

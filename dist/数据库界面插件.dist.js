@@ -262,6 +262,8 @@
     // ComfyUI
     defaultCheckpoint: "",
     realTimeBackgroundGen: false,
+    // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven'
+    bgImageSource: "none",
     // TTS 设置
     ttsEnabled: true,
     ttsAutoPlay: true,
@@ -296,7 +298,6 @@
     },
     // 大香蕉生图模块设置
     bananaImageGen: {
-      enabled: false,
       proxyUrl: "",
       proxyApiKey: "",
       model: "",
@@ -310,12 +311,29 @@
     },
     // Wallhaven 壁纸设置
     wallhaven: {
-      enabled: false,
       purity: "sfw",
       cgMode: false,
       category: "anime",
       customTags: [],
       apiKey: ""
+    },
+    // NovelAI 生图设置
+    novelai: {
+      apiKey: "",
+      model: "nai-diffusion-4-5-curated",
+      width: 1216,
+      height: 832,
+      scale: 10,
+      sampler: "k_euler",
+      steps: 28,
+      cfgRescale: 0.18,
+      noiseSchedule: "karras",
+      ucPreset: 3,
+      skipCfgAboveSigma: 58,
+      negativePrompt: "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark",
+      defaultPromptPrefix: "masterpiece, best quality, no humans, scenery, background, ",
+      defaultPromptSuffix: ", very aesthetic",
+      autoSaveToLibrary: true
     }
   };
   var SYSTEM_PROMPT_FOR_SECOND_GENERATE = `\u4F60\u662FGalgame\u6587\u672C\u683C\u5F0F\u5316\u5DE5\u5177\u3002\u4F60\u7684\u552F\u4E00\u4EFB\u52A1\u662F\u5C06\u539F\u59CB\u6587\u672C\u8F6C\u6362\u4E3AGalgame \u683C\u5F0F\u3002
@@ -374,8 +392,8 @@
   }
   var _settings = Object.assign({}, DEFAULT_SETTINGS);
   function ensureEnhancedModeSettings() {
-    _settings.enhancedMode = normalizeEnhancedModeSettings(_settings?.enhancedMode);
-    return _settings.enhancedMode || createDefaultEnhancedModeSettings();
+    _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
+    return _settings.enhancedMode;
   }
   ensureEnhancedModeSettings();
   function getSettings() {
@@ -427,6 +445,28 @@
             _settings.wallhaven.cgMode = !_settings.wallhaven.sceneMode;
           }
           delete _settings.wallhaven.sceneMode;
+        }
+        if (!_settings.bgImageSource || _settings.bgImageSource === "none") {
+          let migrated = false;
+          if (_settings.bananaImageGen?.enabled) {
+            _settings.bgImageSource = "banana";
+            migrated = true;
+          } else if (_settings.novelai?.enabled) {
+            _settings.bgImageSource = "novelai";
+            migrated = true;
+          } else if (_settings.wallhaven?.enabled) {
+            _settings.bgImageSource = "wallhaven";
+            migrated = true;
+          } else if (_settings.realTimeBackgroundGen) {
+            _settings.bgImageSource = "comfyui";
+            migrated = true;
+          }
+          if (migrated) {
+            if (_settings.bananaImageGen) delete _settings.bananaImageGen.enabled;
+            if (_settings.novelai) delete _settings.novelai.enabled;
+            if (_settings.wallhaven) delete _settings.wallhaven.enabled;
+            delete _settings.realTimeBackgroundGen;
+          }
         }
       }
     } catch (e) {
@@ -687,8 +727,8 @@
   var _showToastRef = null;
   var _getIsEnabledRef = null;
   var _injectCOTRef = null;
-  function setExpressionsRefs({ showToast: showToast6, getIsEnabled: getIsEnabled2, injectCOTToWorldbook: injectCOTToWorldbook2 }) {
-    _showToastRef = showToast6;
+  function setExpressionsRefs({ showToast: showToast5, getIsEnabled: getIsEnabled2, injectCOTToWorldbook: injectCOTToWorldbook2 }) {
+    _showToastRef = showToast5;
     _getIsEnabledRef = getIsEnabled2;
     _injectCOTRef = injectCOTToWorldbook2;
   }
@@ -3033,9 +3073,9 @@ ${lines.join("\n")}`;
   // src/live2d/manager.js
   var _Live2DStageRef = null;
   var _showToastRef2 = null;
-  function setLive2DManagerRefs({ Live2DStage: Live2DStage2, showToast: showToast6 }) {
+  function setLive2DManagerRefs({ Live2DStage: Live2DStage2, showToast: showToast5 }) {
     if (Live2DStage2) _Live2DStageRef = Live2DStage2;
-    if (showToast6) _showToastRef2 = showToast6;
+    if (showToast5) _showToastRef2 = showToast5;
   }
   var Live2DManager = {
     models: /* @__PURE__ */ new Map(),
@@ -4364,8 +4404,8 @@ ${lines.join("\n")}`;
 
   // src/live2d/stage.js
   var _showToastRef3 = null;
-  function setLive2DStageRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef3 = showToast6;
+  function setLive2DStageRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef3 = showToast5;
   }
   var Live2DStage = {
     app: null,
@@ -5490,8 +5530,7 @@ ${lines.join("\n")}`;
         "#gal-custom-popup",
         "#gal-history-modal",
         "#gal-character-sprites-modal",
-        "#gal-settings-panel",
-        "#gal-asset-manager-modal",
+        "#gal-unified-panel",
         "#gal-pack-manager-modal",
         "#gal-transfer-modal",
         "#gal-batch-bg-upload-modal",
@@ -6857,8 +6896,8 @@ ${lines.join("\n")}`;
 
   // src/audio/tts-manager.js
   var _showToastRef4 = null;
-  function setTTSManagerRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef4 = showToast6;
+  function setTTSManagerRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef4 = showToast5;
   }
   function showToast(msg) {
     if (_showToastRef4) _showToastRef4(msg);
@@ -7554,8 +7593,8 @@ ${lines.join("\n")}`;
 
   // src/audio/bgm-manager.js
   var _showToastRef5 = null;
-  function setBGMManagerRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef5 = showToast6;
+  function setBGMManagerRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef5 = showToast5;
   }
   var BGMManager = {
     audio: new Audio(),
@@ -7968,121 +8007,11 @@ ${lines.join("\n")}`;
     }
   };
 
-  // src/image-gen/wallhaven-handler.js
-  var _saveBackgroundRef = null;
-  var _getSceneBackgroundsRef = null;
-  var _getMessageSegmentStateRef = null;
-  var _getSpriteManagerRef = null;
-  var _updateGlobalOverlayContentRef = null;
-  var _showToastRef6 = null;
-  function setWallhavenHandlerRefs({
-    saveBackground: saveBackground2,
-    getSceneBackgrounds,
-    getMessageSegmentState,
-    getSpriteManager,
-    updateGlobalOverlayContent: updateGlobalOverlayContent2,
-    showToast: showToast6
-  }) {
-    if (saveBackground2) _saveBackgroundRef = saveBackground2;
-    if (getSceneBackgrounds) _getSceneBackgroundsRef = getSceneBackgrounds;
-    if (getMessageSegmentState) _getMessageSegmentStateRef = getMessageSegmentState;
-    if (getSpriteManager) _getSpriteManagerRef = getSpriteManager;
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef = updateGlobalOverlayContent2;
-    if (showToast6) _showToastRef6 = showToast6;
-  }
-  var WALLHAVEN_TAG_MAPPING = {
-    "study": "library",
-    "chinese": "asian",
-    "japanese": "asian",
-    "room": "interior",
-    "house": "building",
-    "ancient": "",
-    "traditional": "",
-    "historical": "",
-    "background": "",
-    "scenery": "",
-    "atmosphere": "",
-    "detailed": "",
-    "calligraphy": "",
-    "brushes": ""
-  };
-  function optimizeWallhavenTags(rawTags) {
-    const tagList = rawTags.split(",").map((t) => t.trim().toLowerCase()).filter((t) => t);
-    let optimized = tagList.map((tag) => WALLHAVEN_TAG_MAPPING[tag] || tag).filter((t) => t);
-    optimized = [...new Set(optimized)];
-    optimized = optimized.filter((t) => t.length >= 3 && t.length <= 15);
-    optimized = optimized.slice(0, 4);
-    if (optimized.length < 2) {
-      optimized.push("interior");
-    }
-    console.log(`[${SCRIPT_NAME}] Wallhaven: \u6807\u7B7E\u4F18\u5316 ${tagList.join(", ")} \u2192 ${optimized.join(", ")}`);
-    return optimized;
-  }
-  function handleWallhavenBackgroundSearch(sceneName, tags) {
-    const settings = getSettings();
-    if (!settings.wallhaven?.enabled) return;
-    if (BGMManager.generatingScenes.has(sceneName)) return;
-    const sceneBackgrounds3 = _getSceneBackgroundsRef ? _getSceneBackgroundsRef() : null;
-    if (sceneBackgrounds3 && sceneBackgrounds3.has(sceneName)) {
-      console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u641C\u7D22`);
-      return;
-    }
-    BGMManager.generatingScenes.add(sceneName);
-    (async () => {
-      try {
-        console.log(`[${SCRIPT_NAME}] Wallhaven: \u5F00\u59CB\u641C\u7D22\u573A\u666F\u300C${sceneName}\u300D\u539F\u59CB\u6807\u7B7E: ${tags}`);
-        const tagList = optimizeWallhavenTags(tags);
-        const imageUrl = await WallhavenAPI.search(tagList);
-        if (imageUrl) {
-          let cachedUrl = imageUrl;
-          try {
-            if (_saveBackgroundRef) {
-              const savedUrl = await _saveBackgroundRef(sceneName, null, imageUrl);
-              if (savedUrl) cachedUrl = savedUrl;
-            }
-          } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] Wallhaven: \u4FDD\u5B58\u80CC\u666F\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, e);
-            if (sceneBackgrounds3) {
-              sceneBackgrounds3.set(sceneName, imageUrl);
-            }
-          }
-          console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u80CC\u666F\u5DF2\u7F13\u5B58: ${cachedUrl.substring(0, 50)}...`);
-          const _$ = (typeof window.parent !== "undefined" ? window.parent : window).jQuery;
-          if (_$) {
-            const $lastMes = _$("#chat > .mes").last();
-            if ($lastMes.length) {
-              const mesId = $lastMes.attr("mesid");
-              const messageSegmentState8 = _getMessageSegmentStateRef ? _getMessageSegmentStateRef() : null;
-              const state = messageSegmentState8 ? messageSegmentState8.get(String(mesId)) : null;
-              if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
-                const SpriteManager2 = _getSpriteManagerRef ? _getSpriteManagerRef() : null;
-                if (SpriteManager2) {
-                  SpriteManager2.currentScene = null;
-                }
-                console.log(`[${SCRIPT_NAME}] Wallhaven: \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
-                if (_updateGlobalOverlayContentRef) {
-                  _updateGlobalOverlayContentRef(mesId, state.parsedContent);
-                }
-              }
-            }
-          }
-          if (_showToastRef6) _showToastRef6(`\u573A\u666F\u300C${sceneName}\u300DWallhaven \u80CC\u666F\u5DF2\u5E94\u7528`);
-        } else {
-          console.warn(`[${SCRIPT_NAME}] Wallhaven: \u672A\u627E\u5230\u5339\u914D\u56FE\u7247: ${tags}`);
-        }
-      } catch (e) {
-        console.error(`[${SCRIPT_NAME}] Wallhaven \u80CC\u666F\u641C\u7D22\u5931\u8D25:`, e);
-      } finally {
-        BGMManager.generatingScenes.delete(sceneName);
-      }
-    })();
-  }
-
   // src/sprite/sprite-manager.js
   var _getSpriteRef2 = null;
   var _getBackgroundRef = null;
-  var _getSceneBackgroundsRef2 = null;
-  var _getMessageSegmentStateRef2 = null;
+  var _getSceneBackgroundsRef = null;
+  var _getMessageSegmentStateRef = null;
   var _setBackgroundWithTransitionRef = null;
   var _clearBackgroundLayersRef = null;
   var _BGMManagerRef = null;
@@ -8097,8 +8026,8 @@ ${lines.join("\n")}`;
   }) {
     if (getSprite2) _getSpriteRef2 = getSprite2;
     if (getBackground2) _getBackgroundRef = getBackground2;
-    if (getSceneBackgrounds) _getSceneBackgroundsRef2 = getSceneBackgrounds;
-    if (getMessageSegmentState) _getMessageSegmentStateRef2 = getMessageSegmentState;
+    if (getSceneBackgrounds) _getSceneBackgroundsRef = getSceneBackgrounds;
+    if (getMessageSegmentState) _getMessageSegmentStateRef = getMessageSegmentState;
     if (setBackgroundWithTransition2) _setBackgroundWithTransitionRef = setBackgroundWithTransition2;
     if (clearBackgroundLayers2) _clearBackgroundLayersRef = clearBackgroundLayers2;
     if (BGMManager2) _BGMManagerRef = BGMManager2;
@@ -8385,7 +8314,7 @@ ${lines.join("\n")}`;
       if (hasLive2D) {
         const $container = $slot.find(".gal-live2d-canvas-container");
         const taskSeq = this._nextLive2DRenderSeq(characterId);
-        const messageSegmentState8 = _getMessageSegmentStateRef2 ? _getMessageSegmentStateRef2() : null;
+        const messageSegmentState8 = _getMessageSegmentStateRef ? _getMessageSegmentStateRef() : null;
         const isTaskStale = () => {
           if (!this._isLatestLive2DTask(characterId, taskSeq)) return true;
           if (renderToken === null) return false;
@@ -8483,12 +8412,12 @@ ${lines.join("\n")}`;
       }
     },
     findBestMatchScene(sceneName) {
-      const sceneBackgrounds3 = _getSceneBackgroundsRef2 ? _getSceneBackgroundsRef2() : null;
+      const sceneBackgrounds5 = _getSceneBackgroundsRef ? _getSceneBackgroundsRef() : null;
       if (!sceneName) return null;
-      if (sceneBackgrounds3 && sceneBackgrounds3.has(sceneName)) return sceneName;
+      if (sceneBackgrounds5 && sceneBackgrounds5.has(sceneName)) return sceneName;
       let bestMatch = null;
       let maxLength = 0;
-      const scenes = sceneBackgrounds3 ? Array.from(sceneBackgrounds3.keys()) : [];
+      const scenes = sceneBackgrounds5 ? Array.from(sceneBackgrounds5.keys()) : [];
       const cleanName = sceneName.replace(/\s*[\(（].*?[\)）]/g, "").trim();
       for (const knownScene of scenes) {
         const cleanKnown = knownScene.replace(/\s*[\(（].*?[\)）]/g, "").trim();
@@ -8570,6 +8499,98 @@ ${lines.join("\n")}`;
     }
   };
 
+  // src/image-gen/bg-gen-shared.js
+  var messageSegmentState2 = GalgameStore.cache.segments;
+  var _updateGlobalOverlayContentRef = null;
+  var _showToastRef6 = null;
+  function setBgGenSharedRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, showToast: showToast5 }) {
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef = updateGlobalOverlayContent2;
+    if (showToast5) _showToastRef6 = showToast5;
+  }
+  function showBgGenToast(msg) {
+    if (_showToastRef6) _showToastRef6(msg);
+  }
+  function refreshUIForScene(sceneName) {
+    const $lastMes = $("#chat > .mes").last();
+    if (!$lastMes.length) return;
+    const mesId = $lastMes.attr("mesid");
+    const state = messageSegmentState2.get(String(mesId));
+    if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
+      SpriteManager.currentScene = null;
+      console.log(`[${SCRIPT_NAME}] \u80CC\u666F\u751F\u6210: \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
+      if (_updateGlobalOverlayContentRef) {
+        _updateGlobalOverlayContentRef(mesId, state.parsedContent);
+      }
+    }
+  }
+
+  // src/image-gen/wallhaven-handler.js
+  var sceneBackgrounds2 = GalgameStore.cache.backgrounds;
+  var WALLHAVEN_TAG_MAPPING = {
+    "study": "library",
+    "chinese": "asian",
+    "japanese": "asian",
+    "room": "interior",
+    "house": "building",
+    "ancient": "",
+    "traditional": "",
+    "historical": "",
+    "background": "",
+    "scenery": "",
+    "atmosphere": "",
+    "detailed": "",
+    "calligraphy": "",
+    "brushes": ""
+  };
+  function optimizeWallhavenTags(rawTags) {
+    const tagList = rawTags.split(",").map((t) => t.trim().toLowerCase()).filter((t) => t);
+    let optimized = tagList.map((tag) => WALLHAVEN_TAG_MAPPING[tag] || tag).filter((t) => t);
+    optimized = [...new Set(optimized)];
+    optimized = optimized.filter((t) => t.length >= 3 && t.length <= 15);
+    optimized = optimized.slice(0, 4);
+    if (optimized.length < 2) {
+      optimized.push("interior");
+    }
+    console.log(`[${SCRIPT_NAME}] Wallhaven: \u6807\u7B7E\u4F18\u5316 ${tagList.join(", ")} \u2192 ${optimized.join(", ")}`);
+    return optimized;
+  }
+  function handleWallhavenBackgroundSearch(sceneName, tags) {
+    const settings = getSettings();
+    if (settings.bgImageSource !== "wallhaven") return;
+    if (BGMManager.generatingScenes.has(sceneName)) return;
+    if (sceneBackgrounds2.has(sceneName)) {
+      console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u641C\u7D22`);
+      return;
+    }
+    BGMManager.generatingScenes.add(sceneName);
+    (async () => {
+      try {
+        console.log(`[${SCRIPT_NAME}] Wallhaven: \u5F00\u59CB\u641C\u7D22\u573A\u666F\u300C${sceneName}\u300D\u539F\u59CB\u6807\u7B7E: ${tags}`);
+        const tagList = optimizeWallhavenTags(tags);
+        const imageUrl = await WallhavenAPI.search(tagList);
+        if (imageUrl) {
+          let cachedUrl = imageUrl;
+          try {
+            const savedUrl = await saveBackground(sceneName, null, imageUrl);
+            if (savedUrl) cachedUrl = savedUrl;
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Wallhaven: \u4FDD\u5B58\u80CC\u666F\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, e);
+            sceneBackgrounds2.set(sceneName, imageUrl);
+          }
+          console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u80CC\u666F\u5DF2\u7F13\u5B58: ${cachedUrl.substring(0, 50)}...`);
+          refreshUIForScene(sceneName);
+          showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300DWallhaven \u80CC\u666F\u5DF2\u5E94\u7528`);
+        } else {
+          console.warn(`[${SCRIPT_NAME}] Wallhaven: \u672A\u627E\u5230\u5339\u914D\u56FE\u7247: ${tags}`);
+        }
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] Wallhaven \u80CC\u666F\u641C\u7D22\u5931\u8D25:`, e);
+      } finally {
+        BGMManager.generatingScenes.delete(sceneName);
+      }
+    })();
+  }
+
   // src/logic/cot-template.js
   async function generateCOTTemplate() {
     const settings = getSettings();
@@ -8590,8 +8611,9 @@ ${lines.join("\n")}`;
       charVoiceBindingText = "\n### \u89D2\u8272\u97F3\u8272\u7ED1\u5B9A\uFF08\u5FC5\u987B\u9075\u5B88\uFF09\n" + Object.entries(charVoiceMap).map(([char, voice]) => `- **${char}**: \u5FC5\u987B\u4F7F\u7528\u97F3\u8272 "${voice}"`).join("\n") + "\n**\u91CD\u8981**: \u4EE5\u4E0A\u89D2\u8272\u5FC5\u987B\u4F7F\u7528\u7ED1\u5B9A\u7684\u6307\u5B9A\u97F3\u8272\uFF0C\u4E0D\u53EF\u66F4\u6539\uFF01\n";
     }
     let sceneListText = "";
-    const useBananaImageGen = settings.bananaImageGen?.enabled;
-    const useWallhaven = settings.wallhaven?.enabled;
+    const bgSrc = settings.bgImageSource || "none";
+    const useBananaImageGen = bgSrc === "banana";
+    const useWallhaven = bgSrc === "wallhaven";
     if (useBananaImageGen) {
       const bs = settings.bananaImageGen;
       let modeHint = "";
@@ -8714,7 +8736,17 @@ Wallhaven \u662F\u82F1\u6587\u6807\u7B7E\u7CFB\u7EDF\uFF0C\u6807\u7B7E\u5FC5\u98
 - \u6E29\u99A8\u5367\u5BA4 \u2192 \`<whimg>bedroom, morning, cozy</whimg>\`
 - \u65E5\u5F0F\u5EAD\u9662 \u2192 \`<whimg>garden, temple, asian</whimg>\` (\u4E0D\u7528 japanese)
 - \u73B0\u4EE3\u529E\u516C\u5BA4 \u2192 \`<whimg>office, modern, city</whimg>\`${customTagHint}`;
-    } else if (settings.realTimeBackgroundGen) {
+    } else if (bgSrc === "novelai") {
+      sceneListText = sceneNames.length > 0 ? `**NovelAI \u5B9E\u65F6\u573A\u666F\u751F\u6210\u6A21\u5F0F**: \u5F53\u5267\u60C5\u8FDB\u5165\u65B0\u573A\u666F\u65F6\uFF0C\u6839\u636E\u5F53\u524D\u60C5\u8282\u751F\u6210\u65B0\u573A\u666F\u80CC\u666F\u3002
+- **\u5224\u65AD\u6807\u51C6**: \u5982\u679C\u56FE\u5E93\u4E2D\u7684\u573A\u666F\u540D\u79F0\u4E0E\u5F53\u524D\u5267\u60C5\u5B8C\u5168\u5339\u914D\uFF0C\u5219\u53EF\u590D\u7528\uFF1B\u5426\u5219\u5FC5\u987B\u751F\u6210\u65B0\u573A\u666F\u3002
+- **\u751F\u6210\u683C\u5F0F**: \`<background scene="\u65B0\u573A\u666F\u540D"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
+- **\u573A\u666F\u540D\u8981\u6C42**: \u4F7F\u7528\u5177\u4F53\u3001\u63CF\u8FF0\u6027\u7684\u4E2D\u6587\u540D\u79F0\uFF08\u5982"\u66B4\u96E8\u4E2D\u7684\u5E9F\u5F03\u5DE5\u5382_\u591C\u665A"\u800C\u975E"\u5DE5\u5382"\uFF09
+- **TAG\u8981\u6C42**: \u82F1\u6587\u9017\u53F7\u5206\u9694\u7684 Danbooru \u6807\u7B7E\uFF0C\u5305\u542B\u98CE\u683C\u3001\u5149\u7EBF\u3001\u6C1B\u56F4\u3001\u7EC6\u8282\u7B49
+\u53EF\u7528\u573A\u666F\u5217\u8868: ${sceneNames.join(", ")}` : `**NovelAI \u5B9E\u65F6\u573A\u666F\u751F\u6210\u6A21\u5F0F**: \u5F53\u5267\u60C5\u8FDB\u5165\u65B0\u573A\u666F\u65F6\uFF0C\u6839\u636E\u5F53\u524D\u60C5\u8282\u751F\u6210\u65B0\u573A\u666F\u80CC\u666F\u3002
+- **\u751F\u6210\u683C\u5F0F**: \`<background scene="\u65B0\u573A\u666F\u540D"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
+- **\u573A\u666F\u540D\u8981\u6C42**: \u4F7F\u7528\u5177\u4F53\u3001\u63CF\u8FF0\u6027\u7684\u4E2D\u6587\u540D\u79F0
+- **TAG\u8981\u6C42**: \u82F1\u6587\u9017\u53F7\u5206\u9694\u7684 Danbooru \u6807\u7B7E\uFF0C\u5305\u542B\u98CE\u683C\u3001\u5149\u7EBF\u3001\u6C1B\u56F4\u3001\u7EC6\u8282\u7B49`;
+    } else if (bgSrc === "comfyui") {
       sceneListText = sceneNames.length > 0 ? `**\u5B9E\u65F6\u573A\u666F\u751F\u6210\u6A21\u5F0F**: \u5F53\u5267\u60C5\u8FDB\u5165\u65B0\u573A\u666F\u65F6\uFF0C\u6839\u636E\u5F53\u524D\u5177\u4F53\u60C5\u8282\u751F\u6210\u65B0\u573A\u666F\u3002
 - **\u5224\u65AD\u6807\u51C6**: \u5982\u679C\u56FE\u5E93\u4E2D\u7684\u573A\u666F\u540D\u79F0\u4E0E\u5F53\u524D\u5267\u60C5\u65F6\u95F4\u3001\u5730\u70B9\u3001\u6C1B\u56F4\u5B8C\u5168\u5339\u914D\uFF0C\u5219\u53EF\u590D\u7528\uFF1B\u5426\u5219\u5FC5\u987B\u751F\u6210\u65B0\u573A\u666F\u3002
 - **\u751F\u6210\u683C\u5F0F**: \`<background scene="\u65B0\u573A\u666F\u540D"><bgimg>visual tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
@@ -8728,8 +8760,9 @@ Wallhaven \u662F\u82F1\u6587\u6807\u7B7E\u7CFB\u7EDF\uFF0C\u6807\u7B7E\u5FC5\u98
       sceneListText = sceneNames.length > 0 ? `\u53EF\u7528\u573A\u666F\u5217\u8868: ${sceneNames.join(", ")}
 - **\u4E25\u91CD\u8B66\u544A**: \u5FC5\u987B\u4E25\u683C\u4ECE\u4E0A\u8FF0\u5217\u8868\u4E2D\u9009\u62E9\u573A\u666F\uFF0C\u4E25\u7981\u4F7F\u7528\u5217\u8868\u4E4B\u5916\u7684\u540D\u79F0\uFF0C\u4E25\u7981\u81EA\u521B\u5730\u70B9\u3002` : `\uFF08\u6682\u65E0\u53EF\u7528\u573A\u666F\uFF0C\u8BF7\u5728\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u4E0A\u4F20\u80CC\u666F\u56FE\u7247\u540E\u4F7F\u7528\uFF09`;
     }
-    const exampleScene = settings.realTimeBackgroundGen ? "\u96E8\u591C\u4E2D\u7684\u90FD\u5E02\u8857\u9053" : sceneNames.length > 0 ? sceneNames[0] : "\u573A\u666F\u540D";
-    const extraRule = settings.realTimeBackgroundGen ? `5. **\u573A\u666F\u751F\u6210\u89C4\u5219**: \u5F53\u573A\u666F\u53D8\u5316\u4E14\u56FE\u5E93\u4E2D\u65E0\u5339\u914D\u573A\u666F\u65F6\uFF0C\u4F7F\u7528 \`<background scene="..."><bgimg>TAGS</bgimg>\` \u683C\u5F0F\u751F\u6210\u65B0\u573A\u666F\u3002TAGS\u5FC5\u987B\u662F\u82F1\u6587\u5355\u8BCD\uFF0C\u9017\u53F7\u5206\u9694\uFF0C\u5305\u542B\uFF1A\u573A\u666F\u7C7B\u578B\u3001\u5149\u7EBF\u6761\u4EF6\u3001\u6C1B\u56F4\u3001\u98CE\u683C\u3001\u5173\u952E\u7EC6\u8282\u3002` : `5. **\u80CC\u666F\u573A\u666F\u5FC5\u987B\u4F7F\u7528\u5DF2\u914D\u7F6E\u7684\u573A\u666F\u540D\u79F0**`;
+    const isGenerativeEngine = bgSrc === "comfyui" || bgSrc === "banana" || bgSrc === "novelai";
+    const exampleScene = isGenerativeEngine ? "\u96E8\u591C\u4E2D\u7684\u90FD\u5E02\u8857\u9053" : sceneNames.length > 0 ? sceneNames[0] : "\u573A\u666F\u540D";
+    const extraRule = isGenerativeEngine ? `5. **\u573A\u666F\u751F\u6210\u89C4\u5219**: \u5F53\u573A\u666F\u53D8\u5316\u4E14\u56FE\u5E93\u4E2D\u65E0\u5339\u914D\u573A\u666F\u65F6\uFF0C\u4F7F\u7528 \`<background scene="..."><bgimg>TAGS</bgimg>\` \u683C\u5F0F\u751F\u6210\u65B0\u573A\u666F\u3002TAGS\u5FC5\u987B\u662F\u82F1\u6587\u5355\u8BCD\uFF0C\u9017\u53F7\u5206\u9694\uFF0C\u5305\u542B\uFF1A\u573A\u666F\u7C7B\u578B\u3001\u5149\u7EBF\u6761\u4EF6\u3001\u6C1B\u56F4\u3001\u98CE\u683C\u3001\u5173\u952E\u7EC6\u8282\u3002` : `5. **\u80CC\u666F\u573A\u666F\u5FC5\u987B\u4F7F\u7528\u5DF2\u914D\u7F6E\u7684\u573A\u666F\u540D\u79F0**`;
     const ttsEnabled = getTTSEnabled();
     if (ttsEnabled) {
       return `# Galgame \u8F93\u51FA\u683C\u5F0F\u89C4\u8303
@@ -9393,12 +9426,12 @@ ${extraRule}
   var _updateNextBtnForGeneratingStateRef2 = null;
   var _updateGeneratingStatusRef2 = null;
   function setEnhancedModeRefs({
-    showToast: showToast6,
+    showToast: showToast5,
     updateGlobalOverlayContent: updateGlobalOverlayContent2,
     updateNextBtnForGeneratingState: updateNextBtnForGeneratingState2,
     updateGeneratingStatus: updateGeneratingStatus2
   }) {
-    if (showToast6) _showToastRef7 = showToast6;
+    if (showToast5) _showToastRef7 = showToast5;
     if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef2 = updateGlobalOverlayContent2;
     if (updateNextBtnForGeneratingState2) _updateNextBtnForGeneratingStateRef2 = updateNextBtnForGeneratingState2;
     if (updateGeneratingStatus2) _updateGeneratingStatusRef2 = updateGeneratingStatus2;
@@ -10062,8 +10095,8 @@ ${firstResult}`;
 
   // src/logic/worldbook.js
   var _showToastRef8 = null;
-  function setWorldbookRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef8 = showToast6;
+  function setWorldbookRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef8 = showToast5;
   }
   function showToast3(msg, duration) {
     if (_showToastRef8) _showToastRef8(msg, duration);
@@ -10189,20 +10222,10 @@ ${firstResult}`;
   }
 
   // src/image-gen/banana-image.js
-  var messageSegmentState2 = GalgameStore.cache.segments;
-  var sceneBackgrounds2 = GalgameStore.cache.backgrounds;
-  var _updateGlobalOverlayContentRef3 = null;
-  var _showToastRef9 = null;
-  function setBananaImageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, showToast: showToast6 }) {
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
-    if (showToast6) _showToastRef9 = showToast6;
-  }
-  function showToast4(msg) {
-    if (_showToastRef9) _showToastRef9(msg);
-  }
+  var sceneBackgrounds3 = GalgameStore.cache.backgrounds;
   async function handleRealTimeBackgroundGeneration(sceneName, tags) {
     const settings = getSettings();
-    if (!settings.realTimeBackgroundGen) return;
+    if (settings.bgImageSource !== "comfyui") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     try {
       const backgrounds = await getAllBackgrounds();
@@ -10214,7 +10237,7 @@ ${firstResult}`;
     }
     console.log(`[${SCRIPT_NAME}] \u89E6\u53D1\u5B9E\u65F6\u80CC\u666F\u751F\u6210: ${sceneName}, Tags: ${tags}`);
     BGMManager.generatingScenes.add(sceneName);
-    showToast4(`\u6B63\u5728\u751F\u6210\u65B0\u573A\u666F: ${sceneName}...`);
+    showBgGenToast(`\u6B63\u5728\u751F\u6210\u65B0\u573A\u666F: ${sceneName}...`);
     const $bgLayer = $("#gal-global-overlay .gal-layer-bg");
     if ($bgLayer.length) {
       $bgLayer.addClass("generating-bg").removeClass("has-bg");
@@ -10239,38 +10262,22 @@ ${firstResult}`;
         const negative = settings.comfyui.negativePrompt || "nsfw, lowres, bad anatomy, bad hands, text, error";
         const seed = Math.floor(Math.random() * 1e10);
         const blob = await ComfyUIAPI.generate(targetWorkflow.json, positive, negative, seed);
-        if (blob) {
-          await saveBackgroundsBatch([{ sceneName, imageBlob: blob }]);
-          const newUrl = URL.createObjectURL(blob);
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u5B9E\u65F6\u751F\u6210\u540E\u624B\u52A8\u66F4\u65B0\u7F13\u5B58: "${sceneName}" URL: ${newUrl.substring(0, 50)}...`);
-          sceneBackgrounds2.set(sceneName, newUrl);
-          console.log(`[${SCRIPT_NAME}] [DEBUG] Cache check after set: has("${sceneName}") = ${sceneBackgrounds2.has(sceneName)}`);
-          console.log(`[${SCRIPT_NAME}] \u573A\u666F\u751F\u6210\u5E76\u4FDD\u5B58\u6210\u529F: ${sceneName}`);
-          showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5B8C\u6210\uFF01`);
-          const $bgLayer2 = $("#gal-global-overlay .gal-layer-bg");
-          $bgLayer2.find(".gal-gen-indicator").remove();
-          if (getIsEnabled()) {
-            injectCOTToWorldbook();
-          }
-          const $lastMes = $("#chat > .mes").last();
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u5C1D\u8BD5\u5237\u65B0UI. LastMes ID: ${$lastMes.attr("mesid")}`);
-          if ($lastMes.length) {
-            const mesId = $lastMes.attr("mesid");
-            const state = messageSegmentState2.get(String(mesId));
-            if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
-              SpriteManager.currentScene = null;
-              console.log(`[${SCRIPT_NAME}] [DEBUG] \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
-              if (_updateGlobalOverlayContentRef3) {
-                _updateGlobalOverlayContentRef3(mesId, state.parsedContent);
-              }
-            }
-          }
-        } else {
+        if (!blob) {
           throw new Error("\u751F\u6210\u7684\u56FE\u7247\u6570\u636E\u4E3A\u7A7A");
         }
+        await saveBackgroundsBatch([{ sceneName, imageBlob: blob }]);
+        const newUrl = URL.createObjectURL(blob);
+        sceneBackgrounds3.set(sceneName, newUrl);
+        console.log(`[${SCRIPT_NAME}] \u573A\u666F\u751F\u6210\u5E76\u4FDD\u5B58\u6210\u529F: ${sceneName}`);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5B8C\u6210\uFF01`);
+        $("#gal-global-overlay .gal-layer-bg .gal-gen-indicator").remove();
+        if (getIsEnabled()) {
+          injectCOTToWorldbook();
+        }
+        refreshUIForScene(sceneName);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5B9E\u65F6\u80CC\u666F\u751F\u6210\u5931\u8D25:`, e);
-        showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5931\u8D25`);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5931\u8D25`);
       } finally {
         BGMManager.generatingScenes.delete(sceneName);
       }
@@ -10333,9 +10340,9 @@ ${firstResult}`;
   }
   function handleBananaBackgroundGeneration(sceneName, prompt2) {
     const settings = getSettings();
-    if (!settings.bananaImageGen?.enabled) return;
+    if (settings.bgImageSource !== "banana") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
-    if (sceneBackgrounds2.has(sceneName)) {
+    if (sceneBackgrounds3.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u751F\u6210`);
       return;
     }
@@ -10383,9 +10390,7 @@ ${firstResult}`;
         }
         const genUrl = `${baseUrl}/chat/completions`;
         let messageContent = finalPrompt;
-        console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: cgMode = ${bs.cgMode}`);
         const appearances = getBananaCharacterAppearances();
-        console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u89D2\u8272\u5916\u89C2\u5217\u8868 =`, JSON.stringify(appearances));
         if (bs.cgMode && appearances.length > 0) {
           console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: CG\u6A21\u5F0F\uFF0C\u51C6\u5907\u6DFB\u52A0 ${appearances.length} \u4E2A\u89D2\u8272\u7ACB\u7ED8\u5230\u591A\u6A21\u6001\u6D88\u606F`);
           messageContent = await buildBananaAppearanceMultimodalContent(finalPrompt);
@@ -10432,32 +10437,186 @@ ${firstResult}`;
               imageBlob = new Blob([byteArray], { type: "image/png" });
             }
             const savedUrl = await saveBackground(sceneName, imageBlob, imageUrl);
-            const cachedUrl = savedUrl || imageUrl;
-            sceneBackgrounds2.set(sceneName, cachedUrl);
+            sceneBackgrounds3.set(sceneName, savedUrl || imageUrl);
             console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
           } catch (saveErr) {
             console.warn(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u4FDD\u5B58\u5230\u80CC\u666F\u5E93\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, saveErr);
-            sceneBackgrounds2.set(sceneName, imageUrl);
+            sceneBackgrounds3.set(sceneName, imageUrl);
           }
         } else {
-          sceneBackgrounds2.set(sceneName, imageUrl);
+          sceneBackgrounds3.set(sceneName, imageUrl);
         }
-        const $lastMes = $("#chat > .mes").last();
-        if ($lastMes.length) {
-          const mesId = $lastMes.attr("mesid");
-          const state = messageSegmentState2.get(String(mesId));
-          if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
-            SpriteManager.currentScene = null;
-            console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
-            if (_updateGlobalOverlayContentRef3) {
-              _updateGlobalOverlayContentRef3(mesId, state.parsedContent);
-            }
-          }
-        }
-        showToast4(`\u573A\u666F\u300C${sceneName}\u300DAI \u80CC\u666F\u5DF2\u751F\u6210`);
+        refreshUIForScene(sceneName);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300DAI \u80CC\u666F\u5DF2\u751F\u6210`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE\u5931\u8D25:`, e);
-        showToast4(`\u5927\u9999\u8549\u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
+        showBgGenToast(`\u5927\u9999\u8549\u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
+      } finally {
+        BGMManager.generatingScenes.delete(sceneName);
+      }
+    })();
+  }
+
+  // src/image-gen/novelai-image.js
+  var sceneBackgrounds4 = GalgameStore.cache.backgrounds;
+  async function extractImageFromZip(arrayBuffer) {
+    const view = new DataView(arrayBuffer);
+    if (view.getUint32(0, true) !== 67324752) {
+      throw new Error("\u54CD\u5E94\u4E0D\u662F\u6709\u6548\u7684 ZIP \u6587\u4EF6");
+    }
+    const compressionMethod = view.getUint16(8, true);
+    let compressedSize = view.getUint32(18, true);
+    const fileNameLength = view.getUint16(26, true);
+    const extraFieldLength = view.getUint16(28, true);
+    const dataOffset = 30 + fileNameLength + extraFieldLength;
+    if (compressedSize === 0) {
+      for (let i = dataOffset; i < arrayBuffer.byteLength - 4; i++) {
+        if (view.getUint32(i, true) === 33639248) {
+          compressedSize = view.getUint32(i + 20, true);
+          break;
+        }
+      }
+      if (compressedSize === 0) {
+        for (let i = dataOffset; i < arrayBuffer.byteLength - 4; i++) {
+          if (view.getUint32(i, true) === 134695760) {
+            compressedSize = i - dataOffset;
+            break;
+          }
+        }
+      }
+      if (compressedSize === 0) {
+        console.warn(`[${SCRIPT_NAME}] NovelAI ZIP: \u65E0\u6CD5\u7CBE\u786E\u786E\u5B9A\u6587\u4EF6\u5927\u5C0F\uFF0C\u4F7F\u7528\u5269\u4F59\u5B57\u8282\u4F5C\u4E3A\u515C\u5E95`);
+        compressedSize = arrayBuffer.byteLength - dataOffset;
+      }
+    }
+    const fileData = new Uint8Array(arrayBuffer, dataOffset, compressedSize);
+    if (compressionMethod === 0) {
+      return new Blob([fileData], { type: "image/png" });
+    } else if (compressionMethod === 8) {
+      const ds = new DecompressionStream("deflate-raw");
+      const writer = ds.writable.getWriter();
+      writer.write(fileData);
+      writer.close();
+      return await new Response(ds.readable).blob();
+    }
+    throw new Error(`\u4E0D\u652F\u6301\u7684\u538B\u7F29\u65B9\u5F0F: ${compressionMethod}`);
+  }
+  function buildRequestBody(tags, settings) {
+    const ns = settings.novelai;
+    const negativePrompt = ns.negativePrompt || "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark";
+    let finalPrompt = tags;
+    if (ns.defaultPromptPrefix) {
+      finalPrompt = ns.defaultPromptPrefix + finalPrompt;
+    }
+    if (ns.defaultPromptSuffix) {
+      finalPrompt = finalPrompt + ns.defaultPromptSuffix;
+    }
+    const seed = Math.floor(Math.random() * 4294967295);
+    return {
+      input: finalPrompt,
+      model: ns.model || "nai-diffusion-4-5-curated",
+      action: "generate",
+      parameters: {
+        params_version: 3,
+        width: ns.width || 1216,
+        height: ns.height || 832,
+        scale: ns.scale ?? 10,
+        sampler: ns.sampler || "k_euler",
+        steps: ns.steps || 28,
+        n_samples: 1,
+        ucPreset: ns.ucPreset ?? 3,
+        qualityToggle: true,
+        dynamic_thresholding: false,
+        cfg_rescale: ns.cfgRescale ?? 0.18,
+        noise_schedule: ns.noiseSchedule || "karras",
+        skip_cfg_above_sigma: ns.skipCfgAboveSigma ?? 58,
+        seed,
+        negative_prompt: negativePrompt,
+        characterPrompts: [],
+        v4_prompt: {
+          caption: { base_caption: finalPrompt, char_captions: [] },
+          use_coords: false,
+          use_order: true
+        },
+        v4_negative_prompt: {
+          caption: { base_caption: negativePrompt, char_captions: [] },
+          legacy_uc: false
+        },
+        autoSmea: false,
+        normalize_reference_strength_multiple: false,
+        legacy: false,
+        legacy_uc: false,
+        legacy_v3_extend: false,
+        add_original_image: true,
+        controlnet_strength: 1,
+        use_coords: false
+      }
+    };
+  }
+  function handleNovelAIBackgroundGeneration(sceneName, tags) {
+    const settings = getSettings();
+    if (settings.bgImageSource !== "novelai") return;
+    if (BGMManager.generatingScenes.has(sceneName)) return;
+    if (sceneBackgrounds4.has(sceneName)) {
+      console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u751F\u6210`);
+      return;
+    }
+    const ns = settings.novelai;
+    if (!ns.apiKey) {
+      console.warn(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u672A\u914D\u7F6E API Key`);
+      return;
+    }
+    BGMManager.generatingScenes.add(sceneName);
+    showBgGenToast(`\u6B63\u5728\u751F\u6210\u573A\u666F: ${sceneName}...`);
+    const $bgLayer = $("#gal-global-overlay .gal-layer-bg");
+    if ($bgLayer.length) {
+      $bgLayer.addClass("generating-bg").removeClass("has-bg");
+      clearBackgroundLayers($bgLayer);
+    }
+    (async () => {
+      try {
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u5F00\u59CB\u751F\u6210\u573A\u666F\u300C${sceneName}\u300D`);
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: Tags = ${tags.substring(0, 100)}`);
+        const requestBody = buildRequestBody(tags, settings);
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u6A21\u578B=${requestBody.model}, \u5C3A\u5BF8=${requestBody.parameters.width}x${requestBody.parameters.height}`);
+        const response = await fetch("https://image.novelai.net/ai/generate-image", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${ns.apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const imageBlob = await extractImageFromZip(arrayBuffer);
+        if (!imageBlob || imageBlob.size === 0) {
+          throw new Error("\u63D0\u53D6\u5230\u7684\u56FE\u7247\u6570\u636E\u4E3A\u7A7A");
+        }
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u56FE\u7247\u5927\u5C0F = ${(imageBlob.size / 1024).toFixed(1)} KB`);
+        if (ns.autoSaveToLibrary !== false) {
+          try {
+            const savedUrl = await saveBackground(sceneName, imageBlob, null);
+            sceneBackgrounds4.set(sceneName, savedUrl || URL.createObjectURL(imageBlob));
+            console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
+          } catch (saveErr) {
+            console.warn(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u4FDD\u5B58\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, saveErr);
+            sceneBackgrounds4.set(sceneName, URL.createObjectURL(imageBlob));
+          }
+        } else {
+          sceneBackgrounds4.set(sceneName, URL.createObjectURL(imageBlob));
+        }
+        if (getIsEnabled()) {
+          injectCOTToWorldbook();
+        }
+        refreshUIForScene(sceneName);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300DNovelAI \u80CC\u666F\u5DF2\u751F\u6210`);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE\u5931\u8D25:`, e);
+        showBgGenToast(`NovelAI \u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
       } finally {
         BGMManager.generatingScenes.delete(sceneName);
       }
@@ -14399,17 +14558,17 @@ ${firstResult}`;
   }
 
   // src/ui/fullscreen.js
-  var _showToastRef10 = null;
+  var _showToastRef9 = null;
   var _adjustGameContentScaleRef = null;
   var _resetGameContentScaleRef = null;
   var _adjustToolbarForSpaceRef = null;
   function setFullscreenRefs({
-    showToast: showToast6,
+    showToast: showToast5,
     adjustGameContentScale: adjustGameContentScale2,
     resetGameContentScale: resetGameContentScale2,
     adjustToolbarForSpace: adjustToolbarForSpace2
   }) {
-    if (showToast6) _showToastRef10 = showToast6;
+    if (showToast5) _showToastRef9 = showToast5;
     if (adjustGameContentScale2) _adjustGameContentScaleRef = adjustGameContentScale2;
     if (resetGameContentScale2) _resetGameContentScaleRef = resetGameContentScale2;
     if (adjustToolbarForSpace2) _adjustToolbarForSpaceRef = adjustToolbarForSpace2;
@@ -14458,7 +14617,7 @@ ${firstResult}`;
         console.log(`[${SCRIPT_NAME}] \u8FDB\u5165\u5168\u5C4F\u6A21\u5F0F`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u8FDB\u5165\u5168\u5C4F\u5931\u8D25:`, e);
-        if (_showToastRef10) _showToastRef10("\u5168\u5C4F\u8BF7\u6C42\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6D4F\u89C8\u5668\u6743\u9650");
+        if (_showToastRef9) _showToastRef9("\u5168\u5C4F\u8BF7\u6C42\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6D4F\u89C8\u5668\u6743\u9650");
       }
     }
   }
@@ -14485,7 +14644,7 @@ ${firstResult}`;
   }
 
   // src/ui/toast.js
-  function showToast5(message, duration = 2500) {
+  function showToast4(message, duration = 2500) {
     const mountRoot = getModalMountRoot();
     const $existing = $(mountRoot).find(".gal-toast");
     if ($existing.length) $existing.remove();
@@ -15098,7 +15257,7 @@ ${firstResult}`;
     if ($sendTextarea.length && $sendButton.length) {
       $sendTextarea.val(text);
       $sendButton.click();
-      showToast5("\u6D88\u606F\u5DF2\u53D1\u9001");
+      showToast4("\u6D88\u606F\u5DF2\u53D1\u9001");
     } else {
       console.error(`[${SCRIPT_NAME}] \u672A\u627E\u5230\u53D1\u9001\u6309\u94AE`);
     }
@@ -15123,19 +15282,19 @@ ${firstResult}`;
     const $regenerate = $(topWindow.document).find("#option_regenerate");
     if ($regenerate.length) {
       $regenerate.click();
-      showToast5("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
+      showToast4("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
     } else {
       try {
         if (topWindow.SillyTavern && topWindow.SillyTavern.Generate) {
           topWindow.SillyTavern.Generate();
-          showToast5("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
+          showToast4("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
         } else {
           console.warn(`[${SCRIPT_NAME}] \u672A\u627E\u5230 #option_regenerate`);
-          showToast5("\u672A\u627E\u5230\u91CD\u65B0\u751F\u6210\u6309\u94AE");
+          showToast4("\u672A\u627E\u5230\u91CD\u65B0\u751F\u6210\u6309\u94AE");
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u91CD\u65B0\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u91CD\u65B0\u751F\u6210\u5931\u8D25");
+        showToast4("\u91CD\u65B0\u751F\u6210\u5931\u8D25");
         isRerolling = false;
       }
     }
@@ -15168,7 +15327,7 @@ ${firstResult}`;
         setSkipTimer(setTimeout(doSkip, settings.skipSpeed * 1e3));
       } else {
         stopSkipping();
-        showToast5("\u5DF2\u5FEB\u8FDB\u5230\u6700\u540E");
+        showToast4("\u5DF2\u5FEB\u8FDB\u5230\u6700\u540E");
       }
     };
     void doSkip();
@@ -15186,7 +15345,7 @@ ${firstResult}`;
     if (getIsRewinding()) return;
     setIsRewinding(true);
     const settings = getSettings();
-    showToast5("\u5FEB\u901F\u56DE\u9000\u4E2D...");
+    showToast4("\u5FEB\u901F\u56DE\u9000\u4E2D...");
     const $btn = $('#gal-global-overlay [data-action="prev"]');
     $btn.addClass("active");
     const doRewind = async () => {
@@ -15204,7 +15363,7 @@ ${firstResult}`;
         rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
       } else {
         stopRewinding();
-        showToast5("\u5DF2\u56DE\u9000\u5230\u5F00\u5934");
+        showToast4("\u5DF2\u56DE\u9000\u5230\u5F00\u5934");
       }
     };
     void doRewind();
@@ -15232,7 +15391,7 @@ ${firstResult}`;
         TTSManager.speak(prevSegment, segmentId);
       }
     } else {
-      showToast5("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
+      showToast4("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
     }
   }
   function triggerNextSegment() {
@@ -15408,7 +15567,7 @@ ${firstResult}`;
       } else {
         $textarea.val(currentVal + " " + playerChoice).trigger("input").trigger("change");
       }
-      showToast5(`\u5DF2\u9009\u62E9: ${optionValue.substring(0, 20)}${optionValue.length > 20 ? "..." : ""}`);
+      showToast4(`\u5DF2\u9009\u62E9: ${optionValue.substring(0, 20)}${optionValue.length > 20 ? "..." : ""}`);
       if ($sendButton.length) {
         setTimeout(() => {
           $sendButton.click();
@@ -15776,15 +15935,17 @@ ${firstResult}`;
   // src/ui/process-message.js
   var messageSegmentState6 = GalgameStore.cache.segments;
   var RE_CLOSED_P3 = /<\/p>/i;
-  var _updateGlobalOverlayContentRef4 = null;
+  var _updateGlobalOverlayContentRef3 = null;
   var _applySettingsToUIRef2 = null;
   var _handleRealTimeBackgroundGenerationRef = null;
   var _handleBananaBackgroundGenerationRef = null;
-  function setProcessMessageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, applySettingsToUI: applySettingsToUI2, handleRealTimeBackgroundGeneration: handleRealTimeBackgroundGeneration2, handleBananaBackgroundGeneration: handleBananaBackgroundGeneration2 }) {
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
+  var _handleNovelAIBackgroundGenerationRef = null;
+  function setProcessMessageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, applySettingsToUI: applySettingsToUI2, handleRealTimeBackgroundGeneration: handleRealTimeBackgroundGeneration2, handleBananaBackgroundGeneration: handleBananaBackgroundGeneration2, handleNovelAIBackgroundGeneration: handleNovelAIBackgroundGeneration2 }) {
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
     if (applySettingsToUI2) _applySettingsToUIRef2 = applySettingsToUI2;
     if (handleRealTimeBackgroundGeneration2) _handleRealTimeBackgroundGenerationRef = handleRealTimeBackgroundGeneration2;
     if (handleBananaBackgroundGeneration2) _handleBananaBackgroundGenerationRef = handleBananaBackgroundGeneration2;
+    if (handleNovelAIBackgroundGeneration2) _handleNovelAIBackgroundGenerationRef = handleNovelAIBackgroundGeneration2;
   }
   function processNewMessage(mesNode) {
     injectGalgameButton(mesNode);
@@ -15816,8 +15977,8 @@ ${firstResult}`;
         options: []
       };
       const isLastAi2 = $mes.nextAll('.mes[is_user!="true"]').length === 0;
-      if (isLastAi2 && _updateGlobalOverlayContentRef4) {
-        _updateGlobalOverlayContentRef4(mesId, loadingParsed);
+      if (isLastAi2 && _updateGlobalOverlayContentRef3) {
+        _updateGlobalOverlayContentRef3(mesId, loadingParsed);
         showGlobalOverlay();
         const pending = getPendingOptions();
         if (pending && pending.length > 0) {
@@ -15827,27 +15988,22 @@ ${firstResult}`;
       return;
     }
     let parsed = parseGalgameContent(contentToProcess);
-    if (settings.realTimeBackgroundGen && parsed.backgroundChanges && _handleRealTimeBackgroundGenerationRef) {
-      for (const bgChange of parsed.backgroundChanges) {
-        if (bgChange.generationTags) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1 ComfyUI \u80CC\u666F\u751F\u6210: "${bgChange.scene}"`);
-          _handleRealTimeBackgroundGenerationRef(bgChange.scene, bgChange.generationTags);
-        }
-      }
-    }
-    if (settings.wallhaven?.enabled && parsed.backgroundChanges) {
-      for (const bgChange of parsed.backgroundChanges) {
-        if (bgChange.wallhavenTags) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1 Wallhaven \u80CC\u666F\u641C\u7D22: "${bgChange.scene}"`);
-          handleWallhavenBackgroundSearch(bgChange.scene, bgChange.wallhavenTags);
-        }
-      }
-    }
-    if (settings.bananaImageGen?.enabled && parsed.backgroundChanges && _handleBananaBackgroundGenerationRef) {
-      for (const bgChange of parsed.backgroundChanges) {
-        if (bgChange.bananaPrompt) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1\u5927\u9999\u8549\u80CC\u666F\u751F\u6210: "${bgChange.scene}"`);
-          _handleBananaBackgroundGenerationRef(bgChange.scene, bgChange.bananaPrompt);
+    if (parsed.backgroundChanges) {
+      const bgSrc = settings.bgImageSource || "none";
+      const bgDispatch = {
+        comfyui: { tagKey: "generationTags", handler: _handleRealTimeBackgroundGenerationRef, label: "ComfyUI \u80CC\u666F\u751F\u6210" },
+        banana: { tagKey: "bananaPrompt", handler: _handleBananaBackgroundGenerationRef, label: "\u5927\u9999\u8549\u80CC\u666F\u751F\u6210" },
+        novelai: { tagKey: "generationTags", handler: _handleNovelAIBackgroundGenerationRef, label: "NovelAI \u80CC\u666F\u751F\u6210" },
+        wallhaven: { tagKey: "wallhavenTags", handler: handleWallhavenBackgroundSearch, label: "Wallhaven \u80CC\u666F\u641C\u7D22" }
+      };
+      const entry = bgDispatch[bgSrc];
+      if (entry && entry.handler) {
+        for (const bgChange of parsed.backgroundChanges) {
+          const tags = bgChange[entry.tagKey];
+          if (tags) {
+            console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1 ${entry.label}: "${bgChange.scene}"`);
+            entry.handler(bgChange.scene, tags);
+          }
         }
       }
     }
@@ -15883,8 +16039,8 @@ ${firstResult}`;
     Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, "process-message");
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
     if (isLastAi) {
-      if (_updateGlobalOverlayContentRef4) {
-        _updateGlobalOverlayContentRef4(mesId, parsed);
+      if (_updateGlobalOverlayContentRef3) {
+        _updateGlobalOverlayContentRef3(mesId, parsed);
       }
       showGlobalOverlay();
       requestAnimationFrame(() => {
@@ -15917,11 +16073,11 @@ ${firstResult}`;
   var CUSTOM_TIME_HTML_KEY2 = "gal_custom_time_html";
   var _showSettingsPanelRef2 = null;
   var _showSpriteUploadDialogRef2 = null;
-  var _updateGlobalOverlayContentRef5 = null;
+  var _updateGlobalOverlayContentRef4 = null;
   function setEventsRefs({ showSettingsPanel: showSettingsPanel2, showSpriteUploadDialog: showSpriteUploadDialog2, updateGlobalOverlayContent: updateGlobalOverlayContent2 }) {
     if (showSettingsPanel2) _showSettingsPanelRef2 = showSettingsPanel2;
     if (showSpriteUploadDialog2) _showSpriteUploadDialogRef2 = showSpriteUploadDialog2;
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef5 = updateGlobalOverlayContent2;
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
   }
   function setupGlobalEventListeners() {
     console.log(`[${SCRIPT_NAME}] \u8BBE\u7F6E\u5168\u5C40\u4E8B\u4EF6\u59D4\u6258...`);
@@ -15989,7 +16145,7 @@ ${firstResult}`;
           $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
         }
       }, 150);
-      showToast5("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
+      showToast4("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
     });
     $(doc).on("click", ".gal-open-btn", async function(e) {
       console.log(`[${SCRIPT_NAME}] \u70B9\u51FB\u3010\u8FDB\u5165Galgame\u6A21\u5F0F\u3011\u6309\u94AE`);
@@ -16001,7 +16157,7 @@ ${firstResult}`;
       setIsEnabled(true);
       setCurrentCharEnabled(true);
       updateButtonState();
-      showToast5("\u6B63\u5728\u5F00\u542F Galgame \u6A21\u5F0F...");
+      showToast4("\u6B63\u5728\u5F00\u542F Galgame \u6A21\u5F0F...");
       try {
         await injectCOTToWorldbook();
         await enableWorldbookGlobally();
@@ -16020,11 +16176,11 @@ ${firstResult}`;
       if (contentToProcess) {
         const parsed = parseGalgameContent(contentToProcess);
         detectAndCaptureCg(mesId, $mes[0], parsed);
-        if (parsed.segments.length > 0 && _updateGlobalOverlayContentRef5) {
-          await _updateGlobalOverlayContentRef5(mesId, parsed);
+        if (parsed.segments.length > 0 && _updateGlobalOverlayContentRef4) {
+          await _updateGlobalOverlayContentRef4(mesId, parsed);
           showGlobalOverlay();
           if (settings.hideOtherFloors) hideNonLastFloors();
-          showToast5("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
+          showToast4("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
         }
       } else {
         if (settings.hideOtherFloors) hideNonLastFloors();
@@ -16076,13 +16232,13 @@ ${firstResult}`;
       }
       closeMobileMenu();
       console.log(`[${SCRIPT_NAME}] \u70B9\u51FB\u8BBE\u7F6E\u6309\u94AE`);
-      showToast5("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
+      showToast4("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
       if (_showSettingsPanelRef2) _showSettingsPanelRef2();
     });
     $(doc).on("click", '#gal-global-overlay [data-action="open-settings"]', function(e) {
       e.stopPropagation();
       closeMobileMenu();
-      showToast5("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
+      showToast4("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
       if (_showSettingsPanelRef2) _showSettingsPanelRef2();
     });
     $(doc).on("click", "#gal-mobile-menu .gal-menu-btn", function() {
@@ -16116,17 +16272,17 @@ ${firstResult}`;
       }
       const mesId = $("#gal-global-overlay .gal-game-container").attr("data-mes-id");
       if (!mesId) {
-        showToast5("\u672A\u627E\u5230\u5F53\u524D\u6D88\u606F");
+        showToast4("\u672A\u627E\u5230\u5F53\u524D\u6D88\u606F");
         return;
       }
       const $mes = $(`.mes[mesid="${mesId}"]`);
       if (!$mes.length) {
-        showToast5("\u672A\u627E\u5230\u6D88\u606F\u5143\u7D20");
+        showToast4("\u672A\u627E\u5230\u6D88\u606F\u5143\u7D20");
         return;
       }
       const mesText = $mes.find(".mes_text")[0];
       if (!mesText) {
-        showToast5("\u672A\u627E\u5230\u6D88\u606F\u5185\u5BB9");
+        showToast4("\u672A\u627E\u5230\u6D88\u606F\u5185\u5BB9");
         return;
       }
       const embeddedNodes = [];
@@ -16139,7 +16295,7 @@ ${firstResult}`;
         }
       }
       if (embeddedNodes.length === 0) {
-        showToast5("\u5F53\u524D\u6D88\u606F\u6CA1\u6709\u5D4C\u5165\u7684\u754C\u9762\u5185\u5BB9");
+        showToast4("\u5F53\u524D\u6D88\u606F\u6CA1\u6709\u5D4C\u5165\u7684\u754C\u9762\u5185\u5BB9");
         return;
       }
       const wasHidden = $mes.hasClass("gal-hidden");
@@ -16183,7 +16339,7 @@ ${firstResult}`;
       if (pending && pending.length > 0) {
         renderGalgameChoices(pending);
       } else {
-        showToast5("\u5F53\u524D\u6CA1\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879");
+        showToast4("\u5F53\u524D\u6CA1\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879");
       }
     });
     $(doc).on("click", '#gal-global-overlay [data-action="next"]', async function(e) {
@@ -16202,7 +16358,7 @@ ${firstResult}`;
           TTSManager.speak(nextSegment, segmentId);
         }
       } else {
-        showToast5("\u5DF2\u662F\u6700\u540E\u4E00\u6BB5");
+        showToast4("\u5DF2\u662F\u6700\u540E\u4E00\u6BB5");
       }
     });
     $(doc).on("click", '#gal-global-overlay [data-action="auto"]', function(e) {
@@ -16297,9 +16453,13 @@ ${firstResult}`;
 
   // src/ui/settings-panel.js
   var enhancedModeState3 = GalgameStore.enhancedMode;
-  var _showAssetManagerModalRef = null;
-  function setSettingsPanelRefs({ showAssetManagerModal: showAssetManagerModal3 }) {
-    if (showAssetManagerModal3) _showAssetManagerModalRef = showAssetManagerModal3;
+  var _buildAssetsPaneRef = null;
+  var _bindAssetsPaneRef = null;
+  var _assetStylesRef = null;
+  function setSettingsPanelRefs({ buildAssetsPane, bindAssetsPane, assetStyles }) {
+    if (buildAssetsPane) _buildAssetsPaneRef = buildAssetsPane;
+    if (bindAssetsPane) _bindAssetsPaneRef = bindAssetsPane;
+    if (assetStyles) _assetStylesRef = assetStyles;
   }
   function applySettingsToUI() {
     const settings = getSettings();
@@ -16423,12 +16583,16 @@ ${firstResult}`;
         break;
     }
   }
-  async function showSettingsPanel() {
-    const existingPanel = $("#gal-settings-panel");
-    if (existingPanel.length) {
-      existingPanel.remove();
-      return;
+  async function showSettingsPanel(topTab, subTab) {
+    const $existing = $("#gal-unified-panel");
+    if ($existing.length) {
+      if (topTab === void 0) {
+        $existing.remove();
+        return;
+      }
+      $existing.remove();
     }
+    topTab = topTab || "settings";
     const settings = getSettings();
     const isEnabled = getIsEnabled();
     const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
@@ -16458,14 +16622,24 @@ ${firstResult}`;
           </label>
         `).join("")}
       </div>`;
+    let assetsHtml = "";
+    if (_buildAssetsPaneRef) {
+      assetsHtml = await _buildAssetsPaneRef(subTab);
+    }
+    const assetStyles = _assetStylesRef ? _assetStylesRef() : "";
     const panelHtml = `
-    <div class="gal-config-modal" id="gal-settings-panel">
+    <div class="gal-config-modal" id="gal-unified-panel">
       <div class="gal-config-panel">
-        <div class="gal-config-header">
-          <div class="gal-config-title"><i class="fa-solid fa-gamepad"></i> Galgame \u8BBE\u7F6E</div>
+        <!-- L1 Tab Header -->
+        <div class="gal-l1-tab-header">
+          <div class="gal-l1-tab-btn ${topTab === "settings" ? "active" : ""}" data-l1-tab="settings"><i class="fa-solid fa-gear"></i> <span>\u57FA\u7840\u8BBE\u7F6E</span></div>
+          <div class="gal-l1-tab-btn ${topTab === "assets" ? "active" : ""}" data-l1-tab="assets"><i class="fa-solid fa-folder-open"></i> <span>\u8D44\u6E90\u7BA1\u7406</span></div>
+          <div style="flex:1;"></div>
           <button class="gal-config-close" id="gal-settings-close"><i class="fa-solid fa-times"></i></button>
         </div>
-        <div class="gal-config-body" style="padding: 24px;">
+
+        <!-- L1 Pane: \u57FA\u7840\u8BBE\u7F6E -->
+        <div class="gal-config-body" data-l1-pane="settings" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "settings" ? "display: none;" : ""}">
           <!-- \u4E3B\u5F00\u5173 -->
           <div style="text-align: center; margin-bottom: 24px;">
             <button id="gal-main-toggle" class="${isEnabled ? "gal-toggle-on" : "gal-toggle-off"}"
@@ -16700,48 +16874,6 @@ ${firstResult}`;
 
           <div class="gal-settings-divider"></div>
 
-          <!-- ComfyUI -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI \u6587\u751F\u56FE</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">API \u5730\u5740</span>
-              <div class="gal-settings-control">
-                <input type="text" id="gal-comfyui-url" value="${getComfyUISettings().apiUrl}" placeholder="http://127.0.0.1:8188" style="width: 180px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <button class="gal-action-btn" id="gal-comfyui-test" style="width: 100%; justify-content: center; padding: 10px;"><i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5</button>
-            </div>
-            <div class="gal-settings-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="gal-settings-label" style="font-weight: 700;">\u5DE5\u4F5C\u6D41\u7BA1\u7406 (.json)</span>
-                <input type="file" id="gal-comfy-import-input" accept=".json" style="display: none;">
-                <button class="gal-action-btn" id="gal-comfy-import-btn" style="padding: 4px 10px; font-size: 0.8rem;"><i class="fa-solid fa-file-import"></i> \u5BFC\u5165 JSON</button>
-              </div>
-              <div id="gal-workflow-list" style="max-height: 120px; overflow-y: auto; background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 8px;">
-                <div style="text-align: center; color: #999; font-size: 0.85rem; padding: 10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">\u9ED8\u8BA4\u89D2\u8272 Workflow</span>
-              <select id="gal-comfy-def-char" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="default_char">\u5185\u7F6E SDXL Turbo</option></select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">\u9ED8\u8BA4 Checkpoint \u6A21\u578B</span>
-              <select id="gal-comfy-def-checkpoint" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="">(\u52A0\u8F7D\u4E2D...)</option></select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">\u9ED8\u8BA4\u80CC\u666F Workflow</span>
-              <select id="gal-comfy-def-bg" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="default_bg">\u5185\u7F6E SDXL Turbo</option></select>
-            </div>
-            <div class="gal-settings-row" style="flex-direction: column; align-items: stretch;">
-              <span class="gal-settings-label" style="margin-bottom: 8px;">\u8D1F\u9762\u63D0\u793A\u8BCD</span>
-              <textarea id="gal-comfyui-negative" placeholder="lowres, bad anatomy..." style="width: 100%; height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
           <!-- \u52A0\u5F3A\u6A21\u5F0F -->
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-bolt" style="color: #ff9800;"></i> \u52A0\u5F3A\u6A21\u5F0F</div>
@@ -16807,11 +16939,15 @@ ${firstResult}`;
 
           <div class="gal-settings-divider"></div>
 
-          <!-- \u529F\u80FD\u6309\u94AE\u7EC4 -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;">
-            <button class="gal-panel-btn" id="gal-open-sprite-manager"><i class="fa-solid fa-images"></i><span>\u7ACB\u7ED8\u7BA1\u7406</span></button>
-            <button class="gal-panel-btn secondary" id="gal-refresh-views"><i class="fa-solid fa-sync"></i><span>\u5237\u65B0\u89C6\u56FE</span></button>
+          <!-- \u5237\u65B0\u89C6\u56FE -->
+          <div style="margin-top: 16px;">
+            <button class="gal-panel-btn secondary" id="gal-refresh-views" style="width: 100%;"><i class="fa-solid fa-sync"></i><span>\u5237\u65B0\u89C6\u56FE</span></button>
           </div>
+        </div>
+
+        <!-- L1 Pane: \u8D44\u6E90\u7BA1\u7406 -->
+        <div data-l1-pane="assets" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "assets" ? "display: none;" : ""}">
+          ${assetsHtml}
         </div>
       </div>
     </div>
@@ -16840,10 +16976,18 @@ ${firstResult}`;
       .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
       .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
       .gal-panel-btn i { font-size: 1.3rem; }
+
+      /* L1 Tab Header */
+      .gal-l1-tab-header { display:flex; align-items:center; background:var(--SmartThemeBotMesBlurTintColor, #1a1a2e); padding:0; border-bottom:2px solid ${THEME.accent}; }
+      .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
+      .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
+      .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
+
+      ${assetStyles}
     </style>
   `;
     $(getModalMountRoot()).append(panelHtml);
-    const $panel = $("#gal-settings-panel");
+    const $panel = $("#gal-unified-panel");
     const refreshTtsVoiceOptions = async () => {
       const $sel = $("#gal-tts-default-speaker");
       const $hint = $("#gal-tts-default-speaker-hint");
@@ -16873,6 +17017,13 @@ ${firstResult}`;
       }
     }
     refreshTtsVoiceOptions();
+    $panel.find(".gal-l1-tab-btn").on("click", function() {
+      const tab = $(this).data("l1-tab");
+      $panel.find(".gal-l1-tab-btn").removeClass("active");
+      $(this).addClass("active");
+      $panel.find("[data-l1-pane]").hide();
+      $panel.find(`[data-l1-pane="${tab}"]`).show();
+    });
     $("#gal-settings-close").on("click", () => $panel.remove());
     $panel.on("click", function(e) {
       if (e.target === this) $panel.remove();
@@ -16888,7 +17039,7 @@ ${firstResult}`;
         await enableWorldbookGlobally();
         applyGalgameMode();
         if (settings.hideOtherFloors) hideNonLastFloors();
-        showToast5("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
+        showToast4("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
       } else {
         $(this).removeClass("gal-toggle-on").addClass("gal-toggle-off").html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED</span>');
         await disableWorldbookGlobally();
@@ -16897,7 +17048,7 @@ ${firstResult}`;
           const $lastMes = $("#chat > .mes").last();
           if ($lastMes.length) $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
         }, 150);
-        showToast5("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
+        showToast4("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
       }
     });
     $("#gal-font-size").on("input", function() {
@@ -16960,7 +17111,7 @@ ${firstResult}`;
       enhancedConfig.enabled = enabled;
       saveSettings();
       $("#gal-enhanced-hint, #gal-enhanced-config").toggle(enabled);
-      showToast5(enabled ? "\u5DF2\u542F\u7528\u52A0\u5F3A\u6A21\u5F0F" : "\u5DF2\u7981\u7528\u52A0\u5F3A\u6A21\u5F0F");
+      showToast4(enabled ? "\u5DF2\u542F\u7528\u52A0\u5F3A\u6A21\u5F0F" : "\u5DF2\u7981\u7528\u52A0\u5F3A\u6A21\u5F0F");
     });
     $("#gal-enhanced-use-profile").on("change", function() {
       const enhancedConfig = ensureEnhancedModeSettings();
@@ -17027,7 +17178,7 @@ ${firstResult}`;
     $("#gal-enhanced-view-prompts").on("click", function() {
       const prompts = enhancedModeState3.lastPrompts;
       if (!prompts) {
-        showToast5("\u6682\u65E0\u63D0\u793A\u8BCD\u8BB0\u5F55");
+        showToast4("\u6682\u65E0\u63D0\u793A\u8BCD\u8BB0\u5F55");
         return;
       }
       const esc = (str) => (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -17066,7 +17217,7 @@ ${prompts.systemPrompt}
 ${prompts.firstResult}
 
 \u3010User Prompt\u3011
-${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F")).catch(() => showToast5("\u590D\u5236\u5931\u8D25"));
+${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F")).catch(() => showToast4("\u590D\u5236\u5931\u8D25"));
       });
     });
     $("#gal-skip-speed").on("input", function() {
@@ -17113,7 +17264,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const $charLayer = $(".gal-layer-character");
       if (enabled) $charLayer.addClass("tts-mode-enabled");
       else $charLayer.removeClass("tts-mode-enabled");
-      injectCOTToWorldbook().then(() => showToast5(enabled ? "TTS\u5DF2\u542F\u7528\uFF0CCOT\u5DF2\u66F4\u65B0" : "TTS\u5DF2\u5173\u95ED\uFF0CCOT\u5DF2\u66F4\u65B0"));
+      injectCOTToWorldbook().then(() => showToast4(enabled ? "TTS\u5DF2\u542F\u7528\uFF0CCOT\u5DF2\u66F4\u65B0" : "TTS\u5DF2\u5173\u95ED\uFF0CCOT\u5DF2\u66F4\u65B0"));
     });
     $("#gal-tts-provider").on("change", async function() {
       settings.ttsProvider = $(this).val();
@@ -17124,7 +17275,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       } catch (e) {
       }
       await refreshTtsVoiceOptions();
-      injectCOTToWorldbook().then(() => showToast5("TTS\u5F15\u64CE\u5DF2\u5207\u6362\uFF0CCOT\u5DF2\u66F4\u65B0")).catch(() => showToast5("TTS\u5F15\u64CE\u5DF2\u5207\u6362"));
+      injectCOTToWorldbook().then(() => showToast4("TTS\u5F15\u64CE\u5DF2\u5207\u6362\uFF0CCOT\u5DF2\u66F4\u65B0")).catch(() => showToast4("TTS\u5F15\u64CE\u5DF2\u5207\u6362"));
     });
     $("#gal-tts-autoplay").on("change", function() {
       settings.ttsAutoPlay = $(this).is(":checked");
@@ -17176,11 +17327,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       try {
         parsed = JSON.parse($("#gal-gpt-sovits-voices-json").val() || "[]");
       } catch (e) {
-        showToast5("\u97F3\u8272\u5217\u8868 JSON \u89E3\u6790\u5931\u8D25");
+        showToast4("\u97F3\u8272\u5217\u8868 JSON \u89E3\u6790\u5931\u8D25");
         return;
       }
       if (!Array.isArray(parsed)) {
-        showToast5("\u97F3\u8272\u5217\u8868\u5FC5\u987B\u662F\u6570\u7EC4");
+        showToast4("\u97F3\u8272\u5217\u8868\u5FC5\u987B\u662F\u6570\u7EC4");
         return;
       }
       const normalized = normalizeGptSoVitsVoicesForStore(parsed);
@@ -17194,11 +17345,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       let msg = `GPT-SoVITS \u97F3\u8272\u5217\u8868\u5DF2\u4FDD\u5B58\uFF1A${normalized.voices.length} \u6761`;
       if (normalized.ignoredCount > 0) msg += `\uFF08\u5FFD\u7565\u65E0\u6548\u6761\u76EE ${normalized.ignoredCount} \u6761\uFF09`;
       if (normalized.missingRefCount > 0) msg += `\uFF08${normalized.missingRefCount} \u6761\u7F3A refAudioPath\uFF09`;
-      injectCOTToWorldbook().then(() => showToast5(`${msg}\uFF0CCOT\u5DF2\u66F4\u65B0`)).catch(() => showToast5(msg));
+      injectCOTToWorldbook().then(() => showToast4(`${msg}\uFF0CCOT\u5DF2\u66F4\u65B0`)).catch(() => showToast4(msg));
     });
     $("#gal-gpt-sovits-test").on("click", () => {
       if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) {
-        showToast5("\u8BF7\u5148\u5207\u6362\u4E3A GPT-SoVITS");
+        showToast4("\u8BF7\u5148\u5207\u6362\u4E3A GPT-SoVITS");
         return;
       }
       const text = ($("#gal-gpt-sovits-test-text").val() || "").trim() || "\u4F60\u597D\uFF0C\u8FD9\u662F\u4E00\u6BB5 GPT-SoVITS \u914D\u97F3\u6D4B\u8BD5\u3002";
@@ -17210,130 +17361,30 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const targetVoice = selectedUsable ? selectedVoice : fallbackVoice;
       const voiceName = targetVoice?.name || "";
       if (!voiceName) {
-        showToast5("\u8BF7\u5148\u914D\u7F6E\u81F3\u5C11\u4E00\u4E2A\u53EF\u7528\u97F3\u8272\uFF08refAudioPath \u4E0D\u80FD\u4E3A\u7A7A\uFF09");
+        showToast4("\u8BF7\u5148\u914D\u7F6E\u81F3\u5C11\u4E00\u4E2A\u53EF\u7528\u97F3\u8272\uFF08refAudioPath \u4E0D\u80FD\u4E3A\u7A7A\uFF09");
         return;
       }
       if (selectedVoiceName !== voiceName) {
         settings.ttsDefaultSpeaker = voiceName;
         saveSettings();
         $("#gal-tts-default-speaker").val(voiceName);
-        showToast5(`\u5DF2\u81EA\u52A8\u5207\u6362\u8BD5\u542C\u97F3\u8272\uFF1A${voiceName}`);
+        showToast4(`\u5DF2\u81EA\u52A8\u5207\u6362\u8BD5\u542C\u97F3\u8272\uFF1A${voiceName}`);
       }
       TTSManager.stop();
       TTSManager.speak({ type: "dialogue", speaker: "", text, tts: { speaker: voiceName } }, `gpt_sovits_test_${Date.now()}`);
-    });
-    $("#gal-open-sprite-manager").on("click", () => {
-      $panel.remove();
-      if (_showAssetManagerModalRef) _showAssetManagerModalRef();
     });
     $("#gal-refresh-views").on("click", () => {
       if (getIsEnabled()) {
         applyGalgameMode();
         if (settings.hideOtherFloors) hideNonLastFloors();
-        showToast5("\u89C6\u56FE\u5DF2\u5237\u65B0");
+        showToast4("\u89C6\u56FE\u5DF2\u5237\u65B0");
       } else {
-        showToast5("\u8BF7\u5148\u5F00\u542F Galgame \u6A21\u5F0F");
+        showToast4("\u8BF7\u5148\u5F00\u542F Galgame \u6A21\u5F0F");
       }
     });
-    $("#gal-comfyui-url").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.apiUrl = $(this).val().trim();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfyui-negative").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.negativePrompt = $(this).val();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfyui-test").on("click", async function() {
-      $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6D4B\u8BD5\u4E2D...');
-      const ok = await ComfyUIAPI.checkConnection();
-      $(this).prop("disabled", false).html('<i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5');
-      showToast5(ok ? "ComfyUI \u8FDE\u63A5\u6210\u529F\uFF01" : "ComfyUI \u8FDE\u63A5\u5931\u8D25");
-    });
-    function renderWorkflowList() {
-      const workflows = getComfyWorkflows();
-      const $list = $("#gal-workflow-list");
-      const $selChar = $("#gal-comfy-def-char");
-      const $selBg = $("#gal-comfy-def-bg");
-      const cs = getComfyUISettings();
-      $list.empty();
-      $selChar.html('<option value="default_char">\u5185\u7F6E SDXL Turbo</option>');
-      $selBg.html('<option value="default_bg">\u5185\u7F6E SDXL Turbo</option>');
-      const keys = Object.keys(workflows);
-      if (keys.length === 0) {
-        $list.html('<div style="text-align:center;color:#999;font-size:0.85rem;padding:10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>');
-      } else {
-        keys.forEach((id) => {
-          const wf = workflows[id];
-          const $item = $(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #eee;font-size:0.9rem;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px;" title="${wf.name}">${wf.name}</span><i class="fa-solid fa-trash" style="color:#ff4d4d;cursor:pointer;padding:4px;" title="\u5220\u9664"></i></div>`);
-          $item.find(".fa-trash").on("click", () => {
-            if (confirm(`\u5220\u9664\u5DE5\u4F5C\u6D41 "${wf.name}"?`)) {
-              delete workflows[id];
-              saveComfyWorkflows(workflows);
-              renderWorkflowList();
-            }
-          });
-          $list.append($item);
-          $selChar.append(`<option value="${id}">${wf.name}</option>`);
-          $selBg.append(`<option value="${id}">${wf.name}</option>`);
-        });
-      }
-      $selChar.val(cs.defaultCharWorkflow || "default_char");
-      $selBg.val(cs.defaultBgWorkflow || "default_bg");
+    if (_bindAssetsPaneRef) {
+      _bindAssetsPaneRef($panel, subTab);
     }
-    renderWorkflowList();
-    async function loadCheckpointsToSelect() {
-      const $sel = $("#gal-comfy-def-checkpoint");
-      const cs = getComfyUISettings();
-      try {
-        const models = await ComfyUIAPI.getModels(cs.apiUrl);
-        $sel.empty().append('<option value="">-- \u4F7F\u7528 Workflow\u9ED8\u8BA4 --</option>');
-        models.forEach((m) => $sel.append(`<option value="${m}">${m}</option>`));
-        if (cs.defaultCheckpoint) $sel.val(cs.defaultCheckpoint);
-      } catch (e) {
-        console.error(`[${SCRIPT_NAME}] \u52A0\u8F7D\u6A21\u578B\u5931\u8D25:`, e);
-        $sel.html('<option value="">(\u52A0\u8F7D\u5931\u8D25)</option>');
-      }
-    }
-    loadCheckpointsToSelect();
-    $("#gal-comfy-def-checkpoint").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.defaultCheckpoint = $(this).val();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfy-import-btn").on("click", () => $("#gal-comfy-import-input").click());
-    $("#gal-comfy-import-input").on("change", function() {
-      const file = this.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const json = JSON.parse(e.target.result);
-          const name = file.name.replace(".json", "");
-          const id = "wf_" + Date.now();
-          const workflows = getComfyWorkflows();
-          workflows[id] = { name, json };
-          saveComfyWorkflows(workflows);
-          renderWorkflowList();
-          showToast5(`\u5DF2\u5BFC\u5165: ${name}`);
-        } catch (err) {
-          showToast5("\u65E0\u6548\u7684 JSON \u6587\u4EF6");
-        }
-        $(this).val("");
-      };
-      reader.readAsText(file);
-    });
-    $("#gal-comfy-def-char").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.defaultCharWorkflow = $(this).val();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfy-def-bg").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.defaultBgWorkflow = $(this).val();
-      saveComfyUISettings(cs);
-    });
   }
 
   // src/ui/live2d-settings-modal.js
@@ -17948,7 +17999,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const sceneName = $(this).data("scene");
         if (confirm(`\u786E\u5B9A\u5220\u9664\u80CC\u666F\u300C${sceneName}\u300D\u5417\uFF1F`)) {
           await deleteBackground(sceneName);
-          showToast5(`\u5DF2\u5220\u9664\u80CC\u666F: ${sceneName}`);
+          showToast4(`\u5DF2\u5220\u9664\u80CC\u666F: ${sceneName}`);
           $modal.remove();
           showSpriteConfigModal();
         }
@@ -18121,9 +18172,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-batch-fetch-remote-btn").on("click", async function() {
       const text = $("#gal-batch-remote-urls").val().trim();
-      if (!text) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!text) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       const urls = text.split("\n").map((u) => u.trim()).filter((u) => u);
-      if (urls.length === 0) return showToast5("\u6CA1\u6709\u6709\u6548\u7684\u94FE\u63A5");
+      if (urls.length === 0) return showToast4("\u6CA1\u6709\u6709\u6548\u7684\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u4E0B\u8F7D\u9A8C\u8BC1\u4E2D...');
       let successCount = 0;
       const fetchImage = async (url) => {
@@ -18157,7 +18208,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (successCount > 0) {
         switchToTaggingView();
       } else {
-        showToast5("\u672A\u80FD\u83B7\u53D6\u4EFB\u4F55\u6709\u6548\u56FE\u7247\uFF0C\u8BF7\u68C0\u67E5\u94FE\u63A5");
+        showToast4("\u672A\u80FD\u83B7\u53D6\u4EFB\u4F55\u6709\u6548\u56FE\u7247\uFF0C\u8BF7\u68C0\u67E5\u94FE\u63A5");
       }
     });
     function switchToTaggingView() {
@@ -18241,7 +18292,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!item.name || !item.name.trim()) emptyNames++;
       });
       if (emptyNames > 0) {
-        return showToast5(`\u6709 ${emptyNames} \u5F20\u56FE\u7247\u672A\u586B\u5199\u573A\u666F\u540D\u79F0\uFF0C\u8BF7\u8865\u5145\u5B8C\u6574`);
+        return showToast4(`\u6709 ${emptyNames} \u5F20\u56FE\u7247\u672A\u586B\u5199\u573A\u666F\u540D\u79F0\uFF0C\u8BF7\u8865\u5145\u5B8C\u6574`);
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6B63\u5728\u4FDD\u5B58...');
       let failCount = 0;
@@ -18261,10 +18312,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
       if (failCount === 0) {
-        showToast5(`\u6210\u529F\u6279\u91CF\u4FDD\u5B58 ${batchItems.length} \u5F20\u80CC\u666F\uFF01`);
+        showToast4(`\u6210\u529F\u6279\u91CF\u4FDD\u5B58 ${batchItems.length} \u5F20\u80CC\u666F\uFF01`);
         closeDialog();
       } else {
-        showToast5(`\u4FDD\u5B58\u5B8C\u6210\uFF0C\u4F46\u6709 ${failCount} \u5F20\u5931\u8D25\uFF0C\u8BE6\u60C5\u8BF7\u770B\u63A7\u5236\u53F0`);
+        showToast4(`\u4FDD\u5B58\u5B8C\u6210\uFF0C\u4F46\u6709 ${failCount} \u5F20\u5931\u8D25\uFF0C\u8BE6\u60C5\u8BF7\u770B\u63A7\u5236\u53F0`);
         closeDialog();
       }
     });
@@ -18384,7 +18435,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-bg-fetch-btn").on("click", async function() {
       const url = $("#gal-bg-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -18402,7 +18453,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         };
         reader.readAsDataURL(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -18425,7 +18476,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const prompt2 = $("#gal-bg-comfyui-prompt").val().trim();
       const wfId = $("#gal-bg-comfy-wf-select").val();
       if (!prompt2) {
-        showToast5("\u8BF7\u8F93\u5165\u573A\u666F\u63CF\u8FF0");
+        showToast4("\u8BF7\u8F93\u5165\u573A\u666F\u63CF\u8FF0");
         return;
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u751F\u6210\u4E2D...');
@@ -18460,10 +18511,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         };
         reader.readAsDataURL(file);
-        showToast5("\u80CC\u666F\u751F\u6210\u6210\u529F\uFF01");
+        showToast4("\u80CC\u666F\u751F\u6210\u6210\u529F\uFF01");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] ComfyUI\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u751F\u6210\u5931\u8D25: " + e.message);
+        showToast4("\u751F\u6210\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-image"></i><span>\u751F\u6210\u80CC\u666F</span>');
       }
@@ -18517,14 +18568,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           reader.readAsArrayBuffer(selectedFile);
         });
         await saveBackground(sceneName, blob);
-        showToast5(`\u80CC\u666F\u5DF2\u4FDD\u5B58: ${sceneName}`);
+        showToast4(`\u80CC\u666F\u5DF2\u4FDD\u5B58: ${sceneName}`);
         if (getIsEnabled()) {
           injectCOTToWorldbook().catch((e) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e));
         }
         handleClose();
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u80CC\u666F\u5931\u8D25:`, e);
-        showToast5("\u4FDD\u5B58\u5931\u8D25");
+        showToast4("\u4FDD\u5B58\u5931\u8D25");
         $(this).prop("disabled", false).html('<i class="fa-solid fa-save"></i><span>\u4FDD\u5B58\u80CC\u666F</span>');
       }
     });
@@ -18807,7 +18858,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $modal.find("#gal-appearance-save").on("click", function() {
       const newPrompt = $modal.find("#gal-appearance-prompt-input").val().trim();
       setCharAppearancePrompt(characterId, newPrompt);
-      showToast5(`\u5DF2\u4FDD\u5B58 ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD`);
+      showToast4(`\u5DF2\u4FDD\u5B58 ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD`);
       $modal.remove();
       if (typeof onSave === "function") onSave(newPrompt);
     });
@@ -18816,7 +18867,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $("#gal-banana-appearance-picker").remove();
     const sprites = await getAllSprites();
     if (!sprites || sprites.length === 0) {
-      showToast5("\u6682\u65E0\u53EF\u7528\u7ACB\u7ED8\uFF0C\u8BF7\u5148\u4E0A\u4F20\u7ACB\u7ED8");
+      showToast4("\u6682\u65E0\u53EF\u7528\u7ACB\u7ED8\uFF0C\u8BF7\u5148\u4E0A\u4F20\u7ACB\u7ED8");
       return;
     }
     const grouped = /* @__PURE__ */ new Map();
@@ -19099,14 +19150,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const charName = $("#gal-sprite-character").val().trim() || characterId;
       const voiceName = $("#gal-tts-voice-select").val();
       if (!charName) {
-        showToast5("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       setCharacterTTSVoice(charName, voiceName);
       if (voiceName) {
-        showToast5(`\u5DF2\u7ED1\u5B9A: ${charName} \u2192 ${voiceName}`);
+        showToast4(`\u5DF2\u7ED1\u5B9A: ${charName} \u2192 ${voiceName}`);
       } else {
-        showToast5(`\u5DF2\u6E05\u9664 ${charName} \u7684\u97F3\u8272\u7ED1\u5B9A`);
+        showToast4(`\u5DF2\u6E05\u9664 ${charName} \u7684\u97F3\u8272\u7ED1\u5B9A`);
       }
     });
     $("#gal-sprite-character").on("input", function() {
@@ -19130,7 +19181,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-sprite-fetch-btn").on("click", async function() {
       const url = $("#gal-sprite-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -19140,7 +19191,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const file = new File([blob], "remote_image.png", { type: blob.type });
         handleFileSelect(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -19196,7 +19247,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const wfId = $("#gal-comfy-wf-select").val();
       const checkpointOverride = $("#gal-comfy-checkpoint-select").val();
       if (!charName) {
-        showToast5("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       const appearancePrompt = getCharAppearancePrompt(charName);
@@ -19221,10 +19272,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const fileName = `comfyui_gen_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: "image/png" });
         handleFileSelect(file);
-        showToast5("\u7ACB\u7ED8\u751F\u6210\u6210\u529F\uFF01\u8BF7\u5728\u4E0A\u65B9\u88C1\u526A\u533A\u57DF\u8C03\u6574\u540E\u4FDD\u5B58");
+        showToast4("\u7ACB\u7ED8\u751F\u6210\u6210\u529F\uFF01\u8BF7\u5728\u4E0A\u65B9\u88C1\u526A\u533A\u57DF\u8C03\u6574\u540E\u4FDD\u5B58");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] ComfyUI\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u751F\u6210\u5931\u8D25: " + e.message);
+        showToast4("\u751F\u6210\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-sparkles"></i><span>\u751F\u6210\u7ACB\u7ED8</span>');
       }
@@ -19240,7 +19291,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const canvas = topWindow.document.getElementById("gal-crop-canvas");
       if (!canvas) {
         console.error("[Galgame\u754C\u9762\u63D2\u4EF6] \u672A\u627E\u5230\u88C1\u526A canvas");
-        showToast5("\u88C1\u526A\u533A\u57DF\u521D\u59CB\u5316\u5931\u8D25");
+        showToast4("\u88C1\u526A\u533A\u57DF\u521D\u59CB\u5316\u5931\u8D25");
         return;
       }
       const CANVAS_WIDTH = 640;
@@ -19261,13 +19312,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       };
       reader.onerror = (e) => {
         console.error("[Galgame\u754C\u9762\u63D2\u4EF6] \u6587\u4EF6\u8BFB\u53D6\u9519\u8BEF:", e);
-        showToast5("\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25");
+        showToast4("\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25");
       };
       reader.readAsDataURL(file);
       try {
         await imageLoadPromise;
       } catch (e) {
-        showToast5("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5");
+        showToast4("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5");
         return;
       }
       const ctx = canvas.getContext("2d");
@@ -19410,14 +19461,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const charName = $("#gal-sprite-character").val().trim();
       const expr = $("#gal-sprite-expression").val();
       if (!charName) {
-        showToast5("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       try {
         $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u5904\u7406\u4E2D...');
         const croppedBlob = await cropper.getCroppedBlob(400);
         await saveSprite(charName, expr, croppedBlob);
-        showToast5(`\u5DF2\u4FDD\u5B58: ${charName} - ${expr}`);
+        showToast4(`\u5DF2\u4FDD\u5B58: ${charName} - ${expr}`);
         $modal.remove();
         refreshGalgameViews();
         if (typeof onCloseCallback === "function") {
@@ -19429,7 +19480,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u7ACB\u7ED8\u5931\u8D25:`, e);
-        showToast5("\u4FDD\u5B58\u5931\u8D25");
+        showToast4("\u4FDD\u5B58\u5931\u8D25");
         $(this).prop("disabled", false).html('<i class="fa-solid fa-check"></i><span>\u4FDD\u5B58\u7ACB\u7ED8</span>');
       }
     });
@@ -19660,7 +19711,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     }
     $("#gal-batch-fetch-btn").on("click", async function() {
       const url = $("#gal-batch-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -19670,7 +19721,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const file = new File([blob], "remote_grid.png", { type: blob.type });
         handleFileSelect(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -19851,7 +19902,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         autoDetectGrid(loadedImage);
         renderGridPreview();
         updateMappingUI();
-        showToast5("\u5DF2\u91CD\u65B0\u68C0\u6D4B\u7F51\u683C");
+        showToast4("\u5DF2\u91CD\u65B0\u68C0\u6D4B\u7F51\u683C");
       }
     });
     const handleClose = () => {
@@ -19871,16 +19922,16 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $("#gal-batch-confirm").on("click", async function() {
       const charName = $("#gal-batch-character").val().trim();
       if (!charName) {
-        showToast5("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       if (!loadedImage) {
-        showToast5("\u8BF7\u5148\u4E0A\u4F20\u56FE\u7247");
+        showToast4("\u8BF7\u5148\u4E0A\u4F20\u56FE\u7247");
         return;
       }
       const validMappings = cellMappings.filter((m) => !m.skip && m.expression);
       if (validMappings.length === 0) {
-        showToast5("\u8BF7\u81F3\u5C11\u8BBE\u7F6E\u4E00\u4E2A\u8868\u60C5\u540D\u79F0");
+        showToast4("\u8BF7\u81F3\u5C11\u8BBE\u7F6E\u4E00\u4E2A\u8868\u60C5\u540D\u79F0");
         return;
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u5904\u7406\u4E2D...');
@@ -19928,9 +19979,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
       if (failedCount > 0) {
-        showToast5(`\u4FDD\u5B58\u5B8C\u6210: ${savedCount} \u6210\u529F, ${failedCount} \u5931\u8D25`);
+        showToast4(`\u4FDD\u5B58\u5B8C\u6210: ${savedCount} \u6210\u529F, ${failedCount} \u5931\u8D25`);
       } else {
-        showToast5(`\u5DF2\u4FDD\u5B58 ${savedCount} \u5F20\u7ACB\u7ED8`);
+        showToast4(`\u5DF2\u4FDD\u5B58 ${savedCount} \u5F20\u7ACB\u7ED8`);
       }
       loadedImage = null;
       $previewArea.hide();
@@ -20057,7 +20108,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const suggestedName = json.packageName || json.name;
         targetPackId = await showImportPackSelector(suggestedName);
         if (!targetPackId) {
-          showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
           return;
         }
       }
@@ -20090,10 +20141,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         }
       }
-      showToast5(`\u6210\u529F\u5BFC\u5165 ${count} \u4E2A\u8FDC\u7A0B\u8D44\u6E90\u94FE\u63A5`);
+      showToast4(`\u6210\u529F\u5BFC\u5165 ${count} \u4E2A\u8FDC\u7A0B\u8D44\u6E90\u94FE\u63A5`);
     } catch (e) {
       console.error("JSON\u5BFC\u5165\u5931\u8D25", e);
-      showToast5("JSON\u5BFC\u5165\u5931\u8D25: " + e.message);
+      showToast4("JSON\u5BFC\u5165\u5931\u8D25: " + e.message);
     }
   }
   var AssetIO = {
@@ -20118,7 +20169,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     },
     async exportAllAssets(remoteBaseUrl = null, packageName = null) {
       try {
-        showToast5("\u6B63\u5728\u51C6\u5907\u5BFC\u51FA...");
+        showToast4("\u6B63\u5728\u51C6\u5907\u5BFC\u51FA...");
         const zip = new (await this.loadJSZip())();
         const currentPackId = getCurrentPackId();
         const allPacks = await getAllImagePacks();
@@ -20178,7 +20229,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (remoteBaseUrl) {
           zip.file("remote_assets.json", JSON.stringify(remoteConfig, null, 2));
         }
-        showToast5("\u6B63\u5728\u538B\u7F29\u6253\u5305...");
+        showToast4("\u6B63\u5728\u538B\u7F29\u6253\u5305...");
         const content = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(content);
         const a = document.createElement("a");
@@ -20190,23 +20241,23 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showToast5(`\u5BFC\u51FA\u6210\u529F\uFF01\u5171\u5BFC\u51FA ${sprites.length} \u4E2A\u7ACB\u7ED8\uFF0C${backgrounds.length} \u4E2A\u80CC\u666F`);
+        showToast4(`\u5BFC\u51FA\u6210\u529F\uFF01\u5171\u5BFC\u51FA ${sprites.length} \u4E2A\u7ACB\u7ED8\uFF0C${backgrounds.length} \u4E2A\u80CC\u666F`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5BFC\u51FA\u5931\u8D25:`, e);
-        showToast5("\u5BFC\u51FA\u5931\u8D25: " + e.message);
+        showToast4("\u5BFC\u51FA\u5931\u8D25: " + e.message);
       }
     },
     async importFiles(fileList, targetPackId = null) {
       if (!targetPackId) {
         targetPackId = await showImportPackSelector("\u6587\u4EF6\u5939\u5BFC\u5165");
         if (!targetPackId) {
-          showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
           return false;
         }
       }
       let successCount = 0;
       let failCount = 0;
-      showToast5("\u5F00\u59CB\u5BFC\u5165...");
+      showToast4("\u5F00\u59CB\u5BFC\u5165...");
       for (const file of fileList) {
         try {
           const path = file.webkitRelativePath || file.name;
@@ -20232,7 +20283,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           failCount++;
         }
       }
-      showToast5(`\u5BFC\u5165\u5B8C\u6210: ${successCount} \u6210\u529F, ${failCount} \u5931\u8D25`);
+      showToast4(`\u5BFC\u5165\u5B8C\u6210: ${successCount} \u6210\u529F, ${failCount} \u5931\u8D25`);
       return successCount > 0;
     },
     async importAsSprite(file, packId = null) {
@@ -20272,7 +20323,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!targetPackId) {
           targetPackId = await showImportPackSelector(`GitHub\u5BFC\u5165`);
           if (!targetPackId) {
-            showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+            showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
             return false;
           }
         }
@@ -20300,7 +20351,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!owner || !repo) {
           throw new Error("\u65E0\u6548\u7684 GitHub \u4ED3\u5E93\u5730\u5740");
         }
-        showToast5(`\u6B63\u5728\u83B7\u53D6\u6587\u4EF6\u5217\u8868: ${owner}/${repo}...`);
+        showToast4(`\u6B63\u5728\u83B7\u53D6\u6587\u4EF6\u5217\u8868: ${owner}/${repo}...`);
         const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
@@ -20308,13 +20359,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!Array.isArray(data)) throw new Error("\u8DEF\u5F84\u4E0D\u662F\u4E00\u4E2A\u76EE\u5F55");
         const imageFiles = data.filter((item) => item.type === "file" && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
         if (imageFiles.length === 0) {
-          showToast5("\u8BE5\u76EE\u5F55\u4E0B\u6CA1\u6709\u627E\u5230\u56FE\u7247\u6587\u4EF6");
+          showToast4("\u8BE5\u76EE\u5F55\u4E0B\u6CA1\u6709\u627E\u5230\u56FE\u7247\u6587\u4EF6");
           return;
         }
         if (!confirm(`\u627E\u5230 ${imageFiles.length} \u5F20\u56FE\u7247\uFF0C\u662F\u5426\u5F00\u59CB\u5BFC\u5165\uFF1F`)) return;
         let count = 0;
         for (const item of imageFiles) {
-          showToast5(`\u6B63\u5728\u4E0B\u8F7D (${count + 1}/${imageFiles.length}): ${item.name}`);
+          showToast4(`\u6B63\u5728\u4E0B\u8F7D (${count + 1}/${imageFiles.length}): ${item.name}`);
           try {
             const imgRes = await fetch(item.download_url);
             const blob = await imgRes.blob();
@@ -20329,11 +20380,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
             console.error(`\u4E0B\u8F7D/\u5BFC\u5165 ${item.name} \u5931\u8D25:`, e);
           }
         }
-        showToast5(`GitHub \u5BFC\u5165\u5B8C\u6210\uFF0C\u5171 ${count} \u5F20\u56FE\u7247`);
+        showToast4(`GitHub \u5BFC\u5165\u5B8C\u6210\uFF0C\u5171 ${count} \u5F20\u56FE\u7247`);
         return true;
       } catch (e) {
         console.error("GitHub Import Error:", e);
-        showToast5("GitHub \u5BFC\u5165\u5931\u8D25: " + e.message);
+        showToast4("GitHub \u5BFC\u5165\u5931\u8D25: " + e.message);
         return false;
       }
     }
@@ -20380,11 +20431,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $dialog.find("#gal-remote-zip-confirm").on("click", async function() {
       const url = $dialog.find("#gal-remote-zip-url").val().trim();
       if (!url) {
-        showToast5("\u8BF7\u8F93\u5165ZIP\u6587\u4EF6\u94FE\u63A5");
+        showToast4("\u8BF7\u8F93\u5165ZIP\u6587\u4EF6\u94FE\u63A5");
         return;
       }
       if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        showToast5("\u8BF7\u8F93\u5165\u6709\u6548\u7684 HTTP/HTTPS \u94FE\u63A5");
+        showToast4("\u8BF7\u8F93\u5165\u6709\u6548\u7684 HTTP/HTTPS \u94FE\u63A5");
         return;
       }
       $dialog.remove();
@@ -20395,7 +20446,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     let isCancelled = false;
     const progressController = showImportProgress("\u6B63\u5728\u89E3\u538B\u672C\u5730\u6587\u4EF6...", () => {
       isCancelled = true;
-      showToast5("\u5BFC\u5165\u5DF2\u624B\u52A8\u53D6\u6D88");
+      showToast4("\u5BFC\u5165\u5DF2\u624B\u52A8\u53D6\u6D88");
     });
     try {
       const JSZip = await AssetIO.loadJSZip();
@@ -20413,7 +20464,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast5("ZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("ZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
       } else {
         progressController.close();
       }
@@ -20430,7 +20481,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const progressController = showImportProgress("\u6B63\u5728\u4E0B\u8F7D\u8FDC\u7A0B\u6587\u4EF6...", () => {
       isCancelled = true;
       abortController.abort();
-      showToast5("\u4E0B\u8F7D\u5DF2\u53D6\u6D88");
+      showToast4("\u4E0B\u8F7D\u5DF2\u53D6\u6D88");
     });
     try {
       const response = await fetch(url, { signal: abortController.signal });
@@ -20483,7 +20534,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast5("\u8FDC\u7A0BZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("\u8FDC\u7A0BZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
       } else {
         progressController.close();
       }
@@ -20563,14 +20614,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           } else if (targetType === "new") {
             const newName = $dialog.find("#gal-import-new-pack-name").val().trim();
             if (!newName) {
-              showToast5("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0");
+              showToast4("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0");
               return;
             }
             createImagePack(newName).then((newPack) => {
               $dialog.remove();
               resolve(newPack.id);
             }).catch((err) => {
-              showToast5("\u521B\u5EFA\u56FE\u5305\u5931\u8D25: " + err.message);
+              showToast4("\u521B\u5EFA\u56FE\u5305\u5931\u8D25: " + err.message);
             });
             return;
           }
@@ -20589,7 +20640,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         });
       }).catch((err) => {
         console.error("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25:", err);
-        showToast5("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25");
+        showToast4("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25");
         resolve(null);
       });
     });
@@ -20615,7 +20666,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const suggestedName = packageInfo?.packageName || packageInfo?.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
-        showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+        showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
         return;
       }
     }
@@ -21010,9 +21061,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const voiceName = $("#gal-char-tts-voice-select").val();
       setCharacterTTSVoice(characterId, voiceName);
       if (voiceName) {
-        showToast5(`\u5DF2\u7ED1\u5B9A: ${characterId} \u2192 ${voiceName}`);
+        showToast4(`\u5DF2\u7ED1\u5B9A: ${characterId} \u2192 ${voiceName}`);
       } else {
-        showToast5(`\u5DF2\u6E05\u9664 ${characterId} \u7684\u97F3\u8272\u7ED1\u5B9A`);
+        showToast4(`\u5DF2\u6E05\u9664 ${characterId} \u7684\u97F3\u8272\u7ED1\u5B9A`);
       }
       $modal.remove();
       showCharacterSpritesModal(characterId);
@@ -21043,7 +21094,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $("#gal-char-live2d-toggle").on("change", function() {
       const useLive2D = this.checked;
       setCharacterUseLive2D(characterId, useLive2D);
-      showToast5(useLive2D ? `\u5DF2\u542F\u7528 ${characterId} \u7684 Live2D` : `\u5DF2\u7981\u7528 ${characterId} \u7684 Live2D`);
+      showToast4(useLive2D ? `\u5DF2\u542F\u7528 ${characterId} \u7684 Live2D` : `\u5DF2\u7981\u7528 ${characterId} \u7684 Live2D`);
     });
     $("#gal-char-live2d-upload").on("click", function() {
       const input = document.createElement("input");
@@ -21058,7 +21109,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           $status.text("\u4E0A\u4F20\u4E2D...");
           $uploadBtn.prop("disabled", true);
           await Live2DUploader.uploadZip(file, characterId);
-          showToast5(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
+          showToast4(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
           if (Live2DManager.models.has(characterId)) {
             Live2DManager.cleanup(characterId);
           }
@@ -21066,7 +21117,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           showCharacterSpritesModal(characterId);
         } catch (err) {
           console.error(`[${SCRIPT_NAME}] Live2D \u4E0A\u4F20\u5931\u8D25:`, err);
-          showToast5(`\u4E0A\u4F20\u5931\u8D25: ${err.message}`, "error");
+          showToast4(`\u4E0A\u4F20\u5931\u8D25: ${err.message}`, "error");
           $status.text("\u4E0A\u4F20\u5931\u8D25");
           $uploadBtn.prop("disabled", false);
         }
@@ -21081,12 +21132,12 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (Live2DManager.models.has(characterId)) {
           Live2DManager.cleanup(characterId);
         }
-        showToast5("Live2D \u6A21\u578B\u5DF2\u5220\u9664");
+        showToast4("Live2D \u6A21\u578B\u5DF2\u5220\u9664");
         $modal.remove();
         showCharacterSpritesModal(characterId);
       } catch (err) {
         console.error(`[${SCRIPT_NAME}] Live2D \u5220\u9664\u5931\u8D25:`, err);
-        showToast5(`\u5220\u9664\u5931\u8D25: ${err.message}`, "error");
+        showToast4(`\u5220\u9664\u5931\u8D25: ${err.message}`, "error");
       }
     });
     $("#gal-char-live2d-preview").on("click", async function() {
@@ -21192,7 +21243,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const expr = $btn.attr("data-expr");
       if (confirm(`\u786E\u5B9A\u5220\u9664 ${charId} \u7684\u300C${expr}\u300D\u8868\u60C5\u5417\uFF1F`)) {
         await deleteSprite(charId, expr);
-        showToast5(`\u5DF2\u5220\u9664: ${charId} - ${expr}`);
+        showToast4(`\u5DF2\u5220\u9664: ${charId} - ${expr}`);
         $modal.remove();
         showCharacterSpritesModal(charId);
       }
@@ -21276,7 +21327,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       setCurrentPack(packId);
       $modal.remove();
       showPackManagerModal();
-      showToast5("\u5DF2\u5207\u6362\u56FE\u5305");
+      showToast4("\u5DF2\u5207\u6362\u56FE\u5305");
     });
     $modal.find(".gal-pack-rename-btn").on("click", function() {
       const packId = $(this).data("pack-id");
@@ -21287,7 +21338,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         renameImagePack(packId, newName.trim()).then(() => {
           $modal.remove();
           showPackManagerModal();
-          showToast5("\u5DF2\u91CD\u547D\u540D\u56FE\u5305");
+          showToast4("\u5DF2\u91CD\u547D\u540D\u56FE\u5305");
         }).catch((err) => {
           alert("\u91CD\u547D\u540D\u5931\u8D25\uFF1A" + err.message);
         });
@@ -21303,7 +21354,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         deleteImagePack(packId).then(() => {
           $modal.remove();
           showPackManagerModal();
-          showToast5("\u5DF2\u5220\u9664\u56FE\u5305\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
+          showToast4("\u5DF2\u5220\u9664\u56FE\u5305\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
         }).catch((err) => {
           alert("\u5220\u9664\u5931\u8D25\uFF1A" + err.message);
         });
@@ -21354,242 +21405,83 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const transferPromise = resourceType === "sprite" ? transferSpritesToPack(resourceIds, targetPackId) : transferBackgroundsToPack(resourceIds, targetPackId);
       transferPromise.then((count) => {
         $modal.remove();
-        showToast5(`\u5DF2\u8F6C\u79FB ${count} \u4E2A${resourceType === "sprite" ? "\u7ACB\u7ED8" : "\u80CC\u666F"}`);
+        showToast4(`\u5DF2\u8F6C\u79FB ${count} \u4E2A${resourceType === "sprite" ? "\u7ACB\u7ED8" : "\u80CC\u666F"}`);
         if (typeof onComplete === "function") onComplete();
       }).catch((err) => {
         alert("\u8F6C\u79FB\u5931\u8D25\uFF1A" + err.message);
       });
     });
   }
-  var _showAssetManagerModalRef2 = null;
+  var _showAssetManagerModalRef = null;
   function setAssetManagerModalRef(fn) {
-    _showAssetManagerModalRef2 = fn;
+    _showAssetManagerModalRef = fn;
   }
   function showAssetManagerModal(activeTab) {
-    if (_showAssetManagerModalRef2) _showAssetManagerModalRef2(activeTab);
+    if (_showAssetManagerModalRef) _showAssetManagerModalRef(activeTab);
   }
 
-  // src/ui/asset-manager-modal.js
-  var _showSpriteUploadDialogRef5 = null;
-  var _showBatchUploadDialogRef3 = null;
-  var _showBackgroundUploadDialogRef3 = null;
-  var _showBatchBackgroundUploadDialogRef2 = null;
-  var _showCustomExpressionManagerRef2 = null;
+  // src/ui/image-gen-config.js
   var _showBananaAppearancePickerRef2 = null;
-  function setAssetManagerModalRefs({ showSpriteUploadDialog: showSpriteUploadDialog2, showBatchUploadDialog: showBatchUploadDialog2, showBackgroundUploadDialog: showBackgroundUploadDialog2, showBatchBackgroundUploadDialog: showBatchBackgroundUploadDialog2, showCustomExpressionManager: showCustomExpressionManager2, showBananaAppearancePicker: showBananaAppearancePicker2 }) {
-    if (showSpriteUploadDialog2) _showSpriteUploadDialogRef5 = showSpriteUploadDialog2;
-    if (showBatchUploadDialog2) _showBatchUploadDialogRef3 = showBatchUploadDialog2;
-    if (showBackgroundUploadDialog2) _showBackgroundUploadDialogRef3 = showBackgroundUploadDialog2;
-    if (showBatchBackgroundUploadDialog2) _showBatchBackgroundUploadDialogRef2 = showBatchBackgroundUploadDialog2;
-    if (showCustomExpressionManager2) _showCustomExpressionManagerRef2 = showCustomExpressionManager2;
+  function setImageGenConfigRefs({ showBananaAppearancePicker: showBananaAppearancePicker2 }) {
     if (showBananaAppearancePicker2) _showBananaAppearancePickerRef2 = showBananaAppearancePicker2;
   }
-  var CUSTOM_LOCATION_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
-  var CUSTOM_TIME_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
-  async function showAssetManagerModal2(activeTab = "sprites") {
-    const settings = getSettings();
-    const allPacks = await getAllImagePacks();
-    const currentPackId = getCurrentPackId();
-    const currentPack = allPacks.find((p) => p.id === currentPackId) || allPacks.find((p) => p.id === DEFAULT_PACK_ID);
-    const currentPackName = currentPack ? currentPack.name : "\u672A\u5B9A\u4E49";
-    const currentRenderScope = getRenderScope();
-    const allSprites = await getAllSprites(currentPackId);
-    const allBackgrounds = await getAllBackgrounds(currentPackId);
-    const dbCharacters = getCharacterListFromDatabase();
-    const charactersData = /* @__PURE__ */ new Map();
-    allSprites.forEach((sprite) => {
-      if (!charactersData.has(sprite.characterId)) {
-        charactersData.set(sprite.characterId, { sprites: [], type: "\u81EA\u5B9A\u4E49", source: "\u672C\u5730" });
-      }
-      charactersData.get(sprite.characterId).sprites.push(sprite);
-    });
-    dbCharacters.forEach((char) => {
-      const charName = char.name;
-      if (!charactersData.has(charName)) {
-        charactersData.set(charName, { sprites: [], type: char.type, source: char.source });
-      } else {
-        const info = charactersData.get(charName);
-        info.type = char.type;
-        info.source = char.source;
-      }
-    });
-    const modalHtml = buildAssetManagerHtml(activeTab, settings, allPacks, currentPackId, currentPackName, currentRenderScope, allSprites, allBackgrounds, charactersData);
-    const mountRoot = getModalMountRoot();
-    $(mountRoot).append(modalHtml);
-    const $modal = $(mountRoot).find("#gal-asset-manager-modal");
-    if (activeTab && activeTab !== "sprites") {
-      $modal.find(".gal-tab-btn").removeClass("active");
-      $modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).addClass("active");
-      $modal.find(".gal-tab-pane").hide();
-      $modal.find(`.gal-tab-pane[data-pane="${activeTab}"]`).show();
-    }
-    bindAssetManagerEvents($modal, activeTab, settings, allPacks, currentPackId);
-  }
-  function buildAssetManagerHtml(activeTab, settings, allPacks, currentPackId, currentPackName, currentRenderScope, allSprites, allBackgrounds, charactersData) {
+  function buildImageGenConfigPane(settings) {
+    const src = settings.bgImageSource || "none";
+    const activeEngine = src !== "none" && ["comfyui", "banana", "novelai", "wallhaven"].includes(src) ? src : "comfyui";
     return `
-  <div class="gal-input-modal" id="gal-asset-manager-modal">
-    <div class="gal-input-box" style="width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; overflow: hidden; padding: 0; display: flex; flex-direction: column; border-radius: 0 !important;">
-      <div class="gal-asset-header">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="gal-pack-selector" style="position: relative;">
-              <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="\u5207\u6362\u56FE\u5305" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
-                <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
-              </button>
-              <div class="gal-pack-menu gal-z-dropdown" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden;">
-                ${allPacks.map((pack) => `
-                  <div class="gal-pack-item ${pack.id === currentPackId ? "active" : ""}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? "background: #e9ecef; font-weight: 700;" : ""}">
-                    <span><i class="fa-solid fa-folder${pack.id === currentPackId ? "-open" : ""}" style="margin-right: 8px; color: ${pack.id === currentPackId ? "#6f42c1" : "#666"};"></i>${pack.name}</span>
-                    ${pack.isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">\u9ED8\u8BA4</span>' : ""}
-                  </div>
-                `).join("")}
-                <div style="border-top: 2px solid #eee;">
-                  <div class="gal-pack-item" id="gal-add-pack-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #28a745;">
-                    <i class="fa-solid fa-plus"></i> <span>\u65B0\u5EFA\u56FE\u5305</span>
-                  </div>
-                  <div class="gal-pack-item" id="gal-manage-packs-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #17a2b8;">
-                    <i class="fa-solid fa-cog"></i> <span>\u7BA1\u7406\u56FE\u5305</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <button class="gal-action-btn" id="gal-render-scope-btn" title="${currentRenderScope === "current" ? "\u4EC5\u5F53\u524D\u56FE\u5305\u8D44\u6E90" : "\u641C\u7D22\u6240\u6709\u56FE\u5305\u8D44\u6E90"}" style="padding: 6px 10px; font-size: 0.9rem; background: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"}; color: #fff; border-color: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"};">
-              <i class="fa-solid ${currentRenderScope === "current" ? "fa-bullseye" : "fa-globe"}"></i>
-            </button>
-            <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
-              <span><i class="fa-solid fa-folder-open"></i> \u8D44\u6E90\u7BA1\u7406\u5668</span>
-            </div>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <div class="gal-export-dropdown" style="position: relative;">
-              <button class="gal-action-btn" id="gal-export-dropdown-btn" title="\u5BFC\u51FA\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem;">
-                <i class="fa-solid fa-file-export"></i> <span>\u5BFC\u51FA</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
-              </button>
-              <div class="gal-export-menu gal-z-dropdown" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
-                <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i><span>\u5BFC\u51FA\u672C\u5730\u538B\u7F29\u5305</span>
-                </div>
-                <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i><span>\u5BFC\u51FAGitHub\u8D44\u6E90\u5305</span>
-                </div>
-              </div>
-            </div>
-            <div class="gal-import-dropdown" style="position: relative;">
-              <button class="gal-action-btn" id="gal-import-dropdown-btn" title="\u5BFC\u5165\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
-                <i class="fa-solid fa-file-import"></i> <span>\u5BFC\u5165</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
-              </button>
-              <div class="gal-import-menu gal-z-dropdown" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
-                <div class="gal-import-item" data-action="import-local-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-file-zipper" style="width: 20px; color: #f39c12;"></i><span>\u672C\u5730\u538B\u7F29\u5305\u5BFC\u5165</span>
-                </div>
-                <div class="gal-import-item" data-action="import-remote-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-cloud-arrow-down" style="width: 20px; color: #3498db;"></i><span>\u8FDC\u7A0B\u538B\u7F29\u5305\u5BFC\u5165</span>
-                </div>
-                <div class="gal-import-item" data-action="import-json" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-link" style="width: 20px; color: #9b59b6;"></i><span>\u5BFC\u5165\u8FDC\u7A0B\u94FE\u63A5JSON</span>
-                </div>
-                <div class="gal-import-item" data-action="import-github" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
-                  <i class="fa-brands fa-github" style="width: 20px; color: #333;"></i><span>\u4ECEGitHub\u5BFC\u5165</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <input type="file" id="gal-asset-import-zip-input" accept=".zip" style="display: none;">
-        <input type="file" id="gal-asset-import-input" multiple webkitdirectory style="display: none;">
-        <input type="file" id="gal-asset-import-json-input" accept=".json" style="display: none;">
-      </div>
-      <div class="gal-tab-header">
-        <button class="gal-tab-btn ${activeTab === "sprites" ? "active" : ""}" data-tab="sprites"><i class="fa-solid fa-user"></i> \u7ACB\u7ED8\u7BA1\u7406</button>
-        <button class="gal-tab-btn ${activeTab === "backgrounds" ? "active" : ""}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> \u80CC\u666F\u7BA1\u7406</button>
-        <button class="gal-tab-btn ${activeTab === "custom" ? "active" : ""}" data-tab="custom"><i class="fa-solid fa-code"></i> \u81EA\u5B9A\u4E49\u6A21\u5757</button>
-      </div>
-      <div class="gal-tab-content">
-        ${buildSpritesTab(activeTab, allSprites, charactersData)}
-        ${buildBackgroundsTab(settings, allBackgrounds)}
-        ${buildCustomTab(settings)}
-      </div>
-      <div class="gal-input-actions">
-        <button class="gal-action-btn" id="gal-asset-close" style="width: 100%; min-height: 44px;"><span>\u5173\u95ED</span></button>
-      </div>
+    <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(0,0,0,0.25); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+      <span style="font-weight: 700; color: #ccd6f6; font-size: 0.9rem; white-space: nowrap;"><i class="fa-solid fa-satellite-dish" style="margin-right: 6px;"></i>\u80CC\u666F\u56FE\u6765\u6E90</span>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "none" ? "#ff6b6b" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="none" ${src === "none" ? "checked" : ""} style="accent-color:#ff6b6b;"> \u5173\u95ED</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "comfyui" ? "#00d9ff" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="comfyui" ${src === "comfyui" ? "checked" : ""} style="accent-color:#00d9ff;"> ComfyUI</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "banana" ? "#c084fc" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="banana" ${src === "banana" ? "checked" : ""} style="accent-color:#c084fc;"> \u5927\u9999\u8549</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "novelai" ? "#52b788" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="novelai" ${src === "novelai" ? "checked" : ""} style="accent-color:#52b788;"> NovelAI</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "wallhaven" ? "#ffd166" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="wallhaven" ${src === "wallhaven" ? "checked" : ""} style="accent-color:#ffd166;"> Wallhaven</label>
     </div>
-  </div>
-  ${buildAssetManagerStyles()}
+    <div class="gal-imagegen-pills">
+      <button class="gal-pill ${activeEngine === "comfyui" ? "active" : ""}" data-engine="comfyui"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI</button>
+      <button class="gal-pill ${activeEngine === "banana" ? "active" : ""}" data-engine="banana"><i class="fa-solid fa-lemon"></i> \u5927\u9999\u8549</button>
+      <button class="gal-pill ${activeEngine === "novelai" ? "active" : ""}" data-engine="novelai"><i class="fa-solid fa-palette"></i> NovelAI</button>
+      <button class="gal-pill ${activeEngine === "wallhaven" ? "active" : ""}" data-engine="wallhaven"><i class="fa-solid fa-images"></i> Wallhaven</button>
+    </div>
+    <div data-engine-pane="comfyui" ${activeEngine !== "comfyui" ? 'style="display:none;"' : ""}>${buildComfyUIPane()}</div>
+    <div data-engine-pane="banana" ${activeEngine !== "banana" ? 'style="display:none;"' : ""}>${buildBananaPane(settings)}</div>
+    <div data-engine-pane="novelai" ${activeEngine !== "novelai" ? 'style="display:none;"' : ""}>${buildNovelAIPane(settings)}</div>
+    <div data-engine-pane="wallhaven" ${activeEngine !== "wallhaven" ? 'style="display:none;"' : ""}>${buildWallhavenPane(settings)}</div>
   `;
   }
-  function buildSpritesTab(activeTab, allSprites, charactersData) {
+  function buildComfyUIPane() {
     return `
-  <div class="gal-tab-pane ${activeTab === "sprites" ? "active" : ""}" data-pane="sprites" style="${activeTab !== "sprites" ? "display: none;" : ""}">
+  <div style="padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allSprites.length} \u4E2A\u7ACB\u7ED8\uFF0C\u5171 ${charactersData.size} \u4E2A\u89D2\u8272</span>
-      <div style="display: flex; gap: 10px;">
-        <button class="gal-action-btn" id="gal-batch-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
-        <button class="gal-action-btn primary" id="gal-add-sprite-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u7ACB\u7ED8</span></button>
-        <button class="gal-action-btn" id="gal-manage-expressions-btn" style="padding: 8px 16px; background: #17a2b8; color: #fff; border: none;"><i class="fa-solid fa-face-smile"></i> <span>\u8868\u60C5\u6807\u7B7E</span></button>
+      <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-wand-magic-sparkles" style="color: #00d9ff; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">ComfyUI \u6587\u751F\u56FE</span></div>
+    </div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API \u5730\u5740</label><input type="text" id="gal-comfyui-url" value="${getComfyUISettings().apiUrl}" placeholder="http://127.0.0.1:8188" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460; font-family: monospace;"></div>
+    <div style="margin-bottom: 12px;"><button class="gal-action-btn" id="gal-comfyui-test" style="width: 100%; justify-content: center; padding: 10px; background: linear-gradient(135deg, #00d9ff 0%, #0099cc 100%); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 700;"><i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5</button></div>
+    <div style="margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <label style="color: #ccd6f6; font-size: 0.9rem; font-weight: 700;">\u5DE5\u4F5C\u6D41\u7BA1\u7406 (.json)</label>
+        <input type="file" id="gal-comfy-import-input" accept=".json" style="display: none;">
+        <button class="gal-action-btn" id="gal-comfy-import-btn" style="padding: 4px 10px; font-size: 0.8rem; background: #0f3460; color: #ccd6f6; border: 1px solid #0f3460; border-radius: 4px; cursor: pointer;"><i class="fa-solid fa-file-import"></i> \u5BFC\u5165 JSON</button>
+      </div>
+      <div id="gal-workflow-list" style="max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid #0f3460; border-radius: 4px; padding: 8px;">
+        <div style="text-align: center; color: #8892b0; font-size: 0.85rem; padding: 10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>
       </div>
     </div>
-    ${charactersData.size === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-images" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u89D2\u8272\u6570\u636E\uFF0C\u8BF7\u786E\u4FDD\u5DF2\u52A0\u8F7D\u6570\u636E\u5E93\u811A\u672C\u6216\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p></div>` : `<div class="gal-character-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;">
-          ${Array.from(charactersData.entries()).map(([charId, info]) => {
-      const sprites = info.sprites;
-      const defaultSprite = sprites.find((s) => s.expression === "\u9ED8\u8BA4") || sprites[0];
-      const avatarUrl = defaultSprite?.imageUrl ? defaultSprite.imageUrl : defaultSprite?.imageBlob ? URL.createObjectURL(defaultSprite.imageBlob) : "";
-      const typeLabel = info.type && info.type !== "\u81EA\u5B9A\u4E49" ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${info.type}</span>` : "";
-      return `
-            <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s; position: relative;">
-              <div class="gal-character-avatar" style="aspect-ratio: 1 / 1; background: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
-                ${avatarUrl ? `<img src="${avatarUrl}" alt="${charId}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
-                ${sprites.length === 0 ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 0.7rem; padding: 2px; text-align: center;">\u65E0\u7ACB\u7ED8</div>' : ""}
-                <div class="gal-char-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s;">
-                  <button class="gal-char-transfer" data-char="${charId}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(111, 66, 193, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-                  <button class="gal-char-delete" data-char="${charId}" title="\u5220\u9664\u89D2\u8272" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220, 53, 69, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-trash"></i></button>
-                </div>
-              </div>
-              <div style="padding: 10px; text-align: center;">
-                <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">${charId}</div>
-                <div style="margin-top: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;">${typeLabel}<span style="font-size: 0.75rem; color: #888;">${sprites.length} \u4E2A\u8868\u60C5</span></div>
-              </div>
-            </div>`;
-    }).join("")}
-        </div>`}
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u89D2\u8272 Workflow</label><select id="gal-comfy-def-char" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="default_char">\u5185\u7F6E SDXL Turbo</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4 Checkpoint \u6A21\u578B</label><select id="gal-comfy-def-checkpoint" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="">(\u52A0\u8F7D\u4E2D...)</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u80CC\u666F Workflow</label><select id="gal-comfy-def-bg" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="default_bg">\u5185\u7F6E SDXL Turbo</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u8D1F\u9762\u63D0\u793A\u8BCD</label><textarea id="gal-comfyui-negative" placeholder="lowres, bad anatomy..." style="width: 100%; height: 60px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea></div>
   </div>`;
   }
-  function buildBackgroundsTab(settings, allBackgrounds) {
+  function buildBananaPane(settings) {
     return `
-  <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allBackgrounds.length} \u4E2A\u80CC\u666F</span>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <div class="gal-realtime-toggle-wrapper" title="\u5F00\u542F\u540E\uFF0C\u5F53AI\u8F93\u51FA\u7684\u573A\u666F\u5728\u5E93\u4E2D\u4E0D\u5B58\u5728\u65F6\uFF0C\u5C06\u81EA\u52A8\u8C03\u7528ComfyUI\u751F\u6210">
-          <span class="gal-realtime-label">ComfyUI \u6587\u751F\u56FE\u5B9E\u65F6\u751F\u6210\u80CC\u666F</span>
-          <label class="gal-realtime-switch"><input type="checkbox" id="gal-realtime-bg-gen" ${settings.realTimeBackgroundGen ? "checked" : ""}><span class="gal-realtime-slider"></span></label>
-        </div>
-        <button class="gal-action-btn" id="gal-batch-bg-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
-        <button class="gal-action-btn primary" id="gal-add-bg-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u80CC\u666F</span></button>
-      </div>
-    </div>
-    ${allBackgrounds.length === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-panorama" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u80CC\u666F\uFF0C\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p><small style="color: #bbb;">\u80CC\u666F\u56FE\u5C06\u6839\u636E &lt;background scene="\u573A\u666F\u540D" /&gt; \u6807\u7B7E\u81EA\u52A8\u5339\u914D</small></div>` : `<div class="gal-bg-grid">${allBackgrounds.map((bg) => `
-          <div class="gal-bg-card" data-scene="${bg.sceneName}">
-            <div class="gal-bg-preview">${bg.imageUrl ? `<img src="${bg.imageUrl}" alt="${bg.sceneName}">` : bg.imageBlob ? `<img src="${URL.createObjectURL(bg.imageBlob)}" alt="${bg.sceneName}">` : ""}</div>
-            <div class="gal-bg-label">${bg.sceneName}</div>
-            <div class="gal-bg-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
-              <button class="gal-bg-transfer" data-scene="${bg.sceneName}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(111, 66, 193, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-              <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="\u5220\u9664" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-trash"></i></button>
-            </div>
-          </div>`).join("")}</div>`}
-    ${buildBananaSection(settings)}
-    ${buildWallhavenSection(settings)}
-  </div>`;
-  }
-  function buildBananaSection(settings) {
-    return `
-  <div class="gal-banana-imagegen-settings" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #6b21a8;">
+  <div style="padding: 15px; background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #6b21a8; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-wand-magic-sparkles" style="color: #fbbf24; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757</span></div>
-      <label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-enabled" ${settings.bananaImageGen?.enabled ? "checked" : ""}><span class="gal-realtime-slider"></span></label>
     </div>
     <div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 15px; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 6px;">\u901A\u8FC7\u53CD\u4EE3 API \u751F\u6210\u80CC\u666F\u56FE\u7247\uFF0C\u751F\u6210\u540E\u81EA\u52A8\u4FDD\u5B58\u5230\u80CC\u666F\u5E93\u3002</div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u53CD\u4EE3 API \u5730\u5740</label><input type="text" id="gal-banana-proxy-url" placeholder="http://localhost:8045" value="${settings.bananaImageGen?.proxyUrl || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u53CD\u4EE3 API Key</label><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings.bananaImageGen?.proxyApiKey || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u53CD\u4EE3 API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings.bananaImageGen?.proxyApiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-banana-proxy-key" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #6b21a8; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="\u663E\u793A/\u9690\u85CF"><i class="fa-solid fa-eye"></i></button></div></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u56FE\u7247\u751F\u6210\u6A21\u578B</label><div style="display: flex; gap: 8px;"><select id="gal-banana-model" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">${settings.bananaImageGen?.model ? `<option value="${settings.bananaImageGen.model}" selected>${settings.bananaImageGen.model}</option>` : '<option value="">\u70B9\u51FB\u5237\u65B0\u83B7\u53D6\u6A21\u578B\u5217\u8868</option>'}</select><button id="gal-banana-refresh-models" style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer;" title="\u5237\u65B0\u6A21\u578B\u5217\u8868"><i class="fa-solid fa-sync"></i></button></div></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u751F\u56FECOT\u81EA\u5B9A\u4E49</label><textarea id="gal-banana-cot" placeholder="\u53EF\u586B\u5199\u989D\u5916\u89C4\u5219" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 80px; resize: vertical;">${settings.bananaImageGen?.cotTemplate || ""}</textarea></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u63D0\u793A\u8BCD\u524D\u7F00</label><input type="text" id="gal-banana-prompt-prefix" placeholder="masterpiece, best quality, highres, " value="${settings.bananaImageGen?.defaultPromptPrefix || "masterpiece, best quality, highres, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
@@ -21601,12 +21493,31 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(139,92,246,0.3);"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u624B\u52A8\u751F\u6210\u80CC\u666F</label><div style="display: flex; gap: 8px; margin-bottom: 8px;"><input type="text" id="gal-banana-scene-name" placeholder="\u573A\u666F\u540D\u79F0\uFF08\u5982\uFF1A\u6559\u5BA4\u3001\u68EE\u6797\uFF09" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div><div style="display: flex; gap: 8px; margin-bottom: 8px;"><textarea id="gal-banana-custom-prompt" placeholder="\u81EA\u5B9A\u4E49\u63D0\u793A\u8BCD\uFF08\u53EF\u9009\uFF09" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 60px; resize: vertical;"></textarea></div><button id="gal-banana-generate-btn" style="width: 100%; padding: 10px; border-radius: 6px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #1a1a2e; border: none; cursor: pointer; font-weight: 700; font-size: 0.95rem;"><i class="fa-solid fa-wand-magic-sparkles"></i> \u751F\u6210\u80CC\u666F\u56FE\u7247</button><div id="gal-banana-preview" style="margin-top: 10px; display: none;"><div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 5px;">\u751F\u6210\u9884\u89C8\uFF1A</div><img id="gal-banana-preview-img" style="max-width: 100%; border-radius: 6px; border: 1px solid #6b21a8;"><button id="gal-banana-save-to-library" style="width: 100%; margin-top: 8px; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem;"><i class="fa-solid fa-save"></i> \u4FDD\u5B58\u5230\u80CC\u666F\u5E93</button></div></div>
   </div>`;
   }
-  function buildWallhavenSection(settings) {
+  function buildNovelAIPane(settings) {
+    const ns = settings.novelai || {};
     return `
-  <div class="gal-wallhaven-settings" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460;">
+  <div style="padding: 15px; background: linear-gradient(135deg, #1a2e1a 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #2d6a4f; margin-top: 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-palette" style="color: #52b788; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">NovelAI \u751F\u56FE</span></div>
+    </div>
+    <div style="font-size: 0.8rem; color: #95d5b2; margin-bottom: 15px; padding: 10px; background: rgba(82,183,136,0.1); border-radius: 6px;">\u4F7F\u7528 NovelAI \u5B98\u65B9 API \u751F\u6210\u80CC\u666F\u56FE\u7247\uFF0C\u9700\u8981\u6709\u6548\u7684\u8BA2\u9605\u548C API Key\u3002</div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-novelai-apikey" placeholder="pst-xxx" value="${ns.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-novelai-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #2d6a4f; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="\u663E\u793A/\u9690\u85CF"><i class="fa-solid fa-eye"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u6A21\u578B</label><select id="gal-novelai-model" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"><option value="nai-diffusion-4-5-curated" ${(ns.model || "nai-diffusion-4-5-curated") === "nai-diffusion-4-5-curated" ? "selected" : ""}>NAI Diffusion 4.5 Curated</option><option value="nai-diffusion-4-5-full" ${ns.model === "nai-diffusion-4-5-full" ? "selected" : ""}>NAI Diffusion 4.5 Full</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u56FE\u7247\u5C3A\u5BF8</label><select id="gal-novelai-size" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"><option value="1216x832" ${ns.width === 1216 && ns.height === 832 || !ns.width && !ns.height ? "selected" : ""}>1216 x 832 (\u6A2A\u5C4F 3:2)</option><option value="832x1216" ${ns.width === 832 && ns.height === 1216 ? "selected" : ""}>832 x 1216 (\u7AD6\u5C4F 2:3)</option><option value="1024x1024" ${ns.width === 1024 && ns.height === 1024 ? "selected" : ""}>1024 x 1024 (\u6B63\u65B9\u5F62)</option><option value="1472x704" ${ns.width === 1472 && ns.height === 704 ? "selected" : ""}>1472 x 704 (\u5BBD\u94F6\u5E55)</option><option value="704x1472" ${ns.width === 704 && ns.height === 1472 ? "selected" : ""}>704 x 1472 (\u8D85\u7AD6\u5C4F)</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">Steps: <span id="gal-novelai-steps-value" style="color: #52b788;">${ns.steps || 28}</span></label><input type="range" id="gal-novelai-steps" min="10" max="50" step="1" value="${ns.steps || 28}" style="width: 100%; accent-color: #52b788;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">Guidance Scale: <span id="gal-novelai-scale-value" style="color: #52b788;">${ns.scale ?? 10}</span></label><input type="range" id="gal-novelai-scale" min="1" max="30" step="0.5" value="${ns.scale ?? 10}" style="width: 100%; accent-color: #52b788;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">Sampler</label><select id="gal-novelai-sampler" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"><option value="k_euler" ${(ns.sampler || "k_euler") === "k_euler" ? "selected" : ""}>Euler</option><option value="k_euler_ancestral" ${ns.sampler === "k_euler_ancestral" ? "selected" : ""}>Euler Ancestral</option><option value="k_dpmpp_2s_ancestral" ${ns.sampler === "k_dpmpp_2s_ancestral" ? "selected" : ""}>DPM++ 2S Ancestral</option><option value="k_dpmpp_2m_sde" ${ns.sampler === "k_dpmpp_2m_sde" ? "selected" : ""}>DPM++ 2M SDE</option><option value="k_dpmpp_sde" ${ns.sampler === "k_dpmpp_sde" ? "selected" : ""}>DPM++ SDE</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u63D0\u793A\u8BCD\u524D\u7F00</label><input type="text" id="gal-novelai-prompt-prefix" placeholder="masterpiece, best quality, ..." value="${ns.defaultPromptPrefix || "masterpiece, best quality, no humans, scenery, background, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u63D0\u793A\u8BCD\u540E\u7F00</label><input type="text" id="gal-novelai-prompt-suffix" placeholder=", very aesthetic" value="${ns.defaultPromptSuffix || ", very aesthetic"}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u8D1F\u9762\u63D0\u793A\u8BCD</label><textarea id="gal-novelai-negative" placeholder="nsfw, lowres, ..." style="width: 100%; height: 60px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f; font-size: 0.85rem; resize: vertical;">${ns.negativePrompt || "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark"}</textarea></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">\u81EA\u52A8\u4FDD\u5B58\u5230\u80CC\u666F\u5E93</label><div style="font-size: 0.75rem; color: #8892b0;">\u751F\u6210\u6210\u529F\u540E\u81EA\u52A8\u6DFB\u52A0\u5230\u80CC\u666F\u8D44\u6E90\u5E93</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-novelai-autosave" ${ns.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+  </div>`;
+  }
+  function buildWallhavenPane(settings) {
+    return `
+  <div style="padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-images" style="color: #00d9ff; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">Wallhaven \u58C1\u7EB8\u641C\u7D22</span></div>
-      <label class="gal-realtime-switch"><input type="checkbox" id="gal-wallhaven-enabled" ${settings.wallhaven?.enabled ? "checked" : ""}><span class="gal-realtime-slider"></span></label>
     </div>
     <div style="font-size: 0.8rem; color: #8892b0; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">\u4EC5\u4F9B\u5B66\u4E60\u7814\u7A76\u4F7F\u7528\u3002\u6240\u6709\u56FE\u7247\u7248\u6743\u5F52\u539F\u4F5C\u8005\u53CA Wallhaven \u6240\u6709\u3002</div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u56FE\u7247\u5206\u7C7B</label><select id="gal-wallhaven-category" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="anime" ${settings.wallhaven?.category === "anime" ? "selected" : ""}>\u52A8\u6F2B\u6F2B\u753B</option><option value="all" ${settings.wallhaven?.category === "all" ? "selected" : ""}>\u5168\u90E8\u7C7B\u578B</option><option value="people" ${settings.wallhaven?.category === "people" ? "selected" : ""}>\u4EBA\u7269\u5199\u771F</option><option value="general" ${settings.wallhaven?.category === "general" ? "selected" : ""}>\u7EFC\u5408\u58C1\u7EB8</option></select></div>
@@ -21615,207 +21526,192 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u81EA\u5B9A\u4E49\u6807\u7B7E</label><input type="text" id="gal-wallhaven-customtags" placeholder="\u4F8B\u5982: cosplay, landscape, 4k" value="${(settings.wallhaven?.customTags || []).join(", ")}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">\u591A\u4E2A\u6807\u7B7E\u7528\u9017\u53F7\u5206\u9694</div></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u6392\u5E8F\u65B9\u5F0F</label><select id="gal-wallhaven-sorting" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="favorites" ${settings.wallhaven?.sorting === "favorites" || !settings.wallhaven?.sorting ? "selected" : ""}>\u6536\u85CF\u91CF</option><option value="relevance" ${settings.wallhaven?.sorting === "relevance" ? "selected" : ""}>\u76F8\u5173\u5EA6</option><option value="views" ${settings.wallhaven?.sorting === "views" ? "selected" : ""}>\u6D4F\u89C8\u91CF</option><option value="date_added" ${settings.wallhaven?.sorting === "date_added" ? "selected" : ""}>\u6700\u65B0\u4E0A\u4F20</option><option value="toplist" ${settings.wallhaven?.sorting === "toplist" ? "selected" : ""}>\u6392\u884C\u699C</option><option value="random" ${settings.wallhaven?.sorting === "random" ? "selected" : ""}>\u968F\u673A</option></select></div>
     <div style="margin-bottom: 12px; ${settings.wallhaven?.sorting === "toplist" ? "" : "display: none;"}" id="gal-wallhaven-toprange-container"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4</label><select id="gal-wallhaven-toprange" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="1d" ${settings.wallhaven?.topRange === "1d" ? "selected" : ""}>1\u5929</option><option value="3d" ${settings.wallhaven?.topRange === "3d" ? "selected" : ""}>3\u5929</option><option value="1w" ${settings.wallhaven?.topRange === "1w" ? "selected" : ""}>1\u5468</option><option value="1M" ${settings.wallhaven?.topRange === "1M" || !settings.wallhaven?.topRange ? "selected" : ""}>1\u4E2A\u6708</option><option value="3M" ${settings.wallhaven?.topRange === "3M" ? "selected" : ""}>3\u4E2A\u6708</option><option value="6M" ${settings.wallhaven?.topRange === "6M" ? "selected" : ""}>6\u4E2A\u6708</option><option value="1y" ${settings.wallhaven?.topRange === "1y" ? "selected" : ""}>1\u5E74</option></select></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key\uFF08\u53EF\u9009\uFF09</label><input type="password" id="gal-wallhaven-apikey" placeholder="\u7559\u7A7A\u4F7F\u7528\u516C\u5F00 API" value="${settings.wallhaven?.apiKey || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key\uFF08\u53EF\u9009\uFF09</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-wallhaven-apikey" placeholder="\u7559\u7A7A\u4F7F\u7528\u516C\u5F00 API" value="${settings.wallhaven?.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><button type="button" class="gal-key-toggle" data-target="gal-wallhaven-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #0f3460; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="\u663E\u793A/\u9690\u85CF"><i class="fa-solid fa-eye"></i></button></div></div>
   </div>`;
   }
-  function buildCustomTab(settings) {
-    return `
-  <div class="gal-tab-pane" data-pane="custom" style="display: none;">
-    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> \u5730\u70B9\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-location-html" placeholder="<div>\u81EA\u5B9A\u4E49\u5730\u70B9\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || ""}</textarea></div>
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> \u65F6\u95F4\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-time-html" placeholder="<div>\u81EA\u5B9A\u4E49\u65F6\u95F4\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || ""}</textarea></div>
-      <div style="text-align: right;"><button class="gal-action-btn primary" id="gal-save-custom-html" style="padding: 8px 20px;"><i class="fa-solid fa-save"></i> \u4FDD\u5B58\u914D\u7F6E</button></div>
-    </div>
-    <div style="padding: 15px; color: #666; font-size: 0.9rem; line-height: 1.6;"><strong><i class="fa-solid fa-lightbulb"></i> \u8BF4\u660E\uFF1A</strong><br>\u6B64\u5904\u914D\u7F6E\u7684 HTML \u5185\u5BB9\u5C06\u5728\u70B9\u51FB\u4E3B\u754C\u9762\u7684\u5730\u70B9/\u65F6\u95F4\u72B6\u6001\u680F\u65F6\u5F39\u7A97\u663E\u793A\u3002<br>\u652F\u6301\u6807\u51C6 HTML \u6807\u7B7E\u548C\u5185\u8054\u6837\u5F0F\u3002</div>
-  </div>`;
+  function makeSettingsUpdater(settings, subKey) {
+    return function update(field, value) {
+      if (!settings[subKey]) settings[subKey] = {};
+      settings[subKey][field] = value;
+      saveSettings();
+    };
   }
-  function buildAssetManagerStyles() {
-    return `<style>
-    .gal-tab-btn { padding: 12px 20px; border: none; background: transparent; font-size: 1rem; font-weight: 600; color: #666; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
-    .gal-tab-btn:hover { color: ${THEME.accent}; }
-    .gal-tab-btn.active { color: ${THEME.accent}; border-bottom-color: ${THEME.accent}; }
-    .gal-character-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
-    .gal-character-card:hover .gal-char-actions { opacity: 1 !important; }
-    @media (max-width: 768px), (pointer: coarse) { .gal-char-actions { opacity: 1 !important; } }
-    .gal-sprite-group { margin-bottom: 20px; background: #f8f9fa; border-radius: 8px; padding: 15px; }
-    .gal-sprite-group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .gal-char-name { font-weight: 700; font-size: 1.1rem; color: ${THEME.dark}; }
-    .gal-sprite-count { font-size: 0.85rem; color: #888; }
-    .gal-sprite-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 12px; }
-    .gal-sprite-card { position: relative; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; }
-    .gal-sprite-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-    .gal-sprite-preview { aspect-ratio: 2 / 3; background: #eee; overflow: hidden; }
-    .gal-sprite-preview img { width: 100%; height: 100%; object-fit: cover; }
-    .gal-sprite-label { padding: 6px; text-align: center; font-size: 0.75rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gal-sprite-delete { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
-    .gal-sprite-card:hover .gal-sprite-delete { opacity: 1; }
-    .gal-bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
-    .gal-bg-card { position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }
-    .gal-bg-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
-    .gal-bg-preview { aspect-ratio: 16 / 9; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); overflow: hidden; }
-    .gal-bg-preview img { width: 100%; height: 100%; object-fit: cover; }
-    .gal-bg-label { padding: 10px; text-align: center; font-size: 0.9rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gal-bg-delete { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.8rem; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
-    .gal-bg-card:hover .gal-bg-delete { opacity: 1; }
-    .gal-import-dropdown { position: relative; display: inline-block; }
-    .gal-import-menu { animation: galDropdownFadeIn 0.15s ease; }
-    @keyframes galDropdownFadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-    .gal-import-item:hover { background: #f0f7ff !important; }
-    .gal-import-item:active { background: #e0efff !important; }
-    .gal-import-progress-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
-    .gal-import-progress-box { background: #2b2e38; padding: 30px 50px; border-radius: 12px; text-align: center; min-width: 300px; }
-    .gal-import-progress-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 15px; color: #00d2ff; }
-    .gal-import-progress-bar-container { width: 100%; height: 8px; background: #444; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
-    .gal-import-progress-bar { height: 100%; background: linear-gradient(90deg, #00d2ff, #00a8cc); width: 0%; transition: width 0.3s ease; }
-    .gal-import-progress-text { font-size: 0.9rem; color: #aaa; }
-    .gal-import-progress-details { font-size: 0.8rem; color: #888; margin-top: 8px; max-height: 60px; overflow-y: auto; }
-  </style>`;
-  }
-  function bindAssetManagerEvents($modal, activeTab, settings, allPacks, currentPackId) {
-    $modal.find(".gal-tab-btn").on("click", function() {
-      const tab = $(this).data("tab");
-      $modal.find(".gal-tab-btn").removeClass("active");
+  function bindImageGenConfigEvents($container, settings) {
+    $container.find(".gal-pill").on("click", function() {
+      const engine = $(this).data("engine");
+      $container.find(".gal-pill").removeClass("active");
       $(this).addClass("active");
-      $modal.find(".gal-tab-pane").hide();
-      $modal.find(`.gal-tab-pane[data-pane="${tab}"]`).show();
+      $container.find("[data-engine-pane]").hide();
+      $container.find(`[data-engine-pane="${engine}"]`).show();
     });
-    $("#gal-asset-close").on("click", () => $modal.remove());
-    $modal.on("click", function(e) {
-      if (e.target === this) $modal.remove();
-    });
-    $("#gal-save-custom-html").on("click", function() {
-      const locHtml = $("#gal-custom-location-html").val();
-      const timeHtml = $("#gal-custom-time-html").val();
-      localStorage.setItem(CUSTOM_LOCATION_HTML_KEY4, locHtml);
-      localStorage.setItem(CUSTOM_TIME_HTML_KEY4, timeHtml);
-      showToast5("\u81EA\u5B9A\u4E49\u914D\u7F6E\u5DF2\u4FDD\u5B58");
-    });
-    $modal.find("#gal-realtime-bg-gen").on("change", async function() {
-      settings.realTimeBackgroundGen = $(this).is(":checked");
+    $container.find('input[name="gal-bg-source"]').on("change", async function() {
+      const value = $(this).val();
+      settings.bgImageSource = value;
+      settings.realTimeBackgroundGen = value === "comfyui";
+      if (settings.bananaImageGen) settings.bananaImageGen.enabled = value === "banana";
+      if (settings.novelai) settings.novelai.enabled = value === "novelai";
+      if (settings.wallhaven) settings.wallhaven.enabled = value === "wallhaven";
       saveSettings();
       if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.realTimeBackgroundGen ? "\u5DF2\u5F00\u542F\u5B9E\u65F6\u80CC\u666F\u751F\u6210\uFF08\u5B9E\u9A8C\u6027\uFF09" : "\u5DF2\u5173\u95ED\u5B9E\u65F6\u80CC\u666F\u751F\u6210");
-    });
-    bindWallhavenEvents($modal, settings);
-    bindBananaEvents($modal, settings);
-    bindSpriteEvents($modal, activeTab, currentPackId);
-    bindBackgroundEvents($modal, activeTab, currentPackId);
-    bindPackSelectorEvents($modal, activeTab, allPacks, currentPackId);
-    bindExportImportEvents($modal, activeTab);
-  }
-  function bindWallhavenEvents($modal, settings) {
-    $modal.find("#gal-wallhaven-enabled").on("change", async function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.enabled = $(this).is(":checked");
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.wallhaven.enabled ? "\u5DF2\u5F00\u542F Wallhaven \u58C1\u7EB8\u641C\u7D22" : "\u5DF2\u5173\u95ED Wallhaven \u58C1\u7EB8\u641C\u7D22");
-    });
-    $modal.find("#gal-wallhaven-category").on("change", async function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.category = $(this).val();
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-    });
-    $modal.find("#gal-wallhaven-purity").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.purity = $(this).val();
-      saveSettings();
-    });
-    $modal.find("#gal-wallhaven-cgmode").on("change", async function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.cgMode = $(this).is(":checked");
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-    });
-    $modal.find("#gal-wallhaven-customtags").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      const tags = $(this).val();
-      settings.wallhaven.customTags = tags ? tags.split(",").map((t) => t.trim()).filter((t) => t) : [];
-      saveSettings();
-    });
-    $modal.find("#gal-wallhaven-apikey").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.apiKey = $(this).val();
-      saveSettings();
-    });
-    $modal.find("#gal-wallhaven-sorting").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.sorting = $(this).val();
-      saveSettings();
-      if (settings.wallhaven.sorting === "toplist") {
-        $("#gal-wallhaven-toprange-container").show();
-      } else {
-        $("#gal-wallhaven-toprange-container").hide();
+      $container.find(".gal-radio-label").css("color", "#8892b0");
+      $(this).closest(".gal-radio-label").css("color", "");
+      const colors = { none: "#ff6b6b", comfyui: "#00d9ff", banana: "#c084fc", novelai: "#52b788", wallhaven: "#ffd166" };
+      $(this).closest(".gal-radio-label").css("color", colors[value] || "#8892b0");
+      if (value !== "none") {
+        $container.find(`.gal-pill[data-engine="${value}"]`).trigger("click");
       }
-      showToast5(`\u6392\u5E8F\u65B9\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+      const names = { none: "\u5173\u95ED", comfyui: "ComfyUI", banana: "\u5927\u9999\u8549", novelai: "NovelAI", wallhaven: "Wallhaven" };
+      showToast4(`\u80CC\u666F\u56FE\u6765\u6E90: ${names[value] || value}`);
     });
-    $modal.find("#gal-wallhaven-toprange").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.topRange = $(this).val();
-      saveSettings();
-      showToast5(`\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+    $container.find(".gal-key-toggle").on("click", function() {
+      const targetId = $(this).data("target");
+      const input = $container.find("#" + targetId)[0];
+      if (!input) return;
+      input.type = input.type === "password" ? "text" : "password";
+      $(this).find("i").toggleClass("fa-eye fa-eye-slash");
+    });
+    bindComfyUIConfigEvents($container, settings);
+    bindBananaConfigEvents($container, settings);
+    bindNovelAIConfigEvents($container, settings);
+    bindWallhavenConfigEvents($container, settings);
+  }
+  function bindComfyUIConfigEvents($container, settings) {
+    $container.find("#gal-comfyui-url").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.apiUrl = $(this).val().trim();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfyui-negative").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.negativePrompt = $(this).val();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfyui-test").on("click", async function() {
+      $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6D4B\u8BD5\u4E2D...');
+      const ok = await ComfyUIAPI.checkConnection();
+      $(this).prop("disabled", false).html('<i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5');
+      showToast4(ok ? "ComfyUI \u8FDE\u63A5\u6210\u529F\uFF01" : "ComfyUI \u8FDE\u63A5\u5931\u8D25");
+    });
+    function renderWorkflowList() {
+      const workflows = getComfyWorkflows();
+      const $list = $container.find("#gal-workflow-list");
+      const $selChar = $container.find("#gal-comfy-def-char");
+      const $selBg = $container.find("#gal-comfy-def-bg");
+      const cs = getComfyUISettings();
+      $list.empty();
+      $selChar.html('<option value="default_char">\u5185\u7F6E SDXL Turbo</option>');
+      $selBg.html('<option value="default_bg">\u5185\u7F6E SDXL Turbo</option>');
+      const keys = Object.keys(workflows);
+      if (keys.length === 0) {
+        $list.html('<div style="text-align:center;color:#8892b0;font-size:0.85rem;padding:10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>');
+      } else {
+        keys.forEach((id) => {
+          const wf = workflows[id];
+          const $item = $(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);font-size:0.9rem;color:#ccd6f6;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px;" title="${wf.name}">${wf.name}</span><i class="fa-solid fa-trash" style="color:#ff4d4d;cursor:pointer;padding:4px;" title="\u5220\u9664"></i></div>`);
+          $item.find(".fa-trash").on("click", () => {
+            if (confirm(`\u5220\u9664\u5DE5\u4F5C\u6D41 "${wf.name}"?`)) {
+              delete workflows[id];
+              saveComfyWorkflows(workflows);
+              renderWorkflowList();
+            }
+          });
+          $list.append($item);
+          $selChar.append(`<option value="${id}">${wf.name}</option>`);
+          $selBg.append(`<option value="${id}">${wf.name}</option>`);
+        });
+      }
+      $selChar.val(cs.defaultCharWorkflow || "default_char");
+      $selBg.val(cs.defaultBgWorkflow || "default_bg");
+    }
+    renderWorkflowList();
+    async function loadCheckpointsToSelect() {
+      const $sel = $container.find("#gal-comfy-def-checkpoint");
+      const cs = getComfyUISettings();
+      try {
+        const models = await ComfyUIAPI.getModels(cs.apiUrl);
+        $sel.empty().append('<option value="">-- \u4F7F\u7528 Workflow\u9ED8\u8BA4 --</option>');
+        models.forEach((m) => $sel.append(`<option value="${m}">${m}</option>`));
+        if (cs.defaultCheckpoint) $sel.val(cs.defaultCheckpoint);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] \u52A0\u8F7D\u6A21\u578B\u5931\u8D25:`, e);
+        $sel.html('<option value="">(\u52A0\u8F7D\u5931\u8D25)</option>');
+      }
+    }
+    if (settings.bgImageSource === "comfyui") loadCheckpointsToSelect();
+    $container.find("#gal-comfy-def-checkpoint").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.defaultCheckpoint = $(this).val();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfy-import-btn").on("click", () => $container.find("#gal-comfy-import-input").click());
+    $container.find("#gal-comfy-import-input").on("change", function() {
+      const file = this.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target.result);
+          const name = file.name.replace(".json", "");
+          const id = "wf_" + Date.now();
+          const workflows = getComfyWorkflows();
+          workflows[id] = { name, json };
+          saveComfyWorkflows(workflows);
+          renderWorkflowList();
+          showToast4(`\u5DF2\u5BFC\u5165: ${name}`);
+        } catch (err) {
+          showToast4("\u65E0\u6548\u7684 JSON \u6587\u4EF6");
+        }
+        $(this).val("");
+      };
+      reader.readAsText(file);
+    });
+    $container.find("#gal-comfy-def-char").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.defaultCharWorkflow = $(this).val();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfy-def-bg").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.defaultBgWorkflow = $(this).val();
+      saveComfyUISettings(cs);
     });
   }
-  function bindBananaEvents($modal, settings) {
-    $modal.find("#gal-banana-enabled").on("change", async function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.enabled = $(this).is(":checked");
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.bananaImageGen.enabled ? "\u5DF2\u5F00\u542F\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757" : "\u5DF2\u5173\u95ED\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757");
+  function bindBananaConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "bananaImageGen");
+    $container.find("#gal-banana-proxy-url").on("change", function() {
+      update("proxyUrl", $(this).val().trim());
     });
-    $modal.find("#gal-banana-proxy-url").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.proxyUrl = $(this).val().trim();
-      saveSettings();
+    $container.find("#gal-banana-proxy-key").on("change", function() {
+      update("proxyApiKey", $(this).val().trim());
     });
-    $modal.find("#gal-banana-proxy-key").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.proxyApiKey = $(this).val().trim();
-      saveSettings();
+    $container.find("#gal-banana-model").on("change", function() {
+      update("model", $(this).val());
     });
-    $modal.find("#gal-banana-model").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.model = $(this).val();
-      saveSettings();
-    });
-    $modal.find("#gal-banana-cot").on("change", async function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.cotTemplate = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-cot").on("change", async function() {
+      update("cotTemplate", $(this).val());
       if (getIsEnabled()) await injectCOTToWorldbook();
     });
-    $modal.find("#gal-banana-prompt-prefix").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.defaultPromptPrefix = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-prompt-prefix").on("change", function() {
+      update("defaultPromptPrefix", $(this).val());
     });
-    $modal.find("#gal-banana-prompt-suffix").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.defaultPromptSuffix = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-prompt-suffix").on("change", function() {
+      update("defaultPromptSuffix", $(this).val());
     });
-    $modal.find("#gal-banana-cgmode").on("change", async function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.cgMode = $(this).is(":checked");
-      saveSettings();
-      $modal.find("#gal-banana-appearance-section").toggle(settings.bananaImageGen.cgMode === true);
-      $modal.find("#gal-banana-size-section").toggle(settings.bananaImageGen.cgMode === true);
+    $container.find("#gal-banana-cgmode").on("change", async function() {
+      const checked = $(this).is(":checked");
+      update("cgMode", checked);
+      $container.find("#gal-banana-appearance-section").toggle(checked);
+      $container.find("#gal-banana-size-section").toggle(checked);
       if (getIsEnabled()) await injectCOTToWorldbook();
     });
-    $modal.find("#gal-banana-image-size").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.cgImageSize = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-image-size").on("change", function() {
+      update("cgImageSize", $(this).val());
     });
-    $modal.find("#gal-banana-autosave").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.autoSaveToLibrary = $(this).is(":checked");
-      saveSettings();
+    $container.find("#gal-banana-autosave").on("change", function() {
+      update("autoSaveToLibrary", $(this).is(":checked"));
     });
-    renderBananaAppearanceList2($modal);
-    $modal.find("#gal-banana-appearance-add").on("click", function() {
+    renderBananaAppearanceList2($container);
+    $container.find("#gal-banana-appearance-add").on("click", function() {
       if (_showBananaAppearancePickerRef2) _showBananaAppearancePickerRef2(async (selection) => {
         const list = getBananaCharacterAppearances();
         const name = selection.characterName || selection.characterId;
@@ -21825,30 +21721,30 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (existingIndex >= 0) {
           list[existingIndex] = appearanceData;
         } else if (list.length >= 3) {
-          showToast5("\u6700\u591A\u53EA\u80FD\u6307\u5B9A3\u4E2A\u89D2\u8272");
+          showToast4("\u6700\u591A\u53EA\u80FD\u6307\u5B9A3\u4E2A\u89D2\u8272");
           return;
         } else {
           list.push(appearanceData);
         }
         setBananaCharacterAppearances(list);
-        renderBananaAppearanceList2($modal);
+        renderBananaAppearanceList2($container);
         if (getIsEnabled()) await injectCOTToWorldbook();
       });
     });
-    $modal.on("click", ".gal-banana-appearance-remove", async function() {
+    $container.on("click", ".gal-banana-appearance-remove", async function() {
       const charId = $(this).attr("data-char");
       const list = getBananaCharacterAppearances().filter((a) => (a.characterName || a.characterId) !== charId);
       setBananaCharacterAppearances(list);
-      renderBananaAppearanceList2($modal);
+      renderBananaAppearanceList2($container);
       if (getIsEnabled()) await injectCOTToWorldbook();
     });
-    $modal.find("#gal-banana-refresh-models").on("click", async function() {
+    $container.find("#gal-banana-refresh-models").on("click", async function() {
       const $btn = $(this);
-      const $select = $modal.find("#gal-banana-model");
-      const proxyUrl = $modal.find("#gal-banana-proxy-url").val().trim();
-      const proxyKey = $modal.find("#gal-banana-proxy-key").val().trim();
+      const $select = $container.find("#gal-banana-model");
+      const proxyUrl = $container.find("#gal-banana-proxy-url").val().trim();
+      const proxyKey = $container.find("#gal-banana-proxy-key").val().trim();
       if (!proxyUrl) {
-        showToast5("\u8BF7\u5148\u586B\u5199\u53CD\u4EE3 API \u5730\u5740");
+        showToast4("\u8BF7\u5148\u586B\u5199\u53CD\u4EE3 API \u5730\u5740");
         return;
       }
       $btn.prop("disabled", true).find("i").addClass("fa-spin");
@@ -21860,39 +21756,39 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const data = await response.json();
         const models = data.data || [];
         $select.html(models.map((m) => `<option value="${m.id}">${m.id}</option>`).join(""));
-        if (models.length > 0) showToast5(`\u83B7\u53D6\u5230 ${models.length} \u4E2A\u6A21\u578B`);
+        if (models.length > 0) showToast4(`\u83B7\u53D6\u5230 ${models.length} \u4E2A\u6A21\u578B`);
         else {
           $select.html('<option value="">\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B</option>');
-          showToast5("\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B");
+          showToast4("\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B");
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u83B7\u53D6\u5927\u9999\u8549\u6A21\u578B\u5217\u8868\u5931\u8D25:`, e);
-        showToast5(`\u83B7\u53D6\u6A21\u578B\u5217\u8868\u5931\u8D25: ${e.message}`);
+        showToast4(`\u83B7\u53D6\u6A21\u578B\u5217\u8868\u5931\u8D25: ${e.message}`);
       } finally {
         $btn.prop("disabled", false).find("i").removeClass("fa-spin");
       }
     });
-    $modal.find("#gal-banana-generate-btn").on("click", async function() {
+    $container.find("#gal-banana-generate-btn").on("click", async function() {
       const $btn = $(this);
-      const sceneName = $modal.find("#gal-banana-scene-name").val().trim();
-      const customPrompt = $modal.find("#gal-banana-custom-prompt").val().trim();
-      const proxyUrl = $modal.find("#gal-banana-proxy-url").val().trim();
-      const proxyKey = $modal.find("#gal-banana-proxy-key").val().trim();
-      const model = $modal.find("#gal-banana-model").val();
-      const promptPrefix = $modal.find("#gal-banana-prompt-prefix").val();
-      const promptSuffix = $modal.find("#gal-banana-prompt-suffix").val();
-      const cgMode = $modal.find("#gal-banana-cgmode").is(":checked");
+      const sceneName = $container.find("#gal-banana-scene-name").val().trim();
+      const customPrompt = $container.find("#gal-banana-custom-prompt").val().trim();
+      const proxyUrl = $container.find("#gal-banana-proxy-url").val().trim();
+      const proxyKey = $container.find("#gal-banana-proxy-key").val().trim();
+      const model = $container.find("#gal-banana-model").val();
+      const promptPrefix = $container.find("#gal-banana-prompt-prefix").val();
+      const promptSuffix = $container.find("#gal-banana-prompt-suffix").val();
+      const cgMode = $container.find("#gal-banana-cgmode").is(":checked");
       const defaultSceneSuffix = ", no humans, scenery, background";
       if (!sceneName) {
-        showToast5("\u8BF7\u8F93\u5165\u573A\u666F\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u573A\u666F\u540D\u79F0");
         return;
       }
       if (!proxyUrl) {
-        showToast5("\u8BF7\u5148\u914D\u7F6E\u53CD\u4EE3 API \u5730\u5740");
+        showToast4("\u8BF7\u5148\u914D\u7F6E\u53CD\u4EE3 API \u5730\u5740");
         return;
       }
       if (!model) {
-        showToast5("\u8BF7\u5148\u9009\u62E9\u56FE\u7247\u751F\u6210\u6A21\u578B");
+        showToast4("\u8BF7\u5148\u9009\u62E9\u56FE\u7247\u751F\u6210\u6A21\u578B");
         return;
       }
       let finalPrompt = customPrompt || sceneName;
@@ -21939,23 +21835,23 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!content) throw new Error("\u672A\u8FD4\u56DE\u5185\u5BB9");
         const imageUrl = parseBananaImageFromResponse(content, proxyUrl);
         if (!imageUrl) throw new Error("\u672A\u80FD\u4ECE\u54CD\u5E94\u4E2D\u89E3\u6790\u5230\u56FE\u7247");
-        $modal.find("#gal-banana-preview").show();
-        $modal.find("#gal-banana-preview-img").attr("src", imageUrl);
-        $modal.find("#gal-banana-save-to-library").data("imageUrl", imageUrl).data("sceneName", sceneName);
-        showToast5("\u80CC\u666F\u56FE\u7247\u751F\u6210\u6210\u529F");
+        $container.find("#gal-banana-preview").show();
+        $container.find("#gal-banana-preview-img").attr("src", imageUrl);
+        $container.find("#gal-banana-save-to-library").data("imageUrl", imageUrl).data("sceneName", sceneName);
+        showToast4("\u80CC\u666F\u56FE\u7247\u751F\u6210\u6210\u529F");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE\u5931\u8D25:`, e);
-        showToast5(`\u751F\u6210\u5931\u8D25: ${e.message}`);
+        showToast4(`\u751F\u6210\u5931\u8D25: ${e.message}`);
       } finally {
         $btn.prop("disabled", false).html('<i class="fa-solid fa-wand-magic-sparkles"></i> \u751F\u6210\u80CC\u666F\u56FE\u7247');
       }
     });
-    $modal.find("#gal-banana-save-to-library").on("click", async function() {
+    $container.find("#gal-banana-save-to-library").on("click", async function() {
       const $btn = $(this);
       const imageUrl = $btn.data("imageUrl");
       const sceneName = $btn.data("sceneName");
       if (!imageUrl || !sceneName) {
-        showToast5("\u8BF7\u5148\u751F\u6210\u56FE\u7247");
+        showToast4("\u8BF7\u5148\u751F\u6210\u56FE\u7247");
         return;
       }
       $btn.prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u4FDD\u5B58\u4E2D...');
@@ -21971,32 +21867,385 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         await saveBackground(sceneName, imageBlob, imageUrl);
         sceneBackgrounds.set(sceneName, imageUrl);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e));
-        showToast5(`\u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
+        showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
         $btn.html('<i class="fa-solid fa-check"></i> \u5DF2\u4FDD\u5B58');
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u5230\u80CC\u666F\u5E93\u5931\u8D25`, e);
-        showToast5(`\u4FDD\u5B58\u5931\u8D25: ${e.message}`);
+        showToast4(`\u4FDD\u5B58\u5931\u8D25: ${e.message}`);
         $btn.prop("disabled", false).html('<i class="fa-solid fa-save"></i> \u4FDD\u5B58\u5230\u80CC\u666F\u5E93');
       }
     });
   }
-  function bindSpriteEvents($modal, activeTab, currentPackId) {
-    $("#gal-batch-upload-btn").on("click", () => {
+  function bindNovelAIConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "novelai");
+    $container.find("#gal-novelai-apikey").on("input change", function() {
+      update("apiKey", $(this).val().trim());
+    });
+    $container.find("#gal-novelai-model").on("change", function() {
+      update("model", $(this).val());
+    });
+    $container.find("#gal-novelai-size").on("change", function() {
+      if (!settings.novelai) settings.novelai = {};
+      const [w, h] = $(this).val().split("x").map(Number);
+      settings.novelai.width = w;
+      settings.novelai.height = h;
+      saveSettings();
+    });
+    $container.find("#gal-novelai-steps").on("input", function() {
+      const val = parseInt($(this).val());
+      update("steps", val);
+      $container.find("#gal-novelai-steps-value").text(val);
+    });
+    $container.find("#gal-novelai-scale").on("input", function() {
+      const val = parseFloat($(this).val());
+      update("scale", val);
+      $container.find("#gal-novelai-scale-value").text(val);
+    });
+    $container.find("#gal-novelai-sampler").on("change", function() {
+      update("sampler", $(this).val());
+    });
+    $container.find("#gal-novelai-prompt-prefix").on("change", function() {
+      update("defaultPromptPrefix", $(this).val());
+    });
+    $container.find("#gal-novelai-prompt-suffix").on("change", function() {
+      update("defaultPromptSuffix", $(this).val());
+    });
+    $container.find("#gal-novelai-negative").on("change", function() {
+      update("negativePrompt", $(this).val());
+    });
+    $container.find("#gal-novelai-autosave").on("change", function() {
+      update("autoSaveToLibrary", $(this).is(":checked"));
+    });
+  }
+  function bindWallhavenConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "wallhaven");
+    $container.find("#gal-wallhaven-category").on("change", async function() {
+      update("category", $(this).val());
+      if (getIsEnabled()) await injectCOTToWorldbook();
+    });
+    $container.find("#gal-wallhaven-purity").on("change", function() {
+      update("purity", $(this).val());
+    });
+    $container.find("#gal-wallhaven-cgmode").on("change", async function() {
+      update("cgMode", $(this).is(":checked"));
+      if (getIsEnabled()) await injectCOTToWorldbook();
+    });
+    $container.find("#gal-wallhaven-customtags").on("change", function() {
+      const tags = $(this).val();
+      update("customTags", tags ? tags.split(",").map((t) => t.trim()).filter((t) => t) : []);
+    });
+    $container.find("#gal-wallhaven-apikey").on("change", function() {
+      update("apiKey", $(this).val());
+    });
+    $container.find("#gal-wallhaven-sorting").on("change", function() {
+      update("sorting", $(this).val());
+      $container.find("#gal-wallhaven-toprange-container").toggle($(this).val() === "toplist");
+      showToast4(`\u6392\u5E8F\u65B9\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+    });
+    $container.find("#gal-wallhaven-toprange").on("change", function() {
+      update("topRange", $(this).val());
+      showToast4(`\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+    });
+  }
+
+  // src/ui/asset-manager-modal.js
+  var _showSpriteUploadDialogRef5 = null;
+  var _showBatchUploadDialogRef3 = null;
+  var _showBackgroundUploadDialogRef3 = null;
+  var _showBatchBackgroundUploadDialogRef2 = null;
+  var _showCustomExpressionManagerRef2 = null;
+  var _showSettingsPanelRef3 = null;
+  function setAssetManagerModalRefs({ showSpriteUploadDialog: showSpriteUploadDialog2, showBatchUploadDialog: showBatchUploadDialog2, showBackgroundUploadDialog: showBackgroundUploadDialog2, showBatchBackgroundUploadDialog: showBatchBackgroundUploadDialog2, showCustomExpressionManager: showCustomExpressionManager2, showSettingsPanel: showSettingsPanel2 }) {
+    if (showSpriteUploadDialog2) _showSpriteUploadDialogRef5 = showSpriteUploadDialog2;
+    if (showBatchUploadDialog2) _showBatchUploadDialogRef3 = showBatchUploadDialog2;
+    if (showBackgroundUploadDialog2) _showBackgroundUploadDialogRef3 = showBackgroundUploadDialog2;
+    if (showBatchBackgroundUploadDialog2) _showBatchBackgroundUploadDialogRef2 = showBatchBackgroundUploadDialog2;
+    if (showCustomExpressionManager2) _showCustomExpressionManagerRef2 = showCustomExpressionManager2;
+    if (showSettingsPanel2) _showSettingsPanelRef3 = showSettingsPanel2;
+  }
+  var CUSTOM_LOCATION_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
+  var CUSTOM_TIME_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
+  async function showAssetManagerModal2(activeTab = "sprites") {
+    if (_showSettingsPanelRef3) {
+      _showSettingsPanelRef3("assets", activeTab);
+    }
+  }
+  async function buildAssetManagerContent(activeTab) {
+    const settings = getSettings();
+    const allPacks = await getAllImagePacks();
+    const currentPackId = getCurrentPackId();
+    const currentPack = allPacks.find((p) => p.id === currentPackId) || allPacks.find((p) => p.id === DEFAULT_PACK_ID);
+    const currentPackName = currentPack ? currentPack.name : "\u672A\u5B9A\u4E49";
+    const currentRenderScope = getRenderScope();
+    const allSprites = await getAllSprites(currentPackId);
+    const allBackgrounds = await getAllBackgrounds(currentPackId);
+    const dbCharacters = getCharacterListFromDatabase();
+    const charactersData = /* @__PURE__ */ new Map();
+    allSprites.forEach((sprite) => {
+      if (!charactersData.has(sprite.characterId)) {
+        charactersData.set(sprite.characterId, { sprites: [], type: "\u81EA\u5B9A\u4E49", source: "\u672C\u5730" });
+      }
+      charactersData.get(sprite.characterId).sprites.push(sprite);
+    });
+    dbCharacters.forEach((char) => {
+      const charName = char.name;
+      if (!charactersData.has(charName)) {
+        charactersData.set(charName, { sprites: [], type: char.type, source: char.source });
+      } else {
+        const info = charactersData.get(charName);
+        info.type = char.type;
+        info.source = char.source;
+      }
+    });
+    activeTab = activeTab || "sprites";
+    const html = `
+    <div class="gal-asset-header">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="gal-pack-selector" style="position: relative;">
+            <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="\u5207\u6362\u56FE\u5305" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
+              <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+            </button>
+            <div class="gal-pack-menu gal-z-dropdown" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden;">
+              ${allPacks.map((pack) => `
+                <div class="gal-pack-item ${pack.id === currentPackId ? "active" : ""}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? "background: #e9ecef; font-weight: 700;" : ""}">
+                  <span><i class="fa-solid fa-folder${pack.id === currentPackId ? "-open" : ""}" style="margin-right: 8px; color: ${pack.id === currentPackId ? "#6f42c1" : "#666"};"></i>${pack.name}</span>
+                  ${pack.isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">\u9ED8\u8BA4</span>' : ""}
+                </div>
+              `).join("")}
+              <div style="border-top: 2px solid #eee;">
+                <div class="gal-pack-item" id="gal-add-pack-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #28a745;">
+                  <i class="fa-solid fa-plus"></i> <span>\u65B0\u5EFA\u56FE\u5305</span>
+                </div>
+                <div class="gal-pack-item" id="gal-manage-packs-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #17a2b8;">
+                  <i class="fa-solid fa-cog"></i> <span>\u7BA1\u7406\u56FE\u5305</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button class="gal-action-btn" id="gal-render-scope-btn" title="${currentRenderScope === "current" ? "\u4EC5\u5F53\u524D\u56FE\u5305\u8D44\u6E90" : "\u641C\u7D22\u6240\u6709\u56FE\u5305\u8D44\u6E90"}" style="padding: 6px 10px; font-size: 0.9rem; background: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"}; color: #fff; border-color: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"};">
+            <i class="fa-solid ${currentRenderScope === "current" ? "fa-bullseye" : "fa-globe"}"></i>
+          </button>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div class="gal-export-dropdown" style="position: relative;">
+            <button class="gal-action-btn" id="gal-export-dropdown-btn" title="\u5BFC\u51FA\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem;">
+              <i class="fa-solid fa-file-export"></i> <span>\u5BFC\u51FA</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+            </button>
+            <div class="gal-export-menu gal-z-dropdown" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
+              <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i><span>\u5BFC\u51FA\u672C\u5730\u538B\u7F29\u5305</span>
+              </div>
+              <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i><span>\u5BFC\u51FAGitHub\u8D44\u6E90\u5305</span>
+              </div>
+            </div>
+          </div>
+          <div class="gal-import-dropdown" style="position: relative;">
+            <button class="gal-action-btn" id="gal-import-dropdown-btn" title="\u5BFC\u5165\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
+              <i class="fa-solid fa-file-import"></i> <span>\u5BFC\u5165</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+            </button>
+            <div class="gal-import-menu gal-z-dropdown" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
+              <div class="gal-import-item" data-action="import-local-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-file-zipper" style="width: 20px; color: #f39c12;"></i><span>\u672C\u5730\u538B\u7F29\u5305\u5BFC\u5165</span>
+              </div>
+              <div class="gal-import-item" data-action="import-remote-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-cloud-arrow-down" style="width: 20px; color: #3498db;"></i><span>\u8FDC\u7A0B\u538B\u7F29\u5305\u5BFC\u5165</span>
+              </div>
+              <div class="gal-import-item" data-action="import-json" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-link" style="width: 20px; color: #9b59b6;"></i><span>\u5BFC\u5165\u8FDC\u7A0B\u94FE\u63A5JSON</span>
+              </div>
+              <div class="gal-import-item" data-action="import-github" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
+                <i class="fa-brands fa-github" style="width: 20px; color: #333;"></i><span>\u4ECEGitHub\u5BFC\u5165</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="gal-asset-import-zip-input" accept=".zip" style="display: none;">
+      <input type="file" id="gal-asset-import-input" multiple webkitdirectory style="display: none;">
+      <input type="file" id="gal-asset-import-json-input" accept=".json" style="display: none;">
+    </div>
+    <div class="gal-tab-header">
+      <button class="gal-tab-btn ${activeTab === "sprites" ? "active" : ""}" data-tab="sprites"><i class="fa-solid fa-user"></i> \u7ACB\u7ED8\u7BA1\u7406</button>
+      <button class="gal-tab-btn ${activeTab === "backgrounds" ? "active" : ""}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> \u80CC\u666F\u7BA1\u7406</button>
+      <button class="gal-tab-btn ${activeTab === "imagegen" ? "active" : ""}" data-tab="imagegen"><i class="fa-solid fa-wand-magic-sparkles"></i> \u751F\u56FE\u914D\u7F6E</button>
+      <button class="gal-tab-btn ${activeTab === "custom" ? "active" : ""}" data-tab="custom"><i class="fa-solid fa-code"></i> \u81EA\u5B9A\u4E49\u6A21\u5757</button>
+    </div>
+    <div class="gal-tab-content">
+      ${buildSpritesTab(activeTab, allSprites, charactersData)}
+      ${buildBackgroundsTab(settings, allBackgrounds)}
+      ${buildImagegenTab(activeTab, settings)}
+      ${buildCustomTab(settings)}
+    </div>
+  `;
+    return html;
+  }
+  function bindAssetManagerContentEvents($modal, activeTab) {
+    const settings = getSettings();
+    $modal.find(".gal-tab-btn").on("click", function() {
+      const tab = $(this).data("tab");
+      $modal.find(".gal-tab-btn").removeClass("active");
+      $(this).addClass("active");
+      $modal.find(".gal-tab-pane").hide();
+      $modal.find(`.gal-tab-pane[data-pane="${tab}"]`).show();
+    });
+    $modal.find("#gal-save-custom-html").on("click", function() {
+      const locHtml = $("#gal-custom-location-html").val();
+      const timeHtml = $("#gal-custom-time-html").val();
+      localStorage.setItem(CUSTOM_LOCATION_HTML_KEY4, locHtml);
+      localStorage.setItem(CUSTOM_TIME_HTML_KEY4, timeHtml);
+      showToast4("\u81EA\u5B9A\u4E49\u914D\u7F6E\u5DF2\u4FDD\u5B58");
+    });
+    bindImageGenConfigEvents($modal, settings);
+    bindSpriteEvents($modal, activeTab);
+    bindBackgroundEvents($modal, activeTab);
+    bindPackSelectorEvents($modal, activeTab);
+    bindExportImportEvents($modal, activeTab);
+    activeTab = activeTab || "sprites";
+    if (activeTab !== "sprites") {
+      $modal.find(".gal-tab-btn").removeClass("active");
+      $modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).addClass("active");
+      $modal.find(".gal-tab-pane").hide();
+      $modal.find(`.gal-tab-pane[data-pane="${activeTab}"]`).show();
+    }
+  }
+  function buildSpritesTab(activeTab, allSprites, charactersData) {
+    return `
+  <div class="gal-tab-pane ${activeTab === "sprites" ? "active" : ""}" data-pane="sprites" style="${activeTab !== "sprites" ? "display: none;" : ""}">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allSprites.length} \u4E2A\u7ACB\u7ED8\uFF0C\u5171 ${charactersData.size} \u4E2A\u89D2\u8272</span>
+      <div style="display: flex; gap: 10px;">
+        <button class="gal-action-btn" id="gal-batch-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
+        <button class="gal-action-btn primary" id="gal-add-sprite-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u7ACB\u7ED8</span></button>
+        <button class="gal-action-btn" id="gal-manage-expressions-btn" style="padding: 8px 16px; background: #17a2b8; color: #fff; border: none;"><i class="fa-solid fa-face-smile"></i> <span>\u8868\u60C5\u6807\u7B7E</span></button>
+      </div>
+    </div>
+    ${charactersData.size === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-images" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u89D2\u8272\u6570\u636E\uFF0C\u8BF7\u786E\u4FDD\u5DF2\u52A0\u8F7D\u6570\u636E\u5E93\u811A\u672C\u6216\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p></div>` : `<div class="gal-character-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;">
+          ${Array.from(charactersData.entries()).map(([charId, info]) => {
+      const sprites = info.sprites;
+      const defaultSprite = sprites.find((s) => s.expression === "\u9ED8\u8BA4") || sprites[0];
+      const avatarUrl = defaultSprite?.imageUrl ? defaultSprite.imageUrl : defaultSprite?.imageBlob ? URL.createObjectURL(defaultSprite.imageBlob) : "";
+      const typeLabel = info.type && info.type !== "\u81EA\u5B9A\u4E49" ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${info.type}</span>` : "";
+      return `
+            <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s; position: relative;">
+              <div class="gal-character-avatar" style="aspect-ratio: 1 / 1; background: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
+                ${avatarUrl ? `<img src="${avatarUrl}" alt="${charId}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
+                ${sprites.length === 0 ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 0.7rem; padding: 2px; text-align: center;">\u65E0\u7ACB\u7ED8</div>' : ""}
+                <div class="gal-char-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s;">
+                  <button class="gal-char-transfer" data-char="${charId}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(111, 66, 193, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+                  <button class="gal-char-delete" data-char="${charId}" title="\u5220\u9664\u89D2\u8272" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220, 53, 69, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </div>
+              <div style="padding: 10px; text-align: center;">
+                <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">${charId}</div>
+                <div style="margin-top: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;">${typeLabel}<span style="font-size: 0.75rem; color: #888;">${sprites.length} \u4E2A\u8868\u60C5</span></div>
+              </div>
+            </div>`;
+    }).join("")}
+        </div>`}
+  </div>`;
+  }
+  function buildBackgroundsTab(settings, allBackgrounds) {
+    return `
+  <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allBackgrounds.length} \u4E2A\u80CC\u666F</span>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <button class="gal-action-btn" id="gal-batch-bg-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
+        <button class="gal-action-btn primary" id="gal-add-bg-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u80CC\u666F</span></button>
+      </div>
+    </div>
+    ${allBackgrounds.length === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-panorama" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u80CC\u666F\uFF0C\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p><small style="color: #bbb;">\u80CC\u666F\u56FE\u5C06\u6839\u636E &lt;background scene="\u573A\u666F\u540D" /&gt; \u6807\u7B7E\u81EA\u52A8\u5339\u914D</small></div>` : `<div class="gal-bg-grid">${allBackgrounds.map((bg) => `
+          <div class="gal-bg-card" data-scene="${bg.sceneName}">
+            <div class="gal-bg-preview">${bg.imageUrl ? `<img src="${bg.imageUrl}" alt="${bg.sceneName}">` : bg.imageBlob ? `<img src="${URL.createObjectURL(bg.imageBlob)}" alt="${bg.sceneName}">` : ""}</div>
+            <div class="gal-bg-label">${bg.sceneName}</div>
+            <div class="gal-bg-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
+              <button class="gal-bg-transfer" data-scene="${bg.sceneName}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(111, 66, 193, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+              <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="\u5220\u9664" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>`).join("")}</div>`}
+  </div>`;
+  }
+  function buildImagegenTab(activeTab, settings) {
+    return `
+  <div class="gal-tab-pane" data-pane="imagegen" style="${activeTab !== "imagegen" ? "display: none;" : ""}">
+    ${buildImageGenConfigPane(settings)}
+  </div>`;
+  }
+  function buildCustomTab(settings) {
+    return `
+  <div class="gal-tab-pane" data-pane="custom" style="display: none;">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> \u5730\u70B9\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-location-html" placeholder="<div>\u81EA\u5B9A\u4E49\u5730\u70B9\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || ""}</textarea></div>
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> \u65F6\u95F4\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-time-html" placeholder="<div>\u81EA\u5B9A\u4E49\u65F6\u95F4\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || ""}</textarea></div>
+      <div style="text-align: right;"><button class="gal-action-btn primary" id="gal-save-custom-html" style="padding: 8px 20px;"><i class="fa-solid fa-save"></i> \u4FDD\u5B58\u914D\u7F6E</button></div>
+    </div>
+    <div style="padding: 15px; color: #666; font-size: 0.9rem; line-height: 1.6;"><strong><i class="fa-solid fa-lightbulb"></i> \u8BF4\u660E\uFF1A</strong><br>\u6B64\u5904\u914D\u7F6E\u7684 HTML \u5185\u5BB9\u5C06\u5728\u70B9\u51FB\u4E3B\u754C\u9762\u7684\u5730\u70B9/\u65F6\u95F4\u72B6\u6001\u680F\u65F6\u5F39\u7A97\u663E\u793A\u3002<br>\u652F\u6301\u6807\u51C6 HTML \u6807\u7B7E\u548C\u5185\u8054\u6837\u5F0F\u3002</div>
+  </div>`;
+  }
+  function buildAssetManagerStyles() {
+    return `
+    .gal-tab-btn { padding: 12px 20px; border: none; background: transparent; font-size: 1rem; font-weight: 600; color: #666; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+    .gal-tab-btn:hover { color: ${THEME.accent}; }
+    .gal-tab-btn.active { color: ${THEME.accent}; border-bottom-color: ${THEME.accent}; }
+    .gal-character-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    .gal-character-card:hover .gal-char-actions { opacity: 1 !important; }
+    @media (max-width: 768px), (pointer: coarse) { .gal-char-actions { opacity: 1 !important; } }
+    .gal-sprite-group { margin-bottom: 20px; background: #f8f9fa; border-radius: 8px; padding: 15px; }
+    .gal-sprite-group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .gal-char-name { font-weight: 700; font-size: 1.1rem; color: ${THEME.dark}; }
+    .gal-sprite-count { font-size: 0.85rem; color: #888; }
+    .gal-sprite-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 12px; }
+    .gal-sprite-card { position: relative; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; }
+    .gal-sprite-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .gal-sprite-preview { aspect-ratio: 2 / 3; background: #eee; overflow: hidden; }
+    .gal-sprite-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .gal-sprite-label { padding: 6px; text-align: center; font-size: 0.75rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gal-sprite-delete { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
+    .gal-sprite-card:hover .gal-sprite-delete { opacity: 1; }
+    .gal-bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+    .gal-bg-card { position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer; }
+    .gal-bg-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+    .gal-bg-preview { aspect-ratio: 16 / 9; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); overflow: hidden; }
+    .gal-bg-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .gal-bg-label { padding: 10px; text-align: center; font-size: 0.9rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gal-bg-actions { opacity: 0; transition: opacity 0.2s; }
+    .gal-bg-card:hover .gal-bg-actions { opacity: 1; }
+    .gal-import-dropdown { position: relative; display: inline-block; }
+    .gal-import-menu { animation: galDropdownFadeIn 0.15s ease; }
+    @keyframes galDropdownFadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    .gal-import-item:hover { background: #f0f7ff !important; }
+    .gal-import-item:active { background: #e0efff !important; }
+    .gal-import-progress-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
+    .gal-import-progress-box { background: #2b2e38; padding: 30px 50px; border-radius: 12px; text-align: center; min-width: 300px; }
+    .gal-import-progress-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 15px; color: #00d2ff; }
+    .gal-import-progress-bar-container { width: 100%; height: 8px; background: #444; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+    .gal-import-progress-bar { height: 100%; background: linear-gradient(90deg, #00d2ff, #00a8cc); width: 0%; transition: width 0.3s ease; }
+    .gal-import-progress-text { font-size: 0.9rem; color: #aaa; }
+    .gal-import-progress-details { font-size: 0.8rem; color: #888; margin-top: 8px; max-height: 60px; overflow-y: auto; }
+    .gal-imagegen-pills { display:flex; gap:8px; padding:12px 0; flex-wrap:wrap; }
+    .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
+    .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
+    .gal-pill.active { background:linear-gradient(135deg,${THEME.accent},#00a8cc); color:#fff; border-color:transparent; }
+  `;
+  }
+  function bindSpriteEvents($modal, activeTab) {
+    $modal.find("#gal-batch-upload-btn").on("click", () => {
       $modal.remove();
       if (_showBatchUploadDialogRef3) _showBatchUploadDialogRef3(null, () => showAssetManagerModal2("sprites"));
     });
-    $("#gal-manage-expressions-btn").on("click", () => {
+    $modal.find("#gal-manage-expressions-btn").on("click", () => {
       $modal.remove();
       if (_showCustomExpressionManagerRef2) _showCustomExpressionManagerRef2(() => showAssetManagerModal2("sprites"));
     });
-    $("#gal-add-sprite-btn").on("click", async () => {
+    $modal.find("#gal-add-sprite-btn").on("click", async () => {
       $modal.remove();
       if (_showSpriteUploadDialogRef5) await _showSpriteUploadDialogRef5("", "\u9ED8\u8BA4", () => showAssetManagerModal2("sprites"));
     });
     $modal.find(".gal-character-card").on("click", function(e) {
       if ($(e.target).closest(".gal-char-actions").length) return;
       const charId = $(this).data("char");
-      $modal.remove();
       showCharacterSpritesModal(charId);
     });
     $modal.find(".gal-character-card").on("mouseenter", function() {
@@ -22010,7 +22259,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const allSpritesAll = await getAllSprites(null, true);
       const charSprites = allSpritesAll.filter((s) => s.characterId === charId);
       if (charSprites.length === 0) {
-        showToast5("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8\u53EF\u8F6C\u79FB", "warning");
+        showToast4("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8\u53EF\u8F6C\u79FB", "warning");
         return;
       }
       const spriteKeys = charSprites.map((s) => `${s.characterId}_${s.expression}`);
@@ -22025,24 +22274,39 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const allSpritesAll = await getAllSprites(null, true);
       const charSprites = allSpritesAll.filter((s) => s.characterId === charId);
       if (charSprites.length === 0) {
-        showToast5("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8", "warning");
+        showToast4("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8", "warning");
         return;
       }
       if (confirm(`\u786E\u5B9A\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684\u6240\u6709 ${charSprites.length} \u4E2A\u7ACB\u7ED8\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\uFF01`)) {
         for (const sprite of charSprites) await deleteSprite(sprite.characterId, sprite.expression);
-        showToast5(`\u5DF2\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684 ${charSprites.length} \u4E2A\u7ACB\u7ED8`);
+        showToast4(`\u5DF2\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684 ${charSprites.length} \u4E2A\u7ACB\u7ED8`);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e2) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e2));
         $modal.remove();
         showAssetManagerModal2("sprites");
       }
     });
   }
-  function bindBackgroundEvents($modal, activeTab, currentPackId) {
-    $("#gal-add-bg-btn").on("click", () => {
+  function bindBackgroundEvents($modal, activeTab) {
+    $modal.on("click", ".gal-bg-card", function(e) {
+      if ($(e.target).closest(".gal-bg-actions").length) return;
+      const $img = $(this).find(".gal-bg-preview img");
+      if (!$img.length) return;
+      const src = $img.attr("src");
+      const scene = $(this).data("scene");
+      const $lightbox = $(`<div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
+      <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
+      <span style="color:#ccc;font-size:0.9rem;">${scene}</span>
+    </div>`);
+      $lightbox.on("click", function() {
+        $(this).remove();
+      });
+      $(getModalMountRoot()).append($lightbox);
+    });
+    $modal.find("#gal-add-bg-btn").on("click", () => {
       $modal.remove();
       if (_showBackgroundUploadDialogRef3) _showBackgroundUploadDialogRef3(() => showAssetManagerModal2("backgrounds"));
     });
-    $("#gal-batch-bg-upload-btn").on("click", () => {
+    $modal.find("#gal-batch-bg-upload-btn").on("click", () => {
       $modal.remove();
       if (_showBatchBackgroundUploadDialogRef2) _showBatchBackgroundUploadDialogRef2(() => showAssetManagerModal2("backgrounds"));
     });
@@ -22051,7 +22315,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const scene = $(e.currentTarget).attr("data-scene");
       if (confirm(`\u786E\u5B9A\u5220\u9664\u80CC\u666F\u300C${scene}\u300D\u5417\uFF1F`)) {
         await deleteBackground(scene);
-        showToast5(`\u5DF2\u5220\u9664\u80CC\u666F: ${scene}`);
+        showToast4(`\u5DF2\u5220\u9664\u80CC\u666F: ${scene}`);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e2) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e2));
         $modal.remove();
         showAssetManagerModal2("backgrounds");
@@ -22067,8 +22331,8 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       });
     });
   }
-  function bindPackSelectorEvents($modal, activeTab, allPacks, currentPackId) {
-    $("#gal-pack-dropdown-btn").on("click", function(e) {
+  function bindPackSelectorEvents($modal, activeTab) {
+    $modal.find("#gal-pack-dropdown-btn").on("click", function(e) {
       e.stopPropagation();
       $("#gal-export-menu, #gal-import-menu").hide();
       $("#gal-pack-menu").toggle();
@@ -22084,7 +22348,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       $(topWindow.document).off(".galMenus").off(".galImportMenu").off(".galPackMenu");
       showAssetManagerModal2();
     });
-    $("#gal-add-pack-btn").on("click", function() {
+    $modal.find("#gal-add-pack-btn").on("click", function() {
       $("#gal-pack-menu").hide();
       const name = prompt("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0\uFF1A");
       if (name && name.trim()) {
@@ -22095,11 +22359,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         });
       }
     });
-    $("#gal-manage-packs-btn").on("click", function() {
+    $modal.find("#gal-manage-packs-btn").on("click", function() {
       $("#gal-pack-menu").hide();
       showPackManagerModal();
     });
-    $("#gal-render-scope-btn").on("click", function() {
+    $modal.find("#gal-render-scope-btn").on("click", function() {
       const currentScope = getRenderScope();
       const newScope = currentScope === "current" ? "all" : "current";
       setRenderScope(newScope);
@@ -22109,7 +22373,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       } else {
         $btn.css({ background: "#20c997", borderColor: "#20c997" }).attr("title", "\u641C\u7D22\u6240\u6709\u56FE\u5305\u8D44\u6E90").find("i").removeClass("fa-bullseye").addClass("fa-globe");
       }
-      showToast5(newScope === "current" ? "\u5DF2\u5207\u6362\u4E3A\uFF1A\u4EC5\u5F53\u524D\u56FE\u5305" : "\u5DF2\u5207\u6362\u4E3A\uFF1A\u641C\u7D22\u6240\u6709\u56FE\u5305");
+      showToast4(newScope === "current" ? "\u5DF2\u5207\u6362\u4E3A\uFF1A\u4EC5\u5F53\u524D\u56FE\u5305" : "\u5DF2\u5207\u6362\u4E3A\uFF1A\u641C\u7D22\u6240\u6709\u56FE\u5305");
       const currentTab = $modal.find(".gal-tab-btn.active").data("tab") || activeTab || "sprites";
       $modal.remove();
       $(topWindow.document).off(".galMenus").off(".galImportMenu").off(".galPackMenu");
@@ -22117,7 +22381,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
   }
   function bindExportImportEvents($modal, activeTab) {
-    $("#gal-export-dropdown-btn").on("click", function(e) {
+    $modal.find("#gal-export-dropdown-btn").on("click", function(e) {
       e.stopPropagation();
       $("#gal-import-menu").hide();
       $("#gal-export-menu").toggle();
@@ -22187,7 +22451,7 @@ ${baseUrl}`)) return;
         });
       }
     });
-    $("#gal-import-dropdown-btn").on("click", function(e) {
+    $modal.find("#gal-import-dropdown-btn").on("click", function(e) {
       e.stopPropagation();
       $("#gal-export-menu").hide();
       $("#gal-import-menu").toggle();
@@ -22200,20 +22464,20 @@ ${baseUrl}`)) return;
       $("#gal-import-menu").hide();
       switch (action) {
         case "import-local-zip":
-          $("#gal-asset-import-zip-input").click();
+          $modal.find("#gal-asset-import-zip-input").click();
           break;
         case "import-remote-zip":
           showRemoteZipImportDialog();
           break;
         case "import-json":
-          $("#gal-asset-import-json-input").click();
+          $modal.find("#gal-asset-import-json-input").click();
           break;
         case "import-github":
           handleGitHubImport();
           break;
       }
     });
-    $("#gal-asset-import-zip-input").on("change", async function() {
+    $modal.find("#gal-asset-import-zip-input").on("change", async function() {
       const file = this.files[0];
       if (!file) return;
       const MAX_SIZE = 5 * 1024 * 1024 * 1024;
@@ -22237,7 +22501,7 @@ ${baseUrl}`)) return;
         }
       }
     }
-    $("#gal-asset-import-json-input").on("change", async function() {
+    $modal.find("#gal-asset-import-json-input").on("change", async function() {
       if (this.files.length > 0) {
         await importAssetsFromJson(this.files[0]);
         $modal.remove();
@@ -22371,17 +22635,10 @@ ${baseUrl}`)) return;
   setLive2DManagerRefs({ Live2DStage });
   setLipSyncRefs({ getProxiedAudioUrl: (url) => TTSManager._getProxiedAudioUrl(url) });
   setParserRefs({ getFormattedContent });
-  setExpressionsRefs({ showToast: showToast5, getIsEnabled, injectCOTToWorldbook });
-  setLive2DStageRefs({ showToast: showToast5 });
+  setExpressionsRefs({ showToast: showToast4, getIsEnabled, injectCOTToWorldbook });
+  setLive2DStageRefs({ showToast: showToast4 });
   setPositionEditorRefs({ getModalMountRoot });
-  setWallhavenHandlerRefs({
-    saveBackground,
-    getSceneBackgrounds: () => GalgameStore.cache.sceneBackgrounds,
-    getMessageSegmentState: () => GalgameStore.cache.segments,
-    getSpriteManager: () => SpriteManager,
-    updateGlobalOverlayContent,
-    showToast: showToast5
-  });
+  setBgGenSharedRefs({ updateGlobalOverlayContent, showToast: showToast4 });
   setSpriteManagerRefs({
     getSprite,
     getBackground,
@@ -22391,28 +22648,28 @@ ${baseUrl}`)) return;
     clearBackgroundLayers,
     BGMManager
   });
-  setTTSManagerRefs({ showToast: showToast5 });
-  setBGMManagerRefs({ showToast: showToast5 });
-  setWorldbookRefs({ showToast: showToast5 });
-  setEnhancedModeRefs({ showToast: showToast5 });
+  setTTSManagerRefs({ showToast: showToast4 });
+  setBGMManagerRefs({ showToast: showToast4 });
+  setWorldbookRefs({ showToast: showToast4 });
+  setEnhancedModeRefs({ showToast: showToast4 });
   setCharSettingsRefs({ showCustomPopupPanel, getModalMountRoot });
-  setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast5 });
+  setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast4 });
   setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus });
   setOverlayRefs({ updateOverlaySegmentDisplay });
   setOverlayContentRefs({ renderGalgameChoices });
   setChoicesRefs({ getIsRerolling });
   setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews });
   setGalgameModeRefs({ processNewMessage, applySettingsToUI });
-  setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration });
-  setBananaImageRefs({ updateGlobalOverlayContent, showToast: showToast5 });
+  setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration, handleNovelAIBackgroundGeneration });
   setMessageObserverRefs({ processNewMessage, injectGalgameButton });
   setEventsRefs({ showSettingsPanel, showSpriteUploadDialog, updateGlobalOverlayContent });
   setMenuButtonRefs({ showSettingsPanel });
-  setEnhancedModeRefs({ showToast: showToast5, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
-  setSettingsPanelRefs({ showAssetManagerModal: showAssetManagerModal2 });
+  setEnhancedModeRefs({ showToast: showToast4, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
+  setSettingsPanelRefs({ buildAssetsPane: buildAssetManagerContent, bindAssetsPane: bindAssetManagerContentEvents, assetStyles: buildAssetManagerStyles });
   setSpriteConfigRefs({ showBatchUploadDialog, showSpriteUploadDialog, showBackgroundUploadDialog });
   setAssetManagerRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });
-  setAssetManagerModalRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });
+  setAssetManagerModalRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showSettingsPanel });
+  setImageGenConfigRefs({ showBananaAppearancePicker });
   setAssetManagerModalRef(showAssetManagerModal2);
   console.log(`[${SCRIPT_NAME}] Phase 1-9 \u6A21\u5757\u52A0\u8F7D\u6210\u529F, \u7248\u672C: ${VERSION}`);
 })();

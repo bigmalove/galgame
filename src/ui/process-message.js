@@ -28,12 +28,14 @@ let _updateGlobalOverlayContentRef = null;
 let _applySettingsToUIRef = null;
 let _handleRealTimeBackgroundGenerationRef = null;
 let _handleBananaBackgroundGenerationRef = null;
+let _handleNovelAIBackgroundGenerationRef = null;
 
-export function setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration }) {
+export function setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration, handleNovelAIBackgroundGeneration }) {
   if (updateGlobalOverlayContent) _updateGlobalOverlayContentRef = updateGlobalOverlayContent;
   if (applySettingsToUI) _applySettingsToUIRef = applySettingsToUI;
   if (handleRealTimeBackgroundGeneration) _handleRealTimeBackgroundGenerationRef = handleRealTimeBackgroundGeneration;
   if (handleBananaBackgroundGeneration) _handleBananaBackgroundGenerationRef = handleBananaBackgroundGeneration;
+  if (handleNovelAIBackgroundGeneration) _handleNovelAIBackgroundGenerationRef = handleNovelAIBackgroundGeneration;
 }
 
 export function processNewMessage(mesNode) {
@@ -84,32 +86,23 @@ export function processNewMessage(mesNode) {
 
   let parsed = parseGalgameContent(contentToProcess);
 
-  // 实时背景生成处理
-  if (settings.realTimeBackgroundGen && parsed.backgroundChanges && _handleRealTimeBackgroundGenerationRef) {
-    for (const bgChange of parsed.backgroundChanges) {
-      if (bgChange.generationTags) {
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ComfyUI 背景生成: "${bgChange.scene}"`);
-        _handleRealTimeBackgroundGenerationRef(bgChange.scene, bgChange.generationTags);
-      }
-    }
-  }
-
-  // Wallhaven 壁纸搜索处理
-  if (settings.wallhaven?.enabled && parsed.backgroundChanges) {
-    for (const bgChange of parsed.backgroundChanges) {
-      if (bgChange.wallhavenTags) {
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 Wallhaven 背景搜索: "${bgChange.scene}"`);
-        handleWallhavenBackgroundSearch(bgChange.scene, bgChange.wallhavenTags);
-      }
-    }
-  }
-
-  // 大香蕉 AI 生图处理
-  if (settings.bananaImageGen?.enabled && parsed.backgroundChanges && _handleBananaBackgroundGenerationRef) {
-    for (const bgChange of parsed.backgroundChanges) {
-      if (bgChange.bananaPrompt) {
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 触发大香蕉背景生成: "${bgChange.scene}"`);
-        _handleBananaBackgroundGenerationRef(bgChange.scene, bgChange.bananaPrompt);
+  // 实时背景生成处理 (根据 bgImageSource 单选分派)
+  if (parsed.backgroundChanges) {
+    const bgSrc = settings.bgImageSource || 'none';
+    const bgDispatch = {
+      comfyui:   { tagKey: 'generationTags', handler: _handleRealTimeBackgroundGenerationRef, label: 'ComfyUI 背景生成' },
+      banana:    { tagKey: 'bananaPrompt',    handler: _handleBananaBackgroundGenerationRef,  label: '大香蕉背景生成' },
+      novelai:   { tagKey: 'generationTags', handler: _handleNovelAIBackgroundGenerationRef, label: 'NovelAI 背景生成' },
+      wallhaven: { tagKey: 'wallhavenTags',  handler: handleWallhavenBackgroundSearch,       label: 'Wallhaven 背景搜索' },
+    };
+    const entry = bgDispatch[bgSrc];
+    if (entry && entry.handler) {
+      for (const bgChange of parsed.backgroundChanges) {
+        const tags = bgChange[entry.tagKey];
+        if (tags) {
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ${entry.label}: "${bgChange.scene}"`);
+          entry.handler(bgChange.scene, tags);
+        }
       }
     }
   }

@@ -7,29 +7,15 @@ import { clearBackgroundLayers } from '../db/image-packs.js';
 import { getComfyWorkflows, getBananaCharacterAppearances, buildBananaAppearanceMultimodalContent } from './comfyui-helpers.js';
 import { ComfyUIAPI } from './comfyui-api.js';
 import { BGMManager } from '../audio/bgm-manager.js';
-import { SpriteManager } from '../sprite/sprite-manager.js';
 import { injectCOTToWorldbook } from '../logic/worldbook.js';
 import { getIsEnabled } from '../core/state.js';
+import { showBgGenToast, refreshUIForScene } from './bg-gen-shared.js';
 
 // ============================================
 // 大香蕉 AI 生图 + ComfyUI 实时背景生成
 // ============================================
 
-const messageSegmentState = GalgameStore.cache.segments;
 const sceneBackgrounds = GalgameStore.cache.backgrounds;
-
-// 延迟引用
-let _updateGlobalOverlayContentRef = null;
-let _showToastRef = null;
-
-export function setBananaImageRefs({ updateGlobalOverlayContent, showToast }) {
-  if (updateGlobalOverlayContent) _updateGlobalOverlayContentRef = updateGlobalOverlayContent;
-  if (showToast) _showToastRef = showToast;
-}
-
-function showToast(msg) {
-  if (_showToastRef) _showToastRef(msg);
-}
 
 // ============================================
 // ComfyUI 实时背景生成
@@ -37,7 +23,7 @@ function showToast(msg) {
 
 export async function handleRealTimeBackgroundGeneration(sceneName, tags) {
   const settings = getSettings();
-  if (!settings.realTimeBackgroundGen) return;
+  if (settings.bgImageSource !== 'comfyui') return;
   if (BGMManager.generatingScenes.has(sceneName)) return;
 
   try {
@@ -51,7 +37,7 @@ export async function handleRealTimeBackgroundGeneration(sceneName, tags) {
 
   console.log(`[${SCRIPT_NAME}] 触发实时背景生成: ${sceneName}, Tags: ${tags}`);
   BGMManager.generatingScenes.add(sceneName);
-  showToast(`正在生成新场景: ${sceneName}...`);
+  showBgGenToast(`正在生成新场景: ${sceneName}...`);
 
   const $bgLayer = $('#gal-global-overlay .gal-layer-bg');
   if ($bgLayer.length) {
@@ -83,48 +69,28 @@ export async function handleRealTimeBackgroundGeneration(sceneName, tags) {
 
       const blob = await ComfyUIAPI.generate(targetWorkflow.json, positive, negative, seed);
 
-      if (blob) {
-        await saveBackgroundsBatch([{ sceneName: sceneName, imageBlob: blob }]);
-
-        const newUrl = URL.createObjectURL(blob);
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 实时生成后手动更新缓存: "${sceneName}" URL: ${newUrl.substring(0, 50)}...`);
-        sceneBackgrounds.set(sceneName, newUrl);
-        console.log(`[${SCRIPT_NAME}] [DEBUG] Cache check after set: has("${sceneName}") = ${sceneBackgrounds.has(sceneName)}`);
-
-        console.log(`[${SCRIPT_NAME}] 场景生成并保存成功: ${sceneName}`);
-        showToast(`场景「${sceneName}」生成完成！`);
-
-        const $bgLayer = $('#gal-global-overlay .gal-layer-bg');
-        $bgLayer.find('.gal-gen-indicator').remove();
-
-        if (getIsEnabled()) {
-          injectCOTToWorldbook();
-        }
-
-        const $lastMes = $('#chat > .mes').last();
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 尝试刷新UI. LastMes ID: ${$lastMes.attr('mesid')}`);
-        if ($lastMes.length) {
-          const mesId = $lastMes.attr('mesid');
-          const state = messageSegmentState.get(String(mesId));
-          if (
-            state &&
-            state.parsedContent &&
-            state.parsedContent.currentBackground &&
-            state.parsedContent.currentBackground.scene === sceneName
-          ) {
-            SpriteManager.currentScene = null;
-            console.log(`[${SCRIPT_NAME}] [DEBUG] 强制刷新UI: ${sceneName}`);
-            if (_updateGlobalOverlayContentRef) {
-              _updateGlobalOverlayContentRef(mesId, state.parsedContent);
-            }
-          }
-        }
-      } else {
+      if (!blob) {
         throw new Error('生成的图片数据为空');
       }
+
+      await saveBackgroundsBatch([{ sceneName: sceneName, imageBlob: blob }]);
+
+      const newUrl = URL.createObjectURL(blob);
+      sceneBackgrounds.set(sceneName, newUrl);
+
+      console.log(`[${SCRIPT_NAME}] 场景生成并保存成功: ${sceneName}`);
+      showBgGenToast(`场景「${sceneName}」生成完成！`);
+
+      $('#gal-global-overlay .gal-layer-bg .gal-gen-indicator').remove();
+
+      if (getIsEnabled()) {
+        injectCOTToWorldbook();
+      }
+
+      refreshUIForScene(sceneName);
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 实时背景生成失败:`, e);
-      showToast(`场景「${sceneName}」生成失败`);
+      showBgGenToast(`场景「${sceneName}」生成失败`);
     } finally {
       BGMManager.generatingScenes.delete(sceneName);
     }
@@ -208,7 +174,7 @@ export function parseBananaImageFromResponse(content, proxyUrl) {
 
 export function handleBananaBackgroundGeneration(sceneName, prompt) {
   const settings = getSettings();
-  if (!settings.bananaImageGen?.enabled) return;
+  if (settings.bgImageSource !== 'banana') return;
   if (BGMManager.generatingScenes.has(sceneName)) return;
 
   if (sceneBackgrounds.has(sceneName)) {
@@ -271,9 +237,7 @@ export function handleBananaBackgroundGeneration(sceneName, prompt) {
       const genUrl = `${baseUrl}/chat/completions`;
 
       let messageContent = finalPrompt;
-      console.log(`[${SCRIPT_NAME}] 大香蕉生图: cgMode = ${bs.cgMode}`);
       const appearances = getBananaCharacterAppearances();
-      console.log(`[${SCRIPT_NAME}] 大香蕉生图: 角色外观列表 =`, JSON.stringify(appearances));
       if (bs.cgMode && appearances.length > 0) {
         console.log(`[${SCRIPT_NAME}] 大香蕉生图: CG模式，准备添加 ${appearances.length} 个角色立绘到多模态消息`);
         messageContent = await buildBananaAppearanceMultimodalContent(finalPrompt);
@@ -328,8 +292,7 @@ export function handleBananaBackgroundGeneration(sceneName, prompt) {
           }
 
           const savedUrl = await saveBackground(sceneName, imageBlob, imageUrl);
-          const cachedUrl = savedUrl || imageUrl;
-          sceneBackgrounds.set(sceneName, cachedUrl);
+          sceneBackgrounds.set(sceneName, savedUrl || imageUrl);
           console.log(`[${SCRIPT_NAME}] 大香蕉生图: 场景「${sceneName}」已保存到背景库`);
         } catch (saveErr) {
           console.warn(`[${SCRIPT_NAME}] 大香蕉生图: 保存到背景库失败，使用临时缓存`, saveErr);
@@ -339,28 +302,11 @@ export function handleBananaBackgroundGeneration(sceneName, prompt) {
         sceneBackgrounds.set(sceneName, imageUrl);
       }
 
-      const $lastMes = $('#chat > .mes').last();
-      if ($lastMes.length) {
-        const mesId = $lastMes.attr('mesid');
-        const state = messageSegmentState.get(String(mesId));
-        if (
-          state &&
-          state.parsedContent &&
-          state.parsedContent.currentBackground &&
-          state.parsedContent.currentBackground.scene === sceneName
-        ) {
-          SpriteManager.currentScene = null;
-          console.log(`[${SCRIPT_NAME}] 大香蕉生图: 强制刷新UI: ${sceneName}`);
-          if (_updateGlobalOverlayContentRef) {
-            _updateGlobalOverlayContentRef(mesId, state.parsedContent);
-          }
-        }
-      }
-
-      showToast(`场景「${sceneName}」AI 背景已生成`);
+      refreshUIForScene(sceneName);
+      showBgGenToast(`场景「${sceneName}」AI 背景已生成`);
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 大香蕉生图失败:`, e);
-      showToast(`大香蕉生图失败: ${e.message.substring(0, 50)}`);
+      showBgGenToast(`大香蕉生图失败: ${e.message.substring(0, 50)}`);
     } finally {
       BGMManager.generatingScenes.delete(sceneName);
     }

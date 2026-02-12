@@ -5076,7 +5076,7 @@ ${lines.join("\n")}`;
     return currentDisplayMesId;
   }
   function setCurrentDisplayMesId(mesId) {
-    currentDisplayMesId = mesId;
+    currentDisplayMesId = mesId === null || mesId === void 0 ? null : String(mesId);
   }
   function queueOverlayUpdate(source, updateTask) {
     const run = async () => {
@@ -14638,10 +14638,11 @@ ${firstResult}`;
     const $overlay = ensureGlobalOverlay();
     const segments = parsedContent.segments;
     const settings = getSettings();
-    let state = messageSegmentState3.get(String(mesId));
+    const mesIdStr = String(mesId);
+    let state = messageSegmentState3.get(mesIdStr);
     if (!state) {
       state = { currentIndex: 0, segments, parsedContent, renderToken: 0 };
-      messageSegmentState3.set(String(mesId), state);
+      messageSegmentState3.set(mesIdStr, state);
       console.log(`[${SCRIPT_NAME}] [DEBUG] \u65B0\u5EFA\u72B6\u6001\uFF0C\u6BB5\u843D\u6570: ${segments.length}`);
     } else {
       const segmentCountDiff = Math.abs(state.segments.length - segments.length);
@@ -14656,11 +14657,11 @@ ${firstResult}`;
       }
       console.log(`[${SCRIPT_NAME}] [DEBUG] \u66F4\u65B0\u72B6\u6001\uFF0C\u5F53\u524D\u7D22\u5F15: ${state.currentIndex}, \u6BB5\u843D\u6570: ${segments.length}`);
     }
-    const isNewMessage = getCurrentDisplayMesId() !== mesId;
+    const isNewMessage = getCurrentDisplayMesId() !== mesIdStr;
     if (isNewMessage) {
-      SpriteManager.reset($overlay);
+      console.log(`[${SCRIPT_NAME}] [DEBUG] \u5207\u6362\u6D88\u606F(${getCurrentDisplayMesId()} -> ${mesIdStr})\uFF0C\u4FDD\u7559\u73B0\u6709Live2D\u6A21\u578B\u907F\u514D\u91CD\u8F7D`);
     }
-    setCurrentDisplayMesId(mesId);
+    setCurrentDisplayMesId(mesIdStr);
     const renderToken = nextOverlayRenderToken(state);
     $overlay.attr("data-render-token", String(renderToken));
     const currentIndex = Math.min(state.currentIndex, segments.length - 1);
@@ -14718,13 +14719,13 @@ ${firstResult}`;
       stopNextBtnAnimation();
       $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     }
-    $overlay.find(".gal-game-container").attr("data-mes-id", mesId);
     updateLocationTimeDisplay();
     if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
-      const segmentId = `${mesId}_${currentIndex}`;
+      const segmentId = `${mesIdStr}_${currentIndex}`;
       TTSManager.stop();
       TTSManager.speak(displaySegment, segmentId);
     }
+    $overlay.find(".gal-game-container").attr("data-mes-id", mesIdStr);
   }
   async function updateOverlaySegmentDisplay(state, expectedRenderToken = null) {
     if (!state) return false;

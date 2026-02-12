@@ -23,7 +23,7 @@ export function getCurrentDisplayMesId() {
 }
 
 export function setCurrentDisplayMesId(mesId) {
-  currentDisplayMesId = mesId;
+  currentDisplayMesId = mesId === null || mesId === undefined ? null : String(mesId);
 }
 
 export function queueOverlayUpdate(source, updateTask) {

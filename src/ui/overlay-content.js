@@ -25,11 +25,12 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
   const $overlay = ensureGlobalOverlay();
   const segments = parsedContent.segments;
   const settings = getSettings();
+  const mesIdStr = String(mesId);
 
-  let state = messageSegmentState.get(String(mesId));
+  let state = messageSegmentState.get(mesIdStr);
   if (!state) {
     state = { currentIndex: 0, segments: segments, parsedContent: parsedContent, renderToken: 0 };
-    messageSegmentState.set(String(mesId), state);
+    messageSegmentState.set(mesIdStr, state);
     console.log(`[${SCRIPT_NAME}] [DEBUG] 新建状态，段落数: ${segments.length}`);
   } else {
     const segmentCountDiff = Math.abs(state.segments.length - segments.length);
@@ -45,11 +46,11 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
     console.log(`[${SCRIPT_NAME}] [DEBUG] 更新状态，当前索引: ${state.currentIndex}, 段落数: ${segments.length}`);
   }
 
-  const isNewMessage = getCurrentDisplayMesId() !== mesId;
+  const isNewMessage = getCurrentDisplayMesId() !== mesIdStr;
   if (isNewMessage) {
-    SpriteManager.reset($overlay);
+    console.log(`[${SCRIPT_NAME}] [DEBUG] 切换消息(${getCurrentDisplayMesId()} -> ${mesIdStr})，保留现有Live2D模型避免重载`);
   }
-  setCurrentDisplayMesId(mesId);
+  setCurrentDisplayMesId(mesIdStr);
 
   const renderToken = nextOverlayRenderToken(state);
   $overlay.attr('data-render-token', String(renderToken));
@@ -118,14 +119,15 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
     $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
   }
 
-  $overlay.find('.gal-game-container').attr('data-mes-id', mesId);
   updateLocationTimeDisplay();
 
   if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
-    const segmentId = `${mesId}_${currentIndex}`;
+    const segmentId = `${mesIdStr}_${currentIndex}`;
     TTSManager.stop();
     TTSManager.speak(displaySegment, segmentId);
   }
+
+  $overlay.find('.gal-game-container').attr('data-mes-id', mesIdStr);
 }
 
 export async function updateOverlaySegmentDisplay(state, expectedRenderToken = null) {

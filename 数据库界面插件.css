@@ -1818,7 +1818,7 @@
       }
 
       #gal-layer-choices.active {
-        display: flex;
+        display: flex !important;
         animation: galFadeIn 0.3s ease;
       }
 
@@ -3107,8 +3107,8 @@
         }
 
         #gal-layer-choices {
-            justify-content: flex-start !important;
-            align-items: stretch !important;
+            justify-content: center !important;
+            align-items: center !important;
             padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
             padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
             height: 100dvh !important;
@@ -3118,10 +3118,17 @@
         }
 
         .gal-choices-container {
-            max-height: none !important;
-            overflow-y: visible !important;
-            overflow-x: visible !important;
+            width: min(100%, 32rem) !important;
+            max-height: calc(100dvh - 8rem) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
             padding: 0 0.75rem !important;
+        }
+
+        .gal-choices-title,
+        .gal-choices-hint {
+            width: 100% !important;
+            text-align: center !important;
         }
 
         .gal-choice-card {
@@ -3179,7 +3186,8 @@
         #gal-free-input-modal,
         #gal-batch-bg-upload-modal,
         #gal-custom-popup,
-        #gal-character-sprites-modal {
+        #gal-character-sprites-modal,
+        #gal-layer-choices {
             position: fixed !important;
             inset: 0 !important;
             width: 100vw !important;
@@ -3202,6 +3210,28 @@
             max-height: none !important;
             border-radius: 0 !important;
             margin: 0 !important;
+        }
+
+        #gal-layer-choices {
+            justify-content: center !important;
+            align-items: center !important;
+            padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
+            padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        .gal-choices-container {
+            width: min(100%, 34rem) !important;
+            max-height: calc(100dvh - 8rem) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            padding: 0 0.75rem !important;
+        }
+
+        .gal-choice-card {
+            width: 100% !important;
+            max-width: 100% !important;
         }
     }
 

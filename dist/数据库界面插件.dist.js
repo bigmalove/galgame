@@ -12345,7 +12345,7 @@ ${firstResult}`;
       }
 
       #gal-layer-choices.active {
-        display: flex;
+        display: flex !important;
         animation: galFadeIn 0.3s ease;
       }
 
@@ -13634,8 +13634,8 @@ ${firstResult}`;
         }
 
         #gal-layer-choices {
-            justify-content: flex-start !important;
-            align-items: stretch !important;
+            justify-content: center !important;
+            align-items: center !important;
             padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
             padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
             height: 100dvh !important;
@@ -13645,10 +13645,17 @@ ${firstResult}`;
         }
 
         .gal-choices-container {
-            max-height: none !important;
-            overflow-y: visible !important;
-            overflow-x: visible !important;
+            width: min(100%, 32rem) !important;
+            max-height: calc(100dvh - 8rem) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
             padding: 0 0.75rem !important;
+        }
+
+        .gal-choices-title,
+        .gal-choices-hint {
+            width: 100% !important;
+            text-align: center !important;
         }
 
         .gal-choice-card {
@@ -13706,7 +13713,8 @@ ${firstResult}`;
         #gal-free-input-modal,
         #gal-batch-bg-upload-modal,
         #gal-custom-popup,
-        #gal-character-sprites-modal {
+        #gal-character-sprites-modal,
+        #gal-layer-choices {
             position: fixed !important;
             inset: 0 !important;
             width: 100vw !important;
@@ -13729,6 +13737,28 @@ ${firstResult}`;
             max-height: none !important;
             border-radius: 0 !important;
             margin: 0 !important;
+        }
+
+        #gal-layer-choices {
+            justify-content: center !important;
+            align-items: center !important;
+            padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
+            padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        .gal-choices-container {
+            width: min(100%, 34rem) !important;
+            max-height: calc(100dvh - 8rem) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            padding: 0 0.75rem !important;
+        }
+
+        .gal-choice-card {
+            width: 100% !important;
+            max-width: 100% !important;
         }
     }
 
@@ -18348,6 +18378,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
 
   // src/ui/sprite-upload.js
   var SPRITE_ASPECT_RATIO = 2 / 3;
+  var CROPPER_MIN_SCALE = 0.01;
   var ImageCropper = class {
     constructor(aspectRatio = SPRITE_ASPECT_RATIO) {
       this.aspectRatio = aspectRatio;
@@ -18405,9 +18436,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       }
       const scaleToFitWidth = this.cropWidth / this.image.width;
       const scaleToFitHeight = this.cropHeight / this.image.height;
-      this.minScale = Math.max(scaleToFitWidth, scaleToFitHeight);
-      this.scale = this.minScale * 1.2;
-      this.maxScale = Math.max(this.minScale * 5, 3);
+      const coverScale = Math.max(scaleToFitWidth, scaleToFitHeight);
+      this.minScale = CROPPER_MIN_SCALE;
+      this.scale = Math.max(this.minScale, coverScale * 1.2);
+      this.maxScale = Math.max(coverScale * 5, 3);
       this.offsetX = 0;
       this.offsetY = 0;
     }
@@ -18479,10 +18511,18 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (!this.image) return;
       const scaledWidth = this.image.width * this.scale;
       const scaledHeight = this.image.height * this.scale;
-      const maxOffsetX = (scaledWidth - this.cropWidth) / 2;
-      const maxOffsetY = (scaledHeight - this.cropHeight) / 2;
-      this.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, this.offsetX));
-      this.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, this.offsetY));
+      if (scaledWidth <= this.cropWidth) {
+        this.offsetX = 0;
+      } else {
+        const maxOffsetX = (scaledWidth - this.cropWidth) / 2;
+        this.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, this.offsetX));
+      }
+      if (scaledHeight <= this.cropHeight) {
+        this.offsetY = 0;
+      } else {
+        const maxOffsetY = (scaledHeight - this.cropHeight) / 2;
+        this.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, this.offsetY));
+      }
     }
     reset() {
       this.calculateInitialScale();
@@ -19083,9 +19123,27 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const cropY = (CANVAS_HEIGHT - cropHeight) / 2;
       const scaleToFitWidth = cropWidth / img.width;
       const scaleToFitHeight = cropHeight / img.height;
-      let scale = Math.max(scaleToFitWidth, scaleToFitHeight) * 1.1;
+      const coverScale = Math.max(scaleToFitWidth, scaleToFitHeight);
+      const containScale = Math.min(scaleToFitWidth, scaleToFitHeight);
+      let scale = Math.max(containScale, coverScale * 1.1);
       let offsetX = 0;
       let offsetY = 0;
+      const clampOffsets = () => {
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+        if (scaledWidth <= cropWidth) {
+          offsetX = 0;
+        } else {
+          const maxOffsetX = (scaledWidth - cropWidth) / 2;
+          offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offsetX));
+        }
+        if (scaledHeight <= cropHeight) {
+          offsetY = 0;
+        } else {
+          const maxOffsetY = (scaledHeight - cropHeight) / 2;
+          offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offsetY));
+        }
+      };
       function renderCrop() {
         ctx.fillStyle = "#1a1a2e";
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -19120,12 +19178,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         offsetY += dy;
         lastX = e.clientX;
         lastY = e.clientY;
-        const scaledWidth = img.width * scale;
-        const scaledHeight = img.height * scale;
-        const maxOffsetX = (scaledWidth - cropWidth) / 2;
-        const maxOffsetY = (scaledHeight - cropHeight) / 2;
-        offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offsetX));
-        offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offsetY));
+        clampOffsets();
         renderCrop();
       };
       canvas.onmouseup = () => {
@@ -19136,8 +19189,8 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         isDragging = false;
         canvas.style.cursor = "move";
       };
-      const minScale = Math.max(scaleToFitWidth, scaleToFitHeight);
-      const maxScale = minScale * 5;
+      const minScale = CROPPER_MIN_SCALE;
+      const maxScale = Math.max(coverScale * 5, 3);
       $zoomSlider.attr("min", Math.round(minScale * 100));
       $zoomSlider.attr("max", Math.round(maxScale * 100));
       $zoomSlider.val(Math.round(scale * 100));
@@ -19146,16 +19199,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         scale = parseInt($(this).val()) / 100;
         scale = Math.max(minScale, Math.min(maxScale, scale));
         $zoomValue.text(Math.round(scale * 100) + "%");
-        const scaledWidth = img.width * scale;
-        const scaledHeight = img.height * scale;
-        const maxOffsetX = (scaledWidth - cropWidth) / 2;
-        const maxOffsetY = (scaledHeight - cropHeight) / 2;
-        offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, offsetX));
-        offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, offsetY));
+        clampOffsets();
         renderCrop();
       });
       $("#gal-crop-reset").off("click").on("click", () => {
-        scale = Math.max(scaleToFitWidth, scaleToFitHeight) * 1.1;
+        scale = Math.max(containScale, coverScale * 1.1);
         offsetX = 0;
         offsetY = 0;
         $zoomSlider.val(Math.round(scale * 100));

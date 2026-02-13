@@ -44,6 +44,8 @@ export const DEFAULT_SETTINGS = {
   // 快进设置
   skipSpeed: 0.05,
   ctrlKeySkip: true,
+  // 调试设置
+  globalDebug: false,
   // ComfyUI 设置
   comfyui: Object.assign({}, DEFAULT_COMFYUI_SETTINGS),
   // ComfyUI
@@ -226,6 +228,10 @@ export function loadSettings() {
     const saved = topWindow.localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
+      if (!Object.prototype.hasOwnProperty.call(parsed, 'globalDebug') && Object.prototype.hasOwnProperty.call(parsed, 'live2dDebug')) {
+        parsed.globalDebug = !!parsed.live2dDebug;
+      }
+      delete parsed.live2dDebug;
       if (parsed.enhancedMode && parsed.enhancedMode.promptConfig) {
         delete parsed.enhancedMode.promptConfig;
         console.log(`[${SCRIPT_NAME}] 已清除缓存中的自定义 systemPrompt`);

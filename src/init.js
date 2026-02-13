@@ -3,6 +3,7 @@ import { topWindow, $ } from './core/env.js';
 import { loadSettings, getCurrentCharId, isCurrentCharEnabled } from './core/settings.js';
 import { getIsEnabled, setIsEnabled, setHideOtherFloors, getHideOtherFloors } from './core/state.js';
 import { getSettings } from './core/settings.js';
+import { setGlobalDebugEnabled } from './core/debug.js';
 import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from './utils/html.js';
 import { updateLocationTimeDisplay } from './utils/location-time.js';
 import { initDB } from './db/init.js';
@@ -34,11 +35,13 @@ import { applyGalgameMode, restoreOriginalViews, hideNonLastFloors } from './ui/
 // ============================================
 
 async function init() {
-  console.log(`[${SCRIPT_NAME}] v${VERSION} 开始初始化...`);
   try {
     loadSettings();
     setIsEnabled(isCurrentCharEnabled());
     const settings = getSettings();
+    setGlobalDebugEnabled(!!settings.globalDebug);
+    Live2DManager.debug = !!settings.globalDebug;
+    console.log(`[${SCRIPT_NAME}] v${VERSION} 开始初始化...`);
     setHideOtherFloors(settings.hideOtherFloors);
     await initDB();
     await loadAllSpritesToCache();

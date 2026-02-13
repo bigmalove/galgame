@@ -26,6 +26,12 @@ export const Live2DManager = {
   xhrBlobUrlSupportPromise: null,
   hasLoggedBlobUrlDisabled: false,
   isReady: false,
+  debug: false,
+
+  _debugLog(...args) {
+    if (!this.debug) return;
+    console.log(...args);
+  },
 
   _markModelActive(characterId) {
     this.cachedDetachedAt.delete(characterId);
@@ -363,7 +369,7 @@ export const Live2DManager = {
 
     modelJson.textures = normalizedTextures;
     modelJson.Textures = normalizedTextures;
-    console.log(`[${SCRIPT_NAME}] Live2DManager: 妫€娴嬪埌闈炴爣鍑?Cubism2 璐村浘缁撴瀯锛屽凡鑷姩杞崲`, {
+    this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妫€娴嬪埌闈炴爣鍑?Cubism2 璐村浘缁撴瀯锛屽凡鑷姩杞崲`, {
       key: selected[0],
       textureCount: normalizedTextures.length,
     });
@@ -434,7 +440,7 @@ export const Live2DManager = {
     while (this.cachedDetachedAt.size > this.maxDetachedCache && sorted.length > 0) {
       const [characterId] = sorted.shift();
       this._destroyModel(characterId, 'cache-evict');
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 缂撳瓨娣樻卑妯″瀷 ${characterId}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 缂撳瓨娣樻卑妯″瀷 ${characterId}`);
     }
   },
 
@@ -492,7 +498,7 @@ export const Live2DManager = {
     if (changed) {
       try {
         updateLive2DConfig(characterId, { transform: normalizedTransform });
-        console.log(
+        this._debugLog(
           `[${SCRIPT_NAME}] Live2DManager: 鍧愭爣鍏煎淇 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`,
         );
       } catch (e) {
@@ -534,7 +540,7 @@ export const Live2DManager = {
       Live2DModel.registerTicker(_topWindow.PIXI.Ticker);
 
       this.isReady = true;
-      console.log(`[${SCRIPT_NAME}] Live2DManager 初始化完成`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager 初始化完成`);
       return true;
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] Live2DManager 鍒濆鍖栧け璐?`, e);
@@ -606,7 +612,7 @@ export const Live2DManager = {
             const textures = internalModel.textures || internalModel._textures || [];
 
             if (textures.length === 0) {
-              console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷鏃犲閮ㄧ汗鐞嗭紝璺宠繃绛夊緟`);
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷鏃犲閮ㄧ汗鐞嗭紝璺宠繃绛夊緟`);
               resolve(true);
               return;
             }
@@ -620,11 +626,11 @@ export const Live2DManager = {
             });
 
             if (allLoaded) {
-              console.log(`[${SCRIPT_NAME}] Live2DManager: 绾圭悊鍏ㄩ儴鍔犺浇瀹屾垚 (${textures.length} 寮?`);
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 绾圭悊鍏ㄩ儴鍔犺浇瀹屾垚 (${textures.length} 寮?`);
               resolve(true);
             } else {
               if (retryCount % 5 === 0) {
-                console.log(`[${SCRIPT_NAME}] Live2DManager: 绛夊緟绾圭悊鍔犺浇... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 绛夊緟绾圭悊鍔犺浇... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
               }
               setTimeout(checkTextures, 100);
             }
@@ -671,7 +677,7 @@ export const Live2DManager = {
         const model = await loadFromUrl(modelUrl);
         this.models.set(characterId, model);
         this._markModelActive(characterId);
-        console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} 鍔犺浇鎴愬姛`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} 鍔犺浇鎴愬姛`);
         return model;
       } catch (e) {
         if (!isRemote && usedBlobForLocal) {
@@ -682,7 +688,7 @@ export const Live2DManager = {
           const model = await loadFromUrl(dataUrl);
           this.models.set(characterId, model);
           this._markModelActive(characterId);
-          console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} DataURL 鍥為€€鍔犺浇鎴愬姛`);
+          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} DataURL 鍥為€€鍔犺浇鎴愬姛`);
           return model;
         }
         throw e;
@@ -1362,7 +1368,7 @@ export const Live2DManager = {
       const existingContainer = this.containers.get(characterId);
 
       if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
-        console.log(`[${SCRIPT_NAME}] Live2DManager: 澶嶇敤鐜版湁娓叉煋 ${characterId}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 澶嶇敤鐜版湁娓叉煋 ${characterId}`);
         return true;
       }
 
@@ -1401,7 +1407,7 @@ export const Live2DManager = {
       }
       dpr *= (qualityConfig.textureResolution || 1.0);
 
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 瀹瑰櫒灏哄 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 瀹瑰櫒灏哄 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
 
       const canvas = _topWindow.document.createElement('canvas');
       const renderWidth = containerWidth;
@@ -1481,7 +1487,7 @@ export const Live2DManager = {
       const userScale = transformConfig.scale || 1.0;
       const finalScale = baseScale * userScale;
 
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷灏哄 ${modelWidth}x${modelHeight}, 鍩虹缂╂斁: ${baseScale}, 鐢ㄦ埛缂╂斁: ${userScale}, 鏈€缁堢缉鏀? ${finalScale}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷灏哄 ${modelWidth}x${modelHeight}, 鍩虹缂╂斁: ${baseScale}, 鐢ㄦ埛缂╂斁: ${userScale}, 鏈€缁堢缉鏀? ${finalScale}`);
 
       model.scale.set(finalScale);
       model.anchor.set(0.5, 0.5);
@@ -1511,7 +1517,7 @@ export const Live2DManager = {
         renderHeight,
       });
 
-      console.log(
+      this._debugLog(
         `[${SCRIPT_NAME}] Live2DManager: 娓叉煋 ${characterId} 瀹屾垚 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
       );
       return true;
@@ -1535,7 +1541,7 @@ export const Live2DManager = {
     if (!this.models.has(characterId)) return false;
     const ok = _Live2DStageRef.applyTransform(characterId);
     if (ok) {
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 搴旂敤鍙樻崲閰嶇疆 ${characterId}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 搴旂敤鍙樻崲閰嶇疆 ${characterId}`);
     }
     return ok;
   },
@@ -1768,7 +1774,7 @@ export const Live2DManager = {
       container.canvas.style.cursor = 'move';
     }
 
-    console.log(`[Live2DManager] enableInteraction 鎴愬姛: ${characterId}`);
+    this._debugLog(`[Live2DManager] enableInteraction 鎴愬姛: ${characterId}`);
     return true;
   },
 

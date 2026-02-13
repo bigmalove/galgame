@@ -258,6 +258,8 @@
     // 快进设置
     skipSpeed: 0.05,
     ctrlKeySkip: true,
+    // 调试设置
+    globalDebug: false,
     // ComfyUI 设置
     comfyui: Object.assign({}, DEFAULT_COMFYUI_SETTINGS),
     // ComfyUI
@@ -423,6 +425,10 @@
       const saved = topWindow.localStorage.getItem(SETTINGS_STORAGE_KEY2);
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (!Object.prototype.hasOwnProperty.call(parsed, "globalDebug") && Object.prototype.hasOwnProperty.call(parsed, "live2dDebug")) {
+          parsed.globalDebug = !!parsed.live2dDebug;
+        }
+        delete parsed.live2dDebug;
         if (parsed.enhancedMode && parsed.enhancedMode.promptConfig) {
           delete parsed.enhancedMode.promptConfig;
           console.log(`[${SCRIPT_NAME}] \u5DF2\u6E05\u9664\u7F13\u5B58\u4E2D\u7684\u81EA\u5B9A\u4E49 systemPrompt`);
@@ -3135,6 +3141,11 @@ ${lines.join("\n")}`;
     xhrBlobUrlSupportPromise: null,
     hasLoggedBlobUrlDisabled: false,
     isReady: false,
+    debug: false,
+    _debugLog(...args) {
+      if (!this.debug) return;
+      console.log(...args);
+    },
     _markModelActive(characterId) {
       this.cachedDetachedAt.delete(characterId);
     },
@@ -3407,7 +3418,7 @@ ${lines.join("\n")}`;
       });
       modelJson.textures = normalizedTextures;
       modelJson.Textures = normalizedTextures;
-      console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AB\u20AC\u5A34\u5B2A\u57CC\u95C8\u70B4\u7223\u9351?Cubism2 \u7490\u6751\u6D58\u7F01\u64B4\u702F\u951B\u5C7D\u51E1\u9477\uE044\u59E9\u675E\uE101\u5D32`, {
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AB\u20AC\u5A34\u5B2A\u57CC\u95C8\u70B4\u7223\u9351?Cubism2 \u7490\u6751\u6D58\u7F01\u64B4\u702F\u951B\u5C7D\u51E1\u9477\uE044\u59E9\u675E\uE101\u5D32`, {
         key: selected[0],
         textureCount: normalizedTextures.length
       });
@@ -3473,7 +3484,7 @@ ${lines.join("\n")}`;
       while (this.cachedDetachedAt.size > this.maxDetachedCache && sorted.length > 0) {
         const [characterId] = sorted.shift();
         this._destroyModel(characterId, "cache-evict");
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u7F02\u64B3\u74E8\u5A23\u6A3B\u5351\u59AF\u2033\u7037 ${characterId}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7F02\u64B3\u74E8\u5A23\u6A3B\u5351\u59AF\u2033\u7037 ${characterId}`);
       }
     },
     releaseCharacter(characterId) {
@@ -3524,7 +3535,7 @@ ${lines.join("\n")}`;
       if (changed) {
         try {
           updateLive2DConfig(characterId, { transform: normalizedTransform });
-          console.log(
+          this._debugLog(
             `[${SCRIPT_NAME}] Live2DManager: \u9367\u612D\u7223\u934F\u714E\uE190\u6DC7\uE1BD\uE11C ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`
           );
         } catch (e) {
@@ -3558,7 +3569,7 @@ ${lines.join("\n")}`;
         const { Live2DModel } = _topWindow.PIXI.live2d;
         Live2DModel.registerTicker(_topWindow.PIXI.Ticker);
         this.isReady = true;
-        console.log(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5B8C\u6210`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5B8C\u6210`);
         return true;
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] Live2DManager \u9352\u6FC6\uE750\u9356\u6827\u3051\u7490?`, e);
@@ -3616,7 +3627,7 @@ ${lines.join("\n")}`;
               }
               const textures = internalModel.textures || internalModel._textures || [];
               if (textures.length === 0) {
-                console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u93C3\u72B2\uE63B\u95AE\u3127\u6C57\u941E\u55ED\u7D1D\u74BA\u5BA0\u7E43\u7EDB\u590A\u7DDF`);
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u93C3\u72B2\uE63B\u95AE\u3127\u6C57\u941E\u55ED\u7D1D\u74BA\u5BA0\u7E43\u7EDB\u590A\u7DDF`);
                 resolve(true);
                 return;
               }
@@ -3628,11 +3639,11 @@ ${lines.join("\n")}`;
                 return true;
               });
               if (allLoaded) {
-                console.log(`[${SCRIPT_NAME}] Live2DManager: \u7EFE\u572D\u608A\u934F\u3129\u5134\u9354\u72BA\u6D47\u7039\u5C7E\u579A (${textures.length} \u5BEE?`);
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7EFE\u572D\u608A\u934F\u3129\u5134\u9354\u72BA\u6D47\u7039\u5C7E\u579A (${textures.length} \u5BEE?`);
                 resolve(true);
               } else {
                 if (retryCount % 5 === 0) {
-                  console.log(`[${SCRIPT_NAME}] Live2DManager: \u7EDB\u590A\u7DDF\u7EFE\u572D\u608A\u9354\u72BA\u6D47... (${textures.filter((t) => t?.baseTexture?.valid).length}/${textures.length})`);
+                  this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7EDB\u590A\u7DDF\u7EFE\u572D\u608A\u9354\u72BA\u6D47... (${textures.filter((t) => t?.baseTexture?.valid).length}/${textures.length})`);
                 }
                 setTimeout(checkTextures, 100);
               }
@@ -3667,7 +3678,7 @@ ${lines.join("\n")}`;
           const model = await loadFromUrl(modelUrl);
           this.models.set(characterId, model);
           this._markModelActive(characterId);
-          console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} \u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
+          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} \u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
           return model;
         } catch (e) {
           if (!isRemote && usedBlobForLocal) {
@@ -3678,7 +3689,7 @@ ${lines.join("\n")}`;
             const model = await loadFromUrl(dataUrl);
             this.models.set(characterId, model);
             this._markModelActive(characterId);
-            console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} DataURL \u9365\u70BA\u20AC\u20AC\u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} DataURL \u9365\u70BA\u20AC\u20AC\u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
             return model;
           }
           throw e;
@@ -4261,7 +4272,7 @@ ${lines.join("\n")}`;
         let model = this.models.get(characterId);
         const existingContainer = this.containers.get(characterId);
         if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
-          console.log(`[${SCRIPT_NAME}] Live2DManager: \u6FB6\u5D87\u6564\u941C\u7248\u6E41\u5A13\u53C9\u714B ${characterId}`);
+          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6FB6\u5D87\u6564\u941C\u7248\u6E41\u5A13\u53C9\u714B ${characterId}`);
           return true;
         }
         const needReload = forceReload || model && existingContainer && existingContainer.containerElement !== containerElement;
@@ -4292,7 +4303,7 @@ ${lines.join("\n")}`;
           dpr = parseFloat(qualityConfig.devicePixelRatio) || 1;
         }
         dpr *= qualityConfig.textureResolution || 1;
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u7039\u7470\u6AD2\u704F\u54C4\uE1ED ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7039\u7470\u6AD2\u704F\u54C4\uE1ED ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
         const canvas = _topWindow.document.createElement("canvas");
         const renderWidth = containerWidth;
         const renderHeight = containerHeight;
@@ -4366,7 +4377,7 @@ ${lines.join("\n")}`;
         );
         const userScale = transformConfig.scale || 1;
         const finalScale = baseScale * userScale;
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u704F\u54C4\uE1ED ${modelWidth}x${modelHeight}, \u9369\u8679\uE505\u7F02\u2542\u6581: ${baseScale}, \u9422\u3126\u57DB\u7F02\u2542\u6581: ${userScale}, \u93C8\u20AC\u7F01\u5822\u7F09\u93C0? ${finalScale}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u704F\u54C4\uE1ED ${modelWidth}x${modelHeight}, \u9369\u8679\uE505\u7F02\u2542\u6581: ${baseScale}, \u9422\u3126\u57DB\u7F02\u2542\u6581: ${userScale}, \u93C8\u20AC\u7F01\u5822\u7F09\u93C0? ${finalScale}`);
         model.scale.set(finalScale);
         model.anchor.set(0.5, 0.5);
         const offsetX = transformConfig.offsetX || 0;
@@ -4390,7 +4401,7 @@ ${lines.join("\n")}`;
           renderWidth,
           renderHeight
         });
-        console.log(
+        this._debugLog(
           `[${SCRIPT_NAME}] Live2DManager: \u5A13\u53C9\u714B ${characterId} \u7039\u5C7E\u579A (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`
         );
         return true;
@@ -4411,7 +4422,7 @@ ${lines.join("\n")}`;
       if (!this.models.has(characterId)) return false;
       const ok = _Live2DStageRef.applyTransform(characterId);
       if (ok) {
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u6434\u65C2\u6564\u9359\u6A3B\u5D32\u95B0\u5D87\u7586 ${characterId}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6434\u65C2\u6564\u9359\u6A3B\u5D32\u95B0\u5D87\u7586 ${characterId}`);
       }
       return ok;
     },
@@ -4610,7 +4621,7 @@ ${lines.join("\n")}`;
         container.canvas.style.pointerEvents = "auto";
         container.canvas.style.cursor = "move";
       }
-      console.log(`[Live2DManager] enableInteraction \u93B4\u612C\u59DB: ${characterId}`);
+      this._debugLog(`[Live2DManager] enableInteraction \u93B4\u612C\u59DB: ${characterId}`);
       return true;
     },
     disableInteraction(characterId) {
@@ -12667,8 +12678,70 @@ ${firstResult}`;
     });
   }
 
+  // src/core/debug.js
+  var SCRIPT_LOG_PREFIX = `[${SCRIPT_NAME}]`;
+  var EXTRA_LOG_PREFIXES = ["[Live2DManager]"];
+  var PLUGIN_STACK_HINTS = ["\u6570\u636E\u5E93\u754C\u9762\u63D2\u4EF6.dist.js", "galgame\u901A\u7528\u751F\u6210\u5668/src/"];
+  var consolePatched = false;
+  var globalDebugEnabled = true;
+  var originalConsole = null;
+  function isPluginLog(args) {
+    if (!Array.isArray(args) || args.length === 0) return false;
+    const first = args[0];
+    if (typeof first === "string") {
+      if (first.startsWith(SCRIPT_LOG_PREFIX)) return true;
+      if (EXTRA_LOG_PREFIXES.some((prefix) => first.startsWith(prefix))) return true;
+    }
+    return isPluginCallsite();
+  }
+  function isPluginCallsite() {
+    try {
+      const stack = new Error().stack;
+      if (!stack) return false;
+      const stackLines = stack.split("\n").slice(3);
+      return stackLines.some((line) => PLUGIN_STACK_HINTS.some((hint) => line.includes(hint)));
+    } catch (e) {
+      return false;
+    }
+  }
+  function shouldSuppress(level, args) {
+    if (globalDebugEnabled) return false;
+    if (level === "error") return false;
+    return isPluginLog(args);
+  }
+  function patchConsole() {
+    if (consolePatched) return;
+    consolePatched = true;
+    originalConsole = {
+      log: console.log.bind(console),
+      info: console.info.bind(console),
+      warn: console.warn.bind(console),
+      debug: (console.debug || console.log).bind(console),
+      error: console.error.bind(console)
+    };
+    const wrap = (level, original) => (...args) => {
+      if (shouldSuppress(level, args)) return;
+      original(...args);
+    };
+    console.log = wrap("log", originalConsole.log);
+    console.info = wrap("info", originalConsole.info);
+    console.warn = wrap("warn", originalConsole.warn);
+    console.debug = wrap("debug", originalConsole.debug);
+    console.error = wrap("error", originalConsole.error);
+  }
+  function setGlobalDebugEnabled(enabled) {
+    patchConsole();
+    globalDebugEnabled = !!enabled;
+  }
+  function getGlobalDebugEnabled() {
+    return globalDebugEnabled;
+  }
+
   // src/ui/settings-panel.js
   var enhancedModeState3 = GalgameStore.enhancedMode;
+  function getLive2DManagerRef() {
+    return topWindow?.galgame?.Live2DManager || topWindow?.Live2DManager || null;
+  }
   var _buildAssetsPaneRef = null;
   var _bindAssetsPaneRef = null;
   var _assetStylesRef = null;
@@ -12810,6 +12883,10 @@ ${firstResult}`;
     }
     topTab = topTab || "settings";
     const settings = getSettings();
+    const live2dManager = getLive2DManagerRef();
+    if (live2dManager) {
+      live2dManager.debug = !!settings.globalDebug;
+    }
     const isEnabled = getIsEnabled();
     const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
       getAvailablePresets(),
@@ -13078,6 +13155,10 @@ ${firstResult}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label" title="\u5F00\u542F\u540E\uFF0C\u53EA\u6709\u68C0\u6D4B\u5230Galgame\u6807\u7B7E\u624D\u4F1A\u663E\u793A\u754C\u9762\uFF1B\u5173\u95ED\u5219\u603B\u662F\u663E\u793A">\u667A\u80FD\u5224\u65AD\u4E3B\u754C\u9762\u663E\u793A</span>
               <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings.smartDetection ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">\u5168\u5C40Debug\u65E5\u5FD7</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings.globalDebug ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">\u5FEB\u8FDB\u901F\u5EA6</span>
@@ -13445,6 +13526,16 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       settings.smartDetection = $(this).is(":checked");
       saveSettings();
       if (getIsEnabled()) applyGalgameMode();
+    });
+    $("#gal-global-debug").on("change", function() {
+      settings.globalDebug = $(this).is(":checked");
+      setGlobalDebugEnabled(settings.globalDebug);
+      const manager = getLive2DManagerRef();
+      if (manager) {
+        manager.debug = !!settings.globalDebug;
+      }
+      saveSettings();
+      showToast4(settings.globalDebug ? "\u5168\u5C40 Debug \u65E5\u5FD7\u5DF2\u5F00\u542F" : "\u5168\u5C40 Debug \u65E5\u5FD7\u5DF2\u5173\u95ED\uFF0C\u4EC5\u663E\u793A\u9519\u8BEF\u65E5\u5FD7");
     });
     $("#gal-sprite-scale").on("input", function() {
       settings.spriteScale = parseInt($(this).val());
@@ -19261,11 +19352,13 @@ ${baseUrl}`)) return;
 
   // src/init.js
   async function init() {
-    console.log(`[${SCRIPT_NAME}] v${VERSION} \u5F00\u59CB\u521D\u59CB\u5316...`);
     try {
       loadSettings();
       setIsEnabled(isCurrentCharEnabled());
       const settings = getSettings();
+      setGlobalDebugEnabled(!!settings.globalDebug);
+      Live2DManager.debug = !!settings.globalDebug;
+      console.log(`[${SCRIPT_NAME}] v${VERSION} \u5F00\u59CB\u521D\u59CB\u5316...`);
       setHideOtherFloors(settings.hideOtherFloors);
       await initDB();
       await loadAllSpritesToCache();

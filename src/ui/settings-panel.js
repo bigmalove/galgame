@@ -1,6 +1,7 @@
 import { SCRIPT_NAME, THEME } from '../core/constants.js';
-import { $ } from '../core/env.js';
+import { $, topWindow } from '../core/env.js';
 import { ensureEnhancedModeSettings, getSettings, setCurrentCharEnabled, saveSettings } from '../core/settings.js';
+import { setGlobalDebugEnabled } from '../core/debug.js';
 import { getIsEnabled, setIsEnabled, setHideOtherFloors } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { TTS_PROVIDER, getTTSProvider, getGptSoVitsConfig, getTTSVoiceListAsync, getTTSEnabled, setTTSEnabled, getGptSoVitsVoiceList, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice } from '../audio/tts-config.js';
@@ -18,6 +19,10 @@ import { hideNonLastFloors, showAllFloors, applyGalgameMode, restoreOriginalView
 // ============================================
 
 const enhancedModeState = GalgameStore.enhancedMode;
+
+function getLive2DManagerRef() {
+  return topWindow?.galgame?.Live2DManager || topWindow?.Live2DManager || null;
+}
 
 // 延迟引用
 let _buildAssetsPaneRef = null;
@@ -180,6 +185,10 @@ export async function showSettingsPanel(topTab, subTab) {
   topTab = topTab || 'settings';
 
   const settings = getSettings();
+  const live2dManager = getLive2DManagerRef();
+  if (live2dManager) {
+    live2dManager.debug = !!settings.globalDebug;
+  }
   const isEnabled = getIsEnabled();
 
   const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
@@ -456,6 +465,10 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label" title="开启后，只有检测到Galgame标签才会显示界面；关闭则总是显示">智能判断主界面显示</span>
               <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings.smartDetection ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">全局Debug日志</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings.globalDebug ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">快进速度</span>
@@ -735,6 +748,16 @@ export async function showSettingsPanel(topTab, subTab) {
   // 其他设置
   $('#gal-skip-speed').on('input', function () { settings.skipSpeed = parseFloat($(this).val()); $('#gal-skip-speed-value').text(settings.skipSpeed + 's'); saveSettings(); });
   $('#gal-smart-detection').on('change', function () { settings.smartDetection = $(this).is(':checked'); saveSettings(); if (getIsEnabled()) applyGalgameMode(); });
+  $('#gal-global-debug').on('change', function () {
+    settings.globalDebug = $(this).is(':checked');
+    setGlobalDebugEnabled(settings.globalDebug);
+    const manager = getLive2DManagerRef();
+    if (manager) {
+      manager.debug = !!settings.globalDebug;
+    }
+    saveSettings();
+    showToast(settings.globalDebug ? '全局 Debug 日志已开启' : '全局 Debug 日志已关闭，仅显示错误日志');
+  });
 
   // 立绘设置
   $('#gal-sprite-scale').on('input', function () { settings.spriteScale = parseInt($(this).val()); $('#gal-sprite-scale-value').text(settings.spriteScale + '%'); applySettingsToUI(); saveSettings(); });

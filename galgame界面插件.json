@@ -1,7 +1,7 @@
 ﻿{
-  "id": "galgame-live-dev-009",
+  "id": "galgame-live-dev-010",
   "name": "galgame界面插件",
-  "content": "import 'https://gcore.jsdelivr.net/gh/bigmalove/galgame@v0.9/dist/数据库界面插件.dist.js'",
-  "info": "galgame界面插件 v0.9-alpha",
+  "content": "import 'https://gcore.jsdelivr.net/gh/bigmalove/galgame@v1.0/dist/数据库界面插件.dist.js'",
+  "info": "galgame界面插件 v1.0-alpha",
   "buttons": []
 }

@@ -5039,8 +5039,9 @@
         #gal-live2d-settings-modal {
             position: fixed !important;
             inset: 0 !important;
-            width: auto !important;
-            height: auto !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
             max-width: none !important;
             max-height: none !important;
             margin: 0 !important;
@@ -5071,8 +5072,9 @@
         #gal-prompts-modal {
             position: fixed !important;
             inset: 0 !important;
-            width: auto !important;
-            height: auto !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
             max-width: none !important;
             max-height: none !important;
             margin: 0 !important;
@@ -5085,4 +5087,140 @@
             height: 100% !important;
             border-radius: 0 !important;
         }
+    }
+
+    /* === 文本可读性修复（资源管理 / Live2D设置 / 背景上传） === */
+    #gal-asset-manager-modal .gal-tab-btn,
+    #gal-live2d-settings-modal,
+    #gal-live2d-settings-modal > div,
+    #gal-bg-upload-modal,
+    #gal-bg-upload-modal .gal-input-box,
+    #gal-batch-bg-upload-modal,
+    #gal-batch-bg-upload-modal .gal-input-box {
+        opacity: 1 !important;
+        filter: none !important;
+    }
+
+    /* 资源管理顶部 Tab：避免浅灰底上文字发白 */
+    #gal-asset-manager-modal .gal-tab-btn {
+        color: #4b5563 !important;
+        font-weight: 700 !important;
+    }
+    #gal-asset-manager-modal .gal-tab-btn.active {
+        color: var(--gal-accent) !important;
+    }
+
+    /* Live2D 设置弹窗：统一正文对比度 */
+    #gal-live2d-settings-modal .gal-settings-tab {
+        color: #5b6472 !important;
+        opacity: 1 !important;
+    }
+    #gal-live2d-settings-modal .gal-settings-tab.active {
+        color: var(--gal-accent) !important;
+    }
+    #gal-live2d-settings-modal .gal-settings-panel,
+    #gal-live2d-settings-modal .gal-settings-panel h4,
+    #gal-live2d-settings-modal .gal-settings-panel p,
+    #gal-live2d-settings-modal .gal-settings-panel label,
+    #gal-live2d-settings-modal .gal-settings-panel span {
+        color: #2b2e38 !important;
+        opacity: 1 !important;
+    }
+    #gal-live2d-settings-modal .gal-settings-panel input[type="number"],
+    #gal-live2d-settings-modal .gal-settings-panel select,
+    #gal-live2d-settings-modal .gal-settings-panel select option {
+        color: #1f2937 !important;
+        background: #ffffff !important;
+    }
+    #gal-live2d-settings-modal .gal-settings-panel button:not(:disabled) {
+        color: #2b2e38 !important;
+        opacity: 1 !important;
+    }
+    #gal-live2d-settings-modal #gal-live2d-start-position-edit,
+    #gal-live2d-settings-modal #gal-live2d-auto-match,
+    #gal-live2d-settings-modal #gal-live2d-settings-save {
+        color: #ffffff !important;
+    }
+    #gal-live2d-settings-modal .gal-settings-panel button:disabled {
+        opacity: 0.55 !important;
+        color: #6b7280 !important;
+    }
+
+    /* 背景上传相关弹窗：修复远程链接页文字发灰 */
+    #gal-bg-upload-modal .gal-input-box,
+    #gal-batch-bg-upload-modal .gal-input-box {
+        color: #1f2937 !important;
+    }
+    #gal-bg-upload-modal .gal-upload-tab,
+    #gal-batch-bg-upload-modal .gal-upload-tab {
+        color: #6b7280 !important;
+        opacity: 1 !important;
+    }
+    #gal-bg-upload-modal .gal-upload-tab.active,
+    #gal-batch-bg-upload-modal .gal-upload-tab.active {
+        color: #1f2937 !important;
+        font-weight: 700 !important;
+    }
+    #gal-bg-upload-modal label,
+    #gal-bg-upload-modal small,
+    #gal-bg-upload-modal p,
+    #gal-batch-bg-upload-modal label,
+    #gal-batch-bg-upload-modal small,
+    #gal-batch-bg-upload-modal p {
+        color: #4b5563 !important;
+        opacity: 1 !important;
+    }
+    #gal-bg-upload-modal input,
+    #gal-bg-upload-modal textarea,
+    #gal-bg-upload-modal select,
+    #gal-batch-bg-upload-modal input,
+    #gal-batch-bg-upload-modal textarea,
+    #gal-batch-bg-upload-modal select {
+        color: #1f2937 !important;
+        background: #ffffff !important;
+        opacity: 1 !important;
+    }
+    #gal-bg-upload-modal input::placeholder,
+    #gal-bg-upload-modal textarea::placeholder,
+    #gal-batch-bg-upload-modal input::placeholder,
+    #gal-batch-bg-upload-modal textarea::placeholder {
+        color: #9ca3af !important;
+        opacity: 1 !important;
+    }
+    #gal-bg-upload-modal button:not(:disabled),
+    #gal-batch-bg-upload-modal button:not(:disabled) {
+        opacity: 1 !important;
+    }
+    #gal-bg-upload-modal .gal-action-btn.primary:not(:disabled),
+    #gal-batch-bg-upload-modal .gal-action-btn.primary:not(:disabled) {
+        color: #ffffff !important;
+    }
+    #gal-bg-upload-modal button:disabled,
+    #gal-batch-bg-upload-modal button:disabled {
+        opacity: 0.55 !important;
+        color: #6b7280 !important;
+    }
+    #gal-bg-upload-modal #gal-bg-close-x,
+    #gal-batch-bg-upload-modal #gal-batch-bg-close-x {
+        color: #4b5563 !important;
+    }
+
+    /* 统一面板一级 Tab（基础设置 / 资源管理）：浅色主题下避免发灰 */
+    #gal-unified-panel .gal-l1-tab-header {
+        /* 叠加一层暗色渐变，保证无论主题底色深浅都可读 */
+        background: linear-gradient(135deg, rgba(0,0,0,0.25), rgba(0,0,0,0.55)),
+                    var(--SmartThemeBotMesBlurTintColor, #1a1a2e) !important;
+    }
+    #gal-unified-panel .gal-l1-tab-btn {
+        color: rgba(255,255,255,0.82) !important;
+    }
+    #gal-unified-panel .gal-l1-tab-btn i {
+        color: currentColor !important;
+        opacity: 1 !important;
+    }
+    #gal-unified-panel .gal-l1-tab-btn:hover {
+        color: rgba(255,255,255,0.95) !important;
+    }
+    #gal-unified-panel .gal-l1-tab-btn.active {
+        color: var(--gal-accent) !important;
     }

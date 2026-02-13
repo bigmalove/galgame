@@ -382,6 +382,9 @@ export const Live2DStage = {
       if (!model.parent) {
         targetContainer.addChild(model);
       }
+      if ('autoUpdate' in model) {
+        model.autoUpdate = true;
+      }
     } catch (e) {}
 
     if (!inst.bounds) {
@@ -391,8 +394,6 @@ export const Live2DStage = {
         if (model.scale?.set) model.scale.set(1);
         if (model.pivot?.set) model.pivot.set(0, 0);
         if (model.position?.set) model.position.set(0, 0);
-        if (model.internalModel?.update) model.internalModel.update(0);
-        if (typeof model.update === 'function') model.update(0);
         const b = model.getLocalBounds?.();
         if (b && Number.isFinite(b.width) && Number.isFinite(b.height) && b.width > 0 && b.height > 0) {
           inst.bounds = b;
@@ -444,6 +445,9 @@ export const Live2DStage = {
     try {
       if (inst.model.parent) {
         inst.model.parent.removeChild(inst.model);
+      }
+      if ('autoUpdate' in inst.model) {
+        inst.model.autoUpdate = false;
       }
     } catch (e) {}
 

@@ -3,7 +3,7 @@ import { topWindow, $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getIsEnabled, getPendingOptions, setPendingOptions, getGalgameChoicesVisible, setGalgameChoicesVisible, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
 import { getModalMountRoot } from './fullscreen.js';
-import { ensureGlobalOverlay } from './overlay.js';
+import { ensureGlobalOverlay, adjustToolbarForSpace } from './overlay.js';
 import { showToast } from './toast.js';
 
 // ============================================
@@ -49,6 +49,7 @@ export function renderGalgameChoices(options) {
 
   setPendingOptions(options);
   $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+  adjustToolbarForSpace();
 
   const $layer = ensureChoicesLayer();
   const $container = $layer.find('.gal-choices-container');
@@ -76,12 +77,14 @@ export function showPendingChoicesButton() {
   const pendingOptions = getPendingOptions();
   if (!pendingOptions || pendingOptions.length === 0) return;
   $('#gal-global-overlay .gal-pending-choices-btn').addClass('show');
+  adjustToolbarForSpace();
   console.log(`[${SCRIPT_NAME}] 显示待选择提示按钮`);
 }
 
 export function hidePendingChoicesButton() {
   $('#gal-global-overlay .gal-pending-choices-btn').removeClass('show');
   setPendingOptions(null);
+  adjustToolbarForSpace();
   console.log(`[${SCRIPT_NAME}] 隐藏待选择提示按钮`);
 }
 
@@ -160,6 +163,7 @@ function checkAndRenderOptions() {
   if ($btn.length) {
     $btn.css('display', 'flex');
     $btn.addClass('show');
+    adjustToolbarForSpace();
   }
 
   const optionChanged = currentOptionHash !== getLastGalgameOptionHash();
@@ -195,6 +199,7 @@ function checkAndRenderOptions() {
     if (pending && pending.length > 0) {
       ensureGlobalOverlay();
       $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+      adjustToolbarForSpace();
     }
   }
 

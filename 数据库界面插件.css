@@ -1359,7 +1359,7 @@
         border-radius: 0 !important;
         border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
         margin-left: calc(0.938rem * var(--ui-scale)) !important;
-        margin-right: calc(-1.875rem) !important;
+        margin-right: 0 !important;
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
@@ -1383,6 +1383,40 @@
       .gal-footer-btn-next i {
         font-size: 1.1rem !important;
         margin: 0 !important;
+      }
+
+      /* 桌面中等宽度优化：只缩窄其他按钮，保证 NEXT 可见 */
+      .gal-bottom-toolbar {
+        justify-content: flex-start;
+        gap: calc(0.25rem * var(--ui-scale));
+        padding: 0.625rem 0.75rem 0 0.75rem;
+        overflow: visible;
+      }
+
+      .gal-footer-btn {
+        padding: 0 calc(0.55rem * var(--ui-scale)) !important;
+        gap: calc(0.25rem * var(--ui-scale)) !important;
+        font-size: calc(0.78rem * var(--ui-scale)) !important;
+      }
+
+      .gal-footer-btn i,
+      .gal-footer-btn span {
+        font-size: calc(0.9rem * var(--ui-scale)) !important;
+      }
+
+      .gal-pending-choices-btn {
+        padding: 0 calc(0.7rem * var(--ui-scale)) !important;
+        height: calc(2.45rem * var(--ui-scale)) !important;
+        font-size: calc(0.78rem * var(--ui-scale)) !important;
+        margin-left: auto !important;
+        margin-right: 0 !important;
+      }
+
+      .gal-footer-btn-next {
+        margin-left: calc(0.375rem * var(--ui-scale)) !important;
+        margin-right: 0 !important;
+        min-width: calc(7.25rem * var(--ui-scale)) !important;
+        padding: 0 calc(1.9rem * var(--ui-scale)) !important;
       }
 
       /* 进度指示器 */
@@ -1974,16 +2008,16 @@
       .gal-pending-choices-btn {
         background: linear-gradient(135deg, ${THEME.accentSub} 0%, #cc0044 100%) !important;
         color: #fff !important;
-        padding: 0 1.25rem !important;
+        padding: 0 calc(0.72rem * var(--ui-scale)) !important;
         font-weight: 700 !important;
-        font-size: 0.85rem !important;
+        font-size: calc(0.78rem * var(--ui-scale)) !important;
         cursor: pointer !important;
         display: flex !important; /* 强制常驻显示 */
         align-items: center !important;
-        gap: 0.375rem !important;
-        border: 0.125rem solid ${THEME.dark} !important;
-        height: 2.813rem !important;
-        margin-right: 0.313rem !important;
+        gap: calc(0.25rem * var(--ui-scale)) !important;
+        border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
+        height: calc(2.25rem * var(--ui-scale)) !important;
+        margin-right: calc(0.188rem * var(--ui-scale)) !important;
         border-radius: 0 !important;
         transform: skewX(-10deg);
       }
@@ -1999,7 +2033,7 @@
       }
 
       .gal-pending-choices-btn i {
-        font-size: 1.1rem !important;
+        font-size: calc(0.9rem * var(--ui-scale)) !important;
         margin: 0 !important;
       }
 
@@ -3222,6 +3256,22 @@
 
     /* === 弹窗全屏防御 (769px - 1000px) === */
     @media screen and (min-width: 48.0625rem) and (max-width: 62.5rem) {
+        /* 小桌面/平板横屏：防止 NEXT 在中间宽度被裁切 */
+        .gal-bottom-toolbar {
+            padding-right: 0.75rem !important;
+            overflow: visible !important;
+        }
+
+        .gal-footer-btn-next {
+            margin-right: 0 !important;
+            min-width: calc(7.25rem * var(--ui-scale)) !important;
+            padding: 0 calc(1.75rem * var(--ui-scale)) !important;
+        }
+
+        .gal-pending-choices-btn {
+            margin-right: 0 !important;
+        }
+
         #gal-settings-panel,
         #gal-asset-manager-modal,
         #gal-history-modal,
@@ -3311,6 +3361,7 @@
             padding: 0 !important;
             justify-content: center !important;
             height: 2.5rem !important;
+            margin-left: 0 !important;
         }
 
         .gal-footer-btn i,

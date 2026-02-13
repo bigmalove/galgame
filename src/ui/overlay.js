@@ -359,6 +359,8 @@ export function adjustToolbarForSpace() {
   if (!overlay) return;
   overlay.classList.remove('mobile-mode');
   overlay.classList.remove('icon-only');
+  overlay.classList.remove('gal-toolbar-compact');
+  overlay.classList.remove('gal-toolbar-tight');
 }
 
 // ============================================

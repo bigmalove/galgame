@@ -1,10 +1,18 @@
-import { SCRIPT_NAME, STORE_LIVE2D_MODELS } from '../core/constants.js';
+﻿import { SCRIPT_NAME, STORE_LIVE2D_MODELS } from '../core/constants.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 
 // ============================================
 // Live2D 模型存储函数
 // ============================================
+
+function normalizeCharacterIdKey(characterId) {
+  return String(characterId || '').trim().toLowerCase();
+}
+
+function matchesCharacterId(modelId, characterId) {
+  return normalizeCharacterIdKey(modelId) === normalizeCharacterIdKey(characterId);
+}
 
 export async function saveLive2DModel(modelData) {
   if (!getDb()) await initDB();
@@ -37,7 +45,21 @@ export async function getLive2DModel(characterId) {
       const transaction = db.transaction([STORE_LIVE2D_MODELS], 'readonly');
       const store = transaction.objectStore(STORE_LIVE2D_MODELS);
       const request = store.get(characterId);
-      request.onsuccess = () => resolve(request.result || null);
+      request.onsuccess = () => {
+        const exact = request.result || null;
+        if (exact) {
+          resolve(exact);
+          return;
+        }
+
+        const fallbackReq = store.getAll();
+        fallbackReq.onsuccess = () => {
+          const all = fallbackReq.result || [];
+          const matched = all.find(model => matchesCharacterId(model?.modelId, characterId));
+          resolve(matched || null);
+        };
+        fallbackReq.onerror = () => resolve(null);
+      };
       request.onerror = () => resolve(null);
     } catch (e) {
       resolve(null);

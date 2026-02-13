@@ -38,7 +38,6 @@ import { Live2DPositionEditor, setPositionEditorRefs } from './live2d/position-e
 import { Live2DUploader } from './live2d/uploader.js';
 import { Live2DPreloadManager, renderCharacterVisual, updateCharacterFocus, cleanupCharacterVisual, cleanupAllVisuals } from './live2d/preload.js';
 import { EXPRESSION_LIVE2D_MAP, matchLive2DExpression, matchLive2DMotion, setLive2DCharacterExpression, getLive2DExpressionList, getLive2DMotionGroups } from './live2d/expression-motion.js';
-import { renderCharacterLive2DRow, updateLive2DRowState, bindLive2DSettingsEvents, initAllLive2DRowStates, setCharSettingsRefs } from './live2d/char-settings.js';
 import { Live2DLazyLoader, LOD_CONFIG, applyLOD, updateAllLOD, Live2DPerformanceMonitor, autoAdjustPerformance, DEFAULT_BIG_BANANA_CONFIG } from './live2d/performance.js';
 
 // === Phase 5: 音频和图片生成 ===
@@ -76,7 +75,6 @@ setParserRefs({ getFormattedContent });
 import { injectStyles } from './ui/styles.js';
 import { getFullscreenElement, getModalMountRoot, toggleFullscreen, setupFullscreenChangeListener, setFullscreenRefs } from './ui/fullscreen.js';
 import { showToast } from './ui/toast.js';
-import { showCustomPopupPanel } from './ui/modal.js';
 import { getHistoryFromDatabase, showHistoryModal } from './ui/history.js';
 import { getCurrentDisplayMesId, setCurrentDisplayMesId, queueOverlayUpdate, nextOverlayRenderToken, scheduleOverlaySegmentDisplay, ensureGlobalOverlay, renderMainInterface, setChatScrollLock, syncOverlayHeightToChatViewport, adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showGlobalOverlay, hideGlobalOverlay, toggleGlobalOverlay, showGeneratingIndicator, hideGeneratingIndicator, updateGeneratingStatus, setupGameContentResizeListener, setOverlayRefs } from './ui/overlay.js';
 import { updateNextBtnForGeneratingState, stopNextBtnAnimation, refreshNextBtnDisplay } from './ui/next-btn.js';
@@ -131,7 +129,6 @@ setTTSManagerRefs({ showToast });
 setBGMManagerRefs({ showToast });
 setWorldbookRefs({ showToast });
 setEnhancedModeRefs({ showToast });
-setCharSettingsRefs({ showCustomPopupPanel, getModalMountRoot });
 
 // Phase 8 延迟引用: fullscreen -> overlay
 setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast });

@@ -1,3 +1,4 @@
+"use strict";
 (() => {
   // src/core/constants.js
   var SCRIPT_ID = "galgame-ui-plugin";
@@ -981,6 +982,12 @@
   }
 
   // src/db/live2d-models.js
+  function normalizeCharacterIdKey(characterId) {
+    return String(characterId || "").trim().toLowerCase();
+  }
+  function matchesCharacterId(modelId, characterId) {
+    return normalizeCharacterIdKey(modelId) === normalizeCharacterIdKey(characterId);
+  }
   async function saveLive2DModel(modelData) {
     if (!getDb()) await initDB();
     const db = getDb();
@@ -1011,7 +1018,20 @@
         const transaction = db.transaction([STORE_LIVE2D_MODELS], "readonly");
         const store = transaction.objectStore(STORE_LIVE2D_MODELS);
         const request = store.get(characterId);
-        request.onsuccess = () => resolve(request.result || null);
+        request.onsuccess = () => {
+          const exact = request.result || null;
+          if (exact) {
+            resolve(exact);
+            return;
+          }
+          const fallbackReq = store.getAll();
+          fallbackReq.onsuccess = () => {
+            const all = fallbackReq.result || [];
+            const matched = all.find((model) => matchesCharacterId(model?.modelId, characterId));
+            resolve(matched || null);
+          };
+          fallbackReq.onerror = () => resolve(null);
+        };
         request.onerror = () => resolve(null);
       } catch (e) {
         resolve(null);
@@ -1963,6 +1983,9 @@
   // src/live2d/render-mode.js
   var CHAR_USE_LIVE2D_KEY = `${SCRIPT_ID}_char_use_live2d`;
   var LIVE2D_CONFIG_KEY = `${SCRIPT_ID}_live2d_config`;
+  function normalizeCharacterIdKey2(characterId) {
+    return String(characterId || "").trim().toLowerCase();
+  }
   function normalizeLive2DScaleBase(scaleBase) {
     return scaleBase === "fit" ? "fit" : "height";
   }
@@ -2025,7 +2048,7 @@
         motionMapping: charConfig.motionMapping || {}
       };
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] \u8BFB\u53D6 Live2D \u914D\u7F6E\u5931\u8D25:`, e);
+      console.error(`[${SCRIPT_NAME}] \u7487\u8BF2\u5F47 Live2D \u95B0\u5D87\u7586\u6FB6\u8FAB\u89E6:`, e);
       return getDefaultLive2DConfig();
     }
   }
@@ -2034,9 +2057,9 @@
       const allConfigs = JSON.parse(localStorage.getItem(LIVE2D_CONFIG_KEY) || "{}");
       allConfigs[characterId] = config;
       localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
-      console.log(`[${SCRIPT_NAME}] \u5DF2\u4FDD\u5B58\u89D2\u8272 ${characterId} \u7684 Live2D \u914D\u7F6E`);
+      console.log(`[${SCRIPT_NAME}] \u5BB8\u8E6D\u7E5A\u701B\u6A3F\uE757\u9479?${characterId} \u9428?Live2D \u95B0\u5D87\u7586`);
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58 Live2D \u914D\u7F6E\u5931\u8D25:`, e);
+      console.error(`[${SCRIPT_NAME}] \u6DC7\u6FC6\u74E8 Live2D \u95B0\u5D87\u7586\u6FB6\u8FAB\u89E6:`, e);
     }
   }
   function updateLive2DConfig(characterId, partialConfig) {
@@ -2058,13 +2081,24 @@
       delete allConfigs[characterId];
       localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] \u5220\u9664 Live2D \u914D\u7F6E\u5931\u8D25:`, e);
+      console.error(`[${SCRIPT_NAME}] \u9352\u72BB\u6ACE Live2D \u95B0\u5D87\u7586\u6FB6\u8FAB\u89E6:`, e);
     }
   }
   function getCharacterUseLive2D(characterId) {
     try {
       const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
-      return settings[characterId] || false;
+      const rawKey = String(characterId ?? "");
+      if (Object.prototype.hasOwnProperty.call(settings, rawKey)) {
+        return !!settings[rawKey];
+      }
+      const normalizedTarget = normalizeCharacterIdKey2(characterId);
+      if (!normalizedTarget) return false;
+      for (const [key, value] of Object.entries(settings)) {
+        if (normalizeCharacterIdKey2(key) === normalizedTarget) {
+          return !!value;
+        }
+      }
+      return false;
     } catch {
       return false;
     }
@@ -2072,10 +2106,15 @@
   function setCharacterUseLive2D(characterId, useLive2D) {
     try {
       const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
-      settings[characterId] = useLive2D;
+      const rawKey = String(characterId ?? "");
+      const normalizedKey = normalizeCharacterIdKey2(characterId);
+      settings[rawKey] = !!useLive2D;
+      if (normalizedKey && normalizedKey !== rawKey) {
+        settings[normalizedKey] = !!useLive2D;
+      }
       localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings));
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58 Live2D \u8BBE\u7F6E\u5931\u8D25:`, e);
+      console.error(`[${SCRIPT_NAME}] \u6DC7\u6FC6\u74E8 Live2D \u7481\u5267\u7586\u6FB6\u8FAB\u89E6:`, e);
     }
   }
   var saveLive2DConfig = setLive2DConfig;
@@ -3049,7 +3088,7 @@ ${lines.join("\n")}`;
     modelBlobUrls: /* @__PURE__ */ new Map(),
     // characterId -> Set<string>
     cachedDetachedAt: /* @__PURE__ */ new Map(),
-    // characterId -> timestamp (已退场缓存)
+    // characterId -> timestamp (宸查€€鍦虹紦瀛?
     maxDetachedCache: 3,
     xhrBlobUrlSupport: null,
     // null=unknown, boolean=supported
@@ -3143,11 +3182,195 @@ ${lines.join("\n")}`;
       this.xhrBlobUrlSupport = false;
       if (!this.hasLoggedBlobUrlDisabled) {
         this.hasLoggedBlobUrlDisabled = true;
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u5DF2\u7981\u7528 Blob URL\uFF08XHR \u4E0D\u517C\u5BB9\u6216\u52A0\u8F7D\u5931\u8D25: ${reason}\uFF09\uFF0C\u5C06\u56DE\u9000\u4F7F\u7528 Data URL`);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u5BB8\u832C\uE6E6\u9422?Blob URL\u951B\u5736HR \u6D93\u5D85\u540B\u7039\u89C4\u57A8\u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6: ${reason}\u951B\u591B\u7D1D\u704F\u55D7\u6D16\u95AB\u20AC\u6D63\u8DE8\u6564 Data URL`);
       }
     },
     _isRemoteModelData(modelData) {
       return !!modelData && modelData.source === "remote" && typeof modelData.modelUrl === "string" && modelData.modelUrl.trim().length > 0;
+    },
+    _encodePathSegment(segment) {
+      if (typeof segment !== "string" || !segment) return segment;
+      let decoded = segment;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch (e) {
+        return segment;
+      }
+      const safeChar = /[A-Za-z0-9\-._~!$&'()*+,;=:@]/;
+      let encoded = "";
+      for (const ch of decoded) {
+        encoded += safeChar.test(ch) ? ch : encodeURIComponent(ch);
+      }
+      return encoded;
+    },
+    _normalizeRemoteUrl(inputUrl) {
+      const url = String(inputUrl || "").trim();
+      if (!url) return url;
+      try {
+        const urlObj = new URL(url);
+        urlObj.pathname = urlObj.pathname.split("/").map((segment) => this._encodePathSegment(segment)).join("/");
+        return urlObj.toString();
+      } catch (e) {
+        return url;
+      }
+    },
+    _normalizeResourceRef(inputRef) {
+      const raw = String(inputRef || "").trim();
+      if (!raw) return raw;
+      const hashSafe = raw.replace(/#/g, "%23");
+      const normalized = hashSafe.replace(/\\/g, "/");
+      const qIndex = normalized.indexOf("?");
+      const pathPart = qIndex >= 0 ? normalized.slice(0, qIndex) : normalized;
+      const queryPart = qIndex >= 0 ? normalized.slice(qIndex) : "";
+      const encodedPath = pathPart.split("/").map((segment) => this._encodePathSegment(segment)).join("/");
+      return `${encodedPath}${queryPart.replace(/#/g, "%23")}`;
+    },
+    _stripJsonComments(text) {
+      let output = "";
+      let inString = false;
+      let quoteChar = '"';
+      let escaping = false;
+      let inLineComment = false;
+      let inBlockComment = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = i + 1 < text.length ? text[i + 1] : "";
+        if (inLineComment) {
+          if (ch === "\n") {
+            inLineComment = false;
+            output += ch;
+          }
+          continue;
+        }
+        if (inBlockComment) {
+          if (ch === "*" && next === "/") {
+            inBlockComment = false;
+            i++;
+          }
+          continue;
+        }
+        if (inString) {
+          output += ch;
+          if (escaping) {
+            escaping = false;
+          } else if (ch === "\\") {
+            escaping = true;
+          } else if (ch === quoteChar) {
+            inString = false;
+          }
+          continue;
+        }
+        if (ch === "/" && next === "/") {
+          inLineComment = true;
+          i++;
+          continue;
+        }
+        if (ch === "/" && next === "*") {
+          inBlockComment = true;
+          i++;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          inString = true;
+          quoteChar = ch;
+        }
+        output += ch;
+      }
+      return output;
+    },
+    _tryParseModelJson(text) {
+      const raw = String(text ?? "").replace(/^\uFEFF/, "").trim();
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (e) {
+      }
+      let cleaned = this._stripJsonComments(raw);
+      cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
+      cleaned = cleaned.replace(/}(\s*){/g, "},$1{");
+      cleaned = cleaned.replace(/](\s*){/g, "],$1{");
+      cleaned = cleaned.replace(/([}\]0-9"'])(\s*)(?="[^"]+"\s*:)/g, "$1,$2");
+      try {
+        return JSON.parse(cleaned);
+      } catch (e) {
+        return null;
+      }
+    },
+    _buildModelJsonCandidates(modelUrl) {
+      const candidates = [modelUrl];
+      const addCandidate = (url) => {
+        if (!url) return;
+        if (!candidates.includes(url)) {
+          candidates.push(url);
+        }
+      };
+      addCandidate(modelUrl.replace(/\/model\.json(?=([?#].*)?$)/i, "/model.model.json"));
+      addCandidate(modelUrl.replace(/\/model3\.json(?=([?#].*)?$)/i, "/model.model3.json"));
+      return candidates;
+    },
+    async _fetchWithTimeout(url, init2 = {}, timeoutMs = 12e3) {
+      if (typeof AbortController === "undefined") {
+        return await fetch(url, init2);
+      }
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...init2, signal: controller.signal });
+      } catch (e) {
+        if (e?.name === "AbortError") {
+          throw new Error(`\u7487\u950B\u7730\u74D2\u546E\u6902 (${timeoutMs}ms): ${url}`);
+        }
+        throw e;
+      } finally {
+        window.clearTimeout(timer);
+      }
+    },
+    async _fetchModelJsonCandidate(modelUrl, useProxy) {
+      const requestUrl = useProxy ? this._getProxiedUrl(modelUrl) : modelUrl;
+      const response = await this._fetchWithTimeout(requestUrl, { method: "GET", cache: "no-store" }, 12e3);
+      if (!response.ok) return null;
+      const text = await response.text();
+      const parsed = this._tryParseModelJson(text);
+      if (!parsed) return null;
+      return { modelJson: parsed, sourceUrl: modelUrl, useProxy };
+    },
+    _normalizeLegacyCubism2Settings(modelJson) {
+      if (!modelJson || modelJson.FileReferences) return;
+      const textures = modelJson.textures || modelJson.Textures;
+      if (Array.isArray(textures)) return;
+      if (!textures || typeof textures !== "object") return;
+      const entries = Object.entries(textures).filter((entry) => Array.isArray(entry[1]) && entry[1].length > 0);
+      if (!entries.length) return;
+      const hintKeys = [
+        modelJson.config?.texture,
+        modelJson.config?.textureId,
+        modelJson.config?.skin,
+        modelJson.config?.modelId,
+        modelJson.config?.defaultTexture,
+        modelJson.config?.defaultSkin
+      ].map((v) => v === void 0 || v === null ? "" : String(v).trim()).filter(Boolean);
+      let selected = entries[0];
+      for (const hint of hintKeys) {
+        const matched = entries.find(([key]) => key === hint);
+        if (matched) {
+          selected = matched;
+          break;
+        }
+      }
+      const normalizedTextures = selected[1].map((item) => {
+        const raw = String(item || "").trim();
+        if (!raw) return raw;
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return raw;
+        if (raw.startsWith("/")) return raw;
+        if (raw.includes("/")) return raw;
+        return `textures/${raw}`;
+      });
+      modelJson.textures = normalizedTextures;
+      modelJson.Textures = normalizedTextures;
+      console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AB\u20AC\u5A34\u5B2A\u57CC\u95C8\u70B4\u7223\u9351?Cubism2 \u7490\u6751\u6D58\u7F01\u64B4\u702F\u951B\u5C7D\u51E1\u9477\uE044\u59E9\u675E\uE101\u5D32`, {
+        key: selected[0],
+        textureCount: normalizedTextures.length
+      });
     },
     _getProxiedUrl(originalUrl) {
       const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
@@ -3195,7 +3418,7 @@ ${lines.join("\n")}`;
         }
         model.destroy();
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u9500\u6BC1\u6A21\u578B\u5931\u8D25 (${characterId}, ${reason})`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u95BF\u20AC\u59E3\u4F79\u0101\u9368\u5B2A\u3051\u7490?(${characterId}, ${reason})`, e);
       }
       this.models.delete(characterId);
       this.containers.delete(characterId);
@@ -3210,7 +3433,7 @@ ${lines.join("\n")}`;
       while (this.cachedDetachedAt.size > this.maxDetachedCache && sorted.length > 0) {
         const [characterId] = sorted.shift();
         this._destroyModel(characterId, "cache-evict");
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u7F13\u5B58\u6DD8\u6C70\u6A21\u578B ${characterId}`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: \u7F02\u64B3\u74E8\u5A23\u6A3B\u5351\u59AF\u2033\u7037 ${characterId}`);
       }
     },
     releaseCharacter(characterId) {
@@ -3262,10 +3485,10 @@ ${lines.join("\n")}`;
         try {
           updateLive2DConfig(characterId, { transform: normalizedTransform });
           console.log(
-            `[${SCRIPT_NAME}] Live2DManager: \u5750\u6807\u517C\u5BB9\u4FEE\u6B63 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`
+            `[${SCRIPT_NAME}] Live2DManager: \u9367\u612D\u7223\u934F\u714E\uE190\u6DC7\uE1BD\uE11C ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`
           );
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u4FDD\u5B58\u517C\u5BB9\u4FEE\u6B63\u5931\u8D25`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u6DC7\u6FC6\u74E8\u934F\u714E\uE190\u6DC7\uE1BD\uE11C\u6FB6\u8FAB\u89E6`, e);
         }
       }
       return normalizedTransform;
@@ -3274,7 +3497,7 @@ ${lines.join("\n")}`;
       if (this.isReady) return true;
       const sdkLoaded = await Live2DLoader.load();
       if (!sdkLoaded) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager: SDK \u52A0\u8F7D\u5931\u8D25`);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: SDK \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6`);
         return false;
       }
       const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
@@ -3298,7 +3521,7 @@ ${lines.join("\n")}`;
         console.log(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5B8C\u6210`);
         return true;
       } catch (e) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5931\u8D25:`, e);
+        console.error(`[${SCRIPT_NAME}] Live2DManager \u9352\u6FC6\uE750\u9356\u6827\u3051\u7490?`, e);
         return false;
       }
     },
@@ -3319,11 +3542,11 @@ ${lines.join("\n")}`;
       }
       const modelData = await getLive2DModel(characterId);
       if (!modelData) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u672A\u627E\u5230\u89D2\u8272 ${characterId} \u7684 Live2D \u6A21\u578B`);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u93C8\uE045\u58D8\u9352\u62CC\uE757\u9479?${characterId} \u9428?Live2D \u59AF\u2033\u7037`);
         return null;
       }
       const isRemote = this._isRemoteModelData(modelData);
-      const remoteModelUrl = isRemote ? modelData.modelUrl.trim() : "";
+      const remoteModelUrl = isRemote ? this._normalizeRemoteUrl(modelData.modelUrl.trim()) : "";
       const loadTask = (async () => {
         this._revokeModelBlobUrls(characterId);
         const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
@@ -3331,7 +3554,9 @@ ${lines.join("\n")}`;
         const { Live2DModel } = PIXI.live2d;
         const loadFromUrl = async (modelUrl) => {
           const model = await Live2DModel.from(modelUrl, {
-            autoUpdate: true,
+            // 避免在模型尚未挂载到带 WebGL renderer 的舞台前就触发 update，
+            // 远程 Cubism2 模型在该阶段容易抛 createProgram undefined。
+            autoUpdate: false,
             autoInteract: false
           });
           await new Promise((resolve) => {
@@ -3340,7 +3565,7 @@ ${lines.join("\n")}`;
             const checkTextures = () => {
               retryCount++;
               if (retryCount > maxRetries) {
-                console.warn(`[${SCRIPT_NAME}] Live2DManager: \u7EB9\u7406\u68C0\u67E5\u8FBE\u5230\u6700\u5927\u91CD\u8BD5\u6B21\u6570\uFF0C\u7EE7\u7EED\u6E32\u67D3`);
+                console.warn(`[${SCRIPT_NAME}] Live2DManager: \u7EFE\u572D\u608A\u59AB\u20AC\u93CC\u30E8\u63EA\u9352\u7248\u6E36\u6FB6\u0447\u5678\u7487\u66DF\uE0BC\u93C1\u5E2E\u7D1D\u7F01\u0445\u753B\u5A13\u53C9\u714B`);
                 resolve(false);
                 return;
               }
@@ -3351,7 +3576,7 @@ ${lines.join("\n")}`;
               }
               const textures = internalModel.textures || internalModel._textures || [];
               if (textures.length === 0) {
-                console.log(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B\u65E0\u5916\u90E8\u7EB9\u7406\uFF0C\u8DF3\u8FC7\u7B49\u5F85`);
+                console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u93C3\u72B2\uE63B\u95AE\u3127\u6C57\u941E\u55ED\u7D1D\u74BA\u5BA0\u7E43\u7EDB\u590A\u7DDF`);
                 resolve(true);
                 return;
               }
@@ -3363,11 +3588,11 @@ ${lines.join("\n")}`;
                 return true;
               });
               if (allLoaded) {
-                console.log(`[${SCRIPT_NAME}] Live2DManager: \u7EB9\u7406\u5168\u90E8\u52A0\u8F7D\u5B8C\u6210 (${textures.length} \u5F20)`);
+                console.log(`[${SCRIPT_NAME}] Live2DManager: \u7EFE\u572D\u608A\u934F\u3129\u5134\u9354\u72BA\u6D47\u7039\u5C7E\u579A (${textures.length} \u5BEE?`);
                 resolve(true);
               } else {
                 if (retryCount % 5 === 0) {
-                  console.log(`[${SCRIPT_NAME}] Live2DManager: \u7B49\u5F85\u7EB9\u7406\u52A0\u8F7D... (${textures.filter((t) => t?.baseTexture?.valid).length}/${textures.length})`);
+                  console.log(`[${SCRIPT_NAME}] Live2DManager: \u7EDB\u590A\u7DDF\u7EFE\u572D\u608A\u9354\u72BA\u6D47... (${textures.filter((t) => t?.baseTexture?.valid).length}/${textures.length})`);
                 }
                 setTimeout(checkTextures, 100);
               }
@@ -3376,21 +3601,7 @@ ${lines.join("\n")}`;
           });
           await new Promise((r) => requestAnimationFrame(r));
           await new Promise((r) => setTimeout(r, 100));
-          if (model.internalModel && model.internalModel.update) {
-            model.internalModel.update(0);
-          }
-          if (model.update && typeof model.update === "function") {
-            model.update(0);
-          }
           return model;
-        };
-        const buildRemoteModelUrl = async () => {
-          try {
-            return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl, false);
-          } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] Live2DManager: \u8FDC\u7A0B\u6A21\u578B URL \u52A0\u8F7D\u5931\u8D25\uFF0C\u5C1D\u8BD5\u4F7F\u7528 CORS \u4EE3\u7406`, e);
-            return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl, true);
-          }
         };
         const buildLocalModelUrl = async (preferBlob = true) => {
           if (!preferBlob) {
@@ -3403,6 +3614,12 @@ ${lines.join("\n")}`;
           }
           return await this._buildModelBlobUrl(modelData, characterId);
         };
+        const buildRemoteModelUrl = async () => {
+          if (!remoteModelUrl) {
+            throw new Error("\u8FDC\u7A0B Live2D modelUrl \u4E3A\u7A7A");
+          }
+          return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl);
+        };
         let usedBlobForLocal = false;
         try {
           const modelUrl = isRemote ? await buildRemoteModelUrl() : await buildLocalModelUrl(true);
@@ -3410,25 +3627,25 @@ ${lines.join("\n")}`;
           const model = await loadFromUrl(modelUrl);
           this.models.set(characterId, model);
           this._markModelActive(characterId);
-          console.log(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B ${characterId} \u52A0\u8F7D\u6210\u529F`);
+          console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} \u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
           return model;
         } catch (e) {
           if (!isRemote && usedBlobForLocal) {
-            console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL \u52A0\u8F7D\u5931\u8D25\uFF0C\u56DE\u9000 Data URL (${characterId})`, e);
+            console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6\u951B\u5C7D\u6D16\u95AB\u20AC Data URL (${characterId})`, e);
             this._disableXhrBlobUrls("load-failed");
             this._revokeModelBlobUrls(characterId);
             const dataUrl = await buildLocalModelUrl(false);
             const model = await loadFromUrl(dataUrl);
             this.models.set(characterId, model);
             this._markModelActive(characterId);
-            console.log(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B ${characterId} DataURL \u56DE\u9000\u52A0\u8F7D\u6210\u529F`);
+            console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} DataURL \u9365\u70BA\u20AC\u20AC\u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
             return model;
           }
           throw e;
         }
       })().catch((e) => {
         this._revokeModelBlobUrls(characterId);
-        console.error(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B ${characterId} \u52A0\u8F7D\u5931\u8D25:`, e);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6:`, e);
         return null;
       }).finally(() => {
         this.loadingModels.delete(characterId);
@@ -3821,40 +4038,63 @@ ${lines.join("\n")}`;
       const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));
       return `data:application/json;base64,${modelJsonBase64}`;
     },
-    async _buildRemoteModelDataUrl(characterId, modelUrl, useProxy = false) {
-      const url = String(modelUrl || "").trim();
+    async _buildRemoteModelDataUrl(characterId, modelUrl, forceProxyResources = false) {
+      const url = this._normalizeRemoteUrl(String(modelUrl || "").trim());
       if (!url) {
-        throw new Error("\u8FDC\u7A0B Live2D modelUrl \u4E3A\u7A7A");
+        throw new Error("\u6769\u6EC5\u25BC Live2D modelUrl \u6D93\u8679\u2516");
       }
-      let baseUrl;
-      try {
-        const u = new URL(url);
-        u.hash = "";
-        baseUrl = u.toString();
-      } catch (e) {
-        throw new Error("\u8FDC\u7A0B Live2D modelUrl \u65E0\u6548");
+      const candidateUrls = this._buildModelJsonCandidates(url);
+      let modelJson = null;
+      let sourceModelUrl = url;
+      let fetchedViaProxy = false;
+      let lastError = null;
+      for (const candidateUrl of candidateUrls) {
+        try {
+          const direct = await this._fetchModelJsonCandidate(candidateUrl, false);
+          if (direct) {
+            modelJson = direct.modelJson;
+            sourceModelUrl = direct.sourceUrl;
+            fetchedViaProxy = false;
+            break;
+          }
+        } catch (directError) {
+          lastError = directError;
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u76F4\u8FDE\u83B7\u53D6\u6A21\u578B JSON \u5931\u8D25\uFF0C\u5C1D\u8BD5\u4EE3\u7406`, {
+            characterId,
+            modelUrl: candidateUrl,
+            error: directError
+          });
+        }
+        try {
+          const proxied = await this._fetchModelJsonCandidate(candidateUrl, true);
+          if (proxied) {
+            modelJson = proxied.modelJson;
+            sourceModelUrl = proxied.sourceUrl;
+            fetchedViaProxy = true;
+            break;
+          }
+        } catch (proxyError) {
+          lastError = proxyError;
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u6D60\uFF47\u608A\u947E\u5CF0\u5F47\u59AF\u2033\u7037 JSON \u6FB6\u8FAB\u89E6`, {
+            characterId,
+            modelUrl: candidateUrl,
+            error: proxyError
+          });
+        }
       }
-      const fetchUrl = useProxy ? this._getProxiedUrl(baseUrl) : baseUrl;
-      const response = await fetch(fetchUrl, { method: "GET", cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`\u8FDC\u7A0B\u6A21\u578B JSON \u83B7\u53D6\u5931\u8D25: ${response.status}`);
-      }
-      const text = await response.text();
-      let modelJson;
-      try {
-        modelJson = JSON.parse(text);
-      } catch (e) {
-        throw new Error("\u8FDC\u7A0B\u6A21\u578B JSON \u89E3\u6790\u5931\u8D25");
+      if (!modelJson) {
+        throw lastError instanceof Error ? lastError : new Error("\u6769\u6EC5\u25BC\u59AF\u2033\u7037 JSON \u7459\uFF46\u703D\u6FB6\u8FAB\u89E6");
       }
       const modifiedModelJson = JSON.parse(JSON.stringify(modelJson));
+      this._normalizeLegacyCubism2Settings(modifiedModelJson);
       const resolveUrl = (p) => {
         if (typeof p !== "string") return p;
         const raw = p.trim();
         if (!raw) return p;
-        const normalized = raw.replace(/\\/g, "/");
+        const normalized = this._normalizeResourceRef(raw);
         const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized);
-        const abs = hasScheme ? normalized : new URL(normalized, baseUrl).toString();
-        if (useProxy && (abs.startsWith("http://") || abs.startsWith("https://"))) {
+        const abs = hasScheme ? this._normalizeRemoteUrl(normalized) : this._normalizeRemoteUrl(new URL(normalized, sourceModelUrl).toString());
+        if ((fetchedViaProxy || forceProxyResources) && (abs.startsWith("http://") || abs.startsWith("https://"))) {
           return this._getProxiedUrl(abs);
         }
         return abs;
@@ -3942,7 +4182,7 @@ ${lines.join("\n")}`;
       await prevRender;
       try {
         if (!containerElement || !containerElement.isConnected) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo \u8DF3\u8FC7\uFF0C\u5BB9\u5668\u4E0D\u53EF\u7528 (${characterId})`);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo \u74BA\u5BA0\u7E43\u951B\u5C7D\uE190\u9363\u3124\u7B09\u9359\uE21C\u6564 (${characterId})`);
           return false;
         }
         if (containerElement && containerElement.isConnected) {
@@ -3981,7 +4221,7 @@ ${lines.join("\n")}`;
         let model = this.models.get(characterId);
         const existingContainer = this.containers.get(characterId);
         if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
-          console.log(`[${SCRIPT_NAME}] Live2DManager: \u590D\u7528\u73B0\u6709\u6E32\u67D3 ${characterId}`);
+          console.log(`[${SCRIPT_NAME}] Live2DManager: \u6FB6\u5D87\u6564\u941C\u7248\u6E41\u5A13\u53C9\u714B ${characterId}`);
           return true;
         }
         const needReload = forceReload || model && existingContainer && existingContainer.containerElement !== containerElement;
@@ -4012,7 +4252,7 @@ ${lines.join("\n")}`;
           dpr = parseFloat(qualityConfig.devicePixelRatio) || 1;
         }
         dpr *= qualityConfig.textureResolution || 1;
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u5BB9\u5668\u5C3A\u5BF8 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: \u7039\u7470\u6AD2\u704F\u54C4\uE1ED ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
         const canvas = _topWindow.document.createElement("canvas");
         const renderWidth = containerWidth;
         const renderHeight = containerHeight;
@@ -4030,9 +4270,9 @@ ${lines.join("\n")}`;
           premultipliedAlpha: true
         });
         if (!glContext) {
-          console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL \u4E0D\u53EF\u7528\uFF0C\u65E0\u6CD5\u6E32\u67D3 Live2D`);
+          console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL \u6D93\u5D85\u5F72\u9422\uE7D2\u7D1D\u93C3\u72B3\u7876\u5A13\u53C9\u714B Live2D`);
           try {
-            if (_showToastRef2) _showToastRef2("WebGL \u4E0D\u53EF\u7528\uFF0CLive2D \u65E0\u6CD5\u6E32\u67D3\uFF08\u8BF7\u5F00\u542F\u786C\u4EF6\u52A0\u901F\uFF09");
+            if (_showToastRef2) _showToastRef2("WebGL \u6D93\u5D85\u5F72\u9422\uE7D2\u7D1DLive2D \u93C3\u72B3\u7876\u5A13\u53C9\u714B\u951B\u5823\uE1EC\u5BEE\u20AC\u935A\uE21C\u2016\u6D60\u8DFA\u59DE\u95AB\u71C2\u7D1A");
           } catch {
           }
           return false;
@@ -4064,7 +4304,7 @@ ${lines.join("\n")}`;
           } catch {
           }
           try {
-            if (_showToastRef2) _showToastRef2("WebGL Renderer \u521D\u59CB\u5316\u5931\u8D25\uFF0CLive2D \u65E0\u6CD5\u6E32\u67D3");
+            if (_showToastRef2) _showToastRef2("WebGL Renderer \u9352\u6FC6\uE750\u9356\u6827\u3051\u7490\u30EF\u7D1DLive2D \u93C3\u72B3\u7876\u5A13\u53C9\u714B");
           } catch {
           }
           return false;
@@ -4086,7 +4326,7 @@ ${lines.join("\n")}`;
         );
         const userScale = transformConfig.scale || 1;
         const finalScale = baseScale * userScale;
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B\u5C3A\u5BF8 ${modelWidth}x${modelHeight}, \u57FA\u7840\u7F29\u653E: ${baseScale}, \u7528\u6237\u7F29\u653E: ${userScale}, \u6700\u7EC8\u7F29\u653E: ${finalScale}`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u704F\u54C4\uE1ED ${modelWidth}x${modelHeight}, \u9369\u8679\uE505\u7F02\u2542\u6581: ${baseScale}, \u9422\u3126\u57DB\u7F02\u2542\u6581: ${userScale}, \u93C8\u20AC\u7F01\u5822\u7F09\u93C0? ${finalScale}`);
         model.scale.set(finalScale);
         model.anchor.set(0.5, 0.5);
         const offsetX = transformConfig.offsetX || 0;
@@ -4111,7 +4351,7 @@ ${lines.join("\n")}`;
           renderHeight
         });
         console.log(
-          `[${SCRIPT_NAME}] Live2DManager: \u6E32\u67D3 ${characterId} \u5B8C\u6210 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`
+          `[${SCRIPT_NAME}] Live2DManager: \u5A13\u53C9\u714B ${characterId} \u7039\u5C7E\u579A (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`
         );
         return true;
       } finally {
@@ -4131,7 +4371,7 @@ ${lines.join("\n")}`;
       if (!this.models.has(characterId)) return false;
       const ok = _Live2DStageRef.applyTransform(characterId);
       if (ok) {
-        console.log(`[${SCRIPT_NAME}] Live2DManager: \u5E94\u7528\u53D8\u6362\u914D\u7F6E ${characterId}`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: \u6434\u65C2\u6564\u9359\u6A3B\u5D32\u95B0\u5D87\u7586 ${characterId}`);
       }
       return ok;
     },
@@ -4170,7 +4410,7 @@ ${lines.join("\n")}`;
         try {
           model.expression(mapped);
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u8BBE\u7F6E\u8868\u60C5\u5931\u8D25:`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u7481\u5267\u7586\u741B\u3126\u510F\u6FB6\u8FAB\u89E6:`, e);
         }
       }
     },
@@ -4180,7 +4420,7 @@ ${lines.join("\n")}`;
       try {
         model.motion(motionGroup, index);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u64AD\u653E\u52A8\u4F5C\u5931\u8D25:`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u93BE\uE15F\u6581\u9354\u3124\u7D94\u6FB6\u8FAB\u89E6:`, e);
       }
     },
     setFocus(characterId, isSpeaking) {
@@ -4290,7 +4530,7 @@ ${lines.join("\n")}`;
             container.canvas.parentNode.removeChild(container.canvas);
           }
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u6E05\u7406\u5BB9\u5668\u5931\u8D25:`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u5A13\u546F\u608A\u7039\u7470\u6AD2\u6FB6\u8FAB\u89E6:`, e);
         }
         this.containers.delete(characterId);
       }
@@ -4311,7 +4551,7 @@ ${lines.join("\n")}`;
       const model = this.models.get(characterId);
       const container = this.containers.get(characterId);
       if (!model || !container) {
-        console.warn(`[Live2DManager] enableInteraction \u5931\u8D25: \u6A21\u578B\u6216\u5BB9\u5668\u4E0D\u5B58\u5728`, { model: !!model, container: !!container });
+        console.warn(`[Live2DManager] enableInteraction \u6FB6\u8FAB\u89E6: \u59AF\u2033\u7037\u93B4\u6827\uE190\u9363\u3124\u7B09\u701B\u6A3A\u6E6A`, { model: !!model, container: !!container });
         return false;
       }
       model.interactive = true;
@@ -4330,7 +4570,7 @@ ${lines.join("\n")}`;
         container.canvas.style.pointerEvents = "auto";
         container.canvas.style.cursor = "move";
       }
-      console.log(`[Live2DManager] enableInteraction \u6210\u529F: ${characterId}`);
+      console.log(`[Live2DManager] enableInteraction \u93B4\u612C\u59DB: ${characterId}`);
       return true;
     },
     disableInteraction(characterId) {
@@ -4691,6 +4931,9 @@ ${lines.join("\n")}`;
         if (!model.parent) {
           targetContainer.addChild(model);
         }
+        if ("autoUpdate" in model) {
+          model.autoUpdate = true;
+        }
       } catch (e) {
       }
       if (!inst.bounds) {
@@ -4700,8 +4943,6 @@ ${lines.join("\n")}`;
           if (model.scale?.set) model.scale.set(1);
           if (model.pivot?.set) model.pivot.set(0, 0);
           if (model.position?.set) model.position.set(0, 0);
-          if (model.internalModel?.update) model.internalModel.update(0);
-          if (typeof model.update === "function") model.update(0);
           const b = model.getLocalBounds?.();
           if (b && Number.isFinite(b.width) && Number.isFinite(b.height) && b.width > 0 && b.height > 0) {
             inst.bounds = b;
@@ -4749,6 +4990,9 @@ ${lines.join("\n")}`;
       try {
         if (inst.model.parent) {
           inst.model.parent.removeChild(inst.model);
+        }
+        if ("autoUpdate" in inst.model) {
+          inst.model.autoUpdate = false;
         }
       } catch (e) {
       }
@@ -5368,6 +5612,8 @@ ${lines.join("\n")}`;
     if (!overlay) return;
     overlay.classList.remove("mobile-mode");
     overlay.classList.remove("icon-only");
+    overlay.classList.remove("gal-toolbar-compact");
+    overlay.classList.remove("gal-toolbar-tight");
   }
   function showGlobalOverlay() {
     const $overlay = ensureGlobalOverlay();
@@ -6489,215 +6735,6 @@ ${lines.join("\n")}`;
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] getLive2DMotionGroups \u9519\u8BEF:`, e);
       return [];
-    }
-  }
-
-  // src/live2d/char-settings.js
-  var _showCustomPopupPanelRef = null;
-  var _getModalMountRootRef2 = null;
-  function setCharSettingsRefs({ showCustomPopupPanel: showCustomPopupPanel2, getModalMountRoot: getModalMountRoot2 }) {
-    if (showCustomPopupPanel2) _showCustomPopupPanelRef = showCustomPopupPanel2;
-    if (getModalMountRoot2) _getModalMountRootRef2 = getModalMountRoot2;
-  }
-  function renderCharacterLive2DRow(characterId) {
-    const useLive2D = getCharacterUseLive2D(characterId);
-    return `
-    <div class="gal-setting-row gal-live2d-row" data-char-id="${characterId}">
-      <div class="gal-setting-label">Live2D</div>
-      <div class="gal-setting-controls" style="display: flex; align-items: center; gap: 8px;">
-        <label class="gal-toggle" style="display: inline-flex; align-items: center; cursor: pointer;">
-          <input type="checkbox"
-                 class="gal-live2d-toggle"
-                 data-char-id="${characterId}"
-                 ${useLive2D ? "checked" : ""}
-                 disabled
-                 style="margin-right: 4px;">
-          <span class="gal-toggle-text">\u542F\u7528</span>
-        </label>
-        <button class="gal-btn gal-btn-small gal-live2d-upload"
-                data-char-id="${characterId}"
-                style="padding: 4px 8px; font-size: 12px;">
-          \u4E0A\u4F20\u6A21\u578B
-        </button>
-        <button class="gal-btn gal-btn-small gal-live2d-url"
-                data-char-id="${characterId}"
-                style="padding: 4px 8px; font-size: 12px;">
-          \u8FDC\u7A0BURL
-        </button>
-        <button class="gal-btn gal-btn-small gal-btn-danger gal-live2d-delete"
-                data-char-id="${characterId}"
-                style="padding: 4px 8px; font-size: 12px; display: none;">
-          \u5220\u9664
-        </button>
-        <span class="gal-live2d-status" style="font-size: 12px; color: #888;"></span>
-      </div>
-    </div>
-  `;
-  }
-  async function updateLive2DRowState(characterId) {
-    const _$ = topWindow.jQuery || $;
-    const row = _$(topWindow.document).find(`.gal-live2d-row[data-char-id="${characterId}"]`);
-    if (!row.length) return;
-    const hasModel = await hasLive2DModel(characterId);
-    const toggle = row.find(".gal-live2d-toggle");
-    const uploadBtn = row.find(".gal-live2d-upload");
-    const deleteBtn = row.find(".gal-live2d-delete");
-    const status = row.find(".gal-live2d-status");
-    toggle.prop("disabled", !hasModel);
-    uploadBtn.text(hasModel ? "\u66F4\u6362\u6A21\u578B" : "\u4E0A\u4F20\u6A21\u578B");
-    deleteBtn.css("display", hasModel ? "" : "none");
-    if (hasModel) {
-      const modelData = await getLive2DModel(characterId);
-      if (modelData) {
-        if (modelData.source === "remote" && typeof modelData.modelUrl === "string") {
-          let host = "";
-          try {
-            host = new URL(modelData.modelUrl).host || "";
-          } catch (e) {
-          }
-          status.text(host ? `(URL: ${host})` : `(URL)`);
-        } else if (Number.isFinite(modelData.fileSize) && modelData.fileSize > 0) {
-          const sizeMB = (modelData.fileSize / 1024 / 1024).toFixed(1);
-          status.text(`(${sizeMB} MB)`);
-        } else {
-          status.text("");
-        }
-      }
-    } else {
-      status.text("");
-    }
-  }
-  function bindLive2DSettingsEvents() {
-    const _$ = topWindow.jQuery || $;
-    const _toastr = topWindow.toastr || (typeof toastr !== "undefined" ? toastr : null);
-    _$(topWindow.document).off("click.live2dupload").on("click.live2dupload", ".gal-live2d-upload", async function() {
-      const characterId = _$(this).data("char-id");
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = ".zip";
-      input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const row = _$(topWindow.document).find(`.gal-live2d-row[data-char-id="${characterId}"]`);
-        const status = row.find(".gal-live2d-status");
-        try {
-          status.text("\u4E0A\u4F20\u4E2D...");
-          await Live2DUploader.uploadZip(file, characterId);
-          if (_toastr) _toastr.success(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
-          await updateLive2DRowState(characterId);
-          if (Live2DManager.models.has(characterId)) {
-            Live2DManager.cleanup(characterId);
-          }
-        } catch (err) {
-          console.error(`[${SCRIPT_NAME}] Live2D \u4E0A\u4F20\u5931\u8D25:`, err);
-          if (_toastr) _toastr.error(`\u4E0A\u4F20\u5931\u8D25: ${err.message}`);
-          status.text("\u4E0A\u4F20\u5931\u8D25");
-        }
-      };
-      input.click();
-    });
-    _$(topWindow.document).off("click.live2durl").on("click.live2durl", ".gal-live2d-url", async function() {
-      const characterId = _$(this).data("char-id");
-      const exampleUrl = "https://cdn.jsdelivr.net/gh/Eikanya/Live2d-model/Live2D/Senko_Normals/senko.model3.json";
-      let currentUrl = "";
-      try {
-        const existing = await getLive2DModel(characterId);
-        if (existing?.source === "remote" && typeof existing.modelUrl === "string") {
-          currentUrl = existing.modelUrl;
-        }
-      } catch (e) {
-      }
-      const modalHtml = `
-      <div class="gal-live2d-remote-url-panel">
-        <div style="font-size: 13px; color: #333; margin-bottom: 8px;">
-          \u8F93\u5165 Live2D \u7684 <code>model3.json</code> / <code>model.json</code> URL\uFF1A
-        </div>
-        <input id="gal-live2d-remote-url-input"
-               class="gal-live2d-remote-url-input"
-               type="text"
-               placeholder="https://.../xxx.model3.json">
-        <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px;">
-          <button id="gal-live2d-remote-url-cancel" class="gal-btn gal-btn-small">\u53D6\u6D88</button>
-          <button id="gal-live2d-remote-url-save" class="gal-btn gal-btn-small">\u4FDD\u5B58</button>
-        </div>
-        <div style="margin-top: 8px; font-size: 12px; color: #888; word-break: break-all;">
-          \u793A\u4F8B\uFF1A${exampleUrl}
-        </div>
-      </div>
-    `;
-      if (_showCustomPopupPanelRef) {
-        _showCustomPopupPanelRef(`Live2D \u8FDC\u7A0BURL - ${characterId}`, modalHtml);
-      }
-      const mountRoot = _getModalMountRootRef2 ? _getModalMountRootRef2() : topWindow.document.body;
-      const $popup = _$(mountRoot).find("#gal-custom-popup");
-      $popup.find("#gal-live2d-remote-url-input").val(currentUrl || "");
-      const closePopup = () => {
-        try {
-          $popup.remove();
-        } catch (e) {
-        }
-      };
-      $popup.find("#gal-live2d-remote-url-cancel").on("click", closePopup);
-      $popup.find("#gal-live2d-remote-url-save").on("click", async () => {
-        const inputVal = $popup.find("#gal-live2d-remote-url-input").val();
-        const url = String(inputVal || "").trim();
-        const lowerUrl = url.toLowerCase();
-        if (!url) {
-          if (_toastr) _toastr.error("URL \u4E0D\u80FD\u4E3A\u7A7A");
-          return;
-        }
-        if (!(lowerUrl.startsWith("http://") || lowerUrl.startsWith("https://"))) {
-          if (_toastr) _toastr.error("URL \u5FC5\u987B\u4EE5 http:// \u6216 https:// \u5F00\u5934");
-          return;
-        }
-        if (!/\.json(\?|#|$)/i.test(url)) {
-          if (_toastr) _toastr.warning("URL \u770B\u8D77\u6765\u4E0D\u662F .json \u7ED3\u5C3E\uFF08\u4ECD\u4F1A\u5C1D\u8BD5\u52A0\u8F7D\uFF09");
-        }
-        try {
-          await saveLive2DModel({
-            modelId: characterId,
-            source: "remote",
-            modelUrl: url,
-            uploadTime: Date.now(),
-            fileSize: 0
-          });
-          if (_toastr) _toastr.success(`Live2D \u8FDC\u7A0BURL\u5DF2\u4FDD\u5B58: ${characterId}`);
-          await updateLive2DRowState(characterId);
-          if (Live2DManager.models.has(characterId)) {
-            Live2DManager.cleanup(characterId);
-          }
-          closePopup();
-        } catch (err) {
-          console.error(`[${SCRIPT_NAME}] Live2D \u8FDC\u7A0BURL\u4FDD\u5B58\u5931\u8D25:`, err);
-          if (_toastr) _toastr.error(`\u4FDD\u5B58\u5931\u8D25: ${err.message}`);
-        }
-      });
-    });
-    _$(topWindow.document).off("click.live2ddelete").on("click.live2ddelete", ".gal-live2d-delete", async function() {
-      const characterId = _$(this).data("char-id");
-      if (!confirm(`\u786E\u5B9A\u5220\u9664\u89D2\u8272 "${characterId}" \u7684 Live2D \u6A21\u578B\u5417\uFF1F`)) return;
-      try {
-        await deleteLive2DModel(characterId);
-        setCharacterUseLive2D(characterId, false);
-        Live2DManager.cleanup(characterId);
-        if (_toastr) _toastr.success("Live2D \u6A21\u578B\u5DF2\u5220\u9664");
-        await updateLive2DRowState(characterId);
-      } catch (err) {
-        console.error(`[${SCRIPT_NAME}] Live2D \u5220\u9664\u5931\u8D25:`, err);
-        if (_toastr) _toastr.error(`\u5220\u9664\u5931\u8D25: ${err.message}`);
-      }
-    });
-    _$(topWindow.document).off("change.live2dtoggle").on("change.live2dtoggle", ".gal-live2d-toggle", function() {
-      const characterId = _$(this).data("char-id");
-      const useLive2D = this.checked;
-      setCharacterUseLive2D(characterId, useLive2D);
-      console.log(`[${SCRIPT_NAME}] \u89D2\u8272 ${characterId} Live2D \u6A21\u5F0F: ${useLive2D ? "\u542F\u7528" : "\u7981\u7528"}`);
-    });
-    console.log(`[${SCRIPT_NAME}] Live2D \u8BBE\u7F6E\u4E8B\u4EF6\u5DF2\u7ED1\u5B9A`);
-  }
-  async function initAllLive2DRowStates(characterIds) {
-    for (const characterId of characterIds) {
-      await updateLive2DRowState(characterId);
     }
   }
 
@@ -8345,7 +8382,8 @@ ${lines.join("\n")}`;
       }
       const $existingContainer = $slot.find('.gal-char-container[data-character="' + characterId + '"]');
       const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr("data-live2d") === "true";
-      if (isExistingLive2D && !isEntering) {
+      const hasRenderedLive2D = Live2DManager.containers.has(characterId);
+      if (isExistingLive2D && hasRenderedLive2D && !isEntering) {
         $existingContainer.attr("data-expression", expression);
         if (emotionAttr) {
           $existingContainer.attr("data-emotion", emotion);
@@ -8390,7 +8428,9 @@ ${lines.join("\n")}`;
           if (!this._isLatestLive2DTask(characterId, taskSeq)) return true;
           if (renderToken === null) return false;
           const mesId = $("#gal-global-overlay .gal-game-container").attr("data-mes-id");
+          if (mesId === void 0 || mesId === null || mesId === "") return false;
           const latestState = messageSegmentState8 ? messageSegmentState8.get(String(mesId)) : null;
+          if (!latestState) return false;
           return renderToken !== (Number(latestState?.renderToken) || 0);
         };
         if ($container.length) {
@@ -11914,7 +11954,7 @@ ${firstResult}`;
         border-radius: 0 !important;
         border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
         margin-left: calc(0.938rem * var(--ui-scale)) !important;
-        margin-right: calc(-1.875rem) !important;
+        margin-right: 0 !important;
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
@@ -11938,6 +11978,40 @@ ${firstResult}`;
       .gal-footer-btn-next i {
         font-size: 1.1rem !important;
         margin: 0 !important;
+      }
+
+      /* 桌面中等宽度优化：只缩窄其他按钮，保证 NEXT 可见 */
+      .gal-bottom-toolbar {
+        justify-content: flex-start;
+        gap: calc(0.25rem * var(--ui-scale));
+        padding: 0.625rem 0.75rem 0 0.75rem;
+        overflow: visible;
+      }
+
+      .gal-footer-btn {
+        padding: 0 calc(0.55rem * var(--ui-scale)) !important;
+        gap: calc(0.25rem * var(--ui-scale)) !important;
+        font-size: calc(0.78rem * var(--ui-scale)) !important;
+      }
+
+      .gal-footer-btn i,
+      .gal-footer-btn span {
+        font-size: calc(0.9rem * var(--ui-scale)) !important;
+      }
+
+      .gal-pending-choices-btn {
+        padding: 0 calc(0.7rem * var(--ui-scale)) !important;
+        height: calc(2.45rem * var(--ui-scale)) !important;
+        font-size: calc(0.78rem * var(--ui-scale)) !important;
+        margin-left: auto !important;
+        margin-right: 0 !important;
+      }
+
+      .gal-footer-btn-next {
+        margin-left: calc(0.375rem * var(--ui-scale)) !important;
+        margin-right: 0 !important;
+        min-width: calc(7.25rem * var(--ui-scale)) !important;
+        padding: 0 calc(1.9rem * var(--ui-scale)) !important;
       }
 
       /* 进度指示器 */
@@ -12529,16 +12603,16 @@ ${firstResult}`;
       .gal-pending-choices-btn {
         background: linear-gradient(135deg, ${THEME.accentSub} 0%, #cc0044 100%) !important;
         color: #fff !important;
-        padding: 0 1.25rem !important;
+        padding: 0 calc(0.72rem * var(--ui-scale)) !important;
         font-weight: 700 !important;
-        font-size: 0.85rem !important;
+        font-size: calc(0.78rem * var(--ui-scale)) !important;
         cursor: pointer !important;
         display: flex !important; /* 强制常驻显示 */
         align-items: center !important;
-        gap: 0.375rem !important;
-        border: 0.125rem solid ${THEME.dark} !important;
-        height: 2.813rem !important;
-        margin-right: 0.313rem !important;
+        gap: calc(0.25rem * var(--ui-scale)) !important;
+        border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
+        height: calc(2.25rem * var(--ui-scale)) !important;
+        margin-right: calc(0.188rem * var(--ui-scale)) !important;
         border-radius: 0 !important;
         transform: skewX(-10deg);
       }
@@ -12554,7 +12628,7 @@ ${firstResult}`;
       }
 
       .gal-pending-choices-btn i {
-        font-size: 1.1rem !important;
+        font-size: calc(0.9rem * var(--ui-scale)) !important;
         margin: 0 !important;
       }
 
@@ -13777,6 +13851,22 @@ ${firstResult}`;
 
     /* === 弹窗全屏防御 (769px - 1000px) === */
     @media screen and (min-width: 48.0625rem) and (max-width: 62.5rem) {
+        /* 小桌面/平板横屏：防止 NEXT 在中间宽度被裁切 */
+        .gal-bottom-toolbar {
+            padding-right: 0.75rem !important;
+            overflow: visible !important;
+        }
+
+        .gal-footer-btn-next {
+            margin-right: 0 !important;
+            min-width: calc(7.25rem * var(--ui-scale)) !important;
+            padding: 0 calc(1.75rem * var(--ui-scale)) !important;
+        }
+
+        .gal-pending-choices-btn {
+            margin-right: 0 !important;
+        }
+
         #gal-settings-panel,
         #gal-asset-manager-modal,
         #gal-history-modal,
@@ -13866,6 +13956,7 @@ ${firstResult}`;
             padding: 0 !important;
             justify-content: center !important;
             height: 2.5rem !important;
+            margin-left: 0 !important;
         }
 
         .gal-footer-btn i,
@@ -14492,39 +14583,6 @@ ${firstResult}`;
     const $toast = $(`<div class="gal-toast"><span>${message}</span></div>`);
     $(mountRoot).append($toast);
     setTimeout(() => $toast.fadeOut(300, () => $toast.remove()), duration);
-  }
-
-  // src/ui/modal.js
-  function showCustomPopupPanel(title, htmlContent) {
-    const mountRoot = getModalMountRoot();
-    $(mountRoot).find("#gal-custom-popup-modal").remove();
-    const $modal = $(`
-    <div id="gal-custom-popup-modal" class="gal-popup-modal">
-      <div class="gal-popup-panel">
-        <div class="gal-popup-header">
-          <span class="gal-popup-title">${title}</span>
-          <button class="gal-popup-close">&times;</button>
-        </div>
-        <div class="gal-popup-body">
-          ${htmlContent}
-        </div>
-      </div>
-    </div>
-  `);
-    $(mountRoot).append($modal);
-    $modal.find(".gal-popup-close").on("click", function() {
-      $modal.fadeOut(200, function() {
-        $(this).remove();
-      });
-    });
-    $modal.on("click", function(e) {
-      if (e.target === this) {
-        $modal.fadeOut(200, function() {
-          $(this).remove();
-        });
-      }
-    });
-    return $modal;
   }
 
   // src/ui/history.js
@@ -15354,6 +15412,7 @@ ${firstResult}`;
     }
     setPendingOptions(options);
     $(".gal-game-container .gal-pending-choices-btn").addClass("show");
+    adjustToolbarForSpace();
     const $layer = ensureChoicesLayer();
     const $container = $layer.find(".gal-choices-container");
     $container.empty();
@@ -15377,11 +15436,13 @@ ${firstResult}`;
     const pendingOptions = getPendingOptions();
     if (!pendingOptions || pendingOptions.length === 0) return;
     $("#gal-global-overlay .gal-pending-choices-btn").addClass("show");
+    adjustToolbarForSpace();
     console.log(`[${SCRIPT_NAME}] \u663E\u793A\u5F85\u9009\u62E9\u63D0\u793A\u6309\u94AE`);
   }
   function hidePendingChoicesButton() {
     $("#gal-global-overlay .gal-pending-choices-btn").removeClass("show");
     setPendingOptions(null);
+    adjustToolbarForSpace();
     console.log(`[${SCRIPT_NAME}] \u9690\u85CF\u5F85\u9009\u62E9\u63D0\u793A\u6309\u94AE`);
   }
   function hideGalgameChoices(userDismissed = false) {
@@ -15449,6 +15510,7 @@ ${firstResult}`;
     if ($btn.length) {
       $btn.css("display", "flex");
       $btn.addClass("show");
+      adjustToolbarForSpace();
     }
     const optionChanged = currentOptionHash !== getLastGalgameOptionHash();
     if (optionChanged) {
@@ -15480,6 +15542,7 @@ ${firstResult}`;
       if (pending && pending.length > 0) {
         ensureGlobalOverlay();
         $(".gal-game-container .gal-pending-choices-btn").addClass("show");
+        adjustToolbarForSpace();
       }
     }
     setLastGalgameOptionHash(currentOptionHash);
@@ -15822,6 +15885,7 @@ ${firstResult}`;
         const pending = getPendingOptions();
         if (pending && pending.length > 0) {
           $(".gal-game-container .gal-pending-choices-btn").addClass("show");
+          adjustToolbarForSpace();
         }
       }
       return;
@@ -15909,6 +15973,39 @@ ${firstResult}`;
     }
     $status.text(text).addClass("show");
     setTimeout(() => $status.removeClass("show"), 2e3);
+  }
+
+  // src/ui/modal.js
+  function showCustomPopupPanel(title, htmlContent) {
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).find("#gal-custom-popup-modal").remove();
+    const $modal = $(`
+    <div id="gal-custom-popup-modal" class="gal-popup-modal">
+      <div class="gal-popup-panel">
+        <div class="gal-popup-header">
+          <span class="gal-popup-title">${title}</span>
+          <button class="gal-popup-close">&times;</button>
+        </div>
+        <div class="gal-popup-body">
+          ${htmlContent}
+        </div>
+      </div>
+    </div>
+  `);
+    $(mountRoot).append($modal);
+    $modal.find(".gal-popup-close").on("click", function() {
+      $modal.fadeOut(200, function() {
+        $(this).remove();
+      });
+    });
+    $modal.on("click", function(e) {
+      if (e.target === this) {
+        $modal.fadeOut(200, function() {
+          $(this).remove();
+        });
+      }
+    });
+    return $modal;
   }
 
   // src/ui/events.js
@@ -20773,6 +20870,171 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
   }
 
+  // src/live2d/online-model-browser.js
+  var GITHUB_OWNER = "Eikanya";
+  var GITHUB_REPO = "Live2d-model";
+  var GITHUB_CONTENTS_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents`;
+  var _directoryCache = /* @__PURE__ */ new Map();
+  function isModelFileName(fileName) {
+    const name = String(fileName || "").toLowerCase();
+    return name === "model3.json" || name === "model.json" || name.endsWith(".model3.json") || name.endsWith(".model.json");
+  }
+  function normalizeDirectoryPath(path = "") {
+    return String(path || "").trim().replace(/^\/+|\/+$/g, "");
+  }
+  function encodePathSegment(segment) {
+    if (typeof segment !== "string" || !segment) return segment;
+    let decoded = segment;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch (e) {
+      return segment;
+    }
+    const safeChar = /[A-Za-z0-9\-._~!$&'()*+,;=:@]/;
+    let encoded = "";
+    for (const ch of decoded) {
+      encoded += safeChar.test(ch) ? ch : encodeURIComponent(ch);
+    }
+    return encoded;
+  }
+  function normalizeRemoteUrl(inputUrl) {
+    const url = String(inputUrl || "").trim();
+    if (!url) return "";
+    try {
+      const urlObj = new URL(url);
+      urlObj.pathname = urlObj.pathname.split("/").map((segment) => encodePathSegment(segment)).join("/");
+      return urlObj.toString();
+    } catch (e) {
+      return url;
+    }
+  }
+  function formatApiPath(path = "") {
+    const normalized = normalizeDirectoryPath(path);
+    if (!normalized) return "";
+    return normalized.split("/").filter(Boolean).map((segment) => encodeURIComponent(segment)).join("/");
+  }
+  function parseRateLimitError(response) {
+    const remainingHeader = response.headers.get("x-ratelimit-remaining");
+    const resetHeader = response.headers.get("x-ratelimit-reset");
+    const remaining = Number.parseInt(remainingHeader ?? "", 10);
+    const resetUnix = Number.parseInt(resetHeader ?? "", 10);
+    const resetAt = Number.isFinite(resetUnix) ? new Date(resetUnix * 1e3) : null;
+    return {
+      remaining: Number.isFinite(remaining) ? remaining : null,
+      resetAt
+    };
+  }
+  var RateLimitError = class extends Error {
+    constructor(remaining = null, resetAt = null) {
+      const resetText = resetAt instanceof Date ? `\uFF0C\u91CD\u7F6E\u65F6\u95F4: ${resetAt.toLocaleString()}` : "";
+      super(`GitHub API \u8BBF\u95EE\u9891\u7387\u5DF2\u8FBE\u4E0A\u9650${resetText}`);
+      this.name = "RateLimitError";
+      this.remaining = remaining;
+      this.resetAt = resetAt;
+    }
+  };
+  function clearLive2DDirectoryCache() {
+    _directoryCache.clear();
+  }
+  async function fetchLive2DDirectory(path = "") {
+    const normalizedPath = normalizeDirectoryPath(path);
+    if (_directoryCache.has(normalizedPath)) {
+      return _directoryCache.get(normalizedPath);
+    }
+    const apiPath = formatApiPath(normalizedPath);
+    const requestUrl = apiPath ? `${GITHUB_CONTENTS_API}/${apiPath}` : GITHUB_CONTENTS_API;
+    const response = await fetch(requestUrl, {
+      method: "GET",
+      headers: { Accept: "application/vnd.github+json" },
+      cache: "no-store"
+    });
+    if (response.status === 403 || response.status === 429) {
+      const { remaining, resetAt } = parseRateLimitError(response);
+      if (remaining === 0 || response.status === 429) {
+        throw new RateLimitError(remaining, resetAt);
+      }
+    }
+    if (!response.ok) {
+      throw new Error(`\u5728\u7EBF\u6A21\u578B\u5E93\u8BF7\u6C42\u5931\u8D25: ${response.status} ${response.statusText}`);
+    }
+    const json = await response.json();
+    if (!Array.isArray(json)) {
+      throw new Error("\u5728\u7EBF\u6A21\u578B\u5E93\u8FD4\u56DE\u683C\u5F0F\u5F02\u5E38");
+    }
+    const entries = json.filter((item) => {
+      if (!item || !item.type) return false;
+      if (item.type === "dir") return true;
+      if (item.type === "file") return isModelFileName(item.name);
+      return false;
+    }).map((item) => ({
+      type: item.type,
+      name: item.name,
+      path: normalizeDirectoryPath(item.path || ""),
+      htmlUrl: item.html_url || "",
+      downloadUrl: item.download_url || ""
+    })).sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "dir" ? -1 : 1;
+      }
+      return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hans-CN", { sensitivity: "base" });
+    });
+    _directoryCache.set(normalizedPath, entries);
+    return entries;
+  }
+  function normalizeUserModelUrl(inputUrl) {
+    const raw = String(inputUrl || "").trim();
+    if (!raw) return "";
+    let value = raw;
+    if (/^raw\.githubusercontent\.com\//i.test(value)) {
+      value = `https://${value}`;
+    }
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value)) {
+      return value;
+    }
+    try {
+      const url = new URL(value);
+      const host = url.hostname.toLowerCase();
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (host === "github.com" && parts.length >= 5 && (parts[2] === "blob" || parts[2] === "raw" || parts[2] === "tree")) {
+        const owner = parts[0];
+        const repo = parts[1];
+        const branch = parts[3];
+        const filePath = parts.slice(4).map((seg) => encodePathSegment(seg)).join("/");
+        const search = url.search || "";
+        const hash = url.hash || "";
+        return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}${search}${hash}`;
+      }
+      return normalizeRemoteUrl(url.toString());
+    } catch (e) {
+      return raw;
+    }
+  }
+  function looksLikeLive2DModelUrl(inputUrl) {
+    const normalized = normalizeUserModelUrl(inputUrl);
+    if (!normalized) return false;
+    try {
+      const url = new URL(normalized);
+      const fileName = decodeURIComponent(url.pathname.split("/").pop() || "");
+      return isModelFileName(fileName);
+    } catch (e) {
+      const plain = normalized.split("?")[0].split("#")[0].split("/").pop() || "";
+      return isModelFileName(plain);
+    }
+  }
+  function buildLibraryModelUrl(entry, useCdn = true) {
+    if (!entry || entry.type !== "file") return "";
+    const rawUrl = normalizeUserModelUrl(entry.downloadUrl || "");
+    if (!rawUrl) return "";
+    if (!useCdn) return rawUrl;
+    const match = rawUrl.match(/^https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i);
+    if (!match) return rawUrl;
+    const owner = match[1];
+    const repo = match[2];
+    const branch = match[3];
+    const encodedPath = String(match[4] || "").split("/").filter(Boolean).map((seg) => encodePathSegment(seg)).join("/");
+    return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${encodedPath}`;
+  }
+
   // src/ui/asset-manager-parts.js
   var _showSpriteUploadDialogRef4 = null;
   var _showBatchUploadDialogRef2 = null;
@@ -20840,6 +21102,372 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       }
     }
   }
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function getParentPath(path = "") {
+    const normalized = String(path || "").trim().replace(/^\/+|\/+$/g, "");
+    if (!normalized) return "";
+    const index = normalized.lastIndexOf("/");
+    return index <= 0 ? "" : normalized.slice(0, index);
+  }
+  function formatLive2DModelStatus(modelData) {
+    if (!modelData) return "";
+    if (modelData.source === "remote") {
+      try {
+        const host = new URL(modelData.modelUrl).host;
+        return `(\u8FDC\u7A0B: ${host})`;
+      } catch (e) {
+        return "(\u8FDC\u7A0B\u6A21\u578B)";
+      }
+    }
+    const fileSize = Number(modelData.fileSize || 0);
+    if (fileSize > 0) {
+      return `(${(fileSize / 1024 / 1024).toFixed(1)} MB)`;
+    }
+    return "(\u672C\u5730\u6A21\u578B)";
+  }
+  function createRemoteLive2DModelData(characterId, modelUrl) {
+    return {
+      modelId: characterId,
+      source: "remote",
+      modelUrl,
+      cubismVersion: null,
+      modelJson: null,
+      moc3: null,
+      moc: null,
+      textures: [],
+      motions: {},
+      expressions: [],
+      physics: null,
+      pose: null,
+      uploadTime: Date.now(),
+      fileSize: 0
+    };
+  }
+  function refreshLive2DDisplayForCurrentScene() {
+    try {
+      refreshGalgameViews();
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] \u5237\u65B0 Galgame \u89C6\u56FE\u5931\u8D25:`, error);
+    }
+  }
+  async function applyRemoteLive2DModel(characterId, inputUrl) {
+    const normalizedUrl = normalizeUserModelUrl(String(inputUrl || "").trim());
+    if (!normalizedUrl) {
+      throw new Error("\u8BF7\u8F93\u5165\u8FDC\u7A0B\u6A21\u578B URL");
+    }
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+      throw new Error("\u8FDC\u7A0B\u6A21\u578B URL \u5FC5\u987B\u4EE5 http:// \u6216 https:// \u5F00\u5934");
+    }
+    if (!looksLikeLive2DModelUrl(normalizedUrl)) {
+      throw new Error("URL \u4E0D\u662F\u6709\u6548\u7684 Live2D \u6A21\u578B JSON \u6587\u4EF6");
+    }
+    const previousModel = await getLive2DModel(characterId);
+    const remoteModelData = createRemoteLive2DModelData(characterId, normalizedUrl);
+    const rollback = async () => {
+      if (previousModel) {
+        await saveLive2DModel(previousModel);
+      } else {
+        await deleteLive2DModel(characterId);
+      }
+      if (Live2DManager.models.has(characterId)) {
+        Live2DManager.cleanup(characterId);
+      }
+    };
+    await saveLive2DModel(remoteModelData);
+    if (Live2DManager.models.has(characterId)) {
+      Live2DManager.cleanup(characterId);
+    }
+    try {
+      const loadedModel = await Live2DManager.loadModel(characterId, true);
+      if (!loadedModel) {
+        throw new Error("\u8FDC\u7A0B\u6A21\u578B\u6821\u9A8C\u5931\u8D25");
+      }
+    } catch (error) {
+      try {
+        await rollback();
+      } catch (rollbackError) {
+        console.error(`[${SCRIPT_NAME}] Live2D \u8FDC\u7A0B\u6A21\u578B\u56DE\u6EDA\u5931\u8D25:`, rollbackError);
+      }
+      throw new Error(`\u8FDC\u7A0B\u6A21\u578B\u52A0\u8F7D\u5931\u8D25: ${error?.message || error}`);
+    }
+    setCharacterUseLive2D(characterId, true);
+    refreshLive2DDisplayForCurrentScene();
+    return remoteModelData;
+  }
+  function showLive2DModelSourceDialog(characterId, onSaved) {
+    const mountRoot = getModalMountRoot();
+    const dialogHtml = `
+    <div class="gal-input-modal" id="gal-live2d-source-modal">
+      <div class="gal-input-box" style="max-width: 920px; width: 96%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eee; margin: 0;">
+          <span><i class="fa-solid fa-cube"></i> \u9009\u62E9 Live2D \u6A21\u578B\u6765\u6E90</span>
+          <button id="gal-live2d-source-close" style="border: none; background: transparent; color: #666; cursor: pointer; font-size: 1.1rem;">
+            <i class="fa-solid fa-times"></i>
+          </button>
+        </div>
+        <div style="padding: 12px 20px; border-bottom: 1px solid #eee; display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="gal-action-btn primary" id="gal-live2d-tab-local" style="padding: 6px 12px;">\u672C\u5730 ZIP</button>
+          <button class="gal-action-btn" id="gal-live2d-tab-remote" style="padding: 6px 12px;">\u8FDC\u7A0B URL / \u5728\u7EBF\u5E93</button>
+        </div>
+        <div id="gal-live2d-pane-local" style="padding: 18px 20px; overflow-y: auto;">
+          <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 16px;">
+            <div style="font-size: 0.95rem; color: #334155; margin-bottom: 10px;">
+              \u4E0A\u4F20 .zip \u683C\u5F0F Live2D \u6A21\u578B\u5305\uFF08\u652F\u6301 Cubism 2.1 / 3.x / 4.x\uFF09
+            </div>
+            <input type="file" id="gal-live2d-local-file" accept=".zip" style="display: none;">
+            <button class="gal-action-btn" id="gal-live2d-local-upload" style="padding: 8px 14px;">
+              <i class="fa-solid fa-upload"></i> \u9009\u62E9 ZIP \u5E76\u4E0A\u4F20
+            </button>
+          </div>
+        </div>
+        <div id="gal-live2d-pane-remote" style="display: none; padding: 18px 20px; overflow-y: auto;">
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #111827;">\u8FDC\u7A0B\u6A21\u578B URL</label>
+            <input type="text" id="gal-live2d-remote-url" placeholder="https://.../model3.json"
+                   style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-size: 0.9rem;">
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+            <label style="display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 0.85rem;">
+              <input type="checkbox" id="gal-live2d-use-cdn" checked>
+              \u5728\u7EBF\u6A21\u578B\u5E93\u9ED8\u8BA4\u4F7F\u7528 jsDelivr CDN
+            </label>
+            <button class="gal-action-btn primary" id="gal-live2d-save-remote" style="padding: 8px 14px;">
+              <i class="fa-solid fa-check"></i> \u9A8C\u8BC1\u5E76\u4FDD\u5B58\u8FDC\u7A0B\u6A21\u578B
+            </button>
+          </div>
+          <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
+              <strong style="color: #0f172a;">\u5728\u7EBF\u6A21\u578B\u5E93\uFF08Eikanya/Live2d-model\uFF09</strong>
+              <div style="display: flex; gap: 8px;">
+                <button class="gal-action-btn" id="gal-live2d-lib-up" style="padding: 4px 10px; font-size: 0.8rem;">
+                  <i class="fa-solid fa-arrow-up"></i> \u4E0A\u4E00\u7EA7
+                </button>
+                <button class="gal-action-btn" id="gal-live2d-lib-refresh" style="padding: 4px 10px; font-size: 0.8rem;">
+                  <i class="fa-solid fa-rotate"></i> \u5237\u65B0
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+              <input type="text" id="gal-live2d-lib-filter" placeholder="\u7B5B\u9009\u5F53\u524D\u76EE\u5F55..."
+                     style="flex: 1; min-width: 200px; box-sizing: border-box; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.85rem;">
+            </div>
+            <div id="gal-live2d-lib-path" style="font-family: monospace; font-size: 0.8rem; color: #64748b; margin-bottom: 6px;">/</div>
+            <div id="gal-live2d-lib-list" style="max-height: 280px; overflow-y: auto; background: #fff; border: 1px solid #dbe2ea; border-radius: 6px;">
+              <div style="padding: 16px; color: #64748b; text-align: center;">
+                <i class="fa-solid fa-spinner fa-spin"></i> \u6B63\u5728\u52A0\u8F7D\u76EE\u5F55...
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="padding: 12px 20px; border-top: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+          <span id="gal-live2d-source-status" style="font-size: 0.85rem; color: #64748b;"></span>
+          <button class="gal-action-btn" id="gal-live2d-source-cancel" style="padding: 8px 14px;">
+            \u5173\u95ED
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+    $(mountRoot).append(dialogHtml);
+    const $dialog = $(mountRoot).find("#gal-live2d-source-modal");
+    makeDraggable($dialog.find(".gal-input-box"), $dialog.find(".gal-input-title"));
+    const $status = $dialog.find("#gal-live2d-source-status");
+    const $localPane = $dialog.find("#gal-live2d-pane-local");
+    const $remotePane = $dialog.find("#gal-live2d-pane-remote");
+    const $tabLocal = $dialog.find("#gal-live2d-tab-local");
+    const $tabRemote = $dialog.find("#gal-live2d-tab-remote");
+    const $localUploadBtn = $dialog.find("#gal-live2d-local-upload");
+    const $localFileInput = $dialog.find("#gal-live2d-local-file");
+    const $remoteInput = $dialog.find("#gal-live2d-remote-url");
+    const $useCdn = $dialog.find("#gal-live2d-use-cdn");
+    const $saveRemoteBtn = $dialog.find("#gal-live2d-save-remote");
+    const $libPath = $dialog.find("#gal-live2d-lib-path");
+    const $libList = $dialog.find("#gal-live2d-lib-list");
+    const $libFilter = $dialog.find("#gal-live2d-lib-filter");
+    const state = {
+      currentPath: "",
+      entries: [],
+      visibleEntries: [],
+      selectedEntryPath: "",
+      requestSeq: 0
+    };
+    const setStatus = (text, isError = false) => {
+      $status.text(text || "");
+      $status.css("color", isError ? "#dc2626" : "#64748b");
+    };
+    const closeDialog = () => {
+      $dialog.remove();
+    };
+    const switchTab = (tab) => {
+      const isLocal = tab === "local";
+      $localPane.toggle(isLocal);
+      $remotePane.toggle(!isLocal);
+      $tabLocal.toggleClass("primary", isLocal);
+      $tabRemote.toggleClass("primary", !isLocal);
+    };
+    const renderLibraryEntries = () => {
+      const keyword = String($libFilter.val() || "").trim().toLowerCase();
+      const list = keyword ? state.entries.filter((entry) => String(entry.name || "").toLowerCase().includes(keyword)) : state.entries.slice();
+      state.visibleEntries = list;
+      if (!list.length) {
+        $libList.html(`
+        <div style="padding: 14px; color: #64748b; text-align: center;">
+          \u5F53\u524D\u76EE\u5F55\u6CA1\u6709\u53EF\u7528\u6761\u76EE
+        </div>
+      `);
+        return;
+      }
+      const html = list.map((entry, index) => {
+        const isDir = entry.type === "dir";
+        const selected = !isDir && state.selectedEntryPath === entry.path;
+        const icon = isDir ? "fa-folder" : "fa-file-code";
+        const color = isDir ? "#2563eb" : "#1f2937";
+        const bg = selected ? "#eff6ff" : "#fff";
+        return `
+          <button type="button"
+                  class="gal-live2d-lib-entry"
+                  data-entry-index="${index}"
+                  style="width: 100%; text-align: left; border: none; border-bottom: 1px solid #f1f5f9; background: ${bg}; color: #111827; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <span style="display: inline-flex; align-items: center; gap: 8px; min-width: 0;">
+              <i class="fa-solid ${icon}" style="color: ${color};"></i>
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(entry.name)}</span>
+            </span>
+            <span style="font-size: 0.75rem; color: #94a3b8;">${isDir ? "\u76EE\u5F55" : "\u6A21\u578B"}</span>
+          </button>
+        `;
+      }).join("");
+      $libList.html(html);
+    };
+    const loadDirectory = async (path, forceRefresh = false) => {
+      const normalizedPath = String(path || "").trim().replace(/^\/+|\/+$/g, "");
+      const reqId = ++state.requestSeq;
+      state.currentPath = normalizedPath;
+      state.entries = [];
+      state.visibleEntries = [];
+      state.selectedEntryPath = "";
+      $libPath.text(`/${normalizedPath}`);
+      $libList.html(`
+      <div style="padding: 16px; color: #64748b; text-align: center;">
+        <i class="fa-solid fa-spinner fa-spin"></i> \u6B63\u5728\u52A0\u8F7D\u76EE\u5F55...
+      </div>
+    `);
+      if (forceRefresh) {
+        clearLive2DDirectoryCache();
+      }
+      try {
+        const entries = await fetchLive2DDirectory(normalizedPath);
+        if (!$dialog.closest("body").length || reqId !== state.requestSeq) return;
+        state.entries = entries;
+        renderLibraryEntries();
+        setStatus(`\u76EE\u5F55 /${normalizedPath || ""} \u5DF2\u52A0\u8F7D\uFF0C\u5171 ${entries.length} \u9879`);
+      } catch (error) {
+        if (!$dialog.closest("body").length || reqId !== state.requestSeq) return;
+        const msg = error instanceof RateLimitError ? error.message : `\u76EE\u5F55\u52A0\u8F7D\u5931\u8D25: ${error?.message || error}`;
+        setStatus(msg, true);
+        $libList.html(`
+        <div style="padding: 16px; color: #dc2626; text-align: center;">
+          ${escapeHtml(msg)}
+        </div>
+      `);
+      }
+    };
+    $dialog.find("#gal-live2d-source-close, #gal-live2d-source-cancel").on("click", closeDialog);
+    $dialog.on("click", function(e) {
+      if (e.target === this) closeDialog();
+    });
+    $tabLocal.on("click", () => switchTab("local"));
+    $tabRemote.on("click", () => switchTab("remote"));
+    $localUploadBtn.on("click", () => $localFileInput.trigger("click"));
+    $localFileInput.on("change", async function() {
+      const file = this.files && this.files[0];
+      this.value = "";
+      if (!file) return;
+      $localUploadBtn.prop("disabled", true);
+      setStatus(`\u6B63\u5728\u4E0A\u4F20: ${file.name}`);
+      try {
+        await Live2DUploader.uploadZip(file, characterId);
+        setCharacterUseLive2D(characterId, true);
+        refreshLive2DDisplayForCurrentScene();
+        if (Live2DManager.models.has(characterId)) {
+          Live2DManager.cleanup(characterId);
+        }
+        showToast5(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
+        closeDialog();
+        if (typeof onSaved === "function") await onSaved();
+      } catch (error) {
+        console.error(`[${SCRIPT_NAME}] Live2D \u672C\u5730\u4E0A\u4F20\u5931\u8D25:`, error);
+        setStatus(`\u4E0A\u4F20\u5931\u8D25: ${error?.message || error}`, true);
+        showToast5(`Live2D \u4E0A\u4F20\u5931\u8D25: ${error?.message || error}`, "error");
+      } finally {
+        $localUploadBtn.prop("disabled", false);
+      }
+    });
+    $saveRemoteBtn.on("click", async () => {
+      const inputValue = String($remoteInput.val() || "").trim();
+      if (!inputValue) {
+        setStatus("\u8BF7\u5148\u8F93\u5165\u6216\u9009\u62E9\u8FDC\u7A0B\u6A21\u578B URL", true);
+        return;
+      }
+      $saveRemoteBtn.prop("disabled", true);
+      setStatus("\u6B63\u5728\u9A8C\u8BC1\u5E76\u4FDD\u5B58\u8FDC\u7A0B\u6A21\u578B...");
+      try {
+        const normalizedUrl = normalizeUserModelUrl(inputValue);
+        await applyRemoteLive2DModel(characterId, normalizedUrl);
+        showToast5(`\u8FDC\u7A0B Live2D \u6A21\u578B\u5DF2\u4FDD\u5B58: ${characterId}`);
+        closeDialog();
+        if (typeof onSaved === "function") await onSaved();
+      } catch (error) {
+        console.error(`[${SCRIPT_NAME}] \u8FDC\u7A0B Live2D \u4FDD\u5B58\u5931\u8D25:`, error);
+        setStatus(error?.message || String(error), true);
+        showToast5(`\u8FDC\u7A0B\u6A21\u578B\u4FDD\u5B58\u5931\u8D25: ${error?.message || error}`, "error");
+      } finally {
+        $saveRemoteBtn.prop("disabled", false);
+      }
+    });
+    $dialog.find("#gal-live2d-lib-up").on("click", () => {
+      const parent = getParentPath(state.currentPath);
+      if (parent === state.currentPath) return;
+      loadDirectory(parent);
+    });
+    $dialog.find("#gal-live2d-lib-refresh").on("click", () => {
+      loadDirectory(state.currentPath, true);
+    });
+    $libFilter.on("input", () => {
+      renderLibraryEntries();
+    });
+    $libList.on("click", ".gal-live2d-lib-entry", function() {
+      const idx = Number.parseInt($(this).attr("data-entry-index") || "-1", 10);
+      const entry = state.visibleEntries[idx];
+      if (!entry) return;
+      if (entry.type === "dir") {
+        loadDirectory(entry.path);
+        return;
+      }
+      state.selectedEntryPath = entry.path;
+      renderLibraryEntries();
+      const selectedUrl = buildLibraryModelUrl(entry, $useCdn.prop("checked"));
+      if (selectedUrl) {
+        $remoteInput.val(selectedUrl);
+        setStatus(`\u5DF2\u9009\u62E9\u6A21\u578B: ${entry.path}`);
+      } else {
+        setStatus("\u8BE5\u6587\u4EF6\u65E0\u6CD5\u751F\u6210\u4E0B\u8F7D\u5730\u5740", true);
+      }
+    });
+    $useCdn.on("change", () => {
+      if (!state.selectedEntryPath) return;
+      const selectedEntry = state.entries.find((entry) => entry.path === state.selectedEntryPath);
+      if (!selectedEntry) return;
+      const selectedUrl = buildLibraryModelUrl(selectedEntry, $useCdn.prop("checked"));
+      if (selectedUrl) {
+        $remoteInput.val(selectedUrl);
+      }
+    });
+    switchTab("local");
+    setStatus("\u53EF\u4E0A\u4F20\u672C\u5730 ZIP\uFF0C\u6216\u5207\u6362\u5230\u8FDC\u7A0B URL / \u5728\u7EBF\u6A21\u578B\u5E93");
+    loadDirectory("");
+  }
   async function showCharacterSpritesModal(characterId, onCloseCallback) {
     const allSpritesData = await getAllSprites();
     const characterSpritesData = allSpritesData.filter((s) => s.characterId === characterId);
@@ -20857,7 +21485,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 25px; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
           <i class="fa-solid fa-microphone-lines" style="font-size: 1.2rem;"></i>
-          <span style="font-weight: 600;">TTS\u914D\u97F3\u97F3\u8272\u7ED1\u5B9A</span>
+          <span style="font-weight: 600;">TTS \u914D\u97F3\u97F3\u8272\u7ED1\u5B9A</span>
         </div>
         <div style="display: flex; gap: 10px;">
           <select id="gal-char-tts-voice-select" style="flex: 1; padding: 8px 12px; border: none; border-radius: 4px; font-size: 0.95rem; cursor: pointer;">
@@ -20869,7 +21497,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           </button>
         </div>
         <small style="opacity: 0.9; margin-top: 8px; display: block; font-size: 0.8rem;">
-          <i class="fa-solid fa-circle-info"></i> \u7ED1\u5B9A\u540EAI\u4F1A\u81EA\u52A8\u4E3A\u8BE5\u89D2\u8272\u4F7F\u7528\u6B64\u97F3\u8272\u914D\u97F3
+          <i class="fa-solid fa-circle-info"></i> \u7ED1\u5B9A\u540E AI \u4F1A\u81EA\u52A8\u4E3A\u8BE5\u89D2\u8272\u4F7F\u7528\u6B64\u97F3\u8272\u914D\u97F3
         </small>
       </div>
       <div id="gal-char-live2d-section" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #fff; padding: 15px 20px; border-radius: 10px; margin: 0 25px 15px 25px;">
@@ -20916,7 +21544,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           </div>
         </div>
         <small style="opacity: 0.9; margin-top: 8px; display: block; font-size: 0.8rem;">
-          <i class="fa-solid fa-circle-info"></i> \u4E0A\u4F20 .zip \u683C\u5F0F\u7684 Live2D \u6A21\u578B\u5305\uFF08\u652F\u6301 Cubism 2.1/3.x/4.x\uFF09
+          <i class="fa-solid fa-circle-info"></i> \u4E0A\u4F20 .zip \u683C\u5F0F Live2D \u6A21\u578B\u5305\uFF08\u652F\u6301 Cubism 2.1/3.x/4.x\uFF09
         </small>
       </div>
       <div style="flex: 1; overflow-y: auto; padding: 20px 25px;">
@@ -21010,9 +21638,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const voiceName = $("#gal-char-tts-voice-select").val();
       setCharacterTTSVoice(characterId, voiceName);
       if (voiceName) {
-        showToast5(`\u5DF2\u7ED1\u5B9A: ${characterId} \u2192 ${voiceName}`);
+        showToast5(`\u5DF2\u7ED1\u5B9A\u97F3\u8272: ${characterId} -> ${voiceName}`);
       } else {
-        showToast5(`\u5DF2\u6E05\u9664 ${characterId} \u7684\u97F3\u8272\u7ED1\u5B9A`);
+        showToast5(`\u5DF2\u6E05\u9664\u97F3\u8272\u7ED1\u5B9A: ${characterId}`);
       }
       $modal.remove();
       showCharacterSpritesModal(characterId);
@@ -21035,49 +21663,33 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (hasModel) {
         const modelData = await getLive2DModel(characterId);
         if (modelData) {
-          const sizeMB = (modelData.fileSize / 1024 / 1024).toFixed(1);
-          $status.text(`(${sizeMB} MB)`);
+          $status.text(formatLive2DModelStatus(modelData));
+          if (modelData.source === "remote" && modelData.modelUrl) {
+            $status.attr("title", modelData.modelUrl);
+          } else {
+            $status.removeAttr("title");
+          }
         }
       }
     })();
     $("#gal-char-live2d-toggle").on("change", function() {
       const useLive2D = this.checked;
       setCharacterUseLive2D(characterId, useLive2D);
-      showToast5(useLive2D ? `\u5DF2\u542F\u7528 ${characterId} \u7684 Live2D` : `\u5DF2\u7981\u7528 ${characterId} \u7684 Live2D`);
+      refreshLive2DDisplayForCurrentScene();
+      showToast5(useLive2D ? `\u5DF2\u4E3A ${characterId} \u542F\u7528 Live2D` : `\u5DF2\u4E3A ${characterId} \u5173\u95ED Live2D`);
     });
     $("#gal-char-live2d-upload").on("click", function() {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = ".zip";
-      input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const $status = $("#gal-char-live2d-status");
-        const $uploadBtn = $("#gal-char-live2d-upload");
-        try {
-          $status.text("\u4E0A\u4F20\u4E2D...");
-          $uploadBtn.prop("disabled", true);
-          await Live2DUploader.uploadZip(file, characterId);
-          showToast5(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
-          if (Live2DManager.models.has(characterId)) {
-            Live2DManager.cleanup(characterId);
-          }
-          $modal.remove();
-          showCharacterSpritesModal(characterId);
-        } catch (err) {
-          console.error(`[${SCRIPT_NAME}] Live2D \u4E0A\u4F20\u5931\u8D25:`, err);
-          showToast5(`\u4E0A\u4F20\u5931\u8D25: ${err.message}`, "error");
-          $status.text("\u4E0A\u4F20\u5931\u8D25");
-          $uploadBtn.prop("disabled", false);
-        }
-      };
-      input.click();
+      showLive2DModelSourceDialog(characterId, async () => {
+        $modal.remove();
+        showCharacterSpritesModal(characterId);
+      });
     });
     $("#gal-char-live2d-delete").on("click", async function() {
       if (!confirm(`\u786E\u5B9A\u5220\u9664\u89D2\u8272 "${characterId}" \u7684 Live2D \u6A21\u578B\u5417\uFF1F`)) return;
       try {
         await deleteLive2DModel(characterId);
         setCharacterUseLive2D(characterId, false);
+        refreshLive2DDisplayForCurrentScene();
         if (Live2DManager.models.has(characterId)) {
           Live2DManager.cleanup(characterId);
         }
@@ -21136,7 +21748,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         } else {
           $motionSelect.append('<option value="" disabled>\u65E0\u53EF\u7528\u52A8\u4F5C</option>');
         }
-        console.log(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5DF2\u542F\u52A8: ${characterId}, \u8868\u60C5: ${expressions.length}, \u52A8\u4F5C\u7EC4: ${motionGroups.length}`);
+        console.log(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5DF2\u542F\u52A8: ${characterId}, \u8868\u60C5=${expressions.length}, \u52A8\u4F5C\u7EC4=${motionGroups.length}`);
       } catch (err) {
         console.error(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5931\u8D25:`, err);
         $previewCanvas.html(`<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">\u9884\u89C8\u5931\u8D25: ${err.message}</div>`);
@@ -21160,7 +21772,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         model.expression(value);
         console.log(`[${SCRIPT_NAME}] \u8BBE\u7F6E\u8868\u60C5: ${value}`);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] \u8868\u60C5\u8BBE\u7F6E\u5931\u8D25:`, e);
+        console.warn(`[${SCRIPT_NAME}] \u8BBE\u7F6E\u8868\u60C5\u5931\u8D25:`, e);
       }
     });
     $("#gal-char-live2d-motion-select").on("change", function() {
@@ -21172,7 +21784,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         model.motion(value, 0, "FORCE");
         console.log(`[${SCRIPT_NAME}] \u64AD\u653E\u52A8\u4F5C: ${value}`);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] \u52A8\u4F5C\u64AD\u653E\u5931\u8D25:`, e);
+        console.warn(`[${SCRIPT_NAME}] \u64AD\u653E\u52A8\u4F5C\u5931\u8D25:`, e);
       }
     });
     $("#gal-char-live2d-settings").on("click", async function() {
@@ -21190,9 +21802,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const $btn = $(this);
       const charId = $btn.attr("data-char");
       const expr = $btn.attr("data-expr");
-      if (confirm(`\u786E\u5B9A\u5220\u9664 ${charId} \u7684\u300C${expr}\u300D\u8868\u60C5\u5417\uFF1F`)) {
+      if (confirm(`\u786E\u5B9A\u5220\u9664 ${charId} \u7684\u8868\u60C5\u300C${expr}\u300D\u5417\uFF1F`)) {
         await deleteSprite(charId, expr);
-        showToast5(`\u5DF2\u5220\u9664: ${charId} - ${expr}`);
+        showToast5(`\u5DF2\u5220\u9664\uFF1A${charId} - ${expr}`);
         $modal.remove();
         showCharacterSpritesModal(charId);
       }
@@ -21237,7 +21849,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
                         ${isCurrent ? '<span style="font-size: 0.7rem; background: #0d6efd; color: #fff; padding: 2px 6px; border-radius: 3px;">\u5F53\u524D</span>' : ""}
                       </div>
                       <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">
-                        <i class="fa-solid fa-user"></i> ${stats.sprites} \u4E2A\u7ACB\u7ED8 &nbsp;|&nbsp;
+                        <i class="fa-solid fa-user"></i> ${stats.sprites} \u4E2A\u7ACB\u7ED8&nbsp;|&nbsp;
                         <i class="fa-solid fa-image"></i> ${stats.backgrounds} \u4E2A\u80CC\u666F
                       </div>
                     </div>
@@ -21289,7 +21901,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           showPackManagerModal();
           showToast5("\u5DF2\u91CD\u547D\u540D\u56FE\u5305");
         }).catch((err) => {
-          alert("\u91CD\u547D\u540D\u5931\u8D25\uFF1A" + err.message);
+          alert("\u91CD\u547D\u540D\u5931\u8D25: " + err.message);
         });
       }
     });
@@ -21297,15 +21909,15 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const packId = $(this).data("pack-id");
       const $row = $(this).closest(".gal-pack-row");
       const packName = $row.find(".pack-name-display").text();
-      if (confirm(`\u786E\u5B9A\u8981\u5220\u9664\u56FE\u5305"${packName}"\u5417\uFF1F
+      if (confirm(`\u786E\u5B9A\u8981\u5220\u9664\u56FE\u5305 "${packName}" \u5417\uFF1F
 
-\u8BE5\u56FE\u5305\u5185\u7684\u6240\u6709\u8D44\u6E90\u5C06\u88AB\u8F6C\u79FB\u5230"\u672A\u5B9A\u4E49"\u56FE\u5305\u3002`)) {
+\u8BE5\u56FE\u5305\u5185\u8D44\u6E90\u5C06\u8F6C\u79FB\u5230\u201C\u672A\u5206\u7C7B\u201D\u56FE\u5305\u3002`)) {
         deleteImagePack(packId).then(() => {
           $modal.remove();
           showPackManagerModal();
-          showToast5("\u5DF2\u5220\u9664\u56FE\u5305\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
+          showToast5("\u56FE\u5305\u5DF2\u5220\u9664\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
         }).catch((err) => {
-          alert("\u5220\u9664\u5931\u8D25\uFF1A" + err.message);
+          alert("\u5220\u9664\u5931\u8D25: " + err.message);
         });
       }
     });
@@ -21357,7 +21969,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         showToast5(`\u5DF2\u8F6C\u79FB ${count} \u4E2A${resourceType === "sprite" ? "\u7ACB\u7ED8" : "\u80CC\u666F"}`);
         if (typeof onComplete === "function") onComplete();
       }).catch((err) => {
-        alert("\u8F6C\u79FB\u5931\u8D25\uFF1A" + err.message);
+        alert("\u8F6C\u79FB\u5931\u8D25: " + err.message);
       });
     });
   }
@@ -22395,7 +23007,6 @@ ${baseUrl}`)) return;
   setBGMManagerRefs({ showToast: showToast5 });
   setWorldbookRefs({ showToast: showToast5 });
   setEnhancedModeRefs({ showToast: showToast5 });
-  setCharSettingsRefs({ showCustomPopupPanel, getModalMountRoot });
   setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast5 });
   setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus });
   setOverlayRefs({ updateOverlaySegmentDisplay });

@@ -1,4 +1,4 @@
-import { SCRIPT_NAME, THEME, DEFAULT_PACK_ID } from '../core/constants.js';
+﻿import { SCRIPT_NAME, THEME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
 import { sceneBackgrounds } from '../core/store.js';
 import { getIsEnabled } from '../core/state.js';
@@ -12,12 +12,20 @@ import { getCharacterListFromDatabase } from '../utils/chat.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
 import { getBananaCharacterAppearances, setBananaCharacterAppearances, buildBananaAppearanceMultimodalContent } from '../image-gen/comfyui-helpers.js';
 import { getTTSVoiceListAsync, getCharacterTTSVoice, setCharacterTTSVoice } from '../audio/tts-config.js';
-import { hasLive2DModel, getLive2DModel, deleteLive2DModel } from '../db/live2d-models.js';
+import { saveLive2DModel, hasLive2DModel, getLive2DModel, deleteLive2DModel } from '../db/live2d-models.js';
 import { getCharacterUseLive2D, setCharacterUseLive2D } from '../live2d/render-mode.js';
 import { Live2DManager } from '../live2d/manager.js';
 import { Live2DStage } from '../live2d/stage.js';
 import { Live2DUploader } from '../live2d/uploader.js';
 import { getLive2DExpressionList, getLive2DMotionGroups } from '../live2d/expression-motion.js';
+import {
+  fetchLive2DDirectory,
+  buildLibraryModelUrl,
+  clearLive2DDirectoryCache,
+  looksLikeLive2DModelUrl,
+  normalizeUserModelUrl,
+  RateLimitError
+} from '../live2d/online-model-browser.js';
 import { injectCOTToWorldbook } from '../logic/worldbook.js';
 import { parseBananaImageFromResponse } from '../image-gen/banana-image.js';
 import { getModalMountRoot } from './fullscreen.js';
@@ -25,8 +33,9 @@ import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
 import { showLive2DSettingsModal } from './live2d-settings-modal.js';
 import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, showImportError } from './asset-io.js';
+import { refreshGalgameViews } from './galgame-mode.js';
 
-// 延迟引用
+// 寤惰繜寮曠敤
 let _showSpriteUploadDialogRef = null;
 let _showBatchUploadDialogRef = null;
 let _showBackgroundUploadDialogRef = null;
@@ -47,7 +56,7 @@ const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
 const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 
 // ============================================
-// 大香蕉外观列表渲染
+// 澶ч钑夊瑙傚垪琛ㄦ覆鏌?
 // ============================================
 
 function renderBananaAppearanceList($modal) {
@@ -104,8 +113,430 @@ async function refreshBananaAppearancePreviews($modal) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getParentPath(path = '') {
+  const normalized = String(path || '').trim().replace(/^\/+|\/+$/g, '');
+  if (!normalized) return '';
+  const index = normalized.lastIndexOf('/');
+  return index <= 0 ? '' : normalized.slice(0, index);
+}
+
+function formatLive2DModelStatus(modelData) {
+  if (!modelData) return '';
+  if (modelData.source === 'remote') {
+    try {
+      const host = new URL(modelData.modelUrl).host;
+      return `(远程: ${host})`;
+    } catch (e) {
+      return '(远程模型)';
+    }
+  }
+  const fileSize = Number(modelData.fileSize || 0);
+  if (fileSize > 0) {
+    return `(${(fileSize / 1024 / 1024).toFixed(1)} MB)`;
+  }
+  return '(本地模型)';
+}
+
+function createRemoteLive2DModelData(characterId, modelUrl) {
+  return {
+    modelId: characterId,
+    source: 'remote',
+    modelUrl: modelUrl,
+    cubismVersion: null,
+    modelJson: null,
+    moc3: null,
+    moc: null,
+    textures: [],
+    motions: {},
+    expressions: [],
+    physics: null,
+    pose: null,
+    uploadTime: Date.now(),
+    fileSize: 0,
+  };
+}
+
+function refreshLive2DDisplayForCurrentScene() {
+  try {
+    refreshGalgameViews();
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] 刷新 Galgame 视图失败:`, error);
+  }
+}
+
+async function applyRemoteLive2DModel(characterId, inputUrl) {
+  const normalizedUrl = normalizeUserModelUrl(String(inputUrl || '').trim());
+  if (!normalizedUrl) {
+    throw new Error('请输入远程模型 URL');
+  }
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    throw new Error('远程模型 URL 必须以 http:// 或 https:// 开头');
+  }
+  if (!looksLikeLive2DModelUrl(normalizedUrl)) {
+    throw new Error('URL 不是有效的 Live2D 模型 JSON 文件');
+  }
+
+  const previousModel = await getLive2DModel(characterId);
+  const remoteModelData = createRemoteLive2DModelData(characterId, normalizedUrl);
+
+  const rollback = async () => {
+    if (previousModel) {
+      await saveLive2DModel(previousModel);
+    } else {
+      await deleteLive2DModel(characterId);
+    }
+    if (Live2DManager.models.has(characterId)) {
+      Live2DManager.cleanup(characterId);
+    }
+  };
+
+  await saveLive2DModel(remoteModelData);
+
+  if (Live2DManager.models.has(characterId)) {
+    Live2DManager.cleanup(characterId);
+  }
+
+  try {
+    const loadedModel = await Live2DManager.loadModel(characterId, true);
+    if (!loadedModel) {
+      throw new Error('远程模型校验失败');
+    }
+  } catch (error) {
+    try {
+      await rollback();
+    } catch (rollbackError) {
+      console.error(`[${SCRIPT_NAME}] Live2D 远程模型回滚失败:`, rollbackError);
+    }
+    throw new Error(`远程模型加载失败: ${error?.message || error}`);
+  }
+
+  // 成功保存后默认启用 Live2D，避免主界面仍走立绘链路。
+  setCharacterUseLive2D(characterId, true);
+  refreshLive2DDisplayForCurrentScene();
+  return remoteModelData;
+}
+
+function showLive2DModelSourceDialog(characterId, onSaved) {
+  const mountRoot = getModalMountRoot();
+  const dialogHtml = `
+    <div class="gal-input-modal" id="gal-live2d-source-modal">
+      <div class="gal-input-box" style="max-width: 920px; width: 96%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eee; margin: 0;">
+          <span><i class="fa-solid fa-cube"></i> 选择 Live2D 模型来源</span>
+          <button id="gal-live2d-source-close" style="border: none; background: transparent; color: #666; cursor: pointer; font-size: 1.1rem;">
+            <i class="fa-solid fa-times"></i>
+          </button>
+        </div>
+        <div style="padding: 12px 20px; border-bottom: 1px solid #eee; display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="gal-action-btn primary" id="gal-live2d-tab-local" style="padding: 6px 12px;">本地 ZIP</button>
+          <button class="gal-action-btn" id="gal-live2d-tab-remote" style="padding: 6px 12px;">远程 URL / 在线库</button>
+        </div>
+        <div id="gal-live2d-pane-local" style="padding: 18px 20px; overflow-y: auto;">
+          <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 16px;">
+            <div style="font-size: 0.95rem; color: #334155; margin-bottom: 10px;">
+              上传 .zip 格式 Live2D 模型包（支持 Cubism 2.1 / 3.x / 4.x）
+            </div>
+            <input type="file" id="gal-live2d-local-file" accept=".zip" style="display: none;">
+            <button class="gal-action-btn" id="gal-live2d-local-upload" style="padding: 8px 14px;">
+              <i class="fa-solid fa-upload"></i> 选择 ZIP 并上传
+            </button>
+          </div>
+        </div>
+        <div id="gal-live2d-pane-remote" style="display: none; padding: 18px 20px; overflow-y: auto;">
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: #111827;">远程模型 URL</label>
+            <input type="text" id="gal-live2d-remote-url" placeholder="https://.../model3.json"
+                   style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-size: 0.9rem;">
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+            <label style="display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 0.85rem;">
+              <input type="checkbox" id="gal-live2d-use-cdn" checked>
+              在线模型库默认使用 jsDelivr CDN
+            </label>
+            <button class="gal-action-btn primary" id="gal-live2d-save-remote" style="padding: 8px 14px;">
+              <i class="fa-solid fa-check"></i> 验证并保存远程模型
+            </button>
+          </div>
+          <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
+              <strong style="color: #0f172a;">在线模型库（Eikanya/Live2d-model）</strong>
+              <div style="display: flex; gap: 8px;">
+                <button class="gal-action-btn" id="gal-live2d-lib-up" style="padding: 4px 10px; font-size: 0.8rem;">
+                  <i class="fa-solid fa-arrow-up"></i> 上一级
+                </button>
+                <button class="gal-action-btn" id="gal-live2d-lib-refresh" style="padding: 4px 10px; font-size: 0.8rem;">
+                  <i class="fa-solid fa-rotate"></i> 刷新
+                </button>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+              <input type="text" id="gal-live2d-lib-filter" placeholder="筛选当前目录..."
+                     style="flex: 1; min-width: 200px; box-sizing: border-box; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.85rem;">
+            </div>
+            <div id="gal-live2d-lib-path" style="font-family: monospace; font-size: 0.8rem; color: #64748b; margin-bottom: 6px;">/</div>
+            <div id="gal-live2d-lib-list" style="max-height: 280px; overflow-y: auto; background: #fff; border: 1px solid #dbe2ea; border-radius: 6px;">
+              <div style="padding: 16px; color: #64748b; text-align: center;">
+                <i class="fa-solid fa-spinner fa-spin"></i> 正在加载目录...
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="padding: 12px 20px; border-top: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+          <span id="gal-live2d-source-status" style="font-size: 0.85rem; color: #64748b;"></span>
+          <button class="gal-action-btn" id="gal-live2d-source-cancel" style="padding: 8px 14px;">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  $(mountRoot).append(dialogHtml);
+  const $dialog = $(mountRoot).find('#gal-live2d-source-modal');
+  makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
+
+  const $status = $dialog.find('#gal-live2d-source-status');
+  const $localPane = $dialog.find('#gal-live2d-pane-local');
+  const $remotePane = $dialog.find('#gal-live2d-pane-remote');
+  const $tabLocal = $dialog.find('#gal-live2d-tab-local');
+  const $tabRemote = $dialog.find('#gal-live2d-tab-remote');
+  const $localUploadBtn = $dialog.find('#gal-live2d-local-upload');
+  const $localFileInput = $dialog.find('#gal-live2d-local-file');
+  const $remoteInput = $dialog.find('#gal-live2d-remote-url');
+  const $useCdn = $dialog.find('#gal-live2d-use-cdn');
+  const $saveRemoteBtn = $dialog.find('#gal-live2d-save-remote');
+  const $libPath = $dialog.find('#gal-live2d-lib-path');
+  const $libList = $dialog.find('#gal-live2d-lib-list');
+  const $libFilter = $dialog.find('#gal-live2d-lib-filter');
+
+  const state = {
+    currentPath: '',
+    entries: [],
+    visibleEntries: [],
+    selectedEntryPath: '',
+    requestSeq: 0,
+  };
+
+  const setStatus = (text, isError = false) => {
+    $status.text(text || '');
+    $status.css('color', isError ? '#dc2626' : '#64748b');
+  };
+
+  const closeDialog = () => {
+    $dialog.remove();
+  };
+
+  const switchTab = (tab) => {
+    const isLocal = tab === 'local';
+    $localPane.toggle(isLocal);
+    $remotePane.toggle(!isLocal);
+    $tabLocal.toggleClass('primary', isLocal);
+    $tabRemote.toggleClass('primary', !isLocal);
+  };
+
+  const renderLibraryEntries = () => {
+    const keyword = String($libFilter.val() || '').trim().toLowerCase();
+    const list = keyword
+      ? state.entries.filter(entry => String(entry.name || '').toLowerCase().includes(keyword))
+      : state.entries.slice();
+    state.visibleEntries = list;
+
+    if (!list.length) {
+      $libList.html(`
+        <div style="padding: 14px; color: #64748b; text-align: center;">
+          当前目录没有可用条目
+        </div>
+      `);
+      return;
+    }
+
+    const html = list
+      .map((entry, index) => {
+        const isDir = entry.type === 'dir';
+        const selected = !isDir && state.selectedEntryPath === entry.path;
+        const icon = isDir ? 'fa-folder' : 'fa-file-code';
+        const color = isDir ? '#2563eb' : '#1f2937';
+        const bg = selected ? '#eff6ff' : '#fff';
+        return `
+          <button type="button"
+                  class="gal-live2d-lib-entry"
+                  data-entry-index="${index}"
+                  style="width: 100%; text-align: left; border: none; border-bottom: 1px solid #f1f5f9; background: ${bg}; color: #111827; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <span style="display: inline-flex; align-items: center; gap: 8px; min-width: 0;">
+              <i class="fa-solid ${icon}" style="color: ${color};"></i>
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(entry.name)}</span>
+            </span>
+            <span style="font-size: 0.75rem; color: #94a3b8;">${isDir ? '目录' : '模型'}</span>
+          </button>
+        `;
+      })
+      .join('');
+
+    $libList.html(html);
+  };
+
+  const loadDirectory = async (path, forceRefresh = false) => {
+    const normalizedPath = String(path || '').trim().replace(/^\/+|\/+$/g, '');
+    const reqId = ++state.requestSeq;
+
+    state.currentPath = normalizedPath;
+    state.entries = [];
+    state.visibleEntries = [];
+    state.selectedEntryPath = '';
+
+    $libPath.text(`/${normalizedPath}`);
+    $libList.html(`
+      <div style="padding: 16px; color: #64748b; text-align: center;">
+        <i class="fa-solid fa-spinner fa-spin"></i> 正在加载目录...
+      </div>
+    `);
+
+    if (forceRefresh) {
+      clearLive2DDirectoryCache();
+    }
+
+    try {
+      const entries = await fetchLive2DDirectory(normalizedPath);
+      if (!$dialog.closest('body').length || reqId !== state.requestSeq) return;
+
+      state.entries = entries;
+      renderLibraryEntries();
+      setStatus(`目录 /${normalizedPath || ''} 已加载，共 ${entries.length} 项`);
+    } catch (error) {
+      if (!$dialog.closest('body').length || reqId !== state.requestSeq) return;
+
+      const msg = error instanceof RateLimitError
+        ? error.message
+        : `目录加载失败: ${error?.message || error}`;
+      setStatus(msg, true);
+      $libList.html(`
+        <div style="padding: 16px; color: #dc2626; text-align: center;">
+          ${escapeHtml(msg)}
+        </div>
+      `);
+    }
+  };
+
+  $dialog.find('#gal-live2d-source-close, #gal-live2d-source-cancel').on('click', closeDialog);
+  $dialog.on('click', function (e) {
+    if (e.target === this) closeDialog();
+  });
+
+  $tabLocal.on('click', () => switchTab('local'));
+  $tabRemote.on('click', () => switchTab('remote'));
+
+  $localUploadBtn.on('click', () => $localFileInput.trigger('click'));
+  $localFileInput.on('change', async function () {
+    const file = this.files && this.files[0];
+    this.value = '';
+    if (!file) return;
+
+    $localUploadBtn.prop('disabled', true);
+    setStatus(`正在上传: ${file.name}`);
+    try {
+      await Live2DUploader.uploadZip(file, characterId);
+      setCharacterUseLive2D(characterId, true);
+      refreshLive2DDisplayForCurrentScene();
+      if (Live2DManager.models.has(characterId)) {
+        Live2DManager.cleanup(characterId);
+      }
+      showToast(`Live2D 模型上传成功: ${characterId}`);
+      closeDialog();
+      if (typeof onSaved === 'function') await onSaved();
+    } catch (error) {
+      console.error(`[${SCRIPT_NAME}] Live2D 本地上传失败:`, error);
+      setStatus(`上传失败: ${error?.message || error}`, true);
+      showToast(`Live2D 上传失败: ${error?.message || error}`, 'error');
+    } finally {
+      $localUploadBtn.prop('disabled', false);
+    }
+  });
+
+  $saveRemoteBtn.on('click', async () => {
+    const inputValue = String($remoteInput.val() || '').trim();
+    if (!inputValue) {
+      setStatus('请先输入或选择远程模型 URL', true);
+      return;
+    }
+
+    $saveRemoteBtn.prop('disabled', true);
+    setStatus('正在验证并保存远程模型...');
+    try {
+      const normalizedUrl = normalizeUserModelUrl(inputValue);
+      await applyRemoteLive2DModel(characterId, normalizedUrl);
+      showToast(`远程 Live2D 模型已保存: ${characterId}`);
+      closeDialog();
+      if (typeof onSaved === 'function') await onSaved();
+    } catch (error) {
+      console.error(`[${SCRIPT_NAME}] 远程 Live2D 保存失败:`, error);
+      setStatus(error?.message || String(error), true);
+      showToast(`远程模型保存失败: ${error?.message || error}`, 'error');
+    } finally {
+      $saveRemoteBtn.prop('disabled', false);
+    }
+  });
+
+  $dialog.find('#gal-live2d-lib-up').on('click', () => {
+    const parent = getParentPath(state.currentPath);
+    if (parent === state.currentPath) return;
+    loadDirectory(parent);
+  });
+
+  $dialog.find('#gal-live2d-lib-refresh').on('click', () => {
+    loadDirectory(state.currentPath, true);
+  });
+
+  $libFilter.on('input', () => {
+    renderLibraryEntries();
+  });
+
+  $libList.on('click', '.gal-live2d-lib-entry', function () {
+    const idx = Number.parseInt($(this).attr('data-entry-index') || '-1', 10);
+    const entry = state.visibleEntries[idx];
+    if (!entry) return;
+
+    if (entry.type === 'dir') {
+      loadDirectory(entry.path);
+      return;
+    }
+
+    state.selectedEntryPath = entry.path;
+    renderLibraryEntries();
+    const selectedUrl = buildLibraryModelUrl(entry, $useCdn.prop('checked'));
+    if (selectedUrl) {
+      $remoteInput.val(selectedUrl);
+      setStatus(`已选择模型: ${entry.path}`);
+    } else {
+      setStatus('该文件无法生成下载地址', true);
+    }
+  });
+
+  $useCdn.on('change', () => {
+    if (!state.selectedEntryPath) return;
+    const selectedEntry = state.entries.find(entry => entry.path === state.selectedEntryPath);
+    if (!selectedEntry) return;
+    const selectedUrl = buildLibraryModelUrl(selectedEntry, $useCdn.prop('checked'));
+    if (selectedUrl) {
+      $remoteInput.val(selectedUrl);
+    }
+  });
+
+  switchTab('local');
+  setStatus('可上传本地 ZIP，或切换到远程 URL / 在线模型库');
+  loadDirectory('');
+}
+
 // ============================================
-// 角色立绘管理弹窗
+// 瑙掕壊绔嬬粯绠＄悊寮圭獥
 // ============================================
 
 export async function showCharacterSpritesModal(characterId, onCloseCallback) {
@@ -129,7 +560,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 25px; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
           <i class="fa-solid fa-microphone-lines" style="font-size: 1.2rem;"></i>
-          <span style="font-weight: 600;">TTS配音音色绑定</span>
+          <span style="font-weight: 600;">TTS 配音音色绑定</span>
         </div>
         <div style="display: flex; gap: 10px;">
           <select id="gal-char-tts-voice-select" style="flex: 1; padding: 8px 12px; border: none; border-radius: 4px; font-size: 0.95rem; cursor: pointer;">
@@ -141,7 +572,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
           </button>
         </div>
         <small style="opacity: 0.9; margin-top: 8px; display: block; font-size: 0.8rem;">
-          <i class="fa-solid fa-circle-info"></i> 绑定后AI会自动为该角色使用此音色配音
+          <i class="fa-solid fa-circle-info"></i> 绑定后 AI 会自动为该角色使用此音色配音
         </small>
       </div>
       <div id="gal-char-live2d-section" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #fff; padding: 15px 20px; border-radius: 10px; margin: 0 25px 15px 25px;">
@@ -188,7 +619,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
           </div>
         </div>
         <small style="opacity: 0.9; margin-top: 8px; display: block; font-size: 0.8rem;">
-          <i class="fa-solid fa-circle-info"></i> 上传 .zip 格式的 Live2D 模型包（支持 Cubism 2.1/3.x/4.x）
+          <i class="fa-solid fa-circle-info"></i> 上传 .zip 格式 Live2D 模型包（支持 Cubism 2.1/3.x/4.x）
         </small>
       </div>
       <div style="flex: 1; overflow-y: auto; padding: 20px 25px;">
@@ -294,15 +725,15 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     const voiceName = $('#gal-char-tts-voice-select').val();
     setCharacterTTSVoice(characterId, voiceName);
     if (voiceName) {
-      showToast(`已绑定: ${characterId} → ${voiceName}`);
+      showToast(`已绑定音色: ${characterId} -> ${voiceName}`);
     } else {
-      showToast(`已清除 ${characterId} 的音色绑定`);
+      showToast(`已清除音色绑定: ${characterId}`);
     }
     $modal.remove();
     showCharacterSpritesModal(characterId);
   });
 
-  // Live2D 控件初始化
+  // Live2D control initialization
   (async () => {
     const hasModel = await hasLive2DModel(characterId);
     const useLive2D = getCharacterUseLive2D(characterId);
@@ -323,8 +754,12 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     if (hasModel) {
       const modelData = await getLive2DModel(characterId);
       if (modelData) {
-        const sizeMB = (modelData.fileSize / 1024 / 1024).toFixed(1);
-        $status.text(`(${sizeMB} MB)`);
+        $status.text(formatLive2DModelStatus(modelData));
+        if (modelData.source === 'remote' && modelData.modelUrl) {
+          $status.attr('title', modelData.modelUrl);
+        } else {
+          $status.removeAttr('title');
+        }
       }
     }
   })();
@@ -332,36 +767,15 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
   $('#gal-char-live2d-toggle').on('change', function() {
     const useLive2D = this.checked;
     setCharacterUseLive2D(characterId, useLive2D);
-    showToast(useLive2D ? `已启用 ${characterId} 的 Live2D` : `已禁用 ${characterId} 的 Live2D`);
+    refreshLive2DDisplayForCurrentScene();
+    showToast(useLive2D ? `已为 ${characterId} 启用 Live2D` : `已为 ${characterId} 关闭 Live2D`);
   });
 
-  $('#gal-char-live2d-upload').on('click', function() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.zip';
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const $status = $('#gal-char-live2d-status');
-      const $uploadBtn = $('#gal-char-live2d-upload');
-      try {
-        $status.text('上传中...');
-        $uploadBtn.prop('disabled', true);
-        await Live2DUploader.uploadZip(file, characterId);
-        showToast(`Live2D 模型上传成功: ${characterId}`);
-        if (Live2DManager.models.has(characterId)) {
-          Live2DManager.cleanup(characterId);
-        }
-        $modal.remove();
-        showCharacterSpritesModal(characterId);
-      } catch (err) {
-        console.error(`[${SCRIPT_NAME}] Live2D 上传失败:`, err);
-        showToast(`上传失败: ${err.message}`, 'error');
-        $status.text('上传失败');
-        $uploadBtn.prop('disabled', false);
-      }
-    };
-    input.click();
+    $('#gal-char-live2d-upload').on('click', function() {
+    showLive2DModelSourceDialog(characterId, async () => {
+      $modal.remove();
+      showCharacterSpritesModal(characterId);
+    });
   });
 
   $('#gal-char-live2d-delete').on('click', async function() {
@@ -369,6 +783,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     try {
       await deleteLive2DModel(characterId);
       setCharacterUseLive2D(characterId, false);
+      refreshLive2DDisplayForCurrentScene();
       if (Live2DManager.models.has(characterId)) {
         Live2DManager.cleanup(characterId);
       }
@@ -430,7 +845,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
         $motionSelect.append('<option value="" disabled>无可用动作</option>');
       }
 
-      console.log(`[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情: ${expressions.length}, 动作组: ${motionGroups.length}`);
+      console.log(`[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情=${expressions.length}, 动作组=${motionGroups.length}`);
     } catch (err) {
       console.error(`[${SCRIPT_NAME}] Live2D 预览失败:`, err);
       $previewCanvas.html(`<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败: ${err.message}</div>`);
@@ -454,7 +869,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     const model = Live2DManager.models.get(characterId);
     if (!model) return;
     try { model.expression(value); console.log(`[${SCRIPT_NAME}] 设置表情: ${value}`); }
-    catch (e) { console.warn(`[${SCRIPT_NAME}] 表情设置失败:`, e); }
+    catch (e) { console.warn(`[${SCRIPT_NAME}] 设置表情失败:`, e); }
   });
 
   $('#gal-char-live2d-motion-select').on('change', function() {
@@ -463,7 +878,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     const model = Live2DManager.models.get(characterId);
     if (!model) return;
     try { model.motion(value, 0, 'FORCE'); console.log(`[${SCRIPT_NAME}] 播放动作: ${value}`); }
-    catch (e) { console.warn(`[${SCRIPT_NAME}] 动作播放失败:`, e); }
+    catch (e) { console.warn(`[${SCRIPT_NAME}] 播放动作失败:`, e); }
   });
 
   $('#gal-char-live2d-settings').on('click', async function() {
@@ -483,9 +898,9 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     const $btn = $(this);
     const charId = $btn.attr('data-char');
     const expr = $btn.attr('data-expr');
-    if (confirm(`确定删除 ${charId} 的「${expr}」表情吗？`)) {
+    if (confirm(`确定删除 ${charId} 的表情「${expr}」吗？`)) {
       await deleteSprite(charId, expr);
-      showToast(`已删除: ${charId} - ${expr}`);
+      showToast(`已删除：${charId} - ${expr}`);
       $modal.remove();
       showCharacterSpritesModal(charId);
     }
@@ -493,7 +908,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
 }
 
 // ============================================
-// 图包管理弹窗
+// 鍥惧寘绠＄悊寮圭獥
 // ============================================
 
 export async function showPackManagerModal() {
@@ -537,7 +952,7 @@ export async function showPackManagerModal() {
                         ${isCurrent ? '<span style="font-size: 0.7rem; background: #0d6efd; color: #fff; padding: 2px 6px; border-radius: 3px;">当前</span>' : ''}
                       </div>
                       <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">
-                        <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘 &nbsp;|&nbsp;
+                        <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘&nbsp;|&nbsp;
                         <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景
                       </div>
                     </div>
@@ -586,7 +1001,7 @@ export async function showPackManagerModal() {
     if (newName && newName.trim() && newName.trim() !== currentName) {
       renameImagePack(packId, newName.trim()).then(() => {
         $modal.remove(); showPackManagerModal(); showToast('已重命名图包');
-      }).catch(err => { alert('重命名失败：' + err.message); });
+      }).catch(err => { alert('重命名失败: ' + err.message); });
     }
   });
 
@@ -594,16 +1009,16 @@ export async function showPackManagerModal() {
     const packId = $(this).data('pack-id');
     const $row = $(this).closest('.gal-pack-row');
     const packName = $row.find('.pack-name-display').text();
-    if (confirm(`确定要删除图包"${packName}"吗？\n\n该图包内的所有资源将被转移到"未定义"图包。`)) {
+    if (confirm(`确定要删除图包 "${packName}" 吗？\n\n该图包内资源将转移到“未分类”图包。`)) {
       deleteImagePack(packId).then(() => {
-        $modal.remove(); showPackManagerModal(); showToast('已删除图包，资源已转移');
-      }).catch(err => { alert('删除失败：' + err.message); });
+        $modal.remove(); showPackManagerModal(); showToast('图包已删除，资源已转移');
+      }).catch(err => { alert('删除失败: ' + err.message); });
     }
   });
 }
 
 // ============================================
-// 资源转移对话框
+// 璧勬簮杞Щ瀵硅瘽妗?
 // ============================================
 
 export async function showTransferDialog(resourceType, resourceIds, onComplete) {
@@ -653,12 +1068,12 @@ export async function showTransferDialog(resourceType, resourceIds, onComplete) 
       $modal.remove();
       showToast(`已转移 ${count} 个${resourceType === 'sprite' ? '立绘' : '背景'}`);
       if (typeof onComplete === 'function') onComplete();
-    }).catch(err => { alert('转移失败：' + err.message); });
+    }).catch(err => { alert('转移失败: ' + err.message); });
   });
 }
 
 // ============================================
-// showAssetManagerModal 的前向声明 (实际实现在 asset-manager-modal.js)
+// showAssetManagerModal 鐨勫墠鍚戝０鏄?(瀹為檯瀹炵幇鍦?asset-manager-modal.js)
 // ============================================
 let _showAssetManagerModalRef = null;
 
@@ -671,3 +1086,4 @@ function showAssetManagerModal(activeTab) {
 }
 
 export { renderBananaAppearanceList, refreshBananaAppearancePreviews };
+

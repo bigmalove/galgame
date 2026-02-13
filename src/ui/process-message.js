@@ -9,7 +9,7 @@ import { BGMManager } from '../audio/bgm-manager.js';
 import { RE_GAL_TAGS } from '../logic/parser.js';
 import { parseGalgameContent } from '../logic/parser.js';
 import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.js';
-import { showGlobalOverlay } from './overlay.js';
+import { showGlobalOverlay, adjustToolbarForSpace } from './overlay.js';
 import { detectAndCaptureCg } from './overlay-content.js';
 import { injectGalgameButton } from './menu-button.js';
 import { renderBGMWidget } from './bgm-widget.js';
@@ -77,6 +77,7 @@ export function processNewMessage(mesNode) {
       const pending = getPendingOptions();
       if (pending && pending.length > 0) {
         $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+        adjustToolbarForSpace();
       }
     }
     return;

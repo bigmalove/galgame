@@ -1,9 +1,9 @@
-import { SCRIPT_NAME } from '../core/constants.js';
+﻿import { SCRIPT_NAME } from '../core/constants.js';
 import { Live2DLoader } from './loader.js';
 import { getLive2DModel } from '../db/live2d-models.js';
 import { getLive2DConfig, updateLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
 
-// 延迟引用: Live2DStage (来自 ./stage.js，避免循环), showToast (来自 UI 层)
+// 寤惰繜寮曠敤: Live2DStage (鏉ヨ嚜 ./stage.js锛岄伩鍏嶅惊鐜?, showToast (鏉ヨ嚜 UI 灞?
 let _Live2DStageRef = null;
 let _showToastRef = null;
 export function setLive2DManagerRefs({ Live2DStage, showToast }) {
@@ -12,7 +12,7 @@ export function setLive2DManagerRefs({ Live2DStage, showToast }) {
 }
 
 // ============================================
-// Live2D 核心渲染管理器
+// Live2D 鏍稿績娓叉煋绠＄悊鍣?
 // ============================================
 export const Live2DManager = {
   models: new Map(),        // characterId -> PIXI.Live2DModel
@@ -20,7 +20,7 @@ export const Live2DManager = {
   loadingModels: new Map(), // characterId -> Promise<PIXI.Live2DModel|null>
   renderLocks: new Map(),   // characterId -> Promise<void>
   modelBlobUrls: new Map(), // characterId -> Set<string>
-  cachedDetachedAt: new Map(), // characterId -> timestamp (已退场缓存)
+  cachedDetachedAt: new Map(), // characterId -> timestamp (宸查€€鍦虹紦瀛?
   maxDetachedCache: 3,
   xhrBlobUrlSupport: null, // null=unknown, boolean=supported
   xhrBlobUrlSupportPromise: null,
@@ -124,7 +124,7 @@ export const Live2DManager = {
     this.xhrBlobUrlSupport = false;
     if (!this.hasLoggedBlobUrlDisabled) {
       this.hasLoggedBlobUrlDisabled = true;
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 已禁用 Blob URL（XHR 不兼容或加载失败: ${reason}），将回退使用 Data URL`);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 宸茬鐢?Blob URL锛圶HR 涓嶅吋瀹规垨鍔犺浇澶辫触: ${reason}锛夛紝灏嗗洖閫€浣跨敤 Data URL`);
     }
   },
 
@@ -135,6 +135,238 @@ export const Live2DManager = {
       typeof modelData.modelUrl === 'string' &&
       modelData.modelUrl.trim().length > 0
     );
+  },
+
+  _encodePathSegment(segment) {
+    if (typeof segment !== 'string' || !segment) return segment;
+
+    let decoded = segment;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch (e) {
+      return segment;
+    }
+
+    const safeChar = /[A-Za-z0-9\-._~!$&'()*+,;=:@]/;
+    let encoded = '';
+    for (const ch of decoded) {
+      encoded += safeChar.test(ch) ? ch : encodeURIComponent(ch);
+    }
+    return encoded;
+  },
+
+  _normalizeRemoteUrl(inputUrl) {
+    const url = String(inputUrl || '').trim();
+    if (!url) return url;
+
+    try {
+      const urlObj = new URL(url);
+      urlObj.pathname = urlObj.pathname
+        .split('/')
+        .map(segment => this._encodePathSegment(segment))
+        .join('/');
+      return urlObj.toString();
+    } catch (e) {
+      return url;
+    }
+  },
+
+  _normalizeResourceRef(inputRef) {
+    const raw = String(inputRef || '').trim();
+    if (!raw) return raw;
+
+    const hashSafe = raw.replace(/#/g, '%23');
+    const normalized = hashSafe.replace(/\\/g, '/');
+
+    const qIndex = normalized.indexOf('?');
+    const pathPart = qIndex >= 0 ? normalized.slice(0, qIndex) : normalized;
+    const queryPart = qIndex >= 0 ? normalized.slice(qIndex) : '';
+
+    const encodedPath = pathPart
+      .split('/')
+      .map(segment => this._encodePathSegment(segment))
+      .join('/');
+
+    return `${encodedPath}${queryPart.replace(/#/g, '%23')}`;
+  },
+
+  _stripJsonComments(text) {
+    let output = '';
+    let inString = false;
+    let quoteChar = '"';
+    let escaping = false;
+    let inLineComment = false;
+    let inBlockComment = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = i + 1 < text.length ? text[i + 1] : '';
+
+      if (inLineComment) {
+        if (ch === '\n') {
+          inLineComment = false;
+          output += ch;
+        }
+        continue;
+      }
+
+      if (inBlockComment) {
+        if (ch === '*' && next === '/') {
+          inBlockComment = false;
+          i++;
+        }
+        continue;
+      }
+
+      if (inString) {
+        output += ch;
+        if (escaping) {
+          escaping = false;
+        } else if (ch === '\\') {
+          escaping = true;
+        } else if (ch === quoteChar) {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '/' && next === '/') {
+        inLineComment = true;
+        i++;
+        continue;
+      }
+
+      if (ch === '/' && next === '*') {
+        inBlockComment = true;
+        i++;
+        continue;
+      }
+
+      if (ch === '"' || ch === '\'') {
+        inString = true;
+        quoteChar = ch;
+      }
+
+      output += ch;
+    }
+
+    return output;
+  },
+
+  _tryParseModelJson(text) {
+    const raw = String(text ?? '').replace(/^\uFEFF/, '').trim();
+    if (!raw) return null;
+
+    try {
+      return JSON.parse(raw);
+    } catch (e) {}
+
+    let cleaned = this._stripJsonComments(raw);
+    cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
+    cleaned = cleaned.replace(/}(\s*){/g, '},$1{');
+    cleaned = cleaned.replace(/](\s*){/g, '],$1{');
+    cleaned = cleaned.replace(/([}\]0-9"'])(\s*)(?="[^"]+"\s*:)/g, '$1,$2');
+
+    try {
+      return JSON.parse(cleaned);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  _buildModelJsonCandidates(modelUrl) {
+    const candidates = [modelUrl];
+
+    const addCandidate = (url) => {
+      if (!url) return;
+      if (!candidates.includes(url)) {
+        candidates.push(url);
+      }
+    };
+
+    addCandidate(modelUrl.replace(/\/model\.json(?=([?#].*)?$)/i, '/model.model.json'));
+    addCandidate(modelUrl.replace(/\/model3\.json(?=([?#].*)?$)/i, '/model.model3.json'));
+
+    return candidates;
+  },
+
+  async _fetchWithTimeout(url, init = {}, timeoutMs = 12000) {
+    if (typeof AbortController === 'undefined') {
+      return await fetch(url, init);
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (e) {
+      if (e?.name === 'AbortError') {
+        throw new Error(`璇锋眰瓒呮椂 (${timeoutMs}ms): ${url}`);
+      }
+      throw e;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  },
+
+  async _fetchModelJsonCandidate(modelUrl, useProxy) {
+    const requestUrl = useProxy ? this._getProxiedUrl(modelUrl) : modelUrl;
+    const response = await this._fetchWithTimeout(requestUrl, { method: 'GET', cache: 'no-store' }, 12000);
+    if (!response.ok) return null;
+
+    const text = await response.text();
+    const parsed = this._tryParseModelJson(text);
+    if (!parsed) return null;
+
+    return { modelJson: parsed, sourceUrl: modelUrl, useProxy };
+  },
+
+  _normalizeLegacyCubism2Settings(modelJson) {
+    if (!modelJson || modelJson.FileReferences) return;
+
+    const textures = modelJson.textures || modelJson.Textures;
+    if (Array.isArray(textures)) return;
+    if (!textures || typeof textures !== 'object') return;
+
+    const entries = Object.entries(textures)
+      .filter((entry) => Array.isArray(entry[1]) && entry[1].length > 0);
+    if (!entries.length) return;
+
+    const hintKeys = [
+      modelJson.config?.texture,
+      modelJson.config?.textureId,
+      modelJson.config?.skin,
+      modelJson.config?.modelId,
+      modelJson.config?.defaultTexture,
+      modelJson.config?.defaultSkin,
+    ]
+      .map(v => (v === undefined || v === null ? '' : String(v).trim()))
+      .filter(Boolean);
+
+    let selected = entries[0];
+    for (const hint of hintKeys) {
+      const matched = entries.find(([key]) => key === hint);
+      if (matched) {
+        selected = matched;
+        break;
+      }
+    }
+
+    const normalizedTextures = selected[1].map((item) => {
+      const raw = String(item || '').trim();
+      if (!raw) return raw;
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return raw;
+      if (raw.startsWith('/')) return raw;
+      if (raw.includes('/')) return raw;
+      return `textures/${raw}`;
+    });
+
+    modelJson.textures = normalizedTextures;
+    modelJson.Textures = normalizedTextures;
+    console.log(`[${SCRIPT_NAME}] Live2DManager: 妫€娴嬪埌闈炴爣鍑?Cubism2 璐村浘缁撴瀯锛屽凡鑷姩杞崲`, {
+      key: selected[0],
+      textureCount: normalizedTextures.length,
+    });
   },
 
   _getProxiedUrl(originalUrl) {
@@ -186,7 +418,7 @@ export const Live2DManager = {
       }
       model.destroy();
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 销毁模型失败 (${characterId}, ${reason})`, e);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 閿€姣佹ā鍨嬪け璐?(${characterId}, ${reason})`, e);
     }
     this.models.delete(characterId);
     this.containers.delete(characterId);
@@ -202,7 +434,7 @@ export const Live2DManager = {
     while (this.cachedDetachedAt.size > this.maxDetachedCache && sorted.length > 0) {
       const [characterId] = sorted.shift();
       this._destroyModel(characterId, 'cache-evict');
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 缓存淘汰模型 ${characterId}`);
+      console.log(`[${SCRIPT_NAME}] Live2DManager: 缂撳瓨娣樻卑妯″瀷 ${characterId}`);
     }
   },
 
@@ -261,10 +493,10 @@ export const Live2DManager = {
       try {
         updateLive2DConfig(characterId, { transform: normalizedTransform });
         console.log(
-          `[${SCRIPT_NAME}] Live2DManager: 坐标兼容修正 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`,
+          `[${SCRIPT_NAME}] Live2DManager: 鍧愭爣鍏煎淇 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`,
         );
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 保存兼容修正失败`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 淇濆瓨鍏煎淇澶辫触`, e);
       }
     }
 
@@ -276,7 +508,7 @@ export const Live2DManager = {
 
     const sdkLoaded = await Live2DLoader.load();
     if (!sdkLoaded) {
-      console.error(`[${SCRIPT_NAME}] Live2DManager: SDK 加载失败`);
+      console.error(`[${SCRIPT_NAME}] Live2DManager: SDK 鍔犺浇澶辫触`);
       return false;
     }
 
@@ -305,7 +537,7 @@ export const Live2DManager = {
       console.log(`[${SCRIPT_NAME}] Live2DManager 初始化完成`);
       return true;
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] Live2DManager 初始化失败:`, e);
+      console.error(`[${SCRIPT_NAME}] Live2DManager 鍒濆鍖栧け璐?`, e);
       return false;
     }
   },
@@ -331,12 +563,12 @@ export const Live2DManager = {
 
     const modelData = await getLive2DModel(characterId);
     if (!modelData) {
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到角色 ${characterId} 的 Live2D 模型`);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 鏈壘鍒拌鑹?${characterId} 鐨?Live2D 妯″瀷`);
       return null;
     }
 
     const isRemote = this._isRemoteModelData(modelData);
-    const remoteModelUrl = isRemote ? modelData.modelUrl.trim() : '';
+    const remoteModelUrl = isRemote ? this._normalizeRemoteUrl(modelData.modelUrl.trim()) : '';
 
     const loadTask = (async () => {
       this._revokeModelBlobUrls(characterId);
@@ -346,7 +578,9 @@ export const Live2DManager = {
 
       const loadFromUrl = async (modelUrl) => {
         const model = await Live2DModel.from(modelUrl, {
-          autoUpdate: true,
+          // 避免在模型尚未挂载到带 WebGL renderer 的舞台前就触发 update，
+          // 远程 Cubism2 模型在该阶段容易抛 createProgram undefined。
+          autoUpdate: false,
           autoInteract: false,
         });
 
@@ -358,7 +592,7 @@ export const Live2DManager = {
             retryCount++;
 
             if (retryCount > maxRetries) {
-              console.warn(`[${SCRIPT_NAME}] Live2DManager: 纹理检查达到最大重试次数，继续渲染`);
+              console.warn(`[${SCRIPT_NAME}] Live2DManager: 绾圭悊妫€鏌ヨ揪鍒版渶澶ч噸璇曟鏁帮紝缁х画娓叉煋`);
               resolve(false);
               return;
             }
@@ -372,7 +606,7 @@ export const Live2DManager = {
             const textures = internalModel.textures || internalModel._textures || [];
 
             if (textures.length === 0) {
-              console.log(`[${SCRIPT_NAME}] Live2DManager: 模型无外部纹理，跳过等待`);
+              console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷鏃犲閮ㄧ汗鐞嗭紝璺宠繃绛夊緟`);
               resolve(true);
               return;
             }
@@ -386,11 +620,11 @@ export const Live2DManager = {
             });
 
             if (allLoaded) {
-              console.log(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${textures.length} 张)`);
+              console.log(`[${SCRIPT_NAME}] Live2DManager: 绾圭悊鍏ㄩ儴鍔犺浇瀹屾垚 (${textures.length} 寮?`);
               resolve(true);
             } else {
               if (retryCount % 5 === 0) {
-                console.log(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+                console.log(`[${SCRIPT_NAME}] Live2DManager: 绛夊緟绾圭悊鍔犺浇... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
               }
               setTimeout(checkTextures, 100);
             }
@@ -402,23 +636,10 @@ export const Live2DManager = {
         await new Promise(r => requestAnimationFrame(r));
         await new Promise(r => setTimeout(r, 100));
 
-        if (model.internalModel && model.internalModel.update) {
-          model.internalModel.update(0);
-        }
-        if (model.update && typeof model.update === 'function') {
-          model.update(0);
-        }
-
+        // 不在这里主动调用 model.update(0)。
+        // 远程 Cubism2 模型在未挂载渲染器前触发 update，可能抛 createProgram undefined，
+        // 并导致后续主舞台渲染异常。
         return model;
-      };
-
-      const buildRemoteModelUrl = async () => {
-        try {
-          return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl, false);
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: 远程模型 URL 加载失败，尝试使用 CORS 代理`, e);
-          return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl, true);
-        }
       };
 
       const buildLocalModelUrl = async (preferBlob = true) => {
@@ -433,6 +654,13 @@ export const Live2DManager = {
         return await this._buildModelBlobUrl(modelData, characterId);
       };
 
+      const buildRemoteModelUrl = async () => {
+        if (!remoteModelUrl) {
+          throw new Error('远程 Live2D modelUrl 为空');
+        }
+        return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl);
+      };
+
       let usedBlobForLocal = false;
       try {
         const modelUrl = isRemote
@@ -443,18 +671,18 @@ export const Live2DManager = {
         const model = await loadFromUrl(modelUrl);
         this.models.set(characterId, model);
         this._markModelActive(characterId);
-        console.log(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} 鍔犺浇鎴愬姛`);
         return model;
       } catch (e) {
         if (!isRemote && usedBlobForLocal) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL 加载失败，回退 Data URL (${characterId})`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL 鍔犺浇澶辫触锛屽洖閫€ Data URL (${characterId})`, e);
           this._disableXhrBlobUrls('load-failed');
           this._revokeModelBlobUrls(characterId);
           const dataUrl = await buildLocalModelUrl(false);
           const model = await loadFromUrl(dataUrl);
           this.models.set(characterId, model);
           this._markModelActive(characterId);
-          console.log(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} DataURL 回退加载成功`);
+          console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} DataURL 鍥為€€鍔犺浇鎴愬姛`);
           return model;
         }
         throw e;
@@ -462,7 +690,7 @@ export const Live2DManager = {
     })()
       .catch((e) => {
         this._revokeModelBlobUrls(characterId);
-        console.error(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载失败:`, e);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} 鍔犺浇澶辫触:`, e);
         return null;
       })
       .finally(() => {
@@ -916,47 +1144,72 @@ export const Live2DManager = {
     return `data:application/json;base64,${modelJsonBase64}`;
   },
 
-  async _buildRemoteModelDataUrl(characterId, modelUrl, useProxy = false) {
-    const url = String(modelUrl || '').trim();
-
+  async _buildRemoteModelDataUrl(characterId, modelUrl, forceProxyResources = false) {
+    const url = this._normalizeRemoteUrl(String(modelUrl || '').trim());
     if (!url) {
-      throw new Error('远程 Live2D modelUrl 为空');
+      throw new Error('杩滅▼ Live2D modelUrl 涓虹┖');
     }
 
-    let baseUrl;
-    try {
-      const u = new URL(url);
-      u.hash = '';
-      baseUrl = u.toString();
-    } catch (e) {
-      throw new Error('远程 Live2D modelUrl 无效');
+    const candidateUrls = this._buildModelJsonCandidates(url);
+    let modelJson = null;
+    let sourceModelUrl = url;
+    let fetchedViaProxy = false;
+    let lastError = null;
+
+    for (const candidateUrl of candidateUrls) {
+      try {
+        const direct = await this._fetchModelJsonCandidate(candidateUrl, false);
+        if (direct) {
+          modelJson = direct.modelJson;
+          sourceModelUrl = direct.sourceUrl;
+          fetchedViaProxy = false;
+          break;
+        }
+      } catch (directError) {
+        lastError = directError;
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 直连获取模型 JSON 失败，尝试代理`, {
+          characterId,
+          modelUrl: candidateUrl,
+          error: directError,
+        });
+      }
+
+      try {
+        const proxied = await this._fetchModelJsonCandidate(candidateUrl, true);
+        if (proxied) {
+          modelJson = proxied.modelJson;
+          sourceModelUrl = proxied.sourceUrl;
+          fetchedViaProxy = true;
+          break;
+        }
+      } catch (proxyError) {
+        lastError = proxyError;
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 浠ｇ悊鑾峰彇妯″瀷 JSON 澶辫触`, {
+          characterId,
+          modelUrl: candidateUrl,
+          error: proxyError,
+        });
+      }
     }
 
-    const fetchUrl = useProxy ? this._getProxiedUrl(baseUrl) : baseUrl;
-    const response = await fetch(fetchUrl, { method: 'GET', cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`远程模型 JSON 获取失败: ${response.status}`);
-    }
-
-    const text = await response.text();
-    let modelJson;
-    try {
-      modelJson = JSON.parse(text);
-    } catch (e) {
-      throw new Error('远程模型 JSON 解析失败');
+    if (!modelJson) {
+      throw (lastError instanceof Error ? lastError : new Error('杩滅▼妯″瀷 JSON 瑙ｆ瀽澶辫触'));
     }
 
     const modifiedModelJson = JSON.parse(JSON.stringify(modelJson));
+    this._normalizeLegacyCubism2Settings(modifiedModelJson);
 
     const resolveUrl = (p) => {
       if (typeof p !== 'string') return p;
       const raw = p.trim();
       if (!raw) return p;
 
-      const normalized = raw.replace(/\\/g, '/');
+      const normalized = this._normalizeResourceRef(raw);
       const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized);
-      const abs = hasScheme ? normalized : new URL(normalized, baseUrl).toString();
-      if (useProxy && (abs.startsWith('http://') || abs.startsWith('https://'))) {
+      const abs = hasScheme
+        ? this._normalizeRemoteUrl(normalized)
+        : this._normalizeRemoteUrl(new URL(normalized, sourceModelUrl).toString());
+      if ((fetchedViaProxy || forceProxyResources) && (abs.startsWith('http://') || abs.startsWith('https://'))) {
         return this._getProxiedUrl(abs);
       }
       return abs;
@@ -1057,7 +1310,7 @@ export const Live2DManager = {
 
     try {
       if (!containerElement || !containerElement.isConnected) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo 跳过，容器不可用 (${characterId})`);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo 璺宠繃锛屽鍣ㄤ笉鍙敤 (${characterId})`);
         return false;
       }
 
@@ -1109,7 +1362,7 @@ export const Live2DManager = {
       const existingContainer = this.containers.get(characterId);
 
       if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
-        console.log(`[${SCRIPT_NAME}] Live2DManager: 复用现有渲染 ${characterId}`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: 澶嶇敤鐜版湁娓叉煋 ${characterId}`);
         return true;
       }
 
@@ -1148,7 +1401,7 @@ export const Live2DManager = {
       }
       dpr *= (qualityConfig.textureResolution || 1.0);
 
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 容器尺寸 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+      console.log(`[${SCRIPT_NAME}] Live2DManager: 瀹瑰櫒灏哄 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
 
       const canvas = _topWindow.document.createElement('canvas');
       const renderWidth = containerWidth;
@@ -1171,9 +1424,9 @@ export const Live2DManager = {
         });
 
       if (!glContext) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL 不可用，无法渲染 Live2D`);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL 涓嶅彲鐢紝鏃犳硶娓叉煋 Live2D`);
         try {
-          if (_showToastRef) _showToastRef('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
+          if (_showToastRef) _showToastRef('WebGL 涓嶅彲鐢紝Live2D 鏃犳硶娓叉煋锛堣寮€鍚‖浠跺姞閫燂級');
         } catch {}
         return false;
       }
@@ -1204,7 +1457,7 @@ export const Live2DManager = {
           if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
         } catch {}
         try {
-          if (_showToastRef) _showToastRef('WebGL Renderer 初始化失败，Live2D 无法渲染');
+          if (_showToastRef) _showToastRef('WebGL Renderer 鍒濆鍖栧け璐ワ紝Live2D 鏃犳硶娓叉煋');
         } catch {}
         return false;
       }
@@ -1228,7 +1481,7 @@ export const Live2DManager = {
       const userScale = transformConfig.scale || 1.0;
       const finalScale = baseScale * userScale;
 
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 模型尺寸 ${modelWidth}x${modelHeight}, 基础缩放: ${baseScale}, 用户缩放: ${userScale}, 最终缩放: ${finalScale}`);
+      console.log(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷灏哄 ${modelWidth}x${modelHeight}, 鍩虹缂╂斁: ${baseScale}, 鐢ㄦ埛缂╂斁: ${userScale}, 鏈€缁堢缉鏀? ${finalScale}`);
 
       model.scale.set(finalScale);
       model.anchor.set(0.5, 0.5);
@@ -1259,7 +1512,7 @@ export const Live2DManager = {
       });
 
       console.log(
-        `[${SCRIPT_NAME}] Live2DManager: 渲染 ${characterId} 完成 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
+        `[${SCRIPT_NAME}] Live2DManager: 娓叉煋 ${characterId} 瀹屾垚 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
       );
       return true;
     } finally {
@@ -1282,7 +1535,7 @@ export const Live2DManager = {
     if (!this.models.has(characterId)) return false;
     const ok = _Live2DStageRef.applyTransform(characterId);
     if (ok) {
-      console.log(`[${SCRIPT_NAME}] Live2DManager: 应用变换配置 ${characterId}`);
+      console.log(`[${SCRIPT_NAME}] Live2DManager: 搴旂敤鍙樻崲閰嶇疆 ${characterId}`);
     }
     return ok;
   },
@@ -1329,7 +1582,7 @@ export const Live2DManager = {
       try {
         model.expression(mapped);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 设置表情失败:`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 璁剧疆琛ㄦ儏澶辫触:`, e);
       }
     }
   },
@@ -1341,7 +1594,7 @@ export const Live2DManager = {
     try {
       model.motion(motionGroup, index);
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 播放动作失败:`, e);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 鎾斁鍔ㄤ綔澶辫触:`, e);
     }
   },
 
@@ -1466,7 +1719,7 @@ export const Live2DManager = {
           container.canvas.parentNode.removeChild(container.canvas);
         }
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 清理容器失败:`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 娓呯悊瀹瑰櫒澶辫触:`, e);
       }
       this.containers.delete(characterId);
     }
@@ -1491,7 +1744,7 @@ export const Live2DManager = {
     const model = this.models.get(characterId);
     const container = this.containers.get(characterId);
     if (!model || !container) {
-      console.warn(`[Live2DManager] enableInteraction 失败: 模型或容器不存在`, { model: !!model, container: !!container });
+      console.warn(`[Live2DManager] enableInteraction 澶辫触: 妯″瀷鎴栧鍣ㄤ笉瀛樺湪`, { model: !!model, container: !!container });
       return false;
     }
 
@@ -1515,7 +1768,7 @@ export const Live2DManager = {
       container.canvas.style.cursor = 'move';
     }
 
-    console.log(`[Live2DManager] enableInteraction 成功: ${characterId}`);
+    console.log(`[Live2DManager] enableInteraction 鎴愬姛: ${characterId}`);
     return true;
   },
 

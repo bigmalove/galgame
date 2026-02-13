@@ -313,8 +313,9 @@ export const SpriteManager = {
 
     const $existingContainer = $slot.find('.gal-char-container[data-character="' + characterId + '"]');
     const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr('data-live2d') === 'true';
+    const hasRenderedLive2D = Live2DManager.containers.has(characterId);
 
-    if (isExistingLive2D && !isEntering) {
+    if (isExistingLive2D && hasRenderedLive2D && !isEntering) {
       $existingContainer.attr('data-expression', expression);
       if (emotionAttr) {
         $existingContainer.attr('data-emotion', emotion);
@@ -362,7 +363,9 @@ export const SpriteManager = {
         if (!this._isLatestLive2DTask(characterId, taskSeq)) return true;
         if (renderToken === null) return false;
         const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
+        if (mesId === undefined || mesId === null || mesId === '') return false;
         const latestState = messageSegmentState ? messageSegmentState.get(String(mesId)) : null;
+        if (!latestState) return false;
         return renderToken !== (Number(latestState?.renderToken) || 0);
       };
       if ($container.length) {

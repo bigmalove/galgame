@@ -139,22 +139,6 @@ export function ensureGlobalOverlay() {
                 </div>
 
                 <div class="gal-bottom-toolbar">
-                  <!-- 移动端上拉菜单 -->
-                  <div class="gal-mobile-menu" id="gal-mobile-menu">
-                    <button class="gal-menu-btn" data-action="open-settings">
-                        <i class="fa-solid fa-gear"></i> 设置
-                    </button>
-                    <button class="gal-menu-btn" data-action="log">
-                        <i class="fa-solid fa-list-ul"></i> 历史
-                    </button>
-                    <button class="gal-menu-btn" data-action="view-original">
-                        <i class="fa-solid fa-display"></i> 原界面
-                    </button>
-                    <button class="gal-menu-btn" data-action="close-mode">
-                        <i class="fa-solid fa-power-off"></i> 退出
-                    </button>
-                  </div>
-
                   <button class="gal-footer-btn" data-action="log" title="查看历史">
                     <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
                   </button>
@@ -200,6 +184,19 @@ export function ensureGlobalOverlay() {
             <i class="fa-solid fa-times"></i>
           </button>
           <div class="gal-cg-viewer-loading">图片生成中...</div>
+        </div>
+
+        <!-- 移动端上拉菜单（置于 overlay 顶层，避免被 overflow:hidden 裁剪） -->
+        <div class="gal-mobile-menu" id="gal-mobile-menu">
+          <button class="gal-menu-btn" data-action="open-settings">
+              <i class="fa-solid fa-gear"></i> 设置
+          </button>
+          <button class="gal-menu-btn" data-action="log">
+              <i class="fa-solid fa-list-ul"></i> 历史
+          </button>
+          <button class="gal-menu-btn" data-action="view-original">
+              <i class="fa-solid fa-display"></i> 原界面
+          </button>
         </div>
       </div>
     `;

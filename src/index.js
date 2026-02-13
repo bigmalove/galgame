@@ -44,8 +44,10 @@ import { Live2DLazyLoader, LOD_CONFIG, applyLOD, updateAllLOD, Live2DPerformance
 import { TTSManager, setTTSManagerRefs } from './audio/tts-manager.js';
 import { BGMManager, setBGMManagerRefs } from './audio/bgm-manager.js';
 import { ComfyUIAPI } from './image-gen/comfyui-api.js';
-import { optimizeWallhavenTags, handleWallhavenBackgroundSearch, setWallhavenHandlerRefs } from './image-gen/wallhaven-handler.js';
-import { handleRealTimeBackgroundGeneration, parseBananaImageFromResponse, handleBananaBackgroundGeneration, setBananaImageRefs } from './image-gen/banana-image.js';
+import { optimizeWallhavenTags, handleWallhavenBackgroundSearch } from './image-gen/wallhaven-handler.js';
+import { handleRealTimeBackgroundGeneration, parseBananaImageFromResponse, handleBananaBackgroundGeneration } from './image-gen/banana-image.js';
+import { handleNovelAIBackgroundGeneration } from './image-gen/novelai-image.js';
+import { setBgGenSharedRefs } from './image-gen/bg-gen-shared.js';
 
 // === Phase 6: 立绘管理器 ===
 import { SpriteManager, setSpriteManagerRefs } from './sprite/sprite-manager.js';
@@ -93,7 +95,8 @@ import { showBatchBackgroundUploadDialog, showBackgroundUploadDialog } from './u
 import { ImageCropper, showCharAppearancePromptEditor, showBananaAppearancePicker, showSpriteUploadDialog, showBatchUploadDialog, showCustomExpressionManager } from './ui/sprite-upload.js';
 import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, importFromRemoteZip, showImportPackSelector, processZipContents, showImportProgress, showImportError } from './ui/asset-io.js';
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog, setAssetManagerRefs, setAssetManagerModalRef, renderBananaAppearanceList, refreshBananaAppearancePreviews } from './ui/asset-manager-parts.js';
-import { showAssetManagerModal, setAssetManagerModalRefs } from './ui/asset-manager-modal.js';
+import { showAssetManagerModal, setAssetManagerModalRefs, buildAssetManagerContent, bindAssetManagerContentEvents, buildAssetManagerStyles } from './ui/asset-manager-modal.js';
+import { setImageGenConfigRefs } from './ui/image-gen-config.js';
 
 // Phase 1 延迟引用: expressions -> toast + state + worldbook
 setExpressionsRefs({ showToast, getIsEnabled, injectCOTToWorldbook });
@@ -103,15 +106,8 @@ setLive2DStageRefs({ showToast });
 // Phase 4 延迟引用: PositionEditor -> fullscreen
 setPositionEditorRefs({ getModalMountRoot });
 
-// Phase 5 延迟引用: wallhaven-handler -> backgrounds + store + sprite-manager + overlay + toast
-setWallhavenHandlerRefs({
-  saveBackground,
-  getSceneBackgrounds: () => GalgameStore.cache.sceneBackgrounds,
-  getMessageSegmentState: () => GalgameStore.cache.segments,
-  getSpriteManager: () => SpriteManager,
-  updateGlobalOverlayContent,
-  showToast,
-});
+// Phase 5 延迟引用: bg-gen-shared -> overlay-content + toast (统一背景生成模块共享)
+setBgGenSharedRefs({ updateGlobalOverlayContent, showToast });
 
 // Phase 6 延迟引用: sprite-manager -> sprites + backgrounds + store + image-packs + bgm
 setSpriteManagerRefs({
@@ -151,11 +147,9 @@ setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameV
 // Phase 8 延迟引用: galgame-mode -> process-message + settings-panel
 setGalgameModeRefs({ processNewMessage, applySettingsToUI });
 
-// Phase 8 延迟引用: process-message -> overlay-content + banana-image + settings-panel
-setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration });
+// Phase 8 延迟引用: process-message -> overlay-content + banana-image + novelai-image + settings-panel
+setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration, handleNovelAIBackgroundGeneration });
 
-// Phase 5 延迟引用: banana-image -> overlay-content + toast
-setBananaImageRefs({ updateGlobalOverlayContent, showToast });
 
 // Phase 8 延迟引用: message-observer -> process-message + menu-button
 setMessageObserverRefs({ processNewMessage, injectGalgameButton });
@@ -169,8 +163,8 @@ setMenuButtonRefs({ showSettingsPanel });
 // Phase 8 延迟引用: enhanced-mode -> overlay-content
 setEnhancedModeRefs({ showToast, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
 
-// Phase 8 延迟引用: settings-panel -> asset-manager-modal
-setSettingsPanelRefs({ showAssetManagerModal });
+// Phase 8 延迟引用: settings-panel -> asset-manager-modal (content builder)
+setSettingsPanelRefs({ buildAssetsPane: buildAssetManagerContent, bindAssetsPane: bindAssetManagerContentEvents, assetStyles: buildAssetManagerStyles });
 
 // Phase 8 延迟引用: sprite-config -> sprite-upload + bg-upload
 setSpriteConfigRefs({ showBatchUploadDialog, showSpriteUploadDialog, showBackgroundUploadDialog });
@@ -178,8 +172,11 @@ setSpriteConfigRefs({ showBatchUploadDialog, showSpriteUploadDialog, showBackgro
 // Phase 8 延迟引用: asset-manager-parts -> sprite-upload + bg-upload + banana
 setAssetManagerRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });
 
-// Phase 8 延迟引用: asset-manager-modal -> sprite-upload + bg-upload + banana + asset-manager-parts (循环依赖)
-setAssetManagerModalRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });
+// Phase 8 延迟引用: asset-manager-modal -> sprite-upload + bg-upload + settings-panel
+setAssetManagerModalRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showSettingsPanel });
+
+// Phase 8 延迟引用: image-gen-config -> sprite-upload (banana appearance picker)
+setImageGenConfigRefs({ showBananaAppearancePicker });
 setAssetManagerModalRef(showAssetManagerModal);
 
 // === Phase 9: 初始化和启动 ===

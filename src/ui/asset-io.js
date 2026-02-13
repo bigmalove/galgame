@@ -313,8 +313,11 @@ export function showRemoteZipImportDialog() {
   const dialogHtml = `
     <div class="gal-input-modal" id="gal-remote-zip-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
-        <div class="gal-input-title" style="margin-bottom: 20px;">
+        <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-cloud-arrow-down"></i> 远程压缩包导入</span>
+          <button id="gal-remote-zip-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
@@ -329,9 +332,6 @@ export function showRemoteZipImportDialog() {
           </small>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 12px;">
-          <button class="gal-action-btn" id="gal-remote-zip-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-            <span>取消</span>
-          </button>
           <button class="gal-action-btn primary" id="gal-remote-zip-confirm" style="flex: 1; min-height: 44px; justify-content: center;">
             <i class="fa-solid fa-download"></i>
             <span>下载并导入</span>
@@ -346,7 +346,7 @@ export function showRemoteZipImportDialog() {
   const $dialog = $(mountRoot).find('#gal-remote-zip-dialog');
   makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
 
-  $dialog.find('#gal-remote-zip-cancel').on('click', () => $dialog.remove());
+  $dialog.find('#gal-remote-zip-close-x').on('click', () => $dialog.remove());
   $dialog.on('click', function (e) {
     if (e.target === this) $dialog.remove();
   });
@@ -505,8 +505,11 @@ export async function showImportPackSelector(suggestedName = null) {
       const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
-            <div class="gal-input-title" style="margin-bottom: 20px;">
+            <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
               <span><i class="fa-solid fa-box-open"></i> 选择导入目标图包</span>
+              <button id="gal-import-pack-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
             </div>
             <div style="margin-bottom: 20px;">
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
@@ -531,9 +534,6 @@ export async function showImportPackSelector(suggestedName = null) {
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
               <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
                 <i class="fa-solid fa-check"></i> <span>确认导入</span>
-              </button>
-              <button class="gal-action-btn" id="gal-import-pack-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-                <i class="fa-solid fa-xmark"></i> <span>取消</span>
               </button>
             </div>
           </div>
@@ -581,7 +581,7 @@ export async function showImportPackSelector(suggestedName = null) {
         resolve(resultPackId);
       });
 
-      $dialog.find('#gal-import-pack-cancel').on('click', () => {
+      $dialog.find('#gal-import-pack-close-x').on('click', () => {
         $dialog.remove();
         resolve(null);
       });
@@ -781,15 +781,15 @@ export function showImportError(messages) {
   const errorHtml = `
     <div class="gal-input-modal" id="gal-import-error-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
-        <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c;">
+        <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-circle-exclamation"></i> 导入出错</span>
+          <button id="gal-import-error-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="background: #fdf2f2; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 20px; max-height: 300px; overflow-y: auto;">
           ${messages.map(msg => `<div style="margin-bottom: 5px; color: #721c24; font-size: 0.9rem; white-space: pre-wrap;">${msg}</div>`).join('')}
         </div>
-        <button class="gal-action-btn" id="gal-import-error-close" style="width: 100%; min-height: 44px; justify-content: center;">
-          <span>关闭</span>
-        </button>
       </div>
     </div>
   `;
@@ -798,7 +798,7 @@ export function showImportError(messages) {
   $(mountRoot).append(errorHtml);
   const $dialog = $(mountRoot).find('#gal-import-error-dialog');
 
-  $dialog.find('#gal-import-error-close').on('click', () => $dialog.remove());
+  $dialog.find('#gal-import-error-close-x').on('click', () => $dialog.remove());
   $dialog.on('click', function (e) {
     if (e.target === this) $dialog.remove();
   });

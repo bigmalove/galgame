@@ -42,8 +42,9 @@ export async function generateCOTTemplate() {
 
   // 构建场景列表说明
   let sceneListText = '';
-  const useBananaImageGen = settings.bananaImageGen?.enabled;
-  const useWallhaven = settings.wallhaven?.enabled;
+  const bgSrc = settings.bgImageSource || 'none';
+  const useBananaImageGen = bgSrc === 'banana';
+  const useWallhaven = bgSrc === 'wallhaven';
 
   if (useBananaImageGen) {
     const bs = settings.bananaImageGen;
@@ -170,7 +171,12 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 - 温馨卧室 → \`<whimg>bedroom, morning, cozy</whimg>\`
 - 日式庭院 → \`<whimg>garden, temple, asian</whimg>\` (不用 japanese)
 - 现代办公室 → \`<whimg>office, modern, city</whimg>\`${customTagHint}`;
-  } else if (settings.realTimeBackgroundGen) {
+  } else if (bgSrc === 'novelai') {
+    sceneListText =
+      sceneNames.length > 0
+        ? `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。\n- **判断标准**: 如果图库中的场景名称与当前剧情完全匹配，则可复用；否则必须生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的中文名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）\n- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等\n可用场景列表: ${sceneNames.join(', ')}`
+        : `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的中文名称\n- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等`;
+  } else if (bgSrc === 'comfyui') {
     sceneListText =
       sceneNames.length > 0
         ? `**实时场景生成模式**: 当剧情进入新场景时，根据当前具体情节生成新场景。\n- **判断标准**: 如果图库中的场景名称与当前剧情时间、地点、氛围完全匹配，则可复用；否则必须生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>visual tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）\n- **TAG要求**: 英文逗号分隔，包含风格、光线、氛围、细节等\n可用场景列表: ${sceneNames.join(', ')}`
@@ -182,13 +188,14 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
         : `（暂无可用场景，请在插件设置中上传背景图片后使用）`;
   }
 
-  const exampleScene = settings.realTimeBackgroundGen
+  const isGenerativeEngine = (bgSrc === 'comfyui' || bgSrc === 'banana' || bgSrc === 'novelai');
+  const exampleScene = isGenerativeEngine
     ? '雨夜中的都市街道'
     : sceneNames.length > 0
       ? sceneNames[0]
       : '场景名';
 
-  const extraRule = settings.realTimeBackgroundGen
+  const extraRule = isGenerativeEngine
     ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
     : `5. **背景场景必须使用已配置的场景名称**`;
 

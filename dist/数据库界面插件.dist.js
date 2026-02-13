@@ -263,6 +263,8 @@
     // ComfyUI
     defaultCheckpoint: "",
     realTimeBackgroundGen: false,
+    // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven'
+    bgImageSource: "none",
     // TTS 设置
     ttsEnabled: true,
     ttsAutoPlay: true,
@@ -297,7 +299,6 @@
     },
     // 大香蕉生图模块设置
     bananaImageGen: {
-      enabled: false,
       proxyUrl: "",
       proxyApiKey: "",
       model: "",
@@ -311,12 +312,29 @@
     },
     // Wallhaven 壁纸设置
     wallhaven: {
-      enabled: false,
       purity: "sfw",
       cgMode: false,
       category: "anime",
       customTags: [],
       apiKey: ""
+    },
+    // NovelAI 生图设置
+    novelai: {
+      apiKey: "",
+      model: "nai-diffusion-4-5-curated",
+      width: 1216,
+      height: 832,
+      scale: 10,
+      sampler: "k_euler",
+      steps: 28,
+      cfgRescale: 0.18,
+      noiseSchedule: "karras",
+      ucPreset: 3,
+      skipCfgAboveSigma: 58,
+      negativePrompt: "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark",
+      defaultPromptPrefix: "masterpiece, best quality, no humans, scenery, background, ",
+      defaultPromptSuffix: ", very aesthetic",
+      autoSaveToLibrary: true
     }
   };
   var SYSTEM_PROMPT_FOR_SECOND_GENERATE = `\u4F60\u662FGalgame\u6587\u672C\u683C\u5F0F\u5316\u5DE5\u5177\u3002\u4F60\u7684\u552F\u4E00\u4EFB\u52A1\u662F\u5C06\u539F\u59CB\u6587\u672C\u8F6C\u6362\u4E3AGalgame \u683C\u5F0F\u3002
@@ -375,8 +393,8 @@
   }
   var _settings = Object.assign({}, DEFAULT_SETTINGS);
   function ensureEnhancedModeSettings() {
-    _settings.enhancedMode = normalizeEnhancedModeSettings(_settings?.enhancedMode);
-    return _settings.enhancedMode || createDefaultEnhancedModeSettings();
+    _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
+    return _settings.enhancedMode;
   }
   ensureEnhancedModeSettings();
   function getSettings() {
@@ -428,6 +446,28 @@
             _settings.wallhaven.cgMode = !_settings.wallhaven.sceneMode;
           }
           delete _settings.wallhaven.sceneMode;
+        }
+        if (!_settings.bgImageSource || _settings.bgImageSource === "none") {
+          let migrated = false;
+          if (_settings.bananaImageGen?.enabled) {
+            _settings.bgImageSource = "banana";
+            migrated = true;
+          } else if (_settings.novelai?.enabled) {
+            _settings.bgImageSource = "novelai";
+            migrated = true;
+          } else if (_settings.wallhaven?.enabled) {
+            _settings.bgImageSource = "wallhaven";
+            migrated = true;
+          } else if (_settings.realTimeBackgroundGen) {
+            _settings.bgImageSource = "comfyui";
+            migrated = true;
+          }
+          if (migrated) {
+            if (_settings.bananaImageGen) delete _settings.bananaImageGen.enabled;
+            if (_settings.novelai) delete _settings.novelai.enabled;
+            if (_settings.wallhaven) delete _settings.wallhaven.enabled;
+            delete _settings.realTimeBackgroundGen;
+          }
         }
       }
     } catch (e) {
@@ -688,8 +728,8 @@
   var _showToastRef = null;
   var _getIsEnabledRef = null;
   var _injectCOTRef = null;
-  function setExpressionsRefs({ showToast: showToast6, getIsEnabled: getIsEnabled2, injectCOTToWorldbook: injectCOTToWorldbook2 }) {
-    _showToastRef = showToast6;
+  function setExpressionsRefs({ showToast: showToast5, getIsEnabled: getIsEnabled2, injectCOTToWorldbook: injectCOTToWorldbook2 }) {
+    _showToastRef = showToast5;
     _getIsEnabledRef = getIsEnabled2;
     _injectCOTRef = injectCOTToWorldbook2;
   }
@@ -3072,9 +3112,9 @@ ${lines.join("\n")}`;
   // src/live2d/manager.js
   var _Live2DStageRef = null;
   var _showToastRef2 = null;
-  function setLive2DManagerRefs({ Live2DStage: Live2DStage2, showToast: showToast6 }) {
+  function setLive2DManagerRefs({ Live2DStage: Live2DStage2, showToast: showToast5 }) {
     if (Live2DStage2) _Live2DStageRef = Live2DStage2;
-    if (showToast6) _showToastRef2 = showToast6;
+    if (showToast5) _showToastRef2 = showToast5;
   }
   var Live2DManager = {
     models: /* @__PURE__ */ new Map(),
@@ -4604,8 +4644,8 @@ ${lines.join("\n")}`;
 
   // src/live2d/stage.js
   var _showToastRef3 = null;
-  function setLive2DStageRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef3 = showToast6;
+  function setLive2DStageRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef3 = showToast5;
   }
   var Live2DStage = {
     app: null,
@@ -5423,22 +5463,6 @@ ${lines.join("\n")}`;
                 </div>
 
                 <div class="gal-bottom-toolbar">
-                  <!-- \u79FB\u52A8\u7AEF\u4E0A\u62C9\u83DC\u5355 -->
-                  <div class="gal-mobile-menu" id="gal-mobile-menu">
-                    <button class="gal-menu-btn" data-action="open-settings">
-                        <i class="fa-solid fa-gear"></i> \u8BBE\u7F6E
-                    </button>
-                    <button class="gal-menu-btn" data-action="log">
-                        <i class="fa-solid fa-list-ul"></i> \u5386\u53F2
-                    </button>
-                    <button class="gal-menu-btn" data-action="view-original">
-                        <i class="fa-solid fa-display"></i> \u539F\u754C\u9762
-                    </button>
-                    <button class="gal-menu-btn" data-action="close-mode">
-                        <i class="fa-solid fa-power-off"></i> \u9000\u51FA
-                    </button>
-                  </div>
-
                   <button class="gal-footer-btn" data-action="log" title="\u67E5\u770B\u5386\u53F2">
                     <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
                   </button>
@@ -5484,6 +5508,19 @@ ${lines.join("\n")}`;
             <i class="fa-solid fa-times"></i>
           </button>
           <div class="gal-cg-viewer-loading">\u56FE\u7247\u751F\u6210\u4E2D...</div>
+        </div>
+
+        <!-- \u79FB\u52A8\u7AEF\u4E0A\u62C9\u83DC\u5355\uFF08\u7F6E\u4E8E overlay \u9876\u5C42\uFF0C\u907F\u514D\u88AB overflow:hidden \u88C1\u526A\uFF09 -->
+        <div class="gal-mobile-menu" id="gal-mobile-menu">
+          <button class="gal-menu-btn" data-action="open-settings">
+              <i class="fa-solid fa-gear"></i> \u8BBE\u7F6E
+          </button>
+          <button class="gal-menu-btn" data-action="log">
+              <i class="fa-solid fa-list-ul"></i> \u5386\u53F2
+          </button>
+          <button class="gal-menu-btn" data-action="view-original">
+              <i class="fa-solid fa-display"></i> \u539F\u754C\u9762
+          </button>
         </div>
       </div>
     `;
@@ -5736,8 +5773,7 @@ ${lines.join("\n")}`;
         "#gal-custom-popup",
         "#gal-history-modal",
         "#gal-character-sprites-modal",
-        "#gal-settings-panel",
-        "#gal-asset-manager-modal",
+        "#gal-unified-panel",
         "#gal-pack-manager-modal",
         "#gal-transfer-modal",
         "#gal-batch-bg-upload-modal",
@@ -6894,8 +6930,8 @@ ${lines.join("\n")}`;
 
   // src/audio/tts-manager.js
   var _showToastRef4 = null;
-  function setTTSManagerRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef4 = showToast6;
+  function setTTSManagerRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef4 = showToast5;
   }
   function showToast(msg) {
     if (_showToastRef4) _showToastRef4(msg);
@@ -7591,8 +7627,8 @@ ${lines.join("\n")}`;
 
   // src/audio/bgm-manager.js
   var _showToastRef5 = null;
-  function setBGMManagerRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef5 = showToast6;
+  function setBGMManagerRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef5 = showToast5;
   }
   var BGMManager = {
     audio: new Audio(),
@@ -8005,121 +8041,11 @@ ${lines.join("\n")}`;
     }
   };
 
-  // src/image-gen/wallhaven-handler.js
-  var _saveBackgroundRef = null;
-  var _getSceneBackgroundsRef = null;
-  var _getMessageSegmentStateRef = null;
-  var _getSpriteManagerRef = null;
-  var _updateGlobalOverlayContentRef = null;
-  var _showToastRef6 = null;
-  function setWallhavenHandlerRefs({
-    saveBackground: saveBackground2,
-    getSceneBackgrounds,
-    getMessageSegmentState,
-    getSpriteManager,
-    updateGlobalOverlayContent: updateGlobalOverlayContent2,
-    showToast: showToast6
-  }) {
-    if (saveBackground2) _saveBackgroundRef = saveBackground2;
-    if (getSceneBackgrounds) _getSceneBackgroundsRef = getSceneBackgrounds;
-    if (getMessageSegmentState) _getMessageSegmentStateRef = getMessageSegmentState;
-    if (getSpriteManager) _getSpriteManagerRef = getSpriteManager;
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef = updateGlobalOverlayContent2;
-    if (showToast6) _showToastRef6 = showToast6;
-  }
-  var WALLHAVEN_TAG_MAPPING = {
-    "study": "library",
-    "chinese": "asian",
-    "japanese": "asian",
-    "room": "interior",
-    "house": "building",
-    "ancient": "",
-    "traditional": "",
-    "historical": "",
-    "background": "",
-    "scenery": "",
-    "atmosphere": "",
-    "detailed": "",
-    "calligraphy": "",
-    "brushes": ""
-  };
-  function optimizeWallhavenTags(rawTags) {
-    const tagList = rawTags.split(",").map((t) => t.trim().toLowerCase()).filter((t) => t);
-    let optimized = tagList.map((tag) => WALLHAVEN_TAG_MAPPING[tag] || tag).filter((t) => t);
-    optimized = [...new Set(optimized)];
-    optimized = optimized.filter((t) => t.length >= 3 && t.length <= 15);
-    optimized = optimized.slice(0, 4);
-    if (optimized.length < 2) {
-      optimized.push("interior");
-    }
-    console.log(`[${SCRIPT_NAME}] Wallhaven: \u6807\u7B7E\u4F18\u5316 ${tagList.join(", ")} \u2192 ${optimized.join(", ")}`);
-    return optimized;
-  }
-  function handleWallhavenBackgroundSearch(sceneName, tags) {
-    const settings = getSettings();
-    if (!settings.wallhaven?.enabled) return;
-    if (BGMManager.generatingScenes.has(sceneName)) return;
-    const sceneBackgrounds3 = _getSceneBackgroundsRef ? _getSceneBackgroundsRef() : null;
-    if (sceneBackgrounds3 && sceneBackgrounds3.has(sceneName)) {
-      console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u641C\u7D22`);
-      return;
-    }
-    BGMManager.generatingScenes.add(sceneName);
-    (async () => {
-      try {
-        console.log(`[${SCRIPT_NAME}] Wallhaven: \u5F00\u59CB\u641C\u7D22\u573A\u666F\u300C${sceneName}\u300D\u539F\u59CB\u6807\u7B7E: ${tags}`);
-        const tagList = optimizeWallhavenTags(tags);
-        const imageUrl = await WallhavenAPI.search(tagList);
-        if (imageUrl) {
-          let cachedUrl = imageUrl;
-          try {
-            if (_saveBackgroundRef) {
-              const savedUrl = await _saveBackgroundRef(sceneName, null, imageUrl);
-              if (savedUrl) cachedUrl = savedUrl;
-            }
-          } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] Wallhaven: \u4FDD\u5B58\u80CC\u666F\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, e);
-            if (sceneBackgrounds3) {
-              sceneBackgrounds3.set(sceneName, imageUrl);
-            }
-          }
-          console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u80CC\u666F\u5DF2\u7F13\u5B58: ${cachedUrl.substring(0, 50)}...`);
-          const _$ = (typeof window.parent !== "undefined" ? window.parent : window).jQuery;
-          if (_$) {
-            const $lastMes = _$("#chat > .mes").last();
-            if ($lastMes.length) {
-              const mesId = $lastMes.attr("mesid");
-              const messageSegmentState8 = _getMessageSegmentStateRef ? _getMessageSegmentStateRef() : null;
-              const state = messageSegmentState8 ? messageSegmentState8.get(String(mesId)) : null;
-              if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
-                const SpriteManager2 = _getSpriteManagerRef ? _getSpriteManagerRef() : null;
-                if (SpriteManager2) {
-                  SpriteManager2.currentScene = null;
-                }
-                console.log(`[${SCRIPT_NAME}] Wallhaven: \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
-                if (_updateGlobalOverlayContentRef) {
-                  _updateGlobalOverlayContentRef(mesId, state.parsedContent);
-                }
-              }
-            }
-          }
-          if (_showToastRef6) _showToastRef6(`\u573A\u666F\u300C${sceneName}\u300DWallhaven \u80CC\u666F\u5DF2\u5E94\u7528`);
-        } else {
-          console.warn(`[${SCRIPT_NAME}] Wallhaven: \u672A\u627E\u5230\u5339\u914D\u56FE\u7247: ${tags}`);
-        }
-      } catch (e) {
-        console.error(`[${SCRIPT_NAME}] Wallhaven \u80CC\u666F\u641C\u7D22\u5931\u8D25:`, e);
-      } finally {
-        BGMManager.generatingScenes.delete(sceneName);
-      }
-    })();
-  }
-
   // src/sprite/sprite-manager.js
   var _getSpriteRef2 = null;
   var _getBackgroundRef = null;
-  var _getSceneBackgroundsRef2 = null;
-  var _getMessageSegmentStateRef2 = null;
+  var _getSceneBackgroundsRef = null;
+  var _getMessageSegmentStateRef = null;
   var _setBackgroundWithTransitionRef = null;
   var _clearBackgroundLayersRef = null;
   var _BGMManagerRef = null;
@@ -8134,8 +8060,8 @@ ${lines.join("\n")}`;
   }) {
     if (getSprite2) _getSpriteRef2 = getSprite2;
     if (getBackground2) _getBackgroundRef = getBackground2;
-    if (getSceneBackgrounds) _getSceneBackgroundsRef2 = getSceneBackgrounds;
-    if (getMessageSegmentState) _getMessageSegmentStateRef2 = getMessageSegmentState;
+    if (getSceneBackgrounds) _getSceneBackgroundsRef = getSceneBackgrounds;
+    if (getMessageSegmentState) _getMessageSegmentStateRef = getMessageSegmentState;
     if (setBackgroundWithTransition2) _setBackgroundWithTransitionRef = setBackgroundWithTransition2;
     if (clearBackgroundLayers2) _clearBackgroundLayersRef = clearBackgroundLayers2;
     if (BGMManager2) _BGMManagerRef = BGMManager2;
@@ -8423,7 +8349,7 @@ ${lines.join("\n")}`;
       if (hasLive2D) {
         const $container = $slot.find(".gal-live2d-canvas-container");
         const taskSeq = this._nextLive2DRenderSeq(characterId);
-        const messageSegmentState8 = _getMessageSegmentStateRef2 ? _getMessageSegmentStateRef2() : null;
+        const messageSegmentState8 = _getMessageSegmentStateRef ? _getMessageSegmentStateRef() : null;
         const isTaskStale = () => {
           if (!this._isLatestLive2DTask(characterId, taskSeq)) return true;
           if (renderToken === null) return false;
@@ -8523,12 +8449,12 @@ ${lines.join("\n")}`;
       }
     },
     findBestMatchScene(sceneName) {
-      const sceneBackgrounds3 = _getSceneBackgroundsRef2 ? _getSceneBackgroundsRef2() : null;
+      const sceneBackgrounds5 = _getSceneBackgroundsRef ? _getSceneBackgroundsRef() : null;
       if (!sceneName) return null;
-      if (sceneBackgrounds3 && sceneBackgrounds3.has(sceneName)) return sceneName;
+      if (sceneBackgrounds5 && sceneBackgrounds5.has(sceneName)) return sceneName;
       let bestMatch = null;
       let maxLength = 0;
-      const scenes = sceneBackgrounds3 ? Array.from(sceneBackgrounds3.keys()) : [];
+      const scenes = sceneBackgrounds5 ? Array.from(sceneBackgrounds5.keys()) : [];
       const cleanName = sceneName.replace(/\s*[\(（].*?[\)）]/g, "").trim();
       for (const knownScene of scenes) {
         const cleanKnown = knownScene.replace(/\s*[\(（].*?[\)）]/g, "").trim();
@@ -8610,6 +8536,98 @@ ${lines.join("\n")}`;
     }
   };
 
+  // src/image-gen/bg-gen-shared.js
+  var messageSegmentState2 = GalgameStore.cache.segments;
+  var _updateGlobalOverlayContentRef = null;
+  var _showToastRef6 = null;
+  function setBgGenSharedRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, showToast: showToast5 }) {
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef = updateGlobalOverlayContent2;
+    if (showToast5) _showToastRef6 = showToast5;
+  }
+  function showBgGenToast(msg) {
+    if (_showToastRef6) _showToastRef6(msg);
+  }
+  function refreshUIForScene(sceneName) {
+    const $lastMes = $("#chat > .mes").last();
+    if (!$lastMes.length) return;
+    const mesId = $lastMes.attr("mesid");
+    const state = messageSegmentState2.get(String(mesId));
+    if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
+      SpriteManager.currentScene = null;
+      console.log(`[${SCRIPT_NAME}] \u80CC\u666F\u751F\u6210: \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
+      if (_updateGlobalOverlayContentRef) {
+        _updateGlobalOverlayContentRef(mesId, state.parsedContent);
+      }
+    }
+  }
+
+  // src/image-gen/wallhaven-handler.js
+  var sceneBackgrounds2 = GalgameStore.cache.backgrounds;
+  var WALLHAVEN_TAG_MAPPING = {
+    "study": "library",
+    "chinese": "asian",
+    "japanese": "asian",
+    "room": "interior",
+    "house": "building",
+    "ancient": "",
+    "traditional": "",
+    "historical": "",
+    "background": "",
+    "scenery": "",
+    "atmosphere": "",
+    "detailed": "",
+    "calligraphy": "",
+    "brushes": ""
+  };
+  function optimizeWallhavenTags(rawTags) {
+    const tagList = rawTags.split(",").map((t) => t.trim().toLowerCase()).filter((t) => t);
+    let optimized = tagList.map((tag) => WALLHAVEN_TAG_MAPPING[tag] || tag).filter((t) => t);
+    optimized = [...new Set(optimized)];
+    optimized = optimized.filter((t) => t.length >= 3 && t.length <= 15);
+    optimized = optimized.slice(0, 4);
+    if (optimized.length < 2) {
+      optimized.push("interior");
+    }
+    console.log(`[${SCRIPT_NAME}] Wallhaven: \u6807\u7B7E\u4F18\u5316 ${tagList.join(", ")} \u2192 ${optimized.join(", ")}`);
+    return optimized;
+  }
+  function handleWallhavenBackgroundSearch(sceneName, tags) {
+    const settings = getSettings();
+    if (settings.bgImageSource !== "wallhaven") return;
+    if (BGMManager.generatingScenes.has(sceneName)) return;
+    if (sceneBackgrounds2.has(sceneName)) {
+      console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u641C\u7D22`);
+      return;
+    }
+    BGMManager.generatingScenes.add(sceneName);
+    (async () => {
+      try {
+        console.log(`[${SCRIPT_NAME}] Wallhaven: \u5F00\u59CB\u641C\u7D22\u573A\u666F\u300C${sceneName}\u300D\u539F\u59CB\u6807\u7B7E: ${tags}`);
+        const tagList = optimizeWallhavenTags(tags);
+        const imageUrl = await WallhavenAPI.search(tagList);
+        if (imageUrl) {
+          let cachedUrl = imageUrl;
+          try {
+            const savedUrl = await saveBackground(sceneName, null, imageUrl);
+            if (savedUrl) cachedUrl = savedUrl;
+          } catch (e) {
+            console.warn(`[${SCRIPT_NAME}] Wallhaven: \u4FDD\u5B58\u80CC\u666F\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, e);
+            sceneBackgrounds2.set(sceneName, imageUrl);
+          }
+          console.log(`[${SCRIPT_NAME}] Wallhaven: \u573A\u666F\u300C${sceneName}\u300D\u80CC\u666F\u5DF2\u7F13\u5B58: ${cachedUrl.substring(0, 50)}...`);
+          refreshUIForScene(sceneName);
+          showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300DWallhaven \u80CC\u666F\u5DF2\u5E94\u7528`);
+        } else {
+          console.warn(`[${SCRIPT_NAME}] Wallhaven: \u672A\u627E\u5230\u5339\u914D\u56FE\u7247: ${tags}`);
+        }
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] Wallhaven \u80CC\u666F\u641C\u7D22\u5931\u8D25:`, e);
+      } finally {
+        BGMManager.generatingScenes.delete(sceneName);
+      }
+    })();
+  }
+
   // src/logic/cot-template.js
   async function generateCOTTemplate() {
     const settings = getSettings();
@@ -8630,8 +8648,9 @@ ${lines.join("\n")}`;
       charVoiceBindingText = "\n### \u89D2\u8272\u97F3\u8272\u7ED1\u5B9A\uFF08\u5FC5\u987B\u9075\u5B88\uFF09\n" + Object.entries(charVoiceMap).map(([char, voice]) => `- **${char}**: \u5FC5\u987B\u4F7F\u7528\u97F3\u8272 "${voice}"`).join("\n") + "\n**\u91CD\u8981**: \u4EE5\u4E0A\u89D2\u8272\u5FC5\u987B\u4F7F\u7528\u7ED1\u5B9A\u7684\u6307\u5B9A\u97F3\u8272\uFF0C\u4E0D\u53EF\u66F4\u6539\uFF01\n";
     }
     let sceneListText = "";
-    const useBananaImageGen = settings.bananaImageGen?.enabled;
-    const useWallhaven = settings.wallhaven?.enabled;
+    const bgSrc = settings.bgImageSource || "none";
+    const useBananaImageGen = bgSrc === "banana";
+    const useWallhaven = bgSrc === "wallhaven";
     if (useBananaImageGen) {
       const bs = settings.bananaImageGen;
       let modeHint = "";
@@ -8754,7 +8773,17 @@ Wallhaven \u662F\u82F1\u6587\u6807\u7B7E\u7CFB\u7EDF\uFF0C\u6807\u7B7E\u5FC5\u98
 - \u6E29\u99A8\u5367\u5BA4 \u2192 \`<whimg>bedroom, morning, cozy</whimg>\`
 - \u65E5\u5F0F\u5EAD\u9662 \u2192 \`<whimg>garden, temple, asian</whimg>\` (\u4E0D\u7528 japanese)
 - \u73B0\u4EE3\u529E\u516C\u5BA4 \u2192 \`<whimg>office, modern, city</whimg>\`${customTagHint}`;
-    } else if (settings.realTimeBackgroundGen) {
+    } else if (bgSrc === "novelai") {
+      sceneListText = sceneNames.length > 0 ? `**NovelAI \u5B9E\u65F6\u573A\u666F\u751F\u6210\u6A21\u5F0F**: \u5F53\u5267\u60C5\u8FDB\u5165\u65B0\u573A\u666F\u65F6\uFF0C\u6839\u636E\u5F53\u524D\u60C5\u8282\u751F\u6210\u65B0\u573A\u666F\u80CC\u666F\u3002
+- **\u5224\u65AD\u6807\u51C6**: \u5982\u679C\u56FE\u5E93\u4E2D\u7684\u573A\u666F\u540D\u79F0\u4E0E\u5F53\u524D\u5267\u60C5\u5B8C\u5168\u5339\u914D\uFF0C\u5219\u53EF\u590D\u7528\uFF1B\u5426\u5219\u5FC5\u987B\u751F\u6210\u65B0\u573A\u666F\u3002
+- **\u751F\u6210\u683C\u5F0F**: \`<background scene="\u65B0\u573A\u666F\u540D"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
+- **\u573A\u666F\u540D\u8981\u6C42**: \u4F7F\u7528\u5177\u4F53\u3001\u63CF\u8FF0\u6027\u7684\u4E2D\u6587\u540D\u79F0\uFF08\u5982"\u66B4\u96E8\u4E2D\u7684\u5E9F\u5F03\u5DE5\u5382_\u591C\u665A"\u800C\u975E"\u5DE5\u5382"\uFF09
+- **TAG\u8981\u6C42**: \u82F1\u6587\u9017\u53F7\u5206\u9694\u7684 Danbooru \u6807\u7B7E\uFF0C\u5305\u542B\u98CE\u683C\u3001\u5149\u7EBF\u3001\u6C1B\u56F4\u3001\u7EC6\u8282\u7B49
+\u53EF\u7528\u573A\u666F\u5217\u8868: ${sceneNames.join(", ")}` : `**NovelAI \u5B9E\u65F6\u573A\u666F\u751F\u6210\u6A21\u5F0F**: \u5F53\u5267\u60C5\u8FDB\u5165\u65B0\u573A\u666F\u65F6\uFF0C\u6839\u636E\u5F53\u524D\u60C5\u8282\u751F\u6210\u65B0\u573A\u666F\u80CC\u666F\u3002
+- **\u751F\u6210\u683C\u5F0F**: \`<background scene="\u65B0\u573A\u666F\u540D"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
+- **\u573A\u666F\u540D\u8981\u6C42**: \u4F7F\u7528\u5177\u4F53\u3001\u63CF\u8FF0\u6027\u7684\u4E2D\u6587\u540D\u79F0
+- **TAG\u8981\u6C42**: \u82F1\u6587\u9017\u53F7\u5206\u9694\u7684 Danbooru \u6807\u7B7E\uFF0C\u5305\u542B\u98CE\u683C\u3001\u5149\u7EBF\u3001\u6C1B\u56F4\u3001\u7EC6\u8282\u7B49`;
+    } else if (bgSrc === "comfyui") {
       sceneListText = sceneNames.length > 0 ? `**\u5B9E\u65F6\u573A\u666F\u751F\u6210\u6A21\u5F0F**: \u5F53\u5267\u60C5\u8FDB\u5165\u65B0\u573A\u666F\u65F6\uFF0C\u6839\u636E\u5F53\u524D\u5177\u4F53\u60C5\u8282\u751F\u6210\u65B0\u573A\u666F\u3002
 - **\u5224\u65AD\u6807\u51C6**: \u5982\u679C\u56FE\u5E93\u4E2D\u7684\u573A\u666F\u540D\u79F0\u4E0E\u5F53\u524D\u5267\u60C5\u65F6\u95F4\u3001\u5730\u70B9\u3001\u6C1B\u56F4\u5B8C\u5168\u5339\u914D\uFF0C\u5219\u53EF\u590D\u7528\uFF1B\u5426\u5219\u5FC5\u987B\u751F\u6210\u65B0\u573A\u666F\u3002
 - **\u751F\u6210\u683C\u5F0F**: \`<background scene="\u65B0\u573A\u666F\u540D"><bgimg>visual tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
@@ -8768,8 +8797,9 @@ Wallhaven \u662F\u82F1\u6587\u6807\u7B7E\u7CFB\u7EDF\uFF0C\u6807\u7B7E\u5FC5\u98
       sceneListText = sceneNames.length > 0 ? `\u53EF\u7528\u573A\u666F\u5217\u8868: ${sceneNames.join(", ")}
 - **\u4E25\u91CD\u8B66\u544A**: \u5FC5\u987B\u4E25\u683C\u4ECE\u4E0A\u8FF0\u5217\u8868\u4E2D\u9009\u62E9\u573A\u666F\uFF0C\u4E25\u7981\u4F7F\u7528\u5217\u8868\u4E4B\u5916\u7684\u540D\u79F0\uFF0C\u4E25\u7981\u81EA\u521B\u5730\u70B9\u3002` : `\uFF08\u6682\u65E0\u53EF\u7528\u573A\u666F\uFF0C\u8BF7\u5728\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u4E0A\u4F20\u80CC\u666F\u56FE\u7247\u540E\u4F7F\u7528\uFF09`;
     }
-    const exampleScene = settings.realTimeBackgroundGen ? "\u96E8\u591C\u4E2D\u7684\u90FD\u5E02\u8857\u9053" : sceneNames.length > 0 ? sceneNames[0] : "\u573A\u666F\u540D";
-    const extraRule = settings.realTimeBackgroundGen ? `5. **\u573A\u666F\u751F\u6210\u89C4\u5219**: \u5F53\u573A\u666F\u53D8\u5316\u4E14\u56FE\u5E93\u4E2D\u65E0\u5339\u914D\u573A\u666F\u65F6\uFF0C\u4F7F\u7528 \`<background scene="..."><bgimg>TAGS</bgimg>\` \u683C\u5F0F\u751F\u6210\u65B0\u573A\u666F\u3002TAGS\u5FC5\u987B\u662F\u82F1\u6587\u5355\u8BCD\uFF0C\u9017\u53F7\u5206\u9694\uFF0C\u5305\u542B\uFF1A\u573A\u666F\u7C7B\u578B\u3001\u5149\u7EBF\u6761\u4EF6\u3001\u6C1B\u56F4\u3001\u98CE\u683C\u3001\u5173\u952E\u7EC6\u8282\u3002` : `5. **\u80CC\u666F\u573A\u666F\u5FC5\u987B\u4F7F\u7528\u5DF2\u914D\u7F6E\u7684\u573A\u666F\u540D\u79F0**`;
+    const isGenerativeEngine = bgSrc === "comfyui" || bgSrc === "banana" || bgSrc === "novelai";
+    const exampleScene = isGenerativeEngine ? "\u96E8\u591C\u4E2D\u7684\u90FD\u5E02\u8857\u9053" : sceneNames.length > 0 ? sceneNames[0] : "\u573A\u666F\u540D";
+    const extraRule = isGenerativeEngine ? `5. **\u573A\u666F\u751F\u6210\u89C4\u5219**: \u5F53\u573A\u666F\u53D8\u5316\u4E14\u56FE\u5E93\u4E2D\u65E0\u5339\u914D\u573A\u666F\u65F6\uFF0C\u4F7F\u7528 \`<background scene="..."><bgimg>TAGS</bgimg>\` \u683C\u5F0F\u751F\u6210\u65B0\u573A\u666F\u3002TAGS\u5FC5\u987B\u662F\u82F1\u6587\u5355\u8BCD\uFF0C\u9017\u53F7\u5206\u9694\uFF0C\u5305\u542B\uFF1A\u573A\u666F\u7C7B\u578B\u3001\u5149\u7EBF\u6761\u4EF6\u3001\u6C1B\u56F4\u3001\u98CE\u683C\u3001\u5173\u952E\u7EC6\u8282\u3002` : `5. **\u80CC\u666F\u573A\u666F\u5FC5\u987B\u4F7F\u7528\u5DF2\u914D\u7F6E\u7684\u573A\u666F\u540D\u79F0**`;
     const ttsEnabled = getTTSEnabled();
     if (ttsEnabled) {
       return `# Galgame \u8F93\u51FA\u683C\u5F0F\u89C4\u8303
@@ -9433,12 +9463,12 @@ ${extraRule}
   var _updateNextBtnForGeneratingStateRef2 = null;
   var _updateGeneratingStatusRef2 = null;
   function setEnhancedModeRefs({
-    showToast: showToast6,
+    showToast: showToast5,
     updateGlobalOverlayContent: updateGlobalOverlayContent2,
     updateNextBtnForGeneratingState: updateNextBtnForGeneratingState2,
     updateGeneratingStatus: updateGeneratingStatus2
   }) {
-    if (showToast6) _showToastRef7 = showToast6;
+    if (showToast5) _showToastRef7 = showToast5;
     if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef2 = updateGlobalOverlayContent2;
     if (updateNextBtnForGeneratingState2) _updateNextBtnForGeneratingStateRef2 = updateNextBtnForGeneratingState2;
     if (updateGeneratingStatus2) _updateGeneratingStatusRef2 = updateGeneratingStatus2;
@@ -10102,8 +10132,8 @@ ${firstResult}`;
 
   // src/logic/worldbook.js
   var _showToastRef8 = null;
-  function setWorldbookRefs({ showToast: showToast6 }) {
-    if (showToast6) _showToastRef8 = showToast6;
+  function setWorldbookRefs({ showToast: showToast5 }) {
+    if (showToast5) _showToastRef8 = showToast5;
   }
   function showToast3(msg, duration) {
     if (_showToastRef8) _showToastRef8(msg, duration);
@@ -10229,20 +10259,10 @@ ${firstResult}`;
   }
 
   // src/image-gen/banana-image.js
-  var messageSegmentState2 = GalgameStore.cache.segments;
-  var sceneBackgrounds2 = GalgameStore.cache.backgrounds;
-  var _updateGlobalOverlayContentRef3 = null;
-  var _showToastRef9 = null;
-  function setBananaImageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, showToast: showToast6 }) {
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
-    if (showToast6) _showToastRef9 = showToast6;
-  }
-  function showToast4(msg) {
-    if (_showToastRef9) _showToastRef9(msg);
-  }
+  var sceneBackgrounds3 = GalgameStore.cache.backgrounds;
   async function handleRealTimeBackgroundGeneration(sceneName, tags) {
     const settings = getSettings();
-    if (!settings.realTimeBackgroundGen) return;
+    if (settings.bgImageSource !== "comfyui") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     try {
       const backgrounds = await getAllBackgrounds();
@@ -10254,7 +10274,7 @@ ${firstResult}`;
     }
     console.log(`[${SCRIPT_NAME}] \u89E6\u53D1\u5B9E\u65F6\u80CC\u666F\u751F\u6210: ${sceneName}, Tags: ${tags}`);
     BGMManager.generatingScenes.add(sceneName);
-    showToast4(`\u6B63\u5728\u751F\u6210\u65B0\u573A\u666F: ${sceneName}...`);
+    showBgGenToast(`\u6B63\u5728\u751F\u6210\u65B0\u573A\u666F: ${sceneName}...`);
     const $bgLayer = $("#gal-global-overlay .gal-layer-bg");
     if ($bgLayer.length) {
       $bgLayer.addClass("generating-bg").removeClass("has-bg");
@@ -10279,38 +10299,22 @@ ${firstResult}`;
         const negative = settings.comfyui.negativePrompt || "nsfw, lowres, bad anatomy, bad hands, text, error";
         const seed = Math.floor(Math.random() * 1e10);
         const blob = await ComfyUIAPI.generate(targetWorkflow.json, positive, negative, seed);
-        if (blob) {
-          await saveBackgroundsBatch([{ sceneName, imageBlob: blob }]);
-          const newUrl = URL.createObjectURL(blob);
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u5B9E\u65F6\u751F\u6210\u540E\u624B\u52A8\u66F4\u65B0\u7F13\u5B58: "${sceneName}" URL: ${newUrl.substring(0, 50)}...`);
-          sceneBackgrounds2.set(sceneName, newUrl);
-          console.log(`[${SCRIPT_NAME}] [DEBUG] Cache check after set: has("${sceneName}") = ${sceneBackgrounds2.has(sceneName)}`);
-          console.log(`[${SCRIPT_NAME}] \u573A\u666F\u751F\u6210\u5E76\u4FDD\u5B58\u6210\u529F: ${sceneName}`);
-          showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5B8C\u6210\uFF01`);
-          const $bgLayer2 = $("#gal-global-overlay .gal-layer-bg");
-          $bgLayer2.find(".gal-gen-indicator").remove();
-          if (getIsEnabled()) {
-            injectCOTToWorldbook();
-          }
-          const $lastMes = $("#chat > .mes").last();
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u5C1D\u8BD5\u5237\u65B0UI. LastMes ID: ${$lastMes.attr("mesid")}`);
-          if ($lastMes.length) {
-            const mesId = $lastMes.attr("mesid");
-            const state = messageSegmentState2.get(String(mesId));
-            if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
-              SpriteManager.currentScene = null;
-              console.log(`[${SCRIPT_NAME}] [DEBUG] \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
-              if (_updateGlobalOverlayContentRef3) {
-                _updateGlobalOverlayContentRef3(mesId, state.parsedContent);
-              }
-            }
-          }
-        } else {
+        if (!blob) {
           throw new Error("\u751F\u6210\u7684\u56FE\u7247\u6570\u636E\u4E3A\u7A7A");
         }
+        await saveBackgroundsBatch([{ sceneName, imageBlob: blob }]);
+        const newUrl = URL.createObjectURL(blob);
+        sceneBackgrounds3.set(sceneName, newUrl);
+        console.log(`[${SCRIPT_NAME}] \u573A\u666F\u751F\u6210\u5E76\u4FDD\u5B58\u6210\u529F: ${sceneName}`);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5B8C\u6210\uFF01`);
+        $("#gal-global-overlay .gal-layer-bg .gal-gen-indicator").remove();
+        if (getIsEnabled()) {
+          injectCOTToWorldbook();
+        }
+        refreshUIForScene(sceneName);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5B9E\u65F6\u80CC\u666F\u751F\u6210\u5931\u8D25:`, e);
-        showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5931\u8D25`);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300D\u751F\u6210\u5931\u8D25`);
       } finally {
         BGMManager.generatingScenes.delete(sceneName);
       }
@@ -10373,9 +10377,9 @@ ${firstResult}`;
   }
   function handleBananaBackgroundGeneration(sceneName, prompt2) {
     const settings = getSettings();
-    if (!settings.bananaImageGen?.enabled) return;
+    if (settings.bgImageSource !== "banana") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
-    if (sceneBackgrounds2.has(sceneName)) {
+    if (sceneBackgrounds3.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u751F\u6210`);
       return;
     }
@@ -10423,9 +10427,7 @@ ${firstResult}`;
         }
         const genUrl = `${baseUrl}/chat/completions`;
         let messageContent = finalPrompt;
-        console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: cgMode = ${bs.cgMode}`);
         const appearances = getBananaCharacterAppearances();
-        console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u89D2\u8272\u5916\u89C2\u5217\u8868 =`, JSON.stringify(appearances));
         if (bs.cgMode && appearances.length > 0) {
           console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: CG\u6A21\u5F0F\uFF0C\u51C6\u5907\u6DFB\u52A0 ${appearances.length} \u4E2A\u89D2\u8272\u7ACB\u7ED8\u5230\u591A\u6A21\u6001\u6D88\u606F`);
           messageContent = await buildBananaAppearanceMultimodalContent(finalPrompt);
@@ -10472,32 +10474,186 @@ ${firstResult}`;
               imageBlob = new Blob([byteArray], { type: "image/png" });
             }
             const savedUrl = await saveBackground(sceneName, imageBlob, imageUrl);
-            const cachedUrl = savedUrl || imageUrl;
-            sceneBackgrounds2.set(sceneName, cachedUrl);
+            sceneBackgrounds3.set(sceneName, savedUrl || imageUrl);
             console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
           } catch (saveErr) {
             console.warn(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u4FDD\u5B58\u5230\u80CC\u666F\u5E93\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, saveErr);
-            sceneBackgrounds2.set(sceneName, imageUrl);
+            sceneBackgrounds3.set(sceneName, imageUrl);
           }
         } else {
-          sceneBackgrounds2.set(sceneName, imageUrl);
+          sceneBackgrounds3.set(sceneName, imageUrl);
         }
-        const $lastMes = $("#chat > .mes").last();
-        if ($lastMes.length) {
-          const mesId = $lastMes.attr("mesid");
-          const state = messageSegmentState2.get(String(mesId));
-          if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
-            SpriteManager.currentScene = null;
-            console.log(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE: \u5F3A\u5236\u5237\u65B0UI: ${sceneName}`);
-            if (_updateGlobalOverlayContentRef3) {
-              _updateGlobalOverlayContentRef3(mesId, state.parsedContent);
-            }
-          }
-        }
-        showToast4(`\u573A\u666F\u300C${sceneName}\u300DAI \u80CC\u666F\u5DF2\u751F\u6210`);
+        refreshUIForScene(sceneName);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300DAI \u80CC\u666F\u5DF2\u751F\u6210`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE\u5931\u8D25:`, e);
-        showToast4(`\u5927\u9999\u8549\u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
+        showBgGenToast(`\u5927\u9999\u8549\u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
+      } finally {
+        BGMManager.generatingScenes.delete(sceneName);
+      }
+    })();
+  }
+
+  // src/image-gen/novelai-image.js
+  var sceneBackgrounds4 = GalgameStore.cache.backgrounds;
+  async function extractImageFromZip(arrayBuffer) {
+    const view = new DataView(arrayBuffer);
+    if (view.getUint32(0, true) !== 67324752) {
+      throw new Error("\u54CD\u5E94\u4E0D\u662F\u6709\u6548\u7684 ZIP \u6587\u4EF6");
+    }
+    const compressionMethod = view.getUint16(8, true);
+    let compressedSize = view.getUint32(18, true);
+    const fileNameLength = view.getUint16(26, true);
+    const extraFieldLength = view.getUint16(28, true);
+    const dataOffset = 30 + fileNameLength + extraFieldLength;
+    if (compressedSize === 0) {
+      for (let i = dataOffset; i < arrayBuffer.byteLength - 4; i++) {
+        if (view.getUint32(i, true) === 33639248) {
+          compressedSize = view.getUint32(i + 20, true);
+          break;
+        }
+      }
+      if (compressedSize === 0) {
+        for (let i = dataOffset; i < arrayBuffer.byteLength - 4; i++) {
+          if (view.getUint32(i, true) === 134695760) {
+            compressedSize = i - dataOffset;
+            break;
+          }
+        }
+      }
+      if (compressedSize === 0) {
+        console.warn(`[${SCRIPT_NAME}] NovelAI ZIP: \u65E0\u6CD5\u7CBE\u786E\u786E\u5B9A\u6587\u4EF6\u5927\u5C0F\uFF0C\u4F7F\u7528\u5269\u4F59\u5B57\u8282\u4F5C\u4E3A\u515C\u5E95`);
+        compressedSize = arrayBuffer.byteLength - dataOffset;
+      }
+    }
+    const fileData = new Uint8Array(arrayBuffer, dataOffset, compressedSize);
+    if (compressionMethod === 0) {
+      return new Blob([fileData], { type: "image/png" });
+    } else if (compressionMethod === 8) {
+      const ds = new DecompressionStream("deflate-raw");
+      const writer = ds.writable.getWriter();
+      writer.write(fileData);
+      writer.close();
+      return await new Response(ds.readable).blob();
+    }
+    throw new Error(`\u4E0D\u652F\u6301\u7684\u538B\u7F29\u65B9\u5F0F: ${compressionMethod}`);
+  }
+  function buildRequestBody(tags, settings) {
+    const ns = settings.novelai;
+    const negativePrompt = ns.negativePrompt || "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark";
+    let finalPrompt = tags;
+    if (ns.defaultPromptPrefix) {
+      finalPrompt = ns.defaultPromptPrefix + finalPrompt;
+    }
+    if (ns.defaultPromptSuffix) {
+      finalPrompt = finalPrompt + ns.defaultPromptSuffix;
+    }
+    const seed = Math.floor(Math.random() * 4294967295);
+    return {
+      input: finalPrompt,
+      model: ns.model || "nai-diffusion-4-5-curated",
+      action: "generate",
+      parameters: {
+        params_version: 3,
+        width: ns.width || 1216,
+        height: ns.height || 832,
+        scale: ns.scale ?? 10,
+        sampler: ns.sampler || "k_euler",
+        steps: ns.steps || 28,
+        n_samples: 1,
+        ucPreset: ns.ucPreset ?? 3,
+        qualityToggle: true,
+        dynamic_thresholding: false,
+        cfg_rescale: ns.cfgRescale ?? 0.18,
+        noise_schedule: ns.noiseSchedule || "karras",
+        skip_cfg_above_sigma: ns.skipCfgAboveSigma ?? 58,
+        seed,
+        negative_prompt: negativePrompt,
+        characterPrompts: [],
+        v4_prompt: {
+          caption: { base_caption: finalPrompt, char_captions: [] },
+          use_coords: false,
+          use_order: true
+        },
+        v4_negative_prompt: {
+          caption: { base_caption: negativePrompt, char_captions: [] },
+          legacy_uc: false
+        },
+        autoSmea: false,
+        normalize_reference_strength_multiple: false,
+        legacy: false,
+        legacy_uc: false,
+        legacy_v3_extend: false,
+        add_original_image: true,
+        controlnet_strength: 1,
+        use_coords: false
+      }
+    };
+  }
+  function handleNovelAIBackgroundGeneration(sceneName, tags) {
+    const settings = getSettings();
+    if (settings.bgImageSource !== "novelai") return;
+    if (BGMManager.generatingScenes.has(sceneName)) return;
+    if (sceneBackgrounds4.has(sceneName)) {
+      console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u5B58\u5728\u7F13\u5B58\uFF0C\u8DF3\u8FC7\u751F\u6210`);
+      return;
+    }
+    const ns = settings.novelai;
+    if (!ns.apiKey) {
+      console.warn(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u672A\u914D\u7F6E API Key`);
+      return;
+    }
+    BGMManager.generatingScenes.add(sceneName);
+    showBgGenToast(`\u6B63\u5728\u751F\u6210\u573A\u666F: ${sceneName}...`);
+    const $bgLayer = $("#gal-global-overlay .gal-layer-bg");
+    if ($bgLayer.length) {
+      $bgLayer.addClass("generating-bg").removeClass("has-bg");
+      clearBackgroundLayers($bgLayer);
+    }
+    (async () => {
+      try {
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u5F00\u59CB\u751F\u6210\u573A\u666F\u300C${sceneName}\u300D`);
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: Tags = ${tags.substring(0, 100)}`);
+        const requestBody = buildRequestBody(tags, settings);
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u6A21\u578B=${requestBody.model}, \u5C3A\u5BF8=${requestBody.parameters.width}x${requestBody.parameters.height}`);
+        const response = await fetch("https://image.novelai.net/ai/generate-image", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${ns.apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        const imageBlob = await extractImageFromZip(arrayBuffer);
+        if (!imageBlob || imageBlob.size === 0) {
+          throw new Error("\u63D0\u53D6\u5230\u7684\u56FE\u7247\u6570\u636E\u4E3A\u7A7A");
+        }
+        console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u56FE\u7247\u5927\u5C0F = ${(imageBlob.size / 1024).toFixed(1)} KB`);
+        if (ns.autoSaveToLibrary !== false) {
+          try {
+            const savedUrl = await saveBackground(sceneName, imageBlob, null);
+            sceneBackgrounds4.set(sceneName, savedUrl || URL.createObjectURL(imageBlob));
+            console.log(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
+          } catch (saveErr) {
+            console.warn(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE: \u4FDD\u5B58\u5931\u8D25\uFF0C\u4F7F\u7528\u4E34\u65F6\u7F13\u5B58`, saveErr);
+            sceneBackgrounds4.set(sceneName, URL.createObjectURL(imageBlob));
+          }
+        } else {
+          sceneBackgrounds4.set(sceneName, URL.createObjectURL(imageBlob));
+        }
+        if (getIsEnabled()) {
+          injectCOTToWorldbook();
+        }
+        refreshUIForScene(sceneName);
+        showBgGenToast(`\u573A\u666F\u300C${sceneName}\u300DNovelAI \u80CC\u666F\u5DF2\u751F\u6210`);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] NovelAI \u751F\u56FE\u5931\u8D25:`, e);
+        showBgGenToast(`NovelAI \u751F\u56FE\u5931\u8D25: ${e.message.substring(0, 50)}`);
       } finally {
         BGMManager.generatingScenes.delete(sceneName);
       }
@@ -10583,9 +10739,7 @@ ${firstResult}`;
   function injectStyles() {
     const targetDoc = topWindow.document;
     const oldStyle = targetDoc.getElementById(`${SCRIPT_ID}-styles`);
-    if (oldStyle) {
-      oldStyle.remove();
-    }
+    if (oldStyle) oldStyle.remove();
     topWindow[STYLES_INJECTED_FLAG] = true;
     if (!targetDoc.querySelector('link[href*="Noto+Sans+SC"]')) {
       const fontLink = targetDoc.createElement("link");
@@ -10593,3894 +10747,7 @@ ${firstResult}`;
       fontLink.rel = "stylesheet";
       (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
     }
-    const css = `
-      /* ═══════════════════════════════════════════════════════════════
-         Galgame 界面插件 - Cyber Pop 全屏沉浸式主题
-         ═══════════════════════════════════════════════════════════════ */
-
-      /* z-index 统一层级 token（先保持兼容数值，后续可继续收敛） */
-      :root {
-        --gal-z-overlay: 10000;
-        --gal-z-dropdown: 1000;
-        --gal-z-toast: 100000;
-        --gal-z-modal: 100001;
-        --gal-z-modal-critical: 100002;
-      }
-
-      .gal-z-overlay { z-index: var(--gal-z-overlay) !important; }
-      .gal-z-dropdown { z-index: var(--gal-z-dropdown) !important; }
-      .gal-z-toast { z-index: var(--gal-z-toast) !important; }
-      .gal-z-modal { z-index: var(--gal-z-modal) !important; }
-      .gal-z-critical { z-index: var(--gal-z-modal-critical) !important; }
-
-      /* 全局Galgame界面层 - 默认内联模式（在#chat内） */
-      #gal-global-overlay {
-        position: relative !important;
-        width: 100% !important;
-        min-height: 31.25rem;
-        height: 70vh;
-        max-height: 50rem;
-        display: none;
-        background: transparent !important;
-        font-family: 'Noto Sans SC', sans-serif;
-        border-radius: 0.75rem;
-        overflow: visible;
-        margin: 0.625rem 0;
-        contain: layout;
-      }
-
-      /* ★ 无级缩放 - 使用 --ui-scale 统一缩放（由脚本计算） */
-      #gal-global-overlay {
-        --ui-scale: 1;
-      }
-
-      #gal-global-overlay.active {
-        display: block !important;
-      }
-
-      /* 拖拽手柄样式 */
-      .gal-draggable-handle {
-        cursor: move;
-        user-select: none;
-      }
-
-      /* 全屏模式 - 使用!important确保覆盖 */
-      #gal-global-overlay.fullscreen {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        max-height: none !important;
-        min-height: 100vh !important;
-        z-index: var(--gal-z-overlay) !important;
-        border-radius: 0 !important;
-        margin: 0 !important;
-        box-shadow: none !important;
-      }
-
-      /* 隐藏非Galgame消息楼层 */
-      #chat > .mes.gal-hidden {
-        display: none !important;
-      }
-
-      /* 嵌入内容查看弹窗 */
-      .gal-embedded-viewer {
-        position: fixed;
-        inset: 0;
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(0.375rem);
-      }
-
-      .gal-embedded-viewer-body {
-        position: relative;
-        max-width: 95vw;
-        max-height: 90vh;
-        overflow: auto;
-        border-radius: 0.75rem;
-        box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.5);
-      }
-
-      .gal-embedded-viewer-close {
-        position: fixed;
-        top: 0.75rem;
-        right: 0.75rem;
-        z-index: 100000;
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
-        border: 0.0625rem solid rgba(255, 255, 255, 0.2);
-        background: linear-gradient(135deg, rgba(30, 30, 40, 0.95), rgba(50, 50, 70, 0.95));
-        backdrop-filter: blur(0.625rem);
-        color: #fff;
-        font-size: 0.85rem;
-        cursor: pointer;
-        box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.4);
-        transition: opacity 0.2s;
-      }
-
-      .gal-embedded-viewer-close:hover {
-        opacity: 0.85;
-      }
-
-      /* 全屏切换按钮 */
-      .gal-fullscreen-btn {
-        position: absolute;
-        top: 0.938rem;
-        right: 0.938rem;
-        z-index: 100;
-        background: rgba(43, 46, 56, 0.9);
-        color: ${THEME.accent};
-        border: 0.125rem solid ${THEME.accent};
-        padding: 0.625rem 1.125rem;
-        font-size: 0.9rem;
-        font-weight: 700;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        transition: all 0.2s;
-        font-family: 'Barlow', sans-serif;
-        border-radius: 0.25rem;
-        transform: scale(max(var(--ui-scale), 0.85));
-        transform-origin: top right;
-      }
-
-      .gal-fullscreen-btn:hover {
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-      }
-
-      .gal-fullscreen-btn i {
-        font-size: 1rem;
-      }
-
-      /* 地点时间状态栏容器 */
-      .gal-status-bar-container {
-        position: absolute;
-        top: 0.938rem;
-        right: 7.5rem; /* 在全屏按钮左侧 */
-        z-index: 100;
-        display: flex;
-        gap: 0.625rem;
-        align-items: center;
-        transform: scale(max(var(--ui-scale), 0.85));
-        transform-origin: top right;
-      }
-
-      /* 地点状态栏 */
-      .gal-location-bar {
-        background: rgba(43, 46, 56, 0.9);
-        color: #fff;
-        padding: 0 0.938rem;
-        height: 1.875rem;
-        line-height: 1.875rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        border-radius: 0.25rem;
-        border: 1px solid rgba(0, 210, 255, 0.5);
-        white-space: nowrap;
-        max-width: 21.875rem;
-        overflow: hidden; /* 父容器裁剪，防止溢出 */
-        display: flex;
-        align-items: center;
-      }
-
-      .gal-location-bar i {
-        color: ${THEME.accent};
-        margin-right: 0.5rem;
-        font-size: 0.9rem;
-        flex-shrink: 0; /* 图标不许缩小 */
-      }
-
-      .gal-location-text {
-        /* 移除省略号，以便脚本计算真实宽度 */
-        white-space: nowrap;
-        transform-origin: left center;
-        display: inline-block;
-      }
-
-      /* 时间状态栏 */
-      .gal-time-bar {
-        background: rgba(43, 46, 56, 0.9);
-        color: #fff;
-        padding: 0 0.938rem;
-        height: 1.875rem;
-        line-height: 1.875rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        border-radius: 0.25rem;
-        border: 1px solid rgba(255, 0, 85, 0.5);
-        white-space: nowrap;
-        max-width: 16.25rem; /* 增加一点宽度限制 */
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        /* justify-content: center;  移除居中，改为左对齐配合 padding/margin，方便缩放计算 */
-      }
-
-      .gal-time-bar i {
-        color: ${THEME.accentSub};
-        margin-right: 0.5rem;
-        font-size: 0.9rem;
-        flex-shrink: 0;
-      }
-
-      .gal-time-text {
-        white-space: nowrap;
-        transform-origin: left center;
-        display: inline-block;
-      }
-
-      /* 文字自动缩小效果 */
-      .gal-status-bar-container .auto-shrink {
-        display: inline-block;
-        transform-origin: left center;
-      }
-
-      /* 全屏模式下调整位置 */
-      #gal-global-overlay.fullscreen .gal-status-bar-container {
-        right: 8.125rem;
-      }
-
-      /* BGM 悬浮小组件 */
-      .gal-bgm-widget {
-        position: absolute;
-        top: 0.938rem;
-        left: 0.938rem;
-        z-index: 100;
-        background: rgba(43, 46, 56, 0.85);
-        backdrop-filter: blur(0.313rem);
-        padding: 0.5rem 0.938rem;
-        border-radius: 1.25rem;
-        color: #fff;
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        font-size: 0.85rem;
-        box-shadow: 0 0.25rem 0.625rem rgba(0,0,0,0.2);
-        transition: all 0.3s ease;
-        border: 1px solid rgba(255,255,255,0.1);
-        max-width: 2.5rem; /* 默认收起 */
-        overflow: hidden;
-        white-space: nowrap;
-        cursor: pointer;
-      }
-
-      .gal-bgm-widget:hover, .gal-bgm-widget.active {
-          max-width: 18.75rem;
-          background: rgba(43, 46, 56, 0.95);
-      }
-
-      .gal-bgm-icon {
-          color: ${THEME.accent};
-          animation: galSpin 4s linear infinite;
-          animation-play-state: paused;
-          font-size: 1.1rem;
-          min-width: 1.25rem;
-          text-align: center;
-      }
-
-      .gal-bgm-widget.playing .gal-bgm-icon {
-          animation-play-state: running;
-      }
-
-      @keyframes galSpin { 100% { transform: rotate(360deg); } }
-
-      .gal-bgm-info {
-          display: flex;
-          flex-direction: column;
-          line-height: 1.2;
-          overflow: hidden;
-          margin-right: 0.313rem;
-      }
-
-      .gal-bgm-title {
-          font-weight: bold;
-          font-size: 0.8rem;
-          color: ${THEME.accent};
-      }
-
-      .gal-bgm-ctrl {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-      }
-
-      .gal-bgm-btn {
-          background: none;
-          border: none;
-          color: #fff;
-          cursor: pointer;
-          font-size: 0.9rem;
-          padding: 0;
-          width: 1.25rem;
-      }
-      .gal-bgm-btn:hover { color: ${THEME.accent}; }
-
-      .gal-bgm-slider {
-          width: 3.75rem;
-          height: 0.25rem;
-          -webkit-appearance: none;
-          background: rgba(255,255,255,0.3);
-          border-radius: 0.125rem;
-          outline: none;
-      }
-      .gal-bgm-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          width: 0.625rem; height: 0.625rem;
-          background: #fff;
-          border-radius: 50%;
-          cursor: pointer;
-      }
-
-      /* 主容器 - 全屏沉浸式 */
-      .gal-game-container {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        background: transparent;
-        font-family: 'Noto Sans SC', sans-serif;
-        overflow: hidden;
-        border-radius: 0.75rem;
-        box-shadow: 0 0.25rem 1.25rem rgba(0,0,0,0.1);
-        box-sizing: border-box;
-      }
-
-      /* 全屏模式下无边距 */
-      #gal-global-overlay.fullscreen .gal-game-container {
-        border-radius: 0;
-        box-shadow: none;
-        padding: 0;
-      }
-
-      /* 背景层 - 填满整个 container（不缩放） */
-      .gal-layer-bg {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 0;
-        background: #f0f2f5;
-        overflow: hidden;
-      }
-
-      /* 背景切换层（双层交叉淡入） */
-      .gal-bg-layer {
-        position: absolute;
-        inset: 0;
-        background-repeat: no-repeat;
-        background-size: cover;
-        background-position: center;
-        opacity: 1;
-        transform: scale(1);
-        transition: opacity 0.45s ease, transform 0.45s ease;
-        will-change: opacity, transform;
-      }
-
-      .gal-bg-front {
-        opacity: 0;
-        transform: scale(1.03);
-      }
-
-      .gal-bg-front.is-active {
-        opacity: 1;
-        transform: scale(1);
-      }
-
-      .gal-layer-bg.generating-bg .gal-bg-layer {
-        opacity: 0 !important;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .gal-bg-layer {
-          transition: none !important;
-          transform: none !important;
-        }
-        .gal-bg-front {
-          opacity: 0;
-        }
-        .gal-bg-front.is-active {
-          opacity: 1;
-        }
-      }
-
-      /* 游戏内容层 */
-      .gal-game-content {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        z-index: 1;
-      }
-
-      .gal-layer-bg::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background-image: radial-gradient(#ccc 1px, transparent 1px);
-        background-size: 1.25rem 1.25rem;
-        opacity: 0.3;
-        pointer-events: none;
-      }
-
-      /* 有背景图片时隐藏默认点阵图案 */
-      .gal-layer-bg.has-bg::before {
-        display: none;
-      }
-
-      /* ═══════════════════════════════════════════════════════════════
-         背景生成中特效 - 高性能纯CSS动画
-         ═══════════════════════════════════════════════════════════════ */
-      .gal-layer-bg.generating-bg {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      }
-
-      /* 流动渐变背景动画 */
-      @keyframes galGenGradient {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-      }
-
-      /* 扫描线效果 */
-      .gal-layer-bg.generating-bg::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: repeating-linear-gradient(
-          0deg,
-          transparent,
-          transparent 0.125rem,
-          rgba(0, 210, 255, 0.03) 0.125rem,
-          rgba(0, 210, 255, 0.03) 0.25rem
-        );
-        opacity: 0.15;
-        pointer-events: none;
-      }
-
-      @keyframes galGenScanline {
-        0% { transform: translateY(-100%); }
-        100% { transform: translateY(100%); }
-      }
-
-
-      /* ═══════════════════════════════════════════════════════════════
-         立绘动画关键帧
-         ═══════════════════════════════════════════════════════════════ */
-      @keyframes galSpriteSlideInLeft {
-        from { transform: translateX(-6.25rem); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      @keyframes galSpriteSlideInRight {
-        from { transform: translateX(6.25rem); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      @keyframes galSpriteSlideInCenter {
-        from { transform: translateY(3.125rem); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
-      }
-      @keyframes galSpriteSlideOutLeft {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(-6.25rem); opacity: 0; }
-      }
-      @keyframes galSpriteSlideOutRight {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(6.25rem); opacity: 0; }
-      }
-      @keyframes galSpriteBreathing {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-0.188rem); }
-      }
-      @keyframes galSpriteShake {
-        0%, 100% { transform: translateX(0); }
-        20% { transform: translateX(-0.313rem); }
-        40% { transform: translateX(0.313rem); }
-        60% { transform: translateX(-0.188rem); }
-        80% { transform: translateX(0.188rem); }
-      }
-      @keyframes galSpriteBounce {
-        0% { transform: scale(1); }
-        30% { transform: scale(1.15); }
-        50% { transform: scale(0.95); }
-        70% { transform: scale(1.05); }
-        100% { transform: scale(1); }
-      }
-      @keyframes galSpriteExpressionChange {
-        0% { opacity: 0.7; transform: scale(0.98); }
-        100% { opacity: 1; transform: scale(1); }
-      }
-
-      /* 立绘层 - 多角色布局 (左/中/右) */
-      .gal-layer-character {
-        position: absolute;
-        bottom: 35%;
-        left: 0;
-        width: 100%;
-        height: 55%;
-        z-index: 5;
-        display: flex;
-        justify-content: center;
-        align-items: flex-end;
-        pointer-events: none;
-        padding: 0 3%;
-        gap: 2%;
-      }
-
-      /* Live2D 全局舞台画布：下置到 UI 层下方，避免视觉遮挡按钮/对话框 */
-      .gal-live2d-stage-canvas {
-        z-index: 4;
-        pointer-events: none;
-      }
-
-      /* Live2D 位置调整参考框 */
-      .gal-live2d-position-guide {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        z-index: 6;
-      }
-
-      .gal-live2d-position-guide-box {
-        position: absolute;
-        border: 0.125rem dashed rgba(0, 210, 255, 0.55);
-        border-radius: 0.625rem;
-        box-shadow: 0 0 1rem rgba(0, 210, 255, 0.28);
-        background: rgba(0, 0, 0, 0.06);
-      }
-
-      .gal-live2d-position-guide-label {
-        position: absolute;
-        top: -1.25rem;
-        left: 0;
-        font-size: 0.72rem;
-        line-height: 1;
-        color: #77dfff;
-        text-shadow: 0 0 0.375rem rgba(0, 0, 0, 0.5);
-        white-space: nowrap;
-      }
-
-      /* Live2D 位置调整工具栏 */
-      .gal-live2d-position-toolbar {
-        position: fixed;
-        left: 50%;
-        bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-        transform: translateX(-50%);
-        width: min(92vw, 36rem);
-        min-width: 20rem;
-        max-height: min(65vh, 33.75rem);
-        overflow-y: auto;
-        padding: 0.9375rem 1.125rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.6875rem;
-        border-radius: 0.9375rem;
-        border: 0.0625rem solid rgba(255, 255, 255, 0.16);
-        color: #fff;
-        background: linear-gradient(135deg, rgba(26, 28, 38, 0.97), rgba(42, 46, 64, 0.97));
-        backdrop-filter: blur(0.625rem);
-        box-shadow: 0 0.5rem 1.75rem rgba(0, 0, 0, 0.46);
-      }
-
-      .gal-live2d-position-row {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-      }
-
-      .gal-live2d-position-label {
-        min-width: 4.5rem;
-        font-size: 0.85rem;
-        color: rgba(255, 255, 255, 0.92);
-      }
-
-      .gal-live2d-position-slider {
-        flex: 1;
-        cursor: pointer;
-        accent-color: #00d2ff;
-      }
-
-      .gal-live2d-position-value {
-        min-width: 2.875rem;
-        text-align: right;
-        font-size: 0.9rem;
-        font-weight: 600;
-      }
-
-      .gal-live2d-position-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.625rem;
-        margin-top: 0.25rem;
-      }
-
-      .gal-live2d-position-btn {
-        border: none;
-        border-radius: 0.5rem;
-        padding: 0.5rem 0.875rem;
-        color: #fff;
-        cursor: pointer;
-        font-size: 0.85rem;
-      }
-
-      .gal-live2d-position-btn-reset {
-        background: rgba(255, 255, 255, 0.12);
-        border: 0.0625rem solid rgba(255, 255, 255, 0.2);
-      }
-
-      .gal-live2d-position-btn-cancel {
-        background: rgba(220, 53, 69, 0.82);
-      }
-
-      .gal-live2d-position-btn-save {
-        background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-        font-weight: 600;
-      }
-
-      @media screen and (max-width: 48rem), screen and (max-height: 46rem) {
-        .gal-live2d-position-toolbar {
-          top: calc(0.5rem + env(safe-area-inset-top, 0px));
-          bottom: auto;
-          width: calc(100vw - 1rem);
-          min-width: 0;
-          max-height: calc(72vh - env(safe-area-inset-top, 0px));
-          padding: 0.8125rem 0.8125rem 0.75rem;
-          border-radius: 0.75rem;
-        }
-
-        .gal-live2d-position-label {
-          min-width: 3.75rem;
-          font-size: 0.8rem;
-        }
-
-        .gal-live2d-position-value {
-          min-width: 2.5rem;
-          font-size: 0.85rem;
-        }
-
-        .gal-live2d-position-actions {
-          flex-wrap: wrap;
-          justify-content: stretch;
-          margin-top: 0.125rem;
-        }
-
-        .gal-live2d-position-btn {
-          flex: 1 1 calc(50% - 0.3125rem);
-          min-height: 2.25rem;
-          font-size: 0.82rem;
-          padding: 0.5rem 0.625rem;
-        }
-      }
-
-      /* 多角色槽位 */
-      .gal-char-slot {
-        position: relative;
-        flex: 0 0 30%;
-        max-width: 30%;
-        height: 100%;
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        pointer-events: auto;
-      }
-      .gal-char-slot.slot-left { order: 1; }
-      .gal-char-slot.slot-right { order: 2; }
-
-      .gal-char-container {
-        position: relative;
-        max-height: 100%;
-        /* --base-scale removed to allow inheritance */
-        --state-scale: 1;
-        /* scale moved to .gal-char-img to avoid conflict with transform animations on container */
-        transform-origin: bottom center;
-        max-width: 100%;
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        filter: drop-shadow(0 0.625rem 1.875rem rgba(0,0,0,0.4));
-        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-                    filter 0.3s ease,
-                    opacity 0.3s ease;
-        pointer-events: auto;
-        cursor: pointer;
-        animation: galSpriteBreathing 4s ease-in-out infinite;
-      }
-
-      /* 入场动画 */
-      .gal-char-container.entering-left { animation: galSpriteSlideInLeft 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
-      .gal-char-container.entering-center { animation: galSpriteSlideInCenter 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
-      .gal-char-container.entering-right { animation: galSpriteSlideInRight 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite; }
-
-      /* 退场动画 */
-      .gal-char-container.exiting-left { animation: galSpriteSlideOutLeft 0.4s ease-in forwards; pointer-events: none; }
-      .gal-char-container.exiting-right { animation: galSpriteSlideOutRight 0.4s ease-in forwards; pointer-events: none; }
-
-      /* 表情切换动画 */
-      .gal-char-container.expression-change { animation: galSpriteExpressionChange 0.3s ease-out; }
-
-      /* 说话者状态 - 基础样式 */
-      .gal-char-container.speaking {
-        --state-scale: 1.05;
-        z-index: 10;
-        filter: drop-shadow(0 0.938rem 2.5rem rgba(0,0,0,0.5));
-        position: relative;
-      }
-
-      .gal-char-container.silent {
-        --state-scale: 0.95;
-        filter: drop-shadow(0 0.313rem 0.938rem rgba(0,0,0,0.3));
-        z-index: 4;
-      }
-
-      /* 说话者光晕效果 - 仅在启用时生效 */
-      @keyframes speakingGlow {
-        0%, 100% {
-          filter: drop-shadow(0 0 0.5rem rgba(255, 215, 0, 0.7))
-                  drop-shadow(0 0 0.938rem rgba(255, 180, 0, 0.5))
-                  drop-shadow(0 0.938rem 1.875rem rgba(0,0,0,0.4));
-        }
-        50% {
-          filter: drop-shadow(0 0 0.938rem rgba(255, 215, 0, 0.9))
-                  drop-shadow(0 0 1.875rem rgba(255, 180, 0, 0.7))
-                  drop-shadow(0 0.938rem 1.875rem rgba(0,0,0,0.4));
-        }
-      }
-
-      .gal-layer-character.glow-enabled .gal-char-container.speaking {
-        animation: speakingGlow 2s ease-in-out infinite, galSpriteBreathing 4s ease-in-out infinite;
-      }
-
-      /* 漫画式对话气泡指示器 - 仅在启用时生效 */
-      @keyframes bubbleBounce {
-        0%, 100% { transform: translateY(0) scale(1); }
-        50% { transform: translateY(-0.5rem) scale(1.1); }
-      }
-
-      .gal-layer-character.bubble-enabled .gal-char-container.speaking::before {
-        content: '💬';
-        position: absolute;
-        top: -0.625rem;
-        right: 10%;
-        font-size: 2.5rem;
-        z-index: 100;
-        animation: bubbleBounce 1s ease-in-out infinite;
-        filter: drop-shadow(0.125rem 0.125rem 0.25rem rgba(0,0,0,0.5));
-      }
-
-      /* TTS 模式下的气泡样式 (只要开启TTS就显示喇叭) */
-      .gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking::before {
-        content: '\\f028' !important; /* FontAwesome 喇叭图标 */
-        font-family: "Font Awesome 6 Free";
-        font-weight: 900;
-        color: ${THEME.accent};
-        font-size: 2.2rem;
-      }
-
-      /* === 移动端适配：缩小TTS喇叭 === */
-      @media screen and (max-width: 48rem) {
-          .gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking::before {
-              font-size: 1.5rem !important; /* 移动端缩小字号 */
-              top: -0.3rem !important;      /* 微调位置 */
-              right: 5% !important;         /* 稍微靠里一点，避免贴边 */
-          }
-      }
-
-      /* 情绪特效 - 仅保留动画，移除滤镜 */
-      .gal-char-container[data-emotion="angry"] {
-        animation: galSpriteShake 0.4s ease-in-out 2, galSpriteBreathing 4s ease-in-out 0.8s infinite;
-      }
-      .gal-char-container[data-emotion="surprised"] {
-        animation: galSpriteBounce 0.5s ease-out, galSpriteBreathing 4s ease-in-out 0.5s infinite;
-      }
-
-
-      /* 场景色调 */
-      .gal-layer-character.scene-night {
-        filter: hue-rotate(-10deg) brightness(0.85) saturate(0.9);
-      }
-      .gal-layer-character.scene-night .gal-char-container {
-        filter: drop-shadow(0 0.625rem 1.875rem rgba(0,0,100,0.5));
-      }
-      .gal-layer-character.scene-indoor {
-        filter: sepia(0.08) brightness(1.02);
-      }
-      .gal-layer-character.scene-indoor .gal-char-container {
-        filter: drop-shadow(0 0.625rem 1.875rem rgba(100,50,0,0.3));
-      }
-
-      .gal-char-img {
-        max-height: 100%;
-        max-width: 100%;
-        height: auto;
-        width: auto;
-        object-fit: contain;
-        object-position: bottom center;
-        /* Apply scale here to avoid conflict with container animations */
-        transform: scale(calc(var(--base-scale, 1) * var(--state-scale)));
-        transform-origin: bottom center;
-        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      }
-
-      .gal-char-placeholder {
-        width: 12.5rem;
-        height: 21.875rem;
-        background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(240,240,240,0.9) 100%);
-        border: 0.25rem dashed #ccc;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        color: #999;
-        gap: 0.625rem;
-        border-radius: 0.625rem;
-        cursor: pointer;
-        transition: all 0.3s;
-        pointer-events: auto;
-      }
-
-      .gal-char-placeholder:hover {
-        border-color: ${THEME.accent};
-        color: ${THEME.accent};
-      }
-
-      .gal-char-placeholder i {
-        font-size: 4rem;
-      }
-
-      .gal-char-placeholder span {
-        font-size: 0.9rem;
-        font-weight: 600;
-      }
-
-      /* 对话框层 - 底部悬浮 */
-      .gal-dialog-layer {
-        position: absolute;
-        bottom: 1.25rem;
-        left: 10%;
-        right: 10%;
-        height: 30%; /* 相对高度 */
-        max-width: none;
-        z-index: 30;
-        pointer-events: auto;
-      }
-
-      /* 名字标签 */
-      .gal-name-badge {
-        position: absolute;
-        top: -1.375rem;
-        left: 0;
-        background: ${THEME.dark};
-        color: ${THEME.accent};
-        padding: 0.5rem 2.188rem 0.5rem 1.563rem;
-        font-size: 1.4rem;
-        font-weight: 900;
-        font-family: 'Barlow', sans-serif;
-        transform: skewX(-15deg) scale(var(--ui-scale));
-        transform-origin: bottom left;
-        z-index: 35;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-      }
-
-      .gal-name-badge span {
-        display: block;
-        transform: skewX(15deg);
-      }
-
-      /* 隐藏立绘按钮 - 位于名字标签右侧 */
-      .gal-sprite-toggle {
-        position: absolute;
-        top: -1.375rem;
-        left: auto;
-        right: -2.5rem;
-        width: 2.2rem;
-        height: 2.2rem;
-        background: ${THEME.dark};
-        border: none;
-        border-radius: 0.375rem;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transform: scale(var(--ui-scale));
-        transform-origin: bottom left;
-        z-index: 35;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-        transition: all 0.2s ease;
-        opacity: 0.8;
-      }
-
-      .gal-sprite-toggle:hover {
-        opacity: 1;
-        background: ${THEME.accent};
-      }
-
-      .gal-sprite-toggle:hover .gal-eye-icon {
-        color: ${THEME.dark};
-      }
-
-      .gal-eye-icon {
-        font-size: 1.2rem;
-        color: ${THEME.accent};
-        transition: color 0.2s ease;
-        transform: skewX(0deg);
-      }
-
-      /* 立绘隐藏状态 */
-      .gal-sprite-toggle.sprites-hidden {
-        background: rgba(100, 100, 100, 0.8);
-      }
-
-      .gal-sprite-toggle.sprites-hidden .gal-eye-icon {
-        color: #999;
-      }
-
-      .gal-sprite-toggle.sprites-hidden:hover {
-        background: ${THEME.accent};
-      }
-
-      .gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon {
-        color: ${THEME.dark};
-      }
-
-      /* 立绘层隐藏时的样式 */
-      .gal-layer-character.sprites-hidden {
-        opacity: 0 !important;
-        pointer-events: none !important;
-        transition: opacity 0.3s ease;
-      }
-
-      .gal-narrator-label {
-        background: #666;
-        color: #fff;
-      }
-
-      /* CG 缩略图 */
-      .gal-cg-thumbnail {
-        max-height: 3.5rem;
-        border-radius: 0.25rem;
-        vertical-align: middle;
-        margin-right: 0.5rem;
-        cursor: pointer;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      }
-
-      /* CG 全屏查看器 */
-      .gal-cg-viewer {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.92);
-        z-index: 100;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-      }
-
-      .gal-cg-viewer-img {
-        max-width: 90%;
-        max-height: 90%;
-        object-fit: contain;
-        border-radius: 0.5rem;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-      }
-
-      .gal-cg-viewer-close {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        background: rgba(255,255,255,0.15);
-        border: none;
-        color: #fff;
-        width: 2.5rem;
-        height: 2.5rem;
-        border-radius: 50%;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.2rem;
-        transition: background 0.2s ease;
-      }
-
-      .gal-cg-viewer-close:hover {
-        background: rgba(255,255,255,0.3);
-      }
-
-      .gal-cg-viewer-loading {
-        color: rgba(255,255,255,0.6);
-        font-size: 1.1rem;
-      }
-
-      /* 生成中状态指示器 */
-      .gal-generating-status {
-        position: absolute;
-        top: -3.75rem;
-        left: 50%;
-        transform: translateX(-50%) scale(0.8);
-        background: linear-gradient(135deg, ${THEME.accent} 0%, #ff6b9d 100%);
-        color: #fff;
-        padding: 0.5rem 1.25rem;
-        font-size: 0.9rem;
-        font-weight: 700;
-        border-radius: 1.25rem;
-        box-shadow: 0 0.25rem 0.938rem rgba(0,0,0,0.3);
-        opacity: 0;
-        transition: all 0.3s ease;
-        pointer-events: none;
-        z-index: 50;
-      }
-
-      .gal-generating-status.show {
-        opacity: 1;
-        transform: translateX(-50%) scale(1);
-      }
-
-      /* 交互栏 - 对话框上方右侧 */
-      .gal-interaction-bar {
-        position: absolute;
-        top: -3.438rem;
-        right: 0;
-        display: flex;
-        gap: 0.938rem;
-        z-index: 35;
-        transform: scale(var(--ui-scale));
-        transform-origin: bottom right;
-      }
-
-      .gal-action-btn {
-        padding: 0.75rem 1.875rem;
-        font-weight: 700;
-        font-size: 1.1rem;
-        cursor: pointer;
-        transform: skewX(-15deg);
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        border: 0.125rem solid transparent;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-        font-family: 'Noto Sans SC', sans-serif;
-        /* 修复默认样式 - 确保按钮可见 */
-        background: ${THEME.white};
-        color: ${THEME.dark};
-        border-color: ${THEME.dark};
-      }
-
-      .gal-action-btn span, .gal-action-btn i {
-        transform: skewX(15deg);
-      }
-
-      /* 基础悬停效果 */
-      .gal-action-btn:hover {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        transform: skewX(-15deg) translateY(-0.188rem);
-        box-shadow: 0.313rem 0.5rem 0 rgba(0,0,0,0.3);
-      }
-
-      .gal-action-btn.btn-reroll {
-        background: ${THEME.white};
-        color: ${THEME.dark};
-        border-color: ${THEME.dark};
-      }
-
-      .gal-action-btn.btn-reroll:hover {
-        background: ${THEME.dark};
-        color: ${THEME.accent};
-        transform: skewX(-15deg) translateY(-0.188rem);
-        box-shadow: 0.313rem 0.5rem 0 ${THEME.accent};
-      }
-
-      .gal-action-btn.btn-free {
-        background: ${THEME.accentSub};
-        color: #fff;
-        border-color: ${THEME.accentSub};
-      }
-
-      .gal-action-btn.btn-free:hover {
-        background: ${THEME.dark};
-        color: ${THEME.accentSub};
-        border-color: ${THEME.dark};
-        transform: skewX(-15deg) translateY(-0.188rem);
-        box-shadow: 0.313rem 0.5rem 0 ${THEME.accentSub};
-      }
-
-      /* 文本主面板 - 布局重构 */
-      .gal-text-panel {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        box-sizing: border-box; /* 确保内边距不撑开容器 */
-
-        /* 视觉样式 */
-        background: rgba(255, 255, 255, 0.95);
-        background-image: linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, 0.1) 95%, rgba(0, 210, 255, 0.1) 100%);
-        background-size: 1.25rem 1.25rem;
-        box-shadow: 0 0.625rem 1.875rem rgba(0,0,0,0.15);
-        border-radius: 0;
-
-        /* 内边距 */
-        padding: 2.5rem 3.75rem 5rem 3.75rem;
-
-        /* 行为控制：允许垂直滚动以防内容被截断，但隐藏滚动条保持美观 */
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        scrollbar-width: none; /* Firefox 隐藏滚动条 */
-      }
-
-      /* Webkit (Chrome/Safari/Edge) 隐藏滚动条 */
-      .gal-text-panel::-webkit-scrollbar {
-        display: none;
-      }
-
-      .gal-dialog-text {
-        font-size: calc(1.25rem * var(--ui-scale) * var(--font-scale, 1));
-        line-height: 1.9;
-        color: #333;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-      }
-
-      /* ========== 文字特效样式 ========== */
-
-      /* 毛玻璃效果 */
-      .gal-text-panel.text-effect-glass {
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        background: rgba(255, 255, 255, 0.7) !important;
-      }
-
-      /* 底部渐变遮罩 */
-      .gal-text-panel.text-effect-gradient::before {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 50%;
-        background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.3) 50%, transparent 100%);
-        pointer-events: none;
-        z-index: 1;
-      }
-
-      .gal-text-panel.text-effect-gradient .gal-dialog-text {
-        position: relative;
-        z-index: 2;
-      }
-
-      .gal-text-panel.text-effect-gradient .gal-name-badge {
-        z-index: 3;
-      }
-
-      /* 独立文字背景 */
-      .gal-text-panel.text-effect-text-bg {
-        background: transparent !important;
-        background-image: none !important;
-        box-shadow: none !important;
-      }
-
-      /* TTS 加载指示器 */
-      .gal-tts-loading {
-        position: absolute;
-        top: auto;
-        bottom: 1rem;
-        right: 1.5rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
-        padding: 0;
-        background: rgba(255, 255, 255, 0.95);
-        border: 0.125rem solid ${THEME.accent};
-        border-radius: 50%;
-        color: ${THEME.accent};
-        box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
-        opacity: 0;
-        transform: scale(0.8);
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        pointer-events: none;
-        z-index: 10;
-      }
-
-      .gal-tts-loading.active {
-        opacity: 1;
-        transform: scale(1);
-      }
-
-      .gal-tts-loading i {
-        font-size: 1rem;
-        color: ${THEME.accent};
-      }
-
-      /* 生成中特效 - 动态打字机效果 */
-      .gal-generating-indicator {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 1.25rem 2.5rem;
-        background: rgba(255, 255, 255, 0.98);
-        border: 0.188rem solid ${THEME.accent};
-        border-radius: 1rem;
-        box-shadow: 0 0.5rem 2rem rgba(0, 210, 255, 0.3);
-        z-index: 20;
-        opacity: 0;
-        visibility: hidden;
-        transition: all 0.3s ease;
-      }
-
-      .gal-generating-indicator.active {
-        opacity: 1;
-        visibility: visible;
-      }
-
-      .gal-generating-indicator .gal-gen-icon {
-        font-size: 2.5rem;
-        color: ${THEME.accent};
-        animation: galGenPulse 1.5s ease-in-out infinite;
-      }
-
-      .gal-generating-indicator .gal-gen-text {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: ${THEME.dark};
-        letter-spacing: 0.05em;
-      }
-
-      .gal-generating-indicator .gal-gen-status {
-        font-size: 0.85rem;
-        color: #666;
-        max-width: 17.5rem;
-        text-align: center;
-        min-height: 1.2em;
-      }
-
-      .gal-generating-indicator .gal-gen-dots {
-        display: flex;
-        gap: 0.375rem;
-        margin-top: 0.25rem;
-      }
-
-      .gal-generating-indicator .gal-gen-dot {
-        width: 0.5rem;
-        height: 0.5rem;
-        background: ${THEME.accent};
-        border-radius: 50%;
-        animation: galGenDotBounce 1.4s ease-in-out infinite both;
-      }
-
-      .gal-generating-indicator .gal-gen-dot:nth-child(1) { animation-delay: -0.32s; }
-      .gal-generating-indicator .gal-gen-dot:nth-child(2) { animation-delay: -0.16s; }
-
-      @keyframes galGenPulse {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.1); opacity: 0.8; }
-      }
-
-      @keyframes galGenDotBounce {
-        0%, 80%, 100% { transform: scale(0); }
-        40% { transform: scale(1); }
-      }
-
-      /* 底部工具栏 - 两端对齐，紧凑布局 */
-      .gal-bottom-toolbar {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: auto;
-        min-height: 3.75rem;
-        padding: 0.625rem 1.875rem 0 1.875rem;
-        box-sizing: border-box;
-        display: flex;
-        align-items: flex-end;
-        justify-content: space-between;
-        pointer-events: none;
-        z-index: 100;
-      }
-
-      .gal-bottom-toolbar > * {
-        pointer-events: auto;
-      }
-
-
-      /* 左侧按钮组容器 */
-      .gal-toolbar-left, .gal-toolbar-right {
-        display: flex;
-        align-items: flex-end;
-        gap: 0.5rem; /* 减小间距 */
-      }
-
-      /* 普通按钮 - 缩小尺寸 */
-      .gal-footer-btn {
-        background: rgba(255, 255, 255, 0.9) !important;
-        color: ${THEME.dark} !important;
-        padding: 0 calc(0.75rem * var(--ui-scale)) !important;
-        font-family: ${THEME.fontEng} !important;
-        font-weight: 800 !important;
-        font-size: calc(0.85rem * var(--ui-scale)) !important;
-        cursor: pointer !important;
-        transition: all 0.2s !important;
-        border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: calc(0.375rem * var(--ui-scale)) !important;
-        height: calc(2.25rem * var(--ui-scale)) !important;
-        transform: skewX(-10deg) !important;
-        box-shadow: calc(0.125rem * var(--ui-scale)) calc(0.125rem * var(--ui-scale)) 0 rgba(0,0,0,0.1) !important;
-        border-radius: 0 !important;
-      }
-
-      .gal-footer-btn i, .gal-footer-btn span {
-        transform: skewX(10deg) !important;
-        font-size: calc(1rem * var(--ui-scale)) !important;
-      }
-
-      .gal-footer-btn:hover {
-        background: ${THEME.dark} !important;
-        color: #fff !important;
-        transform: skewX(-10deg) translateY(-0.125rem) !important;
-        box-shadow: 0.25rem 0.25rem 0 rgba(0,0,0,0.2) !important;
-      }
-
-      /* NEXT 按钮 - 保持醒目但在此基础上微调 */
-      .gal-footer-btn-next {
-        background: ${THEME.dark} !important;
-        color: #fff !important;
-        font-size: calc(1.3rem * var(--ui-scale)) !important;
-        font-weight: 800 !important;
-        padding: 0 calc(2.5rem * var(--ui-scale)) !important;
-        height: calc(3.438rem * var(--ui-scale)) !important;
-        min-width: calc(8.75rem * var(--ui-scale)) !important;
-        border-radius: 0 !important;
-        border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
-        margin-left: calc(0.938rem * var(--ui-scale)) !important;
-        margin-right: 0 !important;
-        display: flex !important;
-        flex-direction: row !important;
-        align-items: center !important;
-        justify-content: center !important;
-        gap: calc(0.625rem * var(--ui-scale)) !important;
-        white-space: nowrap !important;
-        line-height: 1 !important;
-        box-shadow: calc(0.25rem * var(--ui-scale)) calc(0.25rem * var(--ui-scale)) 0 rgba(0,0,0,0.2) !important;
-        flex-shrink: 0 !important;
-        clip-path: polygon(calc(1.563rem * var(--ui-scale)) 0, 100% 0, 100% 100%, 0% 100%) !important;
-        transition: all 0.2s ease !important;
-        transform: none !important;
-      }
-
-      .gal-footer-btn-next:hover {
-        background: ${THEME.accent} !important;
-        color: ${THEME.dark} !important;
-        transform: translateX(-0.188rem) !important;
-      }
-
-      .gal-footer-btn-next i {
-        font-size: 1.1rem !important;
-        margin: 0 !important;
-      }
-
-      /* 桌面中等宽度优化：只缩窄其他按钮，保证 NEXT 可见 */
-      .gal-bottom-toolbar {
-        justify-content: flex-start;
-        gap: calc(0.25rem * var(--ui-scale));
-        padding: 0.625rem 0.75rem 0 0.75rem;
-        overflow: visible;
-      }
-
-      .gal-footer-btn {
-        padding: 0 calc(0.55rem * var(--ui-scale)) !important;
-        gap: calc(0.25rem * var(--ui-scale)) !important;
-        font-size: calc(0.78rem * var(--ui-scale)) !important;
-      }
-
-      .gal-footer-btn i,
-      .gal-footer-btn span {
-        font-size: calc(0.9rem * var(--ui-scale)) !important;
-      }
-
-      .gal-pending-choices-btn {
-        padding: 0 calc(0.7rem * var(--ui-scale)) !important;
-        height: calc(2.45rem * var(--ui-scale)) !important;
-        font-size: calc(0.78rem * var(--ui-scale)) !important;
-        margin-left: auto !important;
-        margin-right: 0 !important;
-      }
-
-      .gal-footer-btn-next {
-        margin-left: calc(0.375rem * var(--ui-scale)) !important;
-        margin-right: 0 !important;
-        min-width: calc(7.25rem * var(--ui-scale)) !important;
-        padding: 0 calc(1.9rem * var(--ui-scale)) !important;
-      }
-
-      /* 进度指示器 */
-      .gal-progress-indicator {
-        font-family: 'Barlow', sans-serif;
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: #888;
-        padding: 0.375rem 0.625rem;
-        display: flex;
-        align-items: center;
-        height: 2.25rem;
-      }
-
-      /* 导航按钮 (PREV, AUTO, SKIP) - 统一样式 */
-      .gal-nav-btn {
-        /* 使用与 .gal-footer-btn 相同的样式 */
-      }
-
-      .gal-nav-btn.active {
-        background: ${THEME.accent} !important;
-        color: ${THEME.dark} !important;
-        box-shadow: inset 1px 1px 0.188rem rgba(0,0,0,0.2) !important;
-      }
-
-      /* AUTO 播放中状态 */
-      .gal-auto-playing {
-        background: ${THEME.accentSub} !important;
-        color: #fff !important;
-        border-color: ${THEME.accentSub} !important;
-        animation: galPulse 1s infinite;
-      }
-
-      @keyframes galPulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.8; }
-      }
-
-      /* 自由输入弹窗 */
-      .gal-input-modal,
-      #gal-free-input-modal {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.5);
-        backdrop-filter: blur(0.25rem);
-        z-index: var(--gal-z-modal) !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: galFadeIn 0.2s ease;
-      }
-
-      /* Live2D 设置弹窗 - 确保最高层级 */
-      #gal-live2d-settings-modal {
-        z-index: var(--gal-z-modal-critical) !important;
-      }
-
-      @keyframes galFadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-
-      .gal-input-box {
-        background: ${THEME.white};
-        border: 0.188rem solid ${THEME.dark};
-        box-shadow: 0.625rem 0.625rem 0 rgba(0,0,0,0.15);
-        width: 90%;
-        max-width: 31.25rem;
-        padding: 1.563rem;
-      }
-
-      .gal-input-title {
-        font-family: 'Barlow', sans-serif;
-        font-size: 1.3rem;
-        font-weight: 800;
-        color: ${THEME.dark};
-        margin-bottom: 0.938rem;
-        transform: skewX(-5deg);
-      }
-
-      .gal-input-title span {
-        transform: skewX(5deg);
-        display: block;
-      }
-
-      .gal-input-field {
-        width: 100%;
-        border: 0.125rem solid ${THEME.dark};
-        padding: 0.75rem 0.938rem;
-        font-size: 1rem;
-        font-family: 'Noto Sans SC', sans-serif;
-        resize: vertical;
-        min-height: 5rem;
-        box-sizing: border-box;
-      }
-
-      .gal-input-field:focus {
-        outline: none;
-        border-color: ${THEME.accent};
-        box-shadow: 0 0 0 0.188rem rgba(0, 210, 255, 0.2);
-      }
-
-      .gal-input-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.625rem;
-        margin-top: 0.938rem;
-      }
-
-      /* Toast 通知 */
-      .gal-toast {
-        position: fixed;
-        bottom: 1.875rem;
-        right: 1.875rem;
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        padding: 0.75rem 1.563rem;
-        font-weight: 600;
-        transform: skewX(-5deg);
-        box-shadow: 0.313rem 0.313rem 0 ${THEME.accent};
-        z-index: var(--gal-z-toast);
-        animation: galToastIn 0.3s ease;
-      }
-
-      .gal-toast span {
-        display: block;
-        transform: skewX(5deg);
-      }
-
-      @keyframes galToastIn {
-        from { opacity: 0; transform: skewX(-5deg) translateY(1.25rem); }
-        to { opacity: 1; transform: skewX(-5deg) translateY(0); }
-      }
-
-      /* 立绘配置弹窗 */
-      .gal-input-modal,
-      .gal-config-modal {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.6);
-        backdrop-filter: blur(0.375rem);
-        z-index: var(--gal-z-modal-critical) !important; /* Fix: Ensure it's above fullscreen overlay (99999) */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      /* 远程压缩导入进度遮罩层 - 强制置顶显示 */
-      .gal-import-progress-overlay {
-        z-index: var(--gal-z-modal-critical) !important;
-      }
-
-      /* 移动端：进度框下移，避免过靠上 */
-      @media screen and (max-width: 48rem) {
-        .gal-import-progress-box {
-          transform: translateY(8vh);
-        }
-      }
-
-      .gal-config-panel {
-        background: ${THEME.white};
-        border: none !important;
-        box-shadow: none !important;
-        width: 100% !important;
-        height: 100% !important;
-        max-width: none !important;
-        max-height: none !important;
-        display: flex;
-        flex-direction: column;
-        border-radius: 0 !important;
-      }
-
-      .gal-config-header {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        padding: 0.938rem 1.563rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .gal-config-title {
-        font-family: 'Barlow', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 800;
-        color: ${THEME.accent};
-      }
-
-      .gal-config-close {
-        background: transparent;
-        border: 0.125rem solid ${THEME.white};
-        color: ${THEME.white};
-        width: 2rem;
-        height: 2rem;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-      }
-
-      .gal-config-close:hover {
-        background: ${THEME.accentSub};
-        border-color: ${THEME.accentSub};
-      }
-
-      .gal-config-body {
-        padding: 1.563rem;
-        overflow-y: auto;
-        flex: 1;
-      }
-
-      .gal-sprite-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(9.375rem, 1fr));
-        gap: 0.938rem;
-      }
-
-      .gal-sprite-card {
-        border: 0.125rem solid #eee;
-        padding: 0.625rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .gal-sprite-card:hover {
-        border-color: ${THEME.accent};
-        box-shadow: 0 0.25rem 0.75rem rgba(0, 210, 255, 0.15);
-      }
-
-      /* 立绘预览图 - 固定2:3长宽比 */
-      .gal-sprite-preview {
-        width: 100%;
-        aspect-ratio: 2 / 3;
-        object-fit: cover;
-        object-position: top center;
-        background: #f9f9f9;
-        border-radius: 0.25rem;
-        margin-bottom: 0.5rem;
-      }
-
-      /* 立绘裁剪工具 */
-      .gal-crop-container {
-        position: relative;
-        width: 100%;
-        overflow: visible;
-        background: #1a1a2e;
-        border-radius: 0.5rem;
-      }
-
-      .gal-crop-canvas-wrapper {
-        position: relative;
-        width: 100%;
-        height: 23.75rem;
-        overflow: hidden;
-        cursor: move;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #1a1a2e;
-        border-radius: 0.5rem 0.5rem 0 0;
-      }
-
-      #gal-crop-canvas {
-        display: block;
-      }
-
-      .gal-crop-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        pointer-events: none;
-      }
-
-      .gal-crop-frame {
-        position: absolute;
-        border: 0.188rem solid ${THEME.accent};
-        box-shadow: 0 0 0 624.938rem rgba(0,0,0,0.6);
-        pointer-events: none;
-      }
-
-      .gal-crop-controls {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.938rem;
-        padding: 0.75rem 1.25rem;
-        background: rgba(0,0,0,0.8);
-        border-radius: 0 0 0.5rem 0.5rem;
-      }
-
-      .gal-crop-controls .gal-crop-btn {
-        padding: 0.5rem 1rem;
-        min-width: 3.75rem;
-        font-size: 0.9rem;
-      }
-
-      .gal-crop-zoom-slider {
-        width: 9.375rem;
-        accent-color: ${THEME.accent};
-      }
-
-      .gal-crop-zoom-label {
-        color: #fff;
-        font-size: 0.85rem;
-        font-weight: 600;
-        min-width: 2.813rem;
-      }
-
-      .gal-crop-btn {
-        padding: 0.5rem 1rem;
-        border: none;
-        border-radius: 0.25rem;
-        cursor: pointer;
-        font-weight: 600;
-        transition: all 0.2s;
-      }
-
-      .gal-crop-btn.reset {
-        background: #666;
-        color: #fff;
-      }
-
-      .gal-crop-btn.reset:hover {
-        background: #888;
-      }
-
-      /* 批量上传网格 */
-      .gal-batch-upload-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.938rem;
-        max-height: 60vh;
-        overflow-y: auto;
-        padding: 0.313rem;
-      }
-
-      .gal-batch-upload-card {
-        border: 0.125rem dashed #ccc;
-        border-radius: 0.5rem;
-        padding: 0.75rem;
-        text-align: center;
-        transition: all 0.2s;
-        background: #fafafa;
-      }
-
-      .gal-batch-upload-card:hover {
-        border-color: ${THEME.accent};
-        background: rgba(0, 210, 255, 0.05);
-      }
-
-      .gal-batch-upload-card.has-image {
-        border-style: solid;
-        border-color: ${THEME.accent};
-      }
-
-      .gal-batch-upload-card .expression-label {
-        font-weight: 700;
-        color: ${THEME.dark};
-        margin-bottom: 0.625rem;
-        font-size: 0.9rem;
-      }
-
-      .gal-batch-upload-card .upload-preview {
-        width: 100%;
-        aspect-ratio: 2 / 3;
-        background: #eee;
-        border-radius: 0.375rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        overflow: hidden;
-        margin-bottom: 0.5rem;
-      }
-
-      .gal-batch-upload-card .upload-preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: top center;
-      }
-
-      .gal-batch-upload-card .upload-preview i {
-        font-size: 2rem;
-        color: #bbb;
-      }
-
-      .gal-batch-upload-card .upload-preview:hover i {
-        color: ${THEME.accent};
-      }
-
-      .gal-batch-upload-card .remove-btn {
-        background: ${THEME.accentSub};
-        color: #fff;
-        border: none;
-        padding: 0.25rem 0.625rem;
-        border-radius: 0.25rem;
-        font-size: 0.75rem;
-        cursor: pointer;
-        display: none;
-      }
-
-      .gal-batch-upload-card.has-image .remove-btn {
-        display: inline-block;
-      }
-
-      .gal-sprite-label {
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: ${THEME.dark};
-        line-height: 1.3;
-      }
-
-      .gal-sprite-label small {
-        font-weight: 400;
-        color: #888;
-      }
-
-      /* 上传卡片 */
-      .gal-upload-card {
-        border: 0.125rem dashed #ccc;
-        padding: 1.25rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.5rem;
-        color: #999;
-        min-height: 7.5rem;
-      }
-
-      .gal-upload-card:hover {
-        border-color: ${THEME.accent};
-        color: ${THEME.accent};
-        background: rgba(0, 210, 255, 0.05);
-      }
-
-      .gal-upload-card i {
-        font-size: 2rem;
-      }
-
-      .gal-action-btn.primary {
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-        border-color: ${THEME.accent};
-      }
-
-      .gal-action-btn.primary:hover {
-        background: ${THEME.dark};
-        color: ${THEME.accent};
-      }
-
-      /* ═══════════════════════════════════════════════════════════════
-         选项面板 - 从骰子系统监控并重新渲染
-         ═══════════════════════════════════════════════════════════════ */
-
-      /* 选项层 - 全屏覆盖（无模糊背景） */
-      #gal-layer-choices {
-        position: fixed !important;
-        inset: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        background: rgba(0, 0, 0, 0.4) !important;
-        z-index: var(--gal-z-modal-critical) !important;
-        display: none;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: 0.938rem;
-        padding: 1.25rem;
-      }
-
-      #gal-layer-choices.active {
-        display: flex !important;
-        animation: galFadeIn 0.3s ease;
-      }
-
-      .gal-choices-container {
-        width: 100%;
-        max-width: 32rem;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.75rem;
-        max-height: calc(100vh - 10rem);
-        overflow-y: auto;
-        padding: 0 0.5rem;
-        box-sizing: border-box;
-      }
-
-      /* 选项标题 */
-      .gal-choices-title {
-        font-family: 'Barlow', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 900;
-        color: ${THEME.white};
-        text-transform: uppercase;
-        letter-spacing: 0.125rem;
-        margin-bottom: 0.5rem;
-        transform: skewX(-10deg);
-      }
-
-      .gal-choices-title span {
-        display: block;
-        transform: skewX(10deg);
-      }
-
-      /* 选项卡片 - 缩小字体，自适应宽度 */
-      .gal-choice-card {
-        background: ${THEME.white};
-        color: ${THEME.dark};
-        padding: 0.75rem 1.875rem;
-        min-width: 12.5rem;
-        max-width: 90%;
-        width: auto;
-        text-align: center;
-        font-weight: 600;
-        font-size: 0.95rem;
-        line-height: 1.4;
-        border: 0.125rem solid ${THEME.dark};
-        box-shadow: 0.375rem 0.375rem 0 rgba(0,0,0,0.15);
-        transform: skewX(-8deg);
-        cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-        position: relative;
-        overflow: hidden;
-        word-break: break-word;
-      }
-
-      .gal-choice-card span {
-        display: block;
-        transform: skewX(8deg);
-      }
-
-      .gal-choice-card:hover {
-        background: ${THEME.accent};
-        color: #fff;
-        border-color: ${THEME.dark};
-        transform: skewX(-8deg) translate(-0.188rem, -0.188rem);
-        box-shadow: 0.563rem 0.563rem 0 ${THEME.dark};
-      }
-
-      .gal-choice-card::after {
-        content: '';
-        display: none;
-      }
-
-      /* 关闭提示 */
-      .gal-choices-hint {
-        font-size: 0.8rem;
-        color: rgba(255,255,255,0.7);
-        margin-top: 0.938rem;
-      }
-
-      /* 进度条容器 - 在对话框层底部作为边框 */
-      .gal-dialog-layer .gal-progress-container {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 0.375rem;
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 0;
-        margin: 0;
-        z-index: 10;
-        overflow: hidden;
-        position: relative;
-        min-width: 3.75rem;
-      }
-
-      /* 进度条滑块 */
-      .gal-progress-bar {
-        height: 100%;
-        background: linear-gradient(90deg, ${THEME.accent} 0%, #00a8cc 100%);
-        width: 0%;
-        border-radius: 0;
-        transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-        box-shadow: 0 0 0.625rem ${THEME.accent};
-      }
-
-      /* 待选择提示按钮 - 在工具栏内 */
-      .gal-pending-choices-btn {
-        background: linear-gradient(135deg, ${THEME.accentSub} 0%, #cc0044 100%) !important;
-        color: #fff !important;
-        padding: 0 calc(0.72rem * var(--ui-scale)) !important;
-        font-weight: 700 !important;
-        font-size: calc(0.78rem * var(--ui-scale)) !important;
-        cursor: pointer !important;
-        display: flex !important; /* 强制常驻显示 */
-        align-items: center !important;
-        gap: calc(0.25rem * var(--ui-scale)) !important;
-        border: calc(0.125rem * var(--ui-scale)) solid ${THEME.dark} !important;
-        height: calc(2.25rem * var(--ui-scale)) !important;
-        margin-right: calc(0.188rem * var(--ui-scale)) !important;
-        border-radius: 0 !important;
-        transform: skewX(-10deg);
-      }
-
-      .gal-pending-choices-btn.show {
-        display: flex !important;
-        -webkit-animation: galPendingPulse 2s ease-in-out infinite !important;
-        animation: galPendingPulse 2s ease-in-out infinite !important;
-      }
-
-      .gal-pending-choices-btn i, .gal-pending-choices-btn span {
-        transform: skewX(10deg) !important;
-      }
-
-      .gal-pending-choices-btn i {
-        font-size: calc(0.9rem * var(--ui-scale)) !important;
-        margin: 0 !important;
-      }
-
-      .gal-pending-choices-btn:hover {
-        filter: brightness(1.1) !important;
-        transform: skewX(-10deg) translateY(-0.125rem) !important;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2) !important;
-      }
-
-      @-webkit-keyframes galPendingPulse {
-        0%, 100% {
-            box-shadow:
-                inset 0 0 0.938rem rgba(255,255,255,0.3),
-                0 0 0.938rem rgba(255, 215, 0, 0.6),
-                0 0 1.563rem rgba(255, 215, 0, 0.4),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1);
-        }
-        50% {
-            box-shadow:
-                inset 0 0 1.875rem rgba(255,255,255,0.6),
-                0 0 1.875rem rgba(255, 215, 0, 0.8),
-                0 0 3.125rem rgba(255, 215, 0, 0.5),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1.25);
-        }
-      }
-
-      @keyframes galPendingPulse {
-        0%, 100% {
-            box-shadow:
-                inset 0 0 0.938rem rgba(255,255,255,0.3),
-                0 0 0.938rem rgba(255, 215, 0, 0.6),
-                0 0 1.563rem rgba(255, 215, 0, 0.4),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1);
-        }
-        50% {
-            box-shadow:
-                inset 0 0 1.875rem rgba(255,255,255,0.6),
-                0 0 1.875rem rgba(255, 215, 0, 0.8),
-                0 0 3.125rem rgba(255, 215, 0, 0.5),
-                0.188rem 0.188rem 0 rgba(0,0,0,0.1);
-            filter: brightness(1.25);
-        }
-      }
-
-      .gal-pending-choices-btn.gal-new-option-highlight {
-        -webkit-animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
-        animation: galNewOptionPop 0.6s ease-out, galPendingPulse 2s ease-in-out infinite !important;
-      }
-
-      @-webkit-keyframes galNewOptionPop {
-        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
-        50% { transform: skewX(-10deg) scale(1.1); }
-        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
-      }
-
-      @keyframes galNewOptionPop {
-        0% { transform: skewX(-10deg) scale(0.95); opacity: 0.8; }
-        50% { transform: skewX(-10deg) scale(1.1); }
-        100% { transform: skewX(-10deg) scale(1); opacity: 1; }
-      }
-
-      /* Galgame 开启按钮 (注入到消息中) */
-      .gal-open-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.313rem;
-        padding: 0.125rem 0.5rem;
-        background: transparent;
-        color: ${THEME.accent};
-        border: 1px solid ${THEME.accent};
-        border-radius: 0.25rem;
-        font-size: 0.75rem;
-        cursor: pointer;
-        opacity: 0.6;
-        transition: all 0.2s;
-        margin-left: 0.313rem;
-        font-family: 'Noto Sans SC', sans-serif;
-      }
-
-      .gal-open-btn:hover {
-        opacity: 1;
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-      }
-
-      /* 历史记录模态框 */
-      .gal-history-modal {
-        position: fixed !important;
-        top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
-        background: rgba(0,0,0,0.85) !important;
-        backdrop-filter: blur(0.313rem) !important;
-        z-index: var(--gal-z-modal-critical) !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: galFadeIn 0.3s ease;
-      }
-
-      .gal-history-panel {
-        background: ${THEME.white};
-        border: 0.125rem solid ${THEME.accent};
-        box-shadow: 0 0 1.25rem rgba(0, 210, 255, 0.3);
-        width: 80%;
-        max-width: 50rem;
-        height: 80vh;
-        display: flex;
-        flex-direction: column;
-        border-radius: 0.5rem;
-        overflow: hidden;
-      }
-
-      .gal-history-header {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        padding: 0.938rem 1.25rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 0.125rem solid ${THEME.accent};
-      }
-
-      .gal-history-title {
-        font-family: 'Noto Sans SC', sans-serif;
-        font-size: 1.2rem;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-      }
-
-      .gal-history-close {
-        background: transparent;
-        border: none;
-        color: #aaa;
-        font-size: 1.5rem;
-        cursor: pointer;
-        transition: color 0.2s;
-        line-height: 1;
-      }
-
-      .gal-history-close:hover {
-        color: ${THEME.accent};
-      }
-
-      .gal-history-body {
-        flex: 1;
-        overflow-y: auto;
-        padding: 1.25rem;
-        background: #f5f5f5;
-      }
-
-      .gal-history-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.938rem;
-      }
-
-      .gal-history-item {
-        background: #fff;
-        padding: 0;
-        border-radius: 0.5rem;
-        border: 1px solid #eee;
-        box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.05);
-        transition: all 0.2s;
-        overflow: hidden;
-        margin-bottom: 0.625rem;
-      }
-
-      .gal-history-item:hover {
-        box-shadow: 0 0.5rem 1.25rem rgba(0, 210, 255, 0.15);
-        transform: translateY(-0.125rem);
-        border-color: ${THEME.accent};
-      }
-
-      .gal-history-header-row {
-        background: #f8f9fa;
-        padding: 0.625rem 1.25rem;
-        border-bottom: 1px solid #eee;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .gal-history-info-group {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-
-      .gal-history-index {
-        background: ${THEME.accent};
-        color: ${THEME.dark};
-        padding: 0.125rem 0.5rem;
-        border-radius: 0.25rem;
-        font-size: 0.8rem;
-        font-weight: 700;
-        font-family: 'Barlow', sans-serif;
-      }
-
-      .gal-history-time {
-        color: #666;
-        font-size: 0.9rem;
-        font-weight: 600;
-        font-family: 'Noto Sans SC', sans-serif;
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-
-      .gal-history-time i {
-        font-size: 0.8rem;
-        color: #999;
-      }
-
-      .gal-history-content {
-        padding: 1.25rem;
-        font-size: 1.05rem;
-        line-height: 1.8;
-        color: #333;
-        white-space: pre-wrap;
-        text-align: justify;
-      }
-
-      .gal-history-empty {
-        text-align: center;
-        padding: 3.125rem;
-        color: #999;
-        font-style: italic;
-      }
-
-      .galgame-database-container {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        z-index: var(--gal-z-modal-critical) !important;
-        display: none;
-      }
-
-      /* 2024-01-26 更新样式 */
-      .gal-open-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 1rem;
-          background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);
-          color: #fff;
-          border: none;
-          border-radius: 1.25rem;
-          font-size: 0.85rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s;
-          box-shadow: 0 0.125rem 0.5rem rgba(0, 210, 255, 0.3);
-      }
-
-      .gal-open-btn:hover {
-          transform: scale(1.05);
-          box-shadow: 0 0.25rem 0.938rem rgba(0, 210, 255, 0.5);
-      }
-
-      /* ═══════════════════════════════════════════════════════════════
-         背景管理实时生成开关 - 美化版
-         ═══════════════════════════════════════════════════════════════ */
-      .gal-realtime-toggle-wrapper {
-        display: flex !important;
-        align-items: center !important;
-        gap: 0.5rem;
-      }
-
-      .gal-realtime-label {
-        font-size: 0.9rem !important;
-        color: #2b2e38 !important;
-        font-weight: 600 !important;
-        white-space: nowrap;
-      }
-
-      .gal-realtime-switch {
-        position: relative;
-        display: inline-block;
-        width: 3.25rem;
-        height: 1.75rem;
-        flex-shrink: 0;
-      }
-
-      .gal-realtime-switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-        position: absolute;
-      }
-
-      .gal-realtime-slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: linear-gradient(145deg, #d0d0d0 0%, #b8b8b8 100%);
-        transition: all 0.3s ease;
-        border-radius: 1.75rem;
-        box-shadow: inset 0 0.125rem 0.25rem rgba(0,0,0,0.2);
-      }
-
-      .gal-realtime-slider::before {
-        content: "";
-        position: absolute;
-        height: 1.375rem;
-        width: 1.375rem;
-        left: 0.188rem;
-        bottom: 0.188rem;
-        background: linear-gradient(145deg, #ffffff 0%, #f5f5f5 100%);
-        transition: transform 0.3s ease;
-        border-radius: 50%;
-        box-shadow: 0 0.125rem 0.313rem rgba(0,0,0,0.3);
-        z-index: 2;
-      }
-
-      .gal-realtime-slider::after {
-        content: "OFF";
-        position: absolute;
-        right: 0.5rem;
-        top: 50%;
-        transform: translateY(-50%);
-        font-size: 0.563rem;
-        font-weight: 700;
-        color: #666;
-        z-index: 1;
-      }
-
-      .gal-realtime-switch input:checked + .gal-realtime-slider {
-        background: linear-gradient(135deg, ${THEME.accent} 0%, ${THEME.accentSub} 100%);
-        box-shadow: inset 0 0.125rem 0.25rem rgba(0,0,0,0.2), 0 0 0.75rem rgba(0, 210, 255, 0.4);
-      }
-
-      .gal-realtime-switch input:checked + .gal-realtime-slider::before {
-        transform: translateX(1.5rem);
-      }
-
-      .gal-realtime-switch input:checked + .gal-realtime-slider::after {
-        content: "ON";
-        left: 0.5rem;
-        right: auto;
-        color: rgba(255,255,255,0.95);
-      }
-@media screen and (max-width: 48rem) { .gal-input-modal, .gal-config-modal, #gal-settings-panel, #gal-asset-manager-modal, #gal-free-input-modal, #gal-batch-bg-upload-modal, #gal-custom-popup, #gal-character-sprites-modal, #gal-live2d-settings-modal { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; z-index: var(--gal-z-modal-critical) !important; display: flex !important; align-items: center; justify-content: center; } .gal-input-modal .gal-input-box, .gal-config-modal .gal-config-panel { width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; border-radius: 0 !important; display: flex !important; flex-direction: column !important; } .gal-config-body, .gal-input-box > div:not(.gal-input-title):not(.gal-input-actions) { flex: 1; overflow-y: auto !important; } }
-@media screen and (max-width: 48rem) { /* �����������Ż� */ .gal-input-title { flex-direction: column; align-items: flex-start !important; gap: 0.625rem; padding: 0.625rem 0.938rem !important; height: auto !important; } .gal-input-title span { font-size: 1.2rem !important; } .gal-input-title div { width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.313rem; } /* �����Ҳఴť�� (����/Զ��/����) */ .gal-input-title div > button, .gal-input-title div > div { flex: 1; min-width: auto !important; margin: 0 !important; } .gal-title-btn { padding: 0.25rem 0.625rem !important; font-size: 0.85rem !important; min-width: auto !important; transform: none !important; } .gal-title-btn * { transform: none !important; } /* Tab �����Ż� */ .gal-tab-header { padding: 0 0.625rem !important; gap: 0.625rem !important; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; } .gal-tab-item { padding: 0.625rem 0.5rem !important; font-size: 0.9rem !important; flex-shrink: 0; } /* �ڲ��������Ż� (�����ϴ���) */ .gal-sub-header, .gal-action-bar { flex-direction: column; align-items: stretch !important; gap: 0.625rem; height: auto !important; padding: 0.625rem 0.938rem !important; } .gal-action-group, .gal-filter-group { display: flex !important; flex-wrap: wrap; gap: 0.5rem !important; width: 100%; } .gal-action-btn { margin: 0 !important; flex: 1; min-width: 6.25rem; padding: 0.5rem 0 !important; justify-content: center; transform: none !important; } .gal-action-btn * { transform: none !important; } /* ������������ */ .gal-grid-container { padding: 0.625rem !important; grid-template-columns: repeat(auto-fill, minmax(6.875rem, 1fr)) !important; gap: 0.625rem !important; } /* �ײ��رհ�ť */ .gal-input-box > div:last-child { padding: 0.625rem 0.938rem !important; min-height: auto !important; } #gal-settings-close, #gal-char-sprites-close, #gal-input-cancel { min-height: 2.5rem !important; transform: none !important; } }
-
-    /* === ��Դ������ר�ý��ղ��� (Mobile) === */
-    #gal-asset-manager-modal .gal-asset-header {
-        padding: 0.625rem 0.938rem !important;
-    }
-    
-    #gal-asset-manager-modal .gal-input-title {
-        font-size: 1.1rem !important;
-        margin-bottom: 0.313rem !important;
-    }
-    
-    /* ������ť���ջ� */
-    #gal-asset-manager-modal .gal-action-btn:where(#gal-asset-export, #gal-asset-export-remote, #gal-import-dropdown-btn) {
-        padding: 0.25rem 0.5rem !important;
-        font-size: 0.8rem !important;
-    }
-    
-    /* Tab���ƶ� */
-    #gal-asset-manager-modal .gal-tab-header {
-        padding: 0 0.625rem !important;
-        min-height: 2.5rem !important;
-    }
-    
-    #gal-asset-manager-modal .gal-tab-btn {
-        padding: 0.5rem 0.75rem !important;
-        font-size: 0.9rem !important;
-    }
-
-    /* ������������ */
-    #gal-asset-manager-modal .gal-tab-content {
-        padding: 0.625rem !important;
-    }
-    
-    /* ���������ڲ��Ĳ��������ջ� */
-    #gal-asset-manager-modal .gal-tab-pane > div:first-child {
-        margin-bottom: 0.625rem !important;
-        flex-wrap: wrap;
-    }
-    
-    /* �ײ���ť�� */
-    #gal-asset-manager-modal .gal-input-actions {
-        padding: 0.625rem 0.938rem !important;
-        min-height: auto !important;
-    }
-
-
-    /* === ��Դ�������ƶ����޸� (V2) === */
-    
-    /* �������������������� */
-    #gal-asset-manager-modal .gal-asset-header > div {
-        flex-wrap: wrap !important;
-        gap: 0.625rem !important;
-    }
-    
-    /* ���⣺��ֹ���� */
-    #gal-asset-manager-modal .gal-input-title {
-        white-space: nowrap !important;
-        font-size: 1.2rem !important;
-        width: auto !important;
-    }
-
-    /* �������ܰ�ť��ֻ��ͼ�꣬�������� */
-    #gal-asset-manager-modal .gal-asset-header button span,
-    #gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span {
-        display: none !important; /* �������� */
-    }
-    
-    /* �������ܰ�ť��ͼ��΢�� */
-    #gal-asset-manager-modal .gal-asset-header button i {
-        margin: 0 !important;
-        font-size: 1rem !important;
-    }
-    
-    /* �ָ������˵���������ʾ (��Ϊ���ǵ�����) */
-    #gal-asset-manager-modal .gal-import-menu span {
-        display: inline !important;
-    }
-    
-    /* �в�������ť�� (�����ϴ�/����/����) */
-    #gal-asset-manager-modal .gal-tab-pane > div:first-child {
-        display: flex !important;
-        gap: 0.313rem !important;
-    }
-    
-    #gal-asset-manager-modal .gal-tab-pane > div:first-child button {
-        flex: 1 !important; /* ƽ�ֿ��� */
-        padding: 0.5rem 0.25rem !important; /* ��С�ڱ߾� */
-        font-size: 0.85rem !important;
-        white-space: nowrap !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        gap: 0.25rem !important;
-    }
-    
-    /* �ײ��رհ�ť */
-    #gal-asset-manager-modal .gal-input-actions {
-        padding: 0.5rem !important;
-    }
-    #gal-asset-manager-modal .gal-input-actions button {
-        min-height: 2.25rem !important;
-        padding: 0 !important;
-    }
-
-
-/* === ��Դ������Ĭ����ʽ (Desktop) - �Ƴ�������ʽ === */
-#gal-asset-manager-modal .gal-asset-header {
-    padding: 1.25rem 1.563rem 0.938rem;
-    border-bottom: 1px solid #e0e0e0;
-    flex-shrink: 0;
-}
-#gal-asset-manager-modal .gal-tab-header {
-    display: flex;
-    border-bottom: 0.125rem solid #e0e0e0;
-    padding: 0 1.563rem;
-    flex-shrink: 0;
-}
-#gal-asset-manager-modal .gal-tab-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.25rem 1.563rem;
-}
-
-/* ֮ǰ���ӵ� V3 �ƶ�����ʽ���ڴ�֮�󸲸���ЩĬ����ʽ */
-
-
-#gal-asset-manager-modal .gal-input-actions {
-    padding: 0.938rem 1.563rem;
-    border-top: 1px solid #e0e0e0;
-    flex-shrink: 0;
-}
-
-
-    /* === ��Դ������ȫ������ V3 (Mobile High Density) === */
-    @media screen and (max-width: 48rem) {
-        /* 1. ͷ����һ��ѹ�� & ĥɰ�ʸ� */
-        #gal-asset-manager-modal .gal-asset-header {
-            padding: 0.5rem 0.75rem !important;
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(0.625rem);
-            border-bottom: 1px solid rgba(0,0,0,0.05) !important;
-            display: flex !important;
-            flex-wrap: wrap !important;
-            align-items: center !important;
-            gap: 0.5rem !important;
-        }
-        #gal-asset-manager-modal .gal-input-title {
-            font-size: 1.1rem !important;
-            font-weight: 700 !important;
-            margin-right: auto !important; /* 标题占据左侧剩余空间 */
-        }
-
-        /* 修复：移动端显示实时生成开关 - 防止被压缩 */
-        #gal-asset-manager-modal .gal-realtime-toggle-wrapper {
-            display: flex !important;
-            align-items: center !important;
-            margin-left: 0 !important;
-            transform: scale(0.85);
-            transform-origin: left center;
-            flex-shrink: 0 !important; /* 关键：禁止被flex挤压消失 */
-            min-width: fit-content;
-            margin-right: 0.25rem;
-        }
-
-        /* === 修复 V6：回归 Flexbox 布局，放弃 Grid === */
-
-        /* 1. 顶部容器：作为块级元素，允许内部元素自然堆叠 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child {
-            display: block !important;
-            height: auto !important;
-            padding-bottom: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-            border-bottom: 1px solid rgba(0,0,0,0.05) !important;
-        }
-
-        /* 隐藏"已保存XX背景"文字 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child > span {
-            display: none !important;
-        }
-
-        /* 2. 按钮组容器：Flex 布局，强制换行 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] > div:first-child > div {
-            width: 100% !important;
-            display: flex !important;
-            flex-wrap: wrap !important;
-            justify-content: space-between !important;
-            gap: 0.625rem !important;
-            position: static !important;
-        }
-
-        /* 3. 实时生成开关容器：强制独占一行 */
-        #gal-asset-manager-modal .gal-tab-pane[data-pane="backgrounds"] .gal-realtime-toggle-wrapper {
-            flex: 0 0 100% !important; /* 宽度 100%，禁止压缩/放大 */
-            width: 100% !important;
-            order: -1 !important;      /* 排序第一 */
-
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important; /* 居中对齐 */
-
-            background: rgba(0,0,0,0.03) !important;
-            border-radius: 0.5rem;
-            padding: 0.5rem !important;
-            margin: 0 !important;
-            height: auto !important;
-            min-height: 2.5rem !important; /* 确保有足够高度 */
-
-            visibility: visible !important;
-            opacity: 1 !important;
-            z-index: 10 !important;
-        }
-
-        /* 开关内的文字 */
-        #gal-asset-manager-modal .gal-realtime-label {
-            display: inline-block !important;
-            font-size: 0.9rem !important;
-            color: #444 !important;
-            margin-right: 0.625rem !important;
-            font-weight: bold !important;
-        }
-
-        /* 开关控件本身 */
-        #gal-asset-manager-modal .gal-realtime-switch {
-            display: inline-block !important;
-            transform: scale(1) !important; /* 保持原始大小 */
-            margin: 0 !important;
-        }
-
-        /* 4. 两个大按钮：各占一半宽度（减去间隙） */
-        #gal-batch-bg-upload-btn,
-        #gal-add-bg-btn {
-            flex: 1 1 45% !important; /* 弹性宽度 */
-            width: auto !important;
-            margin: 0 !important;
-        }
-
-        /* ����С��ť��Բ�λ� */
-        #gal-asset-manager-modal .gal-asset-header button {
-            width: 2rem !important;
-            height: 2rem !important;
-            padding: 0 !important;
-            border-radius: 50% !important;
-            background: #fff !important;
-            border: 1px solid #eee !important;
-            color: #555 !important;
-            box-shadow: 0 0.125rem 0.313rem rgba(0,0,0,0.05) !important;
-        }
-        /* ���������˵���λ���� */
-        #gal-asset-manager-modal .gal-import-dropdown {
-            position: static !important; /* ����relative���� */
-        }
-        #gal-import-menu {
-            top: 2.813rem !important;
-            right: 0.625rem !important;
-            width: 12.5rem !important;
-        }
-
-        /* 2. Tab ��������ʽ�л� */
-        #gal-asset-manager-modal .gal-tab-header {
-            min-height: 2.5rem !important;
-            background: #f1f3f5;
-            padding: 0.25rem !important;
-            margin: 0 !important;
-            border: none !important;
-            gap: 0.25rem;
-        }
-        #gal-asset-manager-modal .gal-tab-btn {
-            flex: 1;
-            padding: 0 !important;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 0.375rem !important;
-            border: none !important;
-            font-size: 0.85rem !important;
-            color: #666;
-            background: transparent;
-        }
-        #gal-asset-manager-modal .gal-tab-btn.active {
-            background: #fff !important;
-            color: #333 !important;
-            box-shadow: 0 1px 0.188rem rgba(0,0,0,0.1) !important;
-            font-weight: bold;
-        }
-
-        /* 3. ���Ĳ������������� */
-        /* �������õ�ͳ���ı� */
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child > span {
-            display: none !important;
-        }
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child .gal-realtime-toggle-wrapper {
-            display: flex !important;
-        }
-        
-        /* ��ť�������� */
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child {
-            margin: 0.625rem !important;
-            gap: 0.5rem !important;
-        }
-        
-        /* ������ť */
-        #gal-asset-manager-modal .gal-tab-pane > div:first-child button {
-            flex: 1 !important;
-            height: 2.25rem !important; 
-            border-radius: 1.125rem !important; /* ȫԲ�� */
-            font-size: 0.85rem !important;
-            box-shadow: 0 0.125rem 0.375rem rgba(0,0,0,0.1) !important;
-            padding: 0 !important;
-        }
-
-        /* 4. ���񲼾��Ż� */
-        .gal-character-grid, .gal-bg-grid {
-            padding: 0 0.625rem 3.75rem 0.625rem !important; /* �ײ������ռ��������ť */
-            gap: 0.5rem !important;
-            grid-template-columns: repeat(3, 1fr) !important; /* ǿ��3�� */
-        }
-        .gal-character-card, .gal-bg-card {
-            box-shadow: none !important;
-            border: 1px solid #eee !important;
-        }
-        /* ���ؿ�Ƭ���һЩ������Ϣ */
-        .gal-character-card > div:last-child > div:last-child {
-            display: none !important; /* ���ر��������ı� */
-        }
-
-        /* 5. �ײ������رհ�ť */
-        #gal-asset-manager-modal .gal-input-actions {
-            position: absolute !important;
-            bottom: 1.25rem;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90% !important;
-            padding: 0 !important;
-            border: none !important;
-            z-index: 100 !important;
-            background: transparent !important;
-        }
-        #gal-asset-manager-modal .gal-input-actions button {
-            width: 100% !important;
-            height: 2.75rem !important;
-            border-radius: 1.375rem !important;
-            background: linear-gradient(135deg, #2c3e50, #000) !important;
-            color: white !important;
-            box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.2) !important;
-            opacity: 0.9;
-        }
-    }
-
-
-    /* === ���ս����޸� (FINAL EMERGENCY FIX) === */
-    @media screen and (max-width: 48rem) {
-        /* ǿ������ Flex ������ȷ��ռ����Ļ */
-        #gal-asset-manager-modal .gal-input-box {
-            display: flex !important;
-            flex-direction: column !important;
-            height: 100% !important;
-            overflow: hidden !important;
-        }
-
-        /* 1. ��������ǿ�Ʋ����У�ǿ�Ƹ߶����� */
-        #gal-asset-manager-modal .gal-asset-header {
-            flex: 0 0 auto !important; /* ���������� */
-            height: 3.125rem !important;   /* ǿ�Ƹ߶� */
-            padding: 0 0.625rem !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            gap: 0.5rem !important;
-            background: #fff !important;
-            border-bottom: 1px solid #eee !important;
-        }
-        #gal-asset-manager-modal .gal-asset-header > div {
-            display: flex !important;
-            align-items: center !important;
-            flex-wrap: nowrap !important; /* ��ֹ���� */
-            gap: 0.5rem !important;
-        }
-
-        /* ������ť���֣������� (Hidden) */
-        #gal-asset-manager-modal .gal-asset-header button span,
-        #gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span {
-            display: none !important;
-        }
-        /* 顶部按钮图标：强制尺寸，禁止flex拉伸 */
-        #gal-asset-manager-modal .gal-asset-header button {
-            flex: 0 0 auto !important;
-            width: 2rem !important;
-            height: 2rem !important;
-            min-width: 2rem !important;
-            max-width: 2rem !important;
-            padding: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            font-size: 0.875rem !important;
-        }
-        #gal-asset-manager-modal .gal-asset-header > div {
-            flex: 0 0 auto !important;
-        }
-
-        /* 2. Tab ����ǿ�Ƹ߶����� */
-        #gal-asset-manager-modal .gal-tab-header {
-            flex: 0 0 auto !important;
-            height: 2.5rem !important;
-            padding: 0.125rem 0.625rem !important;
-            gap: 0.313rem !important;
-            background: #f8f9fa !important;
-            display: flex !important;
-            align-items: center !important;
-        }
-        #gal-asset-manager-modal .gal-tab-btn {
-            flex: 1 !important;
-            height: 2rem !important;
-            padding: 0 !important;
-            font-size: 0.813rem !important;
-            line-height: 2rem !important;
-        }
-
-        /* 3. ��������ǿ��ռ��ʣ��ռ� */
-        #gal-asset-manager-modal .gal-tab-content {
-            flex: 1 1 auto !important;
-            height: 0 !important; /* �ؼ������ flex-grow ������� */
-            padding: 0.625rem !important;
-            padding-bottom: 3.75rem !important; /* ��������ť��λ�� */
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-        }
-        
-        /* 4. �ײ������������� */
-        #gal-asset-manager-modal .gal-input-actions {
-            position: absolute !important;
-            bottom: 0.938rem;
-            left: 5%;
-            width: 90% !important;
-            padding: 0 !important;
-            border: none !important;
-            background: transparent !important;
-            pointer-events: none; /* ����������� */
-        }
-        #gal-asset-manager-modal .gal-input-actions button {
-            pointer-events: auto; /* ��ť�ɵ� */
-            height: 2.5rem !important;
-            border-radius: 1.25rem !important;
-            background: rgba(0,0,0,0.85) !important;
-            color: #fff !important;
-            box-shadow: 0 0.25rem 0.625rem rgba(0,0,0,0.2) !important;
-        }
-    }
-
-
-    /* === ��ʽ���� (Revert to Square Buttons) === */
-    @media screen and (max-width: 48rem) {
-        /* ������ť���ָ�������ʽ */
-        #gal-asset-manager-modal .gal-asset-header button {
-            border-radius: 0.25rem !important; /* �ָ�΢Բ��/���� */
-            width: auto !important;      /* ������������Ӧ (��ͼ��) */
-            padding: 0 0.5rem !important;   /* ��΢�����ڱ߾� */
-            background: transparent !important; /* ȥ��ǿ�ư�ɫ���� */
-            border: 1px solid transparent !important; /* ȥ���߿� */
-            box-shadow: none !important;
-            color: #555 !important;
-        }
-        #gal-asset-manager-modal .gal-asset-header button:active {
-            background: rgba(0,0,0,0.1) !important;
-        }
-        
-        /* Զ�̰���ť������ɫ�ָ� */
-        #gal-asset-manager-modal .gal-asset-header #gal-asset-export-remote {
-            color: #6f42c1 !important;
-        }
-        /* ���밴ť������ɫ�ָ� */
-        #gal-asset-manager-modal .gal-asset-header #gal-import-dropdown-btn {
-            color: #28a745 !important;
-        }
-    }
-
-
-    /* === �޸� Z-Index �� �Ӿ��ָ� (DROPDOWN & UNIFY FIX) === */
-    @media screen and (max-width: 48rem) {
-        /* 1. ����������߲㼶���Ƴ��ױ߿� */
-        #gal-asset-manager-modal .gal-asset-header {
-            z-index: 100 !important; /* �ؼ�������������ݸߣ���ֹ�����˵�����ס */
-            position: relative !important;
-            border-bottom: none !important; /* �Ƴ��ָ��� */
-            box-shadow: none !important;
-            padding-bottom: 0 !important; /* �����·� */
-        }
-
-        /* 2. Tab �����Ƴ����߿�ͳһ���� */
-        #gal-asset-manager-modal .gal-tab-header {
-            z-index: 90 !important;
-            position: relative !important;
-            border-top: none !important;
-            background: #fff !important; /* �� Header ����һ�±��� */
-            margin-top: -1px !important; /* �����ص�������϶ */
-            padding-top: 0 !important;
-        }
-
-        /* 3. �����˵���ȷ�����Զ��� */
-        #gal-asset-manager-modal .gal-import-menu {
-            z-index: var(--gal-z-dropdown) !important;
-            position: absolute !important;
-            top: 100% !important;
-            right: 0 !important;
-             /* �ָ���Ӱ */
-            box-shadow: 0 0.25rem 0.938rem rgba(0,0,0,0.2) !important;
-        }
-        
-        /* ���������˵�������������� */
-        #gal-asset-manager-modal .gal-import-dropdown {
-            position: static !important; /* ����� static �ᵼ�� dropdown �Ҳ�����Ԫ�ض�λ�� */
-            /* ���ˣ����� relative �Ա� menu ��λ */
-            position: relative !important;
-            overflow: visible !important;
-        }
-
-        /* 4. �����Tab��һ�廯΢�� */
-        /* �ñ������ֺ�Tab��ť����������һ��������� */
-        #gal-asset-manager-modal .gal-input-title {
-            margin-bottom: 0 !important;
-        }
-    }
-
-
-    /* === ͷ������޸� (Header Overflow Fix - CRITICAL) === */
-    @media screen and (max-width: 48rem) {
-        /* 1. ǿ��ͷ����ֹ����������������� (�޸��˵����� + �޸�����������) */
-        #gal-asset-manager-modal .gal-asset-header {
-            overflow: visible !important;  /* �ؼ�����ֹ���ɹ������������˵����� */
-            touch-action: none !important; /* ��ֹ��ͷ���������� */
-            z-index: var(--gal-z-dropdown) !important;      /* ȷ�������ϲ� */
-        }
-
-        /* 2. ȷ�������˵�����ʾ */
-        #gal-asset-manager-modal .gal-import-dropdown {
-            overflow: visible !important;
-            position: static !important; /* ��� header �� relative */
-        }
-        
-        #gal-asset-manager-modal .gal-import-menu {
-            position: fixed !important; /* ǿ�� fixed ��λ�����װ��Ѹ��������� */
-            top: 3.438rem !important;       /* �������߶� 3.125rem + 0.313rem */
-            right: 0.625rem !important;
-            z-index: var(--gal-z-dropdown) !important;
-            max-height: 60vh !important;
-            overflow-y: auto !important;
-        }
-    }
-
-
-    /* === �ײ���ť�޸� (Revert Footer to Standard) === */
-    @media screen and (max-width: 48rem) {
-        #gal-asset-manager-modal .gal-input-actions {
-            position: static !important; /* �������� */
-            width: 100% !important;
-            padding: 0.625rem 0.938rem !important;
-            background: #fff !important; /* ʵ�ı��� */
-            border-top: 1px solid #eee !important;
-            transform: none !important;
-            left: auto !important;
-            bottom: auto !important;
-            pointer-events: auto !important;
-            flex-shrink: 0 !important; /* ��ֹ����ѹ */
-        }
-        #gal-asset-manager-modal .gal-input-actions button {
-            width: 100% !important;
-            height: 2.5rem !important;
-            border-radius: 0.25rem !important; /* �ع鷽��Բ�� */
-            background: #f8f9fa !important;
-            color: #333 !important;
-            border: 1px solid #ddd !important;
-            box-shadow: none !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-        #gal-asset-manager-modal .gal-input-actions button:hover,
-        #gal-asset-manager-modal .gal-input-actions button:active {
-            background: #e9ecef !important;
-        }
-        
-        /* �Ƴ�������Ϊ������ť���Ķ��� padding */
-        #gal-asset-manager-modal .gal-tab-content {
-            padding-bottom: 0.625rem !important; 
-        }
-    }
-
-
-    /* === 历史记录弹窗移动端统一修复（合并重复补丁块） === */
-    @media screen and (max-width: 48rem) {
-        #gal-history-modal {
-            position: fixed !important;
-            inset: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            z-index: var(--gal-z-modal-critical) !important;
-            background: rgba(0,0,0,0.85) !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-        }
-
-        #gal-history-modal .gal-history-panel {
-            position: relative !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            max-width: none !important;
-            max-height: none !important;
-            margin: 0 !important;
-            border: none !important;
-            border-radius: 0 !important;
-            background: #fff !important;
-            transform: none !important;
-            display: flex !important;
-            flex-direction: column !important;
-            z-index: var(--gal-z-modal-critical) !important;
-            opacity: 1 !important;
-        }
-
-        #gal-history-modal .gal-history-header {
-            flex-shrink: 0 !important;
-            padding: 0.625rem 0.938rem !important;
-            border-bottom: 1px solid #eee !important;
-        }
-
-        #gal-history-modal .gal-history-body {
-            flex: 1 !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow-y: auto !important;
-            padding: 0.938rem !important;
-        }
-    }
-
-
-    /* ═══════════════════════════════════════════════════════════════
-       移动端适配修复 (Mobile Fixes 2024)
-       对应计划：Galgame UI 移动端 CSS 修复计划
-       ═══════════════════════════════════════════════════════════════ */
-    @media screen and (max-width: 48rem) {
-        /* === 阶段一：核心布局重构 === */
-
-        /* 1. 对话框容器空间优化 */
-        .gal-dialog-layer {
-            left: 2% !important;
-            right: 2% !important;
-            width: 96% !important;
-            bottom: 0.625rem !important;
-            height: 40% !important; /* 增加高度占比至40% */
-            padding-bottom: env(safe-area-inset-bottom); /* 底部安全区 */
-        }
-
-        /* 2. 文本面板内边距压缩 */
-        .gal-text-panel {
-            /* 上 右 下 左 - 减少左右留白，增加可视区域 */
-            padding: 1.563rem 0.938rem 2.813rem 0.938rem !important;
-        }
-
-        /* 3. 排版微调 - 提高阅读效率 */
-        .gal-dialog-text {
-            /* 增大移动端基准字号，并乘上字体缩放变量以支持调节 */
-            /* 默认放大 1.2 倍，基础 1.1rem (约1.1rem)，结果约 1.313rem，此时再调大字体即可生效 */
-            font-size: calc(1.1rem * var(--font-scale, 1.3)) !important;
-            line-height: 1.6 !important;
-        }
-
-        /* 4. 名字标签防遮挡 */
-        .gal-name-badge {
-            top: -1.25rem !important;
-            left: 0 !important;
-            padding: 0.25rem 1.25rem 0.25rem 0.938rem !important;
-            font-size: 1.1rem !important;
-            transform: skewX(-15deg) scale(0.9) !important;
-            transform-origin: bottom left !important;
-        }
-
-        /* 5. 交互栏防遮挡 */
-        .gal-interaction-bar {
-            top: -2.813rem !important;
-            right: 0 !important;
-            transform: scale(0.85) !important;
-            transform-origin: bottom right !important;
-            gap: 0.5rem !important;
-        }
-
-        .gal-action-btn {
-            padding: 0.5rem 1rem !important;
-            font-size: 0.95rem !important;
-        }
-
-        /* === 阶段二：组件与交互修复 === */
-
-        /* 1. BGM组件触控优化 */
-        .gal-bgm-widget {
-            top: 3.75rem !important; /* 下移，避开左上角状态栏(如果移过去)或左侧区域 */
-            padding: 0.375rem 0.625rem !important;
-            gap: 0.375rem !important;
-            font-size: 0.72rem !important;
-            border-radius: 1rem !important;
-            max-width: 2.125rem !important; /* 默认收起 */
-            transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }
-
-        .gal-bgm-icon {
-            font-size: 0.95rem !important;
-            min-width: 1rem !important;
-        }
-
-        .gal-bgm-title {
-            font-size: 0.7rem !important;
-        }
-
-        .gal-bgm-btn {
-            font-size: 0.8rem !important;
-            width: 1rem !important;
-        }
-
-        .gal-bgm-slider {
-            width: 3rem !important;
-            height: 0.188rem !important;
-        }
-
-        .gal-bgm-slider::-webkit-slider-thumb {
-            width: 0.5rem !important;
-            height: 0.5rem !important;
-        }
-
-        /* 允许点击/长按展开 */
-        .gal-bgm-widget:active,
-        .gal-bgm-widget:focus-within,
-        .gal-bgm-widget.active {
-            max-width: 12rem !important;
-            background: rgba(43, 46, 56, 0.98) !important;
-        }
-
-        /* 2. 顶部状态栏防重叠 - 移至左上角堆叠 */
-        .gal-status-bar-container {
-            top: 0.625rem !important;
-            right: auto !important;
-            left: 0.625rem !important;
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 0.375rem !important;
-            transform: scale(0.85) !important;
-            transform-origin: top left !important;
-            pointer-events: none; /* 防止遮挡下方点击 */
-            z-index: 90 !important;
-        }
-
-        .gal-location-bar, .gal-time-bar {
-            max-width: 10rem !important;
-            height: 1.625rem !important;
-            font-size: 0.75rem !important;
-            background: rgba(43, 46, 56, 0.8) !important;
-            backdrop-filter: blur(0.25rem);
-        }
-
-        /* 全屏按钮保持在右上 */
-        .gal-fullscreen-btn {
-            top: 0.625rem !important;
-            right: 0.625rem !important;
-            padding: 0.5rem 0.75rem !important;
-            font-size: 0.8rem !important;
-        }
-
-        /* 3. 底部工具栏触控优化 */
-        .gal-bottom-toolbar {
-            padding: 0 0.625rem 0.625rem 0.625rem !important;
-            min-height: 3.125rem !important;
-            /* 增加底部安全区支撑 */
-            margin-bottom: env(safe-area-inset-bottom);
-        }
-
-        .gal-footer-btn {
-            height: 2.375rem !important;
-            padding: 0 0.625rem !important;
-            min-width: 2.375rem !important; /* 确保图标按钮易点 */
-        }
-
-        /* NEXT 按钮适配 */
-        .gal-footer-btn-next {
-            min-width: 6.25rem !important;
-            height: 2.813rem !important;
-            font-size: 1.1rem !important;
-            margin-left: 0.625rem !important;
-            margin-right: -0.625rem !important; /* 贴边 */
-        }
-
-        /* === 阶段三：层级修正 === */
-
-        /* 确保弹窗最高层级 */
-        .gal-input-modal,
-        .gal-config-modal,
-        .gal-history-modal,
-        #gal-layer-choices {
-            z-index: var(--gal-z-modal-critical) !important; /* Max Int 32 */
-        }
-
-        #gal-layer-choices {
-            justify-content: center !important;
-            align-items: center !important;
-            padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
-            padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
-            height: 100dvh !important;
-            max-height: 100dvh !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .gal-choices-container {
-            width: min(100%, 32rem) !important;
-            max-height: calc(100dvh - 8rem) !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            padding: 0 0.75rem !important;
-        }
-
-        .gal-choices-title,
-        .gal-choices-hint {
-            width: 100% !important;
-            text-align: center !important;
-        }
-
-        .gal-choice-card {
-            max-width: 100% !important;
-            width: 100% !important;
-        }
-
-        /* 确保全屏覆盖层在弹窗之下但在其他元素之上 */
-        #gal-global-overlay.fullscreen {
-            z-index: var(--gal-z-overlay) !important;
-        }
-
-
-        /* 隐藏非关键UI以节省空间 */
-        .gal-progress-indicator {
-            display: none !important;
-        }
-    }
-
-        /* === 修复主界面按钮样式被误覆盖的问题 (Fix Main UI Buttons) === */
-    @media screen and (max-width: 48rem) {
-        /* 强制主界面交互栏按钮保持倾斜风格 */
-        .gal-interaction-bar .gal-action-btn {
-            transform: skewX(-15deg) !important; /* 恢复倾斜 */
-            margin: 0 !important;
-            flex: initial !important; /* 取消 flex: 1 拉伸 */
-            min-width: auto !important; /* 取消最小宽度限制 */
-            width: auto !important;
-            display: flex !important;
-            border-radius: 0 !important; /* 保持锐利边缘 */
-        }
-
-        /* 恢复内部文字/图标的反向倾斜 */
-        .gal-interaction-bar .gal-action-btn *,
-        .gal-interaction-bar .gal-action-btn i,
-        .gal-interaction-bar .gal-action-btn span {
-            transform: skewX(15deg) !important;
-        }
-
-        /* 针对 Reroll 和 Free 按钮的特殊微调 */
-        .gal-interaction-bar .gal-action-btn.btn-reroll,
-        .gal-interaction-bar .gal-action-btn.btn-free {
-             padding: 0.375rem 0.75rem !important; /* 适当的内边距 */
-        }
-    }
-
-    /* === 弹窗全屏防御 (769px - 1000px) === */
-    @media screen and (min-width: 48.0625rem) and (max-width: 62.5rem) {
-        /* 小桌面/平板横屏：防止 NEXT 在中间宽度被裁切 */
-        .gal-bottom-toolbar {
-            padding-right: 0.75rem !important;
-            overflow: visible !important;
-        }
-
-        .gal-footer-btn-next {
-            margin-right: 0 !important;
-            min-width: calc(7.25rem * var(--ui-scale)) !important;
-            padding: 0 calc(1.75rem * var(--ui-scale)) !important;
-        }
-
-        .gal-pending-choices-btn {
-            margin-right: 0 !important;
-        }
-
-        #gal-settings-panel,
-        #gal-asset-manager-modal,
-        #gal-history-modal,
-        .gal-history-modal,
-        .gal-config-modal,
-        .gal-input-modal,
-        #gal-free-input-modal,
-        #gal-batch-bg-upload-modal,
-        #gal-custom-popup,
-        #gal-character-sprites-modal,
-        #gal-layer-choices {
-            position: fixed !important;
-            inset: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            max-width: none !important;
-            max-height: none !important;
-            margin: 0 !important;
-            transform: none !important;
-        }
-
-        #gal-settings-panel .gal-config-panel,
-        .gal-config-modal .gal-config-panel,
-        #gal-asset-manager-modal .gal-input-box,
-        .gal-input-modal .gal-input-box,
-        #gal-history-modal .gal-history-panel,
-        .gal-history-modal .gal-history-panel {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: none !important;
-            max-height: none !important;
-            border-radius: 0 !important;
-            margin: 0 !important;
-        }
-
-        #gal-layer-choices {
-            justify-content: center !important;
-            align-items: center !important;
-            padding-top: calc(env(safe-area-inset-top) + 0.75rem) !important;
-            padding-bottom: calc(env(safe-area-inset-bottom) + 0.75rem) !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-        }
-
-        .gal-choices-container {
-            width: min(100%, 34rem) !important;
-            max-height: calc(100dvh - 8rem) !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            padding: 0 0.75rem !important;
-        }
-
-        .gal-choice-card {
-            width: 100% !important;
-            max-width: 100% !important;
-        }
-    }
-
-    /* === 移动端紧凑模式适配 (Compact Mode) - 优化版 === */
-    @media screen and (max-width: 48rem) {
-        /* 1. 隐藏按钮文字，仅显示图标 */
-        .gal-footer-btn .gal-btn-text,
-        .gal-pending-choices-btn .gal-btn-text,
-        .gal-footer-btn-next .gal-btn-text {
-            display: none !important;
-        }
-
-        /* 2. 在移动端隐藏 LOG 和 CLOSE 按钮 (移入上拉菜单) */
-        .gal-footer-btn[data-action="log"],
-        .gal-footer-btn[data-action="close-mode"] {
-            display: none !important;
-        }
-
-        /* 3. 底部工具栏布局优化 */
-        .gal-bottom-toolbar {
-            justify-content: flex-start !important;
-            gap: 0.3rem !important;
-            /* 增加右侧内边距，防止 NEXT 按钮因为倾斜被切掉 */
-            padding: 0 1.5rem 0.5rem 0.5rem !important;
-            overflow: visible !important; /* 允许子元素溢出显示 */
-        }
-
-        /* 4. 普通功能按钮：自动填充 */
-        .gal-footer-btn,
-        .gal-pending-choices-btn {
-            flex: 1 !important;
-            padding: 0 !important;
-            justify-content: center !important;
-            height: 2.5rem !important;
-            margin-left: 0 !important;
-        }
-
-        .gal-footer-btn i,
-        .gal-pending-choices-btn i {
-            margin: 0 !important;
-            font-size: 1.15rem !important;
-        }
-
-        /* 5. NEXT 按钮：确保完整显示 */
-        .gal-footer-btn-next {
-            flex: 0 0 auto !important;
-            width: 5rem !important;           /* 再宽一点 */
-            min-width: 5rem !important;
-            height: 2.5rem !important;
-            margin-left: 0.5rem !important;
-            padding: 0 !important;
-            justify-content: center !important;
-            margin-right: -0.5rem !important; /*稍微向右贴一点，配合容器padding */
-            z-index: 100 !important;          /* 确保在最上层 */
-        }
-
-        .gal-footer-btn-next i {
-            margin: 0 !important;
-            font-size: 1.6rem !important;
-        }
-    }
-
-    /* === 移动端上拉菜单样式 === */
-    .gal-mobile-menu {
-        display: none;
-        position: absolute;
-        bottom: calc(100% + 0.5rem); /* 始终位于 CONFIG 按钮上方 */
-        left: 0.5rem; /* 与 CONFIG 按钮对齐 */
-        transform: none;
-        background: rgba(255, 255, 255, 0.95);
-        border: 0.125rem solid ${THEME.dark};
-        border-radius: 0;
-        padding: 0.5rem;
-        flex-direction: column;
-        gap: 0.5rem;
-        z-index: 120;
-        min-width: 9rem;
-        box-shadow: 0.313rem 0.313rem 0 rgba(0,0,0,0.2);
-        backdrop-filter: blur(0.25rem);
-    }
-
-    .gal-mobile-menu.active {
-        display: flex;
-    }
-
-    .gal-mobile-menu .gal-menu-btn {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 0.875rem;
-        color: ${THEME.dark};
-        background: ${THEME.white};
-        border: 0.125rem solid ${THEME.dark};
-        border-radius: 0;
-        cursor: pointer;
-        text-align: left;
-        font-size: 0.85rem;
-        font-weight: 700;
-        font-family: 'Barlow', sans-serif;
-        transition: all 0.2s;
-        box-shadow: 0.188rem 0.188rem 0 rgba(0,0,0,0.12);
-    }
-
-    .gal-mobile-menu .gal-menu-btn:hover {
-        background: ${THEME.dark};
-        color: ${THEME.white};
-        transform: translateY(-0.125rem);
-        box-shadow: 0.25rem 0.25rem 0 rgba(0,0,0,0.2);
-    }
-
-    .gal-mobile-menu .gal-menu-btn i {
-        width: 1.2rem;
-        text-align: center;
-    }
-
-    /* === 批量上传立绘窗口移动端适配 === */
-    @media screen and (max-width: 48rem) {
-        /* 批量上传窗口整体调整 */
-        #gal-batch-upload-modal .gal-input-box {
-            width: 100% !important;
-            height: 100vh !important;
-            max-width: 100% !important;
-            border-radius: 0 !important;
-        }
-
-        /* 主布局改为垂直堆叠 */
-        #gal-batch-upload-modal > .gal-input-box > div:last-child {
-            flex-direction: column !important;
-        }
-
-        /* 侧边栏改为顶部横向 */
-        #gal-batch-upload-modal .gal-batch-sidebar {
-            width: 100% !important;
-            border-right: none !important;
-            border-bottom: 1px solid #ddd !important;
-            max-height: 35vh !important;
-            flex-shrink: 0 !important;
-        }
-
-        /* 角色列表横向滚动 */
-        #gal-batch-upload-modal #gal-batch-char-list {
-            display: flex !important;
-            flex-wrap: nowrap !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            gap: 0.5rem !important;
-            padding: 0.5rem !important;
-        }
-
-        /* 角色项样式调整 */
-        #gal-batch-upload-modal .gal-batch-char-item {
-            flex-shrink: 0 !important;
-            min-width: 100px !important;
-            max-width: 140px !important;
-        }
-
-        /* 新增角色按钮 */
-        #gal-batch-upload-modal #gal-batch-add-char {
-            white-space: nowrap !important;
-        }
-
-        /* 主内容区域 */
-        #gal-batch-upload-modal .gal-input-box > div:last-child > div:last-child {
-            flex: 1 !important;
-            min-height: 0 !important;
-        }
-
-        /* 上传区域调整 */
-        #gal-batch-upload-modal #gal-grid-upload-area {
-            min-height: 120px !important;
-            padding: 1rem !important;
-        }
-
-        #gal-batch-upload-modal #gal-grid-upload-area i {
-            font-size: 2rem !important;
-        }
-
-        #gal-batch-upload-modal #gal-grid-upload-area span {
-            font-size: 0.95rem !important;
-        }
-
-        /* 网格预览控制区 */
-        #gal-batch-upload-modal #gal-grid-preview-area > div:first-child {
-            padding: 0.75rem !important;
-        }
-
-        /* 网格控制按钮组 */
-        #gal-batch-upload-modal #gal-grid-preview-area > div:first-child > div:first-child {
-            gap: 0.75rem !important;
-        }
-
-        /* 行列控制紧凑布局 */
-        #gal-batch-upload-modal #gal-grid-preview-area > div:first-child > div:first-child > div {
-            gap: 0.375rem !important;
-        }
-
-        #gal-batch-upload-modal #gal-grid-preview-area label {
-            font-size: 0.8rem !important;
-        }
-
-        /* 网格映射容器 */
-        #gal-batch-upload-modal .gal-grid-mapping-container {
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
-            gap: 0.5rem !important;
-        }
-
-        /* 底部按钮区 */
-        #gal-batch-upload-modal .gal-input-actions {
-            padding: 0.75rem 1rem !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-batch-upload-modal .gal-input-actions button {
-            min-height: 40px !important;
-            font-size: 0.9rem !important;
-        }
-
-        /* Tab 标签适配 */
-        #gal-batch-upload-modal .gal-upload-tabs {
-            margin-bottom: 0.75rem !important;
-        }
-
-        #gal-batch-upload-modal .gal-upload-tab {
-            padding: 0.5rem 0.75rem !important;
-            font-size: 0.85rem !important;
-        }
-
-        /* 输入框适配 */
-        #gal-batch-upload-modal input[type="text"] {
-            padding: 0.5rem 0.75rem !important;
-            font-size: 0.9rem !important;
-        }
-
-        /* 标题区域 */
-        #gal-batch-upload-modal .gal-input-title {
-            padding: 0.75rem 1rem !important;
-            font-size: 1rem !important;
-        }
-    }
-
-    /* === 上传角色立绘窗口移动端适配 === */
-    @media screen and (max-width: 48rem) {
-        /* 窗口整体调整 */
-        #gal-sprite-upload-modal .gal-input-box {
-            width: 100% !important;
-            max-width: 100% !important;
-            max-height: 100vh !important;
-            height: 100vh !important;
-            padding: 0.5rem !important; /* 减小整体内边距 */
-            border-radius: 0 !important;
-            overflow-y: auto !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }
-
-        /* 标题 */
-        #gal-sprite-upload-modal .gal-input-title {
-            font-size: 1rem !important; /* 减小字号 */
-            margin-bottom: 0.5rem !important;
-            padding-bottom: 0.375rem !important;
-            border-bottom: 1px solid #eee !important;
-            flex: none !important;
-        }
-
-        /* 输入框区域：改为 Grid 并排布局，节省纵向空间 */
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(2) {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important; /* 左右分栏 */
-            gap: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-            flex: none !important;
-        }
-
-        /* 移除之前的 flex-direction: column 设置 */
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(2) > div {
-            width: auto !important;
-            margin-bottom: 0 !important; /* 移除内部 margin */
-        }
-
-        #gal-sprite-upload-modal label {
-            font-size: 0.8rem !important;
-            margin-bottom: 0.25rem !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-        }
-
-        #gal-sprite-upload-modal input[type="text"],
-        #gal-sprite-upload-modal select {
-            padding: 0.4rem 0.5rem !important; /* 减小输入框高度 */
-            font-size: 0.85rem !important;
-            height: 32px !important; /* 固定较小高度 */
-        }
-
-        /* TTS音色区域：紧凑化 */
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(3) {
-            padding: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-            flex: none !important;
-        }
-
-        #gal-sprite-upload-modal > .gal-input-box > div:nth-child(3) > div {
-            flex-direction: row !important; /* TTS 尝试水平排列 */
-            flex-wrap: wrap !important;
-            gap: 0.5rem !important;
-            align-items: center !important;
-        }
-
-        #gal-sprite-upload-modal #gal-tts-voice-select {
-            flex: 1 !important;
-            width: auto !important;
-            min-width: 120px !important;
-        }
-
-        #gal-sprite-upload-modal #gal-tts-voice-save-btn {
-            width: auto !important;
-            padding: 0 0.75rem !important;
-            height: 32px !important;
-        }
-
-        /* Tab 标签适配：更扁平 */
-        #gal-sprite-upload-modal .gal-upload-tabs {
-            margin-bottom: 0.5rem !important;
-            flex-wrap: nowrap !important; /* 强制不换行 */
-            overflow-x: auto !important; /* 允许横向滚动 */
-            flex: none !important;
-            min-height: auto !important;
-            gap: 0.25rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-upload-tab {
-            padding: 0.35rem 0.5rem !important; /* 减小 Tab 内边距 */
-            font-size: 0.8rem !important;
-            flex: 1 !important;
-            min-width: auto !important;
-            text-align: center !important;
-            white-space: nowrap !important;
-            border-radius: 0.25rem !important;
-        }
-
-        /* 上传/内容区域：占据剩余空间 */
-        #gal-sprite-upload-modal #gal-upload-content {
-            flex: 1 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            min-height: 0 !important; /* 关键：允许 flex item 压缩 */
-            overflow-y: auto !important;
-        }
-
-        /* 上传卡片 */
-        #gal-sprite-upload-modal #gal-upload-trigger {
-            flex: 1 !important; /* 自动填充剩余高度 */
-            min-height: 120px !important;
-            padding: 0.75rem !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-trigger i {
-            font-size: 2rem !important;
-            margin-bottom: 0.5rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-trigger span {
-            font-size: 1rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-trigger small {
-            font-size: 0.75rem !important;
-        }
-
-        /* 远程链接区域 */
-        #gal-sprite-upload-modal #gal-upload-remote > div {
-            padding: 1rem !important;
-            min-height: 120px !important;
-        }
-
-        /* ComfyUI 区域 */
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:first-child {
-            padding: 0.75rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:first-child i {
-            font-size: 1.25rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:first-child span {
-            font-size: 1rem !important;
-        }
-
-        /* ComfyUI 工作流选择 */
-        #gal-sprite-upload-modal #gal-upload-comfyui > div:nth-child(2) {
-            flex-direction: column !important;
-            gap: 0.75rem !important;
-        }
-
-        /* 裁剪区域 */
-        #gal-sprite-upload-modal #gal-crop-area {
-            margin-bottom: 0.75rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-container {
-            padding: 0.5rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-controls {
-            flex-wrap: wrap !important;
-            gap: 0.5rem !important;
-            padding: 0.5rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-controls input[type="range"] {
-            width: 120px !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-btn {
-            padding: 0.375rem 0.625rem !important;
-            font-size: 0.8rem !important;
-        }
-
-        #gal-sprite-upload-modal .gal-crop-controls span {
-            font-size: 0.85rem !important;
-        }
-
-        #gal-sprite-upload-modal #gal-crop-area > p {
-            font-size: 0.75rem !important;
-            margin: 0.5rem 0 !important;
-        }
-
-        /* 底部按钮区 */
-        #gal-sprite-upload-modal .gal-input-actions {
-            flex-direction: column !important;
-            gap: 0.5rem !important;
-            margin-top: 0.75rem !important;
-            padding-top: 0.75rem !important;
-            border-top: 1px solid #eee !important;
-        }
-
-        #gal-sprite-upload-modal .gal-input-actions button {
-            width: 100% !important;
-            min-height: 42px !important;
-            padding: 0.625rem 1rem !important;
-            font-size: 0.9rem !important;
-            flex: none !important;
-        }
-
-        /* 按钮文字隐藏图标简化 */
-        #gal-sprite-upload-modal .gal-input-actions button i {
-            margin-right: 0.375rem !important;
-        }
-    }
-
-    /* === 角色立绘管理弹窗移动端适配 === */
-    @media screen and (max-width: 48rem) {
-        #gal-character-sprites-modal .gal-input-box {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: 100% !important;
-            max-height: 100% !important;
-            border-radius: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-box > div:first-child {
-            padding: 0.75rem 1rem 0.5rem !important;
-            flex: 0 0 auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-title {
-            font-size: 1.1rem !important;
-        }
-
-        /* TTS 绑定区域：收紧高度并避免被拉伸 */
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(2) {
-            margin: 0.5rem 0.75rem 0 !important;
-            padding: 0.75rem !important;
-            border-radius: 0.5rem !important;
-            flex: 0 0 auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(2) > div:nth-child(2) {
-            flex-direction: row !important;
-            flex-wrap: wrap !important;
-            align-items: center !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-tts-voice-select {
-            flex: 1 1 10rem !important;
-            width: auto !important;
-            min-width: 10rem !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-tts-save-btn {
-            width: auto !important;
-            padding: 0.5rem 0.75rem !important;
-        }
-
-        /* 列表区内边距收紧，并允许滚动填满剩余空间 */
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(3) {
-            padding: 0.75rem 1rem !important;
-            flex: 1 1 auto !important;
-            min-height: 0 !important;
-            overflow-y: auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-input-box > div:nth-child(3) > div:first-child {
-            flex-direction: row !important;
-            flex-wrap: wrap !important;
-            align-items: center !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-add-sprite-btn {
-            width: auto !important;
-        }
-
-        #gal-character-sprites-modal .gal-sprite-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-            gap: 0.5rem !important;
-        }
-
-        #gal-character-sprites-modal .gal-sprite-card {
-            border-radius: 0.375rem !important;
-        }
-
-        #gal-character-sprites-modal .gal-sprite-label {
-            font-size: 0.75rem !important;
-            padding: 0.375rem !important;
-        }
-
-        /* 底部按钮区：改为纵向 */
-        #gal-character-sprites-modal .gal-input-box > div:last-child {
-            flex-direction: column !important;
-            gap: 0.5rem !important;
-            padding: 0.75rem 1rem !important;
-            flex: 0 0 auto !important;
-            margin-top: 0 !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-sprites-back,
-        #gal-character-sprites-modal #gal-char-sprites-close {
-            width: 100% !important;
-            min-height: 40px !important;
-        }
-    }
-
-    /* === 超窄屏优化 (<= 360px) === */
-    @media screen and (max-width: 22.5rem) {
-        #gal-character-sprites-modal .gal-sprite-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        }
-
-        #gal-character-sprites-modal #gal-char-add-sprite-btn {
-            width: 100% !important;
-        }
-    }
+    const css = `:root{--gal-z-overlay: 10000;--gal-z-dropdown: 1000;--gal-z-toast: 100000;--gal-z-modal: 100001;--gal-z-modal-critical: 100002;--gal-accent: #00d2ff;--gal-dark: #2b2e38;--gal-white: #ffffff;--gal-accent-sub: #ff0055;--gal-font-eng: "Barlow", sans-serif}.gal-z-overlay{z-index:var(--gal-z-overlay)!important}.gal-z-dropdown{z-index:var(--gal-z-dropdown)!important}.gal-z-toast{z-index:var(--gal-z-toast)!important}.gal-z-modal{z-index:var(--gal-z-modal)!important}.gal-z-critical{z-index:var(--gal-z-modal-critical)!important}#gal-global-overlay{position:relative!important;width:100%!important;min-height:31.25rem;height:70vh;max-height:50rem;display:none;background:transparent!important;font-family:Noto Sans SC,sans-serif;border-radius:.75rem;overflow:visible;margin:.625rem 0;contain:layout;-webkit-text-size-adjust:100%;text-size-adjust:100%}#gal-global-overlay{--ui-scale: 1;--font-scale: 1}#gal-global-overlay.active{display:block!important}.gal-draggable-handle{cursor:move;user-select:none}#gal-global-overlay.fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-height:none!important;min-height:100vh!important;z-index:var(--gal-z-overlay)!important;border-radius:0!important;margin:0!important;box-shadow:none!important}#chat>.mes.gal-hidden{display:none!important}.gal-embedded-viewer{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#000000b3;backdrop-filter:blur(.375rem)}.gal-embedded-viewer-body{position:relative;max-width:95vw;max-height:90vh;overflow:auto;border-radius:.75rem;box-shadow:0 .5rem 2rem #00000080}.gal-embedded-viewer-close{position:fixed;top:.75rem;right:.75rem;z-index:100000;display:flex;align-items:center;gap:.375rem;padding:.5rem 1rem;border-radius:.5rem;border:.0625rem solid rgba(255,255,255,.2);background:linear-gradient(135deg,#1e1e28f2,#323246f2);backdrop-filter:blur(.625rem);color:#fff;font-size:.85rem;cursor:pointer;box-shadow:0 .25rem 1rem #0006;transition:opacity .2s}.gal-embedded-viewer-close:hover{opacity:.85}@media screen and (max-width: 48rem){.gal-embedded-viewer{align-items:flex-start!important;padding-top:3rem!important;padding-top:calc(3rem + env(safe-area-inset-top))!important}.gal-embedded-viewer-body{max-height:calc(100vh - 4rem)!important;max-height:calc(100dvh - 4rem - env(safe-area-inset-top))!important;max-width:100vw!important;border-radius:0!important}}.gal-fullscreen-btn{position:absolute;top:.938rem;right:.938rem;z-index:100;background:#2b2e38e6;color:var(--gal-accent);border:.125rem solid var(--gal-accent);padding:.625rem 1.125rem;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:all .2s;font-family:Barlow,sans-serif;border-radius:.25rem;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-fullscreen-btn:hover{background:var(--gal-accent);color:var(--gal-dark)}.gal-fullscreen-btn i{font-size:1rem}.gal-status-bar-container{position:absolute;top:.938rem;right:7.5rem;z-index:100;display:flex;gap:.625rem;align-items:center;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-location-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(0,210,255,.5);white-space:nowrap;max-width:21.875rem;overflow:hidden;display:flex;align-items:center}.gal-location-bar i{color:var(--gal-accent);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-location-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-time-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(255,0,85,.5);white-space:nowrap;max-width:16.25rem;overflow:hidden;display:flex;align-items:center}.gal-time-bar i{color:var(--gal-accent-sub);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-time-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-status-bar-container .auto-shrink{display:inline-block;transform-origin:left center}#gal-global-overlay.fullscreen .gal-status-bar-container{right:8.125rem}.gal-bgm-widget{position:absolute;top:.938rem;left:.938rem;z-index:100;background:#2b2e38d9;backdrop-filter:blur(.313rem);padding:.5rem .938rem;border-radius:1.25rem;color:#fff;display:flex;align-items:center;gap:.625rem;font-size:.85rem;box-shadow:0 .25rem .625rem #0003;transition:all .3s ease;border:1px solid rgba(255,255,255,.1);max-width:2.5rem;overflow:hidden;white-space:nowrap;cursor:pointer}.gal-bgm-widget:hover,.gal-bgm-widget.active{max-width:18.75rem;background:#2b2e38f2}.gal-bgm-icon{color:var(--gal-accent);animation:galSpin 4s linear infinite;animation-play-state:paused;font-size:1.1rem;min-width:1.25rem;text-align:center}.gal-bgm-widget.playing .gal-bgm-icon{animation-play-state:running}@keyframes galSpin{to{transform:rotate(360deg)}}.gal-bgm-info{display:flex;flex-direction:column;line-height:1.2;overflow:hidden;margin-right:.313rem}.gal-bgm-title{font-weight:700;font-size:.8rem;color:var(--gal-accent)}.gal-bgm-ctrl{display:flex;align-items:center;gap:.5rem}.gal-bgm-btn{background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem;padding:0;width:1.25rem}.gal-bgm-btn:hover{color:var(--gal-accent)}.gal-bgm-slider{width:3.75rem;height:.25rem;-webkit-appearance:none;background:#ffffff4d;border-radius:.125rem;outline:none}.gal-bgm-slider::-webkit-slider-thumb{-webkit-appearance:none;width:.625rem;height:.625rem;background:#fff;border-radius:50%;cursor:pointer}.gal-game-container{position:relative;width:100%;height:100%;background:transparent;font-family:Noto Sans SC,sans-serif;overflow:hidden;border-radius:.75rem;box-shadow:0 .25rem 1.25rem #0000001a;box-sizing:border-box}#gal-global-overlay.fullscreen .gal-game-container{border-radius:0;box-shadow:none;padding:0}.gal-layer-bg{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;background:#f0f2f5;overflow:hidden}.gal-bg-layer{position:absolute;inset:0;background-repeat:no-repeat;background-size:cover;background-position:center;opacity:1;transform:scale(1);transition:opacity .45s ease,transform .45s ease;will-change:opacity,transform}.gal-bg-front{opacity:0;transform:scale(1.03)}.gal-bg-front.is-active{opacity:1;transform:scale(1)}.gal-layer-bg.generating-bg .gal-bg-layer{opacity:0!important}@media (prefers-reduced-motion: reduce){.gal-bg-layer{transition:none!important;transform:none!important}.gal-bg-front{opacity:0}.gal-bg-front.is-active{opacity:1}}.gal-game-content{position:relative;width:100%;height:100%;z-index:1}.gal-layer-bg:before{content:"";position:absolute;top:0;left:0;width:100%;height:100%;background-image:radial-gradient(#ccc 1px,transparent 1px);background-size:1.25rem 1.25rem;opacity:.3;pointer-events:none}.gal-layer-bg.has-bg:before{display:none}.gal-layer-bg.generating-bg{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)}@keyframes galGenGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}to{background-position:0% 50%}}.gal-layer-bg.generating-bg:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent .125rem,rgba(0,210,255,.03) .125rem,rgba(0,210,255,.03) .25rem);opacity:.15;pointer-events:none}@keyframes galGenScanline{0%{transform:translateY(-100%)}to{transform:translateY(100%)}}@keyframes galSpriteSlideInLeft{0%{transform:translate(-6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInRight{0%{transform:translate(6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInCenter{0%{transform:translateY(3.125rem);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes galSpriteSlideOutLeft{0%{transform:translate(0);opacity:1}to{transform:translate(-6.25rem);opacity:0}}@keyframes galSpriteSlideOutRight{0%{transform:translate(0);opacity:1}to{transform:translate(6.25rem);opacity:0}}@keyframes galSpriteBreathing{0%,to{transform:translateY(0)}50%{transform:translateY(-.188rem)}}@keyframes galSpriteShake{0%,to{transform:translate(0)}20%{transform:translate(-.313rem)}40%{transform:translate(.313rem)}60%{transform:translate(-.188rem)}80%{transform:translate(.188rem)}}@keyframes galSpriteBounce{0%{transform:scale(1)}30%{transform:scale(1.15)}50%{transform:scale(.95)}70%{transform:scale(1.05)}to{transform:scale(1)}}@keyframes galSpriteExpressionChange{0%{opacity:.7;transform:scale(.98)}to{opacity:1;transform:scale(1)}}.gal-layer-character{position:absolute;bottom:35%;left:0;width:100%;height:55%;z-index:5;display:flex;justify-content:center;align-items:flex-end;pointer-events:none;padding:0 3%;gap:2%}.gal-live2d-stage-canvas{z-index:4;pointer-events:none}.gal-live2d-position-guide{position:absolute;inset:0;pointer-events:none;z-index:6}.gal-live2d-position-guide-box{position:absolute;border:.125rem dashed rgba(0,210,255,.55);border-radius:.625rem;box-shadow:0 0 1rem #00d2ff47;background:#0000000f}.gal-live2d-position-guide-label{position:absolute;top:-1.25rem;left:0;font-size:.72rem;line-height:1;color:#77dfff;text-shadow:0 0 .375rem rgba(0,0,0,.5);white-space:nowrap}.gal-live2d-position-toolbar{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translate(-50%);width:min(92vw,36rem);min-width:20rem;max-height:min(65vh,33.75rem);overflow-y:auto;padding:.9375rem 1.125rem;display:flex;flex-direction:column;gap:.6875rem;border-radius:.9375rem;border:.0625rem solid rgba(255,255,255,.16);color:#fff;background:linear-gradient(135deg,#1a1c26f7,#2a2e40f7);backdrop-filter:blur(.625rem);box-shadow:0 .5rem 1.75rem #00000075}.gal-live2d-position-row{display:flex;align-items:center;gap:.625rem}.gal-live2d-position-label{min-width:4.5rem;font-size:.85rem;color:#ffffffeb}.gal-live2d-position-slider{flex:1;cursor:pointer;accent-color:#00d2ff}.gal-live2d-position-value{min-width:2.875rem;text-align:right;font-size:.9rem;font-weight:600}.gal-live2d-position-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.25rem}.gal-live2d-position-btn{border:none;border-radius:.5rem;padding:.5rem .875rem;color:#fff;cursor:pointer;font-size:.85rem}.gal-live2d-position-btn-reset{background:#ffffff1f;border:.0625rem solid rgba(255,255,255,.2)}.gal-live2d-position-btn-cancel{background:#dc3545d1}.gal-live2d-position-btn-save{background:linear-gradient(135deg,#00d2ff,#3a7bd5);font-weight:600}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-live2d-position-toolbar{top:calc(.5rem + env(safe-area-inset-top,0px));bottom:auto;width:calc(100vw - 1rem);min-width:0;max-height:calc(72vh - env(safe-area-inset-top,0px));padding:.8125rem .8125rem .75rem;border-radius:.75rem}.gal-live2d-position-label{min-width:3.75rem;font-size:.8rem}.gal-live2d-position-value{min-width:2.5rem;font-size:.85rem}.gal-live2d-position-actions{flex-wrap:wrap;justify-content:stretch;margin-top:.125rem}.gal-live2d-position-btn{flex:1 1 calc(50% - .3125rem);min-height:2.25rem;font-size:.82rem;padding:.5rem .625rem}}.gal-char-slot{position:relative;flex:0 0 30%;max-width:30%;height:100%;display:flex;align-items:flex-end;justify-content:center;pointer-events:auto}.gal-char-slot.slot-left{order:1}.gal-char-slot.slot-right{order:2}.gal-char-container{position:relative;max-height:100%;--state-scale: 1;transform-origin:bottom center;max-width:100%;display:flex;align-items:flex-end;justify-content:center;filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,0,.4));transition:transform .4s cubic-bezier(.175,.885,.32,1.275),filter .3s ease,opacity .3s ease;pointer-events:auto;cursor:pointer;animation:galSpriteBreathing 4s ease-in-out infinite}.gal-char-container.entering-left{animation:galSpriteSlideInLeft .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-center{animation:galSpriteSlideInCenter .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-right{animation:galSpriteSlideInRight .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.exiting-left{animation:galSpriteSlideOutLeft .4s ease-in forwards;pointer-events:none}.gal-char-container.exiting-right{animation:galSpriteSlideOutRight .4s ease-in forwards;pointer-events:none}.gal-char-container.expression-change{animation:galSpriteExpressionChange .3s ease-out}.gal-char-container.speaking{--state-scale: 1.05;z-index:10;filter:drop-shadow(0 .938rem 2.5rem rgba(0,0,0,.5));position:relative}.gal-char-container.silent{--state-scale: .95;filter:drop-shadow(0 .313rem .938rem rgba(0,0,0,.3));z-index:4}@keyframes speakingGlow{0%,to{filter:drop-shadow(0 0 .5rem rgba(255,215,0,.7)) drop-shadow(0 0 .938rem rgba(255,180,0,.5)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}50%{filter:drop-shadow(0 0 .938rem rgba(255,215,0,.9)) drop-shadow(0 0 1.875rem rgba(255,180,0,.7)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}}.gal-layer-character.glow-enabled .gal-char-container.speaking{animation:speakingGlow 2s ease-in-out infinite,galSpriteBreathing 4s ease-in-out infinite}@keyframes bubbleBounce{0%,to{transform:translateY(0) scale(1)}50%{transform:translateY(-.5rem) scale(1.1)}}.gal-layer-character.bubble-enabled .gal-char-container.speaking:before{content:"?";position:absolute;top:-.625rem;right:10%;font-size:2.5rem;z-index:100;animation:bubbleBounce 1s ease-in-out infinite;filter:drop-shadow(.125rem .125rem .25rem rgba(0,0,0,.5))}.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{content:"\\f028"!important;font-family:"Font Awesome 6 Free";font-weight:900;color:var(--gal-accent);font-size:2.2rem}@media screen and (max-width: 48rem){.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{font-size:1.5rem!important;top:-.3rem!important;right:5%!important}}.gal-char-container[data-emotion=angry]{animation:galSpriteShake .4s ease-in-out 2,galSpriteBreathing 4s ease-in-out .8s infinite}.gal-char-container[data-emotion=surprised]{animation:galSpriteBounce .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-layer-character.scene-night{filter:hue-rotate(-10deg) brightness(.85) saturate(.9)}.gal-layer-character.scene-night .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,100,.5))}.gal-layer-character.scene-indoor{filter:sepia(.08) brightness(1.02)}.gal-layer-character.scene-indoor .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(100,50,0,.3))}.gal-char-img{max-height:100%;max-width:100%;height:auto;width:auto;object-fit:contain;object-position:bottom center;transform:scale(calc(var(--base-scale, 1) * var(--state-scale)));transform-origin:bottom center;transition:opacity .3s ease,transform .3s cubic-bezier(.175,.885,.32,1.275)}.gal-char-placeholder{width:12.5rem;height:21.875rem;background:linear-gradient(135deg,#fffc,#f0f0f0e6);border:.25rem dashed #ccc;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#999;gap:.625rem;border-radius:.625rem;cursor:pointer;transition:all .3s;pointer-events:auto}.gal-char-placeholder:hover{border-color:var(--gal-accent);color:var(--gal-accent)}.gal-char-placeholder i{font-size:4rem}.gal-char-placeholder span{font-size:.9rem;font-weight:600}.gal-dialog-layer{position:absolute;bottom:1.25rem;left:10%;right:10%;height:30%;max-width:none;z-index:30;pointer-events:auto}.gal-name-badge{position:absolute;top:-1.375rem;left:0;background:var(--gal-dark);color:var(--gal-accent);padding:.5rem 2.188rem .5rem 1.563rem;font-size:1.4rem;font-weight:900;font-family:Barlow,sans-serif;transform:skew(-15deg) scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem #0003}.gal-name-badge span{display:block;transform:skew(15deg)}.gal-sprite-toggle{position:absolute;top:-1.375rem;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gal-dark);border:none;border-radius:.375rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem #0003;transition:all .2s ease;opacity:.8}.gal-sprite-toggle:hover{opacity:1;background:var(--gal-accent)}.gal-sprite-toggle:hover .gal-eye-icon{color:var(--gal-dark)}.gal-eye-icon{font-size:1.2rem;color:var(--gal-accent);transition:color .2s ease;transform:skew(0)}.gal-sprite-toggle.sprites-hidden{background:#646464cc}.gal-sprite-toggle.sprites-hidden .gal-eye-icon{color:#999}.gal-sprite-toggle.sprites-hidden:hover{background:var(--gal-accent)}.gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon{color:var(--gal-dark)}.gal-layer-character.sprites-hidden{opacity:0!important;pointer-events:none!important;transition:opacity .3s ease}.gal-narrator-label{background:#666;color:#fff}.gal-cg-thumbnail{max-height:3.5rem;border-radius:.25rem;vertical-align:middle;margin-right:.5rem;cursor:pointer;box-shadow:0 2px 4px #0000004d}.gal-cg-viewer{position:absolute;inset:0;background:#000000eb;z-index:100;display:flex;align-items:center;justify-content:center;cursor:pointer}.gal-cg-viewer-img{max-width:90%;max-height:90%;object-fit:contain;border-radius:.5rem;box-shadow:0 4px 20px #00000080}.gal-cg-viewer-close{position:absolute;top:1rem;right:1rem;background:#ffffff26;border:none;color:#fff;width:2.5rem;height:2.5rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:background .2s ease}.gal-cg-viewer-close:hover{background:#ffffff4d}.gal-cg-viewer-loading{color:#fff9;font-size:1.1rem}.gal-generating-status{position:absolute;top:-3.75rem;left:50%;transform:translate(-50%) scale(.8);background:linear-gradient(135deg,var(--gal-accent) 0%,#ff6b9d 100%);color:#fff;padding:.5rem 1.25rem;font-size:.9rem;font-weight:700;border-radius:1.25rem;box-shadow:0 .25rem .938rem #0000004d;opacity:0;transition:all .3s ease;pointer-events:none;z-index:50}.gal-generating-status.show{opacity:1;transform:translate(-50%) scale(1)}.gal-interaction-bar{position:absolute;top:-3.438rem;right:0;display:flex;gap:.938rem;z-index:35;transform:scale(var(--ui-scale));transform-origin:bottom right}.gal-action-btn{padding:.75rem 1.875rem;font-weight:700;font-size:1.1rem;cursor:pointer;transform:skew(-15deg);display:flex;align-items:center;gap:.625rem;transition:all .2s cubic-bezier(.34,1.56,.64,1);border:.125rem solid transparent;box-shadow:.313rem .313rem #0003;font-family:Noto Sans SC,sans-serif;background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn span,.gal-action-btn i{transform:skew(15deg)}.gal-action-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem #0000004d}.gal-action-btn.btn-reroll{background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn.btn-reroll:hover{background:var(--gal-dark);color:var(--gal-accent);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent)}.gal-action-btn.btn-free{background:var(--gal-accent-sub);color:#fff;border-color:var(--gal-accent-sub)}.gal-action-btn.btn-free:hover{background:var(--gal-dark);color:var(--gal-accent-sub);border-color:var(--gal-dark);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent-sub)}.gal-text-panel{position:relative;width:100%;height:100%;box-sizing:border-box;background:#fffffff2;background-image:linear-gradient(135deg,transparent 0%,transparent 95%,rgba(0,210,255,.1) 95%,rgba(0,210,255,.1) 100%);background-size:1.25rem 1.25rem;box-shadow:0 .625rem 1.875rem #00000026;border-radius:0;padding:2.5rem 3.75rem 5rem;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none}.gal-text-panel::-webkit-scrollbar{display:none}.gal-dialog-text{font-size:calc(1.25rem * var(--ui-scale) * var(--font-scale, 1));line-height:1.9;color:#333;font-weight:500;letter-spacing:.02em}.gal-text-panel.text-effect-glass{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:#ffffffb3!important}.gal-text-panel.text-effect-gradient:before{content:"";position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(0,0,0,.6) 0%,rgba(0,0,0,.3) 50%,transparent 100%);pointer-events:none;z-index:1}.gal-text-panel.text-effect-gradient .gal-dialog-text{position:relative;z-index:2}.gal-text-panel.text-effect-gradient .gal-name-badge{z-index:3}.gal-text-panel.text-effect-text-bg{background:transparent!important;background-image:none!important;box-shadow:none!important}.gal-tts-loading{position:absolute;top:auto;bottom:1rem;right:1.5rem;display:flex;align-items:center;justify-content:center;width:2.5rem;height:2.5rem;padding:0;background:#fffffff2;border:.125rem solid var(--gal-accent);border-radius:50%;color:var(--gal-accent);box-shadow:0 .25rem .75rem #0000001a;opacity:0;transform:scale(.8);transition:all .4s cubic-bezier(.175,.885,.32,1.275);pointer-events:none;z-index:10}.gal-tts-loading.active{opacity:1;transform:scale(1)}.gal-tts-loading i{font-size:1rem;color:var(--gal-accent)}.gal-generating-indicator{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.75rem;padding:1.25rem 2.5rem;background:#fffffffa;border:.188rem solid var(--gal-accent);border-radius:1rem;box-shadow:0 .5rem 2rem #00d2ff4d;z-index:20;opacity:0;visibility:hidden;transition:all .3s ease}.gal-generating-indicator.active{opacity:1;visibility:visible}.gal-generating-indicator .gal-gen-icon{font-size:2.5rem;color:var(--gal-accent);animation:galGenPulse 1.5s ease-in-out infinite}.gal-generating-indicator .gal-gen-text{font-size:1.1rem;font-weight:700;color:var(--gal-dark);letter-spacing:.05em}.gal-generating-indicator .gal-gen-status{font-size:.85rem;color:#666;max-width:17.5rem;text-align:center;min-height:1.2em}.gal-generating-indicator .gal-gen-dots{display:flex;gap:.375rem;margin-top:.25rem}.gal-generating-indicator .gal-gen-dot{width:.5rem;height:.5rem;background:var(--gal-accent);border-radius:50%;animation:galGenDotBounce 1.4s ease-in-out infinite both}.gal-generating-indicator .gal-gen-dot:nth-child(1){animation-delay:-.32s}.gal-generating-indicator .gal-gen-dot:nth-child(2){animation-delay:-.16s}@keyframes galGenPulse{0%,to{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.8}}@keyframes galGenDotBounce{0%,80%,to{transform:scale(0)}40%{transform:scale(1)}}.gal-bottom-toolbar{position:absolute;bottom:0;left:0;width:100%;height:auto;min-height:3.75rem;padding:.625rem 1.875rem 0;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:100;contain:layout style}.gal-bottom-toolbar>*{pointer-events:auto}.gal-toolbar-left,.gal-toolbar-right{display:flex;align-items:flex-end;gap:.5rem}.gal-footer-btn{background:#ffffffe6!important;color:var(--gal-dark)!important;padding:0 calc(.75rem * var(--ui-scale))!important;font-family:var(--gal-font-eng)!important;font-weight:800!important;font-size:calc(.85rem * var(--ui-scale))!important;cursor:pointer!important;transition:background .2s,color .2s,transform .2s,box-shadow .2s!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;display:flex!important;align-items:center!important;gap:calc(.375rem * var(--ui-scale))!important;height:calc(2.25rem * var(--ui-scale))!important;transform:skew(-10deg)!important;box-shadow:calc(.125rem * var(--ui-scale)) calc(.125rem * var(--ui-scale)) 0 #0000001a!important;border-radius:0!important;will-change:transform}.gal-footer-btn i,.gal-footer-btn span{transform:skew(10deg)!important;font-size:calc(1rem * var(--ui-scale))!important}.gal-footer-btn:hover{background:var(--gal-dark)!important;color:#fff!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.25rem .25rem #0003!important}.gal-footer-btn-next{background:var(--gal-dark)!important;color:#fff!important;font-size:calc(1.3rem * var(--ui-scale))!important;font-weight:800!important;padding:0 calc(2.5rem * var(--ui-scale))!important;height:calc(3.438rem * var(--ui-scale))!important;min-width:calc(8.75rem * var(--ui-scale))!important;border-radius:0!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;margin-left:calc(.938rem * var(--ui-scale))!important;margin-right:0!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:center!important;gap:calc(.625rem * var(--ui-scale))!important;white-space:nowrap!important;line-height:1!important;box-shadow:calc(.25rem * var(--ui-scale)) calc(.25rem * var(--ui-scale)) 0 #0003!important;flex-shrink:0!important;clip-path:polygon(calc(1.563rem * var(--ui-scale)) 0,100% 0,100% 100%,0% 100%)!important;transition:background .2s ease,color .2s ease,transform .2s ease!important;transform:none!important;will-change:transform}.gal-footer-btn-next:hover{background:var(--gal-accent)!important;color:var(--gal-dark)!important;transform:translate(-.188rem)!important}.gal-footer-btn-next i{font-size:1.1rem!important;margin:0!important}.gal-bottom-toolbar{justify-content:flex-start;gap:calc(.25rem * var(--ui-scale));padding:.625rem .75rem 0;overflow:visible}.gal-footer-btn{padding:0 calc(.55rem * var(--ui-scale))!important;gap:calc(.25rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important}.gal-footer-btn i,.gal-footer-btn span{font-size:calc(.9rem * var(--ui-scale))!important}.gal-pending-choices-btn{padding:0 calc(.7rem * var(--ui-scale))!important;height:calc(2.45rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important;margin-left:auto!important;margin-right:0!important}.gal-footer-btn-next{margin-left:calc(.375rem * var(--ui-scale))!important;margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.9rem * var(--ui-scale))!important}.gal-progress-indicator{font-family:Barlow,sans-serif;font-size:.85rem;font-weight:700;color:#888;padding:.375rem .625rem;display:flex;align-items:center;height:2.25rem}.gal-nav-btn.active{background:var(--gal-accent)!important;color:var(--gal-dark)!important;box-shadow:inset 1px 1px .188rem #0003!important}.gal-auto-playing{background:var(--gal-accent-sub)!important;color:#fff!important;border-color:var(--gal-accent-sub)!important;animation:galPulse 1s infinite}@keyframes galPulse{0%,to{opacity:1}50%{opacity:.8}}.gal-input-modal,#gal-free-input-modal{position:fixed;inset:0;background:#00000080;backdrop-filter:blur(.25rem);z-index:var(--gal-z-modal)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .2s ease}#gal-live2d-settings-modal{z-index:var(--gal-z-modal-critical)!important}@keyframes galFadeIn{0%{opacity:0}to{opacity:1}}.gal-input-box{background:var(--gal-white);border:.188rem solid var(--gal-dark);box-shadow:.625rem .625rem #00000026;width:90%;max-width:31.25rem;padding:1.563rem}.gal-input-title{font-family:Barlow,sans-serif;font-size:1.3rem;font-weight:800;color:var(--gal-dark);margin-bottom:.938rem;transform:skew(-5deg)}.gal-input-title span{transform:skew(5deg);display:block}.gal-input-field{width:100%;border:.125rem solid var(--gal-dark);padding:.75rem .938rem;font-size:1rem;font-family:Noto Sans SC,sans-serif;resize:vertical;min-height:5rem;box-sizing:border-box}.gal-input-field:focus{outline:none;border-color:var(--gal-accent);box-shadow:0 0 0 .188rem #00d2ff33}.gal-input-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.938rem}.gal-toast{position:fixed;bottom:1.875rem;right:1.875rem;background:var(--gal-dark);color:var(--gal-white);padding:.75rem 1.563rem;font-weight:600;transform:skew(-5deg);box-shadow:.313rem .313rem 0 var(--gal-accent);z-index:var(--gal-z-toast);animation:galToastIn .3s ease}.gal-toast span{display:block;transform:skew(5deg)}@keyframes galToastIn{0%{opacity:0;transform:skew(-5deg) translateY(1.25rem)}to{opacity:1;transform:skew(-5deg) translateY(0)}}.gal-input-modal,.gal-config-modal{position:fixed;inset:0;background:#0009;backdrop-filter:blur(.375rem);z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center}.gal-import-progress-overlay{z-index:var(--gal-z-modal-critical)!important}@media screen and (max-width: 48rem){.gal-import-progress-box{transform:translateY(8vh)}}.gal-config-panel{background:var(--gal-white);border:none!important;box-shadow:none!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;display:flex;flex-direction:column;border-radius:0!important}.gal-config-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.563rem;display:flex;justify-content:space-between;align-items:center}.gal-config-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:800;color:var(--gal-accent)}.gal-config-close{background:transparent;border:.125rem solid var(--gal-white);color:var(--gal-white);width:2rem;height:2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}.gal-config-close:hover{background:var(--gal-accent-sub);border-color:var(--gal-accent-sub)}.gal-config-body{padding:1.563rem;overflow-y:auto;flex:1}.gal-sprite-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.375rem,1fr));gap:.938rem}.gal-sprite-card{border:.125rem solid #eee;padding:.625rem;text-align:center;cursor:pointer;transition:all .2s}.gal-sprite-card:hover{border-color:var(--gal-accent);box-shadow:0 .25rem .75rem #00d2ff26}.gal-sprite-preview{width:100%;aspect-ratio:2 / 3;object-fit:cover;object-position:top center;background:#f9f9f9;border-radius:.25rem;margin-bottom:.5rem}.gal-crop-container{position:relative;width:100%;overflow:visible;background:#1a1a2e;border-radius:.5rem}.gal-crop-canvas-wrapper{position:relative;width:100%;height:23.75rem;overflow:hidden;cursor:move;display:flex;align-items:center;justify-content:center;background:#1a1a2e;border-radius:.5rem .5rem 0 0}#gal-crop-canvas{display:block}.gal-crop-overlay{position:absolute;inset:0;pointer-events:none}.gal-crop-frame{position:absolute;border:.188rem solid var(--gal-accent);box-shadow:0 0 0 624.938rem #0009;pointer-events:none}.gal-crop-controls{display:flex;align-items:center;justify-content:center;gap:.938rem;padding:.75rem 1.25rem;background:#000c;border-radius:0 0 .5rem .5rem}.gal-crop-controls .gal-crop-btn{padding:.5rem 1rem;min-width:3.75rem;font-size:.9rem}.gal-crop-zoom-slider{width:9.375rem;accent-color:var(--gal-accent)}.gal-crop-zoom-label{color:#fff;font-size:.85rem;font-weight:600;min-width:2.813rem}.gal-crop-btn{padding:.5rem 1rem;border:none;border-radius:.25rem;cursor:pointer;font-weight:600;transition:all .2s}.gal-crop-btn.reset{background:#666;color:#fff}.gal-crop-btn.reset:hover{background:#888}.gal-batch-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.938rem;max-height:60vh;overflow-y:auto;padding:.313rem}.gal-batch-upload-card{border:.125rem dashed #ccc;border-radius:.5rem;padding:.75rem;text-align:center;transition:all .2s;background:#fafafa}.gal-batch-upload-card:hover{border-color:var(--gal-accent);background:#00d2ff0d}.gal-batch-upload-card.has-image{border-style:solid;border-color:var(--gal-accent)}.gal-batch-upload-card .expression-label{font-weight:700;color:var(--gal-dark);margin-bottom:.625rem;font-size:.9rem}.gal-batch-upload-card .upload-preview{width:100%;aspect-ratio:2 / 3;background:#eee;border-radius:.375rem;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;margin-bottom:.5rem}.gal-batch-upload-card .upload-preview img{width:100%;height:100%;object-fit:cover;object-position:top center}.gal-batch-upload-card .upload-preview i{font-size:2rem;color:#bbb}.gal-batch-upload-card .upload-preview:hover i{color:var(--gal-accent)}.gal-batch-upload-card .remove-btn{background:var(--gal-accent-sub);color:#fff;border:none;padding:.25rem .625rem;border-radius:.25rem;font-size:.75rem;cursor:pointer;display:none}.gal-batch-upload-card.has-image .remove-btn{display:inline-block}.gal-sprite-label{font-size:.85rem;font-weight:700;color:var(--gal-dark);line-height:1.3}.gal-sprite-label small{font-weight:400;color:#888}.gal-upload-card{border:.125rem dashed #ccc;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:#999;min-height:7.5rem}.gal-upload-card:hover{border-color:var(--gal-accent);color:var(--gal-accent);background:#00d2ff0d}.gal-upload-card i{font-size:2rem}.gal-action-btn.primary{background:var(--gal-accent);color:var(--gal-dark);border-color:var(--gal-accent)}.gal-action-btn.primary:hover{background:var(--gal-dark);color:var(--gal-accent)}#gal-layer-choices{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;background:#0006!important;z-index:var(--gal-z-modal-critical)!important;display:none;flex-direction:column;justify-content:center;align-items:center;gap:.938rem;padding:1.25rem}#gal-layer-choices.active{display:flex!important;animation:galFadeIn .3s ease}.gal-choices-container{width:100%;max-width:32rem;display:flex;flex-direction:column;align-items:center;gap:.75rem;max-height:calc(100vh - 10rem);overflow-y:auto;padding:0 .5rem;box-sizing:border-box}.gal-choices-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:900;color:var(--gal-white);text-transform:uppercase;letter-spacing:.125rem;margin-bottom:.5rem;transform:skew(-10deg)}.gal-choices-title span{display:block;transform:skew(10deg)}.gal-choice-card{background:var(--gal-white);color:var(--gal-dark);padding:.75rem 1.875rem;min-width:12.5rem;max-width:90%;width:auto;text-align:center;font-weight:600;font-size:.95rem;line-height:1.4;border:.125rem solid var(--gal-dark);box-shadow:.375rem .375rem #00000026;transform:skew(-8deg);cursor:pointer;transition:all .2s cubic-bezier(.34,1.56,.64,1);position:relative;overflow:hidden;word-break:break-word}.gal-choice-card span{display:block;transform:skew(8deg)}.gal-choice-card:hover{background:var(--gal-accent);color:#fff;border-color:var(--gal-dark);transform:skew(-8deg) translate(-.188rem,-.188rem);box-shadow:.563rem .563rem 0 var(--gal-dark)}.gal-choice-card:after{content:"";display:none}.gal-choices-hint{font-size:.8rem;color:#ffffffb3;margin-top:.938rem}.gal-dialog-layer .gal-progress-container{position:absolute;bottom:0;left:0;width:100%;height:.375rem;background:#0003;border-radius:0;margin:0;z-index:10;overflow:hidden;position:relative;min-width:3.75rem}.gal-progress-bar{height:100%;background:linear-gradient(90deg,var(--gal-accent) 0%,#00a8cc 100%);width:0%;border-radius:0;transition:width .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 0 .625rem var(--gal-accent)}.gal-pending-choices-btn{background:linear-gradient(135deg,var(--gal-accent-sub) 0%,#cc0044 100%)!important;color:#fff!important;padding:0 calc(.72rem * var(--ui-scale))!important;font-weight:700!important;font-size:calc(.78rem * var(--ui-scale))!important;cursor:pointer!important;display:flex!important;align-items:center!important;gap:calc(.25rem * var(--ui-scale))!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;height:calc(2.25rem * var(--ui-scale))!important;margin-right:calc(.188rem * var(--ui-scale))!important;border-radius:0!important;transform:skew(-10deg)}.gal-pending-choices-btn.show{display:flex!important;-webkit-animation:galPendingPulse 2s ease-in-out infinite!important;animation:galPendingPulse 2s ease-in-out infinite!important}.gal-pending-choices-btn i,.gal-pending-choices-btn span{transform:skew(10deg)!important}.gal-pending-choices-btn i{font-size:calc(.9rem * var(--ui-scale))!important;margin:0!important}.gal-pending-choices-btn:hover{filter:brightness(1.1)!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.313rem .313rem #0003!important}@-webkit-keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}@keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}.gal-pending-choices-btn.gal-new-option-highlight{-webkit-animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important;animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important}@-webkit-keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}@keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}.gal-open-btn{display:inline-flex;align-items:center;gap:.313rem;padding:.125rem .5rem;background:transparent;color:var(--gal-accent);border:1px solid var(--gal-accent);border-radius:.25rem;font-size:.75rem;cursor:pointer;opacity:.6;transition:all .2s;margin-left:.313rem;font-family:Noto Sans SC,sans-serif}.gal-open-btn:hover{opacity:1;background:var(--gal-accent);color:var(--gal-dark)}.gal-history-modal{position:fixed!important;inset:0!important;background:#000000d9!important;backdrop-filter:blur(.313rem)!important;z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .3s ease}.gal-history-panel{background:var(--gal-white);border:.125rem solid var(--gal-accent);box-shadow:0 0 1.25rem #00d2ff4d;width:80%;max-width:50rem;height:80vh;display:flex;flex-direction:column;border-radius:.5rem;overflow:hidden}.gal-history-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.25rem;display:flex;justify-content:space-between;align-items:center;border-bottom:.125rem solid var(--gal-accent)}.gal-history-title{font-family:Noto Sans SC,sans-serif;font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:.625rem}.gal-history-close{background:transparent;border:none;color:#aaa;font-size:1.5rem;cursor:pointer;transition:color .2s;line-height:1}.gal-history-close:hover{color:var(--gal-accent)}.gal-history-body{flex:1;overflow-y:auto;padding:1.25rem;background:#f5f5f5}.gal-history-list{display:flex;flex-direction:column;gap:.938rem}.gal-history-item{background:#fff;padding:0;border-radius:.5rem;border:1px solid #eee;box-shadow:0 .25rem .75rem #0000000d;transition:all .2s;overflow:hidden;margin-bottom:.625rem}.gal-history-item:hover{box-shadow:0 .5rem 1.25rem #00d2ff26;transform:translateY(-.125rem);border-color:var(--gal-accent)}.gal-history-header-row{background:#f8f9fa;padding:.625rem 1.25rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}.gal-history-info-group{display:flex;align-items:center;gap:.75rem}.gal-history-index{background:var(--gal-accent);color:var(--gal-dark);padding:.125rem .5rem;border-radius:.25rem;font-size:.8rem;font-weight:700;font-family:Barlow,sans-serif}.gal-history-time{color:#666;font-size:.9rem;font-weight:600;font-family:Noto Sans SC,sans-serif;display:flex;align-items:center;gap:.375rem}.gal-history-time i{font-size:.8rem;color:#999}.gal-history-content{padding:1.25rem;font-size:1.05rem;line-height:1.8;color:#333;white-space:pre-wrap;text-align:justify}.gal-history-empty{text-align:center;padding:3.125rem;color:#999;font-style:italic}.galgame-database-container{position:fixed!important;top:0!important;left:0!important;width:100%!important;height:100%!important;z-index:var(--gal-z-modal-critical)!important;display:none}.gal-open-btn{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;background:linear-gradient(135deg,var(--gal-accent) 0%,#00a8cc 100%);color:#fff;border:none;border-radius:1.25rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 .125rem .5rem #00d2ff4d}.gal-open-btn:hover{transform:scale(1.05);box-shadow:0 .25rem .938rem #00d2ff80}.gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;gap:.5rem}.gal-realtime-label{font-size:.9rem!important;color:#2b2e38!important;font-weight:600!important;white-space:nowrap}.gal-realtime-switch{position:relative;display:inline-block;width:3.25rem;height:1.75rem;flex-shrink:0}.gal-realtime-switch input{opacity:0;width:0;height:0;position:absolute}.gal-realtime-slider{position:absolute;cursor:pointer;inset:0;background:linear-gradient(145deg,#d0d0d0,#b8b8b8);transition:all .3s ease;border-radius:1.75rem;box-shadow:inset 0 .125rem .25rem #0003}.gal-realtime-slider:before{content:"";position:absolute;height:1.375rem;width:1.375rem;left:.188rem;bottom:.188rem;background:linear-gradient(145deg,#fff,#f5f5f5);transition:transform .3s ease;border-radius:50%;box-shadow:0 .125rem .313rem #0000004d;z-index:2}.gal-realtime-slider:after{content:"OFF";position:absolute;right:.5rem;top:50%;transform:translateY(-50%);font-size:.563rem;font-weight:700;color:#666;z-index:1}.gal-realtime-switch input:checked+.gal-realtime-slider{background:linear-gradient(135deg,var(--gal-accent) 0%,var(--gal-accent-sub) 100%);box-shadow:inset 0 .125rem .25rem #0003,0 0 .75rem #00d2ff66}.gal-realtime-switch input:checked+.gal-realtime-slider:before{transform:translate(1.5rem)}.gal-realtime-switch input:checked+.gal-realtime-slider:after{content:"ON";left:.5rem;right:auto;color:#fffffff2}@media screen and (max-width: 48rem){.gal-input-modal,.gal-config-modal,#gal-settings-panel,#gal-asset-manager-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important;padding:0!important;z-index:var(--gal-z-modal-critical)!important;display:flex!important;align-items:center;justify-content:center}.gal-input-modal .gal-input-box,.gal-config-modal .gal-config-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;display:flex!important;flex-direction:column!important}.gal-config-body,.gal-input-box>div:not(.gal-input-title):not(.gal-input-actions){flex:1;overflow-y:auto!important}}@media screen and (max-width: 48rem){.gal-input-title{flex-direction:column;align-items:flex-start!important;gap:.625rem;padding:.625rem .938rem!important;height:auto!important}.gal-input-title span{font-size:1.2rem!important}.gal-input-title div{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.313rem}.gal-input-title div>button,.gal-input-title div>div{flex:1;min-width:auto!important;margin:0!important}.gal-title-btn{padding:.25rem .625rem!important;font-size:.85rem!important;min-width:auto!important;transform:none!important}.gal-title-btn *{transform:none!important}.gal-tab-header{padding:0 .625rem!important;gap:.625rem!important;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}.gal-tab-item{padding:.625rem .5rem!important;font-size:.9rem!important;flex-shrink:0}.gal-sub-header,.gal-action-bar{flex-direction:column;align-items:stretch!important;gap:.625rem;height:auto!important;padding:.625rem .938rem!important}.gal-action-group,.gal-filter-group{display:flex!important;flex-wrap:wrap;gap:.5rem!important;width:100%}.gal-action-btn{margin:0!important;flex:1;min-width:6.25rem;padding:.5rem 0!important;justify-content:center;transform:none!important}.gal-action-btn *{transform:none!important}.gal-grid-container{padding:.625rem!important;grid-template-columns:repeat(auto-fill,minmax(6.875rem,1fr))!important;gap:.625rem!important}.gal-input-box>div:last-child{padding:.625rem .938rem!important;min-height:auto!important}#gal-settings-close,#gal-char-sprites-close{min-height:2.5rem!important;transform:none!important}}#gal-asset-manager-modal .gal-asset-header{padding:.625rem .938rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;margin-bottom:.313rem!important}#gal-asset-manager-modal .gal-action-btn:where(#gal-asset-export,#gal-asset-export-remote,#gal-import-dropdown-btn){padding:.25rem .5rem!important;font-size:.8rem!important}#gal-asset-manager-modal .gal-tab-header{padding:0 .625rem!important;min-height:2.5rem!important}#gal-asset-manager-modal .gal-tab-btn{padding:.5rem .75rem!important;font-size:.9rem!important}#gal-asset-manager-modal .gal-tab-content{padding:.625rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin-bottom:.625rem!important;flex-wrap:wrap}#gal-asset-manager-modal .gal-input-actions{padding:.625rem .938rem!important;min-height:auto!important}#gal-asset-manager-modal .gal-asset-header>div{flex-wrap:wrap!important;gap:.625rem!important}#gal-asset-manager-modal .gal-input-title{white-space:nowrap!important;font-size:1.2rem!important;width:auto!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button i{margin:0!important;font-size:1rem!important}#gal-asset-manager-modal .gal-import-menu span{display:inline!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{display:flex!important;gap:.313rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;padding:.5rem .25rem!important;font-size:.85rem!important;white-space:nowrap!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:.25rem!important}#gal-asset-manager-modal .gal-input-actions{padding:.5rem!important}#gal-asset-manager-modal .gal-input-actions button{min-height:2.25rem!important;padding:0!important}#gal-asset-manager-modal .gal-asset-header{padding:1.25rem 1.563rem .938rem;border-bottom:1px solid #e0e0e0;flex-shrink:0}#gal-asset-manager-modal .gal-tab-header{display:flex;border-bottom:.125rem solid #e0e0e0;padding:0 1.563rem;flex-shrink:0}#gal-asset-manager-modal .gal-tab-content{flex:1;overflow-y:auto;padding:1.25rem 1.563rem}#gal-asset-manager-modal .gal-input-actions{padding:.938rem 1.563rem;border-top:1px solid #e0e0e0;flex-shrink:0}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{padding:.5rem .75rem!important;background:#fffffff2;backdrop-filter:blur(.625rem);border-bottom:1px solid rgba(0,0,0,.05)!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:.5rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;font-weight:700!important;margin-right:auto!important}#gal-asset-manager-modal .gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;margin-left:0!important;transform:scale(.85);transform-origin:left center;flex-shrink:0!important;min-width:fit-content;margin-right:.25rem}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child{display:block!important;height:auto!important;padding-bottom:.5rem!important;margin-bottom:.5rem!important;border-bottom:1px solid rgba(0,0,0,.05)!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>div{width:100%!important;display:flex!important;flex-wrap:wrap!important;justify-content:space-between!important;gap:.625rem!important;position:static!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds] .gal-realtime-toggle-wrapper{flex:0 0 100%!important;width:100%!important;order:-1!important;display:flex!important;align-items:center!important;justify-content:center!important;background:#00000008!important;border-radius:.5rem;padding:.5rem!important;margin:0!important;height:auto!important;min-height:2.5rem!important;visibility:visible!important;opacity:1!important;z-index:10!important}#gal-asset-manager-modal .gal-realtime-label{display:inline-block!important;font-size:.9rem!important;color:#444!important;margin-right:.625rem!important;font-weight:700!important}#gal-asset-manager-modal .gal-realtime-switch{display:inline-block!important;transform:scale(1)!important;margin:0!important}#gal-batch-bg-upload-btn,#gal-add-bg-btn{flex:1 1 45%!important;width:auto!important;margin:0!important}#gal-asset-manager-modal .gal-asset-header button{width:2rem!important;height:2rem!important;padding:0!important;border-radius:50%!important;background:#fff!important;border:1px solid #eee!important;color:#555!important;box-shadow:0 .125rem .313rem #0000000d!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important}#gal-import-menu{top:2.813rem!important;right:.625rem!important;width:12.5rem!important}#gal-asset-manager-modal .gal-tab-header{min-height:2.5rem!important;background:#f1f3f5;padding:.25rem!important;margin:0!important;border:none!important;gap:.25rem}#gal-asset-manager-modal .gal-tab-btn{flex:1;padding:0!important;display:flex;align-items:center;justify-content:center;border-radius:.375rem!important;border:none!important;font-size:.85rem!important;color:#666;background:transparent}#gal-asset-manager-modal .gal-tab-btn.active{background:#fff!important;color:#333!important;box-shadow:0 1px .188rem #0000001a!important;font-weight:700}#gal-asset-manager-modal .gal-tab-pane>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child .gal-realtime-toggle-wrapper{display:flex!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin:.625rem!important;gap:.5rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;height:2.25rem!important;border-radius:1.125rem!important;font-size:.85rem!important;box-shadow:0 .125rem .375rem #0000001a!important;padding:0!important}.gal-character-grid,.gal-bg-grid{padding:0 .625rem 3.75rem!important;gap:.5rem!important;grid-template-columns:repeat(3,1fr)!important}.gal-character-card,.gal-bg-card{box-shadow:none!important;border:1px solid #eee!important}.gal-character-card>div:last-child>div:last-child{display:none!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:1.25rem;left:50%;transform:translate(-50%);width:90%!important;padding:0!important;border:none!important;z-index:100!important;background:transparent!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.75rem!important;border-radius:1.375rem!important;background:linear-gradient(135deg,#2c3e50,#000)!important;color:#fff!important;box-shadow:0 .25rem .75rem #0003!important;opacity:.9}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-box{display:flex!important;flex-direction:column!important;height:100%!important;overflow:hidden!important}#gal-asset-manager-modal .gal-asset-header{flex:0 0 auto!important;height:3.125rem!important;padding:0 .625rem!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:.5rem!important;background:#fff!important;border-bottom:1px solid #eee!important}#gal-asset-manager-modal .gal-asset-header>div{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:.5rem!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button{flex:0 0 auto!important;width:2rem!important;height:2rem!important;min-width:2rem!important;max-width:2rem!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:.875rem!important}#gal-asset-manager-modal .gal-asset-header>div{flex:0 0 auto!important}#gal-asset-manager-modal .gal-tab-header{flex:0 0 auto!important;height:2.5rem!important;padding:.125rem .625rem!important;gap:.313rem!important;background:#f8f9fa!important;display:flex!important;align-items:center!important}#gal-asset-manager-modal .gal-tab-btn{flex:1!important;height:2rem!important;padding:0!important;font-size:.813rem!important;line-height:2rem!important}#gal-asset-manager-modal .gal-tab-content{flex:1 1 auto!important;height:0!important;padding:.625rem .625rem 3.75rem!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:.938rem;left:5%;width:90%!important;padding:0!important;border:none!important;background:transparent!important;pointer-events:none}#gal-asset-manager-modal .gal-input-actions button{pointer-events:auto;height:2.5rem!important;border-radius:1.25rem!important;background:#000000d9!important;color:#fff!important;box-shadow:0 .25rem .625rem #0003!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header button{border-radius:.25rem!important;width:auto!important;padding:0 .5rem!important;background:transparent!important;border:1px solid transparent!important;box-shadow:none!important;color:#555!important}#gal-asset-manager-modal .gal-asset-header button:active{background:#0000001a!important}#gal-asset-manager-modal .gal-asset-header #gal-asset-export-remote{color:#6f42c1!important}#gal-asset-manager-modal .gal-asset-header #gal-import-dropdown-btn{color:#28a745!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{z-index:100!important;position:relative!important;border-bottom:none!important;box-shadow:none!important;padding-bottom:0!important}#gal-asset-manager-modal .gal-tab-header{z-index:90!important;position:relative!important;border-top:none!important;background:#fff!important;margin-top:-1px!important;padding-top:0!important}#gal-asset-manager-modal .gal-import-menu{z-index:var(--gal-z-dropdown)!important;position:absolute!important;top:100%!important;right:0!important;box-shadow:0 .25rem .938rem #0003!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important;position:relative!important;overflow:visible!important}#gal-asset-manager-modal .gal-input-title{margin-bottom:0!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{overflow:visible!important;touch-action:none!important;z-index:var(--gal-z-dropdown)!important}#gal-asset-manager-modal .gal-import-dropdown{overflow:visible!important;position:static!important}#gal-asset-manager-modal .gal-import-menu{position:fixed!important;top:3.438rem!important;right:.625rem!important;z-index:var(--gal-z-dropdown)!important;max-height:60vh!important;overflow-y:auto!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-actions{position:static!important;width:100%!important;padding:.625rem .938rem!important;background:#fff!important;border-top:1px solid #eee!important;transform:none!important;left:auto!important;bottom:auto!important;pointer-events:auto!important;flex-shrink:0!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.5rem!important;border-radius:.25rem!important;background:#f8f9fa!important;color:#333!important;border:1px solid #ddd!important;box-shadow:none!important;display:flex!important;align-items:center!important;justify-content:center!important}#gal-asset-manager-modal .gal-input-actions button:hover,#gal-asset-manager-modal .gal-input-actions button:active{background:#e9ecef!important}#gal-asset-manager-modal .gal-tab-content{padding-bottom:.625rem!important}}@media screen and (max-width: 48rem){#gal-history-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:var(--gal-z-modal-critical)!important;background:#000000d9!important;visibility:visible!important;opacity:1!important}#gal-history-modal .gal-history-panel{position:relative!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;border:none!important;border-radius:0!important;background:#fff!important;transform:none!important;display:flex!important;flex-direction:column!important;z-index:var(--gal-z-modal-critical)!important;opacity:1!important}#gal-history-modal .gal-history-header{flex-shrink:0!important;padding:.625rem .938rem!important;border-bottom:1px solid #eee!important}#gal-history-modal .gal-history-body{flex:1!important;height:auto!important;max-height:none!important;overflow-y:auto!important;padding:.938rem!important}}@media screen and (max-width: 48rem){#gal-global-overlay *,.gal-input-modal,.gal-config-modal,.gal-history-modal{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.gal-input-modal,.gal-config-modal,.gal-history-modal{background:#000000b3!important}.gal-bgm-widget,.gal-location-bar,.gal-time-bar{background:#2b2e38f2!important}.gal-footer-btn,.gal-footer-btn-next,.gal-pending-choices-btn,.gal-action-btn{box-shadow:none!important}.gal-sprite-card:hover,.gal-character-card:hover,.gal-bg-card:hover{transform:none!important}}@media screen and (max-width: 48rem){.gal-dialog-layer{left:2%!important;right:2%!important;width:96%!important;bottom:.625rem!important;height:40%!important;padding-bottom:env(safe-area-inset-bottom)}.gal-text-panel{padding:1.563rem .938rem 2.813rem!important}.gal-dialog-text{font-size:calc(.88rem * var(--font-scale))!important;line-height:1.6!important}.gal-name-badge{top:-1.25rem!important;left:0!important;padding:.25rem 1.25rem .25rem .938rem!important;font-size:1.1rem!important;transform:skew(-15deg) scale(.9)!important;transform-origin:bottom left!important}.gal-interaction-bar{top:-2.813rem!important;right:0!important;transform:scale(.85)!important;transform-origin:bottom right!important;gap:.5rem!important}.gal-action-btn{padding:.5rem 1rem!important;font-size:.95rem!important}.gal-bgm-widget{top:3.75rem!important;padding:.375rem .625rem!important;gap:.375rem!important;font-size:.72rem!important;border-radius:1rem!important;max-width:2.125rem!important;transition:max-width .3s cubic-bezier(.4,0,.2,1)!important}.gal-bgm-icon{font-size:.95rem!important;min-width:1rem!important}.gal-bgm-title{font-size:.7rem!important}.gal-bgm-btn{font-size:.8rem!important;width:1rem!important}.gal-bgm-slider{width:3rem!important;height:.188rem!important}.gal-bgm-slider::-webkit-slider-thumb{width:.5rem!important;height:.5rem!important}.gal-bgm-widget:active,.gal-bgm-widget:focus-within,.gal-bgm-widget.active{max-width:12rem!important;background:#2b2e38fa!important}.gal-status-bar-container{top:.625rem!important;right:auto!important;left:.625rem!important;flex-direction:column!important;align-items:flex-start!important;gap:.375rem!important;transform:scale(.85)!important;transform-origin:top left!important;pointer-events:none;z-index:90!important}.gal-location-bar,.gal-time-bar{max-width:10rem!important;height:1.625rem!important;font-size:.75rem!important;background:#2b2e38cc!important;backdrop-filter:blur(.25rem)}.gal-fullscreen-btn{top:.625rem!important;right:.625rem!important;padding:.5rem .75rem!important;font-size:.8rem!important}.gal-bottom-toolbar{padding:0 .625rem .625rem!important;min-height:3.125rem!important;margin-bottom:env(safe-area-inset-bottom)}.gal-footer-btn{height:2.375rem!important;padding:0 .625rem!important;min-width:2.375rem!important}.gal-footer-btn-next{min-width:6.25rem!important;height:2.813rem!important;font-size:1.1rem!important;margin-left:.625rem!important;margin-right:-.625rem!important}.gal-input-modal,.gal-config-modal,.gal-history-modal,#gal-layer-choices{z-index:var(--gal-z-modal-critical)!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;height:100dvh!important;max-height:100dvh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}.gal-choices-container{width:min(100%,32rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choices-title,.gal-choices-hint{width:100%!important;text-align:center!important}.gal-choice-card{max-width:100%!important;width:100%!important}#gal-global-overlay.fullscreen{z-index:var(--gal-z-overlay)!important}.gal-progress-indicator{display:none!important}}@media screen and (max-width: 48rem){.gal-interaction-bar .gal-action-btn{transform:skew(-15deg)!important;margin:0!important;flex:initial!important;min-width:auto!important;width:auto!important;display:flex!important;border-radius:0!important}.gal-interaction-bar .gal-action-btn *,.gal-interaction-bar .gal-action-btn i,.gal-interaction-bar .gal-action-btn span{transform:skew(15deg)!important}.gal-interaction-bar .gal-action-btn.btn-reroll,.gal-interaction-bar .gal-action-btn.btn-free{padding:.375rem .75rem!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){.gal-bottom-toolbar{padding-right:.75rem!important;overflow:visible!important}.gal-footer-btn-next{margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.75rem * var(--ui-scale))!important}.gal-pending-choices-btn{margin-right:0!important}#gal-settings-panel,#gal-asset-manager-modal,#gal-history-modal,.gal-history-modal,.gal-config-modal,.gal-input-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-layer-choices,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;inset:0!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important}#gal-settings-panel .gal-config-panel,.gal-config-modal .gal-config-panel,#gal-asset-manager-modal .gal-input-box,.gal-input-modal .gal-input-box,#gal-history-modal .gal-history-panel,.gal-history-modal .gal-history-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}.gal-choices-container{width:min(100%,34rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choice-card{width:100%!important;max-width:100%!important}}@media screen and (max-width: 48rem){.gal-footer-btn .gal-btn-text,.gal-pending-choices-btn .gal-btn-text,.gal-footer-btn-next .gal-btn-text,.gal-footer-btn[data-action=log],.gal-footer-btn[data-action=view-original]{display:none!important}.gal-footer-btn[data-action=close-mode]{order:-1!important}.gal-bottom-toolbar{justify-content:flex-start!important;gap:.3rem!important;padding:0 1.5rem .5rem .5rem!important;overflow:visible!important}.gal-footer-btn,.gal-pending-choices-btn{flex:1!important;padding:0!important;justify-content:center!important;height:2.5rem!important;margin-left:0!important}.gal-footer-btn i,.gal-pending-choices-btn i{margin:0!important;font-size:1.15rem!important}.gal-footer-btn-next{flex:0 0 auto!important;width:5rem!important;min-width:5rem!important;height:2.5rem!important;margin-left:.5rem!important;padding:0!important;justify-content:center!important;margin-right:-.5rem!important;z-index:100!important}.gal-footer-btn-next i{margin:0!important;font-size:1.6rem!important}}.gal-mobile-menu{display:none;position:absolute;bottom:4rem;left:.5rem;transform:none;background:#fffffff2;border:.125rem solid var(--gal-dark);border-radius:0;padding:.5rem;flex-direction:column;gap:.5rem;z-index:200;min-width:9rem;box-shadow:.313rem .313rem #0003;backdrop-filter:blur(.25rem);pointer-events:auto}.gal-mobile-menu.active{display:flex}.gal-mobile-menu .gal-menu-btn{display:flex;align-items:center;gap:.5rem;padding:.5rem .875rem;color:var(--gal-dark);background:var(--gal-white);border:.125rem solid var(--gal-dark);border-radius:0;cursor:pointer;text-align:left;font-size:.85rem;font-weight:700;font-family:Barlow,sans-serif;transition:all .2s;box-shadow:.188rem .188rem #0000001f}.gal-mobile-menu .gal-menu-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:translateY(-.125rem);box-shadow:.25rem .25rem #0003}.gal-mobile-menu .gal-menu-btn i{width:1.2rem;text-align:center}@media screen and (max-width: 48rem){#gal-batch-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-height:100%!important;max-width:100%!important;border-radius:0!important}#gal-batch-upload-modal>.gal-input-box>div:last-child{flex-direction:column!important}#gal-batch-upload-modal .gal-batch-sidebar{width:100%!important;border-right:none!important;border-bottom:1px solid #ddd!important;max-height:none!important;flex-shrink:0!important}#gal-batch-upload-modal .gal-batch-sidebar>div:first-child{padding:6px 8px!important}#gal-batch-upload-modal #gal-batch-add-char{white-space:nowrap!important;padding:4px 10px!important;font-size:.8rem!important;min-height:auto!important}#gal-batch-upload-modal #gal-batch-char-list{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:4px!important;padding:4px 6px!important}#gal-batch-upload-modal .gal-char-item{flex-shrink:0!important;min-width:auto!important;max-width:none!important;padding:5px 10px!important;font-size:.8rem!important;margin-bottom:0!important;border-radius:3px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child{flex:1!important;min-height:0!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child{padding:10px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child{margin-bottom:8px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child label{margin-bottom:4px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child input{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area{min-height:100px!important;padding:.75rem!important}#gal-batch-upload-modal #gal-grid-upload-area i{font-size:1.8rem!important}#gal-batch-upload-modal #gal-grid-upload-area span{font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area small{font-size:.75rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child{padding:.625rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child{gap:.5rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child>div{gap:.25rem!important}#gal-batch-upload-modal #gal-grid-preview-area label{font-size:.75rem!important}#gal-batch-upload-modal .gal-grid-mapping-container{grid-template-columns:repeat(auto-fill,minmax(70px,1fr))!important;gap:.375rem!important;max-height:150px!important}#gal-batch-upload-modal .gal-input-actions{padding:.5rem .75rem!important;padding-bottom:calc(.5rem + env(safe-area-inset-bottom))!important;gap:.5rem!important}#gal-batch-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-batch-upload-modal .gal-upload-tab{padding:6px 10px!important;font-size:.8rem!important}#gal-batch-upload-modal input[type=text]{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:.95rem!important}}@media screen and (max-width: 48rem){#gal-bg-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-bg-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important}#gal-bg-upload-modal .gal-input-title span{transform:none!important;flex:1!important;min-width:0!important}#gal-bg-upload-modal #gal-bg-close-x{flex-shrink:0!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2){margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) label{margin-bottom:.25rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) input{padding:.4rem .5rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal .gal-upload-tab{padding:.3rem .5rem!important;font-size:.8rem!important}#gal-bg-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-upload-card{min-height:70px!important;margin-bottom:.5rem!important;padding:.625rem!important}#gal-bg-upload-modal .gal-upload-card i{font-size:1.5rem!important}#gal-bg-upload-modal .gal-upload-card span{font-size:.85rem!important;margin-top:.25rem!important}#gal-bg-upload-modal .gal-upload-card small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal #gal-upload-remote>div{min-height:70px!important;padding:.625rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child{padding:.5rem!important;margin-bottom:.5rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.1rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child span{font-size:.9rem!important}#gal-bg-upload-modal #gal-bg-comfyui-prompt{height:55px!important;font-size:.8rem!important}#gal-bg-upload-modal #gal-bg-comfyui-generate-btn{min-height:38px!important;font-size:.9rem!important}#gal-bg-upload-modal .gal-input-actions{margin-top:.5rem!important}#gal-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-bg-upload-modal #gal-bg-preview-container{margin-bottom:.5rem!important}}@media screen and (max-width: 48rem){#gal-batch-bg-upload-modal .gal-input-box{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;border-radius:0!important}#gal-batch-bg-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:1rem!important}#gal-batch-bg-upload-modal #gal-batch-step-1{padding:.75rem!important}#gal-batch-bg-upload-modal .gal-upload-card{min-height:120px!important}#gal-batch-bg-upload-modal .gal-upload-card i{font-size:2rem!important}#gal-batch-bg-upload-modal .gal-upload-card span{font-size:.95rem!important;margin-top:.5rem!important}#gal-batch-bg-upload-modal .gal-upload-tab{padding:.375rem .625rem!important;font-size:.85rem!important}#gal-batch-bg-upload-modal .gal-batch-grid-container{padding:.625rem!important}#gal-batch-bg-upload-modal #gal-batch-grid{grid-template-columns:repeat(2,1fr)!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-batch-input-area{padding:.375rem!important}#gal-batch-bg-upload-modal .gal-batch-scene-input{padding:.375rem .5rem!important;font-size:.8rem!important}#gal-batch-bg-upload-modal #gal-batch-step-2>div:last-child{padding:.375rem .75rem!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-input-actions{padding:.5rem .75rem!important;gap:.375rem!important}#gal-batch-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-bg-upload-modal #gal-upload-remote>div{padding:.75rem!important}#gal-batch-bg-upload-modal #gal-batch-remote-urls{height:120px!important;font-size:.8rem!important}}@media screen and (max-width: 48rem){#gal-sprite-upload-modal .gal-input-box{width:100%!important;max-width:100%!important;max-height:100%!important;height:auto!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;padding-bottom:.375rem!important;border-bottom:1px solid #eee!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2){display:grid!important;grid-template-columns:1fr 1fr!important;gap:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2)>div{width:auto!important;margin-bottom:0!important}#gal-sprite-upload-modal label{font-size:.8rem!important;margin-bottom:.25rem!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}#gal-sprite-upload-modal input[type=text],#gal-sprite-upload-modal select{padding:.4rem .5rem!important;font-size:.85rem!important;height:32px!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3){padding:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3)>div{flex-direction:row!important;flex-wrap:wrap!important;gap:.5rem!important;align-items:center!important}#gal-sprite-upload-modal #gal-tts-voice-select{flex:1!important;width:auto!important;min-width:120px!important}#gal-sprite-upload-modal #gal-tts-voice-save-btn{width:auto!important;padding:0 .75rem!important;height:32px!important}#gal-sprite-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important;flex-wrap:nowrap!important;overflow-x:auto!important;flex:none!important;min-height:auto!important;gap:.25rem!important}#gal-sprite-upload-modal .gal-upload-tab{padding:.35rem .5rem!important;font-size:.8rem!important;flex:1!important;min-width:auto!important;text-align:center!important;white-space:nowrap!important;border-radius:.25rem!important}#gal-sprite-upload-modal #gal-upload-content{flex:1!important;display:flex!important;flex-direction:column!important;min-height:0!important;overflow-y:auto!important}#gal-sprite-upload-modal #gal-upload-trigger{flex:1!important;min-height:120px!important;padding:.75rem!important;display:flex!important;flex-direction:column!important;justify-content:center!important}#gal-sprite-upload-modal #gal-upload-trigger i{font-size:2rem!important;margin-bottom:.5rem!important}#gal-sprite-upload-modal #gal-upload-trigger span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-trigger small{font-size:.75rem!important}#gal-sprite-upload-modal #gal-upload-remote>div{padding:1rem!important;min-height:120px!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child{padding:.75rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.25rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:nth-child(2){flex-direction:column!important;gap:.75rem!important}#gal-sprite-upload-modal #gal-crop-area{margin-bottom:.75rem!important}#gal-sprite-upload-modal .gal-crop-container{padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:.5rem!important;padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls input[type=range]{width:120px!important}#gal-sprite-upload-modal .gal-crop-btn{padding:.375rem .625rem!important;font-size:.8rem!important}#gal-sprite-upload-modal .gal-crop-controls span{font-size:.85rem!important}#gal-sprite-upload-modal #gal-crop-area>p{font-size:.75rem!important;margin:.5rem 0!important}#gal-sprite-upload-modal .gal-input-actions{flex-direction:column!important;gap:.5rem!important;margin-top:.75rem!important;padding-top:.75rem!important;border-top:1px solid #eee!important}#gal-sprite-upload-modal .gal-input-actions button{width:100%!important;min-height:42px!important;padding:.625rem 1rem!important;font-size:.9rem!important;flex:none!important}#gal-sprite-upload-modal .gal-input-actions button i{margin-right:.375rem!important}}@media screen and (max-width: 48rem){#gal-character-sprites-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;border-radius:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:.5rem .75rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2){margin:.375rem .75rem 0!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:nth-child(2){flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-tts-voice-select{flex:1 1 8rem!important;width:auto!important;min-width:8rem!important;padding:.375rem .5rem!important;font-size:.8rem!important}#gal-character-sprites-modal #gal-char-tts-save-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2) small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-section{margin:.375rem .75rem!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important;max-height:40vh!important;overflow-y:auto!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:nth-child(2){gap:.375rem!important;flex-wrap:wrap!important}#gal-character-sprites-modal #gal-char-live2d-section .gal-action-btn{padding:.25rem .5rem!important;font-size:.75rem!important}#gal-character-sprites-modal #gal-char-live2d-section small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-container{margin-top:.5rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-canvas{height:250px!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4){padding:.5rem .75rem!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4)>div:first-child{margin-bottom:.5rem!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:.375rem!important}#gal-character-sprites-modal .gal-sprite-card{border-radius:.25rem!important}#gal-character-sprites-modal .gal-sprite-label{font-size:.7rem!important;padding:.25rem!important}#gal-character-sprites-modal #gal-char-sprites-close:hover{color:#333!important}}@media screen and (max-width: 22.5rem){#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:100%!important}}@media screen and (max-width: 48rem){#gal-unified-panel .gal-config-body,#gal-unified-panel [data-l1-pane]{padding:12px!important}#gal-unified-panel .gal-l1-tab-btn{padding:10px 16px!important;font-size:.9rem!important}#gal-unified-panel .gal-l1-tab-btn span{font-size:.85rem!important}#gal-unified-panel .gal-config-close{width:2.5rem!important;height:2.5rem!important;min-width:2.5rem!important;font-size:1.1rem!important}#gal-unified-panel #gal-main-toggle{padding:10px 24px!important;font-size:1rem!important}#gal-unified-panel .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel .gal-settings-label{flex:1 1 100%!important;font-size:.85rem!important}#gal-unified-panel .gal-settings-control{flex:1 1 100%!important;justify-content:flex-start!important}#gal-unified-panel .gal-settings-control input[type=range]{width:100%!important;flex:1!important;min-width:0!important}#gal-unified-panel .gal-range-value{min-width:40px!important;flex-shrink:0!important}#gal-unified-panel .gal-settings-row:has(.gal-switch){flex-wrap:nowrap!important}#gal-unified-panel .gal-settings-row:has(.gal-switch) .gal-settings-label{flex:1 1 auto!important}#gal-unified-panel #gal-tts-provider,#gal-unified-panel #gal-tts-default-speaker{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel #gal-gpt-sovits-media-type{min-width:0!important;width:100%!important}#gal-unified-panel #gal-bg-fill-mode{min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config{padding:8px!important;margin-top:8px!important}#gal-unified-panel #gal-gpt-sovits-config input[type=text],#gal-unified-panel #gal-gpt-sovits-config input[type=number]{margin-left:0!important;flex:1!important;min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row>.gal-settings-label{flex:1 1 100%!important}#gal-unified-panel #gal-gpt-sovits-speed{width:100%!important}#gal-unified-panel #gal-gpt-sovits-voices-json{font-size:.75rem!important}#gal-unified-panel #gal-gpt-sovits-config .gal-panel-btn{padding:8px!important;font-size:.85rem!important}#gal-unified-panel #gal-enhanced-config{padding-left:8px!important}#gal-unified-panel #gal-enhanced-config select{width:100%!important;margin-left:0!important}#gal-unified-panel #gal-enhanced-config>div>div{margin-left:8px!important}#gal-unified-panel #gal-enhanced-worldbooks-list{margin-left:8px!important}#gal-unified-panel .gal-enhanced-worldbook-item,#gal-unified-panel #gal-enhanced-config input[type=checkbox]{width:20px!important;height:20px!important}#gal-unified-panel .gal-switch{width:52px!important;height:30px!important;min-width:52px!important}#gal-unified-panel .gal-switch-slider:before{height:24px!important;width:24px!important}#gal-unified-panel .gal-switch input:checked+.gal-switch-slider:before{transform:translate(22px)!important}#gal-unified-panel .gal-bg-source-selector{padding:8px 10px!important;gap:8px!important;flex-wrap:wrap!important}#gal-unified-panel .gal-bg-source-selector .gal-radio-label{font-size:.8rem!important}#gal-unified-panel .gal-imagegen-pills{gap:6px!important;padding:8px 0!important}#gal-unified-panel .gal-pill{padding:6px 12px!important;font-size:.8rem!important}#gal-unified-panel [data-engine-pane]>div{padding:10px!important}#gal-unified-panel [data-engine-pane] input[type=text],#gal-unified-panel [data-engine-pane] input[type=password],#gal-unified-panel [data-engine-pane] textarea,#gal-unified-panel [data-engine-pane] select{max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel .gal-realtime-switch{min-width:3.25rem!important}#gal-unified-panel .gal-settings-divider{margin:10px 0!important}#gal-unified-panel .gal-settings-section-title{font-size:.9rem!important;margin-bottom:8px!important}#gal-unified-panel .gal-asset-header>div:first-child{flex-wrap:wrap!important;gap:8px!important}#gal-unified-panel #gal-pack-dropdown-btn,#gal-unified-panel #gal-render-scope-btn,#gal-unified-panel #gal-export-dropdown-btn,#gal-unified-panel #gal-import-dropdown-btn{padding:4px 8px!important;font-size:.8rem!important}#gal-unified-panel #gal-export-dropdown-btn>span,#gal-unified-panel #gal-import-dropdown-btn>span{display:none!important}#gal-unified-panel .gal-pack-menu,#gal-unified-panel .gal-export-menu,#gal-unified-panel .gal-import-menu{min-width:160px!important}#gal-unified-panel .gal-tab-header{display:flex!important;flex-wrap:nowrap!important;gap:0!important}#gal-unified-panel .gal-tab-btn{padding:8px 4px!important;font-size:.7rem!important;white-space:nowrap!important;flex:1!important;text-align:center!important;justify-content:center!important;gap:2px!important}#gal-unified-panel .gal-tab-btn i{font-size:.8rem!important;margin-right:2px!important}#gal-unified-panel .gal-pane-header{flex-wrap:wrap;gap:8px}#gal-unified-panel .gal-pane-stat{flex:1 1 100%;font-size:.85rem}#gal-unified-panel .gal-pane-actions{flex:1 1 100%;gap:6px}#gal-unified-panel .gal-pane-btn{padding:6px 8px!important;flex:1;justify-content:center;font-size:.75rem!important;gap:4px!important}#gal-unified-panel .gal-pane-btn>i{font-size:.8rem}#gal-prompts-modal{padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal>div>div:first-child{padding:12px 16px!important;border-radius:0!important}#gal-prompts-modal>div>div:nth-child(2){padding:12px!important}#gal-prompts-modal pre{font-size:.75rem!important;padding:8px!important}#gal-prompts-modal>div>div:last-child{padding:10px 12px!important}#gal-prompts-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-asset-header>div:first-child>div:first-child{gap:6px!important}#gal-unified-panel .gal-asset-header>div:first-child>div:last-child{gap:4px!important}#gal-unified-panel .gal-pack-item,#gal-unified-panel .gal-export-item,#gal-unified-panel .gal-import-item{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-character-grid{grid-template-columns:repeat(3,1fr)!important;gap:8px!important}#gal-unified-panel .gal-character-card>div:last-child{padding:6px!important}#gal-unified-panel .gal-character-card>div:last-child>div:first-child{font-size:.75rem!important}#gal-unified-panel .gal-bg-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}#gal-unified-panel .gal-bg-label{padding:6px!important;font-size:.8rem!important}}.gal-popup-modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:var(--gal-z-modal);padding:20px;box-sizing:border-box}.gal-popup-panel{background:var(--SmartThemeFormBg, #fff);border-radius:12px;max-width:700px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px #0000004d}.gal-popup-header{padding:14px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}.gal-popup-title{font-weight:700;font-size:1.1rem}.gal-popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#666;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background .2s}.gal-popup-close:hover{background:#00000014}.gal-popup-body{padding:20px;overflow-y:auto;flex:1}@media screen and (max-width: 48rem){.gal-input-title{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;transform:none!important;gap:.5rem!important;padding:.5rem 0!important}.gal-input-title>span{transform:none!important;flex:1!important;min-width:0!important;display:inline!important;font-size:1rem!important}.gal-input-title>button,.gal-input-title .gal-close-btn{flex-shrink:0!important;transform:none!important}.gal-input-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important;border-radius:0!important;overflow-y:auto!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box>.gal-input-title{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div:last-child{margin-bottom:0!important}.gal-input-modal .gal-input-box label{margin-bottom:.25rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box input[type=text],.gal-input-modal .gal-input-box select,.gal-input-modal .gal-input-box textarea{padding:.4rem .5rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box small{font-size:.7rem!important;margin-top:.125rem!important}.gal-input-actions{margin-top:.5rem!important;gap:.375rem!important}.gal-input-actions button{min-height:36px!important;font-size:.85rem!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}.gal-popup-header{padding:10px 14px!important}.gal-popup-title{font-size:1rem!important}.gal-popup-body{padding:12px!important}#gal-live2d-settings-modal{padding:0!important}#gal-live2d-settings-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-live2d-settings-modal>div>div:first-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:first-child span{font-size:.95rem!important}#gal-live2d-settings-modal .gal-settings-tab{padding:8px 4px!important;font-size:.85rem!important}#gal-live2d-settings-modal .gal-settings-panel{padding:0!important}#gal-live2d-settings-modal>div>div:nth-child(3){padding:12px!important}#gal-live2d-settings-modal .gal-settings-panel div[style*=grid-template-columns]{grid-template-columns:1fr!important;gap:10px!important}#gal-live2d-settings-modal .gal-mapping-row{flex-wrap:wrap!important;gap:4px!important;padding:6px 0!important}#gal-live2d-settings-modal .gal-mapping-row span:first-child{min-width:50px!important;font-size:.8rem!important}#gal-live2d-settings-modal .gal-mapping-row select{flex:1 1 40%!important;min-width:0!important;font-size:.8rem!important;padding:4px!important}#gal-live2d-settings-modal>div>div:last-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-pack-manager-modal .gal-input-box{width:100%!important}#gal-pack-manager-modal .gal-pack-row{flex-wrap:wrap!important;gap:8px!important}#gal-pack-manager-modal .gal-pack-row>div:last-child{width:100%!important;justify-content:flex-end!important}#gal-transfer-modal .gal-input-box{width:100%!important}#gal-banana-appearance-picker .gal-input-box{max-width:none!important;width:100%!important;height:100%!important;max-height:none!important;border-radius:0!important}#gal-banana-appearance-picker .gal-input-title{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-box{padding:0!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-char-live2d-section>div:nth-child(2){flex-wrap:wrap!important;gap:6px!important}#gal-char-live2d-section .gal-action-btn{padding:4px 8px!important;font-size:.75rem!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]{margin:0 12px!important;padding:10px!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]>div:last-child{flex-direction:column!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))!important;gap:8px!important}#gal-sprite-upload-modal .gal-input-box{padding:12px!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:8px!important}#gal-sprite-upload-modal .gal-input-box>div:nth-child(2){flex-direction:column!important;gap:8px!important}#gal-sprite-upload-modal [style*="linear-gradient(135deg, #f5f7fa"]{padding:10px!important;margin-bottom:10px!important}#gal-sprite-upload-modal .gal-crop-container{margin-bottom:8px!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:6px!important}#gal-expression-manager-modal .gal-input-box{padding:12px!important}#gal-expression-manager-modal .gal-tag{padding:4px 8px!important;font-size:.75rem!important}#gal-expression-manager-modal .gal-input-box>div{margin-bottom:10px!important}#gal-expression-manager-modal .gal-input-box label{margin-bottom:4px!important;font-size:.85rem!important}#gal-expression-manager-modal .gal-input-box>div:last-child>div:last-child{gap:6px!important}#gal-expression-manager-modal #gal-new-expression-input{padding:8px 10px!important;font-size:.85rem!important;min-width:0!important}#gal-expression-manager-modal #gal-add-expression-btn{padding:8px 12px!important;font-size:.85rem!important;white-space:nowrap!important;flex-shrink:0!important}#gal-appearance-prompt-modal .gal-input-box{padding:12px!important}#gal-appearance-prompt-modal textarea{height:100px!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){#gal-live2d-settings-modal{position:fixed!important;inset:0!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important;padding:0!important}#gal-live2d-settings-modal>div{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal{position:fixed!important;inset:0!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}}
 `;
     const styleEl = targetDoc.createElement("style");
     styleEl.id = `${SCRIPT_ID}-styles`;
@@ -14490,17 +10757,17 @@ ${firstResult}`;
   }
 
   // src/ui/fullscreen.js
-  var _showToastRef10 = null;
+  var _showToastRef9 = null;
   var _adjustGameContentScaleRef = null;
   var _resetGameContentScaleRef = null;
   var _adjustToolbarForSpaceRef = null;
   function setFullscreenRefs({
-    showToast: showToast6,
+    showToast: showToast5,
     adjustGameContentScale: adjustGameContentScale2,
     resetGameContentScale: resetGameContentScale2,
     adjustToolbarForSpace: adjustToolbarForSpace2
   }) {
-    if (showToast6) _showToastRef10 = showToast6;
+    if (showToast5) _showToastRef9 = showToast5;
     if (adjustGameContentScale2) _adjustGameContentScaleRef = adjustGameContentScale2;
     if (resetGameContentScale2) _resetGameContentScaleRef = resetGameContentScale2;
     if (adjustToolbarForSpace2) _adjustToolbarForSpaceRef = adjustToolbarForSpace2;
@@ -14549,7 +10816,7 @@ ${firstResult}`;
         console.log(`[${SCRIPT_NAME}] \u8FDB\u5165\u5168\u5C4F\u6A21\u5F0F`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u8FDB\u5165\u5168\u5C4F\u5931\u8D25:`, e);
-        if (_showToastRef10) _showToastRef10("\u5168\u5C4F\u8BF7\u6C42\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6D4F\u89C8\u5668\u6743\u9650");
+        if (_showToastRef9) _showToastRef9("\u5168\u5C4F\u8BF7\u6C42\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6D4F\u89C8\u5668\u6743\u9650");
       }
     }
   }
@@ -14576,7 +10843,7 @@ ${firstResult}`;
   }
 
   // src/ui/toast.js
-  function showToast5(message, duration = 2500) {
+  function showToast4(message, duration = 2500) {
     const mountRoot = getModalMountRoot();
     const $existing = $(mountRoot).find(".gal-toast");
     if ($existing.length) $existing.remove();
@@ -15112,12 +11379,14 @@ ${firstResult}`;
     const modalHtml = `
     <div class="gal-input-modal gal-z-critical" id="gal-free-input-modal">
       <div class="gal-input-box">
-        <div class="gal-input-title"><span>\u81EA\u7531\u8F93\u5165</span></div>
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>\u81EA\u7531\u8F93\u5165</span>
+          <button id="gal-free-input-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
         <textarea class="gal-input-field" id="gal-free-input-text" placeholder="\u8F93\u5165\u4F60\u60F3\u8BF4\u7684\u8BDD..."></textarea>
         <div class="gal-input-actions">
-          <button class="gal-action-btn" id="gal-input-cancel">
-            <span>\u53D6\u6D88</span>
-          </button>
           <button class="gal-action-btn primary" id="gal-input-send">
             <i class="fa-solid fa-paper-plane"></i>
             <span>\u53D1\u9001</span>
@@ -15132,7 +11401,7 @@ ${firstResult}`;
     const $input = $(mountRoot).find("#gal-free-input-text");
     makeDraggable($modal.find(".gal-input-box"), $modal.find(".gal-input-title"));
     $input.focus();
-    $modal.find("#gal-input-cancel").on("click", () => $modal.remove());
+    $modal.find("#gal-free-input-close-x").on("click", () => $modal.remove());
     $modal.on("click", function(e) {
       if (e.target === this) $modal.remove();
     });
@@ -15156,7 +11425,7 @@ ${firstResult}`;
     if ($sendTextarea.length && $sendButton.length) {
       $sendTextarea.val(text);
       $sendButton.click();
-      showToast5("\u6D88\u606F\u5DF2\u53D1\u9001");
+      showToast4("\u6D88\u606F\u5DF2\u53D1\u9001");
     } else {
       console.error(`[${SCRIPT_NAME}] \u672A\u627E\u5230\u53D1\u9001\u6309\u94AE`);
     }
@@ -15181,19 +11450,19 @@ ${firstResult}`;
     const $regenerate = $(topWindow.document).find("#option_regenerate");
     if ($regenerate.length) {
       $regenerate.click();
-      showToast5("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
+      showToast4("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
     } else {
       try {
         if (topWindow.SillyTavern && topWindow.SillyTavern.Generate) {
           topWindow.SillyTavern.Generate();
-          showToast5("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
+          showToast4("\u6B63\u5728\u91CD\u65B0\u751F\u6210...");
         } else {
           console.warn(`[${SCRIPT_NAME}] \u672A\u627E\u5230 #option_regenerate`);
-          showToast5("\u672A\u627E\u5230\u91CD\u65B0\u751F\u6210\u6309\u94AE");
+          showToast4("\u672A\u627E\u5230\u91CD\u65B0\u751F\u6210\u6309\u94AE");
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u91CD\u65B0\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u91CD\u65B0\u751F\u6210\u5931\u8D25");
+        showToast4("\u91CD\u65B0\u751F\u6210\u5931\u8D25");
         isRerolling = false;
       }
     }
@@ -15226,7 +11495,7 @@ ${firstResult}`;
         setSkipTimer(setTimeout(doSkip, settings.skipSpeed * 1e3));
       } else {
         stopSkipping();
-        showToast5("\u5DF2\u5FEB\u8FDB\u5230\u6700\u540E");
+        showToast4("\u5DF2\u5FEB\u8FDB\u5230\u6700\u540E");
       }
     };
     void doSkip();
@@ -15244,7 +11513,7 @@ ${firstResult}`;
     if (getIsRewinding()) return;
     setIsRewinding(true);
     const settings = getSettings();
-    showToast5("\u5FEB\u901F\u56DE\u9000\u4E2D...");
+    showToast4("\u5FEB\u901F\u56DE\u9000\u4E2D...");
     const $btn = $('#gal-global-overlay [data-action="prev"]');
     $btn.addClass("active");
     const doRewind = async () => {
@@ -15262,7 +11531,7 @@ ${firstResult}`;
         rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
       } else {
         stopRewinding();
-        showToast5("\u5DF2\u56DE\u9000\u5230\u5F00\u5934");
+        showToast4("\u5DF2\u56DE\u9000\u5230\u5F00\u5934");
       }
     };
     void doRewind();
@@ -15290,7 +11559,7 @@ ${firstResult}`;
         TTSManager.speak(prevSegment, segmentId);
       }
     } else {
-      showToast5("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
+      showToast4("\u5DF2\u662F\u7B2C\u4E00\u6BB5");
     }
   }
   function triggerNextSegment() {
@@ -15469,7 +11738,7 @@ ${firstResult}`;
       } else {
         $textarea.val(currentVal + " " + playerChoice).trigger("input").trigger("change");
       }
-      showToast5(`\u5DF2\u9009\u62E9: ${optionValue.substring(0, 20)}${optionValue.length > 20 ? "..." : ""}`);
+      showToast4(`\u5DF2\u9009\u62E9: ${optionValue.substring(0, 20)}${optionValue.length > 20 ? "..." : ""}`);
       if ($sendButton.length) {
         setTimeout(() => {
           $sendButton.click();
@@ -15839,15 +12108,17 @@ ${firstResult}`;
   // src/ui/process-message.js
   var messageSegmentState6 = GalgameStore.cache.segments;
   var RE_CLOSED_P3 = /<\/p>/i;
-  var _updateGlobalOverlayContentRef4 = null;
+  var _updateGlobalOverlayContentRef3 = null;
   var _applySettingsToUIRef2 = null;
   var _handleRealTimeBackgroundGenerationRef = null;
   var _handleBananaBackgroundGenerationRef = null;
-  function setProcessMessageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, applySettingsToUI: applySettingsToUI2, handleRealTimeBackgroundGeneration: handleRealTimeBackgroundGeneration2, handleBananaBackgroundGeneration: handleBananaBackgroundGeneration2 }) {
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
+  var _handleNovelAIBackgroundGenerationRef = null;
+  function setProcessMessageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, applySettingsToUI: applySettingsToUI2, handleRealTimeBackgroundGeneration: handleRealTimeBackgroundGeneration2, handleBananaBackgroundGeneration: handleBananaBackgroundGeneration2, handleNovelAIBackgroundGeneration: handleNovelAIBackgroundGeneration2 }) {
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
     if (applySettingsToUI2) _applySettingsToUIRef2 = applySettingsToUI2;
     if (handleRealTimeBackgroundGeneration2) _handleRealTimeBackgroundGenerationRef = handleRealTimeBackgroundGeneration2;
     if (handleBananaBackgroundGeneration2) _handleBananaBackgroundGenerationRef = handleBananaBackgroundGeneration2;
+    if (handleNovelAIBackgroundGeneration2) _handleNovelAIBackgroundGenerationRef = handleNovelAIBackgroundGeneration2;
   }
   function processNewMessage(mesNode) {
     injectGalgameButton(mesNode);
@@ -15879,8 +12150,8 @@ ${firstResult}`;
         options: []
       };
       const isLastAi2 = $mes.nextAll('.mes[is_user!="true"]').length === 0;
-      if (isLastAi2 && _updateGlobalOverlayContentRef4) {
-        _updateGlobalOverlayContentRef4(mesId, loadingParsed);
+      if (isLastAi2 && _updateGlobalOverlayContentRef3) {
+        _updateGlobalOverlayContentRef3(mesId, loadingParsed);
         showGlobalOverlay();
         const pending = getPendingOptions();
         if (pending && pending.length > 0) {
@@ -15891,27 +12162,22 @@ ${firstResult}`;
       return;
     }
     let parsed = parseGalgameContent(contentToProcess);
-    if (settings.realTimeBackgroundGen && parsed.backgroundChanges && _handleRealTimeBackgroundGenerationRef) {
-      for (const bgChange of parsed.backgroundChanges) {
-        if (bgChange.generationTags) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1 ComfyUI \u80CC\u666F\u751F\u6210: "${bgChange.scene}"`);
-          _handleRealTimeBackgroundGenerationRef(bgChange.scene, bgChange.generationTags);
-        }
-      }
-    }
-    if (settings.wallhaven?.enabled && parsed.backgroundChanges) {
-      for (const bgChange of parsed.backgroundChanges) {
-        if (bgChange.wallhavenTags) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1 Wallhaven \u80CC\u666F\u641C\u7D22: "${bgChange.scene}"`);
-          handleWallhavenBackgroundSearch(bgChange.scene, bgChange.wallhavenTags);
-        }
-      }
-    }
-    if (settings.bananaImageGen?.enabled && parsed.backgroundChanges && _handleBananaBackgroundGenerationRef) {
-      for (const bgChange of parsed.backgroundChanges) {
-        if (bgChange.bananaPrompt) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1\u5927\u9999\u8549\u80CC\u666F\u751F\u6210: "${bgChange.scene}"`);
-          _handleBananaBackgroundGenerationRef(bgChange.scene, bgChange.bananaPrompt);
+    if (parsed.backgroundChanges) {
+      const bgSrc = settings.bgImageSource || "none";
+      const bgDispatch = {
+        comfyui: { tagKey: "generationTags", handler: _handleRealTimeBackgroundGenerationRef, label: "ComfyUI \u80CC\u666F\u751F\u6210" },
+        banana: { tagKey: "bananaPrompt", handler: _handleBananaBackgroundGenerationRef, label: "\u5927\u9999\u8549\u80CC\u666F\u751F\u6210" },
+        novelai: { tagKey: "generationTags", handler: _handleNovelAIBackgroundGenerationRef, label: "NovelAI \u80CC\u666F\u751F\u6210" },
+        wallhaven: { tagKey: "wallhavenTags", handler: handleWallhavenBackgroundSearch, label: "Wallhaven \u80CC\u666F\u641C\u7D22" }
+      };
+      const entry = bgDispatch[bgSrc];
+      if (entry && entry.handler) {
+        for (const bgChange of parsed.backgroundChanges) {
+          const tags = bgChange[entry.tagKey];
+          if (tags) {
+            console.log(`[${SCRIPT_NAME}] [DEBUG] \u89E6\u53D1 ${entry.label}: "${bgChange.scene}"`);
+            entry.handler(bgChange.scene, tags);
+          }
         }
       }
     }
@@ -15947,8 +12213,8 @@ ${firstResult}`;
     Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, "process-message");
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
     if (isLastAi) {
-      if (_updateGlobalOverlayContentRef4) {
-        _updateGlobalOverlayContentRef4(mesId, parsed);
+      if (_updateGlobalOverlayContentRef3) {
+        _updateGlobalOverlayContentRef3(mesId, parsed);
       }
       showGlobalOverlay();
       requestAnimationFrame(() => {
@@ -16014,11 +12280,11 @@ ${firstResult}`;
   var CUSTOM_TIME_HTML_KEY2 = "gal_custom_time_html";
   var _showSettingsPanelRef2 = null;
   var _showSpriteUploadDialogRef2 = null;
-  var _updateGlobalOverlayContentRef5 = null;
+  var _updateGlobalOverlayContentRef4 = null;
   function setEventsRefs({ showSettingsPanel: showSettingsPanel2, showSpriteUploadDialog: showSpriteUploadDialog2, updateGlobalOverlayContent: updateGlobalOverlayContent2 }) {
     if (showSettingsPanel2) _showSettingsPanelRef2 = showSettingsPanel2;
     if (showSpriteUploadDialog2) _showSpriteUploadDialogRef2 = showSpriteUploadDialog2;
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef5 = updateGlobalOverlayContent2;
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
   }
   function setupGlobalEventListeners() {
     console.log(`[${SCRIPT_NAME}] \u8BBE\u7F6E\u5168\u5C40\u4E8B\u4EF6\u59D4\u6258...`);
@@ -16086,7 +12352,7 @@ ${firstResult}`;
           $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
         }
       }, 150);
-      showToast5("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
+      showToast4("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
     });
     $(doc).on("click", ".gal-open-btn", async function(e) {
       console.log(`[${SCRIPT_NAME}] \u70B9\u51FB\u3010\u8FDB\u5165Galgame\u6A21\u5F0F\u3011\u6309\u94AE`);
@@ -16098,7 +12364,7 @@ ${firstResult}`;
       setIsEnabled(true);
       setCurrentCharEnabled(true);
       updateButtonState();
-      showToast5("\u6B63\u5728\u5F00\u542F Galgame \u6A21\u5F0F...");
+      showToast4("\u6B63\u5728\u5F00\u542F Galgame \u6A21\u5F0F...");
       try {
         await injectCOTToWorldbook();
         await enableWorldbookGlobally();
@@ -16117,11 +12383,11 @@ ${firstResult}`;
       if (contentToProcess) {
         const parsed = parseGalgameContent(contentToProcess);
         detectAndCaptureCg(mesId, $mes[0], parsed);
-        if (parsed.segments.length > 0 && _updateGlobalOverlayContentRef5) {
-          await _updateGlobalOverlayContentRef5(mesId, parsed);
+        if (parsed.segments.length > 0 && _updateGlobalOverlayContentRef4) {
+          await _updateGlobalOverlayContentRef4(mesId, parsed);
           showGlobalOverlay();
           if (settings.hideOtherFloors) hideNonLastFloors();
-          showToast5("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
+          showToast4("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
         }
       } else {
         if (settings.hideOtherFloors) hideNonLastFloors();
@@ -16168,18 +12434,27 @@ ${firstResult}`;
       e.stopPropagation();
       if (isMobileMenuMode()) {
         const $menu = $("#gal-mobile-menu");
+        if (!$menu.hasClass("active")) {
+          const $overlay = $("#gal-global-overlay");
+          const overlayRect = $overlay[0].getBoundingClientRect();
+          const btnRect = this.getBoundingClientRect();
+          $menu.css({
+            bottom: overlayRect.bottom - btnRect.top + 8 + "px",
+            left: btnRect.left - overlayRect.left + "px"
+          });
+        }
         $menu.toggleClass("active");
         return;
       }
       closeMobileMenu();
       console.log(`[${SCRIPT_NAME}] \u70B9\u51FB\u8BBE\u7F6E\u6309\u94AE`);
-      showToast5("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
+      showToast4("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
       if (_showSettingsPanelRef2) _showSettingsPanelRef2();
     });
     $(doc).on("click", '#gal-global-overlay [data-action="open-settings"]', function(e) {
       e.stopPropagation();
       closeMobileMenu();
-      showToast5("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
+      showToast4("\u6B63\u5728\u6253\u5F00\u8BBE\u7F6E...");
       if (_showSettingsPanelRef2) _showSettingsPanelRef2();
     });
     $(doc).on("click", "#gal-mobile-menu .gal-menu-btn", function() {
@@ -16213,17 +12488,17 @@ ${firstResult}`;
       }
       const mesId = $("#gal-global-overlay .gal-game-container").attr("data-mes-id");
       if (!mesId) {
-        showToast5("\u672A\u627E\u5230\u5F53\u524D\u6D88\u606F");
+        showToast4("\u672A\u627E\u5230\u5F53\u524D\u6D88\u606F");
         return;
       }
       const $mes = $(`.mes[mesid="${mesId}"]`);
       if (!$mes.length) {
-        showToast5("\u672A\u627E\u5230\u6D88\u606F\u5143\u7D20");
+        showToast4("\u672A\u627E\u5230\u6D88\u606F\u5143\u7D20");
         return;
       }
       const mesText = $mes.find(".mes_text")[0];
       if (!mesText) {
-        showToast5("\u672A\u627E\u5230\u6D88\u606F\u5185\u5BB9");
+        showToast4("\u672A\u627E\u5230\u6D88\u606F\u5185\u5BB9");
         return;
       }
       const embeddedNodes = [];
@@ -16236,7 +12511,7 @@ ${firstResult}`;
         }
       }
       if (embeddedNodes.length === 0) {
-        showToast5("\u5F53\u524D\u6D88\u606F\u6CA1\u6709\u5D4C\u5165\u7684\u754C\u9762\u5185\u5BB9");
+        showToast4("\u5F53\u524D\u6D88\u606F\u6CA1\u6709\u5D4C\u5165\u7684\u754C\u9762\u5185\u5BB9");
         return;
       }
       const wasHidden = $mes.hasClass("gal-hidden");
@@ -16280,7 +12555,7 @@ ${firstResult}`;
       if (pending && pending.length > 0) {
         renderGalgameChoices(pending);
       } else {
-        showToast5("\u5F53\u524D\u6CA1\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879");
+        showToast4("\u5F53\u524D\u6CA1\u6709\u5F85\u9009\u62E9\u7684\u9009\u9879");
       }
     });
     $(doc).on("click", '#gal-global-overlay [data-action="next"]', async function(e) {
@@ -16299,7 +12574,7 @@ ${firstResult}`;
           TTSManager.speak(nextSegment, segmentId);
         }
       } else {
-        showToast5("\u5DF2\u662F\u6700\u540E\u4E00\u6BB5");
+        showToast4("\u5DF2\u662F\u6700\u540E\u4E00\u6BB5");
       }
     });
     $(doc).on("click", '#gal-global-overlay [data-action="auto"]', function(e) {
@@ -16394,9 +12669,13 @@ ${firstResult}`;
 
   // src/ui/settings-panel.js
   var enhancedModeState3 = GalgameStore.enhancedMode;
-  var _showAssetManagerModalRef = null;
-  function setSettingsPanelRefs({ showAssetManagerModal: showAssetManagerModal3 }) {
-    if (showAssetManagerModal3) _showAssetManagerModalRef = showAssetManagerModal3;
+  var _buildAssetsPaneRef = null;
+  var _bindAssetsPaneRef = null;
+  var _assetStylesRef = null;
+  function setSettingsPanelRefs({ buildAssetsPane, bindAssetsPane, assetStyles }) {
+    if (buildAssetsPane) _buildAssetsPaneRef = buildAssetsPane;
+    if (bindAssetsPane) _bindAssetsPaneRef = bindAssetsPane;
+    if (assetStyles) _assetStylesRef = assetStyles;
   }
   function applySettingsToUI() {
     const settings = getSettings();
@@ -16520,12 +12799,16 @@ ${firstResult}`;
         break;
     }
   }
-  async function showSettingsPanel() {
-    const existingPanel = $("#gal-settings-panel");
-    if (existingPanel.length) {
-      existingPanel.remove();
-      return;
+  async function showSettingsPanel(topTab, subTab) {
+    const $existing = $("#gal-unified-panel");
+    if ($existing.length) {
+      if (topTab === void 0) {
+        $existing.remove();
+        return;
+      }
+      $existing.remove();
     }
+    topTab = topTab || "settings";
     const settings = getSettings();
     const isEnabled = getIsEnabled();
     const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
@@ -16555,14 +12838,24 @@ ${firstResult}`;
           </label>
         `).join("")}
       </div>`;
+    let assetsHtml = "";
+    if (_buildAssetsPaneRef) {
+      assetsHtml = await _buildAssetsPaneRef(subTab);
+    }
+    const assetStyles = _assetStylesRef ? _assetStylesRef() : "";
     const panelHtml = `
-    <div class="gal-config-modal" id="gal-settings-panel">
+    <div class="gal-config-modal" id="gal-unified-panel">
       <div class="gal-config-panel">
-        <div class="gal-config-header">
-          <div class="gal-config-title"><i class="fa-solid fa-gamepad"></i> Galgame \u8BBE\u7F6E</div>
+        <!-- L1 Tab Header -->
+        <div class="gal-l1-tab-header">
+          <div class="gal-l1-tab-btn ${topTab === "settings" ? "active" : ""}" data-l1-tab="settings"><i class="fa-solid fa-gear"></i> <span>\u57FA\u7840\u8BBE\u7F6E</span></div>
+          <div class="gal-l1-tab-btn ${topTab === "assets" ? "active" : ""}" data-l1-tab="assets"><i class="fa-solid fa-folder-open"></i> <span>\u8D44\u6E90\u7BA1\u7406</span></div>
+          <div style="flex:1;"></div>
           <button class="gal-config-close" id="gal-settings-close"><i class="fa-solid fa-times"></i></button>
         </div>
-        <div class="gal-config-body" style="padding: 24px;">
+
+        <!-- L1 Pane: \u57FA\u7840\u8BBE\u7F6E -->
+        <div class="gal-config-body" data-l1-pane="settings" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "settings" ? "display: none;" : ""}">
           <!-- \u4E3B\u5F00\u5173 -->
           <div style="text-align: center; margin-bottom: 24px;">
             <button id="gal-main-toggle" class="${isEnabled ? "gal-toggle-on" : "gal-toggle-off"}"
@@ -16797,48 +13090,6 @@ ${firstResult}`;
 
           <div class="gal-settings-divider"></div>
 
-          <!-- ComfyUI -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI \u6587\u751F\u56FE</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">API \u5730\u5740</span>
-              <div class="gal-settings-control">
-                <input type="text" id="gal-comfyui-url" value="${getComfyUISettings().apiUrl}" placeholder="http://127.0.0.1:8188" style="width: 180px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <button class="gal-action-btn" id="gal-comfyui-test" style="width: 100%; justify-content: center; padding: 10px;"><i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5</button>
-            </div>
-            <div class="gal-settings-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="gal-settings-label" style="font-weight: 700;">\u5DE5\u4F5C\u6D41\u7BA1\u7406 (.json)</span>
-                <input type="file" id="gal-comfy-import-input" accept=".json" style="display: none;">
-                <button class="gal-action-btn" id="gal-comfy-import-btn" style="padding: 4px 10px; font-size: 0.8rem;"><i class="fa-solid fa-file-import"></i> \u5BFC\u5165 JSON</button>
-              </div>
-              <div id="gal-workflow-list" style="max-height: 120px; overflow-y: auto; background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 8px;">
-                <div style="text-align: center; color: #999; font-size: 0.85rem; padding: 10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">\u9ED8\u8BA4\u89D2\u8272 Workflow</span>
-              <select id="gal-comfy-def-char" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="default_char">\u5185\u7F6E SDXL Turbo</option></select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">\u9ED8\u8BA4 Checkpoint \u6A21\u578B</span>
-              <select id="gal-comfy-def-checkpoint" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="">(\u52A0\u8F7D\u4E2D...)</option></select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">\u9ED8\u8BA4\u80CC\u666F Workflow</span>
-              <select id="gal-comfy-def-bg" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="default_bg">\u5185\u7F6E SDXL Turbo</option></select>
-            </div>
-            <div class="gal-settings-row" style="flex-direction: column; align-items: stretch;">
-              <span class="gal-settings-label" style="margin-bottom: 8px;">\u8D1F\u9762\u63D0\u793A\u8BCD</span>
-              <textarea id="gal-comfyui-negative" placeholder="lowres, bad anatomy..." style="width: 100%; height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
           <!-- \u52A0\u5F3A\u6A21\u5F0F -->
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-bolt" style="color: #ff9800;"></i> \u52A0\u5F3A\u6A21\u5F0F</div>
@@ -16904,11 +13155,15 @@ ${firstResult}`;
 
           <div class="gal-settings-divider"></div>
 
-          <!-- \u529F\u80FD\u6309\u94AE\u7EC4 -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;">
-            <button class="gal-panel-btn" id="gal-open-sprite-manager"><i class="fa-solid fa-images"></i><span>\u7ACB\u7ED8\u7BA1\u7406</span></button>
-            <button class="gal-panel-btn secondary" id="gal-refresh-views"><i class="fa-solid fa-sync"></i><span>\u5237\u65B0\u89C6\u56FE</span></button>
+          <!-- \u5237\u65B0\u89C6\u56FE -->
+          <div style="margin-top: 16px;">
+            <button class="gal-panel-btn secondary" id="gal-refresh-views" style="width: 100%;"><i class="fa-solid fa-sync"></i><span>\u5237\u65B0\u89C6\u56FE</span></button>
           </div>
+        </div>
+
+        <!-- L1 Pane: \u8D44\u6E90\u7BA1\u7406 -->
+        <div data-l1-pane="assets" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "assets" ? "display: none;" : ""}">
+          ${assetsHtml}
         </div>
       </div>
     </div>
@@ -16937,10 +13192,18 @@ ${firstResult}`;
       .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
       .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
       .gal-panel-btn i { font-size: 1.3rem; }
+
+      /* L1 Tab Header */
+      .gal-l1-tab-header { display:flex; align-items:center; background:var(--SmartThemeBotMesBlurTintColor, #1a1a2e); padding:0; border-bottom:2px solid ${THEME.accent}; }
+      .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
+      .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
+      .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
+
+      ${assetStyles}
     </style>
   `;
     $(getModalMountRoot()).append(panelHtml);
-    const $panel = $("#gal-settings-panel");
+    const $panel = $("#gal-unified-panel");
     const refreshTtsVoiceOptions = async () => {
       const $sel = $("#gal-tts-default-speaker");
       const $hint = $("#gal-tts-default-speaker-hint");
@@ -16970,6 +13233,13 @@ ${firstResult}`;
       }
     }
     refreshTtsVoiceOptions();
+    $panel.find(".gal-l1-tab-btn").on("click", function() {
+      const tab = $(this).data("l1-tab");
+      $panel.find(".gal-l1-tab-btn").removeClass("active");
+      $(this).addClass("active");
+      $panel.find("[data-l1-pane]").hide();
+      $panel.find(`[data-l1-pane="${tab}"]`).show();
+    });
     $("#gal-settings-close").on("click", () => $panel.remove());
     $panel.on("click", function(e) {
       if (e.target === this) $panel.remove();
@@ -16985,7 +13255,7 @@ ${firstResult}`;
         await enableWorldbookGlobally();
         applyGalgameMode();
         if (settings.hideOtherFloors) hideNonLastFloors();
-        showToast5("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
+        showToast4("Galgame \u6A21\u5F0F\u5DF2\u5F00\u542F");
       } else {
         $(this).removeClass("gal-toggle-on").addClass("gal-toggle-off").html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED</span>');
         await disableWorldbookGlobally();
@@ -16994,7 +13264,7 @@ ${firstResult}`;
           const $lastMes = $("#chat > .mes").last();
           if ($lastMes.length) $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
         }, 150);
-        showToast5("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
+        showToast4("Galgame \u6A21\u5F0F\u5DF2\u5173\u95ED");
       }
     });
     $("#gal-font-size").on("input", function() {
@@ -17057,7 +13327,7 @@ ${firstResult}`;
       enhancedConfig.enabled = enabled;
       saveSettings();
       $("#gal-enhanced-hint, #gal-enhanced-config").toggle(enabled);
-      showToast5(enabled ? "\u5DF2\u542F\u7528\u52A0\u5F3A\u6A21\u5F0F" : "\u5DF2\u7981\u7528\u52A0\u5F3A\u6A21\u5F0F");
+      showToast4(enabled ? "\u5DF2\u542F\u7528\u52A0\u5F3A\u6A21\u5F0F" : "\u5DF2\u7981\u7528\u52A0\u5F3A\u6A21\u5F0F");
     });
     $("#gal-enhanced-use-profile").on("change", function() {
       const enhancedConfig = ensureEnhancedModeSettings();
@@ -17124,7 +13394,7 @@ ${firstResult}`;
     $("#gal-enhanced-view-prompts").on("click", function() {
       const prompts = enhancedModeState3.lastPrompts;
       if (!prompts) {
-        showToast5("\u6682\u65E0\u63D0\u793A\u8BCD\u8BB0\u5F55");
+        showToast4("\u6682\u65E0\u63D0\u793A\u8BCD\u8BB0\u5F55");
         return;
       }
       const esc = (str) => (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -17163,7 +13433,7 @@ ${prompts.systemPrompt}
 ${prompts.firstResult}
 
 \u3010User Prompt\u3011
-${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F")).catch(() => showToast5("\u590D\u5236\u5931\u8D25"));
+${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F")).catch(() => showToast4("\u590D\u5236\u5931\u8D25"));
       });
     });
     $("#gal-skip-speed").on("input", function() {
@@ -17210,7 +13480,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const $charLayer = $(".gal-layer-character");
       if (enabled) $charLayer.addClass("tts-mode-enabled");
       else $charLayer.removeClass("tts-mode-enabled");
-      injectCOTToWorldbook().then(() => showToast5(enabled ? "TTS\u5DF2\u542F\u7528\uFF0CCOT\u5DF2\u66F4\u65B0" : "TTS\u5DF2\u5173\u95ED\uFF0CCOT\u5DF2\u66F4\u65B0"));
+      injectCOTToWorldbook().then(() => showToast4(enabled ? "TTS\u5DF2\u542F\u7528\uFF0CCOT\u5DF2\u66F4\u65B0" : "TTS\u5DF2\u5173\u95ED\uFF0CCOT\u5DF2\u66F4\u65B0"));
     });
     $("#gal-tts-provider").on("change", async function() {
       settings.ttsProvider = $(this).val();
@@ -17221,7 +13491,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       } catch (e) {
       }
       await refreshTtsVoiceOptions();
-      injectCOTToWorldbook().then(() => showToast5("TTS\u5F15\u64CE\u5DF2\u5207\u6362\uFF0CCOT\u5DF2\u66F4\u65B0")).catch(() => showToast5("TTS\u5F15\u64CE\u5DF2\u5207\u6362"));
+      injectCOTToWorldbook().then(() => showToast4("TTS\u5F15\u64CE\u5DF2\u5207\u6362\uFF0CCOT\u5DF2\u66F4\u65B0")).catch(() => showToast4("TTS\u5F15\u64CE\u5DF2\u5207\u6362"));
     });
     $("#gal-tts-autoplay").on("change", function() {
       settings.ttsAutoPlay = $(this).is(":checked");
@@ -17273,11 +13543,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       try {
         parsed = JSON.parse($("#gal-gpt-sovits-voices-json").val() || "[]");
       } catch (e) {
-        showToast5("\u97F3\u8272\u5217\u8868 JSON \u89E3\u6790\u5931\u8D25");
+        showToast4("\u97F3\u8272\u5217\u8868 JSON \u89E3\u6790\u5931\u8D25");
         return;
       }
       if (!Array.isArray(parsed)) {
-        showToast5("\u97F3\u8272\u5217\u8868\u5FC5\u987B\u662F\u6570\u7EC4");
+        showToast4("\u97F3\u8272\u5217\u8868\u5FC5\u987B\u662F\u6570\u7EC4");
         return;
       }
       const normalized = normalizeGptSoVitsVoicesForStore(parsed);
@@ -17291,11 +13561,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       let msg = `GPT-SoVITS \u97F3\u8272\u5217\u8868\u5DF2\u4FDD\u5B58\uFF1A${normalized.voices.length} \u6761`;
       if (normalized.ignoredCount > 0) msg += `\uFF08\u5FFD\u7565\u65E0\u6548\u6761\u76EE ${normalized.ignoredCount} \u6761\uFF09`;
       if (normalized.missingRefCount > 0) msg += `\uFF08${normalized.missingRefCount} \u6761\u7F3A refAudioPath\uFF09`;
-      injectCOTToWorldbook().then(() => showToast5(`${msg}\uFF0CCOT\u5DF2\u66F4\u65B0`)).catch(() => showToast5(msg));
+      injectCOTToWorldbook().then(() => showToast4(`${msg}\uFF0CCOT\u5DF2\u66F4\u65B0`)).catch(() => showToast4(msg));
     });
     $("#gal-gpt-sovits-test").on("click", () => {
       if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) {
-        showToast5("\u8BF7\u5148\u5207\u6362\u4E3A GPT-SoVITS");
+        showToast4("\u8BF7\u5148\u5207\u6362\u4E3A GPT-SoVITS");
         return;
       }
       const text = ($("#gal-gpt-sovits-test-text").val() || "").trim() || "\u4F60\u597D\uFF0C\u8FD9\u662F\u4E00\u6BB5 GPT-SoVITS \u914D\u97F3\u6D4B\u8BD5\u3002";
@@ -17307,130 +13577,30 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const targetVoice = selectedUsable ? selectedVoice : fallbackVoice;
       const voiceName = targetVoice?.name || "";
       if (!voiceName) {
-        showToast5("\u8BF7\u5148\u914D\u7F6E\u81F3\u5C11\u4E00\u4E2A\u53EF\u7528\u97F3\u8272\uFF08refAudioPath \u4E0D\u80FD\u4E3A\u7A7A\uFF09");
+        showToast4("\u8BF7\u5148\u914D\u7F6E\u81F3\u5C11\u4E00\u4E2A\u53EF\u7528\u97F3\u8272\uFF08refAudioPath \u4E0D\u80FD\u4E3A\u7A7A\uFF09");
         return;
       }
       if (selectedVoiceName !== voiceName) {
         settings.ttsDefaultSpeaker = voiceName;
         saveSettings();
         $("#gal-tts-default-speaker").val(voiceName);
-        showToast5(`\u5DF2\u81EA\u52A8\u5207\u6362\u8BD5\u542C\u97F3\u8272\uFF1A${voiceName}`);
+        showToast4(`\u5DF2\u81EA\u52A8\u5207\u6362\u8BD5\u542C\u97F3\u8272\uFF1A${voiceName}`);
       }
       TTSManager.stop();
       TTSManager.speak({ type: "dialogue", speaker: "", text, tts: { speaker: voiceName } }, `gpt_sovits_test_${Date.now()}`);
-    });
-    $("#gal-open-sprite-manager").on("click", () => {
-      $panel.remove();
-      if (_showAssetManagerModalRef) _showAssetManagerModalRef();
     });
     $("#gal-refresh-views").on("click", () => {
       if (getIsEnabled()) {
         applyGalgameMode();
         if (settings.hideOtherFloors) hideNonLastFloors();
-        showToast5("\u89C6\u56FE\u5DF2\u5237\u65B0");
+        showToast4("\u89C6\u56FE\u5DF2\u5237\u65B0");
       } else {
-        showToast5("\u8BF7\u5148\u5F00\u542F Galgame \u6A21\u5F0F");
+        showToast4("\u8BF7\u5148\u5F00\u542F Galgame \u6A21\u5F0F");
       }
     });
-    $("#gal-comfyui-url").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.apiUrl = $(this).val().trim();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfyui-negative").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.negativePrompt = $(this).val();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfyui-test").on("click", async function() {
-      $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6D4B\u8BD5\u4E2D...');
-      const ok = await ComfyUIAPI.checkConnection();
-      $(this).prop("disabled", false).html('<i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5');
-      showToast5(ok ? "ComfyUI \u8FDE\u63A5\u6210\u529F\uFF01" : "ComfyUI \u8FDE\u63A5\u5931\u8D25");
-    });
-    function renderWorkflowList() {
-      const workflows = getComfyWorkflows();
-      const $list = $("#gal-workflow-list");
-      const $selChar = $("#gal-comfy-def-char");
-      const $selBg = $("#gal-comfy-def-bg");
-      const cs = getComfyUISettings();
-      $list.empty();
-      $selChar.html('<option value="default_char">\u5185\u7F6E SDXL Turbo</option>');
-      $selBg.html('<option value="default_bg">\u5185\u7F6E SDXL Turbo</option>');
-      const keys = Object.keys(workflows);
-      if (keys.length === 0) {
-        $list.html('<div style="text-align:center;color:#999;font-size:0.85rem;padding:10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>');
-      } else {
-        keys.forEach((id) => {
-          const wf = workflows[id];
-          const $item = $(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #eee;font-size:0.9rem;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px;" title="${wf.name}">${wf.name}</span><i class="fa-solid fa-trash" style="color:#ff4d4d;cursor:pointer;padding:4px;" title="\u5220\u9664"></i></div>`);
-          $item.find(".fa-trash").on("click", () => {
-            if (confirm(`\u5220\u9664\u5DE5\u4F5C\u6D41 "${wf.name}"?`)) {
-              delete workflows[id];
-              saveComfyWorkflows(workflows);
-              renderWorkflowList();
-            }
-          });
-          $list.append($item);
-          $selChar.append(`<option value="${id}">${wf.name}</option>`);
-          $selBg.append(`<option value="${id}">${wf.name}</option>`);
-        });
-      }
-      $selChar.val(cs.defaultCharWorkflow || "default_char");
-      $selBg.val(cs.defaultBgWorkflow || "default_bg");
+    if (_bindAssetsPaneRef) {
+      _bindAssetsPaneRef($panel, subTab);
     }
-    renderWorkflowList();
-    async function loadCheckpointsToSelect() {
-      const $sel = $("#gal-comfy-def-checkpoint");
-      const cs = getComfyUISettings();
-      try {
-        const models = await ComfyUIAPI.getModels(cs.apiUrl);
-        $sel.empty().append('<option value="">-- \u4F7F\u7528 Workflow\u9ED8\u8BA4 --</option>');
-        models.forEach((m) => $sel.append(`<option value="${m}">${m}</option>`));
-        if (cs.defaultCheckpoint) $sel.val(cs.defaultCheckpoint);
-      } catch (e) {
-        console.error(`[${SCRIPT_NAME}] \u52A0\u8F7D\u6A21\u578B\u5931\u8D25:`, e);
-        $sel.html('<option value="">(\u52A0\u8F7D\u5931\u8D25)</option>');
-      }
-    }
-    loadCheckpointsToSelect();
-    $("#gal-comfy-def-checkpoint").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.defaultCheckpoint = $(this).val();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfy-import-btn").on("click", () => $("#gal-comfy-import-input").click());
-    $("#gal-comfy-import-input").on("change", function() {
-      const file = this.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const json = JSON.parse(e.target.result);
-          const name = file.name.replace(".json", "");
-          const id = "wf_" + Date.now();
-          const workflows = getComfyWorkflows();
-          workflows[id] = { name, json };
-          saveComfyWorkflows(workflows);
-          renderWorkflowList();
-          showToast5(`\u5DF2\u5BFC\u5165: ${name}`);
-        } catch (err) {
-          showToast5("\u65E0\u6548\u7684 JSON \u6587\u4EF6");
-        }
-        $(this).val("");
-      };
-      reader.readAsText(file);
-    });
-    $("#gal-comfy-def-char").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.defaultCharWorkflow = $(this).val();
-      saveComfyUISettings(cs);
-    });
-    $("#gal-comfy-def-bg").on("change", function() {
-      const cs = getComfyUISettings();
-      cs.defaultBgWorkflow = $(this).val();
-      saveComfyUISettings(cs);
-    });
   }
 
   // src/ui/live2d-settings-modal.js
@@ -17657,9 +13827,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
 
         <!-- \u5E95\u90E8\u6309\u94AE -->
         <div style="padding: 15px 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end;">
-          <button id="gal-live2d-settings-cancel" style="padding: 10px 20px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer;">
-            \u53D6\u6D88
-          </button>
           <button id="gal-live2d-settings-save" style="padding: 10px 20px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
             <i class="fa-solid fa-save"></i> \u4FDD\u5B58\u8BBE\u7F6E
           </button>
@@ -17721,7 +13888,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       $modal.find(".gal-expr-mapping-select").val("");
       $modal.find(".gal-motion-mapping-select").val("");
     });
-    $modal.find("#gal-live2d-settings-close, #gal-live2d-settings-cancel").on("click", function() {
+    $modal.find("#gal-live2d-settings-close").on("click", function() {
       $modal.remove();
     });
     $modal.find("#gal-live2d-start-position-edit").on("click", async function() {
@@ -18045,7 +14212,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const sceneName = $(this).data("scene");
         if (confirm(`\u786E\u5B9A\u5220\u9664\u80CC\u666F\u300C${sceneName}\u300D\u5417\uFF1F`)) {
           await deleteBackground(sceneName);
-          showToast5(`\u5DF2\u5220\u9664\u80CC\u666F: ${sceneName}`);
+          showToast4(`\u5DF2\u5220\u9664\u80CC\u666F: ${sceneName}`);
           $modal.remove();
           showSpriteConfigModal();
         }
@@ -18058,8 +14225,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-bg-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-          <div class="gal-input-title" style="padding: 15px 25px; border-bottom: 1px solid #eee; flex-shrink: 0; margin: 0;">
+          <div class="gal-input-title" style="padding: 15px 25px; border-bottom: 1px solid #eee; flex-shrink: 0; margin: 0; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-images"></i> \u6279\u91CF\u4E0A\u4F20\u80CC\u666F</span>
+            <button id="gal-batch-bg-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
 
           <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
@@ -18110,10 +14280,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
 
           <!-- \u5E95\u90E8\u6309\u94AE -->
           <div class="gal-input-actions" style="display: flex; gap: 12px; padding: 15px 25px; border-top: 1px solid #eee; background: #fff; flex-shrink: 0;">
-              <button class="gal-action-btn" id="gal-batch-cancel-btn" style="flex: 1; min-height: 44px; justify-content: center;">
-                <span>\u53D6\u6D88</span>
-              </button>
-              <button class="gal-action-btn primary" id="gal-batch-save-btn" style="flex: 2; min-height: 44px; justify-content: center; display: none;">
+              <button class="gal-action-btn primary" id="gal-batch-save-btn" style="flex: 1; min-height: 44px; justify-content: center; display: none;">
                 <i class="fa-solid fa-save"></i>
                 <span id="gal-batch-save-text">\u4FDD\u5B58\u6240\u6709\u80CC\u666F (0)</span>
               </button>
@@ -18218,9 +14385,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-batch-fetch-remote-btn").on("click", async function() {
       const text = $("#gal-batch-remote-urls").val().trim();
-      if (!text) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!text) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       const urls = text.split("\n").map((u) => u.trim()).filter((u) => u);
-      if (urls.length === 0) return showToast5("\u6CA1\u6709\u6709\u6548\u7684\u94FE\u63A5");
+      if (urls.length === 0) return showToast4("\u6CA1\u6709\u6709\u6548\u7684\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u4E0B\u8F7D\u9A8C\u8BC1\u4E2D...');
       let successCount = 0;
       const fetchImage = async (url) => {
@@ -18254,7 +14421,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (successCount > 0) {
         switchToTaggingView();
       } else {
-        showToast5("\u672A\u80FD\u83B7\u53D6\u4EFB\u4F55\u6709\u6548\u56FE\u7247\uFF0C\u8BF7\u68C0\u67E5\u94FE\u63A5");
+        showToast4("\u672A\u80FD\u83B7\u53D6\u4EFB\u4F55\u6709\u6548\u56FE\u7247\uFF0C\u8BF7\u68C0\u67E5\u94FE\u63A5");
       }
     });
     function switchToTaggingView() {
@@ -18331,14 +14498,17 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       });
       if (typeof onCloseCallback === "function") onCloseCallback();
     }
-    $("#gal-batch-cancel-btn").on("click", closeDialog);
+    $("#gal-batch-bg-close-x").on("click", closeDialog);
+    $modal.on("click", function(e) {
+      if (e.target === this) closeDialog();
+    });
     $saveBtn.on("click", async function() {
       let emptyNames = 0;
       batchItems.forEach((item) => {
         if (!item.name || !item.name.trim()) emptyNames++;
       });
       if (emptyNames > 0) {
-        return showToast5(`\u6709 ${emptyNames} \u5F20\u56FE\u7247\u672A\u586B\u5199\u573A\u666F\u540D\u79F0\uFF0C\u8BF7\u8865\u5145\u5B8C\u6574`);
+        return showToast4(`\u6709 ${emptyNames} \u5F20\u56FE\u7247\u672A\u586B\u5199\u573A\u666F\u540D\u79F0\uFF0C\u8BF7\u8865\u5145\u5B8C\u6574`);
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6B63\u5728\u4FDD\u5B58...');
       let failCount = 0;
@@ -18358,10 +14528,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
       if (failCount === 0) {
-        showToast5(`\u6210\u529F\u6279\u91CF\u4FDD\u5B58 ${batchItems.length} \u5F20\u80CC\u666F\uFF01`);
+        showToast4(`\u6210\u529F\u6279\u91CF\u4FDD\u5B58 ${batchItems.length} \u5F20\u80CC\u666F\uFF01`);
         closeDialog();
       } else {
-        showToast5(`\u4FDD\u5B58\u5B8C\u6210\uFF0C\u4F46\u6709 ${failCount} \u5F20\u5931\u8D25\uFF0C\u8BE6\u60C5\u8BF7\u770B\u63A7\u5236\u53F0`);
+        showToast4(`\u4FDD\u5B58\u5B8C\u6210\uFF0C\u4F46\u6709 ${failCount} \u5F20\u5931\u8D25\uFF0C\u8BE6\u60C5\u8BF7\u770B\u63A7\u5236\u53F0`);
         closeDialog();
       }
     });
@@ -18370,8 +14540,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-bg-upload-modal">
         <div class="gal-input-box" style="max-width: 600px; width: 90%; padding: 25px;">
-          <div class="gal-input-title" style="margin-bottom: 20px; font-size: 1.3rem;">
+          <div class="gal-input-title" style="margin-bottom: 20px; font-size: 1.3rem; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-panorama"></i> \u6DFB\u52A0\u80CC\u666F\u56FE\u7247</span>
+            <button id="gal-bg-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
 
           <div style="margin-bottom: 15px;">
@@ -18450,9 +14623,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           </div>
 
           <div class="gal-input-actions" style="display: flex; gap: 12px;">
-            <button class="gal-action-btn" id="gal-bg-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-              <span>\u53D6\u6D88</span>
-            </button>
             <button class="gal-action-btn primary" id="gal-bg-confirm" style="flex: 1; min-height: 44px; justify-content: center;" disabled>
               <i class="fa-solid fa-save"></i>
               <span>\u4FDD\u5B58\u80CC\u666F</span>
@@ -18481,7 +14651,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-bg-fetch-btn").on("click", async function() {
       const url = $("#gal-bg-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -18499,7 +14669,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         };
         reader.readAsDataURL(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -18522,7 +14692,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const prompt2 = $("#gal-bg-comfyui-prompt").val().trim();
       const wfId = $("#gal-bg-comfy-wf-select").val();
       if (!prompt2) {
-        showToast5("\u8BF7\u8F93\u5165\u573A\u666F\u63CF\u8FF0");
+        showToast4("\u8BF7\u8F93\u5165\u573A\u666F\u63CF\u8FF0");
         return;
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u751F\u6210\u4E2D...');
@@ -18557,10 +14727,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         };
         reader.readAsDataURL(file);
-        showToast5("\u80CC\u666F\u751F\u6210\u6210\u529F\uFF01");
+        showToast4("\u80CC\u666F\u751F\u6210\u6210\u529F\uFF01");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] ComfyUI\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u751F\u6210\u5931\u8D25: " + e.message);
+        showToast4("\u751F\u6210\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-image"></i><span>\u751F\u6210\u80CC\u666F</span>');
       }
@@ -18596,7 +14766,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-bg-cancel").on("click", handleClose);
+    $("#gal-bg-close-x").on("click", handleClose);
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
     });
@@ -18614,14 +14784,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           reader.readAsArrayBuffer(selectedFile);
         });
         await saveBackground(sceneName, blob);
-        showToast5(`\u80CC\u666F\u5DF2\u4FDD\u5B58: ${sceneName}`);
+        showToast4(`\u80CC\u666F\u5DF2\u4FDD\u5B58: ${sceneName}`);
         if (getIsEnabled()) {
           injectCOTToWorldbook().catch((e) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e));
         }
         handleClose();
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u80CC\u666F\u5931\u8D25:`, e);
-        showToast5("\u4FDD\u5B58\u5931\u8D25");
+        showToast4("\u4FDD\u5B58\u5931\u8D25");
         $(this).prop("disabled", false).html('<i class="fa-solid fa-save"></i><span>\u4FDD\u5B58\u80CC\u666F</span>');
       }
     });
@@ -18855,8 +15025,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
             <div class="gal-input-modal" id="gal-appearance-prompt-modal">
                 <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
-                    <div class="gal-input-title" style="margin-bottom: 20px;">
+                    <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                         <span><i class="fa-solid fa-palette"></i> ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD</span>
+                        <button id="gal-appearance-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                          <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
@@ -18882,9 +15055,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
                         </div>
                     </div>
                     <div class="gal-input-actions" style="display: flex; gap: 12px;">
-                        <button class="gal-action-btn" id="gal-appearance-cancel" style="flex: 1; min-height: 44px;">
-                            <span>\u53D6\u6D88</span>
-                        </button>
                         <button class="gal-action-btn primary" id="gal-appearance-save" style="flex: 1; min-height: 44px;">
                             <i class="fa-solid fa-save"></i>
                             <span>\u4FDD\u5B58</span>
@@ -18897,14 +15067,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find("#gal-appearance-prompt-modal");
     makeDraggable($modal.find(".gal-input-box"), $modal.find(".gal-input-title"));
-    $modal.find("#gal-appearance-cancel").on("click", () => $modal.remove());
+    $modal.find("#gal-appearance-close-x").on("click", () => $modal.remove());
     $modal.on("click", function(e) {
       if (e.target === this) $modal.remove();
     });
     $modal.find("#gal-appearance-save").on("click", function() {
       const newPrompt = $modal.find("#gal-appearance-prompt-input").val().trim();
       setCharAppearancePrompt(characterId, newPrompt);
-      showToast5(`\u5DF2\u4FDD\u5B58 ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD`);
+      showToast4(`\u5DF2\u4FDD\u5B58 ${characterId} \u7684\u5916\u8C8C\u63D0\u793A\u8BCD`);
       $modal.remove();
       if (typeof onSave === "function") onSave(newPrompt);
     });
@@ -18913,7 +15083,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $("#gal-banana-appearance-picker").remove();
     const sprites = await getAllSprites();
     if (!sprites || sprites.length === 0) {
-      showToast5("\u6682\u65E0\u53EF\u7528\u7ACB\u7ED8\uFF0C\u8BF7\u5148\u4E0A\u4F20\u7ACB\u7ED8");
+      showToast4("\u6682\u65E0\u53EF\u7528\u7ACB\u7ED8\uFF0C\u8BF7\u5148\u4E0A\u4F20\u7ACB\u7ED8");
       return;
     }
     const grouped = /* @__PURE__ */ new Map();
@@ -19002,7 +15172,12 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-sprite-upload-modal">
         <div class="gal-input-box" style="max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 25px;">
-          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem;"><span>\u4E0A\u4F20\u89D2\u8272\u7ACB\u7ED8</span></div>
+          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem; display: flex; align-items: center; justify-content: space-between;">
+            <span>\u4E0A\u4F20\u89D2\u8272\u7ACB\u7ED8</span>
+            <button id="gal-sprite-upload-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
           <div style="margin-bottom: 15px; display: flex; gap: 15px;">
             <div style="flex: 1;">
               <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
@@ -19153,9 +15328,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
             </p>
           </div>
           <div class="gal-input-actions" style="display: flex; gap: 15px; margin-top: 15px;">
-            <button class="gal-action-btn" id="gal-upload-cancel" style="flex: 1; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
-              <span>\u53D6\u6D88</span>
-            </button>
             <button class="gal-action-btn" id="gal-batch-upload-btn" style="flex: 1; background: #666; color: #fff; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
               <i class="fa-solid fa-images"></i>
               <span>\u6279\u91CF\u4E0A\u4F20</span>
@@ -19191,19 +15363,19 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-upload-cancel").on("click", handleClose);
+    $("#gal-sprite-upload-close-x").on("click", handleClose);
     $("#gal-tts-voice-save-btn").on("click", () => {
       const charName = $("#gal-sprite-character").val().trim() || characterId;
       const voiceName = $("#gal-tts-voice-select").val();
       if (!charName) {
-        showToast5("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       setCharacterTTSVoice(charName, voiceName);
       if (voiceName) {
-        showToast5(`\u5DF2\u7ED1\u5B9A: ${charName} \u2192 ${voiceName}`);
+        showToast4(`\u5DF2\u7ED1\u5B9A: ${charName} \u2192 ${voiceName}`);
       } else {
-        showToast5(`\u5DF2\u6E05\u9664 ${charName} \u7684\u97F3\u8272\u7ED1\u5B9A`);
+        showToast4(`\u5DF2\u6E05\u9664 ${charName} \u7684\u97F3\u8272\u7ED1\u5B9A`);
       }
     });
     $("#gal-sprite-character").on("input", function() {
@@ -19227,7 +15399,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
     $("#gal-sprite-fetch-btn").on("click", async function() {
       const url = $("#gal-sprite-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -19237,7 +15409,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const file = new File([blob], "remote_image.png", { type: blob.type });
         handleFileSelect(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -19293,7 +15465,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const wfId = $("#gal-comfy-wf-select").val();
       const checkpointOverride = $("#gal-comfy-checkpoint-select").val();
       if (!charName) {
-        showToast5("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u5148\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       const appearancePrompt = getCharAppearancePrompt(charName);
@@ -19318,10 +15490,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const fileName = `comfyui_gen_${Date.now()}.png`;
         const file = new File([blob], fileName, { type: "image/png" });
         handleFileSelect(file);
-        showToast5("\u7ACB\u7ED8\u751F\u6210\u6210\u529F\uFF01\u8BF7\u5728\u4E0A\u65B9\u88C1\u526A\u533A\u57DF\u8C03\u6574\u540E\u4FDD\u5B58");
+        showToast4("\u7ACB\u7ED8\u751F\u6210\u6210\u529F\uFF01\u8BF7\u5728\u4E0A\u65B9\u88C1\u526A\u533A\u57DF\u8C03\u6574\u540E\u4FDD\u5B58");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] ComfyUI\u751F\u6210\u5931\u8D25:`, e);
-        showToast5("\u751F\u6210\u5931\u8D25: " + e.message);
+        showToast4("\u751F\u6210\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-sparkles"></i><span>\u751F\u6210\u7ACB\u7ED8</span>');
       }
@@ -19337,7 +15509,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const canvas = topWindow.document.getElementById("gal-crop-canvas");
       if (!canvas) {
         console.error("[Galgame\u754C\u9762\u63D2\u4EF6] \u672A\u627E\u5230\u88C1\u526A canvas");
-        showToast5("\u88C1\u526A\u533A\u57DF\u521D\u59CB\u5316\u5931\u8D25");
+        showToast4("\u88C1\u526A\u533A\u57DF\u521D\u59CB\u5316\u5931\u8D25");
         return;
       }
       const CANVAS_WIDTH = 640;
@@ -19358,13 +15530,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       };
       reader.onerror = (e) => {
         console.error("[Galgame\u754C\u9762\u63D2\u4EF6] \u6587\u4EF6\u8BFB\u53D6\u9519\u8BEF:", e);
-        showToast5("\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25");
+        showToast4("\u6587\u4EF6\u8BFB\u53D6\u5931\u8D25");
       };
       reader.readAsDataURL(file);
       try {
         await imageLoadPromise;
       } catch (e) {
-        showToast5("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5");
+        showToast4("\u56FE\u7247\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5");
         return;
       }
       const ctx = canvas.getContext("2d");
@@ -19507,14 +15679,14 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const charName = $("#gal-sprite-character").val().trim();
       const expr = $("#gal-sprite-expression").val();
       if (!charName) {
-        showToast5("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       try {
         $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u5904\u7406\u4E2D...');
         const croppedBlob = await cropper.getCroppedBlob(400);
         await saveSprite(charName, expr, croppedBlob);
-        showToast5(`\u5DF2\u4FDD\u5B58: ${charName} - ${expr}`);
+        showToast4(`\u5DF2\u4FDD\u5B58: ${charName} - ${expr}`);
         $modal.remove();
         refreshGalgameViews();
         if (typeof onCloseCallback === "function") {
@@ -19526,7 +15698,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u7ACB\u7ED8\u5931\u8D25:`, e);
-        showToast5("\u4FDD\u5B58\u5931\u8D25");
+        showToast4("\u4FDD\u5B58\u5931\u8D25");
         $(this).prop("disabled", false).html('<i class="fa-solid fa-check"></i><span>\u4FDD\u5B58\u7ACB\u7ED8</span>');
       }
     });
@@ -19536,8 +15708,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="gal-input-title" style="padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0;">
+          <div class="gal-input-title" style="padding: 15px 20px; border-bottom: 1px solid #eee; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
             <span><i class="fa-solid fa-grid-2"></i> \u667A\u80FD\u6279\u91CF\u4E0A\u4F20\u7ACB\u7ED8</span>
+            <button id="gal-batch-upload-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
           <div style="display: flex; flex: 1; overflow: hidden;">
             <div class="gal-batch-sidebar" style="width: 240px; border-right: 1px solid #ddd; background: #f8f9fa; display: flex; flex-direction: column;">
@@ -19622,10 +15797,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
                     </div>
                 </div>
                 <div class="gal-input-actions" style="display: flex; gap: 12px; padding: 15px 20px; border-top: 1px solid #eee; background: #fff; flex-shrink: 0;">
-                    <button class="gal-action-btn" id="gal-batch-cancel" style="flex: 1; min-height: 44px;">
-                      <span>\u5173\u95ED</span>
-                    </button>
-                    <button class="gal-action-btn primary" id="gal-batch-confirm" style="flex: 2; min-height: 44px;" disabled>
+                    <button class="gal-action-btn primary" id="gal-batch-confirm" style="flex: 1; min-height: 44px;" disabled>
                       <i class="fa-solid fa-save"></i>
                       <span>\u4FDD\u5B58\u6240\u6709\u7ACB\u7ED8</span>
                     </button>
@@ -19757,7 +15929,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     }
     $("#gal-batch-fetch-btn").on("click", async function() {
       const url = $("#gal-batch-remote-url").val().trim();
-      if (!url) return showToast5("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
+      if (!url) return showToast4("\u8BF7\u8F93\u5165\u56FE\u7247\u94FE\u63A5");
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u83B7\u53D6\u4E2D...');
       try {
         const response = await fetch(url);
@@ -19767,7 +15939,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const file = new File([blob], "remote_grid.png", { type: blob.type });
         handleFileSelect(file);
       } catch (e) {
-        showToast5("\u83B7\u53D6\u5931\u8D25: " + e.message);
+        showToast4("\u83B7\u53D6\u5931\u8D25: " + e.message);
       } finally {
         $(this).prop("disabled", false).html('<i class="fa-solid fa-download"></i> \u83B7\u53D6\u56FE\u7247');
       }
@@ -19948,7 +16120,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         autoDetectGrid(loadedImage);
         renderGridPreview();
         updateMappingUI();
-        showToast5("\u5DF2\u91CD\u65B0\u68C0\u6D4B\u7F51\u683C");
+        showToast4("\u5DF2\u91CD\u65B0\u68C0\u6D4B\u7F51\u683C");
       }
     });
     const handleClose = () => {
@@ -19961,23 +16133,23 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-batch-cancel").on("click", handleClose);
+    $("#gal-batch-upload-close-x").on("click", handleClose);
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
     });
     $("#gal-batch-confirm").on("click", async function() {
       const charName = $("#gal-batch-character").val().trim();
       if (!charName) {
-        showToast5("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u89D2\u8272\u540D\u79F0");
         return;
       }
       if (!loadedImage) {
-        showToast5("\u8BF7\u5148\u4E0A\u4F20\u56FE\u7247");
+        showToast4("\u8BF7\u5148\u4E0A\u4F20\u56FE\u7247");
         return;
       }
       const validMappings = cellMappings.filter((m) => !m.skip && m.expression);
       if (validMappings.length === 0) {
-        showToast5("\u8BF7\u81F3\u5C11\u8BBE\u7F6E\u4E00\u4E2A\u8868\u60C5\u540D\u79F0");
+        showToast4("\u8BF7\u81F3\u5C11\u8BBE\u7F6E\u4E00\u4E2A\u8868\u60C5\u540D\u79F0");
         return;
       }
       $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u5904\u7406\u4E2D...');
@@ -20025,9 +16197,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
       if (failedCount > 0) {
-        showToast5(`\u4FDD\u5B58\u5B8C\u6210: ${savedCount} \u6210\u529F, ${failedCount} \u5931\u8D25`);
+        showToast4(`\u4FDD\u5B58\u5B8C\u6210: ${savedCount} \u6210\u529F, ${failedCount} \u5931\u8D25`);
       } else {
-        showToast5(`\u5DF2\u4FDD\u5B58 ${savedCount} \u5F20\u7ACB\u7ED8`);
+        showToast4(`\u5DF2\u4FDD\u5B58 ${savedCount} \u5F20\u7ACB\u7ED8`);
       }
       loadedImage = null;
       $previewArea.hide();
@@ -20045,8 +16217,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
             <div class="gal-input-modal" id="gal-expression-manager-modal">
                 <div class="gal-input-box" style="max-width: 550px; width: 90%; padding: 25px;">
-                    <div class="gal-input-title" style="margin-bottom: 20px;">
+                    <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                         <span><i class="fa-solid fa-face-smile"></i> \u7BA1\u7406\u8868\u60C5\u6807\u7B7E</span>
+                        <button id="gal-expr-manager-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                          <i class="fa-solid fa-xmark"></i>
+                        </button>
                     </div>
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
@@ -20077,11 +16252,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
                                 <i class="fa-solid fa-plus"></i> \u6DFB\u52A0
                             </button>
                         </div>
-                    </div>
-                    <div class="gal-input-actions" style="margin-top: 20px;">
-                        <button class="gal-action-btn" id="gal-expr-manager-close" style="width: 100%; min-height: 44px;">
-                            <span>\u5173\u95ED</span>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -20139,7 +16309,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
       }
     };
-    $("#gal-expr-manager-close").on("click", handleClose);
+    $("#gal-expr-manager-close-x").on("click", handleClose);
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
     });
@@ -20154,7 +16324,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const suggestedName = json.packageName || json.name;
         targetPackId = await showImportPackSelector(suggestedName);
         if (!targetPackId) {
-          showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
           return;
         }
       }
@@ -20187,10 +16357,10 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         }
       }
-      showToast5(`\u6210\u529F\u5BFC\u5165 ${count} \u4E2A\u8FDC\u7A0B\u8D44\u6E90\u94FE\u63A5`);
+      showToast4(`\u6210\u529F\u5BFC\u5165 ${count} \u4E2A\u8FDC\u7A0B\u8D44\u6E90\u94FE\u63A5`);
     } catch (e) {
       console.error("JSON\u5BFC\u5165\u5931\u8D25", e);
-      showToast5("JSON\u5BFC\u5165\u5931\u8D25: " + e.message);
+      showToast4("JSON\u5BFC\u5165\u5931\u8D25: " + e.message);
     }
   }
   var AssetIO = {
@@ -20215,7 +16385,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     },
     async exportAllAssets(remoteBaseUrl = null, packageName = null) {
       try {
-        showToast5("\u6B63\u5728\u51C6\u5907\u5BFC\u51FA...");
+        showToast4("\u6B63\u5728\u51C6\u5907\u5BFC\u51FA...");
         const zip = new (await this.loadJSZip())();
         const currentPackId = getCurrentPackId();
         const allPacks = await getAllImagePacks();
@@ -20275,7 +16445,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (remoteBaseUrl) {
           zip.file("remote_assets.json", JSON.stringify(remoteConfig, null, 2));
         }
-        showToast5("\u6B63\u5728\u538B\u7F29\u6253\u5305...");
+        showToast4("\u6B63\u5728\u538B\u7F29\u6253\u5305...");
         const content = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(content);
         const a = document.createElement("a");
@@ -20287,23 +16457,23 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showToast5(`\u5BFC\u51FA\u6210\u529F\uFF01\u5171\u5BFC\u51FA ${sprites.length} \u4E2A\u7ACB\u7ED8\uFF0C${backgrounds.length} \u4E2A\u80CC\u666F`);
+        showToast4(`\u5BFC\u51FA\u6210\u529F\uFF01\u5171\u5BFC\u51FA ${sprites.length} \u4E2A\u7ACB\u7ED8\uFF0C${backgrounds.length} \u4E2A\u80CC\u666F`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5BFC\u51FA\u5931\u8D25:`, e);
-        showToast5("\u5BFC\u51FA\u5931\u8D25: " + e.message);
+        showToast4("\u5BFC\u51FA\u5931\u8D25: " + e.message);
       }
     },
     async importFiles(fileList, targetPackId = null) {
       if (!targetPackId) {
         targetPackId = await showImportPackSelector("\u6587\u4EF6\u5939\u5BFC\u5165");
         if (!targetPackId) {
-          showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
           return false;
         }
       }
       let successCount = 0;
       let failCount = 0;
-      showToast5("\u5F00\u59CB\u5BFC\u5165...");
+      showToast4("\u5F00\u59CB\u5BFC\u5165...");
       for (const file of fileList) {
         try {
           const path = file.webkitRelativePath || file.name;
@@ -20329,7 +16499,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           failCount++;
         }
       }
-      showToast5(`\u5BFC\u5165\u5B8C\u6210: ${successCount} \u6210\u529F, ${failCount} \u5931\u8D25`);
+      showToast4(`\u5BFC\u5165\u5B8C\u6210: ${successCount} \u6210\u529F, ${failCount} \u5931\u8D25`);
       return successCount > 0;
     },
     async importAsSprite(file, packId = null) {
@@ -20369,7 +16539,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!targetPackId) {
           targetPackId = await showImportPackSelector(`GitHub\u5BFC\u5165`);
           if (!targetPackId) {
-            showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+            showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
             return false;
           }
         }
@@ -20397,7 +16567,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!owner || !repo) {
           throw new Error("\u65E0\u6548\u7684 GitHub \u4ED3\u5E93\u5730\u5740");
         }
-        showToast5(`\u6B63\u5728\u83B7\u53D6\u6587\u4EF6\u5217\u8868: ${owner}/${repo}...`);
+        showToast4(`\u6B63\u5728\u83B7\u53D6\u6587\u4EF6\u5217\u8868: ${owner}/${repo}...`);
         const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
@@ -20405,13 +16575,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!Array.isArray(data)) throw new Error("\u8DEF\u5F84\u4E0D\u662F\u4E00\u4E2A\u76EE\u5F55");
         const imageFiles = data.filter((item) => item.type === "file" && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
         if (imageFiles.length === 0) {
-          showToast5("\u8BE5\u76EE\u5F55\u4E0B\u6CA1\u6709\u627E\u5230\u56FE\u7247\u6587\u4EF6");
+          showToast4("\u8BE5\u76EE\u5F55\u4E0B\u6CA1\u6709\u627E\u5230\u56FE\u7247\u6587\u4EF6");
           return;
         }
         if (!confirm(`\u627E\u5230 ${imageFiles.length} \u5F20\u56FE\u7247\uFF0C\u662F\u5426\u5F00\u59CB\u5BFC\u5165\uFF1F`)) return;
         let count = 0;
         for (const item of imageFiles) {
-          showToast5(`\u6B63\u5728\u4E0B\u8F7D (${count + 1}/${imageFiles.length}): ${item.name}`);
+          showToast4(`\u6B63\u5728\u4E0B\u8F7D (${count + 1}/${imageFiles.length}): ${item.name}`);
           try {
             const imgRes = await fetch(item.download_url);
             const blob = await imgRes.blob();
@@ -20426,11 +16596,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
             console.error(`\u4E0B\u8F7D/\u5BFC\u5165 ${item.name} \u5931\u8D25:`, e);
           }
         }
-        showToast5(`GitHub \u5BFC\u5165\u5B8C\u6210\uFF0C\u5171 ${count} \u5F20\u56FE\u7247`);
+        showToast4(`GitHub \u5BFC\u5165\u5B8C\u6210\uFF0C\u5171 ${count} \u5F20\u56FE\u7247`);
         return true;
       } catch (e) {
         console.error("GitHub Import Error:", e);
-        showToast5("GitHub \u5BFC\u5165\u5931\u8D25: " + e.message);
+        showToast4("GitHub \u5BFC\u5165\u5931\u8D25: " + e.message);
         return false;
       }
     }
@@ -20439,8 +16609,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const dialogHtml = `
     <div class="gal-input-modal" id="gal-remote-zip-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
-        <div class="gal-input-title" style="margin-bottom: 20px;">
+        <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-cloud-arrow-down"></i> \u8FDC\u7A0B\u538B\u7F29\u5305\u5BFC\u5165</span>
+          <button id="gal-remote-zip-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
@@ -20455,9 +16628,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           </small>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 12px;">
-          <button class="gal-action-btn" id="gal-remote-zip-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-            <span>\u53D6\u6D88</span>
-          </button>
           <button class="gal-action-btn primary" id="gal-remote-zip-confirm" style="flex: 1; min-height: 44px; justify-content: center;">
             <i class="fa-solid fa-download"></i>
             <span>\u4E0B\u8F7D\u5E76\u5BFC\u5165</span>
@@ -20470,18 +16640,18 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $(mountRoot).append(dialogHtml);
     const $dialog = $(mountRoot).find("#gal-remote-zip-dialog");
     makeDraggable($dialog.find(".gal-input-box"), $dialog.find(".gal-input-title"));
-    $dialog.find("#gal-remote-zip-cancel").on("click", () => $dialog.remove());
+    $dialog.find("#gal-remote-zip-close-x").on("click", () => $dialog.remove());
     $dialog.on("click", function(e) {
       if (e.target === this) $dialog.remove();
     });
     $dialog.find("#gal-remote-zip-confirm").on("click", async function() {
       const url = $dialog.find("#gal-remote-zip-url").val().trim();
       if (!url) {
-        showToast5("\u8BF7\u8F93\u5165ZIP\u6587\u4EF6\u94FE\u63A5");
+        showToast4("\u8BF7\u8F93\u5165ZIP\u6587\u4EF6\u94FE\u63A5");
         return;
       }
       if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        showToast5("\u8BF7\u8F93\u5165\u6709\u6548\u7684 HTTP/HTTPS \u94FE\u63A5");
+        showToast4("\u8BF7\u8F93\u5165\u6709\u6548\u7684 HTTP/HTTPS \u94FE\u63A5");
         return;
       }
       $dialog.remove();
@@ -20492,7 +16662,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     let isCancelled = false;
     const progressController = showImportProgress("\u6B63\u5728\u89E3\u538B\u672C\u5730\u6587\u4EF6...", () => {
       isCancelled = true;
-      showToast5("\u5BFC\u5165\u5DF2\u624B\u52A8\u53D6\u6D88");
+      showToast4("\u5BFC\u5165\u5DF2\u624B\u52A8\u53D6\u6D88");
     });
     try {
       const JSZip = await AssetIO.loadJSZip();
@@ -20510,7 +16680,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast5("ZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("ZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
       } else {
         progressController.close();
       }
@@ -20527,7 +16697,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const progressController = showImportProgress("\u6B63\u5728\u4E0B\u8F7D\u8FDC\u7A0B\u6587\u4EF6...", () => {
       isCancelled = true;
       abortController.abort();
-      showToast5("\u4E0B\u8F7D\u5DF2\u53D6\u6D88");
+      showToast4("\u4E0B\u8F7D\u5DF2\u53D6\u6D88");
     });
     try {
       const response = await fetch(url, { signal: abortController.signal });
@@ -20580,7 +16750,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast5("\u8FDC\u7A0BZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("\u8FDC\u7A0BZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
       } else {
         progressController.close();
       }
@@ -20604,8 +16774,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
-            <div class="gal-input-title" style="margin-bottom: 20px;">
+            <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
               <span><i class="fa-solid fa-box-open"></i> \u9009\u62E9\u5BFC\u5165\u76EE\u6807\u56FE\u5305</span>
+              <button id="gal-import-pack-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
             </div>
             <div style="margin-bottom: 20px;">
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
@@ -20630,9 +16803,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
               <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
                 <i class="fa-solid fa-check"></i> <span>\u786E\u8BA4\u5BFC\u5165</span>
-              </button>
-              <button class="gal-action-btn" id="gal-import-pack-cancel" style="flex: 1; min-height: 44px; justify-content: center;">
-                <i class="fa-solid fa-xmark"></i> <span>\u53D6\u6D88</span>
               </button>
             </div>
           </div>
@@ -20660,21 +16830,21 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
           } else if (targetType === "new") {
             const newName = $dialog.find("#gal-import-new-pack-name").val().trim();
             if (!newName) {
-              showToast5("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0");
+              showToast4("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0");
               return;
             }
             createImagePack(newName).then((newPack) => {
               $dialog.remove();
               resolve(newPack.id);
             }).catch((err) => {
-              showToast5("\u521B\u5EFA\u56FE\u5305\u5931\u8D25: " + err.message);
+              showToast4("\u521B\u5EFA\u56FE\u5305\u5931\u8D25: " + err.message);
             });
             return;
           }
           $dialog.remove();
           resolve(resultPackId);
         });
-        $dialog.find("#gal-import-pack-cancel").on("click", () => {
+        $dialog.find("#gal-import-pack-close-x").on("click", () => {
           $dialog.remove();
           resolve(null);
         });
@@ -20686,7 +16856,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         });
       }).catch((err) => {
         console.error("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25:", err);
-        showToast5("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25");
+        showToast4("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25");
         resolve(null);
       });
     });
@@ -20712,7 +16882,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const suggestedName = packageInfo?.packageName || packageInfo?.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
-        showToast5("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+        showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
         return;
       }
     }
@@ -20849,22 +17019,22 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const errorHtml = `
     <div class="gal-input-modal" id="gal-import-error-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
-        <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c;">
+        <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-circle-exclamation"></i> \u5BFC\u5165\u51FA\u9519</span>
+          <button id="gal-import-error-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="background: #fdf2f2; border: 1px solid #f5c6cb; border-radius: 6px; padding: 15px; margin-bottom: 20px; max-height: 300px; overflow-y: auto;">
           ${messages.map((msg) => `<div style="margin-bottom: 5px; color: #721c24; font-size: 0.9rem; white-space: pre-wrap;">${msg}</div>`).join("")}
         </div>
-        <button class="gal-action-btn" id="gal-import-error-close" style="width: 100%; min-height: 44px; justify-content: center;">
-          <span>\u5173\u95ED</span>
-        </button>
       </div>
     </div>
   `;
     const mountRoot = getModalMountRoot();
     $(mountRoot).append(errorHtml);
     const $dialog = $(mountRoot).find("#gal-import-error-dialog");
-    $dialog.find("#gal-import-error-close").on("click", () => $dialog.remove());
+    $dialog.find("#gal-import-error-close-x").on("click", () => $dialog.remove());
     $dialog.on("click", function(e) {
       if (e.target === this) $dialog.remove();
     });
@@ -21393,13 +17563,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (Live2DManager.models.has(characterId)) {
           Live2DManager.cleanup(characterId);
         }
-        showToast5(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
+        showToast4(`Live2D \u6A21\u578B\u4E0A\u4F20\u6210\u529F: ${characterId}`);
         closeDialog();
         if (typeof onSaved === "function") await onSaved();
       } catch (error) {
         console.error(`[${SCRIPT_NAME}] Live2D \u672C\u5730\u4E0A\u4F20\u5931\u8D25:`, error);
         setStatus(`\u4E0A\u4F20\u5931\u8D25: ${error?.message || error}`, true);
-        showToast5(`Live2D \u4E0A\u4F20\u5931\u8D25: ${error?.message || error}`, "error");
+        showToast4(`Live2D \u4E0A\u4F20\u5931\u8D25: ${error?.message || error}`, "error");
       } finally {
         $localUploadBtn.prop("disabled", false);
       }
@@ -21415,13 +17585,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       try {
         const normalizedUrl = normalizeUserModelUrl(inputValue);
         await applyRemoteLive2DModel(characterId, normalizedUrl);
-        showToast5(`\u8FDC\u7A0B Live2D \u6A21\u578B\u5DF2\u4FDD\u5B58: ${characterId}`);
+        showToast4(`\u8FDC\u7A0B Live2D \u6A21\u578B\u5DF2\u4FDD\u5B58: ${characterId}`);
         closeDialog();
         if (typeof onSaved === "function") await onSaved();
       } catch (error) {
         console.error(`[${SCRIPT_NAME}] \u8FDC\u7A0B Live2D \u4FDD\u5B58\u5931\u8D25:`, error);
         setStatus(error?.message || String(error), true);
-        showToast5(`\u8FDC\u7A0B\u6A21\u578B\u4FDD\u5B58\u5931\u8D25: ${error?.message || error}`, "error");
+        showToast4(`\u8FDC\u7A0B\u6A21\u578B\u4FDD\u5B58\u5931\u8D25: ${error?.message || error}`, "error");
       } finally {
         $saveRemoteBtn.prop("disabled", false);
       }
@@ -21477,10 +17647,13 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
   <div class="gal-input-modal" id="gal-character-sprites-modal">
     <div class="gal-input-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-      <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;">
+      <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
         <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
           <span><i class="fa-solid fa-user"></i> ${characterId} \u7684\u7ACB\u7ED8\u7BA1\u7406</span>
         </div>
+        <button id="gal-char-sprites-close" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 25px; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -21575,14 +17748,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
                 `).join("")}
               </div>`}
       </div>
-      <div style="padding: 15px 25px; border-top: 1px solid #e0e0e0; flex-shrink: 0; display: flex; gap: 10px;">
-        <button class="gal-action-btn" id="gal-char-sprites-back" style="flex: 1; min-height: 44px;">
-          <i class="fa-solid fa-arrow-left"></i> <span>\u8FD4\u56DE</span>
-        </button>
-        <button class="gal-action-btn" id="gal-char-sprites-close" style="flex: 1; min-height: 44px;">
-          <span>\u5173\u95ED</span>
-        </button>
-      </div>
+      <!-- \u5E95\u90E8\u6309\u94AE\u680F\u5DF2\u79FB\u9664\uFF0C\u5173\u95ED\u6309\u94AE\u5728\u53F3\u4E0A\u89D2 -->
     </div>
   </div>
   <style>
@@ -21625,11 +17791,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     $modal.on("click", function(e) {
       if (e.target === this) handleClose();
     });
-    $("#gal-char-sprites-back").on("click", () => {
-      cleanupLive2DStageMount();
-      $modal.remove();
-      showAssetManagerModal();
-    });
     $("#gal-char-add-sprite-btn").on("click", async () => {
       $modal.remove();
       if (_showSpriteUploadDialogRef4) await _showSpriteUploadDialogRef4(characterId, "\u9ED8\u8BA4", () => showCharacterSpritesModal(characterId));
@@ -21638,9 +17799,9 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const voiceName = $("#gal-char-tts-voice-select").val();
       setCharacterTTSVoice(characterId, voiceName);
       if (voiceName) {
-        showToast5(`\u5DF2\u7ED1\u5B9A\u97F3\u8272: ${characterId} -> ${voiceName}`);
+        showToast4(`\u5DF2\u7ED1\u5B9A\u97F3\u8272: ${characterId} -> ${voiceName}`);
       } else {
-        showToast5(`\u5DF2\u6E05\u9664\u97F3\u8272\u7ED1\u5B9A: ${characterId}`);
+        showToast4(`\u5DF2\u6E05\u9664\u97F3\u8272\u7ED1\u5B9A: ${characterId}`);
       }
       $modal.remove();
       showCharacterSpritesModal(characterId);
@@ -21676,7 +17837,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const useLive2D = this.checked;
       setCharacterUseLive2D(characterId, useLive2D);
       refreshLive2DDisplayForCurrentScene();
-      showToast5(useLive2D ? `\u5DF2\u4E3A ${characterId} \u542F\u7528 Live2D` : `\u5DF2\u4E3A ${characterId} \u5173\u95ED Live2D`);
+      showToast4(useLive2D ? `\u5DF2\u4E3A ${characterId} \u542F\u7528 Live2D` : `\u5DF2\u4E3A ${characterId} \u5173\u95ED Live2D`);
     });
     $("#gal-char-live2d-upload").on("click", function() {
       showLive2DModelSourceDialog(characterId, async () => {
@@ -21693,12 +17854,12 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (Live2DManager.models.has(characterId)) {
           Live2DManager.cleanup(characterId);
         }
-        showToast5("Live2D \u6A21\u578B\u5DF2\u5220\u9664");
+        showToast4("Live2D \u6A21\u578B\u5DF2\u5220\u9664");
         $modal.remove();
         showCharacterSpritesModal(characterId);
       } catch (err) {
         console.error(`[${SCRIPT_NAME}] Live2D \u5220\u9664\u5931\u8D25:`, err);
-        showToast5(`\u5220\u9664\u5931\u8D25: ${err.message}`, "error");
+        showToast4(`\u5220\u9664\u5931\u8D25: ${err.message}`, "error");
       }
     });
     $("#gal-char-live2d-preview").on("click", async function() {
@@ -21804,7 +17965,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const expr = $btn.attr("data-expr");
       if (confirm(`\u786E\u5B9A\u5220\u9664 ${charId} \u7684\u8868\u60C5\u300C${expr}\u300D\u5417\uFF1F`)) {
         await deleteSprite(charId, expr);
-        showToast5(`\u5DF2\u5220\u9664\uFF1A${charId} - ${expr}`);
+        showToast4(`\u5DF2\u5220\u9664\uFF1A${charId} - ${expr}`);
         $modal.remove();
         showCharacterSpritesModal(charId);
       }
@@ -21888,7 +18049,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       setCurrentPack(packId);
       $modal.remove();
       showPackManagerModal();
-      showToast5("\u5DF2\u5207\u6362\u56FE\u5305");
+      showToast4("\u5DF2\u5207\u6362\u56FE\u5305");
     });
     $modal.find(".gal-pack-rename-btn").on("click", function() {
       const packId = $(this).data("pack-id");
@@ -21899,7 +18060,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         renameImagePack(packId, newName.trim()).then(() => {
           $modal.remove();
           showPackManagerModal();
-          showToast5("\u5DF2\u91CD\u547D\u540D\u56FE\u5305");
+          showToast4("\u5DF2\u91CD\u547D\u540D\u56FE\u5305");
         }).catch((err) => {
           alert("\u91CD\u547D\u540D\u5931\u8D25: " + err.message);
         });
@@ -21915,7 +18076,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         deleteImagePack(packId).then(() => {
           $modal.remove();
           showPackManagerModal();
-          showToast5("\u56FE\u5305\u5DF2\u5220\u9664\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
+          showToast4("\u56FE\u5305\u5DF2\u5220\u9664\uFF0C\u8D44\u6E90\u5DF2\u8F6C\u79FB");
         }).catch((err) => {
           alert("\u5220\u9664\u5931\u8D25: " + err.message);
         });
@@ -21928,8 +18089,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const modalHtml = `
     <div class="gal-input-modal" id="gal-transfer-modal">
       <div class="gal-input-box" style="width: 400px;">
-        <div class="gal-input-title">
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-arrow-right-arrow-left"></i> \u8F6C\u79FB\u8D44\u6E90</span>
+          <button id="gal-transfer-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="padding: 20px;">
           <p style="margin-bottom: 15px; color: #333;">
@@ -21941,7 +18105,6 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
             `).join("")}
           </select>
           <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
-            <button class="gal-action-btn" id="gal-transfer-cancel" style="padding: 8px 16px;">\u53D6\u6D88</button>
             <button class="gal-action-btn primary" id="gal-transfer-confirm" style="padding: 8px 16px;">
               <i class="fa-solid fa-check"></i> \u786E\u8BA4\u8F6C\u79FB
             </button>
@@ -21953,7 +18116,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     const mountRoot = getModalMountRoot();
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find("#gal-transfer-modal");
-    $modal.find("#gal-transfer-cancel").on("click", () => $modal.remove());
+    $modal.find("#gal-transfer-close-x").on("click", () => $modal.remove());
     $modal.on("click", function(e) {
       if (e.target === this) $modal.remove();
     });
@@ -21966,242 +18129,83 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const transferPromise = resourceType === "sprite" ? transferSpritesToPack(resourceIds, targetPackId) : transferBackgroundsToPack(resourceIds, targetPackId);
       transferPromise.then((count) => {
         $modal.remove();
-        showToast5(`\u5DF2\u8F6C\u79FB ${count} \u4E2A${resourceType === "sprite" ? "\u7ACB\u7ED8" : "\u80CC\u666F"}`);
+        showToast4(`\u5DF2\u8F6C\u79FB ${count} \u4E2A${resourceType === "sprite" ? "\u7ACB\u7ED8" : "\u80CC\u666F"}`);
         if (typeof onComplete === "function") onComplete();
       }).catch((err) => {
         alert("\u8F6C\u79FB\u5931\u8D25: " + err.message);
       });
     });
   }
-  var _showAssetManagerModalRef2 = null;
+  var _showAssetManagerModalRef = null;
   function setAssetManagerModalRef(fn) {
-    _showAssetManagerModalRef2 = fn;
+    _showAssetManagerModalRef = fn;
   }
   function showAssetManagerModal(activeTab) {
-    if (_showAssetManagerModalRef2) _showAssetManagerModalRef2(activeTab);
+    if (_showAssetManagerModalRef) _showAssetManagerModalRef(activeTab);
   }
 
-  // src/ui/asset-manager-modal.js
-  var _showSpriteUploadDialogRef5 = null;
-  var _showBatchUploadDialogRef3 = null;
-  var _showBackgroundUploadDialogRef3 = null;
-  var _showBatchBackgroundUploadDialogRef2 = null;
-  var _showCustomExpressionManagerRef2 = null;
+  // src/ui/image-gen-config.js
   var _showBananaAppearancePickerRef2 = null;
-  function setAssetManagerModalRefs({ showSpriteUploadDialog: showSpriteUploadDialog2, showBatchUploadDialog: showBatchUploadDialog2, showBackgroundUploadDialog: showBackgroundUploadDialog2, showBatchBackgroundUploadDialog: showBatchBackgroundUploadDialog2, showCustomExpressionManager: showCustomExpressionManager2, showBananaAppearancePicker: showBananaAppearancePicker2 }) {
-    if (showSpriteUploadDialog2) _showSpriteUploadDialogRef5 = showSpriteUploadDialog2;
-    if (showBatchUploadDialog2) _showBatchUploadDialogRef3 = showBatchUploadDialog2;
-    if (showBackgroundUploadDialog2) _showBackgroundUploadDialogRef3 = showBackgroundUploadDialog2;
-    if (showBatchBackgroundUploadDialog2) _showBatchBackgroundUploadDialogRef2 = showBatchBackgroundUploadDialog2;
-    if (showCustomExpressionManager2) _showCustomExpressionManagerRef2 = showCustomExpressionManager2;
+  function setImageGenConfigRefs({ showBananaAppearancePicker: showBananaAppearancePicker2 }) {
     if (showBananaAppearancePicker2) _showBananaAppearancePickerRef2 = showBananaAppearancePicker2;
   }
-  var CUSTOM_LOCATION_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
-  var CUSTOM_TIME_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
-  async function showAssetManagerModal2(activeTab = "sprites") {
-    const settings = getSettings();
-    const allPacks = await getAllImagePacks();
-    const currentPackId = getCurrentPackId();
-    const currentPack = allPacks.find((p) => p.id === currentPackId) || allPacks.find((p) => p.id === DEFAULT_PACK_ID);
-    const currentPackName = currentPack ? currentPack.name : "\u672A\u5B9A\u4E49";
-    const currentRenderScope = getRenderScope();
-    const allSprites = await getAllSprites(currentPackId);
-    const allBackgrounds = await getAllBackgrounds(currentPackId);
-    const dbCharacters = getCharacterListFromDatabase();
-    const charactersData = /* @__PURE__ */ new Map();
-    allSprites.forEach((sprite) => {
-      if (!charactersData.has(sprite.characterId)) {
-        charactersData.set(sprite.characterId, { sprites: [], type: "\u81EA\u5B9A\u4E49", source: "\u672C\u5730" });
-      }
-      charactersData.get(sprite.characterId).sprites.push(sprite);
-    });
-    dbCharacters.forEach((char) => {
-      const charName = char.name;
-      if (!charactersData.has(charName)) {
-        charactersData.set(charName, { sprites: [], type: char.type, source: char.source });
-      } else {
-        const info = charactersData.get(charName);
-        info.type = char.type;
-        info.source = char.source;
-      }
-    });
-    const modalHtml = buildAssetManagerHtml(activeTab, settings, allPacks, currentPackId, currentPackName, currentRenderScope, allSprites, allBackgrounds, charactersData);
-    const mountRoot = getModalMountRoot();
-    $(mountRoot).append(modalHtml);
-    const $modal = $(mountRoot).find("#gal-asset-manager-modal");
-    if (activeTab && activeTab !== "sprites") {
-      $modal.find(".gal-tab-btn").removeClass("active");
-      $modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).addClass("active");
-      $modal.find(".gal-tab-pane").hide();
-      $modal.find(`.gal-tab-pane[data-pane="${activeTab}"]`).show();
-    }
-    bindAssetManagerEvents($modal, activeTab, settings, allPacks, currentPackId);
-  }
-  function buildAssetManagerHtml(activeTab, settings, allPacks, currentPackId, currentPackName, currentRenderScope, allSprites, allBackgrounds, charactersData) {
+  function buildImageGenConfigPane(settings) {
+    const src = settings.bgImageSource || "none";
+    const activeEngine = src !== "none" && ["comfyui", "banana", "novelai", "wallhaven"].includes(src) ? src : "comfyui";
     return `
-  <div class="gal-input-modal" id="gal-asset-manager-modal">
-    <div class="gal-input-box" style="width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; overflow: hidden; padding: 0; display: flex; flex-direction: column; border-radius: 0 !important;">
-      <div class="gal-asset-header">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="gal-pack-selector" style="position: relative;">
-              <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="\u5207\u6362\u56FE\u5305" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
-                <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
-              </button>
-              <div class="gal-pack-menu gal-z-dropdown" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden;">
-                ${allPacks.map((pack) => `
-                  <div class="gal-pack-item ${pack.id === currentPackId ? "active" : ""}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? "background: #e9ecef; font-weight: 700;" : ""}">
-                    <span><i class="fa-solid fa-folder${pack.id === currentPackId ? "-open" : ""}" style="margin-right: 8px; color: ${pack.id === currentPackId ? "#6f42c1" : "#666"};"></i>${pack.name}</span>
-                    ${pack.isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">\u9ED8\u8BA4</span>' : ""}
-                  </div>
-                `).join("")}
-                <div style="border-top: 2px solid #eee;">
-                  <div class="gal-pack-item" id="gal-add-pack-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #28a745;">
-                    <i class="fa-solid fa-plus"></i> <span>\u65B0\u5EFA\u56FE\u5305</span>
-                  </div>
-                  <div class="gal-pack-item" id="gal-manage-packs-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #17a2b8;">
-                    <i class="fa-solid fa-cog"></i> <span>\u7BA1\u7406\u56FE\u5305</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <button class="gal-action-btn" id="gal-render-scope-btn" title="${currentRenderScope === "current" ? "\u4EC5\u5F53\u524D\u56FE\u5305\u8D44\u6E90" : "\u641C\u7D22\u6240\u6709\u56FE\u5305\u8D44\u6E90"}" style="padding: 6px 10px; font-size: 0.9rem; background: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"}; color: #fff; border-color: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"};">
-              <i class="fa-solid ${currentRenderScope === "current" ? "fa-bullseye" : "fa-globe"}"></i>
-            </button>
-            <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
-              <span><i class="fa-solid fa-folder-open"></i> \u8D44\u6E90\u7BA1\u7406\u5668</span>
-            </div>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <div class="gal-export-dropdown" style="position: relative;">
-              <button class="gal-action-btn" id="gal-export-dropdown-btn" title="\u5BFC\u51FA\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem;">
-                <i class="fa-solid fa-file-export"></i> <span>\u5BFC\u51FA</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
-              </button>
-              <div class="gal-export-menu gal-z-dropdown" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
-                <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i><span>\u5BFC\u51FA\u672C\u5730\u538B\u7F29\u5305</span>
-                </div>
-                <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i><span>\u5BFC\u51FAGitHub\u8D44\u6E90\u5305</span>
-                </div>
-              </div>
-            </div>
-            <div class="gal-import-dropdown" style="position: relative;">
-              <button class="gal-action-btn" id="gal-import-dropdown-btn" title="\u5BFC\u5165\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
-                <i class="fa-solid fa-file-import"></i> <span>\u5BFC\u5165</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
-              </button>
-              <div class="gal-import-menu gal-z-dropdown" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
-                <div class="gal-import-item" data-action="import-local-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-file-zipper" style="width: 20px; color: #f39c12;"></i><span>\u672C\u5730\u538B\u7F29\u5305\u5BFC\u5165</span>
-                </div>
-                <div class="gal-import-item" data-action="import-remote-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-cloud-arrow-down" style="width: 20px; color: #3498db;"></i><span>\u8FDC\u7A0B\u538B\u7F29\u5305\u5BFC\u5165</span>
-                </div>
-                <div class="gal-import-item" data-action="import-json" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
-                  <i class="fa-solid fa-link" style="width: 20px; color: #9b59b6;"></i><span>\u5BFC\u5165\u8FDC\u7A0B\u94FE\u63A5JSON</span>
-                </div>
-                <div class="gal-import-item" data-action="import-github" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
-                  <i class="fa-brands fa-github" style="width: 20px; color: #333;"></i><span>\u4ECEGitHub\u5BFC\u5165</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <input type="file" id="gal-asset-import-zip-input" accept=".zip" style="display: none;">
-        <input type="file" id="gal-asset-import-input" multiple webkitdirectory style="display: none;">
-        <input type="file" id="gal-asset-import-json-input" accept=".json" style="display: none;">
-      </div>
-      <div class="gal-tab-header">
-        <button class="gal-tab-btn ${activeTab === "sprites" ? "active" : ""}" data-tab="sprites"><i class="fa-solid fa-user"></i> \u7ACB\u7ED8\u7BA1\u7406</button>
-        <button class="gal-tab-btn ${activeTab === "backgrounds" ? "active" : ""}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> \u80CC\u666F\u7BA1\u7406</button>
-        <button class="gal-tab-btn ${activeTab === "custom" ? "active" : ""}" data-tab="custom"><i class="fa-solid fa-code"></i> \u81EA\u5B9A\u4E49\u6A21\u5757</button>
-      </div>
-      <div class="gal-tab-content">
-        ${buildSpritesTab(activeTab, allSprites, charactersData)}
-        ${buildBackgroundsTab(settings, allBackgrounds)}
-        ${buildCustomTab(settings)}
-      </div>
-      <div class="gal-input-actions">
-        <button class="gal-action-btn" id="gal-asset-close" style="width: 100%; min-height: 44px;"><span>\u5173\u95ED</span></button>
-      </div>
+    <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(0,0,0,0.25); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+      <span style="font-weight: 700; color: #ccd6f6; font-size: 0.9rem; white-space: nowrap;"><i class="fa-solid fa-satellite-dish" style="margin-right: 6px;"></i>\u80CC\u666F\u56FE\u6765\u6E90</span>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "none" ? "#ff6b6b" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="none" ${src === "none" ? "checked" : ""} style="accent-color:#ff6b6b;"> \u5173\u95ED</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "comfyui" ? "#00d9ff" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="comfyui" ${src === "comfyui" ? "checked" : ""} style="accent-color:#00d9ff;"> ComfyUI</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "banana" ? "#c084fc" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="banana" ${src === "banana" ? "checked" : ""} style="accent-color:#c084fc;"> \u5927\u9999\u8549</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "novelai" ? "#52b788" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="novelai" ${src === "novelai" ? "checked" : ""} style="accent-color:#52b788;"> NovelAI</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "wallhaven" ? "#ffd166" : "#8892b0"};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="wallhaven" ${src === "wallhaven" ? "checked" : ""} style="accent-color:#ffd166;"> Wallhaven</label>
     </div>
-  </div>
-  ${buildAssetManagerStyles()}
+    <div class="gal-imagegen-pills">
+      <button class="gal-pill ${activeEngine === "comfyui" ? "active" : ""}" data-engine="comfyui"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI</button>
+      <button class="gal-pill ${activeEngine === "banana" ? "active" : ""}" data-engine="banana"><i class="fa-solid fa-lemon"></i> \u5927\u9999\u8549</button>
+      <button class="gal-pill ${activeEngine === "novelai" ? "active" : ""}" data-engine="novelai"><i class="fa-solid fa-palette"></i> NovelAI</button>
+      <button class="gal-pill ${activeEngine === "wallhaven" ? "active" : ""}" data-engine="wallhaven"><i class="fa-solid fa-images"></i> Wallhaven</button>
+    </div>
+    <div data-engine-pane="comfyui" ${activeEngine !== "comfyui" ? 'style="display:none;"' : ""}>${buildComfyUIPane()}</div>
+    <div data-engine-pane="banana" ${activeEngine !== "banana" ? 'style="display:none;"' : ""}>${buildBananaPane(settings)}</div>
+    <div data-engine-pane="novelai" ${activeEngine !== "novelai" ? 'style="display:none;"' : ""}>${buildNovelAIPane(settings)}</div>
+    <div data-engine-pane="wallhaven" ${activeEngine !== "wallhaven" ? 'style="display:none;"' : ""}>${buildWallhavenPane(settings)}</div>
   `;
   }
-  function buildSpritesTab(activeTab, allSprites, charactersData) {
+  function buildComfyUIPane() {
     return `
-  <div class="gal-tab-pane ${activeTab === "sprites" ? "active" : ""}" data-pane="sprites" style="${activeTab !== "sprites" ? "display: none;" : ""}">
+  <div style="padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allSprites.length} \u4E2A\u7ACB\u7ED8\uFF0C\u5171 ${charactersData.size} \u4E2A\u89D2\u8272</span>
-      <div style="display: flex; gap: 10px;">
-        <button class="gal-action-btn" id="gal-batch-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
-        <button class="gal-action-btn primary" id="gal-add-sprite-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u7ACB\u7ED8</span></button>
-        <button class="gal-action-btn" id="gal-manage-expressions-btn" style="padding: 8px 16px; background: #17a2b8; color: #fff; border: none;"><i class="fa-solid fa-face-smile"></i> <span>\u8868\u60C5\u6807\u7B7E</span></button>
+      <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-wand-magic-sparkles" style="color: #00d9ff; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">ComfyUI \u6587\u751F\u56FE</span></div>
+    </div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API \u5730\u5740</label><input type="text" id="gal-comfyui-url" value="${getComfyUISettings().apiUrl}" placeholder="http://127.0.0.1:8188" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460; font-family: monospace;"></div>
+    <div style="margin-bottom: 12px;"><button class="gal-action-btn" id="gal-comfyui-test" style="width: 100%; justify-content: center; padding: 10px; background: linear-gradient(135deg, #00d9ff 0%, #0099cc 100%); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 700;"><i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5</button></div>
+    <div style="margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <label style="color: #ccd6f6; font-size: 0.9rem; font-weight: 700;">\u5DE5\u4F5C\u6D41\u7BA1\u7406 (.json)</label>
+        <input type="file" id="gal-comfy-import-input" accept=".json" style="display: none;">
+        <button class="gal-action-btn" id="gal-comfy-import-btn" style="padding: 4px 10px; font-size: 0.8rem; background: #0f3460; color: #ccd6f6; border: 1px solid #0f3460; border-radius: 4px; cursor: pointer;"><i class="fa-solid fa-file-import"></i> \u5BFC\u5165 JSON</button>
+      </div>
+      <div id="gal-workflow-list" style="max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid #0f3460; border-radius: 4px; padding: 8px;">
+        <div style="text-align: center; color: #8892b0; font-size: 0.85rem; padding: 10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>
       </div>
     </div>
-    ${charactersData.size === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-images" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u89D2\u8272\u6570\u636E\uFF0C\u8BF7\u786E\u4FDD\u5DF2\u52A0\u8F7D\u6570\u636E\u5E93\u811A\u672C\u6216\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p></div>` : `<div class="gal-character-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;">
-          ${Array.from(charactersData.entries()).map(([charId, info]) => {
-      const sprites = info.sprites;
-      const defaultSprite = sprites.find((s) => s.expression === "\u9ED8\u8BA4") || sprites[0];
-      const avatarUrl = defaultSprite?.imageUrl ? defaultSprite.imageUrl : defaultSprite?.imageBlob ? URL.createObjectURL(defaultSprite.imageBlob) : "";
-      const typeLabel = info.type && info.type !== "\u81EA\u5B9A\u4E49" ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${info.type}</span>` : "";
-      return `
-            <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s; position: relative;">
-              <div class="gal-character-avatar" style="aspect-ratio: 1 / 1; background: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
-                ${avatarUrl ? `<img src="${avatarUrl}" alt="${charId}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
-                ${sprites.length === 0 ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 0.7rem; padding: 2px; text-align: center;">\u65E0\u7ACB\u7ED8</div>' : ""}
-                <div class="gal-char-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s;">
-                  <button class="gal-char-transfer" data-char="${charId}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(111, 66, 193, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-                  <button class="gal-char-delete" data-char="${charId}" title="\u5220\u9664\u89D2\u8272" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220, 53, 69, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-trash"></i></button>
-                </div>
-              </div>
-              <div style="padding: 10px; text-align: center;">
-                <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">${charId}</div>
-                <div style="margin-top: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;">${typeLabel}<span style="font-size: 0.75rem; color: #888;">${sprites.length} \u4E2A\u8868\u60C5</span></div>
-              </div>
-            </div>`;
-    }).join("")}
-        </div>`}
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u89D2\u8272 Workflow</label><select id="gal-comfy-def-char" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="default_char">\u5185\u7F6E SDXL Turbo</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4 Checkpoint \u6A21\u578B</label><select id="gal-comfy-def-checkpoint" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="">(\u52A0\u8F7D\u4E2D...)</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u80CC\u666F Workflow</label><select id="gal-comfy-def-bg" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="default_bg">\u5185\u7F6E SDXL Turbo</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u8D1F\u9762\u63D0\u793A\u8BCD</label><textarea id="gal-comfyui-negative" placeholder="lowres, bad anatomy..." style="width: 100%; height: 60px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea></div>
   </div>`;
   }
-  function buildBackgroundsTab(settings, allBackgrounds) {
+  function buildBananaPane(settings) {
     return `
-  <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-      <span style="font-weight: 700; color: ${THEME.dark};">\u5DF2\u4FDD\u5B58 ${allBackgrounds.length} \u4E2A\u80CC\u666F</span>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <div class="gal-realtime-toggle-wrapper" title="\u5F00\u542F\u540E\uFF0C\u5F53AI\u8F93\u51FA\u7684\u573A\u666F\u5728\u5E93\u4E2D\u4E0D\u5B58\u5728\u65F6\uFF0C\u5C06\u81EA\u52A8\u8C03\u7528ComfyUI\u751F\u6210">
-          <span class="gal-realtime-label">ComfyUI \u6587\u751F\u56FE\u5B9E\u65F6\u751F\u6210\u80CC\u666F</span>
-          <label class="gal-realtime-switch"><input type="checkbox" id="gal-realtime-bg-gen" ${settings.realTimeBackgroundGen ? "checked" : ""}><span class="gal-realtime-slider"></span></label>
-        </div>
-        <button class="gal-action-btn" id="gal-batch-bg-upload-btn" style="padding: 8px 16px; background: #6f42c1; color: #fff; border: none;"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
-        <button class="gal-action-btn primary" id="gal-add-bg-btn" style="padding: 8px 16px;"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u80CC\u666F</span></button>
-      </div>
-    </div>
-    ${allBackgrounds.length === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-panorama" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u80CC\u666F\uFF0C\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p><small style="color: #bbb;">\u80CC\u666F\u56FE\u5C06\u6839\u636E &lt;background scene="\u573A\u666F\u540D" /&gt; \u6807\u7B7E\u81EA\u52A8\u5339\u914D</small></div>` : `<div class="gal-bg-grid">${allBackgrounds.map((bg) => `
-          <div class="gal-bg-card" data-scene="${bg.sceneName}">
-            <div class="gal-bg-preview">${bg.imageUrl ? `<img src="${bg.imageUrl}" alt="${bg.sceneName}">` : bg.imageBlob ? `<img src="${URL.createObjectURL(bg.imageBlob)}" alt="${bg.sceneName}">` : ""}</div>
-            <div class="gal-bg-label">${bg.sceneName}</div>
-            <div class="gal-bg-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
-              <button class="gal-bg-transfer" data-scene="${bg.sceneName}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(111, 66, 193, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-              <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="\u5220\u9664" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-trash"></i></button>
-            </div>
-          </div>`).join("")}</div>`}
-    ${buildBananaSection(settings)}
-    ${buildWallhavenSection(settings)}
-  </div>`;
-  }
-  function buildBananaSection(settings) {
-    return `
-  <div class="gal-banana-imagegen-settings" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #6b21a8;">
+  <div style="padding: 15px; background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #6b21a8; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-wand-magic-sparkles" style="color: #fbbf24; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757</span></div>
-      <label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-enabled" ${settings.bananaImageGen?.enabled ? "checked" : ""}><span class="gal-realtime-slider"></span></label>
     </div>
     <div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 15px; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 6px;">\u901A\u8FC7\u53CD\u4EE3 API \u751F\u6210\u80CC\u666F\u56FE\u7247\uFF0C\u751F\u6210\u540E\u81EA\u52A8\u4FDD\u5B58\u5230\u80CC\u666F\u5E93\u3002</div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u53CD\u4EE3 API \u5730\u5740</label><input type="text" id="gal-banana-proxy-url" placeholder="http://localhost:8045" value="${settings.bananaImageGen?.proxyUrl || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u53CD\u4EE3 API Key</label><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings.bananaImageGen?.proxyApiKey || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u53CD\u4EE3 API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings.bananaImageGen?.proxyApiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-banana-proxy-key" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #6b21a8; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="\u663E\u793A/\u9690\u85CF"><i class="fa-solid fa-eye"></i></button></div></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u56FE\u7247\u751F\u6210\u6A21\u578B</label><div style="display: flex; gap: 8px;"><select id="gal-banana-model" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">${settings.bananaImageGen?.model ? `<option value="${settings.bananaImageGen.model}" selected>${settings.bananaImageGen.model}</option>` : '<option value="">\u70B9\u51FB\u5237\u65B0\u83B7\u53D6\u6A21\u578B\u5217\u8868</option>'}</select><button id="gal-banana-refresh-models" style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer;" title="\u5237\u65B0\u6A21\u578B\u5217\u8868"><i class="fa-solid fa-sync"></i></button></div></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u751F\u56FECOT\u81EA\u5B9A\u4E49</label><textarea id="gal-banana-cot" placeholder="\u53EF\u586B\u5199\u989D\u5916\u89C4\u5219" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 80px; resize: vertical;">${settings.bananaImageGen?.cotTemplate || ""}</textarea></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u63D0\u793A\u8BCD\u524D\u7F00</label><input type="text" id="gal-banana-prompt-prefix" placeholder="masterpiece, best quality, highres, " value="${settings.bananaImageGen?.defaultPromptPrefix || "masterpiece, best quality, highres, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
@@ -22213,12 +18217,31 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(139,92,246,0.3);"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u624B\u52A8\u751F\u6210\u80CC\u666F</label><div style="display: flex; gap: 8px; margin-bottom: 8px;"><input type="text" id="gal-banana-scene-name" placeholder="\u573A\u666F\u540D\u79F0\uFF08\u5982\uFF1A\u6559\u5BA4\u3001\u68EE\u6797\uFF09" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div><div style="display: flex; gap: 8px; margin-bottom: 8px;"><textarea id="gal-banana-custom-prompt" placeholder="\u81EA\u5B9A\u4E49\u63D0\u793A\u8BCD\uFF08\u53EF\u9009\uFF09" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 60px; resize: vertical;"></textarea></div><button id="gal-banana-generate-btn" style="width: 100%; padding: 10px; border-radius: 6px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #1a1a2e; border: none; cursor: pointer; font-weight: 700; font-size: 0.95rem;"><i class="fa-solid fa-wand-magic-sparkles"></i> \u751F\u6210\u80CC\u666F\u56FE\u7247</button><div id="gal-banana-preview" style="margin-top: 10px; display: none;"><div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 5px;">\u751F\u6210\u9884\u89C8\uFF1A</div><img id="gal-banana-preview-img" style="max-width: 100%; border-radius: 6px; border: 1px solid #6b21a8;"><button id="gal-banana-save-to-library" style="width: 100%; margin-top: 8px; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem;"><i class="fa-solid fa-save"></i> \u4FDD\u5B58\u5230\u80CC\u666F\u5E93</button></div></div>
   </div>`;
   }
-  function buildWallhavenSection(settings) {
+  function buildNovelAIPane(settings) {
+    const ns = settings.novelai || {};
     return `
-  <div class="gal-wallhaven-settings" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460;">
+  <div style="padding: 15px; background: linear-gradient(135deg, #1a2e1a 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #2d6a4f; margin-top: 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-palette" style="color: #52b788; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">NovelAI \u751F\u56FE</span></div>
+    </div>
+    <div style="font-size: 0.8rem; color: #95d5b2; margin-bottom: 15px; padding: 10px; background: rgba(82,183,136,0.1); border-radius: 6px;">\u4F7F\u7528 NovelAI \u5B98\u65B9 API \u751F\u6210\u80CC\u666F\u56FE\u7247\uFF0C\u9700\u8981\u6709\u6548\u7684\u8BA2\u9605\u548C API Key\u3002</div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-novelai-apikey" placeholder="pst-xxx" value="${ns.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-novelai-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #2d6a4f; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="\u663E\u793A/\u9690\u85CF"><i class="fa-solid fa-eye"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u6A21\u578B</label><select id="gal-novelai-model" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"><option value="nai-diffusion-4-5-curated" ${(ns.model || "nai-diffusion-4-5-curated") === "nai-diffusion-4-5-curated" ? "selected" : ""}>NAI Diffusion 4.5 Curated</option><option value="nai-diffusion-4-5-full" ${ns.model === "nai-diffusion-4-5-full" ? "selected" : ""}>NAI Diffusion 4.5 Full</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u56FE\u7247\u5C3A\u5BF8</label><select id="gal-novelai-size" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"><option value="1216x832" ${ns.width === 1216 && ns.height === 832 || !ns.width && !ns.height ? "selected" : ""}>1216 x 832 (\u6A2A\u5C4F 3:2)</option><option value="832x1216" ${ns.width === 832 && ns.height === 1216 ? "selected" : ""}>832 x 1216 (\u7AD6\u5C4F 2:3)</option><option value="1024x1024" ${ns.width === 1024 && ns.height === 1024 ? "selected" : ""}>1024 x 1024 (\u6B63\u65B9\u5F62)</option><option value="1472x704" ${ns.width === 1472 && ns.height === 704 ? "selected" : ""}>1472 x 704 (\u5BBD\u94F6\u5E55)</option><option value="704x1472" ${ns.width === 704 && ns.height === 1472 ? "selected" : ""}>704 x 1472 (\u8D85\u7AD6\u5C4F)</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">Steps: <span id="gal-novelai-steps-value" style="color: #52b788;">${ns.steps || 28}</span></label><input type="range" id="gal-novelai-steps" min="10" max="50" step="1" value="${ns.steps || 28}" style="width: 100%; accent-color: #52b788;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">Guidance Scale: <span id="gal-novelai-scale-value" style="color: #52b788;">${ns.scale ?? 10}</span></label><input type="range" id="gal-novelai-scale" min="1" max="30" step="0.5" value="${ns.scale ?? 10}" style="width: 100%; accent-color: #52b788;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">Sampler</label><select id="gal-novelai-sampler" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"><option value="k_euler" ${(ns.sampler || "k_euler") === "k_euler" ? "selected" : ""}>Euler</option><option value="k_euler_ancestral" ${ns.sampler === "k_euler_ancestral" ? "selected" : ""}>Euler Ancestral</option><option value="k_dpmpp_2s_ancestral" ${ns.sampler === "k_dpmpp_2s_ancestral" ? "selected" : ""}>DPM++ 2S Ancestral</option><option value="k_dpmpp_2m_sde" ${ns.sampler === "k_dpmpp_2m_sde" ? "selected" : ""}>DPM++ 2M SDE</option><option value="k_dpmpp_sde" ${ns.sampler === "k_dpmpp_sde" ? "selected" : ""}>DPM++ SDE</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u63D0\u793A\u8BCD\u524D\u7F00</label><input type="text" id="gal-novelai-prompt-prefix" placeholder="masterpiece, best quality, ..." value="${ns.defaultPromptPrefix || "masterpiece, best quality, no humans, scenery, background, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u9ED8\u8BA4\u63D0\u793A\u8BCD\u540E\u7F00</label><input type="text" id="gal-novelai-prompt-suffix" placeholder=", very aesthetic" value="${ns.defaultPromptSuffix || ", very aesthetic"}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u8D1F\u9762\u63D0\u793A\u8BCD</label><textarea id="gal-novelai-negative" placeholder="nsfw, lowres, ..." style="width: 100%; height: 60px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #2d6a4f; font-size: 0.85rem; resize: vertical;">${ns.negativePrompt || "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark"}</textarea></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">\u81EA\u52A8\u4FDD\u5B58\u5230\u80CC\u666F\u5E93</label><div style="font-size: 0.75rem; color: #8892b0;">\u751F\u6210\u6210\u529F\u540E\u81EA\u52A8\u6DFB\u52A0\u5230\u80CC\u666F\u8D44\u6E90\u5E93</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-novelai-autosave" ${ns.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+  </div>`;
+  }
+  function buildWallhavenPane(settings) {
+    return `
+  <div style="padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-images" style="color: #00d9ff; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">Wallhaven \u58C1\u7EB8\u641C\u7D22</span></div>
-      <label class="gal-realtime-switch"><input type="checkbox" id="gal-wallhaven-enabled" ${settings.wallhaven?.enabled ? "checked" : ""}><span class="gal-realtime-slider"></span></label>
     </div>
     <div style="font-size: 0.8rem; color: #8892b0; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">\u4EC5\u4F9B\u5B66\u4E60\u7814\u7A76\u4F7F\u7528\u3002\u6240\u6709\u56FE\u7247\u7248\u6743\u5F52\u539F\u4F5C\u8005\u53CA Wallhaven \u6240\u6709\u3002</div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u56FE\u7247\u5206\u7C7B</label><select id="gal-wallhaven-category" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="anime" ${settings.wallhaven?.category === "anime" ? "selected" : ""}>\u52A8\u6F2B\u6F2B\u753B</option><option value="all" ${settings.wallhaven?.category === "all" ? "selected" : ""}>\u5168\u90E8\u7C7B\u578B</option><option value="people" ${settings.wallhaven?.category === "people" ? "selected" : ""}>\u4EBA\u7269\u5199\u771F</option><option value="general" ${settings.wallhaven?.category === "general" ? "selected" : ""}>\u7EFC\u5408\u58C1\u7EB8</option></select></div>
@@ -22227,207 +18250,192 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u81EA\u5B9A\u4E49\u6807\u7B7E</label><input type="text" id="gal-wallhaven-customtags" placeholder="\u4F8B\u5982: cosplay, landscape, 4k" value="${(settings.wallhaven?.customTags || []).join(", ")}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">\u591A\u4E2A\u6807\u7B7E\u7528\u9017\u53F7\u5206\u9694</div></div>
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u6392\u5E8F\u65B9\u5F0F</label><select id="gal-wallhaven-sorting" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="favorites" ${settings.wallhaven?.sorting === "favorites" || !settings.wallhaven?.sorting ? "selected" : ""}>\u6536\u85CF\u91CF</option><option value="relevance" ${settings.wallhaven?.sorting === "relevance" ? "selected" : ""}>\u76F8\u5173\u5EA6</option><option value="views" ${settings.wallhaven?.sorting === "views" ? "selected" : ""}>\u6D4F\u89C8\u91CF</option><option value="date_added" ${settings.wallhaven?.sorting === "date_added" ? "selected" : ""}>\u6700\u65B0\u4E0A\u4F20</option><option value="toplist" ${settings.wallhaven?.sorting === "toplist" ? "selected" : ""}>\u6392\u884C\u699C</option><option value="random" ${settings.wallhaven?.sorting === "random" ? "selected" : ""}>\u968F\u673A</option></select></div>
     <div style="margin-bottom: 12px; ${settings.wallhaven?.sorting === "toplist" ? "" : "display: none;"}" id="gal-wallhaven-toprange-container"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4</label><select id="gal-wallhaven-toprange" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="1d" ${settings.wallhaven?.topRange === "1d" ? "selected" : ""}>1\u5929</option><option value="3d" ${settings.wallhaven?.topRange === "3d" ? "selected" : ""}>3\u5929</option><option value="1w" ${settings.wallhaven?.topRange === "1w" ? "selected" : ""}>1\u5468</option><option value="1M" ${settings.wallhaven?.topRange === "1M" || !settings.wallhaven?.topRange ? "selected" : ""}>1\u4E2A\u6708</option><option value="3M" ${settings.wallhaven?.topRange === "3M" ? "selected" : ""}>3\u4E2A\u6708</option><option value="6M" ${settings.wallhaven?.topRange === "6M" ? "selected" : ""}>6\u4E2A\u6708</option><option value="1y" ${settings.wallhaven?.topRange === "1y" ? "selected" : ""}>1\u5E74</option></select></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key\uFF08\u53EF\u9009\uFF09</label><input type="password" id="gal-wallhaven-apikey" placeholder="\u7559\u7A7A\u4F7F\u7528\u516C\u5F00 API" value="${settings.wallhaven?.apiKey || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key\uFF08\u53EF\u9009\uFF09</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-wallhaven-apikey" placeholder="\u7559\u7A7A\u4F7F\u7528\u516C\u5F00 API" value="${settings.wallhaven?.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><button type="button" class="gal-key-toggle" data-target="gal-wallhaven-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #0f3460; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="\u663E\u793A/\u9690\u85CF"><i class="fa-solid fa-eye"></i></button></div></div>
   </div>`;
   }
-  function buildCustomTab(settings) {
-    return `
-  <div class="gal-tab-pane" data-pane="custom" style="display: none;">
-    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> \u5730\u70B9\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-location-html" placeholder="<div>\u81EA\u5B9A\u4E49\u5730\u70B9\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || ""}</textarea></div>
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> \u65F6\u95F4\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-time-html" placeholder="<div>\u81EA\u5B9A\u4E49\u65F6\u95F4\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || ""}</textarea></div>
-      <div style="text-align: right;"><button class="gal-action-btn primary" id="gal-save-custom-html" style="padding: 8px 20px;"><i class="fa-solid fa-save"></i> \u4FDD\u5B58\u914D\u7F6E</button></div>
-    </div>
-    <div style="padding: 15px; color: #666; font-size: 0.9rem; line-height: 1.6;"><strong><i class="fa-solid fa-lightbulb"></i> \u8BF4\u660E\uFF1A</strong><br>\u6B64\u5904\u914D\u7F6E\u7684 HTML \u5185\u5BB9\u5C06\u5728\u70B9\u51FB\u4E3B\u754C\u9762\u7684\u5730\u70B9/\u65F6\u95F4\u72B6\u6001\u680F\u65F6\u5F39\u7A97\u663E\u793A\u3002<br>\u652F\u6301\u6807\u51C6 HTML \u6807\u7B7E\u548C\u5185\u8054\u6837\u5F0F\u3002</div>
-  </div>`;
+  function makeSettingsUpdater(settings, subKey) {
+    return function update(field, value) {
+      if (!settings[subKey]) settings[subKey] = {};
+      settings[subKey][field] = value;
+      saveSettings();
+    };
   }
-  function buildAssetManagerStyles() {
-    return `<style>
-    .gal-tab-btn { padding: 12px 20px; border: none; background: transparent; font-size: 1rem; font-weight: 600; color: #666; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
-    .gal-tab-btn:hover { color: ${THEME.accent}; }
-    .gal-tab-btn.active { color: ${THEME.accent}; border-bottom-color: ${THEME.accent}; }
-    .gal-character-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
-    .gal-character-card:hover .gal-char-actions { opacity: 1 !important; }
-    @media (max-width: 768px), (pointer: coarse) { .gal-char-actions { opacity: 1 !important; } }
-    .gal-sprite-group { margin-bottom: 20px; background: #f8f9fa; border-radius: 8px; padding: 15px; }
-    .gal-sprite-group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .gal-char-name { font-weight: 700; font-size: 1.1rem; color: ${THEME.dark}; }
-    .gal-sprite-count { font-size: 0.85rem; color: #888; }
-    .gal-sprite-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 12px; }
-    .gal-sprite-card { position: relative; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; }
-    .gal-sprite-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-    .gal-sprite-preview { aspect-ratio: 2 / 3; background: #eee; overflow: hidden; }
-    .gal-sprite-preview img { width: 100%; height: 100%; object-fit: cover; }
-    .gal-sprite-label { padding: 6px; text-align: center; font-size: 0.75rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gal-sprite-delete { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
-    .gal-sprite-card:hover .gal-sprite-delete { opacity: 1; }
-    .gal-bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
-    .gal-bg-card { position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }
-    .gal-bg-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
-    .gal-bg-preview { aspect-ratio: 16 / 9; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); overflow: hidden; }
-    .gal-bg-preview img { width: 100%; height: 100%; object-fit: cover; }
-    .gal-bg-label { padding: 10px; text-align: center; font-size: 0.9rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gal-bg-delete { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.8rem; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
-    .gal-bg-card:hover .gal-bg-delete { opacity: 1; }
-    .gal-import-dropdown { position: relative; display: inline-block; }
-    .gal-import-menu { animation: galDropdownFadeIn 0.15s ease; }
-    @keyframes galDropdownFadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-    .gal-import-item:hover { background: #f0f7ff !important; }
-    .gal-import-item:active { background: #e0efff !important; }
-    .gal-import-progress-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
-    .gal-import-progress-box { background: #2b2e38; padding: 30px 50px; border-radius: 12px; text-align: center; min-width: 300px; }
-    .gal-import-progress-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 15px; color: #00d2ff; }
-    .gal-import-progress-bar-container { width: 100%; height: 8px; background: #444; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
-    .gal-import-progress-bar { height: 100%; background: linear-gradient(90deg, #00d2ff, #00a8cc); width: 0%; transition: width 0.3s ease; }
-    .gal-import-progress-text { font-size: 0.9rem; color: #aaa; }
-    .gal-import-progress-details { font-size: 0.8rem; color: #888; margin-top: 8px; max-height: 60px; overflow-y: auto; }
-  </style>`;
-  }
-  function bindAssetManagerEvents($modal, activeTab, settings, allPacks, currentPackId) {
-    $modal.find(".gal-tab-btn").on("click", function() {
-      const tab = $(this).data("tab");
-      $modal.find(".gal-tab-btn").removeClass("active");
+  function bindImageGenConfigEvents($container, settings) {
+    $container.find(".gal-pill").on("click", function() {
+      const engine = $(this).data("engine");
+      $container.find(".gal-pill").removeClass("active");
       $(this).addClass("active");
-      $modal.find(".gal-tab-pane").hide();
-      $modal.find(`.gal-tab-pane[data-pane="${tab}"]`).show();
+      $container.find("[data-engine-pane]").hide();
+      $container.find(`[data-engine-pane="${engine}"]`).show();
     });
-    $("#gal-asset-close").on("click", () => $modal.remove());
-    $modal.on("click", function(e) {
-      if (e.target === this) $modal.remove();
-    });
-    $("#gal-save-custom-html").on("click", function() {
-      const locHtml = $("#gal-custom-location-html").val();
-      const timeHtml = $("#gal-custom-time-html").val();
-      localStorage.setItem(CUSTOM_LOCATION_HTML_KEY4, locHtml);
-      localStorage.setItem(CUSTOM_TIME_HTML_KEY4, timeHtml);
-      showToast5("\u81EA\u5B9A\u4E49\u914D\u7F6E\u5DF2\u4FDD\u5B58");
-    });
-    $modal.find("#gal-realtime-bg-gen").on("change", async function() {
-      settings.realTimeBackgroundGen = $(this).is(":checked");
+    $container.find('input[name="gal-bg-source"]').on("change", async function() {
+      const value = $(this).val();
+      settings.bgImageSource = value;
+      settings.realTimeBackgroundGen = value === "comfyui";
+      if (settings.bananaImageGen) settings.bananaImageGen.enabled = value === "banana";
+      if (settings.novelai) settings.novelai.enabled = value === "novelai";
+      if (settings.wallhaven) settings.wallhaven.enabled = value === "wallhaven";
       saveSettings();
       if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.realTimeBackgroundGen ? "\u5DF2\u5F00\u542F\u5B9E\u65F6\u80CC\u666F\u751F\u6210\uFF08\u5B9E\u9A8C\u6027\uFF09" : "\u5DF2\u5173\u95ED\u5B9E\u65F6\u80CC\u666F\u751F\u6210");
-    });
-    bindWallhavenEvents($modal, settings);
-    bindBananaEvents($modal, settings);
-    bindSpriteEvents($modal, activeTab, currentPackId);
-    bindBackgroundEvents($modal, activeTab, currentPackId);
-    bindPackSelectorEvents($modal, activeTab, allPacks, currentPackId);
-    bindExportImportEvents($modal, activeTab);
-  }
-  function bindWallhavenEvents($modal, settings) {
-    $modal.find("#gal-wallhaven-enabled").on("change", async function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.enabled = $(this).is(":checked");
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.wallhaven.enabled ? "\u5DF2\u5F00\u542F Wallhaven \u58C1\u7EB8\u641C\u7D22" : "\u5DF2\u5173\u95ED Wallhaven \u58C1\u7EB8\u641C\u7D22");
-    });
-    $modal.find("#gal-wallhaven-category").on("change", async function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.category = $(this).val();
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-    });
-    $modal.find("#gal-wallhaven-purity").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.purity = $(this).val();
-      saveSettings();
-    });
-    $modal.find("#gal-wallhaven-cgmode").on("change", async function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.cgMode = $(this).is(":checked");
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-    });
-    $modal.find("#gal-wallhaven-customtags").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      const tags = $(this).val();
-      settings.wallhaven.customTags = tags ? tags.split(",").map((t) => t.trim()).filter((t) => t) : [];
-      saveSettings();
-    });
-    $modal.find("#gal-wallhaven-apikey").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.apiKey = $(this).val();
-      saveSettings();
-    });
-    $modal.find("#gal-wallhaven-sorting").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.sorting = $(this).val();
-      saveSettings();
-      if (settings.wallhaven.sorting === "toplist") {
-        $("#gal-wallhaven-toprange-container").show();
-      } else {
-        $("#gal-wallhaven-toprange-container").hide();
+      $container.find(".gal-radio-label").css("color", "#8892b0");
+      $(this).closest(".gal-radio-label").css("color", "");
+      const colors = { none: "#ff6b6b", comfyui: "#00d9ff", banana: "#c084fc", novelai: "#52b788", wallhaven: "#ffd166" };
+      $(this).closest(".gal-radio-label").css("color", colors[value] || "#8892b0");
+      if (value !== "none") {
+        $container.find(`.gal-pill[data-engine="${value}"]`).trigger("click");
       }
-      showToast5(`\u6392\u5E8F\u65B9\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+      const names = { none: "\u5173\u95ED", comfyui: "ComfyUI", banana: "\u5927\u9999\u8549", novelai: "NovelAI", wallhaven: "Wallhaven" };
+      showToast4(`\u80CC\u666F\u56FE\u6765\u6E90: ${names[value] || value}`);
     });
-    $modal.find("#gal-wallhaven-toprange").on("change", function() {
-      if (!settings.wallhaven) settings.wallhaven = {};
-      settings.wallhaven.topRange = $(this).val();
-      saveSettings();
-      showToast5(`\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+    $container.find(".gal-key-toggle").on("click", function() {
+      const targetId = $(this).data("target");
+      const input = $container.find("#" + targetId)[0];
+      if (!input) return;
+      input.type = input.type === "password" ? "text" : "password";
+      $(this).find("i").toggleClass("fa-eye fa-eye-slash");
+    });
+    bindComfyUIConfigEvents($container, settings);
+    bindBananaConfigEvents($container, settings);
+    bindNovelAIConfigEvents($container, settings);
+    bindWallhavenConfigEvents($container, settings);
+  }
+  function bindComfyUIConfigEvents($container, settings) {
+    $container.find("#gal-comfyui-url").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.apiUrl = $(this).val().trim();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfyui-negative").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.negativePrompt = $(this).val();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfyui-test").on("click", async function() {
+      $(this).prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u6D4B\u8BD5\u4E2D...');
+      const ok = await ComfyUIAPI.checkConnection();
+      $(this).prop("disabled", false).html('<i class="fa-solid fa-plug"></i> \u6D4B\u8BD5\u8FDE\u63A5');
+      showToast4(ok ? "ComfyUI \u8FDE\u63A5\u6210\u529F\uFF01" : "ComfyUI \u8FDE\u63A5\u5931\u8D25");
+    });
+    function renderWorkflowList() {
+      const workflows = getComfyWorkflows();
+      const $list = $container.find("#gal-workflow-list");
+      const $selChar = $container.find("#gal-comfy-def-char");
+      const $selBg = $container.find("#gal-comfy-def-bg");
+      const cs = getComfyUISettings();
+      $list.empty();
+      $selChar.html('<option value="default_char">\u5185\u7F6E SDXL Turbo</option>');
+      $selBg.html('<option value="default_bg">\u5185\u7F6E SDXL Turbo</option>');
+      const keys = Object.keys(workflows);
+      if (keys.length === 0) {
+        $list.html('<div style="text-align:center;color:#8892b0;font-size:0.85rem;padding:10px;">\u6682\u65E0\u5BFC\u5165\u7684\u5DE5\u4F5C\u6D41</div>');
+      } else {
+        keys.forEach((id) => {
+          const wf = workflows[id];
+          const $item = $(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);font-size:0.9rem;color:#ccd6f6;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px;" title="${wf.name}">${wf.name}</span><i class="fa-solid fa-trash" style="color:#ff4d4d;cursor:pointer;padding:4px;" title="\u5220\u9664"></i></div>`);
+          $item.find(".fa-trash").on("click", () => {
+            if (confirm(`\u5220\u9664\u5DE5\u4F5C\u6D41 "${wf.name}"?`)) {
+              delete workflows[id];
+              saveComfyWorkflows(workflows);
+              renderWorkflowList();
+            }
+          });
+          $list.append($item);
+          $selChar.append(`<option value="${id}">${wf.name}</option>`);
+          $selBg.append(`<option value="${id}">${wf.name}</option>`);
+        });
+      }
+      $selChar.val(cs.defaultCharWorkflow || "default_char");
+      $selBg.val(cs.defaultBgWorkflow || "default_bg");
+    }
+    renderWorkflowList();
+    async function loadCheckpointsToSelect() {
+      const $sel = $container.find("#gal-comfy-def-checkpoint");
+      const cs = getComfyUISettings();
+      try {
+        const models = await ComfyUIAPI.getModels(cs.apiUrl);
+        $sel.empty().append('<option value="">-- \u4F7F\u7528 Workflow\u9ED8\u8BA4 --</option>');
+        models.forEach((m) => $sel.append(`<option value="${m}">${m}</option>`));
+        if (cs.defaultCheckpoint) $sel.val(cs.defaultCheckpoint);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] \u52A0\u8F7D\u6A21\u578B\u5931\u8D25:`, e);
+        $sel.html('<option value="">(\u52A0\u8F7D\u5931\u8D25)</option>');
+      }
+    }
+    if (settings.bgImageSource === "comfyui") loadCheckpointsToSelect();
+    $container.find("#gal-comfy-def-checkpoint").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.defaultCheckpoint = $(this).val();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfy-import-btn").on("click", () => $container.find("#gal-comfy-import-input").click());
+    $container.find("#gal-comfy-import-input").on("change", function() {
+      const file = this.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target.result);
+          const name = file.name.replace(".json", "");
+          const id = "wf_" + Date.now();
+          const workflows = getComfyWorkflows();
+          workflows[id] = { name, json };
+          saveComfyWorkflows(workflows);
+          renderWorkflowList();
+          showToast4(`\u5DF2\u5BFC\u5165: ${name}`);
+        } catch (err) {
+          showToast4("\u65E0\u6548\u7684 JSON \u6587\u4EF6");
+        }
+        $(this).val("");
+      };
+      reader.readAsText(file);
+    });
+    $container.find("#gal-comfy-def-char").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.defaultCharWorkflow = $(this).val();
+      saveComfyUISettings(cs);
+    });
+    $container.find("#gal-comfy-def-bg").on("change", function() {
+      const cs = getComfyUISettings();
+      cs.defaultBgWorkflow = $(this).val();
+      saveComfyUISettings(cs);
     });
   }
-  function bindBananaEvents($modal, settings) {
-    $modal.find("#gal-banana-enabled").on("change", async function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.enabled = $(this).is(":checked");
-      saveSettings();
-      if (getIsEnabled()) await injectCOTToWorldbook();
-      showToast5(settings.bananaImageGen.enabled ? "\u5DF2\u5F00\u542F\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757" : "\u5DF2\u5173\u95ED\u5927\u9999\u8549\u751F\u56FE\u6A21\u5757");
+  function bindBananaConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "bananaImageGen");
+    $container.find("#gal-banana-proxy-url").on("change", function() {
+      update("proxyUrl", $(this).val().trim());
     });
-    $modal.find("#gal-banana-proxy-url").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.proxyUrl = $(this).val().trim();
-      saveSettings();
+    $container.find("#gal-banana-proxy-key").on("change", function() {
+      update("proxyApiKey", $(this).val().trim());
     });
-    $modal.find("#gal-banana-proxy-key").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.proxyApiKey = $(this).val().trim();
-      saveSettings();
+    $container.find("#gal-banana-model").on("change", function() {
+      update("model", $(this).val());
     });
-    $modal.find("#gal-banana-model").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.model = $(this).val();
-      saveSettings();
-    });
-    $modal.find("#gal-banana-cot").on("change", async function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.cotTemplate = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-cot").on("change", async function() {
+      update("cotTemplate", $(this).val());
       if (getIsEnabled()) await injectCOTToWorldbook();
     });
-    $modal.find("#gal-banana-prompt-prefix").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.defaultPromptPrefix = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-prompt-prefix").on("change", function() {
+      update("defaultPromptPrefix", $(this).val());
     });
-    $modal.find("#gal-banana-prompt-suffix").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.defaultPromptSuffix = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-prompt-suffix").on("change", function() {
+      update("defaultPromptSuffix", $(this).val());
     });
-    $modal.find("#gal-banana-cgmode").on("change", async function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.cgMode = $(this).is(":checked");
-      saveSettings();
-      $modal.find("#gal-banana-appearance-section").toggle(settings.bananaImageGen.cgMode === true);
-      $modal.find("#gal-banana-size-section").toggle(settings.bananaImageGen.cgMode === true);
+    $container.find("#gal-banana-cgmode").on("change", async function() {
+      const checked = $(this).is(":checked");
+      update("cgMode", checked);
+      $container.find("#gal-banana-appearance-section").toggle(checked);
+      $container.find("#gal-banana-size-section").toggle(checked);
       if (getIsEnabled()) await injectCOTToWorldbook();
     });
-    $modal.find("#gal-banana-image-size").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.cgImageSize = $(this).val();
-      saveSettings();
+    $container.find("#gal-banana-image-size").on("change", function() {
+      update("cgImageSize", $(this).val());
     });
-    $modal.find("#gal-banana-autosave").on("change", function() {
-      if (!settings.bananaImageGen) settings.bananaImageGen = {};
-      settings.bananaImageGen.autoSaveToLibrary = $(this).is(":checked");
-      saveSettings();
+    $container.find("#gal-banana-autosave").on("change", function() {
+      update("autoSaveToLibrary", $(this).is(":checked"));
     });
-    renderBananaAppearanceList2($modal);
-    $modal.find("#gal-banana-appearance-add").on("click", function() {
+    renderBananaAppearanceList2($container);
+    $container.find("#gal-banana-appearance-add").on("click", function() {
       if (_showBananaAppearancePickerRef2) _showBananaAppearancePickerRef2(async (selection) => {
         const list = getBananaCharacterAppearances();
         const name = selection.characterName || selection.characterId;
@@ -22437,30 +18445,30 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (existingIndex >= 0) {
           list[existingIndex] = appearanceData;
         } else if (list.length >= 3) {
-          showToast5("\u6700\u591A\u53EA\u80FD\u6307\u5B9A3\u4E2A\u89D2\u8272");
+          showToast4("\u6700\u591A\u53EA\u80FD\u6307\u5B9A3\u4E2A\u89D2\u8272");
           return;
         } else {
           list.push(appearanceData);
         }
         setBananaCharacterAppearances(list);
-        renderBananaAppearanceList2($modal);
+        renderBananaAppearanceList2($container);
         if (getIsEnabled()) await injectCOTToWorldbook();
       });
     });
-    $modal.on("click", ".gal-banana-appearance-remove", async function() {
+    $container.on("click", ".gal-banana-appearance-remove", async function() {
       const charId = $(this).attr("data-char");
       const list = getBananaCharacterAppearances().filter((a) => (a.characterName || a.characterId) !== charId);
       setBananaCharacterAppearances(list);
-      renderBananaAppearanceList2($modal);
+      renderBananaAppearanceList2($container);
       if (getIsEnabled()) await injectCOTToWorldbook();
     });
-    $modal.find("#gal-banana-refresh-models").on("click", async function() {
+    $container.find("#gal-banana-refresh-models").on("click", async function() {
       const $btn = $(this);
-      const $select = $modal.find("#gal-banana-model");
-      const proxyUrl = $modal.find("#gal-banana-proxy-url").val().trim();
-      const proxyKey = $modal.find("#gal-banana-proxy-key").val().trim();
+      const $select = $container.find("#gal-banana-model");
+      const proxyUrl = $container.find("#gal-banana-proxy-url").val().trim();
+      const proxyKey = $container.find("#gal-banana-proxy-key").val().trim();
       if (!proxyUrl) {
-        showToast5("\u8BF7\u5148\u586B\u5199\u53CD\u4EE3 API \u5730\u5740");
+        showToast4("\u8BF7\u5148\u586B\u5199\u53CD\u4EE3 API \u5730\u5740");
         return;
       }
       $btn.prop("disabled", true).find("i").addClass("fa-spin");
@@ -22472,39 +18480,39 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         const data = await response.json();
         const models = data.data || [];
         $select.html(models.map((m) => `<option value="${m.id}">${m.id}</option>`).join(""));
-        if (models.length > 0) showToast5(`\u83B7\u53D6\u5230 ${models.length} \u4E2A\u6A21\u578B`);
+        if (models.length > 0) showToast4(`\u83B7\u53D6\u5230 ${models.length} \u4E2A\u6A21\u578B`);
         else {
           $select.html('<option value="">\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B</option>');
-          showToast5("\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B");
+          showToast4("\u672A\u627E\u5230\u53EF\u7528\u6A21\u578B");
         }
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u83B7\u53D6\u5927\u9999\u8549\u6A21\u578B\u5217\u8868\u5931\u8D25:`, e);
-        showToast5(`\u83B7\u53D6\u6A21\u578B\u5217\u8868\u5931\u8D25: ${e.message}`);
+        showToast4(`\u83B7\u53D6\u6A21\u578B\u5217\u8868\u5931\u8D25: ${e.message}`);
       } finally {
         $btn.prop("disabled", false).find("i").removeClass("fa-spin");
       }
     });
-    $modal.find("#gal-banana-generate-btn").on("click", async function() {
+    $container.find("#gal-banana-generate-btn").on("click", async function() {
       const $btn = $(this);
-      const sceneName = $modal.find("#gal-banana-scene-name").val().trim();
-      const customPrompt = $modal.find("#gal-banana-custom-prompt").val().trim();
-      const proxyUrl = $modal.find("#gal-banana-proxy-url").val().trim();
-      const proxyKey = $modal.find("#gal-banana-proxy-key").val().trim();
-      const model = $modal.find("#gal-banana-model").val();
-      const promptPrefix = $modal.find("#gal-banana-prompt-prefix").val();
-      const promptSuffix = $modal.find("#gal-banana-prompt-suffix").val();
-      const cgMode = $modal.find("#gal-banana-cgmode").is(":checked");
+      const sceneName = $container.find("#gal-banana-scene-name").val().trim();
+      const customPrompt = $container.find("#gal-banana-custom-prompt").val().trim();
+      const proxyUrl = $container.find("#gal-banana-proxy-url").val().trim();
+      const proxyKey = $container.find("#gal-banana-proxy-key").val().trim();
+      const model = $container.find("#gal-banana-model").val();
+      const promptPrefix = $container.find("#gal-banana-prompt-prefix").val();
+      const promptSuffix = $container.find("#gal-banana-prompt-suffix").val();
+      const cgMode = $container.find("#gal-banana-cgmode").is(":checked");
       const defaultSceneSuffix = ", no humans, scenery, background";
       if (!sceneName) {
-        showToast5("\u8BF7\u8F93\u5165\u573A\u666F\u540D\u79F0");
+        showToast4("\u8BF7\u8F93\u5165\u573A\u666F\u540D\u79F0");
         return;
       }
       if (!proxyUrl) {
-        showToast5("\u8BF7\u5148\u914D\u7F6E\u53CD\u4EE3 API \u5730\u5740");
+        showToast4("\u8BF7\u5148\u914D\u7F6E\u53CD\u4EE3 API \u5730\u5740");
         return;
       }
       if (!model) {
-        showToast5("\u8BF7\u5148\u9009\u62E9\u56FE\u7247\u751F\u6210\u6A21\u578B");
+        showToast4("\u8BF7\u5148\u9009\u62E9\u56FE\u7247\u751F\u6210\u6A21\u578B");
         return;
       }
       let finalPrompt = customPrompt || sceneName;
@@ -22551,23 +18559,23 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (!content) throw new Error("\u672A\u8FD4\u56DE\u5185\u5BB9");
         const imageUrl = parseBananaImageFromResponse(content, proxyUrl);
         if (!imageUrl) throw new Error("\u672A\u80FD\u4ECE\u54CD\u5E94\u4E2D\u89E3\u6790\u5230\u56FE\u7247");
-        $modal.find("#gal-banana-preview").show();
-        $modal.find("#gal-banana-preview-img").attr("src", imageUrl);
-        $modal.find("#gal-banana-save-to-library").data("imageUrl", imageUrl).data("sceneName", sceneName);
-        showToast5("\u80CC\u666F\u56FE\u7247\u751F\u6210\u6210\u529F");
+        $container.find("#gal-banana-preview").show();
+        $container.find("#gal-banana-preview-img").attr("src", imageUrl);
+        $container.find("#gal-banana-save-to-library").data("imageUrl", imageUrl).data("sceneName", sceneName);
+        showToast4("\u80CC\u666F\u56FE\u7247\u751F\u6210\u6210\u529F");
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u5927\u9999\u8549\u751F\u56FE\u5931\u8D25:`, e);
-        showToast5(`\u751F\u6210\u5931\u8D25: ${e.message}`);
+        showToast4(`\u751F\u6210\u5931\u8D25: ${e.message}`);
       } finally {
         $btn.prop("disabled", false).html('<i class="fa-solid fa-wand-magic-sparkles"></i> \u751F\u6210\u80CC\u666F\u56FE\u7247');
       }
     });
-    $modal.find("#gal-banana-save-to-library").on("click", async function() {
+    $container.find("#gal-banana-save-to-library").on("click", async function() {
       const $btn = $(this);
       const imageUrl = $btn.data("imageUrl");
       const sceneName = $btn.data("sceneName");
       if (!imageUrl || !sceneName) {
-        showToast5("\u8BF7\u5148\u751F\u6210\u56FE\u7247");
+        showToast4("\u8BF7\u5148\u751F\u6210\u56FE\u7247");
         return;
       }
       $btn.prop("disabled", true).html('<i class="fa-solid fa-spinner fa-spin"></i> \u4FDD\u5B58\u4E2D...');
@@ -22583,32 +18591,396 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         await saveBackground(sceneName, imageBlob, imageUrl);
         sceneBackgrounds.set(sceneName, imageUrl);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e));
-        showToast5(`\u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
+        showToast4(`\u573A\u666F\u300C${sceneName}\u300D\u5DF2\u4FDD\u5B58\u5230\u80CC\u666F\u5E93`);
         $btn.html('<i class="fa-solid fa-check"></i> \u5DF2\u4FDD\u5B58');
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] \u4FDD\u5B58\u5230\u80CC\u666F\u5E93\u5931\u8D25`, e);
-        showToast5(`\u4FDD\u5B58\u5931\u8D25: ${e.message}`);
+        showToast4(`\u4FDD\u5B58\u5931\u8D25: ${e.message}`);
         $btn.prop("disabled", false).html('<i class="fa-solid fa-save"></i> \u4FDD\u5B58\u5230\u80CC\u666F\u5E93');
       }
     });
   }
-  function bindSpriteEvents($modal, activeTab, currentPackId) {
-    $("#gal-batch-upload-btn").on("click", () => {
+  function bindNovelAIConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "novelai");
+    $container.find("#gal-novelai-apikey").on("input change", function() {
+      update("apiKey", $(this).val().trim());
+    });
+    $container.find("#gal-novelai-model").on("change", function() {
+      update("model", $(this).val());
+    });
+    $container.find("#gal-novelai-size").on("change", function() {
+      if (!settings.novelai) settings.novelai = {};
+      const [w, h] = $(this).val().split("x").map(Number);
+      settings.novelai.width = w;
+      settings.novelai.height = h;
+      saveSettings();
+    });
+    $container.find("#gal-novelai-steps").on("input", function() {
+      const val = parseInt($(this).val());
+      update("steps", val);
+      $container.find("#gal-novelai-steps-value").text(val);
+    });
+    $container.find("#gal-novelai-scale").on("input", function() {
+      const val = parseFloat($(this).val());
+      update("scale", val);
+      $container.find("#gal-novelai-scale-value").text(val);
+    });
+    $container.find("#gal-novelai-sampler").on("change", function() {
+      update("sampler", $(this).val());
+    });
+    $container.find("#gal-novelai-prompt-prefix").on("change", function() {
+      update("defaultPromptPrefix", $(this).val());
+    });
+    $container.find("#gal-novelai-prompt-suffix").on("change", function() {
+      update("defaultPromptSuffix", $(this).val());
+    });
+    $container.find("#gal-novelai-negative").on("change", function() {
+      update("negativePrompt", $(this).val());
+    });
+    $container.find("#gal-novelai-autosave").on("change", function() {
+      update("autoSaveToLibrary", $(this).is(":checked"));
+    });
+  }
+  function bindWallhavenConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "wallhaven");
+    $container.find("#gal-wallhaven-category").on("change", async function() {
+      update("category", $(this).val());
+      if (getIsEnabled()) await injectCOTToWorldbook();
+    });
+    $container.find("#gal-wallhaven-purity").on("change", function() {
+      update("purity", $(this).val());
+    });
+    $container.find("#gal-wallhaven-cgmode").on("change", async function() {
+      update("cgMode", $(this).is(":checked"));
+      if (getIsEnabled()) await injectCOTToWorldbook();
+    });
+    $container.find("#gal-wallhaven-customtags").on("change", function() {
+      const tags = $(this).val();
+      update("customTags", tags ? tags.split(",").map((t) => t.trim()).filter((t) => t) : []);
+    });
+    $container.find("#gal-wallhaven-apikey").on("change", function() {
+      update("apiKey", $(this).val());
+    });
+    $container.find("#gal-wallhaven-sorting").on("change", function() {
+      update("sorting", $(this).val());
+      $container.find("#gal-wallhaven-toprange-container").toggle($(this).val() === "toplist");
+      showToast4(`\u6392\u5E8F\u65B9\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+    });
+    $container.find("#gal-wallhaven-toprange").on("change", function() {
+      update("topRange", $(this).val());
+      showToast4(`\u6392\u884C\u699C\u65F6\u95F4\u8303\u56F4\u5DF2\u8BBE\u7F6E\u4E3A: ${$(this).find("option:selected").text()}`);
+    });
+  }
+
+  // src/ui/asset-manager-modal.js
+  var _showSpriteUploadDialogRef5 = null;
+  var _showBatchUploadDialogRef3 = null;
+  var _showBackgroundUploadDialogRef3 = null;
+  var _showBatchBackgroundUploadDialogRef2 = null;
+  var _showCustomExpressionManagerRef2 = null;
+  var _showSettingsPanelRef3 = null;
+  function setAssetManagerModalRefs({ showSpriteUploadDialog: showSpriteUploadDialog2, showBatchUploadDialog: showBatchUploadDialog2, showBackgroundUploadDialog: showBackgroundUploadDialog2, showBatchBackgroundUploadDialog: showBatchBackgroundUploadDialog2, showCustomExpressionManager: showCustomExpressionManager2, showSettingsPanel: showSettingsPanel2 }) {
+    if (showSpriteUploadDialog2) _showSpriteUploadDialogRef5 = showSpriteUploadDialog2;
+    if (showBatchUploadDialog2) _showBatchUploadDialogRef3 = showBatchUploadDialog2;
+    if (showBackgroundUploadDialog2) _showBackgroundUploadDialogRef3 = showBackgroundUploadDialog2;
+    if (showBatchBackgroundUploadDialog2) _showBatchBackgroundUploadDialogRef2 = showBatchBackgroundUploadDialog2;
+    if (showCustomExpressionManager2) _showCustomExpressionManagerRef2 = showCustomExpressionManager2;
+    if (showSettingsPanel2) _showSettingsPanelRef3 = showSettingsPanel2;
+  }
+  var CUSTOM_LOCATION_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
+  var CUSTOM_TIME_HTML_KEY4 = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
+  async function showAssetManagerModal2(activeTab = "sprites") {
+    if (_showSettingsPanelRef3) {
+      _showSettingsPanelRef3("assets", activeTab);
+    }
+  }
+  async function buildAssetManagerContent(activeTab) {
+    const settings = getSettings();
+    const allPacks = await getAllImagePacks();
+    const currentPackId = getCurrentPackId();
+    const currentPack = allPacks.find((p) => p.id === currentPackId) || allPacks.find((p) => p.id === DEFAULT_PACK_ID);
+    const currentPackName = currentPack ? currentPack.name : "\u672A\u5B9A\u4E49";
+    const currentRenderScope = getRenderScope();
+    const allSprites = await getAllSprites(currentPackId);
+    const allBackgrounds = await getAllBackgrounds(currentPackId);
+    const dbCharacters = getCharacterListFromDatabase();
+    const charactersData = /* @__PURE__ */ new Map();
+    allSprites.forEach((sprite) => {
+      if (!charactersData.has(sprite.characterId)) {
+        charactersData.set(sprite.characterId, { sprites: [], type: "\u81EA\u5B9A\u4E49", source: "\u672C\u5730" });
+      }
+      charactersData.get(sprite.characterId).sprites.push(sprite);
+    });
+    dbCharacters.forEach((char) => {
+      const charName = char.name;
+      if (!charactersData.has(charName)) {
+        charactersData.set(charName, { sprites: [], type: char.type, source: char.source });
+      } else {
+        const info = charactersData.get(charName);
+        info.type = char.type;
+        info.source = char.source;
+      }
+    });
+    activeTab = activeTab || "sprites";
+    const html = `
+    <div class="gal-asset-header">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="gal-pack-selector" style="position: relative;">
+            <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="\u5207\u6362\u56FE\u5305" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
+              <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+            </button>
+            <div class="gal-pack-menu gal-z-dropdown" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden;">
+              ${allPacks.map((pack) => `
+                <div class="gal-pack-item ${pack.id === currentPackId ? "active" : ""}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? "background: #e9ecef; font-weight: 700;" : ""}">
+                  <span><i class="fa-solid fa-folder${pack.id === currentPackId ? "-open" : ""}" style="margin-right: 8px; color: ${pack.id === currentPackId ? "#6f42c1" : "#666"};"></i>${pack.name}</span>
+                  ${pack.isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">\u9ED8\u8BA4</span>' : ""}
+                </div>
+              `).join("")}
+              <div style="border-top: 2px solid #eee;">
+                <div class="gal-pack-item" id="gal-add-pack-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #28a745;">
+                  <i class="fa-solid fa-plus"></i> <span>\u65B0\u5EFA\u56FE\u5305</span>
+                </div>
+                <div class="gal-pack-item" id="gal-manage-packs-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #17a2b8;">
+                  <i class="fa-solid fa-cog"></i> <span>\u7BA1\u7406\u56FE\u5305</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button class="gal-action-btn" id="gal-render-scope-btn" title="${currentRenderScope === "current" ? "\u4EC5\u5F53\u524D\u56FE\u5305\u8D44\u6E90" : "\u641C\u7D22\u6240\u6709\u56FE\u5305\u8D44\u6E90"}" style="padding: 6px 10px; font-size: 0.9rem; background: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"}; color: #fff; border-color: ${currentRenderScope === "current" ? "#fd7e14" : "#20c997"};">
+            <i class="fa-solid ${currentRenderScope === "current" ? "fa-bullseye" : "fa-globe"}"></i>
+          </button>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div class="gal-export-dropdown" style="position: relative;">
+            <button class="gal-action-btn" id="gal-export-dropdown-btn" title="\u5BFC\u51FA\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem;">
+              <i class="fa-solid fa-file-export"></i> <span>\u5BFC\u51FA</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+            </button>
+            <div class="gal-export-menu gal-z-dropdown" id="gal-export-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
+              <div class="gal-export-item" data-action="export-local" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-file-zipper" style="width: 20px; color: #333;"></i><span>\u5BFC\u51FA\u672C\u5730\u538B\u7F29\u5305</span>
+              </div>
+              <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i><span>\u5BFC\u51FAGitHub\u8D44\u6E90\u5305</span>
+              </div>
+            </div>
+          </div>
+          <div class="gal-import-dropdown" style="position: relative;">
+            <button class="gal-action-btn" id="gal-import-dropdown-btn" title="\u5BFC\u5165\u8D44\u6E90" style="padding: 6px 12px; font-size: 0.9rem; background: #28a745; color: #fff; border-color: #28a745;">
+              <i class="fa-solid fa-file-import"></i> <span>\u5BFC\u5165</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+            </button>
+            <div class="gal-import-menu gal-z-dropdown" id="gal-import-menu" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 200px; overflow: hidden;">
+              <div class="gal-import-item" data-action="import-local-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-file-zipper" style="width: 20px; color: #f39c12;"></i><span>\u672C\u5730\u538B\u7F29\u5305\u5BFC\u5165</span>
+              </div>
+              <div class="gal-import-item" data-action="import-remote-zip" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-cloud-arrow-down" style="width: 20px; color: #3498db;"></i><span>\u8FDC\u7A0B\u538B\u7F29\u5305\u5BFC\u5165</span>
+              </div>
+              <div class="gal-import-item" data-action="import-json" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-link" style="width: 20px; color: #9b59b6;"></i><span>\u5BFC\u5165\u8FDC\u7A0B\u94FE\u63A5JSON</span>
+              </div>
+              <div class="gal-import-item" data-action="import-github" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
+                <i class="fa-brands fa-github" style="width: 20px; color: #333;"></i><span>\u4ECEGitHub\u5BFC\u5165</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="gal-asset-import-zip-input" accept=".zip" style="display: none;">
+      <input type="file" id="gal-asset-import-input" multiple webkitdirectory style="display: none;">
+      <input type="file" id="gal-asset-import-json-input" accept=".json" style="display: none;">
+    </div>
+    <div class="gal-tab-header">
+      <button class="gal-tab-btn ${activeTab === "sprites" ? "active" : ""}" data-tab="sprites"><i class="fa-solid fa-user"></i> \u7ACB\u7ED8\u7BA1\u7406</button>
+      <button class="gal-tab-btn ${activeTab === "backgrounds" ? "active" : ""}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> \u80CC\u666F\u7BA1\u7406</button>
+      <button class="gal-tab-btn ${activeTab === "imagegen" ? "active" : ""}" data-tab="imagegen"><i class="fa-solid fa-wand-magic-sparkles"></i> \u751F\u56FE\u914D\u7F6E</button>
+      <button class="gal-tab-btn ${activeTab === "custom" ? "active" : ""}" data-tab="custom"><i class="fa-solid fa-code"></i> \u81EA\u5B9A\u4E49\u6A21\u5757</button>
+    </div>
+    <div class="gal-tab-content">
+      ${buildSpritesTab(activeTab, allSprites, charactersData)}
+      ${buildBackgroundsTab(settings, allBackgrounds)}
+      ${buildImagegenTab(activeTab, settings)}
+      ${buildCustomTab(settings)}
+    </div>
+  `;
+    return html;
+  }
+  function bindAssetManagerContentEvents($modal, activeTab) {
+    const settings = getSettings();
+    $modal.find(".gal-tab-btn").on("click", function() {
+      const tab = $(this).data("tab");
+      $modal.find(".gal-tab-btn").removeClass("active");
+      $(this).addClass("active");
+      $modal.find(".gal-tab-pane").hide();
+      $modal.find(`.gal-tab-pane[data-pane="${tab}"]`).show();
+    });
+    $modal.find("#gal-save-custom-html").on("click", function() {
+      const locHtml = $("#gal-custom-location-html").val();
+      const timeHtml = $("#gal-custom-time-html").val();
+      localStorage.setItem(CUSTOM_LOCATION_HTML_KEY4, locHtml);
+      localStorage.setItem(CUSTOM_TIME_HTML_KEY4, timeHtml);
+      showToast4("\u81EA\u5B9A\u4E49\u914D\u7F6E\u5DF2\u4FDD\u5B58");
+    });
+    bindImageGenConfigEvents($modal, settings);
+    bindSpriteEvents($modal, activeTab);
+    bindBackgroundEvents($modal, activeTab);
+    bindPackSelectorEvents($modal, activeTab);
+    bindExportImportEvents($modal, activeTab);
+    activeTab = activeTab || "sprites";
+    if (activeTab !== "sprites") {
+      $modal.find(".gal-tab-btn").removeClass("active");
+      $modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).addClass("active");
+      $modal.find(".gal-tab-pane").hide();
+      $modal.find(`.gal-tab-pane[data-pane="${activeTab}"]`).show();
+    }
+  }
+  function buildSpritesTab(activeTab, allSprites, charactersData) {
+    return `
+  <div class="gal-tab-pane ${activeTab === "sprites" ? "active" : ""}" data-pane="sprites" style="${activeTab !== "sprites" ? "display: none;" : ""}">
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">\u5DF2\u4FDD\u5B58 ${allSprites.length} \u4E2A\u7ACB\u7ED8\uFF0C\u5171 ${charactersData.size} \u4E2A\u89D2\u8272</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-add-sprite-btn"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u7ACB\u7ED8</span></button>
+        <button class="gal-action-btn gal-pane-btn teal" id="gal-manage-expressions-btn"><i class="fa-solid fa-face-smile"></i> <span>\u8868\u60C5\u6807\u7B7E</span></button>
+      </div>
+    </div>
+    ${charactersData.size === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-images" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u89D2\u8272\u6570\u636E\uFF0C\u8BF7\u786E\u4FDD\u5DF2\u52A0\u8F7D\u6570\u636E\u5E93\u811A\u672C\u6216\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p></div>` : `<div class="gal-character-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 15px;">
+          ${Array.from(charactersData.entries()).map(([charId, info]) => {
+      const sprites = info.sprites;
+      const defaultSprite = sprites.find((s) => s.expression === "\u9ED8\u8BA4") || sprites[0];
+      const avatarUrl = defaultSprite?.imageUrl ? defaultSprite.imageUrl : defaultSprite?.imageBlob ? URL.createObjectURL(defaultSprite.imageBlob) : "";
+      const typeLabel = info.type && info.type !== "\u81EA\u5B9A\u4E49" ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${info.type}</span>` : "";
+      return `
+            <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s; position: relative;">
+              <div class="gal-character-avatar" style="aspect-ratio: 1 / 1; background: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
+                ${avatarUrl ? `<img src="${avatarUrl}" alt="${charId}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
+                ${sprites.length === 0 ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 0.7rem; padding: 2px; text-align: center;">\u65E0\u7ACB\u7ED8</div>' : ""}
+                <div class="gal-char-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s;">
+                  <button class="gal-char-transfer" data-char="${charId}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(111, 66, 193, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+                  <button class="gal-char-delete" data-char="${charId}" title="\u5220\u9664\u89D2\u8272" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220, 53, 69, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </div>
+              <div style="padding: 10px; text-align: center;">
+                <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">${charId}</div>
+                <div style="margin-top: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;">${typeLabel}<span style="font-size: 0.75rem; color: #888;">${sprites.length} \u4E2A\u8868\u60C5</span></div>
+              </div>
+            </div>`;
+    }).join("")}
+        </div>`}
+  </div>`;
+  }
+  function buildBackgroundsTab(settings, allBackgrounds) {
+    return `
+  <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">\u5DF2\u4FDD\u5B58 ${allBackgrounds.length} \u4E2A\u80CC\u666F</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-bg-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>\u6279\u91CF\u4E0A\u4F20</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-add-bg-btn"><i class="fa-solid fa-plus"></i> <span>\u6DFB\u52A0\u80CC\u666F</span></button>
+      </div>
+    </div>
+    ${allBackgrounds.length === 0 ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-panorama" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>\u6682\u65E0\u80CC\u666F\uFF0C\u70B9\u51FB\u4E0A\u65B9\u6309\u94AE\u6DFB\u52A0</p><small style="color: #bbb;">\u80CC\u666F\u56FE\u5C06\u6839\u636E &lt;background scene="\u573A\u666F\u540D" /&gt; \u6807\u7B7E\u81EA\u52A8\u5339\u914D</small></div>` : `<div class="gal-bg-grid">${allBackgrounds.map((bg) => `
+          <div class="gal-bg-card" data-scene="${bg.sceneName}">
+            <div class="gal-bg-preview">${bg.imageUrl ? `<img src="${bg.imageUrl}" alt="${bg.sceneName}">` : bg.imageBlob ? `<img src="${URL.createObjectURL(bg.imageBlob)}" alt="${bg.sceneName}">` : ""}</div>
+            <div class="gal-bg-label">${bg.sceneName}</div>
+            <div class="gal-bg-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
+              <button class="gal-bg-transfer" data-scene="${bg.sceneName}" title="\u8F6C\u79FB\u5230\u5176\u4ED6\u56FE\u5305" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(111, 66, 193, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+              <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="\u5220\u9664" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>`).join("")}</div>`}
+  </div>`;
+  }
+  function buildImagegenTab(activeTab, settings) {
+    return `
+  <div class="gal-tab-pane" data-pane="imagegen" style="${activeTab !== "imagegen" ? "display: none;" : ""}">
+    ${buildImageGenConfigPane(settings)}
+  </div>`;
+  }
+  function buildCustomTab(settings) {
+    return `
+  <div class="gal-tab-pane" data-pane="custom" style="display: none;">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> \u5730\u70B9\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-location-html" placeholder="<div>\u81EA\u5B9A\u4E49\u5730\u70B9\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || ""}</textarea></div>
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> \u65F6\u95F4\u72B6\u6001\u680F - \u81EA\u5B9A\u4E49\u5185\u5BB9 HTML</label><textarea id="gal-custom-time-html" placeholder="<div>\u81EA\u5B9A\u4E49\u65F6\u95F4\u4ECB\u7ECD...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || ""}</textarea></div>
+      <div style="text-align: right;"><button class="gal-action-btn primary" id="gal-save-custom-html" style="padding: 8px 20px;"><i class="fa-solid fa-save"></i> \u4FDD\u5B58\u914D\u7F6E</button></div>
+    </div>
+    <div style="padding: 15px; color: #666; font-size: 0.9rem; line-height: 1.6;"><strong><i class="fa-solid fa-lightbulb"></i> \u8BF4\u660E\uFF1A</strong><br>\u6B64\u5904\u914D\u7F6E\u7684 HTML \u5185\u5BB9\u5C06\u5728\u70B9\u51FB\u4E3B\u754C\u9762\u7684\u5730\u70B9/\u65F6\u95F4\u72B6\u6001\u680F\u65F6\u5F39\u7A97\u663E\u793A\u3002<br>\u652F\u6301\u6807\u51C6 HTML \u6807\u7B7E\u548C\u5185\u8054\u6837\u5F0F\u3002</div>
+  </div>`;
+  }
+  function buildAssetManagerStyles() {
+    return `
+    .gal-tab-btn { padding: 12px 20px; border: none; background: transparent; font-size: 1rem; font-weight: 600; color: #666; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+    .gal-tab-btn:hover { color: ${THEME.accent}; }
+    .gal-tab-btn.active { color: ${THEME.accent}; border-bottom-color: ${THEME.accent}; }
+    .gal-character-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    .gal-character-card:hover .gal-char-actions { opacity: 1 !important; }
+    @media (max-width: 768px), (pointer: coarse) { .gal-char-actions { opacity: 1 !important; } }
+    .gal-sprite-group { margin-bottom: 20px; background: #f8f9fa; border-radius: 8px; padding: 15px; }
+    .gal-sprite-group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .gal-char-name { font-weight: 700; font-size: 1.1rem; color: ${THEME.dark}; }
+    .gal-sprite-count { font-size: 0.85rem; color: #888; }
+    .gal-sprite-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 12px; }
+    .gal-sprite-card { position: relative; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; }
+    .gal-sprite-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .gal-sprite-preview { aspect-ratio: 2 / 3; background: #eee; overflow: hidden; }
+    .gal-sprite-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .gal-sprite-label { padding: 6px; text-align: center; font-size: 0.75rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gal-sprite-delete { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
+    .gal-sprite-card:hover .gal-sprite-delete { opacity: 1; }
+    .gal-bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+    .gal-bg-card { position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer; }
+    .gal-bg-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+    .gal-bg-preview { aspect-ratio: 16 / 9; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); overflow: hidden; }
+    .gal-bg-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .gal-bg-label { padding: 10px; text-align: center; font-size: 0.9rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gal-bg-actions { opacity: 0; transition: opacity 0.2s; }
+    .gal-bg-card:hover .gal-bg-actions { opacity: 1; }
+    .gal-import-dropdown { position: relative; display: inline-block; }
+    .gal-import-menu { animation: galDropdownFadeIn 0.15s ease; }
+    @keyframes galDropdownFadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    .gal-import-item:hover { background: #f0f7ff !important; }
+    .gal-import-item:active { background: #e0efff !important; }
+    .gal-import-progress-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
+    .gal-import-progress-box { background: #2b2e38; padding: 30px 50px; border-radius: 12px; text-align: center; min-width: 300px; }
+    .gal-import-progress-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 15px; color: #00d2ff; }
+    .gal-import-progress-bar-container { width: 100%; height: 8px; background: #444; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+    .gal-import-progress-bar { height: 100%; background: linear-gradient(90deg, #00d2ff, #00a8cc); width: 0%; transition: width 0.3s ease; }
+    .gal-import-progress-text { font-size: 0.9rem; color: #aaa; }
+    .gal-import-progress-details { font-size: 0.8rem; color: #888; margin-top: 8px; max-height: 60px; overflow-y: auto; }
+    .gal-pane-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .gal-pane-stat { font-weight: 700; color: ${THEME.dark}; }
+    .gal-pane-actions { display: flex; gap: 10px; align-items: center; }
+    .gal-pane-btn { padding: 8px 16px !important; transform: none !important; box-shadow: none !important; border-radius: 6px !important; font-size: 0.85rem !important; border: none !important; }
+    .gal-pane-btn * { transform: none !important; }
+    .gal-pane-btn.purple { background: #6f42c1; color: #fff; }
+    .gal-pane-btn.purple:hover { background: #5a32a3; color: #fff; }
+    .gal-pane-btn.teal { background: #17a2b8; color: #fff; }
+    .gal-pane-btn.teal:hover { background: #138496; color: #fff; }
+    .gal-pane-btn.primary { background: ${THEME.accent}; color: ${THEME.dark}; }
+    .gal-pane-btn.primary:hover { background: #00a8cc; color: #fff; }
+    .gal-imagegen-pills { display:flex; gap:8px; padding:12px 0; flex-wrap:wrap; }
+    .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
+    .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
+    .gal-pill.active { background:linear-gradient(135deg,${THEME.accent},#00a8cc); color:#fff; border-color:transparent; }
+  `;
+  }
+  function bindSpriteEvents($modal, activeTab) {
+    $modal.find("#gal-batch-upload-btn").on("click", () => {
       $modal.remove();
       if (_showBatchUploadDialogRef3) _showBatchUploadDialogRef3(null, () => showAssetManagerModal2("sprites"));
     });
-    $("#gal-manage-expressions-btn").on("click", () => {
+    $modal.find("#gal-manage-expressions-btn").on("click", () => {
       $modal.remove();
       if (_showCustomExpressionManagerRef2) _showCustomExpressionManagerRef2(() => showAssetManagerModal2("sprites"));
     });
-    $("#gal-add-sprite-btn").on("click", async () => {
+    $modal.find("#gal-add-sprite-btn").on("click", async () => {
       $modal.remove();
       if (_showSpriteUploadDialogRef5) await _showSpriteUploadDialogRef5("", "\u9ED8\u8BA4", () => showAssetManagerModal2("sprites"));
     });
     $modal.find(".gal-character-card").on("click", function(e) {
       if ($(e.target).closest(".gal-char-actions").length) return;
       const charId = $(this).data("char");
-      $modal.remove();
       showCharacterSpritesModal(charId);
     });
     $modal.find(".gal-character-card").on("mouseenter", function() {
@@ -22622,7 +18994,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const allSpritesAll = await getAllSprites(null, true);
       const charSprites = allSpritesAll.filter((s) => s.characterId === charId);
       if (charSprites.length === 0) {
-        showToast5("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8\u53EF\u8F6C\u79FB", "warning");
+        showToast4("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8\u53EF\u8F6C\u79FB", "warning");
         return;
       }
       const spriteKeys = charSprites.map((s) => `${s.characterId}_${s.expression}`);
@@ -22637,24 +19009,42 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const allSpritesAll = await getAllSprites(null, true);
       const charSprites = allSpritesAll.filter((s) => s.characterId === charId);
       if (charSprites.length === 0) {
-        showToast5("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8", "warning");
+        showToast4("\u8BE5\u89D2\u8272\u6CA1\u6709\u7ACB\u7ED8", "warning");
         return;
       }
       if (confirm(`\u786E\u5B9A\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684\u6240\u6709 ${charSprites.length} \u4E2A\u7ACB\u7ED8\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\uFF01`)) {
         for (const sprite of charSprites) await deleteSprite(sprite.characterId, sprite.expression);
-        showToast5(`\u5DF2\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684 ${charSprites.length} \u4E2A\u7ACB\u7ED8`);
+        showToast4(`\u5DF2\u5220\u9664\u89D2\u8272\u300C${charId}\u300D\u7684 ${charSprites.length} \u4E2A\u7ACB\u7ED8`);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e2) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e2));
         $modal.remove();
         showAssetManagerModal2("sprites");
       }
     });
   }
-  function bindBackgroundEvents($modal, activeTab, currentPackId) {
-    $("#gal-add-bg-btn").on("click", () => {
+  function bindBackgroundEvents($modal, activeTab) {
+    $modal.on("click", ".gal-bg-card", function(e) {
+      if ($(e.target).closest(".gal-bg-actions").length) return;
+      const $img = $(this).find(".gal-bg-preview img");
+      if (!$img.length) return;
+      const src = $img.attr("src");
+      const scene = $(this).data("scene");
+      const mountRoot = getModalMountRoot();
+      const isFullscreen = mountRoot !== topWindow.document.body;
+      const posStyle = isFullscreen ? "position:absolute;top:0;left:0;width:100%;height:100%;" : "position:fixed;top:0;left:0;width:100vw;height:100vh;";
+      const $lightbox = $(`<div style="${posStyle}background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
+      <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
+      <span style="color:#ccc;font-size:0.9rem;">${scene}</span>
+    </div>`);
+      $lightbox.on("click", function() {
+        $(this).remove();
+      });
+      $(mountRoot).append($lightbox);
+    });
+    $modal.find("#gal-add-bg-btn").on("click", () => {
       $modal.remove();
       if (_showBackgroundUploadDialogRef3) _showBackgroundUploadDialogRef3(() => showAssetManagerModal2("backgrounds"));
     });
-    $("#gal-batch-bg-upload-btn").on("click", () => {
+    $modal.find("#gal-batch-bg-upload-btn").on("click", () => {
       $modal.remove();
       if (_showBatchBackgroundUploadDialogRef2) _showBatchBackgroundUploadDialogRef2(() => showAssetManagerModal2("backgrounds"));
     });
@@ -22663,7 +19053,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       const scene = $(e.currentTarget).attr("data-scene");
       if (confirm(`\u786E\u5B9A\u5220\u9664\u80CC\u666F\u300C${scene}\u300D\u5417\uFF1F`)) {
         await deleteBackground(scene);
-        showToast5(`\u5DF2\u5220\u9664\u80CC\u666F: ${scene}`);
+        showToast4(`\u5DF2\u5220\u9664\u80CC\u666F: ${scene}`);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e2) => console.warn(`[${SCRIPT_NAME}] \u66F4\u65B0\u4E16\u754C\u4E66\u5931\u8D25:`, e2));
         $modal.remove();
         showAssetManagerModal2("backgrounds");
@@ -22679,8 +19069,8 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       });
     });
   }
-  function bindPackSelectorEvents($modal, activeTab, allPacks, currentPackId) {
-    $("#gal-pack-dropdown-btn").on("click", function(e) {
+  function bindPackSelectorEvents($modal, activeTab) {
+    $modal.find("#gal-pack-dropdown-btn").on("click", function(e) {
       e.stopPropagation();
       $("#gal-export-menu, #gal-import-menu").hide();
       $("#gal-pack-menu").toggle();
@@ -22696,7 +19086,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       $(topWindow.document).off(".galMenus").off(".galImportMenu").off(".galPackMenu");
       showAssetManagerModal2();
     });
-    $("#gal-add-pack-btn").on("click", function() {
+    $modal.find("#gal-add-pack-btn").on("click", function() {
       $("#gal-pack-menu").hide();
       const name = prompt("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0\uFF1A");
       if (name && name.trim()) {
@@ -22707,11 +19097,11 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
         });
       }
     });
-    $("#gal-manage-packs-btn").on("click", function() {
+    $modal.find("#gal-manage-packs-btn").on("click", function() {
       $("#gal-pack-menu").hide();
       showPackManagerModal();
     });
-    $("#gal-render-scope-btn").on("click", function() {
+    $modal.find("#gal-render-scope-btn").on("click", function() {
       const currentScope = getRenderScope();
       const newScope = currentScope === "current" ? "all" : "current";
       setRenderScope(newScope);
@@ -22721,7 +19111,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
       } else {
         $btn.css({ background: "#20c997", borderColor: "#20c997" }).attr("title", "\u641C\u7D22\u6240\u6709\u56FE\u5305\u8D44\u6E90").find("i").removeClass("fa-bullseye").addClass("fa-globe");
       }
-      showToast5(newScope === "current" ? "\u5DF2\u5207\u6362\u4E3A\uFF1A\u4EC5\u5F53\u524D\u56FE\u5305" : "\u5DF2\u5207\u6362\u4E3A\uFF1A\u641C\u7D22\u6240\u6709\u56FE\u5305");
+      showToast4(newScope === "current" ? "\u5DF2\u5207\u6362\u4E3A\uFF1A\u4EC5\u5F53\u524D\u56FE\u5305" : "\u5DF2\u5207\u6362\u4E3A\uFF1A\u641C\u7D22\u6240\u6709\u56FE\u5305");
       const currentTab = $modal.find(".gal-tab-btn.active").data("tab") || activeTab || "sprites";
       $modal.remove();
       $(topWindow.document).off(".galMenus").off(".galImportMenu").off(".galPackMenu");
@@ -22729,7 +19119,7 @@ ${prompts.userPrompt}`).then(() => showToast5("\u5DF2\u590D\u5236\u5230\u526A\u8
     });
   }
   function bindExportImportEvents($modal, activeTab) {
-    $("#gal-export-dropdown-btn").on("click", function(e) {
+    $modal.find("#gal-export-dropdown-btn").on("click", function(e) {
       e.stopPropagation();
       $("#gal-import-menu").hide();
       $("#gal-export-menu").toggle();
@@ -22799,7 +19189,7 @@ ${baseUrl}`)) return;
         });
       }
     });
-    $("#gal-import-dropdown-btn").on("click", function(e) {
+    $modal.find("#gal-import-dropdown-btn").on("click", function(e) {
       e.stopPropagation();
       $("#gal-export-menu").hide();
       $("#gal-import-menu").toggle();
@@ -22812,20 +19202,20 @@ ${baseUrl}`)) return;
       $("#gal-import-menu").hide();
       switch (action) {
         case "import-local-zip":
-          $("#gal-asset-import-zip-input").click();
+          $modal.find("#gal-asset-import-zip-input").click();
           break;
         case "import-remote-zip":
           showRemoteZipImportDialog();
           break;
         case "import-json":
-          $("#gal-asset-import-json-input").click();
+          $modal.find("#gal-asset-import-json-input").click();
           break;
         case "import-github":
           handleGitHubImport();
           break;
       }
     });
-    $("#gal-asset-import-zip-input").on("change", async function() {
+    $modal.find("#gal-asset-import-zip-input").on("change", async function() {
       const file = this.files[0];
       if (!file) return;
       const MAX_SIZE = 5 * 1024 * 1024 * 1024;
@@ -22849,7 +19239,7 @@ ${baseUrl}`)) return;
         }
       }
     }
-    $("#gal-asset-import-json-input").on("change", async function() {
+    $modal.find("#gal-asset-import-json-input").on("change", async function() {
       if (this.files.length > 0) {
         await importAssetsFromJson(this.files[0]);
         $modal.remove();
@@ -22983,17 +19373,10 @@ ${baseUrl}`)) return;
   setLive2DManagerRefs({ Live2DStage });
   setLipSyncRefs({ getProxiedAudioUrl: (url) => TTSManager._getProxiedAudioUrl(url) });
   setParserRefs({ getFormattedContent });
-  setExpressionsRefs({ showToast: showToast5, getIsEnabled, injectCOTToWorldbook });
-  setLive2DStageRefs({ showToast: showToast5 });
+  setExpressionsRefs({ showToast: showToast4, getIsEnabled, injectCOTToWorldbook });
+  setLive2DStageRefs({ showToast: showToast4 });
   setPositionEditorRefs({ getModalMountRoot });
-  setWallhavenHandlerRefs({
-    saveBackground,
-    getSceneBackgrounds: () => GalgameStore.cache.sceneBackgrounds,
-    getMessageSegmentState: () => GalgameStore.cache.segments,
-    getSpriteManager: () => SpriteManager,
-    updateGlobalOverlayContent,
-    showToast: showToast5
-  });
+  setBgGenSharedRefs({ updateGlobalOverlayContent, showToast: showToast4 });
   setSpriteManagerRefs({
     getSprite,
     getBackground,
@@ -23003,27 +19386,27 @@ ${baseUrl}`)) return;
     clearBackgroundLayers,
     BGMManager
   });
-  setTTSManagerRefs({ showToast: showToast5 });
-  setBGMManagerRefs({ showToast: showToast5 });
-  setWorldbookRefs({ showToast: showToast5 });
-  setEnhancedModeRefs({ showToast: showToast5 });
-  setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast5 });
+  setTTSManagerRefs({ showToast: showToast4 });
+  setBGMManagerRefs({ showToast: showToast4 });
+  setWorldbookRefs({ showToast: showToast4 });
+  setEnhancedModeRefs({ showToast: showToast4 });
+  setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast4 });
   setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus });
   setOverlayRefs({ updateOverlaySegmentDisplay });
   setOverlayContentRefs({ renderGalgameChoices });
   setChoicesRefs({ getIsRerolling });
   setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews });
   setGalgameModeRefs({ processNewMessage, applySettingsToUI });
-  setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration });
-  setBananaImageRefs({ updateGlobalOverlayContent, showToast: showToast5 });
+  setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration, handleNovelAIBackgroundGeneration });
   setMessageObserverRefs({ processNewMessage, injectGalgameButton });
   setEventsRefs({ showSettingsPanel, showSpriteUploadDialog, updateGlobalOverlayContent });
   setMenuButtonRefs({ showSettingsPanel });
-  setEnhancedModeRefs({ showToast: showToast5, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
-  setSettingsPanelRefs({ showAssetManagerModal: showAssetManagerModal2 });
+  setEnhancedModeRefs({ showToast: showToast4, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
+  setSettingsPanelRefs({ buildAssetsPane: buildAssetManagerContent, bindAssetsPane: bindAssetManagerContentEvents, assetStyles: buildAssetManagerStyles });
   setSpriteConfigRefs({ showBatchUploadDialog, showSpriteUploadDialog, showBackgroundUploadDialog });
   setAssetManagerRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });
-  setAssetManagerModalRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });
+  setAssetManagerModalRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showSettingsPanel });
+  setImageGenConfigRefs({ showBananaAppearancePicker });
   setAssetManagerModalRef(showAssetManagerModal2);
   console.log(`[${SCRIPT_NAME}] Phase 1-9 \u6A21\u5757\u52A0\u8F7D\u6210\u529F, \u7248\u672C: ${VERSION}`);
 })();

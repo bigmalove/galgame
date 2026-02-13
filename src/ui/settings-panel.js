@@ -5,8 +5,6 @@ import { getIsEnabled, setIsEnabled, setHideOtherFloors } from '../core/state.js
 import { GalgameStore } from '../core/store.js';
 import { TTS_PROVIDER, getTTSProvider, getGptSoVitsConfig, getTTSVoiceListAsync, getTTSEnabled, setTTSEnabled, getGptSoVitsVoiceList, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice } from '../audio/tts-config.js';
 import { TTSManager } from '../audio/tts-manager.js';
-import { ComfyUIAPI } from '../image-gen/comfyui-api.js';
-import { getComfyUISettings, saveComfyUISettings, getComfyWorkflows, saveComfyWorkflows } from '../image-gen/comfyui-helpers.js';
 import { getAvailablePresets, getAvailableProfiles, getAvailableModels, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
 import { injectCOTToWorldbook, enableWorldbookGlobally, disableWorldbookGlobally } from '../logic/worldbook.js';
 import { getModalMountRoot } from './fullscreen.js';
@@ -16,16 +14,20 @@ import { updateButtonState } from './menu-button.js';
 import { hideNonLastFloors, showAllFloors, applyGalgameMode, restoreOriginalViews } from './galgame-mode.js';
 
 // ============================================
-// 设置面板 + UI 应用函数
+// 统一设置面板 + UI 应用函数
 // ============================================
 
 const enhancedModeState = GalgameStore.enhancedMode;
 
 // 延迟引用
-let _showAssetManagerModalRef = null;
+let _buildAssetsPaneRef = null;
+let _bindAssetsPaneRef = null;
+let _assetStylesRef = null;
 
-export function setSettingsPanelRefs({ showAssetManagerModal }) {
-  if (showAssetManagerModal) _showAssetManagerModalRef = showAssetManagerModal;
+export function setSettingsPanelRefs({ buildAssetsPane, bindAssetsPane, assetStyles }) {
+  if (buildAssetsPane) _buildAssetsPaneRef = buildAssetsPane;
+  if (bindAssetsPane) _bindAssetsPaneRef = bindAssetsPane;
+  if (assetStyles) _assetStylesRef = assetStyles;
 }
 
 // 应用设置到 UI
@@ -169,12 +171,13 @@ export function applyTextEffect() {
   }
 }
 
-export async function showSettingsPanel() {
-  const existingPanel = $('#gal-settings-panel');
-  if (existingPanel.length) {
-    existingPanel.remove();
-    return;
+export async function showSettingsPanel(topTab, subTab) {
+  const $existing = $('#gal-unified-panel');
+  if ($existing.length) {
+    if (topTab === undefined) { $existing.remove(); return; } // toggle
+    $existing.remove(); // 有参数 = 重建
   }
+  topTab = topTab || 'settings';
 
   const settings = getSettings();
   const isEnabled = getIsEnabled();
@@ -211,14 +214,26 @@ export async function showSettingsPanel() {
         `).join('')}
       </div>`;
 
+  // 构建资源管理 pane (async)
+  let assetsHtml = '';
+  if (_buildAssetsPaneRef) {
+    assetsHtml = await _buildAssetsPaneRef(subTab);
+  }
+  const assetStyles = _assetStylesRef ? _assetStylesRef() : '';
+
   const panelHtml = `
-    <div class="gal-config-modal" id="gal-settings-panel">
+    <div class="gal-config-modal" id="gal-unified-panel">
       <div class="gal-config-panel">
-        <div class="gal-config-header">
-          <div class="gal-config-title"><i class="fa-solid fa-gamepad"></i> Galgame 设置</div>
+        <!-- L1 Tab Header -->
+        <div class="gal-l1-tab-header">
+          <div class="gal-l1-tab-btn ${topTab === 'settings' ? 'active' : ''}" data-l1-tab="settings"><i class="fa-solid fa-gear"></i> <span>基础设置</span></div>
+          <div class="gal-l1-tab-btn ${topTab === 'assets' ? 'active' : ''}" data-l1-tab="assets"><i class="fa-solid fa-folder-open"></i> <span>资源管理</span></div>
+          <div style="flex:1;"></div>
           <button class="gal-config-close" id="gal-settings-close"><i class="fa-solid fa-times"></i></button>
         </div>
-        <div class="gal-config-body" style="padding: 24px;">
+
+        <!-- L1 Pane: 基础设置 -->
+        <div class="gal-config-body" data-l1-pane="settings" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== 'settings' ? 'display: none;' : ''}">
           <!-- 主开关 -->
           <div style="text-align: center; margin-bottom: 24px;">
             <button id="gal-main-toggle" class="${isEnabled ? 'gal-toggle-on' : 'gal-toggle-off'}"
@@ -453,48 +468,6 @@ export async function showSettingsPanel() {
 
           <div class="gal-settings-divider"></div>
 
-          <!-- ComfyUI -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI 文生图</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">API 地址</span>
-              <div class="gal-settings-control">
-                <input type="text" id="gal-comfyui-url" value="${getComfyUISettings().apiUrl}" placeholder="http://127.0.0.1:8188" style="width: 180px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <button class="gal-action-btn" id="gal-comfyui-test" style="width: 100%; justify-content: center; padding: 10px;"><i class="fa-solid fa-plug"></i> 测试连接</button>
-            </div>
-            <div class="gal-settings-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="gal-settings-label" style="font-weight: 700;">工作流管理 (.json)</span>
-                <input type="file" id="gal-comfy-import-input" accept=".json" style="display: none;">
-                <button class="gal-action-btn" id="gal-comfy-import-btn" style="padding: 4px 10px; font-size: 0.8rem;"><i class="fa-solid fa-file-import"></i> 导入 JSON</button>
-              </div>
-              <div id="gal-workflow-list" style="max-height: 120px; overflow-y: auto; background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 8px;">
-                <div style="text-align: center; color: #999; font-size: 0.85rem; padding: 10px;">暂无导入的工作流</div>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">默认角色 Workflow</span>
-              <select id="gal-comfy-def-char" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="default_char">内置 SDXL Turbo</option></select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">默认 Checkpoint 模型</span>
-              <select id="gal-comfy-def-checkpoint" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="">(加载中...)</option></select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">默认背景 Workflow</span>
-              <select id="gal-comfy-def-bg" style="width: 160px; padding: 4px; border: 1px solid #ddd; border-radius: 4px;"><option value="default_bg">内置 SDXL Turbo</option></select>
-            </div>
-            <div class="gal-settings-row" style="flex-direction: column; align-items: stretch;">
-              <span class="gal-settings-label" style="margin-bottom: 8px;">负面提示词</span>
-              <textarea id="gal-comfyui-negative" placeholder="lowres, bad anatomy..." style="width: 100%; height: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
           <!-- 加强模式 -->
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-bolt" style="color: #ff9800;"></i> 加强模式</div>
@@ -560,11 +533,15 @@ export async function showSettingsPanel() {
 
           <div class="gal-settings-divider"></div>
 
-          <!-- 功能按钮组 -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;">
-            <button class="gal-panel-btn" id="gal-open-sprite-manager"><i class="fa-solid fa-images"></i><span>立绘管理</span></button>
-            <button class="gal-panel-btn secondary" id="gal-refresh-views"><i class="fa-solid fa-sync"></i><span>刷新视图</span></button>
+          <!-- 刷新视图 -->
+          <div style="margin-top: 16px;">
+            <button class="gal-panel-btn secondary" id="gal-refresh-views" style="width: 100%;"><i class="fa-solid fa-sync"></i><span>刷新视图</span></button>
           </div>
+        </div>
+
+        <!-- L1 Pane: 资源管理 -->
+        <div data-l1-pane="assets" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== 'assets' ? 'display: none;' : ''}">
+          ${assetsHtml}
         </div>
       </div>
     </div>
@@ -593,11 +570,19 @@ export async function showSettingsPanel() {
       .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
       .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
       .gal-panel-btn i { font-size: 1.3rem; }
+
+      /* L1 Tab Header */
+      .gal-l1-tab-header { display:flex; align-items:center; background:var(--SmartThemeBotMesBlurTintColor, #1a1a2e); padding:0; border-bottom:2px solid ${THEME.accent}; }
+      .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
+      .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
+      .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
+
+      ${assetStyles}
     </style>
   `;
 
   $(getModalMountRoot()).append(panelHtml);
-  const $panel = $('#gal-settings-panel');
+  const $panel = $('#gal-unified-panel');
 
   // TTS 音色列表异步填充
   const refreshTtsVoiceOptions = async () => {
@@ -624,6 +609,15 @@ export async function showSettingsPanel() {
     try { $('#gal-gpt-sovits-voices-json').val(JSON.stringify(settings.gptSoVits?.voices || [], null, 2)); } catch (e) { $('#gal-gpt-sovits-voices-json').val('[]'); }
   }
   refreshTtsVoiceOptions();
+
+  // L1 tab 切换
+  $panel.find('.gal-l1-tab-btn').on('click', function () {
+    const tab = $(this).data('l1-tab');
+    $panel.find('.gal-l1-tab-btn').removeClass('active');
+    $(this).addClass('active');
+    $panel.find('[data-l1-pane]').hide();
+    $panel.find(`[data-l1-pane="${tab}"]`).show();
+  });
 
   // 关闭
   $('#gal-settings-close').on('click', () => $panel.remove());
@@ -820,73 +814,11 @@ export async function showSettingsPanel() {
     TTSManager.speak({ type: 'dialogue', speaker: '', text, tts: { speaker: voiceName } }, `gpt_sovits_test_${Date.now()}`);
   });
 
-  // 立绘管理
-  $('#gal-open-sprite-manager').on('click', () => { $panel.remove(); if (_showAssetManagerModalRef) _showAssetManagerModalRef(); });
   // 刷新视图
   $('#gal-refresh-views').on('click', () => { if (getIsEnabled()) { applyGalgameMode(); if (settings.hideOtherFloors) hideNonLastFloors(); showToast('视图已刷新'); } else { showToast('请先开启 Galgame 模式'); } });
 
-  // ComfyUI
-  $('#gal-comfyui-url').on('change', function () { const cs = getComfyUISettings(); cs.apiUrl = $(this).val().trim(); saveComfyUISettings(cs); });
-  $('#gal-comfyui-negative').on('change', function () { const cs = getComfyUISettings(); cs.negativePrompt = $(this).val(); saveComfyUISettings(cs); });
-  $('#gal-comfyui-test').on('click', async function () {
-    $(this).prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> 测试中...');
-    const ok = await ComfyUIAPI.checkConnection();
-    $(this).prop('disabled', false).html('<i class="fa-solid fa-plug"></i> 测试连接');
-    showToast(ok ? 'ComfyUI 连接成功！' : 'ComfyUI 连接失败');
-  });
-
-  // 工作流管理
-  function renderWorkflowList() {
-    const workflows = getComfyWorkflows();
-    const $list = $('#gal-workflow-list');
-    const $selChar = $('#gal-comfy-def-char');
-    const $selBg = $('#gal-comfy-def-bg');
-    const cs = getComfyUISettings();
-    $list.empty();
-    $selChar.html('<option value="default_char">内置 SDXL Turbo</option>');
-    $selBg.html('<option value="default_bg">内置 SDXL Turbo</option>');
-    const keys = Object.keys(workflows);
-    if (keys.length === 0) { $list.html('<div style="text-align:center;color:#999;font-size:0.85rem;padding:10px;">暂无导入的工作流</div>'); }
-    else {
-      keys.forEach(id => {
-        const wf = workflows[id];
-        const $item = $(`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid #eee;font-size:0.9rem;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px;" title="${wf.name}">${wf.name}</span><i class="fa-solid fa-trash" style="color:#ff4d4d;cursor:pointer;padding:4px;" title="删除"></i></div>`);
-        $item.find('.fa-trash').on('click', () => { if (confirm(`删除工作流 "${wf.name}"?`)) { delete workflows[id]; saveComfyWorkflows(workflows); renderWorkflowList(); } });
-        $list.append($item);
-        $selChar.append(`<option value="${id}">${wf.name}</option>`);
-        $selBg.append(`<option value="${id}">${wf.name}</option>`);
-      });
-    }
-    $selChar.val(cs.defaultCharWorkflow || 'default_char');
-    $selBg.val(cs.defaultBgWorkflow || 'default_bg');
+  // 绑定资源管理事件
+  if (_bindAssetsPaneRef) {
+    _bindAssetsPaneRef($panel, subTab);
   }
-  renderWorkflowList();
-
-  async function loadCheckpointsToSelect() {
-    const $sel = $('#gal-comfy-def-checkpoint');
-    const cs = getComfyUISettings();
-    try {
-      const models = await ComfyUIAPI.getModels(cs.apiUrl);
-      $sel.empty().append('<option value="">-- 使用 Workflow默认 --</option>');
-      models.forEach(m => $sel.append(`<option value="${m}">${m}</option>`));
-      if (cs.defaultCheckpoint) $sel.val(cs.defaultCheckpoint);
-    } catch (e) { console.error(`[${SCRIPT_NAME}] 加载模型失败:`, e); $sel.html('<option value="">(加载失败)</option>'); }
-  }
-  loadCheckpointsToSelect();
-
-  $('#gal-comfy-def-checkpoint').on('change', function () { const cs = getComfyUISettings(); cs.defaultCheckpoint = $(this).val(); saveComfyUISettings(cs); });
-  $('#gal-comfy-import-btn').on('click', () => $('#gal-comfy-import-input').click());
-  $('#gal-comfy-import-input').on('change', function () {
-    const file = this.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      try { const json = JSON.parse(e.target.result); const name = file.name.replace('.json', ''); const id = 'wf_' + Date.now(); const workflows = getComfyWorkflows(); workflows[id] = { name, json }; saveComfyWorkflows(workflows); renderWorkflowList(); showToast(`已导入: ${name}`); }
-      catch (err) { showToast('无效的 JSON 文件'); }
-      $(this).val('');
-    };
-    reader.readAsText(file);
-  });
-  $('#gal-comfy-def-char').on('change', function () { const cs = getComfyUISettings(); cs.defaultCharWorkflow = $(this).val(); saveComfyUISettings(cs); });
-  $('#gal-comfy-def-bg').on('change', function () { const cs = getComfyUISettings(); cs.defaultBgWorkflow = $(this).val(); saveComfyUISettings(cs); });
 }

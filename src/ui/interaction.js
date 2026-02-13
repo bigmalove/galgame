@@ -32,12 +32,14 @@ export function showFreeInputModal() {
   const modalHtml = `
     <div class="gal-input-modal gal-z-critical" id="gal-free-input-modal">
       <div class="gal-input-box">
-        <div class="gal-input-title"><span>自由输入</span></div>
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>自由输入</span>
+          <button id="gal-free-input-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
         <textarea class="gal-input-field" id="gal-free-input-text" placeholder="输入你想说的话..."></textarea>
         <div class="gal-input-actions">
-          <button class="gal-action-btn" id="gal-input-cancel">
-            <span>取消</span>
-          </button>
           <button class="gal-action-btn primary" id="gal-input-send">
             <i class="fa-solid fa-paper-plane"></i>
             <span>发送</span>
@@ -54,7 +56,7 @@ export function showFreeInputModal() {
   makeDraggable($modal.find('.gal-input-box'), $modal.find('.gal-input-title'));
   $input.focus();
 
-  $modal.find('#gal-input-cancel').on('click', () => $modal.remove());
+  $modal.find('#gal-free-input-close-x').on('click', () => $modal.remove());
   $modal.on('click', function (e) {
     if (e.target === this) $modal.remove();
   });

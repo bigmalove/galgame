@@ -252,9 +252,6 @@ export async function showLive2DSettingsModal(characterId) {
 
         <!-- 底部按钮 -->
         <div style="padding: 15px 20px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end;">
-          <button id="gal-live2d-settings-cancel" style="padding: 10px 20px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer;">
-            取消
-          </button>
           <button id="gal-live2d-settings-save" style="padding: 10px 20px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
             <i class="fa-solid fa-save"></i> 保存设置
           </button>
@@ -332,7 +329,7 @@ export async function showLive2DSettingsModal(characterId) {
   });
 
   // 关闭/取消
-  $modal.find('#gal-live2d-settings-close, #gal-live2d-settings-cancel').on('click', function() {
+  $modal.find('#gal-live2d-settings-close').on('click', function() {
     $modal.remove();
   });
 

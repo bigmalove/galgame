@@ -49,6 +49,8 @@ export const DEFAULT_SETTINGS = {
   // ComfyUI
   defaultCheckpoint: '',
   realTimeBackgroundGen: false,
+  // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven'
+  bgImageSource: 'none',
   // TTS 设置
   ttsEnabled: true,
   ttsAutoPlay: true,
@@ -83,7 +85,6 @@ export const DEFAULT_SETTINGS = {
   },
   // 大香蕉生图模块设置
   bananaImageGen: {
-    enabled: false,
     proxyUrl: '',
     proxyApiKey: '',
     model: '',
@@ -97,12 +98,29 @@ export const DEFAULT_SETTINGS = {
   },
   // Wallhaven 壁纸设置
   wallhaven: {
-    enabled: false,
     purity: 'sfw',
     cgMode: false,
     category: 'anime',
     customTags: [],
     apiKey: '',
+  },
+  // NovelAI 生图设置
+  novelai: {
+    apiKey: '',
+    model: 'nai-diffusion-4-5-curated',
+    width: 1216,
+    height: 832,
+    scale: 10,
+    sampler: 'k_euler',
+    steps: 28,
+    cfgRescale: 0.18,
+    noiseSchedule: 'karras',
+    ucPreset: 3,
+    skipCfgAboveSigma: 58,
+    negativePrompt: 'nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark',
+    defaultPromptPrefix: 'masterpiece, best quality, no humans, scenery, background, ',
+    defaultPromptSuffix: ', very aesthetic',
+    autoSaveToLibrary: true,
   },
 };
 
@@ -172,8 +190,8 @@ export function normalizeEnhancedModeSettings(rawEnhancedMode) {
 // 当前设置 (getter/setter 模式 - esbuild IIFE 中 export let 不可靠)
 let _settings = Object.assign({}, DEFAULT_SETTINGS);
 export function ensureEnhancedModeSettings() {
-  _settings.enhancedMode = normalizeEnhancedModeSettings(_settings?.enhancedMode);
-  return _settings.enhancedMode || createDefaultEnhancedModeSettings();
+  _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
+  return _settings.enhancedMode;
 }
 ensureEnhancedModeSettings();
 
@@ -232,6 +250,20 @@ export function loadSettings() {
           _settings.wallhaven.cgMode = !_settings.wallhaven.sceneMode;
         }
         delete _settings.wallhaven.sceneMode;
+      }
+      // 迁移旧版独立开关到统一 bgImageSource（一次性，迁移后清除旧标志）
+      if (!_settings.bgImageSource || _settings.bgImageSource === 'none') {
+        let migrated = false;
+        if (_settings.bananaImageGen?.enabled) { _settings.bgImageSource = 'banana'; migrated = true; }
+        else if (_settings.novelai?.enabled) { _settings.bgImageSource = 'novelai'; migrated = true; }
+        else if (_settings.wallhaven?.enabled) { _settings.bgImageSource = 'wallhaven'; migrated = true; }
+        else if (_settings.realTimeBackgroundGen) { _settings.bgImageSource = 'comfyui'; migrated = true; }
+        if (migrated) {
+          if (_settings.bananaImageGen) delete _settings.bananaImageGen.enabled;
+          if (_settings.novelai) delete _settings.novelai.enabled;
+          if (_settings.wallhaven) delete _settings.wallhaven.enabled;
+          delete _settings.realTimeBackgroundGen;
+        }
       }
     }
   } catch (e) {

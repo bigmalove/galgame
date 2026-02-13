@@ -552,10 +552,13 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
   const modalHtml = `
   <div class="gal-input-modal" id="gal-character-sprites-modal">
     <div class="gal-input-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-      <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0;">
+      <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
         <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
           <span><i class="fa-solid fa-user"></i> ${characterId} 的立绘管理</span>
         </div>
+        <button id="gal-char-sprites-close" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 25px; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -658,14 +661,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
               </div>`
         }
       </div>
-      <div style="padding: 15px 25px; border-top: 1px solid #e0e0e0; flex-shrink: 0; display: flex; gap: 10px;">
-        <button class="gal-action-btn" id="gal-char-sprites-back" style="flex: 1; min-height: 44px;">
-          <i class="fa-solid fa-arrow-left"></i> <span>返回</span>
-        </button>
-        <button class="gal-action-btn" id="gal-char-sprites-close" style="flex: 1; min-height: 44px;">
-          <span>关闭</span>
-        </button>
-      </div>
+      <!-- 底部按钮栏已移除，关闭按钮在右上角 -->
     </div>
   </div>
   <style>
@@ -708,12 +704,6 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
   $modal.find('#gal-char-sprites-close').on('click', handleClose);
   $modal.on('click', function (e) {
     if (e.target === this) handleClose();
-  });
-
-  $('#gal-char-sprites-back').on('click', () => {
-    cleanupLive2DStageMount();
-    $modal.remove();
-    showAssetManagerModal();
   });
 
   $('#gal-char-add-sprite-btn').on('click', async () => {
@@ -1028,8 +1018,11 @@ export async function showTransferDialog(resourceType, resourceIds, onComplete) 
   const modalHtml = `
     <div class="gal-input-modal" id="gal-transfer-modal">
       <div class="gal-input-box" style="width: 400px;">
-        <div class="gal-input-title">
+        <div class="gal-input-title" style="display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-arrow-right-arrow-left"></i> 转移资源</span>
+          <button id="gal-transfer-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
         <div style="padding: 20px;">
           <p style="margin-bottom: 15px; color: #333;">
@@ -1041,7 +1034,6 @@ export async function showTransferDialog(resourceType, resourceIds, onComplete) 
             `).join('')}
           </select>
           <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
-            <button class="gal-action-btn" id="gal-transfer-cancel" style="padding: 8px 16px;">取消</button>
             <button class="gal-action-btn primary" id="gal-transfer-confirm" style="padding: 8px 16px;">
               <i class="fa-solid fa-check"></i> 确认转移
             </button>
@@ -1055,7 +1047,7 @@ export async function showTransferDialog(resourceType, resourceIds, onComplete) 
   $(mountRoot).append(modalHtml);
   const $modal = $(mountRoot).find('#gal-transfer-modal');
 
-  $modal.find('#gal-transfer-cancel').on('click', () => $modal.remove());
+  $modal.find('#gal-transfer-close-x').on('click', () => $modal.remove());
   $modal.on('click', function (e) { if (e.target === this) $modal.remove(); });
 
   $modal.find('#gal-transfer-confirm').on('click', () => {

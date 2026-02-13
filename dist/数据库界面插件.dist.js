@@ -3233,7 +3233,7 @@ ${lines.join("\n")}`;
       this.xhrBlobUrlSupport = false;
       if (!this.hasLoggedBlobUrlDisabled) {
         this.hasLoggedBlobUrlDisabled = true;
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u5BB8\u832C\uE6E6\u9422?Blob URL\u951B\u5736HR \u6D93\u5D85\u540B\u7039\u89C4\u57A8\u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6: ${reason}\u951B\u591B\u7D1D\u704F\u55D7\u6D16\u95AB\u20AC\u6D63\u8DE8\u6564 Data URL`);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u5DF2\u7981\u7528 Blob URL\uFF08XHR \u4E0D\u517C\u5BB9\u6216\u52A0\u8F7D\u5931\u8D25: ${reason}\uFF09\uFF0C\u5C06\u56DE\u9000\u4F7F\u7528 Data URL`);
       }
     },
     _isRemoteModelData(modelData) {
@@ -3369,7 +3369,7 @@ ${lines.join("\n")}`;
         return await fetch(url, { ...init2, signal: controller.signal });
       } catch (e) {
         if (e?.name === "AbortError") {
-          throw new Error(`\u7487\u950B\u7730\u74D2\u546E\u6902 (${timeoutMs}ms): ${url}`);
+          throw new Error(`\u8BF7\u6C42\u8D85\u65F6 (${timeoutMs}ms): ${url}`);
         }
         throw e;
       } finally {
@@ -3418,7 +3418,7 @@ ${lines.join("\n")}`;
       });
       modelJson.textures = normalizedTextures;
       modelJson.Textures = normalizedTextures;
-      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AB\u20AC\u5A34\u5B2A\u57CC\u95C8\u70B4\u7223\u9351?Cubism2 \u7490\u6751\u6D58\u7F01\u64B4\u702F\u951B\u5C7D\u51E1\u9477\uE044\u59E9\u675E\uE101\u5D32`, {
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u68C0\u6D4B\u5230\u975E\u6807\u51C6 Cubism2 \u8D34\u56FE\u7ED3\u6784\uFF0C\u5DF2\u81EA\u52A8\u8F6C\u6362`, {
         key: selected[0],
         textureCount: normalizedTextures.length
       });
@@ -3469,7 +3469,7 @@ ${lines.join("\n")}`;
         }
         model.destroy();
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u95BF\u20AC\u59E3\u4F79\u0101\u9368\u5B2A\u3051\u7490?(${characterId}, ${reason})`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u9500\u6BC1\u6A21\u578B\u5931\u8D25 (${characterId}, ${reason})`, e);
       }
       this.models.delete(characterId);
       this.containers.delete(characterId);
@@ -3484,7 +3484,7 @@ ${lines.join("\n")}`;
       while (this.cachedDetachedAt.size > this.maxDetachedCache && sorted.length > 0) {
         const [characterId] = sorted.shift();
         this._destroyModel(characterId, "cache-evict");
-        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7F02\u64B3\u74E8\u5A23\u6A3B\u5351\u59AF\u2033\u7037 ${characterId}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7F13\u5B58\u6DD8\u6C70\u6A21\u578B ${characterId}`);
       }
     },
     releaseCharacter(characterId) {
@@ -3536,10 +3536,10 @@ ${lines.join("\n")}`;
         try {
           updateLive2DConfig(characterId, { transform: normalizedTransform });
           this._debugLog(
-            `[${SCRIPT_NAME}] Live2DManager: \u9367\u612D\u7223\u934F\u714E\uE190\u6DC7\uE1BD\uE11C ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`
+            `[${SCRIPT_NAME}] Live2DManager: \u5750\u6807\u517C\u5BB9\u4FEE\u6B63 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`
           );
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u6DC7\u6FC6\u74E8\u934F\u714E\uE190\u6DC7\uE1BD\uE11C\u6FB6\u8FAB\u89E6`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u4FDD\u5B58\u517C\u5BB9\u4FEE\u6B63\u5931\u8D25`, e);
         }
       }
       return normalizedTransform;
@@ -3548,7 +3548,7 @@ ${lines.join("\n")}`;
       if (this.isReady) return true;
       const sdkLoaded = await Live2DLoader.load();
       if (!sdkLoaded) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager: SDK \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6`);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: SDK \u52A0\u8F7D\u5931\u8D25`);
         return false;
       }
       const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
@@ -3572,7 +3572,7 @@ ${lines.join("\n")}`;
         this._debugLog(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5B8C\u6210`);
         return true;
       } catch (e) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager \u9352\u6FC6\uE750\u9356\u6827\u3051\u7490?`, e);
+        console.error(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5931\u8D25`, e);
         return false;
       }
     },
@@ -3593,7 +3593,7 @@ ${lines.join("\n")}`;
       }
       const modelData = await getLive2DModel(characterId);
       if (!modelData) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u93C8\uE045\u58D8\u9352\u62CC\uE757\u9479?${characterId} \u9428?Live2D \u59AF\u2033\u7037`);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u672A\u627E\u5230\u89D2\u8272 ${characterId} \u7684 Live2D \u6A21\u578B`);
         return null;
       }
       const isRemote = this._isRemoteModelData(modelData);
@@ -3616,7 +3616,7 @@ ${lines.join("\n")}`;
             const checkTextures = () => {
               retryCount++;
               if (retryCount > maxRetries) {
-                console.warn(`[${SCRIPT_NAME}] Live2DManager: \u7EFE\u572D\u608A\u59AB\u20AC\u93CC\u30E8\u63EA\u9352\u7248\u6E36\u6FB6\u0447\u5678\u7487\u66DF\uE0BC\u93C1\u5E2E\u7D1D\u7F01\u0445\u753B\u5A13\u53C9\u714B`);
+                console.warn(`[${SCRIPT_NAME}] Live2DManager: \u7EB9\u7406\u68C0\u67E5\u8FBE\u5230\u6700\u5927\u91CD\u8BD5\u6B21\u6570\uFF0C\u7EE7\u7EED\u6E32\u67D3`);
                 resolve(false);
                 return;
               }
@@ -3627,7 +3627,7 @@ ${lines.join("\n")}`;
               }
               const textures = internalModel.textures || internalModel._textures || [];
               if (textures.length === 0) {
-                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u93C3\u72B2\uE63B\u95AE\u3127\u6C57\u941E\u55ED\u7D1D\u74BA\u5BA0\u7E43\u7EDB\u590A\u7DDF`);
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B\u65E0\u5916\u90E8\u7EB9\u7406\uFF0C\u8DF3\u8FC7\u7B49\u5F85`);
                 resolve(true);
                 return;
               }
@@ -3639,11 +3639,11 @@ ${lines.join("\n")}`;
                 return true;
               });
               if (allLoaded) {
-                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7EFE\u572D\u608A\u934F\u3129\u5134\u9354\u72BA\u6D47\u7039\u5C7E\u579A (${textures.length} \u5BEE?`);
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7EB9\u7406\u5168\u90E8\u52A0\u8F7D\u5B8C\u6210 (${textures.length} \u5F20)`);
                 resolve(true);
               } else {
                 if (retryCount % 5 === 0) {
-                  this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7EDB\u590A\u7DDF\u7EFE\u572D\u608A\u9354\u72BA\u6D47... (${textures.filter((t) => t?.baseTexture?.valid).length}/${textures.length})`);
+                  this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7B49\u5F85\u7EB9\u7406\u52A0\u8F7D... (${textures.filter((t) => t?.baseTexture?.valid).length}/${textures.length})`);
                 }
                 setTimeout(checkTextures, 100);
               }
@@ -3678,25 +3678,25 @@ ${lines.join("\n")}`;
           const model = await loadFromUrl(modelUrl);
           this.models.set(characterId, model);
           this._markModelActive(characterId);
-          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} \u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
+          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B ${characterId} \u52A0\u8F7D\u6210\u529F`);
           return model;
         } catch (e) {
           if (!isRemote && usedBlobForLocal) {
-            console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6\u951B\u5C7D\u6D16\u95AB\u20AC Data URL (${characterId})`, e);
+            console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL \u52A0\u8F7D\u5931\u8D25\uFF0C\u56DE\u9000 Data URL (${characterId})`, e);
             this._disableXhrBlobUrls("load-failed");
             this._revokeModelBlobUrls(characterId);
             const dataUrl = await buildLocalModelUrl(false);
             const model = await loadFromUrl(dataUrl);
             this.models.set(characterId, model);
             this._markModelActive(characterId);
-            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} DataURL \u9365\u70BA\u20AC\u20AC\u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B ${characterId} DataURL \u56DE\u9000\u52A0\u8F7D\u6210\u529F`);
             return model;
           }
           throw e;
         }
       })().catch((e) => {
         this._revokeModelBlobUrls(characterId);
-        console.error(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037 ${characterId} \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6:`, e);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B ${characterId} \u52A0\u8F7D\u5931\u8D25:`, e);
         return null;
       }).finally(() => {
         this.loadingModels.delete(characterId);
@@ -4126,7 +4126,7 @@ ${lines.join("\n")}`;
           }
         } catch (proxyError) {
           lastError = proxyError;
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u6D60\uFF47\u608A\u947E\u5CF0\u5F47\u59AF\u2033\u7037 JSON \u6FB6\u8FAB\u89E6`, {
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u4EE3\u7406\u83B7\u53D6\u6A21\u578B JSON \u5931\u8D25`, {
             characterId,
             modelUrl: candidateUrl,
             error: proxyError
@@ -4134,7 +4134,7 @@ ${lines.join("\n")}`;
         }
       }
       if (!modelJson) {
-        throw lastError instanceof Error ? lastError : new Error("\u6769\u6EC5\u25BC\u59AF\u2033\u7037 JSON \u7459\uFF46\u703D\u6FB6\u8FAB\u89E6");
+        throw lastError instanceof Error ? lastError : new Error("\u8FDC\u7A0B\u6A21\u578B JSON \u89E3\u6790\u5931\u8D25");
       }
       const modifiedModelJson = JSON.parse(JSON.stringify(modelJson));
       this._normalizeLegacyCubism2Settings(modifiedModelJson);
@@ -4233,7 +4233,7 @@ ${lines.join("\n")}`;
       await prevRender;
       try {
         if (!containerElement || !containerElement.isConnected) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo \u74BA\u5BA0\u7E43\u951B\u5C7D\uE190\u9363\u3124\u7B09\u9359\uE21C\u6564 (${characterId})`);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo \u8DF3\u8FC7\uFF0C\u5BB9\u5668\u4E0D\u53EF\u7528 (${characterId})`);
           return false;
         }
         if (containerElement && containerElement.isConnected) {
@@ -4272,7 +4272,7 @@ ${lines.join("\n")}`;
         let model = this.models.get(characterId);
         const existingContainer = this.containers.get(characterId);
         if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
-          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6FB6\u5D87\u6564\u941C\u7248\u6E41\u5A13\u53C9\u714B ${characterId}`);
+          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u590D\u7528\u73B0\u6709\u6E32\u67D3 ${characterId}`);
           return true;
         }
         const needReload = forceReload || model && existingContainer && existingContainer.containerElement !== containerElement;
@@ -4303,7 +4303,7 @@ ${lines.join("\n")}`;
           dpr = parseFloat(qualityConfig.devicePixelRatio) || 1;
         }
         dpr *= qualityConfig.textureResolution || 1;
-        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u7039\u7470\u6AD2\u704F\u54C4\uE1ED ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u5BB9\u5668\u5C3A\u5BF8 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
         const canvas = _topWindow.document.createElement("canvas");
         const renderWidth = containerWidth;
         const renderHeight = containerHeight;
@@ -4321,9 +4321,9 @@ ${lines.join("\n")}`;
           premultipliedAlpha: true
         });
         if (!glContext) {
-          console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL \u6D93\u5D85\u5F72\u9422\uE7D2\u7D1D\u93C3\u72B3\u7876\u5A13\u53C9\u714B Live2D`);
+          console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL \u4E0D\u53EF\u7528\uFF0C\u65E0\u6CD5\u6E32\u67D3 Live2D`);
           try {
-            if (_showToastRef2) _showToastRef2("WebGL \u6D93\u5D85\u5F72\u9422\uE7D2\u7D1DLive2D \u93C3\u72B3\u7876\u5A13\u53C9\u714B\u951B\u5823\uE1EC\u5BEE\u20AC\u935A\uE21C\u2016\u6D60\u8DFA\u59DE\u95AB\u71C2\u7D1A");
+            if (_showToastRef2) _showToastRef2("WebGL \u4E0D\u53EF\u7528\uFF0CLive2D \u65E0\u6CD5\u6E32\u67D3\uFF08\u8BF7\u5F00\u542F\u786C\u4EF6\u52A0\u901F\uFF09");
           } catch {
           }
           return false;
@@ -4355,7 +4355,7 @@ ${lines.join("\n")}`;
           } catch {
           }
           try {
-            if (_showToastRef2) _showToastRef2("WebGL Renderer \u9352\u6FC6\uE750\u9356\u6827\u3051\u7490\u30EF\u7D1DLive2D \u93C3\u72B3\u7876\u5A13\u53C9\u714B");
+            if (_showToastRef2) _showToastRef2("WebGL Renderer \u521D\u59CB\u5316\u5931\u8D25\uFF0CLive2D \u65E0\u6CD5\u6E32\u67D3");
           } catch {
           }
           return false;
@@ -4377,7 +4377,7 @@ ${lines.join("\n")}`;
         );
         const userScale = transformConfig.scale || 1;
         const finalScale = baseScale * userScale;
-        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u59AF\u2033\u7037\u704F\u54C4\uE1ED ${modelWidth}x${modelHeight}, \u9369\u8679\uE505\u7F02\u2542\u6581: ${baseScale}, \u9422\u3126\u57DB\u7F02\u2542\u6581: ${userScale}, \u93C8\u20AC\u7F01\u5822\u7F09\u93C0? ${finalScale}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B\u5C3A\u5BF8 ${modelWidth}x${modelHeight}, \u57FA\u7840\u7F29\u653E: ${baseScale}, \u7528\u6237\u7F29\u653E: ${userScale}, \u6700\u7EC8\u7F29\u653E: ${finalScale}`);
         model.scale.set(finalScale);
         model.anchor.set(0.5, 0.5);
         const offsetX = transformConfig.offsetX || 0;
@@ -4402,7 +4402,7 @@ ${lines.join("\n")}`;
           renderHeight
         });
         this._debugLog(
-          `[${SCRIPT_NAME}] Live2DManager: \u5A13\u53C9\u714B ${characterId} \u7039\u5C7E\u579A (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`
+          `[${SCRIPT_NAME}] Live2DManager: \u6E32\u67D3 ${characterId} \u5B8C\u6210 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`
         );
         return true;
       } finally {
@@ -4422,7 +4422,7 @@ ${lines.join("\n")}`;
       if (!this.models.has(characterId)) return false;
       const ok = _Live2DStageRef.applyTransform(characterId);
       if (ok) {
-        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6434\u65C2\u6564\u9359\u6A3B\u5D32\u95B0\u5D87\u7586 ${characterId}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u5E94\u7528\u53D8\u6362\u914D\u7F6E ${characterId}`);
       }
       return ok;
     },
@@ -4461,7 +4461,7 @@ ${lines.join("\n")}`;
         try {
           model.expression(mapped);
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u7481\u5267\u7586\u741B\u3126\u510F\u6FB6\u8FAB\u89E6:`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u8BBE\u7F6E\u8868\u60C5\u5931\u8D25:`, e);
         }
       }
     },
@@ -4471,7 +4471,7 @@ ${lines.join("\n")}`;
       try {
         model.motion(motionGroup, index);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u93BE\uE15F\u6581\u9354\u3124\u7D94\u6FB6\u8FAB\u89E6:`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: \u64AD\u653E\u52A8\u4F5C\u5931\u8D25:`, e);
       }
     },
     setFocus(characterId, isSpeaking) {
@@ -4581,7 +4581,7 @@ ${lines.join("\n")}`;
             container.canvas.parentNode.removeChild(container.canvas);
           }
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u5A13\u546F\u608A\u7039\u7470\u6AD2\u6FB6\u8FAB\u89E6:`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: \u6E05\u7406\u5BB9\u5668\u5931\u8D25:`, e);
         }
         this.containers.delete(characterId);
       }
@@ -4602,7 +4602,7 @@ ${lines.join("\n")}`;
       const model = this.models.get(characterId);
       const container = this.containers.get(characterId);
       if (!model || !container) {
-        console.warn(`[Live2DManager] enableInteraction \u6FB6\u8FAB\u89E6: \u59AF\u2033\u7037\u93B4\u6827\uE190\u9363\u3124\u7B09\u701B\u6A3A\u6E6A`, { model: !!model, container: !!container });
+        console.warn(`[Live2DManager] enableInteraction \u5931\u8D25: \u6A21\u578B\u6216\u5BB9\u5668\u4E0D\u5B58\u5728`, { model: !!model, container: !!container });
         return false;
       }
       model.interactive = true;
@@ -4621,7 +4621,7 @@ ${lines.join("\n")}`;
         container.canvas.style.pointerEvents = "auto";
         container.canvas.style.cursor = "move";
       }
-      this._debugLog(`[Live2DManager] enableInteraction \u93B4\u612C\u59DB: ${characterId}`);
+      this._debugLog(`[Live2DManager] enableInteraction \u6210\u529F: ${characterId}`);
       return true;
     },
     disableInteraction(characterId) {
@@ -12682,9 +12682,8 @@ ${firstResult}`;
   var SCRIPT_LOG_PREFIX = `[${SCRIPT_NAME}]`;
   var EXTRA_LOG_PREFIXES = ["[Live2DManager]"];
   var PLUGIN_STACK_HINTS = ["\u6570\u636E\u5E93\u754C\u9762\u63D2\u4EF6.dist.js", "galgame\u901A\u7528\u751F\u6210\u5668/src/"];
-  var consolePatched = false;
   var globalDebugEnabled = true;
-  var originalConsole = null;
+  var patchedConsoles = /* @__PURE__ */ new WeakSet();
   function isPluginLog(args) {
     if (!Array.isArray(args) || args.length === 0) return false;
     const first = args[0];
@@ -12709,25 +12708,39 @@ ${firstResult}`;
     if (level === "error") return false;
     return isPluginLog(args);
   }
-  function patchConsole() {
-    if (consolePatched) return;
-    consolePatched = true;
-    originalConsole = {
-      log: console.log.bind(console),
-      info: console.info.bind(console),
-      warn: console.warn.bind(console),
-      debug: (console.debug || console.log).bind(console),
-      error: console.error.bind(console)
+  function getConsoleTargets() {
+    const targets = [];
+    if (typeof console !== "undefined") targets.push(console);
+    if (typeof window !== "undefined" && window?.console) targets.push(window.console);
+    if (topWindow?.console) targets.push(topWindow.console);
+    return Array.from(new Set(targets));
+  }
+  function patchSingleConsole(targetConsole) {
+    if (!targetConsole || patchedConsoles.has(targetConsole)) return;
+    patchedConsoles.add(targetConsole);
+    const original = {
+      log: targetConsole.log?.bind(targetConsole),
+      info: targetConsole.info?.bind(targetConsole),
+      warn: targetConsole.warn?.bind(targetConsole),
+      debug: (targetConsole.debug || targetConsole.log)?.bind(targetConsole),
+      error: targetConsole.error?.bind(targetConsole)
     };
-    const wrap = (level, original) => (...args) => {
+    const wrap = (level, raw) => (...args) => {
+      if (typeof raw !== "function") return;
       if (shouldSuppress(level, args)) return;
-      original(...args);
+      raw(...args);
     };
-    console.log = wrap("log", originalConsole.log);
-    console.info = wrap("info", originalConsole.info);
-    console.warn = wrap("warn", originalConsole.warn);
-    console.debug = wrap("debug", originalConsole.debug);
-    console.error = wrap("error", originalConsole.error);
+    targetConsole.log = wrap("log", original.log);
+    targetConsole.info = wrap("info", original.info);
+    targetConsole.warn = wrap("warn", original.warn);
+    targetConsole.debug = wrap("debug", original.debug);
+    targetConsole.error = wrap("error", original.error);
+  }
+  function patchConsole() {
+    const targets = getConsoleTargets();
+    for (const targetConsole of targets) {
+      patchSingleConsole(targetConsole);
+    }
   }
   function setGlobalDebugEnabled(enabled) {
     patchConsole();

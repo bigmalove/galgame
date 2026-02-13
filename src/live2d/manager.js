@@ -130,7 +130,7 @@ export const Live2DManager = {
     this.xhrBlobUrlSupport = false;
     if (!this.hasLoggedBlobUrlDisabled) {
       this.hasLoggedBlobUrlDisabled = true;
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 宸茬鐢?Blob URL锛圶HR 涓嶅吋瀹规垨鍔犺浇澶辫触: ${reason}锛夛紝灏嗗洖閫€浣跨敤 Data URL`);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 已禁用 Blob URL（XHR 不兼容或加载失败: ${reason}），将回退使用 Data URL`);
     }
   },
 
@@ -307,7 +307,7 @@ export const Live2DManager = {
       return await fetch(url, { ...init, signal: controller.signal });
     } catch (e) {
       if (e?.name === 'AbortError') {
-        throw new Error(`璇锋眰瓒呮椂 (${timeoutMs}ms): ${url}`);
+        throw new Error(`请求超时 (${timeoutMs}ms): ${url}`);
       }
       throw e;
     } finally {
@@ -369,7 +369,7 @@ export const Live2DManager = {
 
     modelJson.textures = normalizedTextures;
     modelJson.Textures = normalizedTextures;
-    this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妫€娴嬪埌闈炴爣鍑?Cubism2 璐村浘缁撴瀯锛屽凡鑷姩杞崲`, {
+    this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 检测到非标准 Cubism2 贴图结构，已自动转换`, {
       key: selected[0],
       textureCount: normalizedTextures.length,
     });
@@ -424,7 +424,7 @@ export const Live2DManager = {
       }
       model.destroy();
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 閿€姣佹ā鍨嬪け璐?(${characterId}, ${reason})`, e);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 销毁模型失败 (${characterId}, ${reason})`, e);
     }
     this.models.delete(characterId);
     this.containers.delete(characterId);
@@ -440,7 +440,7 @@ export const Live2DManager = {
     while (this.cachedDetachedAt.size > this.maxDetachedCache && sorted.length > 0) {
       const [characterId] = sorted.shift();
       this._destroyModel(characterId, 'cache-evict');
-      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 缂撳瓨娣樻卑妯″瀷 ${characterId}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 缓存淘汰模型 ${characterId}`);
     }
   },
 
@@ -499,10 +499,10 @@ export const Live2DManager = {
       try {
         updateLive2DConfig(characterId, { transform: normalizedTransform });
         this._debugLog(
-          `[${SCRIPT_NAME}] Live2DManager: 鍧愭爣鍏煎淇 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`,
+          `[${SCRIPT_NAME}] Live2DManager: 坐标兼容修正 ${characterId} (${safeTransform.offsetX}, ${safeTransform.offsetY}) -> (${normalizedTransform.offsetX}, ${normalizedTransform.offsetY})`,
         );
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 淇濆瓨鍏煎淇澶辫触`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 保存兼容修正失败`, e);
       }
     }
 
@@ -514,7 +514,7 @@ export const Live2DManager = {
 
     const sdkLoaded = await Live2DLoader.load();
     if (!sdkLoaded) {
-      console.error(`[${SCRIPT_NAME}] Live2DManager: SDK 鍔犺浇澶辫触`);
+      console.error(`[${SCRIPT_NAME}] Live2DManager: SDK 加载失败`);
       return false;
     }
 
@@ -543,7 +543,7 @@ export const Live2DManager = {
       this._debugLog(`[${SCRIPT_NAME}] Live2DManager 初始化完成`);
       return true;
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] Live2DManager 鍒濆鍖栧け璐?`, e);
+      console.error(`[${SCRIPT_NAME}] Live2DManager 初始化失败`, e);
       return false;
     }
   },
@@ -569,7 +569,7 @@ export const Live2DManager = {
 
     const modelData = await getLive2DModel(characterId);
     if (!modelData) {
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 鏈壘鍒拌鑹?${characterId} 鐨?Live2D 妯″瀷`);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到角色 ${characterId} 的 Live2D 模型`);
       return null;
     }
 
@@ -598,7 +598,7 @@ export const Live2DManager = {
             retryCount++;
 
             if (retryCount > maxRetries) {
-              console.warn(`[${SCRIPT_NAME}] Live2DManager: 绾圭悊妫€鏌ヨ揪鍒版渶澶ч噸璇曟鏁帮紝缁х画娓叉煋`);
+              console.warn(`[${SCRIPT_NAME}] Live2DManager: 纹理检查达到最大重试次数，继续渲染`);
               resolve(false);
               return;
             }
@@ -612,7 +612,7 @@ export const Live2DManager = {
             const textures = internalModel.textures || internalModel._textures || [];
 
             if (textures.length === 0) {
-              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷鏃犲閮ㄧ汗鐞嗭紝璺宠繃绛夊緟`);
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型无外部纹理，跳过等待`);
               resolve(true);
               return;
             }
@@ -626,11 +626,11 @@ export const Live2DManager = {
             });
 
             if (allLoaded) {
-              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 绾圭悊鍏ㄩ儴鍔犺浇瀹屾垚 (${textures.length} 寮?`);
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${textures.length} 张)`);
               resolve(true);
             } else {
               if (retryCount % 5 === 0) {
-                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 绛夊緟绾圭悊鍔犺浇... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
               }
               setTimeout(checkTextures, 100);
             }
@@ -677,18 +677,18 @@ export const Live2DManager = {
         const model = await loadFromUrl(modelUrl);
         this.models.set(characterId, model);
         this._markModelActive(characterId);
-        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} 鍔犺浇鎴愬姛`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
         return model;
       } catch (e) {
         if (!isRemote && usedBlobForLocal) {
-          console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL 鍔犺浇澶辫触锛屽洖閫€ Data URL (${characterId})`, e);
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL 加载失败，回退 Data URL (${characterId})`, e);
           this._disableXhrBlobUrls('load-failed');
           this._revokeModelBlobUrls(characterId);
           const dataUrl = await buildLocalModelUrl(false);
           const model = await loadFromUrl(dataUrl);
           this.models.set(characterId, model);
           this._markModelActive(characterId);
-          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} DataURL 鍥為€€鍔犺浇鎴愬姛`);
+          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} DataURL 回退加载成功`);
           return model;
         }
         throw e;
@@ -696,7 +696,7 @@ export const Live2DManager = {
     })()
       .catch((e) => {
         this._revokeModelBlobUrls(characterId);
-        console.error(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷 ${characterId} 鍔犺浇澶辫触:`, e);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载失败:`, e);
         return null;
       })
       .finally(() => {
@@ -1190,7 +1190,7 @@ export const Live2DManager = {
         }
       } catch (proxyError) {
         lastError = proxyError;
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 浠ｇ悊鑾峰彇妯″瀷 JSON 澶辫触`, {
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 代理获取模型 JSON 失败`, {
           characterId,
           modelUrl: candidateUrl,
           error: proxyError,
@@ -1199,7 +1199,7 @@ export const Live2DManager = {
     }
 
     if (!modelJson) {
-      throw (lastError instanceof Error ? lastError : new Error('杩滅▼妯″瀷 JSON 瑙ｆ瀽澶辫触'));
+      throw (lastError instanceof Error ? lastError : new Error('远程模型 JSON 解析失败'));
     }
 
     const modifiedModelJson = JSON.parse(JSON.stringify(modelJson));
@@ -1316,7 +1316,7 @@ export const Live2DManager = {
 
     try {
       if (!containerElement || !containerElement.isConnected) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo 璺宠繃锛屽鍣ㄤ笉鍙敤 (${characterId})`);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: renderTo 跳过，容器不可用 (${characterId})`);
         return false;
       }
 
@@ -1368,7 +1368,7 @@ export const Live2DManager = {
       const existingContainer = this.containers.get(characterId);
 
       if (!forceReload && model && existingContainer && existingContainer.containerElement === containerElement) {
-        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 澶嶇敤鐜版湁娓叉煋 ${characterId}`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 复用现有渲染 ${characterId}`);
         return true;
       }
 
@@ -1407,7 +1407,7 @@ export const Live2DManager = {
       }
       dpr *= (qualityConfig.textureResolution || 1.0);
 
-      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 瀹瑰櫒灏哄 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 容器尺寸 ${containerWidth}x${containerHeight}, DPR: ${dpr}`);
 
       const canvas = _topWindow.document.createElement('canvas');
       const renderWidth = containerWidth;
@@ -1430,9 +1430,9 @@ export const Live2DManager = {
         });
 
       if (!glContext) {
-        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL 涓嶅彲鐢紝鏃犳硶娓叉煋 Live2D`);
+        console.error(`[${SCRIPT_NAME}] Live2DManager: WebGL 不可用，无法渲染 Live2D`);
         try {
-          if (_showToastRef) _showToastRef('WebGL 涓嶅彲鐢紝Live2D 鏃犳硶娓叉煋锛堣寮€鍚‖浠跺姞閫燂級');
+          if (_showToastRef) _showToastRef('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
         } catch {}
         return false;
       }
@@ -1463,7 +1463,7 @@ export const Live2DManager = {
           if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
         } catch {}
         try {
-          if (_showToastRef) _showToastRef('WebGL Renderer 鍒濆鍖栧け璐ワ紝Live2D 鏃犳硶娓叉煋');
+          if (_showToastRef) _showToastRef('WebGL Renderer 初始化失败，Live2D 无法渲染');
         } catch {}
         return false;
       }
@@ -1487,7 +1487,7 @@ export const Live2DManager = {
       const userScale = transformConfig.scale || 1.0;
       const finalScale = baseScale * userScale;
 
-      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 妯″瀷灏哄 ${modelWidth}x${modelHeight}, 鍩虹缂╂斁: ${baseScale}, 鐢ㄦ埛缂╂斁: ${userScale}, 鏈€缁堢缉鏀? ${finalScale}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型尺寸 ${modelWidth}x${modelHeight}, 基础缩放: ${baseScale}, 用户缩放: ${userScale}, 最终缩放: ${finalScale}`);
 
       model.scale.set(finalScale);
       model.anchor.set(0.5, 0.5);
@@ -1518,7 +1518,7 @@ export const Live2DManager = {
       });
 
       this._debugLog(
-        `[${SCRIPT_NAME}] Live2DManager: 娓叉煋 ${characterId} 瀹屾垚 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
+        `[${SCRIPT_NAME}] Live2DManager: 渲染 ${characterId} 完成 (offsetX=${offsetX}, offsetY=${offsetY}, scale=${userScale})`,
       );
       return true;
     } finally {
@@ -1541,7 +1541,7 @@ export const Live2DManager = {
     if (!this.models.has(characterId)) return false;
     const ok = _Live2DStageRef.applyTransform(characterId);
     if (ok) {
-      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 搴旂敤鍙樻崲閰嶇疆 ${characterId}`);
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 应用变换配置 ${characterId}`);
     }
     return ok;
   },
@@ -1588,7 +1588,7 @@ export const Live2DManager = {
       try {
         model.expression(mapped);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 璁剧疆琛ㄦ儏澶辫触:`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 设置表情失败:`, e);
       }
     }
   },
@@ -1600,7 +1600,7 @@ export const Live2DManager = {
     try {
       model.motion(motionGroup, index);
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] Live2DManager: 鎾斁鍔ㄤ綔澶辫触:`, e);
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 播放动作失败:`, e);
     }
   },
 
@@ -1725,7 +1725,7 @@ export const Live2DManager = {
           container.canvas.parentNode.removeChild(container.canvas);
         }
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DManager: 娓呯悊瀹瑰櫒澶辫触:`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 清理容器失败:`, e);
       }
       this.containers.delete(characterId);
     }
@@ -1750,7 +1750,7 @@ export const Live2DManager = {
     const model = this.models.get(characterId);
     const container = this.containers.get(characterId);
     if (!model || !container) {
-      console.warn(`[Live2DManager] enableInteraction 澶辫触: 妯″瀷鎴栧鍣ㄤ笉瀛樺湪`, { model: !!model, container: !!container });
+      console.warn(`[Live2DManager] enableInteraction 失败: 模型或容器不存在`, { model: !!model, container: !!container });
       return false;
     }
 
@@ -1774,7 +1774,7 @@ export const Live2DManager = {
       container.canvas.style.cursor = 'move';
     }
 
-    this._debugLog(`[Live2DManager] enableInteraction 鎴愬姛: ${characterId}`);
+    this._debugLog(`[Live2DManager] enableInteraction 成功: ${characterId}`);
     return true;
   },
 

@@ -1,12 +1,12 @@
 import { SCRIPT_NAME } from './constants.js';
+import { topWindow } from './env.js';
 
 const SCRIPT_LOG_PREFIX = `[${SCRIPT_NAME}]`;
 const EXTRA_LOG_PREFIXES = ['[Live2DManager]'];
 const PLUGIN_STACK_HINTS = ['数据库界面插件.dist.js', 'galgame通用生成器/src/'];
 
-let consolePatched = false;
 let globalDebugEnabled = true;
-let originalConsole = null;
+const patchedConsoles = new WeakSet();
 
 function isPluginLog(args) {
   if (!Array.isArray(args) || args.length === 0) return false;
@@ -35,28 +35,44 @@ function shouldSuppress(level, args) {
   return isPluginLog(args);
 }
 
-function patchConsole() {
-  if (consolePatched) return;
-  consolePatched = true;
+function getConsoleTargets() {
+  const targets = [];
+  if (typeof console !== 'undefined') targets.push(console);
+  if (typeof window !== 'undefined' && window?.console) targets.push(window.console);
+  if (topWindow?.console) targets.push(topWindow.console);
+  return Array.from(new Set(targets));
+}
 
-  originalConsole = {
-    log: console.log.bind(console),
-    info: console.info.bind(console),
-    warn: console.warn.bind(console),
-    debug: (console.debug || console.log).bind(console),
-    error: console.error.bind(console),
+function patchSingleConsole(targetConsole) {
+  if (!targetConsole || patchedConsoles.has(targetConsole)) return;
+  patchedConsoles.add(targetConsole);
+
+  const original = {
+    log: targetConsole.log?.bind(targetConsole),
+    info: targetConsole.info?.bind(targetConsole),
+    warn: targetConsole.warn?.bind(targetConsole),
+    debug: (targetConsole.debug || targetConsole.log)?.bind(targetConsole),
+    error: targetConsole.error?.bind(targetConsole),
   };
 
-  const wrap = (level, original) => (...args) => {
+  const wrap = (level, raw) => (...args) => {
+    if (typeof raw !== 'function') return;
     if (shouldSuppress(level, args)) return;
-    original(...args);
+    raw(...args);
   };
 
-  console.log = wrap('log', originalConsole.log);
-  console.info = wrap('info', originalConsole.info);
-  console.warn = wrap('warn', originalConsole.warn);
-  console.debug = wrap('debug', originalConsole.debug);
-  console.error = wrap('error', originalConsole.error);
+  targetConsole.log = wrap('log', original.log);
+  targetConsole.info = wrap('info', original.info);
+  targetConsole.warn = wrap('warn', original.warn);
+  targetConsole.debug = wrap('debug', original.debug);
+  targetConsole.error = wrap('error', original.error);
+}
+
+function patchConsole() {
+  const targets = getConsoleTargets();
+  for (const targetConsole of targets) {
+    patchSingleConsole(targetConsole);
+  }
 }
 
 export function setGlobalDebugEnabled(enabled) {

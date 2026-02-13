@@ -16,6 +16,14 @@ import { renderBananaAppearanceList } from './asset-manager-parts.js';
 // ============================================
 
 let _showBananaAppearancePickerRef = null;
+const BG_SOURCE_INACTIVE_COLOR = '#475569';
+const BG_SOURCE_COLORS = {
+  none: '#dc2626',
+  comfyui: '#0369a1',
+  banana: '#7e22ce',
+  novelai: '#15803d',
+  wallhaven: '#a16207',
+};
 
 export function setImageGenConfigRefs({ showBananaAppearancePicker }) {
   if (showBananaAppearancePicker) _showBananaAppearancePickerRef = showBananaAppearancePicker;
@@ -29,13 +37,13 @@ export function buildImageGenConfigPane(settings) {
   const src = settings.bgImageSource || 'none';
   const activeEngine = (src !== 'none' && ['comfyui', 'banana', 'novelai', 'wallhaven'].includes(src)) ? src : 'comfyui';
   return `
-    <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(0,0,0,0.25); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
-      <span style="font-weight: 700; color: #ccd6f6; font-size: 0.9rem; white-space: nowrap;"><i class="fa-solid fa-satellite-dish" style="margin-right: 6px;"></i>背景图来源</span>
-      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'none' ? '#ff6b6b' : '#8892b0'};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="none" ${src === 'none' ? 'checked' : ''} style="accent-color:#ff6b6b;"> 关闭</label>
-      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'comfyui' ? '#00d9ff' : '#8892b0'};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="comfyui" ${src === 'comfyui' ? 'checked' : ''} style="accent-color:#00d9ff;"> ComfyUI</label>
-      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'banana' ? '#c084fc' : '#8892b0'};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="banana" ${src === 'banana' ? 'checked' : ''} style="accent-color:#c084fc;"> 大香蕉</label>
-      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'novelai' ? '#52b788' : '#8892b0'};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="novelai" ${src === 'novelai' ? 'checked' : ''} style="accent-color:#52b788;"> NovelAI</label>
-      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'wallhaven' ? '#ffd166' : '#8892b0'};font-size:0.85rem;"><input type="radio" name="gal-bg-source" value="wallhaven" ${src === 'wallhaven' ? 'checked' : ''} style="accent-color:#ffd166;"> Wallhaven</label>
+    <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(15,23,42,0.08); border: 1px solid rgba(71,85,105,0.35); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+      <span style="font-weight: 700; color: #1f2937; font-size: 0.9rem; white-space: nowrap;"><i class="fa-solid fa-satellite-dish" style="margin-right: 6px;"></i>背景图来源</span>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'none' ? BG_SOURCE_COLORS.none : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="none" ${src === 'none' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.none};"> 关闭</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'comfyui' ? BG_SOURCE_COLORS.comfyui : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="comfyui" ${src === 'comfyui' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.comfyui};"> ComfyUI</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'banana' ? BG_SOURCE_COLORS.banana : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="banana" ${src === 'banana' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.banana};"> 大香蕉</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'novelai' ? BG_SOURCE_COLORS.novelai : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="novelai" ${src === 'novelai' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.novelai};"> NovelAI</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'wallhaven' ? BG_SOURCE_COLORS.wallhaven : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="wallhaven" ${src === 'wallhaven' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.wallhaven};"> Wallhaven</label>
     </div>
     <div class="gal-imagegen-pills">
       <button class="gal-pill ${activeEngine === 'comfyui' ? 'active' : ''}" data-engine="comfyui"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI</button>
@@ -177,10 +185,9 @@ export function bindImageGenConfigEvents($container, settings) {
     saveSettings();
     if (getIsEnabled()) await injectCOTToWorldbook();
     // 高亮选中 radio 的 label
-    $container.find('.gal-radio-label').css('color', '#8892b0');
+    $container.find('.gal-radio-label').css('color', BG_SOURCE_INACTIVE_COLOR);
     $(this).closest('.gal-radio-label').css('color', '');
-    const colors = { none: '#ff6b6b', comfyui: '#00d9ff', banana: '#c084fc', novelai: '#52b788', wallhaven: '#ffd166' };
-    $(this).closest('.gal-radio-label').css('color', colors[value] || '#8892b0');
+    $(this).closest('.gal-radio-label').css('color', BG_SOURCE_COLORS[value] || BG_SOURCE_INACTIVE_COLOR);
     // 自动切到对应 pill（关闭则不切）
     if (value !== 'none') {
       $container.find(`.gal-pill[data-engine="${value}"]`).trigger('click');

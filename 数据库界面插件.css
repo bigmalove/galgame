@@ -3361,8 +3361,9 @@
             inset: 0 !important;
             /* 不设 width/height，靠 inset:0 撑满视觉视口；
                100vh 在手机端会包含地址栏后面的空间导致底部按钮超出 */
-            width: auto !important;
-            height: auto !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
             max-width: none !important;
             max-height: none !important;
             margin: 0 !important;

@@ -1,5 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { Live2DManager } from './manager.js';
+import { setLive2DCharacterExpression } from './expression-motion.js';
 import { getCharacterUseLive2D } from './render-mode.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { SpriteAnimationManager } from '../animation/sprite-animation.js';
@@ -122,7 +123,7 @@ export async function renderCharacterVisual(characterId, expression, container, 
       const model = await Live2DManager.loadModel(characterId);
       if (model) {
         Live2DManager.renderTo(characterId, container);
-        Live2DManager.setExpression(characterId, expression);
+        setLive2DCharacterExpression(characterId, expression, true);
         console.log(`[${SCRIPT_NAME}] 使用 Live2D 渲染: ${characterId}`);
         return { mode: 'live2d', success: true };
       }

@@ -2,6 +2,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
 import { SpriteAnimationManager } from '../animation/sprite-animation.js';
 import { Live2DManager } from '../live2d/manager.js';
+import { setLive2DCharacterExpression } from '../live2d/expression-motion.js';
 import { getCharacterUseLive2D } from '../live2d/render-mode.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { updateCharacterFocus } from '../live2d/preload.js';
@@ -320,7 +321,7 @@ export const SpriteManager = {
       if (emotionAttr) {
         $existingContainer.attr('data-emotion', emotion);
       }
-      Live2DManager.setExpression(characterId, expression);
+      setLive2DCharacterExpression(characterId, expression, true);
       console.log(`[${SCRIPT_NAME}] Live2D 表情更新: ${characterId} -> ${expression}`);
 
       const info = this.activeCharacters.get(characterId);
@@ -383,7 +384,7 @@ export const SpriteManager = {
               if (!rendered || isTaskStale()) return;
               if (this.slotOwners.get(slot) !== characterId) return;
               if (!$container[0]?.isConnected) return;
-              Live2DManager.setExpression(characterId, expression);
+              setLive2DCharacterExpression(characterId, expression, true);
               Live2DManager.setFocus(characterId, this.currentSpeaker === characterId);
               console.log(`[${SCRIPT_NAME}] Live2D 渲染成功: ${characterId}`);
             }

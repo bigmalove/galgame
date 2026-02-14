@@ -6466,143 +6466,6 @@ ${lines.join("\n")}`;
     }
   };
 
-  // src/live2d/preload.js
-  var Live2DPreloadManager = {
-    sdkPreloadStarted: false,
-    sdkPreloadDone: false,
-    queue: [],
-    queuedSet: /* @__PURE__ */ new Set(),
-    preloadedSet: /* @__PURE__ */ new Set(),
-    failedUntil: /* @__PURE__ */ new Map(),
-    failureCooldownMs: 60 * 1e3,
-    workerPromise: null,
-    lookAheadLimit: 60,
-    scheduleSdkPreload(reason = "unknown") {
-      if (this.sdkPreloadStarted || this.sdkPreloadDone) return;
-      this.sdkPreloadStarted = true;
-      const run = async () => {
-        try {
-          const ok = await Live2DManager.init();
-          this.sdkPreloadDone = !!ok;
-          console.log(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D SDK \u5B8C\u6210: ${ok ? "\u6210\u529F" : "\u5931\u8D25"} (${reason})`);
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D SDK \u5931\u8D25 (${reason}):`, e);
-        }
-      };
-      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
-      if (typeof _topWindow.requestIdleCallback === "function") {
-        _topWindow.requestIdleCallback(() => {
-          run();
-        }, { timeout: 2e3 });
-      } else {
-        setTimeout(() => {
-          run();
-        }, 300);
-      }
-    },
-    enqueueCharacter(characterId, reason = "unknown") {
-      if (!characterId) return;
-      if (this.preloadedSet.has(characterId)) return;
-      if (Live2DManager.models.has(characterId)) {
-        this.preloadedSet.add(characterId);
-        return;
-      }
-      const until = this.failedUntil.get(characterId);
-      if (until && Date.now() < until) return;
-      if (until) this.failedUntil.delete(characterId);
-      if (this.queuedSet.has(characterId)) return;
-      this.queue.push({ characterId, reason });
-      this.queuedSet.add(characterId);
-      this._ensureWorker();
-    },
-    preloadFromSegments(segments, currentIndex = 0, reason = "segments") {
-      if (!Array.isArray(segments) || segments.length === 0) return;
-      const start = Math.max(0, Number(currentIndex) || 0);
-      const end = Math.min(segments.length, start + this.lookAheadLimit + 1);
-      const seen = /* @__PURE__ */ new Set();
-      for (let i = start; i < end; i++) {
-        const speaker = segments[i]?.speaker;
-        if (!speaker || seen.has(speaker)) continue;
-        seen.add(speaker);
-        this.enqueueCharacter(speaker, `${reason}@${i}`);
-      }
-    },
-    _ensureWorker() {
-      if (this.workerPromise) return;
-      this.workerPromise = (async () => {
-        while (this.queue.length > 0) {
-          const item = this.queue.shift();
-          if (!item?.characterId) continue;
-          const { characterId, reason } = item;
-          this.queuedSet.delete(characterId);
-          try {
-            if (this.preloadedSet.has(characterId) || Live2DManager.models.has(characterId)) {
-              this.preloadedSet.add(characterId);
-              continue;
-            }
-            if (!getCharacterUseLive2D(characterId)) {
-              continue;
-            }
-            const hasModel = await hasLive2DModel(characterId);
-            if (!hasModel) {
-              continue;
-            }
-            const model = await Live2DManager.loadModel(characterId, false);
-            if (model) {
-              this.failedUntil.delete(characterId);
-              this.preloadedSet.add(characterId);
-              console.log(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D\u6A21\u578B\u6210\u529F: ${characterId} (${reason})`);
-            } else {
-              this.failedUntil.set(characterId, Date.now() + this.failureCooldownMs);
-            }
-          } catch (e) {
-            this.failedUntil.set(characterId, Date.now() + this.failureCooldownMs);
-            console.warn(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D\u6A21\u578B\u5931\u8D25: ${characterId} (${reason})`, e);
-          }
-        }
-      })().finally(() => {
-        this.workerPromise = null;
-        if (this.queue.length > 0) {
-          this._ensureWorker();
-        }
-      });
-    }
-  };
-  async function renderCharacterVisual(characterId, expression, container, options = {}) {
-    const useLive2D = getCharacterUseLive2D(characterId);
-    const hasModel = await hasLive2DModel(characterId);
-    if (useLive2D && hasModel) {
-      try {
-        const model = await Live2DManager.loadModel(characterId);
-        if (model) {
-          Live2DManager.renderTo(characterId, container);
-          Live2DManager.setExpression(characterId, expression);
-          console.log(`[${SCRIPT_NAME}] \u4F7F\u7528 Live2D \u6E32\u67D3: ${characterId}`);
-          return { mode: "live2d", success: true };
-        }
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2D \u6E32\u67D3\u5931\u8D25\uFF0C\u964D\u7EA7\u5230\u9759\u6001\u7ACB\u7ED8:`, e);
-      }
-    }
-    return { mode: "static", success: true };
-  }
-  function updateCharacterFocus(characterId, isSpeaking) {
-    const useLive2D = getCharacterUseLive2D(characterId);
-    if (useLive2D && Live2DManager.models.has(characterId)) {
-      Live2DManager.setFocus(characterId, isSpeaking);
-    }
-  }
-  function cleanupCharacterVisual(characterId) {
-    if (Live2DManager.models.has(characterId)) {
-      Live2DManager.cleanup(characterId);
-    }
-    SpriteAnimationManager.cleanup(characterId);
-  }
-  function cleanupAllVisuals() {
-    Live2DManager.cleanupAll();
-    SpriteAnimationManager.cleanupAll();
-  }
-
   // src/live2d/expression-motion.js
   var EXPRESSION_LIVE2D_MAP = {
     "\u9ED8\u8BA4": {
@@ -6926,6 +6789,143 @@ ${lines.join("\n")}`;
       console.warn(`[${SCRIPT_NAME}] getLive2DMotionGroups \u9519\u8BEF:`, e);
       return [];
     }
+  }
+
+  // src/live2d/preload.js
+  var Live2DPreloadManager = {
+    sdkPreloadStarted: false,
+    sdkPreloadDone: false,
+    queue: [],
+    queuedSet: /* @__PURE__ */ new Set(),
+    preloadedSet: /* @__PURE__ */ new Set(),
+    failedUntil: /* @__PURE__ */ new Map(),
+    failureCooldownMs: 60 * 1e3,
+    workerPromise: null,
+    lookAheadLimit: 60,
+    scheduleSdkPreload(reason = "unknown") {
+      if (this.sdkPreloadStarted || this.sdkPreloadDone) return;
+      this.sdkPreloadStarted = true;
+      const run = async () => {
+        try {
+          const ok = await Live2DManager.init();
+          this.sdkPreloadDone = !!ok;
+          console.log(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D SDK \u5B8C\u6210: ${ok ? "\u6210\u529F" : "\u5931\u8D25"} (${reason})`);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D SDK \u5931\u8D25 (${reason}):`, e);
+        }
+      };
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      if (typeof _topWindow.requestIdleCallback === "function") {
+        _topWindow.requestIdleCallback(() => {
+          run();
+        }, { timeout: 2e3 });
+      } else {
+        setTimeout(() => {
+          run();
+        }, 300);
+      }
+    },
+    enqueueCharacter(characterId, reason = "unknown") {
+      if (!characterId) return;
+      if (this.preloadedSet.has(characterId)) return;
+      if (Live2DManager.models.has(characterId)) {
+        this.preloadedSet.add(characterId);
+        return;
+      }
+      const until = this.failedUntil.get(characterId);
+      if (until && Date.now() < until) return;
+      if (until) this.failedUntil.delete(characterId);
+      if (this.queuedSet.has(characterId)) return;
+      this.queue.push({ characterId, reason });
+      this.queuedSet.add(characterId);
+      this._ensureWorker();
+    },
+    preloadFromSegments(segments, currentIndex = 0, reason = "segments") {
+      if (!Array.isArray(segments) || segments.length === 0) return;
+      const start = Math.max(0, Number(currentIndex) || 0);
+      const end = Math.min(segments.length, start + this.lookAheadLimit + 1);
+      const seen = /* @__PURE__ */ new Set();
+      for (let i = start; i < end; i++) {
+        const speaker = segments[i]?.speaker;
+        if (!speaker || seen.has(speaker)) continue;
+        seen.add(speaker);
+        this.enqueueCharacter(speaker, `${reason}@${i}`);
+      }
+    },
+    _ensureWorker() {
+      if (this.workerPromise) return;
+      this.workerPromise = (async () => {
+        while (this.queue.length > 0) {
+          const item = this.queue.shift();
+          if (!item?.characterId) continue;
+          const { characterId, reason } = item;
+          this.queuedSet.delete(characterId);
+          try {
+            if (this.preloadedSet.has(characterId) || Live2DManager.models.has(characterId)) {
+              this.preloadedSet.add(characterId);
+              continue;
+            }
+            if (!getCharacterUseLive2D(characterId)) {
+              continue;
+            }
+            const hasModel = await hasLive2DModel(characterId);
+            if (!hasModel) {
+              continue;
+            }
+            const model = await Live2DManager.loadModel(characterId, false);
+            if (model) {
+              this.failedUntil.delete(characterId);
+              this.preloadedSet.add(characterId);
+              console.log(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D\u6A21\u578B\u6210\u529F: ${characterId} (${reason})`);
+            } else {
+              this.failedUntil.set(characterId, Date.now() + this.failureCooldownMs);
+            }
+          } catch (e) {
+            this.failedUntil.set(characterId, Date.now() + this.failureCooldownMs);
+            console.warn(`[${SCRIPT_NAME}] Live2D \u9884\u52A0\u8F7D\u6A21\u578B\u5931\u8D25: ${characterId} (${reason})`, e);
+          }
+        }
+      })().finally(() => {
+        this.workerPromise = null;
+        if (this.queue.length > 0) {
+          this._ensureWorker();
+        }
+      });
+    }
+  };
+  async function renderCharacterVisual(characterId, expression, container, options = {}) {
+    const useLive2D = getCharacterUseLive2D(characterId);
+    const hasModel = await hasLive2DModel(characterId);
+    if (useLive2D && hasModel) {
+      try {
+        const model = await Live2DManager.loadModel(characterId);
+        if (model) {
+          Live2DManager.renderTo(characterId, container);
+          setLive2DCharacterExpression(characterId, expression, true);
+          console.log(`[${SCRIPT_NAME}] \u4F7F\u7528 Live2D \u6E32\u67D3: ${characterId}`);
+          return { mode: "live2d", success: true };
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2D \u6E32\u67D3\u5931\u8D25\uFF0C\u964D\u7EA7\u5230\u9759\u6001\u7ACB\u7ED8:`, e);
+      }
+    }
+    return { mode: "static", success: true };
+  }
+  function updateCharacterFocus(characterId, isSpeaking) {
+    const useLive2D = getCharacterUseLive2D(characterId);
+    if (useLive2D && Live2DManager.models.has(characterId)) {
+      Live2DManager.setFocus(characterId, isSpeaking);
+    }
+  }
+  function cleanupCharacterVisual(characterId) {
+    if (Live2DManager.models.has(characterId)) {
+      Live2DManager.cleanup(characterId);
+    }
+    SpriteAnimationManager.cleanup(characterId);
+  }
+  function cleanupAllVisuals() {
+    Live2DManager.cleanupAll();
+    SpriteAnimationManager.cleanupAll();
   }
 
   // src/live2d/performance.js
@@ -8468,7 +8468,7 @@ ${lines.join("\n")}`;
         if (emotionAttr) {
           $existingContainer.attr("data-emotion", emotion);
         }
-        Live2DManager.setExpression(characterId, expression);
+        setLive2DCharacterExpression(characterId, expression, true);
         console.log(`[${SCRIPT_NAME}] Live2D \u8868\u60C5\u66F4\u65B0: ${characterId} -> ${expression}`);
         const info2 = this.activeCharacters.get(characterId);
         if (info2) {
@@ -8528,7 +8528,7 @@ ${lines.join("\n")}`;
                 if (!rendered || isTaskStale()) return;
                 if (this.slotOwners.get(slot) !== characterId) return;
                 if (!$container[0]?.isConnected) return;
-                Live2DManager.setExpression(characterId, expression);
+                setLive2DCharacterExpression(characterId, expression, true);
                 Live2DManager.setFocus(characterId, this.currentSpeaker === characterId);
                 console.log(`[${SCRIPT_NAME}] Live2D \u6E32\u67D3\u6210\u529F: ${characterId}`);
               }

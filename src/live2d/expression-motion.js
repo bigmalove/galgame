@@ -48,6 +48,196 @@ export const EXPRESSION_LIVE2D_MAP = {
   },
 };
 
+function uniquePush(list, seen, value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized || seen.has(normalized)) return;
+  seen.add(normalized);
+  list.push(normalized);
+}
+
+function normalizeFileStem(input) {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+
+  const noHash = raw.split('#')[0];
+  const noQuery = noHash.split('?')[0];
+  const filePart = noQuery.split('/').pop() || noQuery;
+  let decoded = filePart;
+  try {
+    decoded = decodeURIComponent(filePart);
+  } catch (e) {}
+
+  return decoded
+    .replace(/\.exp3\.json$/i, '')
+    .replace(/\.motion3\.json$/i, '')
+    .replace(/\.mtn$/i, '')
+    .replace(/\.json$/i, '')
+    .trim();
+}
+
+function normalizeDefinitionName(def, fallback = '') {
+  if (typeof def === 'string') {
+    return normalizeFileStem(def) || def.trim();
+  }
+  if (!def || typeof def !== 'object') {
+    return fallback;
+  }
+
+  const directName = def.Name || def.name || def.Id || def.id || '';
+  if (String(directName ?? '').trim()) {
+    return String(directName).trim();
+  }
+
+  const fileLike = def.File || def.file || def.Path || def.path || '';
+  const stem = normalizeFileStem(fileLike);
+  if (stem) return stem;
+
+  return fallback;
+}
+
+function collectSettingsCandidates(model) {
+  const candidates = [];
+  const seen = new Set();
+
+  const add = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    candidates.push(obj);
+  };
+
+  const motionManager = model?.internalModel?.motionManager;
+  const settings = model?.internalModel?.settings;
+
+  add(settings);
+  add(settings?.json);
+  add(settings?.rawSettings);
+  add(settings?.modelJson);
+  add(motionManager?.settings);
+  add(motionManager?.settings?.json);
+  add(motionManager?.settings?.rawSettings);
+  add(motionManager?.settings?.modelJson);
+
+  return candidates;
+}
+
+function collectExpressionNames(model) {
+  const names = [];
+  const seen = new Set();
+  const expressionManager = model?.internalModel?.motionManager?.expressionManager;
+
+  const pushFromList = (list, fallbackPrefix = 'expression') => {
+    if (!Array.isArray(list)) return;
+    for (let i = 0; i < list.length; i++) {
+      const normalized = normalizeDefinitionName(list[i], `${fallbackPrefix}_${i + 1}`);
+      uniquePush(names, seen, normalized);
+    }
+  };
+  const pushFromContainer = (container, fallbackPrefix = 'expression') => {
+    if (Array.isArray(container)) {
+      pushFromList(container, fallbackPrefix);
+      return;
+    }
+    if (!container || typeof container !== 'object') return;
+
+    let i = 0;
+    for (const [key, value] of Object.entries(container)) {
+      const fallbackName = normalizeFileStem(key) || String(key || '').trim() || `${fallbackPrefix}_${i + 1}`;
+      const normalized = normalizeDefinitionName(value, fallbackName);
+      uniquePush(names, seen, normalized || fallbackName);
+      i++;
+    }
+  };
+
+  pushFromContainer(expressionManager?.definitions, 'definition');
+  pushFromContainer(expressionManager?.expressions, 'expression');
+
+  const settingsCandidates = collectSettingsCandidates(model);
+  for (const settings of settingsCandidates) {
+    pushFromContainer(settings?.expressions, 'settings_expr');
+    pushFromContainer(settings?.Expressions, 'settings_expr');
+    pushFromContainer(settings?.FileReferences?.Expressions, 'file_ref_expr');
+  }
+
+  const settings = model?.internalModel?.settings;
+  if (settings && typeof settings === 'object') {
+    if (typeof settings.getExpressionCount === 'function') {
+      let count = 0;
+      try {
+        count = Number(settings.getExpressionCount()) || 0;
+      } catch (e) {}
+      count = Math.max(0, Math.min(count, 1000));
+
+      for (let i = 0; i < count; i++) {
+        let name = '';
+        if (typeof settings.getExpressionName === 'function') {
+          try {
+            name = String(settings.getExpressionName(i) ?? '').trim();
+          } catch (e) {}
+        }
+        if (!name && typeof settings.getExpressionFile === 'function') {
+          try {
+            name = normalizeFileStem(settings.getExpressionFile(i));
+          } catch (e) {}
+        }
+        uniquePush(names, seen, name || `expression_${i + 1}`);
+      }
+    }
+  }
+
+  return names;
+}
+
+function collectMotionGroupNames(model) {
+  const groupNames = [];
+  const seen = new Set();
+  const motionManager = model?.internalModel?.motionManager;
+
+  const pushFromObject = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const key of Object.keys(obj)) {
+      uniquePush(groupNames, seen, key);
+    }
+  };
+
+  pushFromObject(motionManager?.motionGroups);
+  pushFromObject(motionManager?.groups);
+  pushFromObject(motionManager?.definitions);
+
+  const settingsCandidates = collectSettingsCandidates(model);
+  for (const settings of settingsCandidates) {
+    pushFromObject(settings?.motions);
+    pushFromObject(settings?.Motions);
+    pushFromObject(settings?.FileReferences?.Motions);
+  }
+
+  const settings = model?.internalModel?.settings;
+  if (settings && typeof settings === 'object') {
+    if (typeof settings.getMotionGroupCount === 'function' && typeof settings.getMotionGroupName === 'function') {
+      let count = 0;
+      try {
+        count = Number(settings.getMotionGroupCount()) || 0;
+      } catch (e) {}
+      count = Math.max(0, Math.min(count, 1000));
+
+      for (let i = 0; i < count; i++) {
+        try {
+          uniquePush(groupNames, seen, String(settings.getMotionGroupName(i) ?? ''));
+        } catch (e) {}
+      }
+    } else if (typeof settings.getMotionGroupNames === 'function') {
+      try {
+        const names = settings.getMotionGroupNames();
+        if (Array.isArray(names)) {
+          for (const name of names) uniquePush(groupNames, seen, name);
+        }
+      } catch (e) {}
+    }
+  }
+
+  return groupNames;
+}
+
 // 智能匹配 Live2D 表情 (支持用户自定义映射)
 export function matchLive2DExpression(model, targetExpression, characterId = null) {
   if (characterId) {
@@ -62,30 +252,28 @@ export function matchLive2DExpression(model, targetExpression, characterId = nul
   const candidates = mapping?.expressions || [targetExpression.toLowerCase()];
 
   try {
-    const expressionManager = model.internalModel?.motionManager?.expressionManager;
-    if (!expressionManager?.definitions) return null;
-
-    const definitions = expressionManager.definitions;
+    const definitions = collectExpressionNames(model);
+    if (!definitions.length) return null;
 
     for (const candidate of candidates) {
       for (const def of definitions) {
-        const name = (def.Name || def.name || '').toLowerCase();
+        const name = String(def || '').toLowerCase();
         if (name === candidate) {
-          return def.Name || def.name;
+          return def;
         }
       }
     }
 
     for (const candidate of candidates) {
       for (const def of definitions) {
-        const name = (def.Name || def.name || '').toLowerCase();
+        const name = String(def || '').toLowerCase();
         if (name.includes(candidate) || candidate.includes(name)) {
-          return def.Name || def.name;
+          return def;
         }
       }
     }
 
-    return definitions[0]?.Name || definitions[0]?.name || null;
+    return definitions[0] || null;
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 表情匹配失败:`, e);
     return null;
@@ -99,8 +287,8 @@ export function matchLive2DMotion(model, targetExpression, characterId = null) {
     const userMotionMapping = config.motionMapping || {};
     if (userMotionMapping[targetExpression]) {
       const motionConfig = userMotionMapping[targetExpression];
-      if (motionConfig.enabled !== false && motionConfig.group) {
-        return { group: motionConfig.group, index: motionConfig.index || 0 };
+      if (motionConfig.enabled !== false && Object.prototype.hasOwnProperty.call(motionConfig, 'group')) {
+        return { group: String(motionConfig.group ?? ''), index: motionConfig.index || 0 };
       }
       if (motionConfig.enabled === false) {
         return null;
@@ -112,15 +300,13 @@ export function matchLive2DMotion(model, targetExpression, characterId = null) {
   if (!mapping?.motions?.length) return null;
 
   try {
-    const motionManager = model.internalModel?.motionManager;
-    if (!motionManager) return null;
-
-    const groups = motionManager.motionGroups || motionManager.groups || {};
-    const groupNames = Object.keys(groups);
+    const groupNames = collectMotionGroupNames(model);
+    if (!groupNames.length) return null;
 
     for (const candidate of mapping.motions) {
-      if (groups[candidate]) {
-        return { group: candidate, index: 0 };
+      const exact = groupNames.find(name => name === candidate);
+      if (exact !== undefined) {
+        return { group: exact, index: 0 };
       }
     }
 
@@ -168,23 +354,11 @@ export function getLive2DExpressionList(characterId) {
   if (!model) return [];
 
   try {
-    const expressionManager = model.internalModel?.motionManager?.expressionManager;
-
-    let definitions = expressionManager?.definitions
-      || expressionManager?.expressions
-      || model.internalModel?.settings?.expressions
-      || [];
-
-    if (definitions.length === 0) {
-      const settings = model.internalModel?.settings;
-      if (settings?.expressions) {
-        definitions = settings.expressions;
-      }
-    }
+    const definitions = collectExpressionNames(model);
 
     console.log(`[${SCRIPT_NAME}] getLive2DExpressionList: 找到 ${definitions.length} 个表情定义`, definitions);
 
-    return definitions.map(def => def.Name || def.name || def.File || '').filter(Boolean);
+    return definitions;
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] getLive2DExpressionList 错误:`, e);
     return [];
@@ -197,25 +371,7 @@ export function getLive2DMotionGroups(characterId) {
   if (!model) return [];
 
   try {
-    const motionManager = model.internalModel?.motionManager;
-    if (!motionManager) {
-      console.log(`[${SCRIPT_NAME}] getLive2DMotionGroups: motionManager 不存在`);
-      return [];
-    }
-
-    let groups = motionManager.motionGroups
-      || motionManager.groups
-      || motionManager.definitions
-      || {};
-
-    if (Object.keys(groups).length === 0) {
-      const settings = model.internalModel?.settings;
-      if (settings?.motions) {
-        groups = settings.motions;
-      }
-    }
-
-    const groupNames = Object.keys(groups);
+    const groupNames = collectMotionGroupNames(model);
     console.log(`[${SCRIPT_NAME}] getLive2DMotionGroups: 找到 ${groupNames.length} 个动作组`, groupNames);
 
     return groupNames;

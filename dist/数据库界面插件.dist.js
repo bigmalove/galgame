@@ -6646,6 +6646,170 @@ ${lines.join("\n")}`;
       motions: ["playful", "wink", "fun"]
     }
   };
+  function uniquePush(list, seen, value) {
+    const normalized = String(value ?? "").trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    list.push(normalized);
+  }
+  function normalizeFileStem(input) {
+    const raw = String(input ?? "").trim();
+    if (!raw) return "";
+    const noHash = raw.split("#")[0];
+    const noQuery = noHash.split("?")[0];
+    const filePart = noQuery.split("/").pop() || noQuery;
+    let decoded = filePart;
+    try {
+      decoded = decodeURIComponent(filePart);
+    } catch (e) {
+    }
+    return decoded.replace(/\.exp3\.json$/i, "").replace(/\.motion3\.json$/i, "").replace(/\.mtn$/i, "").replace(/\.json$/i, "").trim();
+  }
+  function normalizeDefinitionName(def, fallback = "") {
+    if (typeof def === "string") {
+      return normalizeFileStem(def) || def.trim();
+    }
+    if (!def || typeof def !== "object") {
+      return fallback;
+    }
+    const directName = def.Name || def.name || def.Id || def.id || "";
+    if (String(directName ?? "").trim()) {
+      return String(directName).trim();
+    }
+    const fileLike = def.File || def.file || def.Path || def.path || "";
+    const stem = normalizeFileStem(fileLike);
+    if (stem) return stem;
+    return fallback;
+  }
+  function collectSettingsCandidates(model) {
+    const candidates = [];
+    const seen = /* @__PURE__ */ new Set();
+    const add = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+      if (seen.has(obj)) return;
+      seen.add(obj);
+      candidates.push(obj);
+    };
+    const motionManager = model?.internalModel?.motionManager;
+    const settings = model?.internalModel?.settings;
+    add(settings);
+    add(settings?.json);
+    add(settings?.rawSettings);
+    add(settings?.modelJson);
+    add(motionManager?.settings);
+    add(motionManager?.settings?.json);
+    add(motionManager?.settings?.rawSettings);
+    add(motionManager?.settings?.modelJson);
+    return candidates;
+  }
+  function collectExpressionNames(model) {
+    const names = [];
+    const seen = /* @__PURE__ */ new Set();
+    const expressionManager = model?.internalModel?.motionManager?.expressionManager;
+    const pushFromList = (list, fallbackPrefix = "expression") => {
+      if (!Array.isArray(list)) return;
+      for (let i = 0; i < list.length; i++) {
+        const normalized = normalizeDefinitionName(list[i], `${fallbackPrefix}_${i + 1}`);
+        uniquePush(names, seen, normalized);
+      }
+    };
+    const pushFromContainer = (container, fallbackPrefix = "expression") => {
+      if (Array.isArray(container)) {
+        pushFromList(container, fallbackPrefix);
+        return;
+      }
+      if (!container || typeof container !== "object") return;
+      let i = 0;
+      for (const [key, value] of Object.entries(container)) {
+        const fallbackName = normalizeFileStem(key) || String(key || "").trim() || `${fallbackPrefix}_${i + 1}`;
+        const normalized = normalizeDefinitionName(value, fallbackName);
+        uniquePush(names, seen, normalized || fallbackName);
+        i++;
+      }
+    };
+    pushFromContainer(expressionManager?.definitions, "definition");
+    pushFromContainer(expressionManager?.expressions, "expression");
+    const settingsCandidates = collectSettingsCandidates(model);
+    for (const settings2 of settingsCandidates) {
+      pushFromContainer(settings2?.expressions, "settings_expr");
+      pushFromContainer(settings2?.Expressions, "settings_expr");
+      pushFromContainer(settings2?.FileReferences?.Expressions, "file_ref_expr");
+    }
+    const settings = model?.internalModel?.settings;
+    if (settings && typeof settings === "object") {
+      if (typeof settings.getExpressionCount === "function") {
+        let count = 0;
+        try {
+          count = Number(settings.getExpressionCount()) || 0;
+        } catch (e) {
+        }
+        count = Math.max(0, Math.min(count, 1e3));
+        for (let i = 0; i < count; i++) {
+          let name = "";
+          if (typeof settings.getExpressionName === "function") {
+            try {
+              name = String(settings.getExpressionName(i) ?? "").trim();
+            } catch (e) {
+            }
+          }
+          if (!name && typeof settings.getExpressionFile === "function") {
+            try {
+              name = normalizeFileStem(settings.getExpressionFile(i));
+            } catch (e) {
+            }
+          }
+          uniquePush(names, seen, name || `expression_${i + 1}`);
+        }
+      }
+    }
+    return names;
+  }
+  function collectMotionGroupNames(model) {
+    const groupNames = [];
+    const seen = /* @__PURE__ */ new Set();
+    const motionManager = model?.internalModel?.motionManager;
+    const pushFromObject = (obj) => {
+      if (!obj || typeof obj !== "object") return;
+      for (const key of Object.keys(obj)) {
+        uniquePush(groupNames, seen, key);
+      }
+    };
+    pushFromObject(motionManager?.motionGroups);
+    pushFromObject(motionManager?.groups);
+    pushFromObject(motionManager?.definitions);
+    const settingsCandidates = collectSettingsCandidates(model);
+    for (const settings2 of settingsCandidates) {
+      pushFromObject(settings2?.motions);
+      pushFromObject(settings2?.Motions);
+      pushFromObject(settings2?.FileReferences?.Motions);
+    }
+    const settings = model?.internalModel?.settings;
+    if (settings && typeof settings === "object") {
+      if (typeof settings.getMotionGroupCount === "function" && typeof settings.getMotionGroupName === "function") {
+        let count = 0;
+        try {
+          count = Number(settings.getMotionGroupCount()) || 0;
+        } catch (e) {
+        }
+        count = Math.max(0, Math.min(count, 1e3));
+        for (let i = 0; i < count; i++) {
+          try {
+            uniquePush(groupNames, seen, String(settings.getMotionGroupName(i) ?? ""));
+          } catch (e) {
+          }
+        }
+      } else if (typeof settings.getMotionGroupNames === "function") {
+        try {
+          const names = settings.getMotionGroupNames();
+          if (Array.isArray(names)) {
+            for (const name of names) uniquePush(groupNames, seen, name);
+          }
+        } catch (e) {
+        }
+      }
+    }
+    return groupNames;
+  }
   function matchLive2DExpression(model, targetExpression, characterId = null) {
     if (characterId) {
       const config = getLive2DConfig(characterId);
@@ -6657,26 +6821,25 @@ ${lines.join("\n")}`;
     const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
     const candidates = mapping?.expressions || [targetExpression.toLowerCase()];
     try {
-      const expressionManager = model.internalModel?.motionManager?.expressionManager;
-      if (!expressionManager?.definitions) return null;
-      const definitions = expressionManager.definitions;
+      const definitions = collectExpressionNames(model);
+      if (!definitions.length) return null;
       for (const candidate of candidates) {
         for (const def of definitions) {
-          const name = (def.Name || def.name || "").toLowerCase();
+          const name = String(def || "").toLowerCase();
           if (name === candidate) {
-            return def.Name || def.name;
+            return def;
           }
         }
       }
       for (const candidate of candidates) {
         for (const def of definitions) {
-          const name = (def.Name || def.name || "").toLowerCase();
+          const name = String(def || "").toLowerCase();
           if (name.includes(candidate) || candidate.includes(name)) {
-            return def.Name || def.name;
+            return def;
           }
         }
       }
-      return definitions[0]?.Name || definitions[0]?.name || null;
+      return definitions[0] || null;
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] \u8868\u60C5\u5339\u914D\u5931\u8D25:`, e);
       return null;
@@ -6688,8 +6851,8 @@ ${lines.join("\n")}`;
       const userMotionMapping = config.motionMapping || {};
       if (userMotionMapping[targetExpression]) {
         const motionConfig = userMotionMapping[targetExpression];
-        if (motionConfig.enabled !== false && motionConfig.group) {
-          return { group: motionConfig.group, index: motionConfig.index || 0 };
+        if (motionConfig.enabled !== false && Object.prototype.hasOwnProperty.call(motionConfig, "group")) {
+          return { group: String(motionConfig.group ?? ""), index: motionConfig.index || 0 };
         }
         if (motionConfig.enabled === false) {
           return null;
@@ -6699,13 +6862,12 @@ ${lines.join("\n")}`;
     const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
     if (!mapping?.motions?.length) return null;
     try {
-      const motionManager = model.internalModel?.motionManager;
-      if (!motionManager) return null;
-      const groups = motionManager.motionGroups || motionManager.groups || {};
-      const groupNames = Object.keys(groups);
+      const groupNames = collectMotionGroupNames(model);
+      if (!groupNames.length) return null;
       for (const candidate of mapping.motions) {
-        if (groups[candidate]) {
-          return { group: candidate, index: 0 };
+        const exact = groupNames.find((name) => name === candidate);
+        if (exact !== void 0) {
+          return { group: exact, index: 0 };
         }
       }
       for (const candidate of mapping.motions) {
@@ -6745,16 +6907,9 @@ ${lines.join("\n")}`;
     const model = Live2DManager.models.get(characterId);
     if (!model) return [];
     try {
-      const expressionManager = model.internalModel?.motionManager?.expressionManager;
-      let definitions = expressionManager?.definitions || expressionManager?.expressions || model.internalModel?.settings?.expressions || [];
-      if (definitions.length === 0) {
-        const settings = model.internalModel?.settings;
-        if (settings?.expressions) {
-          definitions = settings.expressions;
-        }
-      }
+      const definitions = collectExpressionNames(model);
       console.log(`[${SCRIPT_NAME}] getLive2DExpressionList: \u627E\u5230 ${definitions.length} \u4E2A\u8868\u60C5\u5B9A\u4E49`, definitions);
-      return definitions.map((def) => def.Name || def.name || def.File || "").filter(Boolean);
+      return definitions;
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] getLive2DExpressionList \u9519\u8BEF:`, e);
       return [];
@@ -6764,19 +6919,7 @@ ${lines.join("\n")}`;
     const model = Live2DManager.models.get(characterId);
     if (!model) return [];
     try {
-      const motionManager = model.internalModel?.motionManager;
-      if (!motionManager) {
-        console.log(`[${SCRIPT_NAME}] getLive2DMotionGroups: motionManager \u4E0D\u5B58\u5728`);
-        return [];
-      }
-      let groups = motionManager.motionGroups || motionManager.groups || motionManager.definitions || {};
-      if (Object.keys(groups).length === 0) {
-        const settings = model.internalModel?.settings;
-        if (settings?.motions) {
-          groups = settings.motions;
-        }
-      }
-      const groupNames = Object.keys(groups);
+      const groupNames = collectMotionGroupNames(model);
       console.log(`[${SCRIPT_NAME}] getLive2DMotionGroups: \u627E\u5230 ${groupNames.length} \u4E2A\u52A8\u4F5C\u7EC4`, groupNames);
       return groupNames;
     } catch (e) {
@@ -13716,8 +13859,18 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const qualityConfig = config.quality || {};
     const expressionMapping = config.expressionMapping || {};
     const motionMapping = config.motionMapping || {};
+    const EMPTY_MOTION_GROUP_VALUE = "__gal_empty_motion_group__";
     let expressionList = [];
     let motionGroups = [];
+    let previewMounted = false;
+    let previewMountPromise = null;
+    let previewZoomFactor = 1.8;
+    let previewPanOffsetX = 0;
+    let previewPanOffsetY = 0;
+    let previewBasePose = { x: 0, y: 0, scale: 1 };
+    let previewIsDragging = false;
+    let previewDragStart = { x: 0, y: 0 };
+    let previewDragOrigin = { x: 0, y: 0 };
     const gameExpressionTags = Object.keys(EXPRESSION_LIVE2D_MAP);
     const buildMappingRows = () => {
       const existingMappings = { ...expressionMapping };
@@ -13725,10 +13878,16 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       let rows = "";
       const allTags = [.../* @__PURE__ */ new Set([...Object.keys(existingMappings), ...gameExpressionTags])];
       const exprOptionsHtml = expressionList.length > 0 ? expressionList.map((e) => `<option value="${e}">${e}</option>`).join("") : "";
-      const motionOptionsHtml = motionGroups.length > 0 ? motionGroups.map((g) => `<option value="${g}">${g}</option>`).join("") : "";
+      const motionOptionsHtml = motionGroups.length > 0 ? motionGroups.map((groupName) => {
+        const rawGroup = String(groupName ?? "");
+        const value = rawGroup === "" ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
+        const label = rawGroup === "" ? "(\u7A7A\u52A8\u4F5C\u7EC4)" : rawGroup;
+        return `<option value="${value}">${label}</option>`;
+      }).join("") : "";
       for (const tag of allTags) {
         const currentExpr = existingMappings[tag] || "";
         const currentMotion = existingMotionMappings[tag] || {};
+        const currentMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, "group") ? String(currentMotion.group ?? "") : "";
         rows += `
         <div class="gal-mapping-row" data-tag="${tag}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
           <span style="min-width: 60px; font-weight: 600;">${tag}</span>
@@ -13737,11 +13896,14 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
             <option value="">(\u81EA\u52A8\u5339\u914D)</option>
             ${exprOptionsHtml}
           </select>
-          <select class="gal-motion-mapping-select" data-tag="${tag}" data-current="${currentMotion.group || ""}" data-disabled="${currentMotion.enabled === false}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+          <select class="gal-motion-mapping-select" data-tag="${tag}" data-current="${currentMotionGroup}" data-disabled="${currentMotion.enabled === false}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">(\u81EA\u52A8\u5339\u914D)</option>
             <option value="__disabled__">(\u7981\u7528\u52A8\u4F5C)</option>
             ${motionOptionsHtml}
           </select>
+          <button type="button" class="gal-mapping-preview-btn" data-tag="${tag}" title="\u9884\u89C8\u8BE5\u6807\u7B7E" style="width: 32px; height: 32px; border: 1px solid #0ea5e9; border-radius: 6px; background: #e0f2fe; color: #0369a1; cursor: pointer; flex-shrink: 0;">
+            <i class="fa-solid fa-play"></i>
+          </button>
         </div>
       `;
       }
@@ -13759,25 +13921,33 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         if ($modal2.length) {
           $modal2.find(".gal-model-info-expr").text(expressionList.length);
           $modal2.find(".gal-model-info-motion").text(motionGroups.length);
-          setTimeout(() => {
+          setTimeout(async () => {
             const $mappingContainer = $modal2.find("#gal-mapping-rows");
             if ($mappingContainer.length && !$mappingContainer.data("loaded")) {
               const rowsHtml = buildMappingRows();
               $mappingContainer.html(rowsHtml);
               $mappingContainer.data("loaded", true);
               $mappingContainer.find(".gal-expr-mapping-select").each(function() {
-                const current = $(this).data("current");
-                if (current) $(this).val(current);
+                const current = _$(this).data("current");
+                if (current) _$(this).val(current);
               });
               $mappingContainer.find(".gal-motion-mapping-select").each(function() {
-                const current = $(this).data("current");
-                const disabled = $(this).data("disabled");
+                const current = _$(this).data("current");
+                const disabled = _$(this).data("disabled");
                 if (disabled) {
-                  $(this).val("__disabled__");
+                  _$(this).val("__disabled__");
+                } else if (current === "") {
+                  _$(this).val(EMPTY_MOTION_GROUP_VALUE);
                 } else if (current) {
-                  $(this).val(current);
+                  _$(this).val(current);
                 }
               });
+              bindMappingContainerEvents($mappingContainer);
+              const activeTab = $modal2.find(".gal-settings-tab.active").data("tab");
+              if (activeTab === "mapping") {
+                await ensureMappingPreviewMounted();
+                await previewFirstTagIfExists();
+              }
             }
           }, 50);
         }
@@ -13787,7 +13957,103 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     };
     const modalHtml = `
     <div id="gal-live2d-settings-modal" class="gal-z-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;">
-      <div style="background: #fff; border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+      <style>
+        #gal-live2d-settings-modal .gal-live2d-mapping-layout {
+          display: flex;
+          gap: 14px;
+          align-items: stretch;
+          min-height: 360px;
+        }
+        #gal-live2d-settings-modal .gal-live2d-mapping-left {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        #gal-live2d-settings-modal .gal-live2d-mapping-right {
+          width: 320px;
+          flex: 0 0 320px;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          background: #f8fafc;
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        #gal-live2d-settings-modal .gal-mapping-row.previewing {
+          background: rgba(0, 210, 255, 0.08);
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-canvas {
+          position: relative;
+          width: 100%;
+          height: 260px;
+          border-radius: 8px;
+          overflow: hidden;
+          background: radial-gradient(circle at 30% 20%, #1e293b, #0f172a 70%);
+          cursor: grab;
+          user-select: none;
+          touch-action: none;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          font-size: 0.8rem;
+          color: #475569;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-tools {
+          display: flex;
+          gap: 8px;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-tools button {
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          background: #fff;
+          color: #334155;
+          padding: 6px 10px;
+          cursor: pointer;
+          font-size: 0.8rem;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-zoom-wrap {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+        }
+        #gal-live2d-settings-modal #gal-live2d-preview-zoom {
+          flex: 1;
+          min-width: 90px;
+        }
+        #gal-live2d-settings-modal #gal-live2d-preview-zoom-value {
+          min-width: 44px;
+          text-align: right;
+          font-size: 0.76rem;
+          color: #475569;
+        }
+        #gal-live2d-settings-modal #gal-live2d-preview-status {
+          display: block;
+          color: #64748b;
+          font-size: 0.78rem;
+          min-height: 18px;
+        }
+        @media screen and (max-width: 900px) {
+          #gal-live2d-settings-modal .gal-live2d-mapping-layout {
+            flex-direction: column;
+            min-height: 0;
+          }
+          #gal-live2d-settings-modal .gal-live2d-mapping-right {
+            width: 100%;
+            flex: 0 0 auto;
+          }
+          #gal-live2d-settings-modal #gal-mapping-rows {
+            max-height: 260px !important;
+          }
+        }
+      </style>
+      <div style="background: #fff; border-radius: 12px; width: 92%; max-width: 1080px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
         <!-- \u5934\u90E8 -->
         <div style="padding: 16px 20px; background: linear-gradient(135deg, ${THEME.accent}, ${THEME.accentSub}); color: #fff; display: flex; justify-content: space-between; align-items: center;">
           <span style="font-weight: 700; font-size: 1.1rem;">
@@ -13860,23 +14126,54 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
 
           <!-- \u8868\u60C5\u6620\u5C04 -->
           <div class="gal-settings-panel" data-panel="mapping" style="display: none;">
-            <div style="margin-bottom: 15px;">
-              <h4 style="margin: 0 0 8px 0; color: ${THEME.dark};">\u8868\u60C5\u6807\u7B7E\u6620\u5C04</h4>
-              <p style="margin: 0; color: #666; font-size: 0.85rem;">\u5C06\u6E38\u620F\u8868\u60C5\u6807\u7B7E\u6620\u5C04\u5230 Live2D \u8868\u60C5\u548C\u52A8\u4F5C\u3002\u7559\u7A7A\u5219\u4F7F\u7528\u81EA\u52A8\u5339\u914D\u3002</p>
-            </div>
-            <div id="gal-mapping-rows" style="max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px;">
-              <div style="text-align: center; padding: 30px; color: #999;">
-                <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 10px; display: block;"></i>
-                \u6B63\u5728\u52A0\u8F7D\u6A21\u578B\u6570\u636E...
+            <div class="gal-live2d-mapping-layout">
+              <div class="gal-live2d-mapping-left">
+                <div style="margin-bottom: 12px;">
+                  <h4 style="margin: 0 0 8px 0; color: ${THEME.dark};">\u8868\u60C5\u6807\u7B7E\u6620\u5C04</h4>
+                  <p style="margin: 0; color: #666; font-size: 0.85rem;">\u5C06\u6E38\u620F\u8868\u60C5\u6807\u7B7E\u6620\u5C04\u5230 Live2D \u8868\u60C5\u548C\u52A8\u4F5C\uFF0C\u53F3\u4FA7\u4F1A\u5B9E\u65F6\u9884\u89C8\u5F53\u524D\u9009\u62E9\u3002</p>
+                </div>
+                <div id="gal-mapping-rows" style="max-height: 360px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px;">
+                  <div style="text-align: center; padding: 30px; color: #999;">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 10px; display: block;"></i>
+                    \u6B63\u5728\u52A0\u8F7D\u6A21\u578B\u6570\u636E...
+                  </div>
+                </div>
+                <div style="margin-top: 12px; display: flex; gap: 10px;">
+                  <button id="gal-live2d-auto-match" style="padding: 8px 16px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
+                    <i class="fa-solid fa-magic"></i> \u81EA\u52A8\u5339\u914D\u5168\u90E8
+                  </button>
+                  <button id="gal-live2d-clear-mapping" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                    <i class="fa-solid fa-trash"></i> \u6E05\u7A7A\u6620\u5C04
+                  </button>
+                </div>
               </div>
-            </div>
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-              <button id="gal-live2d-auto-match" style="padding: 8px 16px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
-                <i class="fa-solid fa-magic"></i> \u81EA\u52A8\u5339\u914D\u5168\u90E8
-              </button>
-              <button id="gal-live2d-clear-mapping" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
-                <i class="fa-solid fa-trash"></i> \u6E05\u7A7A\u6620\u5C04
-              </button>
+
+              <div class="gal-live2d-mapping-right">
+                <div class="gal-live2d-preview-meta">
+                  <span><i class="fa-solid fa-eye"></i> \u6A21\u578B\u9884\u89C8</span>
+                  <span>\u6807\u7B7E: <strong id="gal-live2d-preview-tag">-</strong></span>
+                </div>
+                <div id="gal-live2d-preview-canvas" class="gal-live2d-preview-canvas">
+                  <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.88); font-size: 0.85rem;">
+                    \u5207\u6362\u5230\u201C\u8868\u60C5\u6620\u5C04\u201D\u540E\u81EA\u52A8\u52A0\u8F7D\u9884\u89C8
+                  </div>
+                </div>
+                <div class="gal-live2d-preview-tools">
+                  <div class="gal-live2d-preview-zoom-wrap">
+                    <span style="font-size: 0.76rem; color: #475569;">\u7F29\u653E</span>
+                    <input type="range" id="gal-live2d-preview-zoom" min="0.5" max="4" step="0.05" value="1.8">
+                    <span id="gal-live2d-preview-zoom-value">180%</span>
+                  </div>
+                  <button id="gal-live2d-preview-reset-view" type="button">
+                    <i class="fa-solid fa-up-down-left-right"></i> \u91CD\u7F6E\u89C6\u56FE
+                  </button>
+                  <button id="gal-live2d-preview-replay" type="button">
+                    <i class="fa-solid fa-rotate-right"></i> \u91CD\u64AD\u5F53\u524D\u6807\u7B7E
+                  </button>
+                </div>
+                <small style="color: #64748b; font-size: 0.72rem;">\u63D0\u793A: \u62D6\u62FD\u9884\u89C8\u533A\u53EF\u79FB\u52A8\u6A21\u578B\uFF0C\u6EDA\u8F6E\u53EF\u7F29\u653E\u3002</small>
+                <small id="gal-live2d-preview-status">\u51C6\u5907\u4E2D</small>
+              </div>
             </div>
           </div>
 
@@ -13942,13 +14239,269 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const mountRoot = getModalMountRoot();
     _$(mountRoot).append(modalHtml);
     const $modal = _$(mountRoot).find("#gal-live2d-settings-modal");
+    const setPreviewStatus = (text, level = "info") => {
+      const $status = $modal.find("#gal-live2d-preview-status");
+      if (!$status.length) return;
+      $status.text(text || "");
+      if (level === "error") {
+        $status.css("color", "#dc2626");
+      } else if (level === "success") {
+        $status.css("color", "#16a34a");
+      } else {
+        $status.css("color", "#64748b");
+      }
+    };
+    const setPreviewTag = (tag) => {
+      $modal.find("#gal-live2d-preview-tag").text(tag ? String(tag) : "-");
+    };
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const getPreviewDragPoint = (event) => {
+      const oe = event?.originalEvent || event;
+      if (oe?.touches?.length) return { x: oe.touches[0].clientX, y: oe.touches[0].clientY };
+      if (oe?.changedTouches?.length) return { x: oe.changedTouches[0].clientX, y: oe.changedTouches[0].clientY };
+      if (Number.isFinite(oe?.clientX) && Number.isFinite(oe?.clientY)) return { x: oe.clientX, y: oe.clientY };
+      return null;
+    };
+    const capturePreviewBasePose = () => {
+      const model = Live2DManager.models.get(characterId);
+      if (!model) return;
+      const baseScale = Number(model.scale?.x);
+      previewBasePose = {
+        x: Number(model.x) || 0,
+        y: Number(model.y) || 0,
+        scale: Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1
+      };
+    };
+    const applyPreviewViewport = () => {
+      if (!previewMounted) return;
+      const model = Live2DManager.models.get(characterId);
+      if (!model) return;
+      const $previewCanvas = $modal.find("#gal-live2d-preview-canvas");
+      const canvasWidth = Math.max(1, Number($previewCanvas.innerWidth()) || Number($previewCanvas.width()) || 320);
+      const canvasHeight = Math.max(1, Number($previewCanvas.innerHeight()) || Number($previewCanvas.height()) || 260);
+      const maxOffsetX = Math.max(60, canvasWidth * 0.45);
+      const maxOffsetY = Math.max(60, canvasHeight * 0.45);
+      previewPanOffsetX = clamp(previewPanOffsetX, -maxOffsetX, maxOffsetX);
+      previewPanOffsetY = clamp(previewPanOffsetY, -maxOffsetY, maxOffsetY);
+      previewZoomFactor = clamp(previewZoomFactor, 0.5, 4);
+      const finalScale = previewBasePose.scale * previewZoomFactor;
+      if (model.scale?.set) {
+        model.scale.set(finalScale);
+      }
+      model.x = previewBasePose.x + previewPanOffsetX;
+      model.y = previewBasePose.y + previewPanOffsetY;
+      const container = Live2DManager.containers.get(characterId);
+      if (container?.app?.renderer && container?.app?.stage) {
+        container.app.renderer.render(container.app.stage);
+      }
+      $modal.find("#gal-live2d-preview-zoom").val(String(previewZoomFactor.toFixed(2)));
+      $modal.find("#gal-live2d-preview-zoom-value").text(`${Math.round(previewZoomFactor * 100)}%`);
+    };
+    const resetPreviewViewport = () => {
+      previewZoomFactor = 1.8;
+      previewPanOffsetX = 0;
+      previewPanOffsetY = 0;
+      applyPreviewViewport();
+    };
+    const bindPreviewViewportEvents = () => {
+      const $previewCanvas = $modal.find("#gal-live2d-preview-canvas");
+      if (!$previewCanvas.length) return;
+      if ($previewCanvas.data("viewportBound")) return;
+      $previewCanvas.on("mousedown.galLive2DPreviewPan touchstart.galLive2DPreviewPan", function(event) {
+        if (!previewMounted) return;
+        const point = getPreviewDragPoint(event);
+        if (!point) return;
+        previewIsDragging = true;
+        previewDragStart = point;
+        previewDragOrigin = { x: previewPanOffsetX, y: previewPanOffsetY };
+        _$(this).css("cursor", "grabbing");
+        if (typeof event.preventDefault === "function") event.preventDefault();
+      });
+      _$(topWindow.document).on("mousemove.galLive2DPreviewPan touchmove.galLive2DPreviewPan", function(event) {
+        if (!previewIsDragging) return;
+        const point = getPreviewDragPoint(event);
+        if (!point) return;
+        previewPanOffsetX = previewDragOrigin.x + (point.x - previewDragStart.x);
+        previewPanOffsetY = previewDragOrigin.y + (point.y - previewDragStart.y);
+        applyPreviewViewport();
+        if (typeof event.preventDefault === "function") event.preventDefault();
+      });
+      _$(topWindow.document).on("mouseup.galLive2DPreviewPan touchend.galLive2DPreviewPan touchcancel.galLive2DPreviewPan", function() {
+        if (!previewIsDragging) return;
+        previewIsDragging = false;
+        $previewCanvas.css("cursor", "grab");
+      });
+      $previewCanvas.on("wheel.galLive2DPreviewPan", function(event) {
+        if (!previewMounted) return;
+        const oe = event?.originalEvent;
+        if (!oe) return;
+        const delta = oe.deltaY < 0 ? 0.08 : -0.08;
+        previewZoomFactor = clamp(previewZoomFactor + delta, 0.5, 4);
+        applyPreviewViewport();
+        if (typeof event.preventDefault === "function") event.preventDefault();
+      });
+      $previewCanvas.data("viewportBound", true);
+    };
+    const unbindPreviewViewportEvents = () => {
+      previewIsDragging = false;
+      const $previewCanvas = $modal.find("#gal-live2d-preview-canvas");
+      $previewCanvas.off(".galLive2DPreviewPan");
+      _$(topWindow.document).off(".galLive2DPreviewPan");
+      $previewCanvas.data("viewportBound", false);
+    };
+    const cleanupMappingPreview = () => {
+      if (!previewMounted) return;
+      previewIsDragging = false;
+      $modal.find("#gal-live2d-preview-canvas").css("cursor", "grab");
+      try {
+        Live2DStage.popMount();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5378\u8F7D\u5931\u8D25:`, e);
+      }
+      previewMounted = false;
+    };
+    const ensureMappingPreviewMounted = async () => {
+      if (previewMounted) return true;
+      if (previewMountPromise) return previewMountPromise;
+      previewMountPromise = (async () => {
+        const $previewCanvas = $modal.find("#gal-live2d-preview-canvas");
+        if (!$previewCanvas.length) return false;
+        $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.88);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 1.4rem;"></i></div>');
+        setPreviewStatus("\u6B63\u5728\u52A0\u8F7D\u6A21\u578B...");
+        let model = Live2DManager.models.get(characterId);
+        if (!model) {
+          model = await Live2DManager.loadModel(characterId);
+        }
+        if (!model) {
+          $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fca5a5; font-size: 0.85rem;">\u6A21\u578B\u52A0\u8F7D\u5931\u8D25</div>');
+          setPreviewStatus("\u6A21\u578B\u52A0\u8F7D\u5931\u8D25", "error");
+          return false;
+        }
+        $previewCanvas.empty();
+        Live2DStage.pushMount($previewCanvas[0], { mode: "single", focusCharacterId: characterId });
+        const attached = Live2DStage.attach(characterId, model, "left", { entering: false });
+        if (!attached) {
+          try {
+            Live2DStage.popMount();
+          } catch (e) {
+          }
+          $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fca5a5; font-size: 0.85rem;">\u9884\u89C8\u6302\u8F7D\u5931\u8D25</div>');
+          setPreviewStatus("\u9884\u89C8\u6302\u8F7D\u5931\u8D25", "error");
+          return false;
+        }
+        previewMounted = true;
+        bindPreviewViewportEvents();
+        capturePreviewBasePose();
+        resetPreviewViewport();
+        setPreviewStatus("\u9884\u89C8\u5C31\u7EEA\uFF0C\u53EF\u62D6\u62FD\u79FB\u52A8/\u6EDA\u8F6E\u7F29\u653E", "success");
+        return true;
+      })();
+      try {
+        return await previewMountPromise;
+      } finally {
+        previewMountPromise = null;
+      }
+    };
+    const getTagRow = (tag) => {
+      let $target = null;
+      $modal.find(".gal-mapping-row").each(function() {
+        if (_$(this).data("tag") === tag) {
+          $target = _$(this);
+          return false;
+        }
+        return void 0;
+      });
+      return $target;
+    };
+    const previewMappingForTag = async (tag) => {
+      if (!tag) return;
+      const mounted = await ensureMappingPreviewMounted();
+      if (!mounted) return;
+      const model = Live2DManager.models.get(characterId);
+      if (!model) {
+        setPreviewStatus("\u6A21\u578B\u672A\u5C31\u7EEA", "error");
+        return;
+      }
+      const $row = getTagRow(tag);
+      if (!$row || !$row.length) return;
+      const exprValue = String($row.find(".gal-expr-mapping-select").val() || "");
+      const motionValueRaw = $row.find(".gal-motion-mapping-select").val();
+      const motionValue = motionValueRaw === null || motionValueRaw === void 0 ? "" : String(motionValueRaw);
+      $modal.find(".gal-mapping-row").removeClass("previewing");
+      $row.addClass("previewing");
+      setPreviewTag(tag);
+      applyPreviewViewport();
+      let playedExpr = "";
+      let playedMotion = "";
+      try {
+        const exprName = exprValue || matchLive2DExpression(model, tag, null) || "";
+        if (exprName) {
+          model.expression(exprName);
+          playedExpr = exprName;
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] \u9884\u89C8\u8868\u60C5\u5931\u8D25:`, e);
+      }
+      try {
+        if (motionValue === "__disabled__") {
+          playedMotion = "(\u52A8\u4F5C\u5DF2\u7981\u7528)";
+        } else {
+          let motion = null;
+          if (motionValue) {
+            motion = { group: motionValue === EMPTY_MOTION_GROUP_VALUE ? "" : motionValue, index: 0 };
+          } else {
+            motion = matchLive2DMotion(model, tag, null);
+          }
+          if (motion) {
+            model.motion(motion.group, motion.index || 0, "FORCE");
+            playedMotion = motion.group === "" ? "(\u7A7A\u52A8\u4F5C\u7EC4)" : String(motion.group || "");
+          }
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] \u9884\u89C8\u52A8\u4F5C\u5931\u8D25:`, e);
+      }
+      const exprText = playedExpr ? `\u8868\u60C5: ${playedExpr}` : "\u8868\u60C5: (\u65E0\u5339\u914D)";
+      const motionText = playedMotion ? `\u52A8\u4F5C: ${playedMotion}` : "\u52A8\u4F5C: (\u65E0\u5339\u914D)";
+      setPreviewStatus(`${tag} | ${exprText} | ${motionText}`);
+    };
+    const previewFirstTagIfExists = async () => {
+      const $first = $modal.find(".gal-mapping-row").first();
+      if (!$first.length) return;
+      const tag = $first.data("tag");
+      if (tag) {
+        await previewMappingForTag(String(tag));
+      }
+    };
+    const bindMappingContainerEvents = ($mappingContainer) => {
+      if (!$mappingContainer.length) return;
+      if ($mappingContainer.data("previewBound")) return;
+      $mappingContainer.on("change", ".gal-expr-mapping-select, .gal-motion-mapping-select", async function() {
+        const tag = _$(this).data("tag");
+        if (tag) {
+          await previewMappingForTag(String(tag));
+        }
+      });
+      $mappingContainer.on("click", ".gal-mapping-preview-btn", async function() {
+        const tag = _$(this).data("tag");
+        if (tag) {
+          await previewMappingForTag(String(tag));
+        }
+      });
+      $mappingContainer.data("previewBound", true);
+    };
     loadModelDataAsync();
-    $modal.find(".gal-settings-tab").on("click", function() {
+    $modal.find(".gal-settings-tab").on("click", async function() {
       const tab = _$(this).data("tab");
       $modal.find(".gal-settings-tab").removeClass("active").css({ color: "#666", borderBottom: "2px solid transparent" });
       _$(this).addClass("active").css({ color: THEME.accent, borderBottom: `2px solid ${THEME.accent}` });
       $modal.find(".gal-settings-panel").hide();
       $modal.find(`.gal-settings-panel[data-panel="${tab}"]`).show();
+      if (tab === "mapping") {
+        await ensureMappingPreviewMounted();
+        await previewFirstTagIfExists();
+      } else {
+        cleanupMappingPreview();
+      }
     });
     $modal.find("#gal-live2d-scale").on("input", function() {
       const val = parseFloat(_$(this).val());
@@ -13970,7 +14523,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       $input.val(parseInt($input.val() || 0) + delta);
       $input.trigger("change");
     });
-    $modal.find("#gal-live2d-auto-match").on("click", function() {
+    $modal.find("#gal-live2d-auto-match").on("click", async function() {
       const model = Live2DManager.models.get(characterId);
       if (!model) return;
       $modal.find(".gal-expr-mapping-select").each(function() {
@@ -13984,17 +14537,45 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         const tag = _$(this).data("tag");
         const matched = matchLive2DMotion(model, tag, null);
         if (matched) {
-          _$(this).val(matched.group);
+          const value = String(matched.group ?? "") === "" ? EMPTY_MOTION_GROUP_VALUE : matched.group;
+          _$(this).val(value);
         }
       });
+      await previewFirstTagIfExists();
     });
-    $modal.find("#gal-live2d-clear-mapping").on("click", function() {
+    $modal.find("#gal-live2d-clear-mapping").on("click", async function() {
       $modal.find(".gal-expr-mapping-select").val("");
       $modal.find(".gal-motion-mapping-select").val("");
+      await previewFirstTagIfExists();
     });
-    $modal.find("#gal-live2d-settings-close").on("click", function() {
+    $modal.find("#gal-live2d-preview-replay").on("click", async function() {
+      const $active = $modal.find(".gal-mapping-row.previewing").first();
+      const activeTag = $active.length ? String($active.data("tag") || "") : "";
+      if (activeTag) {
+        await previewMappingForTag(activeTag);
+        return;
+      }
+      await previewFirstTagIfExists();
+    });
+    $modal.find("#gal-live2d-preview-zoom").on("input", function() {
+      const nextZoom = parseFloat(_$(this).val());
+      if (!Number.isFinite(nextZoom)) return;
+      previewZoomFactor = nextZoom;
+      applyPreviewViewport();
+    });
+    $modal.find("#gal-live2d-preview-reset-view").on("click", function() {
+      resetPreviewViewport();
+      const $active = $modal.find(".gal-mapping-row.previewing").first();
+      if ($active.length) {
+        setPreviewTag(String($active.data("tag") || ""));
+      }
+    });
+    const closeModal = () => {
+      cleanupMappingPreview();
+      unbindPreviewViewportEvents();
       $modal.remove();
-    });
+    };
+    $modal.find("#gal-live2d-settings-close").on("click", closeModal);
     $modal.find("#gal-live2d-start-position-edit").on("click", async function() {
       const currentTransform = {
         offsetX: parseInt($modal.find("#gal-live2d-offset-x").val()) || 0,
@@ -14005,7 +14586,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       const config2 = getLive2DConfig(characterId);
       config2.transform = { ...config2.transform || {}, ...currentTransform };
       setLive2DConfig(characterId, config2);
-      $modal.remove();
+      closeModal();
       await Live2DPositionEditor.enter(characterId);
     });
     $modal.find("#gal-live2d-settings-save").on("click", function() {
@@ -14036,8 +14617,9 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         const val = _$(this).val();
         if (val === "__disabled__") {
           newMotionMapping[tag] = { enabled: false };
-        } else if (val) {
-          newMotionMapping[tag] = { group: val, index: 0, enabled: true };
+        } else if (val || val === EMPTY_MOTION_GROUP_VALUE) {
+          const motionGroup = val === EMPTY_MOTION_GROUP_VALUE ? "" : val;
+          newMotionMapping[tag] = { group: motionGroup, index: 0, enabled: true };
         }
       });
       const newConfig = {
@@ -14054,7 +14636,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (_toastr) {
         _toastr.success(`Live2D \u8BBE\u7F6E\u5DF2\u4FDD\u5B58: ${characterId}`);
       }
-      $modal.remove();
+      closeModal();
     });
   }
 
@@ -17973,6 +18555,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       const $motionSelect = $("#gal-char-live2d-motion-select");
       const $zoomSlider = $("#gal-char-live2d-zoom");
       const $zoomValue = $("#gal-char-live2d-zoom-value");
+      const EMPTY_MOTION_GROUP_VALUE = "__gal_empty_motion_group__";
       if ($previewContainer.is(":visible")) {
         Live2DStage.popMount();
         $previewContainer.hide();
@@ -17995,25 +18578,61 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">\u9884\u89C8\u5931\u8D25\uFF1A\u65E0\u6CD5\u6302\u8F7D\u821E\u53F0</div>');
           return;
         }
-        const expressions = getLive2DExpressionList(characterId);
-        $exprSelect.empty().append('<option value="">\u9009\u62E9\u8868\u60C5</option>');
-        if (expressions.length > 0) {
-          expressions.forEach((expr) => {
-            $exprSelect.append(`<option value="${expr}">${expr}</option>`);
-          });
-        } else {
-          $exprSelect.append('<option value="" disabled>\u65E0\u53EF\u7528\u8868\u60C5</option>');
-        }
-        const motionGroups = getLive2DMotionGroups(characterId);
-        $motionSelect.empty().append('<option value="">\u9009\u62E9\u52A8\u4F5C</option>');
-        if (motionGroups.length > 0) {
-          motionGroups.forEach((group) => {
-            $motionSelect.append(`<option value="${group}">${group}</option>`);
-          });
-        } else {
-          $motionSelect.append('<option value="" disabled>\u65E0\u53EF\u7528\u52A8\u4F5C</option>');
-        }
-        console.log(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5DF2\u542F\u52A8: ${characterId}, \u8868\u60C5=${expressions.length}, \u52A8\u4F5C\u7EC4=${motionGroups.length}`);
+        const refreshPreviewSelectors = () => {
+          const selectedExpr = $exprSelect.val();
+          const selectedMotion = $motionSelect.val();
+          const expressions = getLive2DExpressionList(characterId);
+          $exprSelect.empty().append('<option value="">\u9009\u62E9\u8868\u60C5</option>');
+          if (expressions.length > 0) {
+            expressions.forEach((expr) => {
+              const $option = $("<option></option>");
+              $option.val(expr).text(expr);
+              $exprSelect.append($option);
+            });
+          } else {
+            $exprSelect.append('<option value="" disabled>\u65E0\u53EF\u7528\u8868\u60C5</option>');
+          }
+          if (selectedExpr) {
+            $exprSelect.val(selectedExpr);
+          }
+          const motionGroups = getLive2DMotionGroups(characterId);
+          $motionSelect.empty().append('<option value="">\u9009\u62E9\u52A8\u4F5C</option>');
+          if (motionGroups.length > 0) {
+            motionGroups.forEach((group) => {
+              const rawGroup = String(group ?? "");
+              const optionValue = rawGroup === "" ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
+              const optionLabel = rawGroup === "" ? "(\u7A7A\u52A8\u4F5C\u7EC4)" : rawGroup;
+              const $option = $("<option></option>");
+              $option.val(optionValue).text(optionLabel);
+              $motionSelect.append($option);
+            });
+          } else {
+            $motionSelect.append('<option value="" disabled>\u65E0\u53EF\u7528\u52A8\u4F5C</option>');
+          }
+          if (selectedMotion) {
+            $motionSelect.val(selectedMotion);
+          }
+          return { expressionsCount: expressions.length, motionGroupCount: motionGroups.length };
+        };
+        let retryCount = 0;
+        const maxRetries = 8;
+        const retryDelayMs = 220;
+        const retryRefresh = () => {
+          if (!Live2DManager.models.has(characterId)) return;
+          if (!$previewContainer.is(":visible")) return;
+          const { expressionsCount, motionGroupCount } = refreshPreviewSelectors();
+          if (expressionsCount > 0 && motionGroupCount > 0) {
+            console.log(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5DF2\u542F\u52A8: ${characterId}, \u8868\u60C5=${expressionsCount}, \u52A8\u4F5C\u7EC4=${motionGroupCount}`);
+            return;
+          }
+          if (retryCount >= maxRetries) {
+            console.log(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5DF2\u542F\u52A8: ${characterId}, \u8868\u60C5=${expressionsCount}, \u52A8\u4F5C\u7EC4=${motionGroupCount} (\u91CD\u8BD5\u7ED3\u675F)`);
+            return;
+          }
+          retryCount++;
+          setTimeout(retryRefresh, retryDelayMs);
+        };
+        retryRefresh();
       } catch (err) {
         console.error(`[${SCRIPT_NAME}] Live2D \u9884\u89C8\u5931\u8D25:`, err);
         $previewCanvas.html(`<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">\u9884\u89C8\u5931\u8D25: ${err.message}</div>`);
@@ -18041,8 +18660,9 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       }
     });
     $("#gal-char-live2d-motion-select").on("change", function() {
-      const value = $(this).val();
-      if (!value) return;
+      const rawValue = $(this).val();
+      if (rawValue === null || rawValue === void 0 || rawValue === "") return;
+      const value = rawValue === "__gal_empty_motion_group__" ? "" : rawValue;
       const model = Live2DManager.models.get(characterId);
       if (!model) return;
       try {

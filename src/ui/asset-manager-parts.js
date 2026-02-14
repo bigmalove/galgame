@@ -793,6 +793,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     const $motionSelect = $('#gal-char-live2d-motion-select');
     const $zoomSlider = $('#gal-char-live2d-zoom');
     const $zoomValue = $('#gal-char-live2d-zoom-value');
+    const EMPTY_MOTION_GROUP_VALUE = '__gal_empty_motion_group__';
 
     if ($previewContainer.is(':visible')) {
       Live2DStage.popMount();
@@ -819,23 +820,68 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
         return;
       }
 
-      const expressions = getLive2DExpressionList(characterId);
-      $exprSelect.empty().append('<option value="">选择表情</option>');
-      if (expressions.length > 0) {
-        expressions.forEach(expr => { $exprSelect.append(`<option value="${expr}">${expr}</option>`); });
-      } else {
-        $exprSelect.append('<option value="" disabled>无可用表情</option>');
-      }
+      const refreshPreviewSelectors = () => {
+        const selectedExpr = $exprSelect.val();
+        const selectedMotion = $motionSelect.val();
 
-      const motionGroups = getLive2DMotionGroups(characterId);
-      $motionSelect.empty().append('<option value="">选择动作</option>');
-      if (motionGroups.length > 0) {
-        motionGroups.forEach(group => { $motionSelect.append(`<option value="${group}">${group}</option>`); });
-      } else {
-        $motionSelect.append('<option value="" disabled>无可用动作</option>');
-      }
+        const expressions = getLive2DExpressionList(characterId);
+        $exprSelect.empty().append('<option value="">选择表情</option>');
+        if (expressions.length > 0) {
+          expressions.forEach(expr => {
+            const $option = $('<option></option>');
+            $option.val(expr).text(expr);
+            $exprSelect.append($option);
+          });
+        } else {
+          $exprSelect.append('<option value="" disabled>无可用表情</option>');
+        }
+        if (selectedExpr) {
+          $exprSelect.val(selectedExpr);
+        }
 
-      console.log(`[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情=${expressions.length}, 动作组=${motionGroups.length}`);
+        const motionGroups = getLive2DMotionGroups(characterId);
+        $motionSelect.empty().append('<option value="">选择动作</option>');
+        if (motionGroups.length > 0) {
+          motionGroups.forEach(group => {
+            const rawGroup = String(group ?? '');
+            const optionValue = rawGroup === '' ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
+            const optionLabel = rawGroup === '' ? '(空动作组)' : rawGroup;
+            const $option = $('<option></option>');
+            $option.val(optionValue).text(optionLabel);
+            $motionSelect.append($option);
+          });
+        } else {
+          $motionSelect.append('<option value="" disabled>无可用动作</option>');
+        }
+        if (selectedMotion) {
+          $motionSelect.val(selectedMotion);
+        }
+
+        return { expressionsCount: expressions.length, motionGroupCount: motionGroups.length };
+      };
+
+      let retryCount = 0;
+      const maxRetries = 8;
+      const retryDelayMs = 220;
+      const retryRefresh = () => {
+        if (!Live2DManager.models.has(characterId)) return;
+        if (!$previewContainer.is(':visible')) return;
+
+        const { expressionsCount, motionGroupCount } = refreshPreviewSelectors();
+        if (expressionsCount > 0 && motionGroupCount > 0) {
+          console.log(`[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情=${expressionsCount}, 动作组=${motionGroupCount}`);
+          return;
+        }
+        if (retryCount >= maxRetries) {
+          console.log(`[${SCRIPT_NAME}] Live2D 预览已启动: ${characterId}, 表情=${expressionsCount}, 动作组=${motionGroupCount} (重试结束)`);
+          return;
+        }
+
+        retryCount++;
+        setTimeout(retryRefresh, retryDelayMs);
+      };
+
+      retryRefresh();
     } catch (err) {
       console.error(`[${SCRIPT_NAME}] Live2D 预览失败:`, err);
       $previewCanvas.html(`<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff6b6b;">预览失败: ${err.message}</div>`);
@@ -863,8 +909,9 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
   });
 
   $('#gal-char-live2d-motion-select').on('change', function() {
-    const value = $(this).val();
-    if (!value) return;
+    const rawValue = $(this).val();
+    if (rawValue === null || rawValue === undefined || rawValue === '') return;
+    const value = rawValue === '__gal_empty_motion_group__' ? '' : rawValue;
     const model = Live2DManager.models.get(characterId);
     if (!model) return;
     try { model.motion(value, 0, 'FORCE'); console.log(`[${SCRIPT_NAME}] 播放动作: ${value}`); }

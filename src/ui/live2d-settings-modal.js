@@ -2,6 +2,7 @@ import { SCRIPT_NAME, THEME } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
 import { getLive2DConfig, setLive2DConfig, normalizeLive2DScaleBase } from '../live2d/render-mode.js';
 import { Live2DManager } from '../live2d/manager.js';
+import { Live2DStage } from '../live2d/stage.js';
 import { Live2DPositionEditor } from '../live2d/position-editor.js';
 import { EXPRESSION_LIVE2D_MAP, matchLive2DExpression, matchLive2DMotion, getLive2DExpressionList, getLive2DMotionGroups } from '../live2d/expression-motion.js';
 import { getModalMountRoot } from './fullscreen.js';
@@ -19,9 +20,19 @@ export async function showLive2DSettingsModal(characterId) {
   const qualityConfig = config.quality || {};
   const expressionMapping = config.expressionMapping || {};
   const motionMapping = config.motionMapping || {};
+  const EMPTY_MOTION_GROUP_VALUE = '__gal_empty_motion_group__';
 
   let expressionList = [];
   let motionGroups = [];
+  let previewMounted = false;
+  let previewMountPromise = null;
+  let previewZoomFactor = 1.8;
+  let previewPanOffsetX = 0;
+  let previewPanOffsetY = 0;
+  let previewBasePose = { x: 0, y: 0, scale: 1 };
+  let previewIsDragging = false;
+  let previewDragStart = { x: 0, y: 0 };
+  let previewDragOrigin = { x: 0, y: 0 };
 
   const gameExpressionTags = Object.keys(EXPRESSION_LIVE2D_MAP);
 
@@ -36,12 +47,20 @@ export async function showLive2DSettingsModal(characterId) {
       ? expressionList.map(e => `<option value="${e}">${e}</option>`).join('')
       : '';
     const motionOptionsHtml = motionGroups.length > 0
-      ? motionGroups.map(g => `<option value="${g}">${g}</option>`).join('')
+      ? motionGroups.map(groupName => {
+        const rawGroup = String(groupName ?? '');
+        const value = rawGroup === '' ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
+        const label = rawGroup === '' ? '(空动作组)' : rawGroup;
+        return `<option value="${value}">${label}</option>`;
+      }).join('')
       : '';
 
     for (const tag of allTags) {
       const currentExpr = existingMappings[tag] || '';
       const currentMotion = existingMotionMappings[tag] || {};
+      const currentMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, 'group')
+        ? String(currentMotion.group ?? '')
+        : '';
 
       rows += `
         <div class="gal-mapping-row" data-tag="${tag}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
@@ -51,11 +70,14 @@ export async function showLive2DSettingsModal(characterId) {
             <option value="">(自动匹配)</option>
             ${exprOptionsHtml}
           </select>
-          <select class="gal-motion-mapping-select" data-tag="${tag}" data-current="${currentMotion.group || ''}" data-disabled="${currentMotion.enabled === false}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+          <select class="gal-motion-mapping-select" data-tag="${tag}" data-current="${currentMotionGroup}" data-disabled="${currentMotion.enabled === false}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">(自动匹配)</option>
             <option value="__disabled__">(禁用动作)</option>
             ${motionOptionsHtml}
           </select>
+          <button type="button" class="gal-mapping-preview-btn" data-tag="${tag}" title="预览该标签" style="width: 32px; height: 32px; border: 1px solid #0ea5e9; border-radius: 6px; background: #e0f2fe; color: #0369a1; cursor: pointer; flex-shrink: 0;">
+            <i class="fa-solid fa-play"></i>
+          </button>
         </div>
       `;
     }
@@ -78,7 +100,7 @@ export async function showLive2DSettingsModal(characterId) {
         $modal.find('.gal-model-info-expr').text(expressionList.length);
         $modal.find('.gal-model-info-motion').text(motionGroups.length);
 
-        setTimeout(() => {
+        setTimeout(async () => {
           const $mappingContainer = $modal.find('#gal-mapping-rows');
           if ($mappingContainer.length && !$mappingContainer.data('loaded')) {
             const rowsHtml = buildMappingRows();
@@ -86,18 +108,28 @@ export async function showLive2DSettingsModal(characterId) {
             $mappingContainer.data('loaded', true);
 
             $mappingContainer.find('.gal-expr-mapping-select').each(function() {
-              const current = $(this).data('current');
-              if (current) $(this).val(current);
+              const current = _$(this).data('current');
+              if (current) _$(this).val(current);
             });
             $mappingContainer.find('.gal-motion-mapping-select').each(function() {
-              const current = $(this).data('current');
-              const disabled = $(this).data('disabled');
+              const current = _$(this).data('current');
+              const disabled = _$(this).data('disabled');
               if (disabled) {
-                $(this).val('__disabled__');
+                _$(this).val('__disabled__');
+              } else if (current === '') {
+                _$(this).val(EMPTY_MOTION_GROUP_VALUE);
               } else if (current) {
-                $(this).val(current);
+                _$(this).val(current);
               }
             });
+
+            bindMappingContainerEvents($mappingContainer);
+
+            const activeTab = $modal.find('.gal-settings-tab.active').data('tab');
+            if (activeTab === 'mapping') {
+              await ensureMappingPreviewMounted();
+              await previewFirstTagIfExists();
+            }
           }
         }, 50);
       }
@@ -108,7 +140,103 @@ export async function showLive2DSettingsModal(characterId) {
 
   const modalHtml = `
     <div id="gal-live2d-settings-modal" class="gal-z-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;">
-      <div style="background: #fff; border-radius: 12px; width: 90%; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+      <style>
+        #gal-live2d-settings-modal .gal-live2d-mapping-layout {
+          display: flex;
+          gap: 14px;
+          align-items: stretch;
+          min-height: 360px;
+        }
+        #gal-live2d-settings-modal .gal-live2d-mapping-left {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        #gal-live2d-settings-modal .gal-live2d-mapping-right {
+          width: 320px;
+          flex: 0 0 320px;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          background: #f8fafc;
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        #gal-live2d-settings-modal .gal-mapping-row.previewing {
+          background: rgba(0, 210, 255, 0.08);
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-canvas {
+          position: relative;
+          width: 100%;
+          height: 260px;
+          border-radius: 8px;
+          overflow: hidden;
+          background: radial-gradient(circle at 30% 20%, #1e293b, #0f172a 70%);
+          cursor: grab;
+          user-select: none;
+          touch-action: none;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          font-size: 0.8rem;
+          color: #475569;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-tools {
+          display: flex;
+          gap: 8px;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-tools button {
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          background: #fff;
+          color: #334155;
+          padding: 6px 10px;
+          cursor: pointer;
+          font-size: 0.8rem;
+        }
+        #gal-live2d-settings-modal .gal-live2d-preview-zoom-wrap {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+        }
+        #gal-live2d-settings-modal #gal-live2d-preview-zoom {
+          flex: 1;
+          min-width: 90px;
+        }
+        #gal-live2d-settings-modal #gal-live2d-preview-zoom-value {
+          min-width: 44px;
+          text-align: right;
+          font-size: 0.76rem;
+          color: #475569;
+        }
+        #gal-live2d-settings-modal #gal-live2d-preview-status {
+          display: block;
+          color: #64748b;
+          font-size: 0.78rem;
+          min-height: 18px;
+        }
+        @media screen and (max-width: 900px) {
+          #gal-live2d-settings-modal .gal-live2d-mapping-layout {
+            flex-direction: column;
+            min-height: 0;
+          }
+          #gal-live2d-settings-modal .gal-live2d-mapping-right {
+            width: 100%;
+            flex: 0 0 auto;
+          }
+          #gal-live2d-settings-modal #gal-mapping-rows {
+            max-height: 260px !important;
+          }
+        }
+      </style>
+      <div style="background: #fff; border-radius: 12px; width: 92%; max-width: 1080px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
         <!-- 头部 -->
         <div style="padding: 16px 20px; background: linear-gradient(135deg, ${THEME.accent}, ${THEME.accentSub}); color: #fff; display: flex; justify-content: space-between; align-items: center;">
           <span style="font-weight: 700; font-size: 1.1rem;">
@@ -181,23 +309,54 @@ export async function showLive2DSettingsModal(characterId) {
 
           <!-- 表情映射 -->
           <div class="gal-settings-panel" data-panel="mapping" style="display: none;">
-            <div style="margin-bottom: 15px;">
-              <h4 style="margin: 0 0 8px 0; color: ${THEME.dark};">表情标签映射</h4>
-              <p style="margin: 0; color: #666; font-size: 0.85rem;">将游戏表情标签映射到 Live2D 表情和动作。留空则使用自动匹配。</p>
-            </div>
-            <div id="gal-mapping-rows" style="max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px;">
-              <div style="text-align: center; padding: 30px; color: #999;">
-                <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 10px; display: block;"></i>
-                正在加载模型数据...
+            <div class="gal-live2d-mapping-layout">
+              <div class="gal-live2d-mapping-left">
+                <div style="margin-bottom: 12px;">
+                  <h4 style="margin: 0 0 8px 0; color: ${THEME.dark};">表情标签映射</h4>
+                  <p style="margin: 0; color: #666; font-size: 0.85rem;">将游戏表情标签映射到 Live2D 表情和动作，右侧会实时预览当前选择。</p>
+                </div>
+                <div id="gal-mapping-rows" style="max-height: 360px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px;">
+                  <div style="text-align: center; padding: 30px; color: #999;">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 10px; display: block;"></i>
+                    正在加载模型数据...
+                  </div>
+                </div>
+                <div style="margin-top: 12px; display: flex; gap: 10px;">
+                  <button id="gal-live2d-auto-match" style="padding: 8px 16px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
+                    <i class="fa-solid fa-magic"></i> 自动匹配全部
+                  </button>
+                  <button id="gal-live2d-clear-mapping" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                    <i class="fa-solid fa-trash"></i> 清空映射
+                  </button>
+                </div>
               </div>
-            </div>
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-              <button id="gal-live2d-auto-match" style="padding: 8px 16px; background: ${THEME.accent}; color: #fff; border: none; border-radius: 4px; cursor: pointer;">
-                <i class="fa-solid fa-magic"></i> 自动匹配全部
-              </button>
-              <button id="gal-live2d-clear-mapping" style="padding: 8px 16px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
-                <i class="fa-solid fa-trash"></i> 清空映射
-              </button>
+
+              <div class="gal-live2d-mapping-right">
+                <div class="gal-live2d-preview-meta">
+                  <span><i class="fa-solid fa-eye"></i> 模型预览</span>
+                  <span>标签: <strong id="gal-live2d-preview-tag">-</strong></span>
+                </div>
+                <div id="gal-live2d-preview-canvas" class="gal-live2d-preview-canvas">
+                  <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.88); font-size: 0.85rem;">
+                    切换到“表情映射”后自动加载预览
+                  </div>
+                </div>
+                <div class="gal-live2d-preview-tools">
+                  <div class="gal-live2d-preview-zoom-wrap">
+                    <span style="font-size: 0.76rem; color: #475569;">缩放</span>
+                    <input type="range" id="gal-live2d-preview-zoom" min="0.5" max="4" step="0.05" value="1.8">
+                    <span id="gal-live2d-preview-zoom-value">180%</span>
+                  </div>
+                  <button id="gal-live2d-preview-reset-view" type="button">
+                    <i class="fa-solid fa-up-down-left-right"></i> 重置视图
+                  </button>
+                  <button id="gal-live2d-preview-replay" type="button">
+                    <i class="fa-solid fa-rotate-right"></i> 重播当前标签
+                  </button>
+                </div>
+                <small style="color: #64748b; font-size: 0.72rem;">提示: 拖拽预览区可移动模型，滚轮可缩放。</small>
+                <small id="gal-live2d-preview-status">准备中</small>
+              </div>
             </div>
           </div>
 
@@ -266,15 +425,313 @@ export async function showLive2DSettingsModal(characterId) {
 
   const $modal = _$(mountRoot).find('#gal-live2d-settings-modal');
 
+  const setPreviewStatus = (text, level = 'info') => {
+    const $status = $modal.find('#gal-live2d-preview-status');
+    if (!$status.length) return;
+    $status.text(text || '');
+    if (level === 'error') {
+      $status.css('color', '#dc2626');
+    } else if (level === 'success') {
+      $status.css('color', '#16a34a');
+    } else {
+      $status.css('color', '#64748b');
+    }
+  };
+
+  const setPreviewTag = (tag) => {
+    $modal.find('#gal-live2d-preview-tag').text(tag ? String(tag) : '-');
+  };
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  const getPreviewDragPoint = (event) => {
+    const oe = event?.originalEvent || event;
+    if (oe?.touches?.length) return { x: oe.touches[0].clientX, y: oe.touches[0].clientY };
+    if (oe?.changedTouches?.length) return { x: oe.changedTouches[0].clientX, y: oe.changedTouches[0].clientY };
+    if (Number.isFinite(oe?.clientX) && Number.isFinite(oe?.clientY)) return { x: oe.clientX, y: oe.clientY };
+    return null;
+  };
+
+  const capturePreviewBasePose = () => {
+    const model = Live2DManager.models.get(characterId);
+    if (!model) return;
+    const baseScale = Number(model.scale?.x);
+    previewBasePose = {
+      x: Number(model.x) || 0,
+      y: Number(model.y) || 0,
+      scale: Number.isFinite(baseScale) && baseScale > 0 ? baseScale : 1,
+    };
+  };
+
+  const applyPreviewViewport = () => {
+    if (!previewMounted) return;
+    const model = Live2DManager.models.get(characterId);
+    if (!model) return;
+
+    const $previewCanvas = $modal.find('#gal-live2d-preview-canvas');
+    const canvasWidth = Math.max(1, Number($previewCanvas.innerWidth()) || Number($previewCanvas.width()) || 320);
+    const canvasHeight = Math.max(1, Number($previewCanvas.innerHeight()) || Number($previewCanvas.height()) || 260);
+    const maxOffsetX = Math.max(60, canvasWidth * 0.45);
+    const maxOffsetY = Math.max(60, canvasHeight * 0.45);
+    previewPanOffsetX = clamp(previewPanOffsetX, -maxOffsetX, maxOffsetX);
+    previewPanOffsetY = clamp(previewPanOffsetY, -maxOffsetY, maxOffsetY);
+    previewZoomFactor = clamp(previewZoomFactor, 0.5, 4);
+
+    const finalScale = previewBasePose.scale * previewZoomFactor;
+    if (model.scale?.set) {
+      model.scale.set(finalScale);
+    }
+    model.x = previewBasePose.x + previewPanOffsetX;
+    model.y = previewBasePose.y + previewPanOffsetY;
+
+    const container = Live2DManager.containers.get(characterId);
+    if (container?.app?.renderer && container?.app?.stage) {
+      container.app.renderer.render(container.app.stage);
+    }
+
+    $modal.find('#gal-live2d-preview-zoom').val(String(previewZoomFactor.toFixed(2)));
+    $modal.find('#gal-live2d-preview-zoom-value').text(`${Math.round(previewZoomFactor * 100)}%`);
+  };
+
+  const resetPreviewViewport = () => {
+    previewZoomFactor = 1.8;
+    previewPanOffsetX = 0;
+    previewPanOffsetY = 0;
+    applyPreviewViewport();
+  };
+
+  const bindPreviewViewportEvents = () => {
+    const $previewCanvas = $modal.find('#gal-live2d-preview-canvas');
+    if (!$previewCanvas.length) return;
+    if ($previewCanvas.data('viewportBound')) return;
+
+    $previewCanvas.on('mousedown.galLive2DPreviewPan touchstart.galLive2DPreviewPan', function(event) {
+      if (!previewMounted) return;
+      const point = getPreviewDragPoint(event);
+      if (!point) return;
+      previewIsDragging = true;
+      previewDragStart = point;
+      previewDragOrigin = { x: previewPanOffsetX, y: previewPanOffsetY };
+      _$(this).css('cursor', 'grabbing');
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+    });
+
+    _$(topWindow.document).on('mousemove.galLive2DPreviewPan touchmove.galLive2DPreviewPan', function(event) {
+      if (!previewIsDragging) return;
+      const point = getPreviewDragPoint(event);
+      if (!point) return;
+      previewPanOffsetX = previewDragOrigin.x + (point.x - previewDragStart.x);
+      previewPanOffsetY = previewDragOrigin.y + (point.y - previewDragStart.y);
+      applyPreviewViewport();
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+    });
+
+    _$(topWindow.document).on('mouseup.galLive2DPreviewPan touchend.galLive2DPreviewPan touchcancel.galLive2DPreviewPan', function() {
+      if (!previewIsDragging) return;
+      previewIsDragging = false;
+      $previewCanvas.css('cursor', 'grab');
+    });
+
+    $previewCanvas.on('wheel.galLive2DPreviewPan', function(event) {
+      if (!previewMounted) return;
+      const oe = event?.originalEvent;
+      if (!oe) return;
+      const delta = oe.deltaY < 0 ? 0.08 : -0.08;
+      previewZoomFactor = clamp(previewZoomFactor + delta, 0.5, 4);
+      applyPreviewViewport();
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+    });
+
+    $previewCanvas.data('viewportBound', true);
+  };
+
+  const unbindPreviewViewportEvents = () => {
+    previewIsDragging = false;
+    const $previewCanvas = $modal.find('#gal-live2d-preview-canvas');
+    $previewCanvas.off('.galLive2DPreviewPan');
+    _$(topWindow.document).off('.galLive2DPreviewPan');
+    $previewCanvas.data('viewportBound', false);
+  };
+
+  const cleanupMappingPreview = () => {
+    if (!previewMounted) return;
+    previewIsDragging = false;
+    $modal.find('#gal-live2d-preview-canvas').css('cursor', 'grab');
+    try {
+      Live2DStage.popMount();
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] Live2D 预览卸载失败:`, e);
+    }
+    previewMounted = false;
+  };
+
+  const ensureMappingPreviewMounted = async () => {
+    if (previewMounted) return true;
+    if (previewMountPromise) return previewMountPromise;
+
+    previewMountPromise = (async () => {
+      const $previewCanvas = $modal.find('#gal-live2d-preview-canvas');
+      if (!$previewCanvas.length) return false;
+
+      $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: rgba(255,255,255,0.88);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 1.4rem;"></i></div>');
+      setPreviewStatus('正在加载模型...');
+
+      let model = Live2DManager.models.get(characterId);
+      if (!model) {
+        model = await Live2DManager.loadModel(characterId);
+      }
+      if (!model) {
+        $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fca5a5; font-size: 0.85rem;">模型加载失败</div>');
+        setPreviewStatus('模型加载失败', 'error');
+        return false;
+      }
+
+      $previewCanvas.empty();
+      Live2DStage.pushMount($previewCanvas[0], { mode: 'single', focusCharacterId: characterId });
+      const attached = Live2DStage.attach(characterId, model, 'left', { entering: false });
+      if (!attached) {
+        try {
+          Live2DStage.popMount();
+        } catch (e) {}
+        $previewCanvas.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #fca5a5; font-size: 0.85rem;">预览挂载失败</div>');
+        setPreviewStatus('预览挂载失败', 'error');
+        return false;
+      }
+
+      previewMounted = true;
+      bindPreviewViewportEvents();
+      capturePreviewBasePose();
+      resetPreviewViewport();
+      setPreviewStatus('预览就绪，可拖拽移动/滚轮缩放', 'success');
+      return true;
+    })();
+
+    try {
+      return await previewMountPromise;
+    } finally {
+      previewMountPromise = null;
+    }
+  };
+
+  const getTagRow = (tag) => {
+    let $target = null;
+    $modal.find('.gal-mapping-row').each(function() {
+      if (_$(this).data('tag') === tag) {
+        $target = _$(this);
+        return false;
+      }
+      return undefined;
+    });
+    return $target;
+  };
+
+  const previewMappingForTag = async (tag) => {
+    if (!tag) return;
+    const mounted = await ensureMappingPreviewMounted();
+    if (!mounted) return;
+
+    const model = Live2DManager.models.get(characterId);
+    if (!model) {
+      setPreviewStatus('模型未就绪', 'error');
+      return;
+    }
+
+    const $row = getTagRow(tag);
+    if (!$row || !$row.length) return;
+
+    const exprValue = String($row.find('.gal-expr-mapping-select').val() || '');
+    const motionValueRaw = $row.find('.gal-motion-mapping-select').val();
+    const motionValue = motionValueRaw === null || motionValueRaw === undefined ? '' : String(motionValueRaw);
+
+    $modal.find('.gal-mapping-row').removeClass('previewing');
+    $row.addClass('previewing');
+    setPreviewTag(tag);
+    applyPreviewViewport();
+
+    let playedExpr = '';
+    let playedMotion = '';
+
+    try {
+      const exprName = exprValue || matchLive2DExpression(model, tag, null) || '';
+      if (exprName) {
+        model.expression(exprName);
+        playedExpr = exprName;
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 预览表情失败:`, e);
+    }
+
+    try {
+      if (motionValue === '__disabled__') {
+        playedMotion = '(动作已禁用)';
+      } else {
+        let motion = null;
+        if (motionValue) {
+          motion = { group: motionValue === EMPTY_MOTION_GROUP_VALUE ? '' : motionValue, index: 0 };
+        } else {
+          motion = matchLive2DMotion(model, tag, null);
+        }
+
+        if (motion) {
+          model.motion(motion.group, motion.index || 0, 'FORCE');
+          playedMotion = motion.group === '' ? '(空动作组)' : String(motion.group || '');
+        }
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 预览动作失败:`, e);
+    }
+
+    const exprText = playedExpr ? `表情: ${playedExpr}` : '表情: (无匹配)';
+    const motionText = playedMotion ? `动作: ${playedMotion}` : '动作: (无匹配)';
+    setPreviewStatus(`${tag} | ${exprText} | ${motionText}`);
+  };
+
+  const previewFirstTagIfExists = async () => {
+    const $first = $modal.find('.gal-mapping-row').first();
+    if (!$first.length) return;
+    const tag = $first.data('tag');
+    if (tag) {
+      await previewMappingForTag(String(tag));
+    }
+  };
+
+  const bindMappingContainerEvents = ($mappingContainer) => {
+    if (!$mappingContainer.length) return;
+    if ($mappingContainer.data('previewBound')) return;
+
+    $mappingContainer.on('change', '.gal-expr-mapping-select, .gal-motion-mapping-select', async function() {
+      const tag = _$(this).data('tag');
+      if (tag) {
+        await previewMappingForTag(String(tag));
+      }
+    });
+
+    $mappingContainer.on('click', '.gal-mapping-preview-btn', async function() {
+      const tag = _$(this).data('tag');
+      if (tag) {
+        await previewMappingForTag(String(tag));
+      }
+    });
+
+    $mappingContainer.data('previewBound', true);
+  };
+
   loadModelDataAsync();
 
   // 标签页切换
-  $modal.find('.gal-settings-tab').on('click', function() {
+  $modal.find('.gal-settings-tab').on('click', async function() {
     const tab = _$(this).data('tab');
     $modal.find('.gal-settings-tab').removeClass('active').css({ color: '#666', borderBottom: '2px solid transparent' });
     _$(this).addClass('active').css({ color: THEME.accent, borderBottom: `2px solid ${THEME.accent}` });
     $modal.find('.gal-settings-panel').hide();
     $modal.find(`.gal-settings-panel[data-panel="${tab}"]`).show();
+
+    if (tab === 'mapping') {
+      await ensureMappingPreviewMounted();
+      await previewFirstTagIfExists();
+    } else {
+      cleanupMappingPreview();
+    }
   });
 
   // 缩放滑块
@@ -303,7 +760,7 @@ export async function showLive2DSettingsModal(characterId) {
     $input.trigger('change');
   });
 
-  $modal.find('#gal-live2d-auto-match').on('click', function() {
+  $modal.find('#gal-live2d-auto-match').on('click', async function() {
     const model = Live2DManager.models.get(characterId);
     if (!model) return;
     $modal.find('.gal-expr-mapping-select').each(function() {
@@ -317,21 +774,54 @@ export async function showLive2DSettingsModal(characterId) {
       const tag = _$(this).data('tag');
       const matched = matchLive2DMotion(model, tag, null);
       if (matched) {
-        _$(this).val(matched.group);
+        const value = String(matched.group ?? '') === '' ? EMPTY_MOTION_GROUP_VALUE : matched.group;
+        _$(this).val(value);
       }
     });
+
+    await previewFirstTagIfExists();
   });
 
   // 清空映射
-  $modal.find('#gal-live2d-clear-mapping').on('click', function() {
+  $modal.find('#gal-live2d-clear-mapping').on('click', async function() {
     $modal.find('.gal-expr-mapping-select').val('');
     $modal.find('.gal-motion-mapping-select').val('');
+    await previewFirstTagIfExists();
   });
 
-  // 关闭/取消
-  $modal.find('#gal-live2d-settings-close').on('click', function() {
-    $modal.remove();
+  $modal.find('#gal-live2d-preview-replay').on('click', async function() {
+    const $active = $modal.find('.gal-mapping-row.previewing').first();
+    const activeTag = $active.length ? String($active.data('tag') || '') : '';
+    if (activeTag) {
+      await previewMappingForTag(activeTag);
+      return;
+    }
+    await previewFirstTagIfExists();
   });
+
+  $modal.find('#gal-live2d-preview-zoom').on('input', function() {
+    const nextZoom = parseFloat(_$(this).val());
+    if (!Number.isFinite(nextZoom)) return;
+    previewZoomFactor = nextZoom;
+    applyPreviewViewport();
+  });
+
+  $modal.find('#gal-live2d-preview-reset-view').on('click', function() {
+    resetPreviewViewport();
+    const $active = $modal.find('.gal-mapping-row.previewing').first();
+    if ($active.length) {
+      setPreviewTag(String($active.data('tag') || ''));
+    }
+  });
+
+  const closeModal = () => {
+    cleanupMappingPreview();
+    unbindPreviewViewportEvents();
+    $modal.remove();
+  };
+
+  // 关闭/取消
+  $modal.find('#gal-live2d-settings-close').on('click', closeModal);
 
   // 开始调整位置
   $modal.find('#gal-live2d-start-position-edit').on('click', async function() {
@@ -345,7 +835,7 @@ export async function showLive2DSettingsModal(characterId) {
     config.transform = { ...(config.transform || {}), ...currentTransform };
     setLive2DConfig(characterId, config);
 
-    $modal.remove();
+    closeModal();
 
     await Live2DPositionEditor.enter(characterId);
   });
@@ -382,8 +872,9 @@ export async function showLive2DSettingsModal(characterId) {
       const val = _$(this).val();
       if (val === '__disabled__') {
         newMotionMapping[tag] = { enabled: false };
-      } else if (val) {
-        newMotionMapping[tag] = { group: val, index: 0, enabled: true };
+      } else if (val || val === EMPTY_MOTION_GROUP_VALUE) {
+        const motionGroup = val === EMPTY_MOTION_GROUP_VALUE ? '' : val;
+        newMotionMapping[tag] = { group: motionGroup, index: 0, enabled: true };
       }
     });
 
@@ -404,6 +895,6 @@ export async function showLive2DSettingsModal(characterId) {
       _toastr.success(`Live2D 设置已保存: ${characterId}`);
     }
 
-    $modal.remove();
+    closeModal();
   });
 }

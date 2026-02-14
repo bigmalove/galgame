@@ -270,6 +270,8 @@
                 <span class="pill"><span class="k">角色卡</span><span class="v" id="cardName">未载入</span></span>
                 <span class="pill"><span class="k">spec</span><span class="v" id="cardSpec">-</span></span>
                 <span class="pill"><span class="k">是否含配置</span><span class="v" id="hasCfg">-</span></span>
+                <span class="pill"><span class="k">配置体积</span><span class="v" id="cfgSize">-</span></span>
+                <span class="pill"><span class="k">嵌入Live2D</span><span class="v" id="cfgLive2dSize">-</span></span>
                 <span class="pill"><span class="k">提示</span><span class="v" id="hint">选择一个角色卡 JSON 或 PNG</span></span>
               </div>
             </div>
@@ -298,6 +300,9 @@
         card: null,
         config: null,
       };
+
+      const DISCORD_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
+      const RECOMMENDED_EMBED_LIVE2D_BYTES = DISCORD_UPLOAD_LIMIT_BYTES;
 
       function setHealth(kind, text) {
         const dot = $('healthDot');
@@ -351,19 +356,143 @@
         return String(fileName || '').replace(/\.(json|png)$/i, '');
       }
 
+      function utf8ByteLength(text) {
+        return new TextEncoder().encode(String(text || '')).length;
+      }
+
+      function formatSize(bytes) {
+        const n = Number(bytes) || 0;
+        if (n < 1024) return `${n} B`;
+        if (n < 1024 * 1024) return `${(n / 1024).toFixed(2)} KB`;
+        return `${(n / 1024 / 1024).toFixed(2)} MB`;
+      }
+
+      function estimateBase64Bytes(base64Text) {
+        const normalized = normalizeBase64(base64Text);
+        if (!normalized) return 0;
+        const len = normalized.length;
+        const pad = normalized.endsWith('==') ? 2 : (normalized.endsWith('=') ? 1 : 0);
+        return Math.max(0, Math.floor((len * 3) / 4) - pad);
+      }
+
+      function estimateEmbeddedLive2dSize(cfg) {
+        const models = cfg?.live2d?.models;
+        if (!models || typeof models !== 'object') {
+          return { totalBytes: 0, count: 0 };
+        }
+
+        let totalBytes = 0;
+        let count = 0;
+        for (const model of Object.values(models)) {
+          if (!model || typeof model !== 'object') continue;
+          if (model.source !== 'embedded') continue;
+          count++;
+
+          let size = Number(model.sizeBytes) || 0;
+          const payload = model.payload;
+          if (size <= 0 && payload && typeof payload === 'object') {
+            size += estimateBase64Bytes(payload.moc3Base64);
+            size += estimateBase64Bytes(payload.mocBase64);
+            size += estimateBase64Bytes(payload.physicsBase64);
+            size += estimateBase64Bytes(payload.poseBase64);
+
+            if (Array.isArray(payload.textures)) {
+              for (const tex of payload.textures) {
+                size += estimateBase64Bytes(tex?.dataBase64);
+              }
+            }
+
+            if (payload.motions && typeof payload.motions === 'object') {
+              for (const list of Object.values(payload.motions)) {
+                if (!Array.isArray(list)) continue;
+                for (const motion of list) {
+                  size += estimateBase64Bytes(motion?.dataBase64);
+                }
+              }
+            }
+
+            if (Array.isArray(payload.expressions)) {
+              for (const expr of payload.expressions) {
+                size += estimateBase64Bytes(expr?.dataBase64);
+              }
+            }
+          }
+
+          totalBytes += size;
+        }
+
+        return { totalBytes, count };
+      }
+
+      function getConfigDiagnostics(cfg) {
+        if (!cfg || typeof cfg !== 'object') {
+          return { ok: false, configBytes: 0, embeddedLive2dBytes: 0, embeddedLive2dCount: 0, warnings: [], errors: [] };
+        }
+
+        const configBytes = utf8ByteLength(JSON.stringify(cfg));
+        const live2dStats = estimateEmbeddedLive2dSize(cfg);
+        const warnings = [];
+        const errors = [];
+
+        if (configBytes > DISCORD_UPLOAD_LIMIT_BYTES) {
+          errors.push(
+            `配置体积 ${formatSize(configBytes)} 已超过 Discord 限制 ${formatSize(DISCORD_UPLOAD_LIMIT_BYTES)}，禁止导出`,
+          );
+        }
+
+        if (live2dStats.embeddedLive2dCount > 0 && live2dStats.totalBytes > RECOMMENDED_EMBED_LIVE2D_BYTES) {
+          warnings.push(
+            `嵌入 Live2D 本体合计 ${formatSize(live2dStats.totalBytes)}，建议改用远程 URL 导出（Discord 限制 ${formatSize(DISCORD_UPLOAD_LIMIT_BYTES)}）`,
+          );
+        }
+
+        return {
+          ok: true,
+          configBytes,
+          embeddedLive2dBytes: live2dStats.totalBytes,
+          embeddedLive2dCount: live2dStats.count,
+          warnings,
+          errors,
+        };
+      }
+
+      function ensureWithinDiscordLimit(totalBytes, formatLabel) {
+        const sizeText = formatSize(totalBytes);
+        if (totalBytes <= DISCORD_UPLOAD_LIMIT_BYTES) return true;
+        alert(
+          `${formatLabel} 导出失败：体积 ${sizeText} 超过 Discord 限制 ${formatSize(DISCORD_UPLOAD_LIMIT_BYTES)}。\n` +
+          '请改用远程资源导出。',
+        );
+        return false;
+      }
+
       function syncUi() {
         const card = state.card;
         const cfgInCard = card ? hasGalgameConfig(card) : false;
+        const cfgParsed = getConfigForInject();
+        const cfgDiag = cfgParsed.ok ? getConfigDiagnostics(cfgParsed.value) : null;
 
         $('cardName').textContent = card ? (getCardDataObject(card).name || card.name || '(未命名)') : '未载入';
         $('cardSpec').textContent = card ? (card.spec || '-') : '-';
         $('hasCfg').textContent = card ? (cfgInCard ? '是' : '否') : '-';
         $('hasCfg').className = 'v ' + (card ? (cfgInCard ? 'ok' : 'bad') : '');
+        $('cfgSize').textContent = cfgDiag && cfgDiag.ok ? formatSize(cfgDiag.configBytes) : '-';
+        $('cfgSize').className = 'v ' + (cfgDiag && cfgDiag.ok
+          ? (cfgDiag.configBytes > DISCORD_UPLOAD_LIMIT_BYTES ? 'bad' : 'ok')
+          : '');
+        $('cfgLive2dSize').textContent = cfgDiag && cfgDiag.ok
+          ? (cfgDiag.embeddedLive2dCount > 0
+            ? `${formatSize(cfgDiag.embeddedLive2dBytes)} (${cfgDiag.embeddedLive2dCount})`
+            : '0')
+          : '-';
+        $('cfgLive2dSize').className = 'v ' + (cfgDiag && cfgDiag.ok
+          ? (cfgDiag.embeddedLive2dBytes > RECOMMENDED_EMBED_LIVE2D_BYTES ? 'bad' : 'ok')
+          : '');
 
         $('btnExtract').disabled = !card || !cfgInCard;
         $('btnRemove').disabled = !card || !cfgInCard;
-        $('btnInject').disabled = !card || !getConfigForInject().ok;
-        $('btnCopy').disabled = !getConfigForInject().ok;
+        $('btnInject').disabled = !card || !cfgParsed.ok;
+        $('btnCopy').disabled = !cfgParsed.ok;
 
         if (!card) {
           $('hint').textContent = '选择一个角色卡 JSON 或 PNG';
@@ -377,7 +506,19 @@
           return;
         }
 
-        $('hint').textContent = getConfigForInject().ok ? '可注入配置到角色卡' : '需要配置 JSON（文件或粘贴）';
+        if (cfgDiag && cfgDiag.ok && cfgDiag.errors.length > 0) {
+          $('hint').textContent = cfgDiag.errors[0];
+          setHealth('bad', '配置超限，无法导出');
+          return;
+        }
+
+        if (cfgDiag && cfgDiag.ok && cfgDiag.warnings.length > 0) {
+          $('hint').textContent = cfgDiag.warnings[0];
+          setHealth('warn', '配置存在体积风险，建议优先远程资源');
+          return;
+        }
+
+        $('hint').textContent = cfgParsed.ok ? '可注入配置到角色卡' : '需要配置 JSON（文件或粘贴）';
         setHealth('warn', '角色卡已载入，等待配置');
       }
 
@@ -736,6 +877,14 @@
           if (!state.card) return;
           const cfgParsed = getConfigForInject();
           if (!cfgParsed.ok) throw new Error(cfgParsed.error);
+          const cfgDiag = getConfigDiagnostics(cfgParsed.value);
+          if (cfgDiag.errors.length > 0) {
+            throw new Error(cfgDiag.errors[0]);
+          }
+          if (cfgDiag.warnings.length > 0) {
+            const warningText = cfgDiag.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n');
+            if (!confirm(`检测到以下风险：\n${warningText}\n\n是否继续注入？`)) return;
+          }
 
           const card = structuredClone ? structuredClone(state.card) : JSON.parse(JSON.stringify(state.card));
           const data = getCardDataObject(card);
@@ -745,10 +894,12 @@
           if (state.cardFormat === 'png') {
             if (!state.cardPngBytes) throw new Error('未保存 PNG 原始数据');
             const outBytes = embedCardIntoPngBytes(state.cardPngBytes, card, 2);
+            if (!ensureWithinDiscordLimit(outBytes.length, 'PNG 角色卡')) return;
             const outName = `${baseName(state.cardFileName || 'character')}.patched.png`;
             downloadBlob(new Blob([outBytes], { type: 'image/png' }), outName);
           } else {
             const out = JSON.stringify(card, null, 2);
+            if (!ensureWithinDiscordLimit(utf8ByteLength(out), 'JSON 角色卡')) return;
             const outName = `${baseName(state.cardFileName || 'character')}.patched.json`;
             downloadText(out, outName);
           }

@@ -1,16 +1,911 @@
-import { SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
-import { $ } from '../core/env.js';
+﻿import { SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
+import { $, topWindow } from '../core/env.js';
 import { saveSprite, saveSpritesBatch, getAllSprites } from '../db/sprites.js';
 import { saveBackground, saveBackgroundsBatch, getAllBackgrounds } from '../db/backgrounds.js';
 import { getCurrentPackId, getAllImagePacks, createImagePack } from '../db/image-packs.js';
+import { getAllLive2DModels } from '../db/live2d-models.js';
+import { getTTSEnabled, getAllCharacterTTSVoices } from '../audio/tts-config.js';
+import { CHAR_USE_LIVE2D_KEY, LIVE2D_CONFIG_KEY } from '../live2d/render-mode.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
 
 // ============================================
-// 资源导入导出管理器 (Asset IO)
+// 璧勬簮瀵煎叆瀵煎嚭绠＄悊鍣?(Asset IO)
 // ============================================
+
+const DISCORD_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
+const DEFAULT_LIVE2D_EMBED_LIMIT_BYTES = DISCORD_UPLOAD_LIMIT_BYTES;
+
+function safeJsonParse(text, fallback) {
+  try {
+    if (text == null || text === '') return fallback;
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+}
+
+function readLocalStorageJson(key, fallback) {
+  try {
+    return safeJsonParse(localStorage.getItem(key), fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+function ensureTrailingSlash(url) {
+  if (!url) return '';
+  return url.endsWith('/') ? url : `${url}/`;
+}
+
+function normalizeRemoteInput(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return { remoteBaseUrl: '', remoteAssetsUrl: '' };
+  if (/\.json(\?.*)?$/i.test(raw)) {
+    return { remoteBaseUrl: '', remoteAssetsUrl: raw };
+  }
+  const base = ensureTrailingSlash(raw);
+  return { remoteBaseUrl: base, remoteAssetsUrl: `${base}remote_assets.json` };
+}
+
+function sanitizeFileName(name) {
+  return String(name || 'character').replace(/[\\/:*?"<>|]/g, '_').trim() || 'character';
+}
+
+function escapeHtml(input) {
+  return String(input || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function downloadTextFile(filename, text, mimeType = 'application/json') {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function toArrayBuffer(input) {
+  if (!input) return null;
+  if (input instanceof ArrayBuffer) return input;
+  if (ArrayBuffer.isView(input)) {
+    return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+  }
+  return null;
+}
+
+function safeByteLength(input) {
+  const buf = toArrayBuffer(input);
+  if (buf) return buf.byteLength;
+  if (typeof Blob !== 'undefined' && input instanceof Blob) return input.size || 0;
+  if (typeof input?.size === 'number') return input.size;
+  return 0;
+}
+
+function formatSizeMb(bytes) {
+  const n = Number(bytes) || 0;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function arrayBufferToBase64(buffer) {
+  const safeBuffer = toArrayBuffer(buffer);
+  if (!safeBuffer) return '';
+  const bytes = new Uint8Array(safeBuffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const idx = result.indexOf(',');
+        resolve(idx >= 0 ? result.slice(idx + 1) : result);
+      };
+      reader.onerror = () => reject(reader.error || new Error('Blob read failed'));
+      reader.readAsDataURL(blob);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function estimateLive2DModelSizeBytes(modelData) {
+  if (!modelData || typeof modelData !== 'object') return 0;
+  if (Number.isFinite(modelData.fileSize) && modelData.fileSize > 0) {
+    return Number(modelData.fileSize);
+  }
+
+  let total = 0;
+  total += safeByteLength(modelData.moc3);
+  total += safeByteLength(modelData.moc);
+  total += safeByteLength(modelData.physics);
+  total += safeByteLength(modelData.pose);
+
+  if (Array.isArray(modelData.textures)) {
+    for (const tex of modelData.textures) total += safeByteLength(tex?.data);
+  }
+
+  if (modelData.motions && typeof modelData.motions === 'object') {
+    for (const list of Object.values(modelData.motions)) {
+      if (!Array.isArray(list)) continue;
+      for (const item of list) total += safeByteLength(item?.data);
+    }
+  }
+
+  if (Array.isArray(modelData.expressions)) {
+    for (const expr of modelData.expressions) total += safeByteLength(expr?.data);
+  }
+
+  return total;
+}
+
+async function serializeLive2DModelData(modelData) {
+  const out = {
+    modelId: String(modelData?.modelId || ''),
+    cubismVersion: Number(modelData?.cubismVersion || 0) || null,
+    uploadTime: Number(modelData?.uploadTime || 0) || null,
+    fileSize: Number(modelData?.fileSize || 0) || null,
+    modelJson: modelData?.modelJson || null,
+    moc3Base64: null,
+    mocBase64: null,
+    physicsBase64: null,
+    poseBase64: null,
+    textures: [],
+    motions: {},
+    expressions: [],
+  };
+
+  const moc3 = toArrayBuffer(modelData?.moc3);
+  const moc = toArrayBuffer(modelData?.moc);
+  const physics = toArrayBuffer(modelData?.physics);
+  const pose = toArrayBuffer(modelData?.pose);
+  if (moc3) out.moc3Base64 = arrayBufferToBase64(moc3);
+  if (moc) out.mocBase64 = arrayBufferToBase64(moc);
+  if (physics) out.physicsBase64 = arrayBufferToBase64(physics);
+  if (pose) out.poseBase64 = arrayBufferToBase64(pose);
+
+  if (Array.isArray(modelData?.textures)) {
+    for (const tex of modelData.textures) {
+      if (!tex?.data) continue;
+      let dataBase64 = '';
+      let mimeType = 'application/octet-stream';
+
+      if (typeof Blob !== 'undefined' && tex.data instanceof Blob) {
+        mimeType = tex.data.type || mimeType;
+        dataBase64 = await blobToBase64(tex.data);
+      } else {
+        const texBuffer = toArrayBuffer(tex.data);
+        if (!texBuffer) continue;
+        dataBase64 = arrayBufferToBase64(texBuffer);
+      }
+
+      out.textures.push({
+        name: String(tex?.name || ''),
+        mimeType,
+        dataBase64,
+      });
+    }
+  }
+
+  if (modelData?.motions && typeof modelData.motions === 'object') {
+    for (const [groupName, list] of Object.entries(modelData.motions)) {
+      if (!Array.isArray(list)) continue;
+      const exportedList = [];
+      for (const motion of list) {
+        const dataBuffer = toArrayBuffer(motion?.data);
+        if (!dataBuffer) continue;
+        exportedList.push({
+          name: String(motion?.name || ''),
+          dataBase64: arrayBufferToBase64(dataBuffer),
+        });
+      }
+      if (exportedList.length > 0) out.motions[groupName] = exportedList;
+    }
+  }
+
+  if (Array.isArray(modelData?.expressions)) {
+    for (const expr of modelData.expressions) {
+      const dataBuffer = toArrayBuffer(expr?.data);
+      if (!dataBuffer) continue;
+      out.expressions.push({
+        name: String(expr?.name || ''),
+        file: String(expr?.file || ''),
+        dataBase64: arrayBufferToBase64(dataBuffer),
+      });
+    }
+  }
+
+  return out;
+}
+
+function ensureCardExtensions(card) {
+  if (!card || typeof card !== 'object') {
+    throw new Error('褰撳墠瑙掕壊鍗℃暟鎹棤鏁?');
+  }
+  const data = card.data && typeof card.data === 'object' ? card.data : card;
+  if (!data.extensions || typeof data.extensions !== 'object') {
+    data.extensions = {};
+  }
+  return data.extensions;
+}
+
+async function buildGalgameCardConfig(options = {}) {
+  const {
+    remoteInput = '',
+    includeAllPacks = true,
+    embedLocalLive2d = true,
+    includeLocalLive2dPlaceholder = true,
+    maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
+    onProgress = null,
+  } = options;
+  const reportProgress = typeof onProgress === 'function'
+    ? (percent, text) => onProgress(Math.max(0, Math.min(100, Number(percent) || 0)), text)
+    : () => {};
+
+  reportProgress(8, 'Loading packs and base export config...');
+  const currentPackId = getCurrentPackId() || DEFAULT_PACK_ID;
+  let packs = await getAllImagePacks();
+  if (!Array.isArray(packs) || packs.length === 0) {
+    packs = [{ id: DEFAULT_PACK_ID, name: '未定义', isDefault: true }];
+  }
+
+  const { remoteBaseUrl, remoteAssetsUrl } = normalizeRemoteInput(remoteInput);
+  const packList = includeAllPacks
+    ? packs
+    : packs.filter(p => p && String(p.id) === String(currentPackId));
+
+  const exportedPacks = packList.map(p => {
+    const packId = String(p.id || DEFAULT_PACK_ID);
+    const name = String(p.name || '鏈畾涔?');
+    const out = { packId, name };
+    if (packId === currentPackId && (remoteBaseUrl || remoteAssetsUrl)) {
+      if (remoteBaseUrl) out.remoteBaseUrl = remoteBaseUrl;
+      if (remoteAssetsUrl) out.remoteAssetsUrl = remoteAssetsUrl;
+    }
+    return out;
+  });
+
+  reportProgress(18, 'Loading TTS and Live2D settings...');
+  const ttsEnabled = !!getTTSEnabled();
+  const characterVoice = getAllCharacterTTSVoices() || {};
+
+  const live2dEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
+  const live2dConfigMap = readLocalStorageJson(LIVE2D_CONFIG_KEY, {});
+  const live2dModels = await getAllLive2DModels();
+  const live2dList = Array.isArray(live2dModels) ? live2dModels : [];
+  const live2dOutModels = {};
+  const warnings = [];
+
+  if (live2dList.length === 0) {
+    reportProgress(68, 'No Live2D models detected, skipping embedded model stage');
+  }
+
+  for (let i = 0; i < live2dList.length; i++) {
+    const model = live2dList[i];
+    const stepPercent = 24 + Math.round((i / Math.max(1, live2dList.length)) * 40);
+    reportProgress(stepPercent, `Processing Live2D model ${i + 1}/${live2dList.length}...`);
+    const characterId = String(model?.modelId || '').trim();
+    if (!characterId) {
+      reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+      continue;
+    }
+    const charCfg = live2dConfigMap && typeof live2dConfigMap === 'object' ? live2dConfigMap[characterId] : null;
+
+    if (model?.source === 'remote' && typeof model?.modelUrl === 'string' && model.modelUrl.trim()) {
+      live2dOutModels[characterId] = {
+        source: 'remote',
+        modelUrl: model.modelUrl.trim(),
+        ...(charCfg ? { config: charCfg } : {}),
+      };
+      reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+      continue;
+    }
+
+    const modelSizeBytes = estimateLive2DModelSizeBytes(model);
+    if (embedLocalLive2d) {
+      const overLimit =
+        Number.isFinite(maxEmbeddedLive2dBytes) &&
+        maxEmbeddedLive2dBytes > 0 &&
+        modelSizeBytes > maxEmbeddedLive2dBytes;
+
+      if (overLimit) {
+        const warn =
+          `[Live2D] ${characterId} size ${formatSizeMb(modelSizeBytes)} exceeds Discord limit ` +
+          `${formatSizeMb(maxEmbeddedLive2dBytes)}; skipped embedded export, upload to GitHub and use remote URL.`;
+        warnings.push(warn);
+        if (includeLocalLive2dPlaceholder) {
+          live2dOutModels[characterId] = {
+            source: 'idb',
+            modelId: characterId,
+            sizeBytes: modelSizeBytes,
+            note: warn,
+            ...(charCfg ? { config: charCfg } : {}),
+          };
+        }
+        reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+        continue;
+      }
+
+      try {
+        const payload = await serializeLive2DModelData(model);
+        live2dOutModels[characterId] = {
+          source: 'embedded',
+          format: 'live2d_idb_v1',
+          sizeBytes: modelSizeBytes,
+          payload,
+          ...(charCfg ? { config: charCfg } : {}),
+        };
+      } catch (e) {
+        const errMsg = e && e.message ? e.message : String(e);
+        const warn = `[Live2D] ${characterId} 鏈綋瀵煎嚭澶辫触锛屽凡閫€鍥炲崰浣嶈褰曪細${errMsg}`;
+        warnings.push(warn);
+        if (includeLocalLive2dPlaceholder) {
+          live2dOutModels[characterId] = {
+            source: 'idb',
+            modelId: characterId,
+            sizeBytes: modelSizeBytes,
+            note: warn,
+            ...(charCfg ? { config: charCfg } : {}),
+          };
+        }
+      }
+      reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+      continue;
+    }
+
+    if (includeLocalLive2dPlaceholder) {
+      live2dOutModels[characterId] = {
+        source: 'idb',
+        modelId: characterId,
+        sizeBytes: modelSizeBytes,
+        note:
+          'Local Live2D model is stored in IndexedDB; binary payload is not exported. Upload to remote and use source=remote if you want portability.',
+        ...(charCfg ? { config: charCfg } : {}),
+      };
+    }
+    reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+  }
+
+  reportProgress(72, 'Finalizing character-card extension config...');
+  return {
+    schema: 'galgame_ui_plugin_config_v2',
+      meta: {
+        exportedAt: new Date().toISOString(),
+        exporter: 'galgame-ui-plugin.asset-io',
+        live2dExportMode: embedLocalLive2d ? 'embedded' : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local'),
+        maxEmbeddedLive2dBytes: Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
+        discordUploadLimitBytes: DISCORD_UPLOAD_LIMIT_BYTES,
+        ...(warnings.length > 0 ? { warnings } : {}),
+      },
+    assets: {
+      activePackId: currentPackId,
+      packs: exportedPacks,
+    },
+    live2d: {
+      enabledMap: live2dEnabledMap || {},
+      models: live2dOutModels,
+    },
+    tts: {
+      enabled: ttsEnabled,
+      characterVoice: characterVoice || {},
+    },
+  };
+}
+
+function estimateCardJsonBytes(cardObj) {
+  const text = JSON.stringify(cardObj);
+  return new TextEncoder().encode(text).length;
+}
+
+function getSillyTavernContextSafe() {
+  try {
+    const getContext = topWindow?.SillyTavern?.getContext;
+    if (typeof getContext === 'function') {
+      return getContext.call(topWindow.SillyTavern) || null;
+    }
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 获取 SillyTavern 上下文失败`, e);
+  }
+  return null;
+}
+
+function collectCurrentCharacterNameCandidates() {
+  const result = [];
+  const append = (value) => {
+    const name = String(value || '').trim();
+    if (!name) return;
+    if (!result.includes(name)) result.push(name);
+  };
+
+  const ctx = getSillyTavernContextSafe();
+  if (ctx?.characters && ctx?.characterId != null) {
+    const current = ctx.characters[ctx.characterId];
+    append(current?.name);
+    append(current?.data?.name);
+  }
+  append(ctx?.name2);
+
+  const st = topWindow?.SillyTavern;
+  if (st?.characters && st?.characterId != null) {
+    const current = st.characters[st.characterId];
+    append(current?.name);
+    append(current?.data?.name);
+  }
+  append(st?.name2);
+
+  return result;
+}
+
+function pickBestSuggestedCharacterName(allNames, preferredName = '', contextCandidates = []) {
+  const names = Array.isArray(allNames)
+    ? allNames.map(v => String(v || '').trim()).filter(Boolean)
+    : [];
+  if (names.length === 0) return '';
+
+  const index = new Map(names.map(name => [name.toLowerCase(), name]));
+  const preferred = String(preferredName || '').trim().toLowerCase();
+  if (preferred && index.has(preferred)) {
+    return index.get(preferred);
+  }
+
+  for (const candidate of Array.isArray(contextCandidates) ? contextCandidates : []) {
+    const key = String(candidate || '').trim().toLowerCase();
+    if (!key) continue;
+    if (index.has(key)) return index.get(key);
+  }
+
+  return names[0];
+}
+
+function listAllCharacterNamesSafe() {
+  try {
+    const getCharacterNames = topWindow?.TavernHelper?.getCharacterNames;
+    if (typeof getCharacterNames !== 'function') return [];
+    const names = getCharacterNames();
+    if (!Array.isArray(names)) return [];
+    return names
+      .map(name => String(name || '').trim())
+      .filter(Boolean);
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 获取角色卡列表失败`, e);
+    return [];
+  }
+}
+
+async function showCharacterExportSelector(characterNames, suggestedName = '') {
+  const names = Array.isArray(characterNames)
+    ? characterNames.map(v => String(v || '').trim()).filter(Boolean)
+    : [];
+  if (names.length === 0) return null;
+
+  const suggested = String(suggestedName || '').trim();
+  const hasSuggested = suggested && names.some(n => n.toLowerCase() === suggested.toLowerCase());
+  const defaultName = hasSuggested ? names.find(n => n.toLowerCase() === suggested.toLowerCase()) : names[0];
+
+  return new Promise((resolve) => {
+    const optionsHtml = names
+      .map((name) => `<option value="${escapeHtml(name)}"${name === defaultName ? ' selected' : ''}>${escapeHtml(name)}</option>`)
+      .join('');
+
+    const dialogHtml = `
+      <div class="gal-input-modal gal-z-critical" id="gal-export-char-selector">
+        <div class="gal-input-box" style="max-width: 460px; width: 90%; padding: 25px;">
+          <div class="gal-input-title" style="margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between;">
+            <span><i class="fa-solid fa-id-card"></i> 选择导出角色卡</span>
+            <button id="gal-export-char-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div style="margin-bottom: 14px; color: #666; font-size: 0.9rem;">
+            当前会话不是可导出的角色卡上下文，请选择一个角色卡继续导出。
+          </div>
+          <div style="margin-bottom: 16px;">
+            <select id="gal-export-char-name"
+                    style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 1rem; box-sizing: border-box;">
+              ${optionsHtml}
+            </select>
+          </div>
+          <div class="gal-input-actions" style="display: flex; gap: 12px;">
+            <button class="gal-action-btn" id="gal-export-char-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
+              <i class="fa-solid fa-check"></i> <span>确认导出</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(dialogHtml);
+    const $dialog = $(mountRoot).find('#gal-export-char-selector');
+    makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
+
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      $dialog.remove();
+      resolve(value);
+    };
+
+    $dialog.find('#gal-export-char-confirm').on('click', () => {
+      const selected = String($dialog.find('#gal-export-char-name').val() || '').trim();
+      if (!selected) {
+        showToast('请选择一个角色卡');
+        return;
+      }
+      done(selected);
+    });
+
+    $dialog.find('#gal-export-char-close-x').on('click', () => done(null));
+    $dialog.on('click', function (e) {
+      if (e.target === this) done(null);
+    });
+  });
+}
+
+async function resolveCharacterCardForExport(options = {}) {
+  const {
+    interactive = true,
+    preferredCharacterName = '',
+    onProgress = null,
+  } = options;
+  const reportProgress = typeof onProgress === 'function' ? onProgress : () => {};
+  const getCharacter = topWindow?.TavernHelper?.getCharacter;
+  if (typeof getCharacter !== 'function') {
+    throw new Error('未检测到 TavernHelper.getCharacter，无法读取角色卡');
+  }
+
+  const tried = new Set();
+  let lastError = null;
+
+  const tryGetCharacter = async (name, reason) => {
+    const safeName = String(name || '').trim();
+    if (!safeName) return null;
+    const key = safeName.toLowerCase();
+    if (tried.has(key)) return null;
+    tried.add(key);
+
+    reportProgress(76, `读取角色卡: ${safeName}`);
+    try {
+      const card = await getCharacter(safeName);
+      if (card && typeof card === 'object') {
+        return { card, resolvedName: safeName, resolveReason: reason };
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn(`[${SCRIPT_NAME}] 读取角色卡失败 (${reason}): ${safeName}`, e);
+    }
+    return null;
+  };
+
+  const preferred = String(preferredCharacterName || '').trim();
+  if (preferred) {
+    const hit = await tryGetCharacter(preferred, 'preferred');
+    if (hit) return hit;
+  }
+
+  const fromCurrent = await tryGetCharacter('current', 'current');
+  if (fromCurrent) return fromCurrent;
+
+  const contextCandidates = collectCurrentCharacterNameCandidates();
+  for (const candidate of contextCandidates) {
+    const hit = await tryGetCharacter(candidate, 'context');
+    if (hit) return hit;
+  }
+
+  const allNames = listAllCharacterNamesSafe();
+  if (allNames.length > 0 && contextCandidates.length > 0) {
+    const index = new Map(allNames.map(name => [name.toLowerCase(), name]));
+    for (const candidate of contextCandidates) {
+      const mapped = index.get(String(candidate).toLowerCase());
+      if (!mapped) continue;
+      const hit = await tryGetCharacter(mapped, 'context-mapped');
+      if (hit) return hit;
+    }
+  }
+
+  if (allNames.length === 1) {
+    const hit = await tryGetCharacter(allNames[0], 'single-character');
+    if (hit) return hit;
+  }
+
+  if (interactive && allNames.length > 0) {
+    const suggestedForSelect = pickBestSuggestedCharacterName(allNames, preferred, contextCandidates);
+    const selectedByModal = await showCharacterExportSelector(
+      allNames,
+      suggestedForSelect,
+    );
+    if (typeof selectedByModal === 'string' && selectedByModal.trim()) {
+      const hit = await tryGetCharacter(selectedByModal.trim(), 'manual-select-modal');
+      if (hit) return hit;
+    }
+
+    if (typeof prompt === 'function') {
+      const preview = allNames.slice(0, 20).join('、');
+      const more = allNames.length > 20 ? ` ... 共 ${allNames.length} 个` : '';
+      const answer = prompt(
+        `当前会话无法通过 'current' 读取角色卡。\n请输入要导出的角色卡名称：\n${preview}${more}`,
+        contextCandidates[0] || allNames[0] || '',
+      );
+      if (typeof answer === 'string' && answer.trim()) {
+        const hit = await tryGetCharacter(answer.trim(), 'manual-input');
+        if (hit) return hit;
+      }
+    }
+  }
+
+  const parts = [];
+  if (contextCandidates.length > 0) {
+    parts.push(`上下文候选: ${contextCandidates.join('、')}`);
+  }
+  if (allNames.length > 0) {
+    const preview = allNames.slice(0, 10).join('、');
+    parts.push(`角色卡列表: ${preview}${allNames.length > 10 ? ' ...' : ''}`);
+  }
+  if (lastError?.message) {
+    parts.push(`最后错误: ${lastError.message}`);
+  }
+  throw new Error(`角色卡 'current' 不存在，且无法自动定位导出目标。${parts.join('；')}`);
+}
+
+function isLikelyRawCharacterCard(card) {
+  if (!card || typeof card !== 'object') return false;
+  const hasName = typeof card.name === 'string' && card.name.trim().length > 0;
+  const hasData = card.data && typeof card.data === 'object';
+  const hasDialogField = typeof card.first_mes === 'string' || typeof card?.data?.first_mes === 'string';
+  return hasName && hasData && hasDialogField;
+}
+
+function resolveRawCharacterCardForExport(options = {}) {
+  const {
+    resolvedName = '',
+    fallbackCharacter = null,
+    onProgress = null,
+  } = options;
+  const reportProgress = typeof onProgress === 'function' ? onProgress : () => {};
+  const tried = new Set();
+  const candidateNames = [];
+  const appendName = (value) => {
+    const name = String(value || '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (tried.has(key)) return;
+    tried.add(key);
+    candidateNames.push(name);
+  };
+
+  appendName(resolvedName);
+  appendName('current');
+  for (const name of collectCurrentCharacterNameCandidates()) appendName(name);
+
+  const getCharData = topWindow?.TavernHelper?.getCharData;
+  if (typeof getCharData === 'function') {
+    for (const name of candidateNames) {
+      reportProgress(79, `读取原始角色卡: ${name}`);
+      try {
+        const raw = getCharData(name, true);
+        if (isLikelyRawCharacterCard(raw)) {
+          return {
+            card: raw,
+            resolvedName: name,
+            source: 'tavern-helper.getCharData',
+          };
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] getCharData 读取失败: ${name}`, e);
+      }
+    }
+  }
+
+  const ctx = getSillyTavernContextSafe();
+  if (ctx?.characters && ctx?.characterId != null) {
+    const current = ctx.characters[ctx.characterId];
+    if (isLikelyRawCharacterCard(current)) {
+      return {
+        card: current,
+        resolvedName: String(current?.name || resolvedName || 'current'),
+        source: 'sillytavern.context',
+      };
+    }
+  }
+
+  const st = topWindow?.SillyTavern;
+  if (st?.characters && st?.characterId != null) {
+    const current = st.characters[st.characterId];
+    if (isLikelyRawCharacterCard(current)) {
+      return {
+        card: current,
+        resolvedName: String(current?.name || resolvedName || 'current'),
+        source: 'sillytavern.global',
+      };
+    }
+  }
+
+  if (isLikelyRawCharacterCard(fallbackCharacter)) {
+    return {
+      card: fallbackCharacter,
+      resolvedName: String(fallbackCharacter?.name || resolvedName || 'current'),
+      source: 'fallback-getCharacter',
+    };
+  }
+
+  throw new Error('无法获取可导入的原始角色卡结构（v1/v2），请确认已打开角色卡会话后重试');
+}
+
+export async function exportCurrentCharacterCardWithConfig(options = {}) {
+  let progressController = null;
+  let exportSucceeded = false;
+  const updateProgress = (percent, text) => {
+    if (progressController) {
+      progressController.update(percent, text);
+    }
+  };
+
+  try {
+    if (!topWindow?.TavernHelper?.getCharacter || typeof topWindow.TavernHelper.getCharacter !== 'function') {
+      throw new Error('未检测到 TavernHelper.getCharacter，无法直接导出角色卡');
+    }
+
+    const interactive = options.interactive !== false;
+    const preferredCharacterName = options.characterName || '';
+    let remoteInput = options.remoteInput || '';
+    let includeAllPacks = options.includeAllPacks;
+    let embedLocalLive2d = options.embedLocalLive2d;
+    let includeLocalLive2dPlaceholder = options.includeLocalLive2dPlaceholder;
+    let maxEmbeddedLive2dBytes = options.maxEmbeddedLive2dBytes;
+
+    if (interactive) {
+      const remoteAnswer = prompt(
+        '请输入图包远程配置（可选）:\n- 可填 baseUrl（例如 https://cdn.jsdelivr.net/gh/user/repo@main/ ）\n- 或直接填 remote_assets.json 完整 URL\n\n留空则只导出绑定配置',
+        remoteInput || '',
+      );
+      if (remoteAnswer === null) {
+        showToast('未设置远程资源地址，继续使用当前导出参数');
+      } else {
+        remoteInput = remoteAnswer.trim();
+      }
+
+      includeAllPacks = includeAllPacks === undefined
+        ? confirm('是否导出所有图包记录？\n是：保留 packs 列表（推荐）\n否：只导出当前图包')
+        : !!includeAllPacks;
+
+      embedLocalLive2d = embedLocalLive2d === undefined
+        ? confirm('Live2D 导出策略：\n是：本地模型导出本体；远程模型导出 URL\n否：本地模型不导出本体')
+        : !!embedLocalLive2d;
+
+      includeLocalLive2dPlaceholder = includeLocalLive2dPlaceholder === undefined
+        ? true
+        : !!includeLocalLive2dPlaceholder;
+
+      if (embedLocalLive2d) {
+        const limitInput = prompt(
+          '请输入本地 Live2D 本体导出阈值（MB）。\n超过阈值将自动跳过本体并建议改用 GitHub 远程导出。\n默认 25',
+          String(Math.round((Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES) / 1024 / 1024)),
+        );
+        if (limitInput === null) {
+          showToast('未设置 Live2D 本体阈值，使用默认 25MB');
+        } else {
+          const parsedMb = Number(limitInput);
+          maxEmbeddedLive2dBytes = Number.isFinite(parsedMb) && parsedMb > 0
+            ? Math.floor(parsedMb * 1024 * 1024)
+            : DEFAULT_LIVE2D_EMBED_LIMIT_BYTES;
+        }
+      }
+    }
+
+    if (includeAllPacks === undefined) includeAllPacks = true;
+    if (embedLocalLive2d === undefined) embedLocalLive2d = true;
+    if (includeLocalLive2dPlaceholder === undefined) includeLocalLive2dPlaceholder = true;
+    if (!Number.isFinite(maxEmbeddedLive2dBytes) || maxEmbeddedLive2dBytes <= 0) {
+      maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES;
+    }
+
+    showToast('正在定位导出角色卡...');
+    const resolvedCharacter = await resolveCharacterCardForExport({
+      interactive,
+      preferredCharacterName,
+    });
+    const currentCharacter = resolvedCharacter?.card;
+    if (!currentCharacter || typeof currentCharacter !== 'object') {
+      throw new Error('无法读取当前角色卡');
+    }
+
+    progressController = showImportProgress('准备导出角色卡...', null, {
+      title: '正在导出角色卡',
+      iconClass: 'fa-solid fa-file-export',
+    });
+    updateProgress(3, '初始化导出流程...');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    updateProgress(8, '收集插件配置...');
+    const config = await buildGalgameCardConfig({
+      remoteInput,
+      includeAllPacks,
+      embedLocalLive2d,
+      includeLocalLive2dPlaceholder,
+      maxEmbeddedLive2dBytes,
+      onProgress: updateProgress,
+    });
+
+    updateProgress(76, '读取角色卡数据...');
+    updateProgress(80, '读取可导入的原始角色卡结构...');
+    const rawResolved = resolveRawCharacterCardForExport({
+      resolvedName: resolvedCharacter?.resolvedName || preferredCharacterName,
+      fallbackCharacter: currentCharacter,
+      onProgress: updateProgress,
+    });
+
+    updateProgress(82, '写入角色卡扩展配置...');
+    const card = typeof structuredClone === 'function'
+      ? structuredClone(rawResolved.card)
+      : JSON.parse(JSON.stringify(rawResolved.card));
+    const ext = ensureCardExtensions(card);
+    ext.galgame_ui_plugin = config;
+
+    if (rawResolved?.resolvedName && rawResolved.resolvedName !== 'current') {
+      showToast(`已自动改用角色卡: ${rawResolved.resolvedName}`);
+    }
+
+    updateProgress(88, '校验角色卡体积...');
+    const bytes = estimateCardJsonBytes(card);
+    if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
+      const msg =
+        `导出失败：角色卡体积 ${formatSizeMb(bytes)} 超过 Discord 限制 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}。\n请改用远程资源导出。`;
+      if (interactive) alert(msg);
+      throw new Error(msg);
+    }
+
+    const cardName = card?.name || card?.data?.name || 'character';
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `${sanitizeFileName(cardName)}.galgame-packed.${date}.json`;
+    updateProgress(94, '生成导出文件...');
+    const outputText = JSON.stringify(card, null, 2);
+    downloadTextFile(filename, outputText, 'application/json');
+
+    updateProgress(100, '导出完成');
+    exportSucceeded = true;
+    showToast(`角色卡导出成功: ${filename}`);
+    if (Array.isArray(config?.meta?.warnings) && config.meta.warnings.length > 0) {
+      console.warn(`[${SCRIPT_NAME}] 角色卡导出警告`, config.meta.warnings);
+      if (interactive) {
+        alert(`导出完成，但有以下提醒：\n\n${config.meta.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n')}`);
+      }
+    }
+    return true;
+  } catch (e) {
+    console.error(`[${SCRIPT_NAME}] 导出角色卡失败`, e);
+    const message = `导出角色卡失败: ${e.message || e}`;
+    if (progressController) {
+      progressController.update(100, message);
+    }
+    showToast(message);
+    return false;
+  } finally {
+    if (progressController) {
+      const closeDelay = exportSucceeded ? 250 : 1200;
+      setTimeout(() => {
+        progressController.close();
+      }, closeDelay);
+    }
+  }
+}
 
 export async function importAssetsFromJson(file, targetPackId = null) {
   try {
@@ -21,7 +916,7 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       const suggestedName = json.packageName || json.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
-        showToast('已取消导入');
+        showToast('宸插彇娑堝鍏?');
         return;
       }
     }
@@ -44,7 +939,7 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       }
       if (newExpressions.length > 0) {
         saveCustomExpressions(customs);
-        console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(', ')}`);
+        console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${newExpressions.join(', ')}`);
       }
     }
     if (json.backgrounds) {
@@ -57,8 +952,8 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     }
     showToast(`成功导入 ${count} 个远程资源链接`);
   } catch (e) {
-    console.error('JSON导入失败', e);
-    showToast('JSON导入失败: ' + e.message);
+    console.error('JSON瀵煎叆澶辫触', e);
+    showToast('JSON瀵煎叆澶辫触: ' + e.message);
   }
 }
 
@@ -75,7 +970,7 @@ export const AssetIO = {
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
       script.onload = () => {
         this.jszip = window.JSZip;
-        console.log(`[${SCRIPT_NAME}] JSZip 加载成功`);
+        console.log(`[${SCRIPT_NAME}] JSZip 鍔犺浇鎴愬姛`);
         resolve(this.jszip);
       };
       script.onerror = () => reject(new Error('JSZip load failed'));
@@ -84,13 +979,13 @@ export const AssetIO = {
   },
   async exportAllAssets(remoteBaseUrl = null, packageName = null) {
     try {
-      showToast('正在准备导出...');
+      showToast('姝ｅ湪鍑嗗瀵煎嚭...');
       const zip = new (await this.loadJSZip())();
 
       const currentPackId = getCurrentPackId();
       const allPacks = await getAllImagePacks();
       const currentPack = allPacks.find(p => p.id === currentPackId);
-      const currentPackName = currentPack ? currentPack.name : '未命名包';
+      const currentPackName = currentPack ? currentPack.name : '鏈懡鍚嶅寘';
 
       const remoteConfig = {
         packageName: packageName || currentPackName,
@@ -146,7 +1041,7 @@ export const AssetIO = {
       if (remoteBaseUrl) {
         zip.file('remote_assets.json', JSON.stringify(remoteConfig, null, 2));
       }
-      showToast('正在压缩打包...');
+      showToast('姝ｅ湪鍘嬬缉鎵撳寘...');
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
@@ -160,22 +1055,22 @@ export const AssetIO = {
       URL.revokeObjectURL(url);
       showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景`);
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
-      showToast('导出失败: ' + e.message);
+      console.error(`[${SCRIPT_NAME}] 瀵煎嚭澶辫触:`, e);
+      showToast('瀵煎嚭澶辫触: ' + e.message);
     }
   },
   async importFiles(fileList, targetPackId = null) {
     if (!targetPackId) {
-      targetPackId = await showImportPackSelector('文件夹导入');
+      targetPackId = await showImportPackSelector('鏂囦欢澶瑰鍏?');
       if (!targetPackId) {
-        showToast('已取消导入');
+        showToast('宸插彇娑堝鍏?');
         return false;
       }
     }
 
     let successCount = 0;
     let failCount = 0;
-    showToast('开始导入...');
+    showToast('寮€濮嬪鍏?..');
     for (const file of fileList) {
       try {
         const path = file.webkitRelativePath || file.name;
@@ -197,11 +1092,11 @@ export const AssetIO = {
         }
         if (imported) successCount++;
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] 导入文件 ${file.name} 失败:`, e);
+        console.warn(`[${SCRIPT_NAME}] 瀵煎叆鏂囦欢 ${file.name} 澶辫触:`, e);
         failCount++;
       }
     }
-    showToast(`导入完成: ${successCount} 成功, ${failCount} 失败`);
+    showToast(`瀵煎叆瀹屾垚: ${successCount} 鎴愬姛, ${failCount} 澶辫触`);
     return successCount > 0;
   },
   async importAsSprite(file, packId = null) {
@@ -213,35 +1108,35 @@ export const AssetIO = {
       const characterId = parts.join('_');
       if (characterId && expression) {
         await saveSprite(characterId, expression, file, null, packId);
-        console.log(`[${SCRIPT_NAME}] 导入立绘: ${characterId} - ${expression}`);
+        console.log(`[${SCRIPT_NAME}] 瀵煎叆绔嬬粯: ${characterId} - ${expression}`);
         const allExpressions = getAllExpressions();
         if (!allExpressions.includes(expression)) {
           const customs = getCustomExpressions();
           if (!customs.find(e => e.name === expression)) {
             customs.push({ name: expression, emotion: null });
             saveCustomExpressions(customs);
-            console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${expression}`);
+            console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${expression}`);
           }
         }
         return;
       }
     }
-    throw new Error('文件名格式不匹配 Name_Expression.ext');
+    throw new Error('鏂囦欢鍚嶆牸寮忎笉鍖归厤 Name_Expression.ext');
   },
   async importAsBackground(file, packId = null) {
     const fileName = file.name.split('/').pop();
     const sceneName = fileName.substring(0, fileName.lastIndexOf('.'));
     if (sceneName) {
       await saveBackground(sceneName, file, null, packId);
-      console.log(`[${SCRIPT_NAME}] 导入背景: ${sceneName}`);
+      console.log(`[${SCRIPT_NAME}] 瀵煎叆鑳屾櫙: ${sceneName}`);
     }
   },
   async importFromGitHub(repoUrl, targetPackId = null) {
     try {
       if (!targetPackId) {
-        targetPackId = await showImportPackSelector(`GitHub导入`);
+        targetPackId = await showImportPackSelector(`GitHub瀵煎叆`);
         if (!targetPackId) {
-          showToast('已取消导入');
+          showToast('宸插彇娑堝鍏?');
           return false;
         }
       }
@@ -268,23 +1163,23 @@ export const AssetIO = {
         }
       }
       if (!owner || !repo) {
-        throw new Error('无效的 GitHub 仓库地址');
+        throw new Error('鏃犳晥鐨?GitHub 浠撳簱鍦板潃');
       }
-      showToast(`正在获取文件列表: ${owner}/${repo}...`);
+      showToast(`姝ｅ湪鑾峰彇鏂囦欢鍒楄〃: ${owner}/${repo}...`);
       const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
       const data = await response.json();
-      if (!Array.isArray(data)) throw new Error('路径不是一个目录');
+      if (!Array.isArray(data)) throw new Error('璺緞涓嶆槸涓€涓洰褰?');
       const imageFiles = data.filter(item => item.type === 'file' && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
       if (imageFiles.length === 0) {
-        showToast('该目录下没有找到图片文件');
+        showToast('璇ョ洰褰曚笅娌℃湁鎵惧埌鍥剧墖鏂囦欢');
         return;
       }
-      if (!confirm(`找到 ${imageFiles.length} 张图片，是否开始导入？`)) return;
+      if (!confirm(`鎵惧埌 ${imageFiles.length} 寮犲浘鐗囷紝鏄惁寮€濮嬪鍏ワ紵`)) return;
       let count = 0;
       for (const item of imageFiles) {
-        showToast(`正在下载 (${count + 1}/${imageFiles.length}): ${item.name}`);
+        showToast(`姝ｅ湪涓嬭浇 (${count + 1}/${imageFiles.length}): ${item.name}`);
         try {
           const imgRes = await fetch(item.download_url);
           const blob = await imgRes.blob();
@@ -296,14 +1191,14 @@ export const AssetIO = {
           }
           count++;
         } catch (e) {
-          console.error(`下载/导入 ${item.name} 失败:`, e);
+          console.error(`涓嬭浇/瀵煎叆 ${item.name} 澶辫触:`, e);
         }
       }
       showToast(`GitHub 导入完成，共 ${count} 张图片`);
       return true;
     } catch (e) {
       console.error('GitHub Import Error:', e);
-      showToast('GitHub 导入失败: ' + e.message);
+      showToast('GitHub 瀵煎叆澶辫触: ' + e.message);
       return false;
     }
   },
@@ -314,27 +1209,27 @@ export function showRemoteZipImportDialog() {
     <div class="gal-input-modal" id="gal-remote-zip-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
         <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-cloud-arrow-down"></i> 远程压缩包导入</span>
-          <button id="gal-remote-zip-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-cloud-arrow-down"></i> 杩滅▼鍘嬬缉鍖呭鍏?/span>
+          <button id="gal-remote-zip-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
-            <i class="fa-solid fa-link"></i> ZIP 文件链接
+            <i class="fa-solid fa-link"></i> ZIP 鏂囦欢閾炬帴
           </label>
           <input type="text" id="gal-remote-zip-url"
                  placeholder="https://example.com/assets.zip"
                  style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 6px;">
           <small style="color: #888; margin-top: 5px; display: block;">
-            支持直接下载链接，如 GitHub Release、云盘直链等<br>
-            <strong style="color: #e74c3c;">限制：最大 5GB</strong>
+            鏀寔鐩存帴涓嬭浇閾炬帴锛屽 GitHub Release銆佷簯鐩樼洿閾剧瓑<br>
+            <strong style="color: #e74c3c;">闄愬埗锛氭渶澶?5GB</strong>
           </small>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 12px;">
           <button class="gal-action-btn primary" id="gal-remote-zip-confirm" style="flex: 1; min-height: 44px; justify-content: center;">
             <i class="fa-solid fa-download"></i>
-            <span>下载并导入</span>
+            <span>涓嬭浇骞跺鍏?/span>
           </button>
         </div>
       </div>
@@ -354,11 +1249,11 @@ export function showRemoteZipImportDialog() {
   $dialog.find('#gal-remote-zip-confirm').on('click', async function () {
     const url = $dialog.find('#gal-remote-zip-url').val().trim();
     if (!url) {
-      showToast('请输入ZIP文件链接');
+      showToast('璇疯緭鍏IP鏂囦欢閾炬帴');
       return;
     }
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      showToast('请输入有效的 HTTP/HTTPS 链接');
+      showToast('璇疯緭鍏ユ湁鏁堢殑 HTTP/HTTPS 閾炬帴');
       return;
     }
     $dialog.remove();
@@ -368,9 +1263,9 @@ export function showRemoteZipImportDialog() {
 
 export async function importFromZipFile(file) {
   let isCancelled = false;
-  const progressController = showImportProgress('正在解压本地文件...', () => {
+  const progressController = showImportProgress('姝ｅ湪瑙ｅ帇鏈湴鏂囦欢...', () => {
     isCancelled = true;
-    showToast('导入已手动取消');
+    showToast('瀵煎叆宸叉墜鍔ㄥ彇娑?');
   });
 
   try {
@@ -379,7 +1274,7 @@ export async function importFromZipFile(file) {
       onprogress: event => {
         if (isCancelled) return;
         const percent = Math.round(event.percent || 0);
-        progressController.update(percent, `解压中... ${percent}%`);
+        progressController.update(percent, `瑙ｅ帇涓?.. ${percent}%`);
       },
     });
 
@@ -392,15 +1287,15 @@ export async function importFromZipFile(file) {
 
     if (!isCancelled) {
       progressController.close();
-      showToast('ZIP导入完成！');
+      showToast('ZIP瀵煎叆瀹屾垚锛?');
     } else {
       progressController.close();
     }
   } catch (e) {
     progressController.close();
     if (isCancelled) return;
-    console.error('ZIP导入失败:', e);
-    showImportError(['ZIP文件解析失败', e.message || '未知错误', '请确保文件是有效的ZIP格式']);
+    console.error('ZIP瀵煎叆澶辫触:', e);
+    showImportError(['ZIP鏂囦欢瑙ｆ瀽澶辫触', e.message || '鏈煡閿欒', '璇风‘淇濇枃浠舵槸鏈夋晥鐨刏IP鏍煎紡']);
   }
 }
 
@@ -408,10 +1303,10 @@ export async function importFromRemoteZip(url) {
   const abortController = new AbortController();
   let isCancelled = false;
 
-  const progressController = showImportProgress('正在下载远程文件...', () => {
+  const progressController = showImportProgress('姝ｅ湪涓嬭浇杩滅▼鏂囦欢...', () => {
     isCancelled = true;
     abortController.abort();
-    showToast('下载已取消');
+    showToast('涓嬭浇宸插彇娑?');
   });
 
   try {
@@ -424,7 +1319,7 @@ export async function importFromRemoteZip(url) {
     const MAX_SIZE = 5 * 1024 * 1024 * 1024;
 
     if (contentLength && parseInt(contentLength) > MAX_SIZE) {
-      throw new Error(`文件大小 ${(parseInt(contentLength) / 1024 / 1024 / 1024).toFixed(2)} GB 超过 5GB 限制`);
+      throw new Error(`鏂囦欢澶у皬 ${(parseInt(contentLength) / 1024 / 1024 / 1024).toFixed(2)} GB 瓒呰繃 5GB 闄愬埗`);
     }
 
     const reader = response.body.getReader();
@@ -441,7 +1336,7 @@ export async function importFromRemoteZip(url) {
       receivedLength += value.length;
 
       if (receivedLength > MAX_SIZE) {
-        throw new Error('下载的文件大小超过 5GB 限制');
+        throw new Error('涓嬭浇鐨勬枃浠跺ぇ灏忚秴杩?5GB 闄愬埗');
       }
 
       const now = Date.now();
@@ -450,13 +1345,13 @@ export async function importFromRemoteZip(url) {
         const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
         const total = (totalLength / 1024 / 1024).toFixed(1);
         if (now - lastProgressUpdate > 200 || percent === 100) {
-          progressController.update(percent, `下载中: ${downloaded} MB / ${total} MB`);
+          progressController.update(percent, `涓嬭浇涓? ${downloaded} MB / ${total} MB`);
           lastProgressUpdate = now;
         }
       } else {
         const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
         if (now - lastProgressUpdate > 200) {
-          progressController.update(-1, `下载中: ${downloaded} MB`);
+          progressController.update(-1, `涓嬭浇涓? ${downloaded} MB`);
           lastProgressUpdate = now;
         }
       }
@@ -468,7 +1363,7 @@ export async function importFromRemoteZip(url) {
     }
 
     const blob = new Blob(chunks);
-    progressController.update(100, '下载完成，开始解压...');
+    progressController.update(100, '涓嬭浇瀹屾垚锛屽紑濮嬭В鍘?..');
 
     const JSZip = await AssetIO.loadJSZip();
     const zip = await JSZip.loadAsync(blob);
@@ -477,14 +1372,14 @@ export async function importFromRemoteZip(url) {
 
     if (!isCancelled) {
       progressController.close();
-      showToast('远程ZIP导入完成！');
+      showToast('杩滅▼ZIP瀵煎叆瀹屾垚锛?');
     } else {
       progressController.close();
     }
   } catch (e) {
     progressController.close();
     if (e.name === 'AbortError' || isCancelled) return;
-    console.error('远程ZIP导入失败:', e);
+    console.error('杩滅▼ZIP瀵煎叆澶辫触:', e);
     showImportError(['远程ZIP下载/导入失败', e.message || '网络错误', '请检查链接是否有效、是否支持跨域']);
   }
 }
@@ -494,46 +1389,46 @@ export async function showImportPackSelector(suggestedName = null) {
     getAllImagePacks().then(packs => {
       const currentPackId = getCurrentPackId();
       const currentPack = packs.find(p => p.id === currentPackId);
-      const currentPackName = currentPack ? currentPack.name : '当前图包';
+      const currentPackName = currentPack ? currentPack.name : '褰撳墠鍥惧寘';
 
       const packOptions = packs.map(p =>
-        `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (当前)' : ''}</option>`
+        `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (褰撳墠)' : ''}</option>`
       ).join('');
 
-      const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
+      const defaultNewName = suggestedName || `瀵煎叆鍖卂${new Date().toISOString().slice(0, 10)}`;
 
       const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
             <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-              <span><i class="fa-solid fa-box-open"></i> 选择导入目标图包</span>
-              <button id="gal-import-pack-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <span><i class="fa-solid fa-box-open"></i> 閫夋嫨瀵煎叆鐩爣鍥惧寘</span>
+              <button id="gal-import-pack-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
             <div style="margin-bottom: 20px;">
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
                 <input type="radio" name="import-target" value="current" checked style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">导入到当前图包</span>
+                <span style="font-weight: 600; color: #2b2e38;">瀵煎叆鍒板綋鍓嶅浘鍖?/span>
                 <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${currentPackName}</span>
               </label>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="existing" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">导入到已有图包</span>
+                <span style="font-weight: 600; color: #2b2e38;">瀵煎叆鍒板凡鏈夊浘鍖?/span>
               </label>
               <select id="gal-import-existing-pack" disabled style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-bottom: 15px; margin-left: 26px; opacity: 0.6;">
                 ${packOptions}
               </select>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">创建新图包</span>
+                <span style="font-weight: 600; color: #2b2e38;">鍒涘缓鏂板浘鍖?/span>
               </label>
-              <input type="text" id="gal-import-new-pack-name" disabled placeholder="输入新图包名称" value="${defaultNewName}"
+              <input type="text" id="gal-import-new-pack-name" disabled placeholder="杈撳叆鏂板浘鍖呭悕绉? value="${defaultNewName}"
                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
             </div>
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
               <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
-                <i class="fa-solid fa-check"></i> <span>确认导入</span>
+                <i class="fa-solid fa-check"></i> <span>纭瀵煎叆</span>
               </button>
             </div>
           </div>
@@ -565,14 +1460,14 @@ export async function showImportPackSelector(suggestedName = null) {
         } else if (targetType === 'new') {
           const newName = $dialog.find('#gal-import-new-pack-name').val().trim();
           if (!newName) {
-            showToast('请输入新图包名称');
+            showToast('璇疯緭鍏ユ柊鍥惧寘鍚嶇О');
             return;
           }
           createImagePack(newName).then(newPack => {
             $dialog.remove();
             resolve(newPack.id);
           }).catch(err => {
-            showToast('创建图包失败: ' + err.message);
+            showToast('鍒涘缓鍥惧寘澶辫触: ' + err.message);
           });
           return;
         }
@@ -593,8 +1488,8 @@ export async function showImportPackSelector(suggestedName = null) {
         }
       });
     }).catch(err => {
-      console.error('获取图包列表失败:', err);
-      showToast('获取图包列表失败');
+      console.error('鑾峰彇鍥惧寘鍒楄〃澶辫触:', err);
+      showToast('鑾峰彇鍥惧寘鍒楄〃澶辫触');
       resolve(null);
     });
   });
@@ -605,7 +1500,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
   const hasBackgroundsDir = Object.keys(zip.files).some(path => path.startsWith('backgrounds/'));
 
   if (!hasSpritesDir && !hasBackgroundsDir) {
-    throw new Error('ZIP包格式错误：必须包含 sprites/ 或 backgrounds/ 目录');
+    throw new Error('ZIP鍖呮牸寮忛敊璇細蹇呴』鍖呭惈 sprites/ 鎴?backgrounds/ 鐩綍');
   }
 
   let packageInfo = null;
@@ -614,9 +1509,9 @@ export async function processZipContents(zip, progressController, isCancelledChe
     try {
       const infoText = await infoFile.async('text');
       packageInfo = JSON.parse(infoText);
-      console.log(`[${SCRIPT_NAME}] 读取到包信息:`, packageInfo);
+      console.log(`[${SCRIPT_NAME}] 璇诲彇鍒板寘淇℃伅:`, packageInfo);
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 读取 package_info.json 失败:`, e);
+      console.warn(`[${SCRIPT_NAME}] 璇诲彇 package_info.json 澶辫触:`, e);
     }
   }
 
@@ -624,7 +1519,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
     const suggestedName = packageInfo?.packageName || packageInfo?.name;
     targetPackId = await showImportPackSelector(suggestedName);
     if (!targetPackId) {
-      showToast('已取消导入');
+      showToast('宸插彇娑堝鍏?');
       return;
     }
   }
@@ -645,10 +1540,10 @@ export async function processZipContents(zip, progressController, isCancelledChe
   });
 
   if (imageFiles.length === 0) {
-    throw new Error('ZIP包中未找到有效的图片文件');
+    throw new Error('ZIP鍖呬腑鏈壘鍒版湁鏁堢殑鍥剧墖鏂囦欢');
   }
 
-  progressController.update(0, `准备导入 ${imageFiles.length} 个文件...`);
+  progressController.update(0, `鍑嗗瀵煎叆 ${imageFiles.length} 涓枃浠?..`);
 
   const BATCH_SIZE = 50;
   let successCount = 0;
@@ -683,7 +1578,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
             backgroundBatch.push({ sceneName, imageBlob: blob });
           }
         } catch (e) {
-          console.warn(`解压 ${item.path} 失败:`, e);
+          console.warn(`瑙ｅ帇 ${item.path} 澶辫触:`, e);
           failedItems.push({ path: item.path, error: e.message });
         }
       }),
@@ -703,7 +1598,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
       }
       if (newExpressions.length > 0) {
         saveCustomExpressions(customs);
-        console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(', ')}`);
+        console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${newExpressions.join(', ')}`);
       }
     }
     if (backgroundBatch.length > 0) {
@@ -714,35 +1609,39 @@ export async function processZipContents(zip, progressController, isCancelledChe
 
     const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
     const percent = Math.round((processed / imageFiles.length) * 100);
-    progressController.update(percent, `导入中: ${processed}/${imageFiles.length} (批量模式)`);
+    progressController.update(percent, `瀵煎叆涓? ${processed}/${imageFiles.length} (鎵归噺妯″紡)`);
   }
 
   if (failedItems.length > 0) {
     showImportError([
       `成功: ${successCount} 个, 失败: ${failedItems.length} 个`,
-      '部分文件导入失败，请检查详情...',
+      '閮ㄥ垎鏂囦欢瀵煎叆澶辫触锛岃妫€鏌ヨ鎯?..',
     ]);
   }
 
-  console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}`);
+  console.log(`[${SCRIPT_NAME}] ZIP瀵煎叆瀹屾垚: 鎴愬姛 ${successCount}, 澶辫触 ${failedItems.length}`);
 }
 
-export function showImportProgress(initialText, onCancel) {
+export function showImportProgress(initialText, onCancel, options = {}) {
   $('.gal-import-progress-overlay').remove();
+  const title = String(options.title || '正在导入资源');
+  const iconClass = String(options.iconClass || 'fa-solid fa-spinner fa-spin');
+  const cancelText = String(options.cancelText || '取消');
+  const initialDetails = String(options.initialDetails || '');
 
   const html = `
     <div class="gal-import-progress-overlay">
       <div class="gal-import-progress-box">
         <div class="gal-import-progress-title">
-          <i class="fa-solid fa-spinner fa-spin"></i> 正在导入资源
+          <i class="${iconClass}"></i> ${title}
         </div>
         <div class="gal-import-progress-bar-container">
           <div class="gal-import-progress-bar"></div>
         </div>
         <div class="gal-import-progress-text">${initialText}</div>
-        <div class="gal-import-progress-details"></div>
+        <div class="gal-import-progress-details">${initialDetails}</div>
         <button class="gal-action-btn" id="gal-import-cancel-btn" style="margin-top: 15px; background: #e74c3c; color: #fff; border: none; padding: 6px 15px; font-size: 0.9rem;">
-          <i class="fa-solid fa-xmark"></i> 取消
+          <i class="fa-solid fa-xmark"></i> ${cancelText}
         </button>
       </div>
     </div>
@@ -759,13 +1658,21 @@ export function showImportProgress(initialText, onCancel) {
   }
 
   return {
-    update: (percent, text) => {
+    update: (percent, text, details) => {
       if (percent >= 0) {
         $overlay.find('.gal-import-progress-bar').css('width', percent + '%');
       } else {
         $overlay.find('.gal-import-progress-bar').css('width', '30%');
       }
       $overlay.find('.gal-import-progress-text').text(text);
+      if (typeof details === 'string') {
+        $overlay.find('.gal-import-progress-details').text(details);
+      }
+    },
+    setDetails: (details) => {
+      if (typeof details === 'string') {
+        $overlay.find('.gal-import-progress-details').text(details);
+      }
     },
     close: () => {
       $overlay.fadeOut(300, function () {
@@ -782,8 +1689,8 @@ export function showImportError(messages) {
     <div class="gal-input-modal" id="gal-import-error-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
         <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-circle-exclamation"></i> 导入出错</span>
-          <button id="gal-import-error-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-circle-exclamation"></i> 瀵煎叆鍑洪敊</span>
+          <button id="gal-import-error-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -803,3 +1710,5 @@ export function showImportError(messages) {
     if (e.target === this) $dialog.remove();
   });
 }
+
+

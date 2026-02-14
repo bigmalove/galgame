@@ -3116,6 +3116,7 @@ ${lines.join("\n")}`;
   };
 
   // src/live2d/manager.js
+  var LIVE2D_TICKER_GUARD_KEY = "__galgameLive2dTickerRef__";
   var _Live2DStageRef = null;
   var _showToastRef2 = null;
   function setLive2DManagerRefs({ Live2DStage: Live2DStage2, showToast: showToast5 }) {
@@ -3567,7 +3568,11 @@ ${lines.join("\n")}`;
       }
       try {
         const { Live2DModel } = _topWindow.PIXI.live2d;
-        Live2DModel.registerTicker(_topWindow.PIXI.Ticker);
+        const tickerRef = _topWindow.PIXI.Ticker;
+        if (_topWindow[LIVE2D_TICKER_GUARD_KEY] !== tickerRef) {
+          Live2DModel.registerTicker(tickerRef);
+          _topWindow[LIVE2D_TICKER_GUARD_KEY] = tickerRef;
+        }
         this.isReady = true;
         this._debugLog(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5B8C\u6210`);
         return true;
@@ -3896,7 +3901,7 @@ ${lines.join("\n")}`;
     async _buildModelDataUrl(modelData, characterId) {
       const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
       const modifiedModelJson = JSON.parse(JSON.stringify(modelData.modelJson));
-      const arrayBufferToBase64 = (buffer) => {
+      const arrayBufferToBase642 = (buffer) => {
         const bytes = new Uint8Array(buffer);
         let binary = "";
         for (let i = 0; i < bytes.length; i++) {
@@ -3913,7 +3918,7 @@ ${lines.join("\n")}`;
         });
       };
       const arrayBufferToDataUrl = (buffer, mimeType) => {
-        const base64 = arrayBufferToBase64(buffer);
+        const base64 = arrayBufferToBase642(buffer);
         return `data:${mimeType};base64,${base64}`;
       };
       const normalizePath = (p) => typeof p === "string" ? p.replace(/\\/g, "/") : p;
@@ -4722,7 +4727,7 @@ ${lines.join("\n")}`;
       const PIXI = this._getPIXI();
       if (!mountEl || !mountEl.isConnected) return false;
       if (!PIXI) {
-        console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI \u672A\u5C31\u7EEA\uFF0C\u65E0\u6CD5\u6302\u8F7D`);
+        console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI \u93C8\uE044\u6C28\u7F01\uE04E\u7D1D\u93C3\u72B3\u7876\u93B8\u509D\u6D47`);
         return false;
       }
       if (this.mountEl !== mountEl) {
@@ -4767,9 +4772,9 @@ ${lines.join("\n")}`;
           premultipliedAlpha: true
         });
         if (!glContext) {
-          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL \u4E0D\u53EF\u7528\uFF0C\u65E0\u6CD5\u6E32\u67D3 Live2D`);
+          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL \u6D93\u5D85\u5F72\u9422\uE7D2\u7D1D\u93C3\u72B3\u7876\u5A13\u53C9\u714B Live2D`);
           try {
-            if (_showToastRef3) _showToastRef3("WebGL \u4E0D\u53EF\u7528\uFF0CLive2D \u65E0\u6CD5\u6E32\u67D3\uFF08\u8BF7\u5F00\u542F\u786C\u4EF6\u52A0\u901F\uFF09");
+            if (_showToastRef3) _showToastRef3("WebGL \u6D93\u5D85\u5F72\u9422\uE7D2\u7D1DLive2D \u93C3\u72B3\u7876\u5A13\u53C9\u714B\u951B\u5823\uE1EC\u5BEE\u20AC\u935A\uE21C\u2016\u6D60\u8DFA\u59DE\u95AB\u71C2\u7D1A");
           } catch {
           }
           return false;
@@ -4787,7 +4792,7 @@ ${lines.join("\n")}`;
           preserveDrawingBuffer: false
         });
         if (!this.app.renderer?.gl) {
-          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL Renderer \u521D\u59CB\u5316\u5931\u8D25`, this.app.renderer);
+          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL Renderer init failed`, this.app.renderer);
           try {
             this.app.destroy(true);
           } catch {
@@ -4895,7 +4900,7 @@ ${lines.join("\n")}`;
       try {
         this.app.renderer.resize(width, height);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize \u5931\u8D25`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize \u6FB6\u8FAB\u89E6`, e);
       }
       this._ensureSlotContainers();
       if (this.mode === "single") {
@@ -4983,7 +4988,18 @@ ${lines.join("\n")}`;
           targetContainer.addChild(model);
         }
         if ("autoUpdate" in model) {
-          model.autoUpdate = true;
+          const pixiRef = this._getPIXI();
+          const sharedTicker = pixiRef?.Ticker?.shared;
+          if (sharedTicker && typeof sharedTicker.remove === "function" && typeof model.onTickerUpdate === "function") {
+            try {
+              sharedTicker.remove(model.onTickerUpdate, model);
+            } catch (e) {
+            }
+          }
+          try {
+            model.autoUpdate = true;
+          } catch (e) {
+          }
         }
       } catch (e) {
       }
@@ -5041,6 +5057,14 @@ ${lines.join("\n")}`;
       try {
         if (inst.model.parent) {
           inst.model.parent.removeChild(inst.model);
+        }
+        const pixiRef = this._getPIXI();
+        const sharedTicker = pixiRef?.Ticker?.shared;
+        if (sharedTicker && typeof sharedTicker.remove === "function" && typeof inst.model.onTickerUpdate === "function") {
+          try {
+            sharedTicker.remove(inst.model.onTickerUpdate, inst.model);
+          } catch (e) {
+          }
         }
         if ("autoUpdate" in inst.model) {
           inst.model.autoUpdate = false;
@@ -8402,10 +8426,15 @@ ${lines.join("\n")}`;
         slot = info.slot;
         this.slotOwners.set(slot, characterId);
         const isElementValid = this.isCharacterElementValid(info, $overlay);
+        const useLive2D = getCharacterUseLive2D(characterId);
+        const hasLive2D = useLive2D ? await hasLive2DModel(characterId) : false;
+        const hasRenderedLive2D = Live2DManager.containers.has(characterId);
+        const isExistingLive2D = isElementValid && info?.element?.attr("data-live2d") === "true";
+        const renderModeChanged = hasLive2D !== (isExistingLive2D || hasRenderedLive2D);
         if (!isElementValid) {
           info.expression = expression;
           await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken);
-        } else if (info.expression !== expression) {
+        } else if (info.expression !== expression || renderModeChanged) {
           info.expression = expression;
           await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken);
         }
@@ -8461,8 +8490,11 @@ ${lines.join("\n")}`;
         this._clearLive2DRenderSeq(characterId);
       }
       const $existingContainer = $slot.find('.gal-char-container[data-character="' + characterId + '"]');
-      const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr("data-live2d") === "true";
       const hasRenderedLive2D = Live2DManager.containers.has(characterId);
+      if (!hasLive2D && hasRenderedLive2D) {
+        Live2DManager.releaseCharacter(characterId);
+      }
+      const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr("data-live2d") === "true";
       if (isExistingLive2D && hasRenderedLive2D && !isEntering) {
         $existingContainer.attr("data-expression", expression);
         if (emotionAttr) {
@@ -13871,6 +13903,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     let previewIsDragging = false;
     let previewDragStart = { x: 0, y: 0 };
     let previewDragOrigin = { x: 0, y: 0 };
+    let previewRequestToken = 0;
     const gameExpressionTags = Object.keys(EXPRESSION_LIVE2D_MAP);
     const buildMappingRows = () => {
       const existingMappings = { ...expressionMapping };
@@ -14352,6 +14385,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const cleanupMappingPreview = () => {
       if (!previewMounted) return;
       previewIsDragging = false;
+      previewRequestToken++;
       $modal.find("#gal-live2d-preview-canvas").css("cursor", "grab");
       try {
         Live2DStage.popMount();
@@ -14413,10 +14447,51 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       });
       return $target;
     };
+    const stopPreviewMotion = (model) => {
+      const motionManager = model?.internalModel?.motionManager;
+      if (!motionManager) return;
+      try {
+        if (typeof motionManager.stopAllMotions === "function") {
+          motionManager.stopAllMotions();
+          return;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof motionManager.motionQueueManager?.stopAllMotions === "function") {
+          motionManager.motionQueueManager.stopAllMotions();
+          return;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof motionManager.queueManager?.stopAllMotions === "function") {
+          motionManager.queueManager.stopAllMotions();
+        }
+      } catch (e) {
+      }
+    };
+    const normalizePreviewAutoUpdateTicker = (model) => {
+      if (!model) return;
+      const sharedTicker = topWindow?.PIXI?.Ticker?.shared;
+      if (sharedTicker && typeof sharedTicker.remove === "function" && typeof model.onTickerUpdate === "function") {
+        try {
+          sharedTicker.remove(model.onTickerUpdate, model);
+        } catch (e) {
+        }
+      }
+      if ("autoUpdate" in model) {
+        try {
+          model.autoUpdate = true;
+        } catch (e) {
+        }
+      }
+    };
     const previewMappingForTag = async (tag) => {
       if (!tag) return;
+      const requestToken = ++previewRequestToken;
       const mounted = await ensureMappingPreviewMounted();
-      if (!mounted) return;
+      if (!mounted || requestToken !== previewRequestToken) return;
       const model = Live2DManager.models.get(characterId);
       if (!model) {
         setPreviewStatus("\u6A21\u578B\u672A\u5C31\u7EEA", "error");
@@ -14427,6 +14502,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       const exprValue = String($row.find(".gal-expr-mapping-select").val() || "");
       const motionValueRaw = $row.find(".gal-motion-mapping-select").val();
       const motionValue = motionValueRaw === null || motionValueRaw === void 0 ? "" : String(motionValueRaw);
+      if (requestToken !== previewRequestToken) return;
+      normalizePreviewAutoUpdateTicker(model);
       $modal.find(".gal-mapping-row").removeClass("previewing");
       $row.addClass("previewing");
       setPreviewTag(tag);
@@ -14443,6 +14520,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         console.warn(`[${SCRIPT_NAME}] \u9884\u89C8\u8868\u60C5\u5931\u8D25:`, e);
       }
       try {
+        stopPreviewMotion(model);
         if (motionValue === "__disabled__") {
           playedMotion = "(\u52A8\u4F5C\u5DF2\u7981\u7528)";
         } else {
@@ -14571,6 +14649,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       }
     });
     const closeModal = () => {
+      previewRequestToken++;
       cleanupMappingPreview();
       unbindPreviewViewportEvents();
       $modal.remove();
@@ -17002,6 +17081,773 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
   }
 
   // src/ui/asset-io.js
+  var DISCORD_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
+  var DEFAULT_LIVE2D_EMBED_LIMIT_BYTES = DISCORD_UPLOAD_LIMIT_BYTES;
+  function safeJsonParse(text, fallback) {
+    try {
+      if (text == null || text === "") return fallback;
+      return JSON.parse(text);
+    } catch {
+      return fallback;
+    }
+  }
+  function readLocalStorageJson(key, fallback) {
+    try {
+      return safeJsonParse(localStorage.getItem(key), fallback);
+    } catch {
+      return fallback;
+    }
+  }
+  function ensureTrailingSlash(url) {
+    if (!url) return "";
+    return url.endsWith("/") ? url : `${url}/`;
+  }
+  function normalizeRemoteInput(input) {
+    const raw = String(input || "").trim();
+    if (!raw) return { remoteBaseUrl: "", remoteAssetsUrl: "" };
+    if (/\.json(\?.*)?$/i.test(raw)) {
+      return { remoteBaseUrl: "", remoteAssetsUrl: raw };
+    }
+    const base = ensureTrailingSlash(raw);
+    return { remoteBaseUrl: base, remoteAssetsUrl: `${base}remote_assets.json` };
+  }
+  function sanitizeFileName(name) {
+    return String(name || "character").replace(/[\\/:*?"<>|]/g, "_").trim() || "character";
+  }
+  function escapeHtml(input) {
+    return String(input || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function downloadTextFile(filename, text, mimeType = "application/json") {
+    const blob = new Blob([text], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function toArrayBuffer(input) {
+    if (!input) return null;
+    if (input instanceof ArrayBuffer) return input;
+    if (ArrayBuffer.isView(input)) {
+      return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+    }
+    return null;
+  }
+  function safeByteLength(input) {
+    const buf = toArrayBuffer(input);
+    if (buf) return buf.byteLength;
+    if (typeof Blob !== "undefined" && input instanceof Blob) return input.size || 0;
+    if (typeof input?.size === "number") return input.size;
+    return 0;
+  }
+  function formatSizeMb(bytes) {
+    const n = Number(bytes) || 0;
+    return `${(n / 1024 / 1024).toFixed(2)} MB`;
+  }
+  function arrayBufferToBase64(buffer) {
+    const safeBuffer = toArrayBuffer(buffer);
+    if (!safeBuffer) return "";
+    const bytes = new Uint8Array(safeBuffer);
+    const chunkSize = 32768;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      try {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const idx = result.indexOf(",");
+          resolve(idx >= 0 ? result.slice(idx + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error || new Error("Blob read failed"));
+        reader.readAsDataURL(blob);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+  function estimateLive2DModelSizeBytes(modelData) {
+    if (!modelData || typeof modelData !== "object") return 0;
+    if (Number.isFinite(modelData.fileSize) && modelData.fileSize > 0) {
+      return Number(modelData.fileSize);
+    }
+    let total = 0;
+    total += safeByteLength(modelData.moc3);
+    total += safeByteLength(modelData.moc);
+    total += safeByteLength(modelData.physics);
+    total += safeByteLength(modelData.pose);
+    if (Array.isArray(modelData.textures)) {
+      for (const tex of modelData.textures) total += safeByteLength(tex?.data);
+    }
+    if (modelData.motions && typeof modelData.motions === "object") {
+      for (const list of Object.values(modelData.motions)) {
+        if (!Array.isArray(list)) continue;
+        for (const item of list) total += safeByteLength(item?.data);
+      }
+    }
+    if (Array.isArray(modelData.expressions)) {
+      for (const expr of modelData.expressions) total += safeByteLength(expr?.data);
+    }
+    return total;
+  }
+  async function serializeLive2DModelData(modelData) {
+    const out = {
+      modelId: String(modelData?.modelId || ""),
+      cubismVersion: Number(modelData?.cubismVersion || 0) || null,
+      uploadTime: Number(modelData?.uploadTime || 0) || null,
+      fileSize: Number(modelData?.fileSize || 0) || null,
+      modelJson: modelData?.modelJson || null,
+      moc3Base64: null,
+      mocBase64: null,
+      physicsBase64: null,
+      poseBase64: null,
+      textures: [],
+      motions: {},
+      expressions: []
+    };
+    const moc3 = toArrayBuffer(modelData?.moc3);
+    const moc = toArrayBuffer(modelData?.moc);
+    const physics = toArrayBuffer(modelData?.physics);
+    const pose = toArrayBuffer(modelData?.pose);
+    if (moc3) out.moc3Base64 = arrayBufferToBase64(moc3);
+    if (moc) out.mocBase64 = arrayBufferToBase64(moc);
+    if (physics) out.physicsBase64 = arrayBufferToBase64(physics);
+    if (pose) out.poseBase64 = arrayBufferToBase64(pose);
+    if (Array.isArray(modelData?.textures)) {
+      for (const tex of modelData.textures) {
+        if (!tex?.data) continue;
+        let dataBase64 = "";
+        let mimeType = "application/octet-stream";
+        if (typeof Blob !== "undefined" && tex.data instanceof Blob) {
+          mimeType = tex.data.type || mimeType;
+          dataBase64 = await blobToBase64(tex.data);
+        } else {
+          const texBuffer = toArrayBuffer(tex.data);
+          if (!texBuffer) continue;
+          dataBase64 = arrayBufferToBase64(texBuffer);
+        }
+        out.textures.push({
+          name: String(tex?.name || ""),
+          mimeType,
+          dataBase64
+        });
+      }
+    }
+    if (modelData?.motions && typeof modelData.motions === "object") {
+      for (const [groupName, list] of Object.entries(modelData.motions)) {
+        if (!Array.isArray(list)) continue;
+        const exportedList = [];
+        for (const motion of list) {
+          const dataBuffer = toArrayBuffer(motion?.data);
+          if (!dataBuffer) continue;
+          exportedList.push({
+            name: String(motion?.name || ""),
+            dataBase64: arrayBufferToBase64(dataBuffer)
+          });
+        }
+        if (exportedList.length > 0) out.motions[groupName] = exportedList;
+      }
+    }
+    if (Array.isArray(modelData?.expressions)) {
+      for (const expr of modelData.expressions) {
+        const dataBuffer = toArrayBuffer(expr?.data);
+        if (!dataBuffer) continue;
+        out.expressions.push({
+          name: String(expr?.name || ""),
+          file: String(expr?.file || ""),
+          dataBase64: arrayBufferToBase64(dataBuffer)
+        });
+      }
+    }
+    return out;
+  }
+  function ensureCardExtensions(card) {
+    if (!card || typeof card !== "object") {
+      throw new Error("\u8930\u64B3\u58A0\u7459\u6395\u58CA\u9357\u2103\u669F\u93B9\uE1BD\u68E4\u93C1?");
+    }
+    const data = card.data && typeof card.data === "object" ? card.data : card;
+    if (!data.extensions || typeof data.extensions !== "object") {
+      data.extensions = {};
+    }
+    return data.extensions;
+  }
+  async function buildGalgameCardConfig(options = {}) {
+    const {
+      remoteInput = "",
+      includeAllPacks = true,
+      embedLocalLive2d = true,
+      includeLocalLive2dPlaceholder = true,
+      maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
+      onProgress = null
+    } = options;
+    const reportProgress = typeof onProgress === "function" ? (percent, text) => onProgress(Math.max(0, Math.min(100, Number(percent) || 0)), text) : () => {
+    };
+    reportProgress(8, "Loading packs and base export config...");
+    const currentPackId = getCurrentPackId() || DEFAULT_PACK_ID;
+    let packs = await getAllImagePacks();
+    if (!Array.isArray(packs) || packs.length === 0) {
+      packs = [{ id: DEFAULT_PACK_ID, name: "\u672A\u5B9A\u4E49", isDefault: true }];
+    }
+    const { remoteBaseUrl, remoteAssetsUrl } = normalizeRemoteInput(remoteInput);
+    const packList = includeAllPacks ? packs : packs.filter((p) => p && String(p.id) === String(currentPackId));
+    const exportedPacks = packList.map((p) => {
+      const packId = String(p.id || DEFAULT_PACK_ID);
+      const name = String(p.name || "\u93C8\uE044\u757E\u6D94?");
+      const out = { packId, name };
+      if (packId === currentPackId && (remoteBaseUrl || remoteAssetsUrl)) {
+        if (remoteBaseUrl) out.remoteBaseUrl = remoteBaseUrl;
+        if (remoteAssetsUrl) out.remoteAssetsUrl = remoteAssetsUrl;
+      }
+      return out;
+    });
+    reportProgress(18, "Loading TTS and Live2D settings...");
+    const ttsEnabled = !!getTTSEnabled();
+    const characterVoice = getAllCharacterTTSVoices() || {};
+    const live2dEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
+    const live2dConfigMap = readLocalStorageJson(LIVE2D_CONFIG_KEY, {});
+    const live2dModels = await getAllLive2DModels();
+    const live2dList = Array.isArray(live2dModels) ? live2dModels : [];
+    const live2dOutModels = {};
+    const warnings = [];
+    if (live2dList.length === 0) {
+      reportProgress(68, "No Live2D models detected, skipping embedded model stage");
+    }
+    for (let i = 0; i < live2dList.length; i++) {
+      const model = live2dList[i];
+      const stepPercent = 24 + Math.round(i / Math.max(1, live2dList.length) * 40);
+      reportProgress(stepPercent, `Processing Live2D model ${i + 1}/${live2dList.length}...`);
+      const characterId = String(model?.modelId || "").trim();
+      if (!characterId) {
+        reportProgress(24 + Math.round((i + 1) / Math.max(1, live2dList.length) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+        continue;
+      }
+      const charCfg = live2dConfigMap && typeof live2dConfigMap === "object" ? live2dConfigMap[characterId] : null;
+      if (model?.source === "remote" && typeof model?.modelUrl === "string" && model.modelUrl.trim()) {
+        live2dOutModels[characterId] = {
+          source: "remote",
+          modelUrl: model.modelUrl.trim(),
+          ...charCfg ? { config: charCfg } : {}
+        };
+        reportProgress(24 + Math.round((i + 1) / Math.max(1, live2dList.length) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+        continue;
+      }
+      const modelSizeBytes = estimateLive2DModelSizeBytes(model);
+      if (embedLocalLive2d) {
+        const overLimit = Number.isFinite(maxEmbeddedLive2dBytes) && maxEmbeddedLive2dBytes > 0 && modelSizeBytes > maxEmbeddedLive2dBytes;
+        if (overLimit) {
+          const warn = `[Live2D] ${characterId} size ${formatSizeMb(modelSizeBytes)} exceeds Discord limit ${formatSizeMb(maxEmbeddedLive2dBytes)}; skipped embedded export, upload to GitHub and use remote URL.`;
+          warnings.push(warn);
+          if (includeLocalLive2dPlaceholder) {
+            live2dOutModels[characterId] = {
+              source: "idb",
+              modelId: characterId,
+              sizeBytes: modelSizeBytes,
+              note: warn,
+              ...charCfg ? { config: charCfg } : {}
+            };
+          }
+          reportProgress(24 + Math.round((i + 1) / Math.max(1, live2dList.length) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+          continue;
+        }
+        try {
+          const payload = await serializeLive2DModelData(model);
+          live2dOutModels[characterId] = {
+            source: "embedded",
+            format: "live2d_idb_v1",
+            sizeBytes: modelSizeBytes,
+            payload,
+            ...charCfg ? { config: charCfg } : {}
+          };
+        } catch (e) {
+          const errMsg = e && e.message ? e.message : String(e);
+          const warn = `[Live2D] ${characterId} \u93C8\uE0FF\u7D8B\u7035\u714E\u56AD\u6FB6\u8FAB\u89E6\u951B\u5C7D\u51E1\u95AB\u20AC\u9365\u70B2\u5D30\u6D63\u5D88\uE187\u8930\u66EA\u7D30${errMsg}`;
+          warnings.push(warn);
+          if (includeLocalLive2dPlaceholder) {
+            live2dOutModels[characterId] = {
+              source: "idb",
+              modelId: characterId,
+              sizeBytes: modelSizeBytes,
+              note: warn,
+              ...charCfg ? { config: charCfg } : {}
+            };
+          }
+        }
+        reportProgress(24 + Math.round((i + 1) / Math.max(1, live2dList.length) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+        continue;
+      }
+      if (includeLocalLive2dPlaceholder) {
+        live2dOutModels[characterId] = {
+          source: "idb",
+          modelId: characterId,
+          sizeBytes: modelSizeBytes,
+          note: "Local Live2D model is stored in IndexedDB; binary payload is not exported. Upload to remote and use source=remote if you want portability.",
+          ...charCfg ? { config: charCfg } : {}
+        };
+      }
+      reportProgress(24 + Math.round((i + 1) / Math.max(1, live2dList.length) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+    }
+    reportProgress(72, "Finalizing character-card extension config...");
+    return {
+      schema: "galgame_ui_plugin_config_v2",
+      meta: {
+        exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        exporter: "galgame-ui-plugin.asset-io",
+        live2dExportMode: embedLocalLive2d ? "embedded" : includeLocalLive2dPlaceholder ? "idb-placeholder" : "skip-local",
+        maxEmbeddedLive2dBytes: Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
+        discordUploadLimitBytes: DISCORD_UPLOAD_LIMIT_BYTES,
+        ...warnings.length > 0 ? { warnings } : {}
+      },
+      assets: {
+        activePackId: currentPackId,
+        packs: exportedPacks
+      },
+      live2d: {
+        enabledMap: live2dEnabledMap || {},
+        models: live2dOutModels
+      },
+      tts: {
+        enabled: ttsEnabled,
+        characterVoice: characterVoice || {}
+      }
+    };
+  }
+  function estimateCardJsonBytes(cardObj) {
+    const text = JSON.stringify(cardObj);
+    return new TextEncoder().encode(text).length;
+  }
+  function getSillyTavernContextSafe() {
+    try {
+      const getContext = topWindow?.SillyTavern?.getContext;
+      if (typeof getContext === "function") {
+        return getContext.call(topWindow.SillyTavern) || null;
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] \u83B7\u53D6 SillyTavern \u4E0A\u4E0B\u6587\u5931\u8D25`, e);
+    }
+    return null;
+  }
+  function collectCurrentCharacterNameCandidates() {
+    const result = [];
+    const append = (value) => {
+      const name = String(value || "").trim();
+      if (!name) return;
+      if (!result.includes(name)) result.push(name);
+    };
+    const ctx = getSillyTavernContextSafe();
+    if (ctx?.characters && ctx?.characterId != null) {
+      const current = ctx.characters[ctx.characterId];
+      append(current?.name);
+      append(current?.data?.name);
+    }
+    append(ctx?.name2);
+    const st = topWindow?.SillyTavern;
+    if (st?.characters && st?.characterId != null) {
+      const current = st.characters[st.characterId];
+      append(current?.name);
+      append(current?.data?.name);
+    }
+    append(st?.name2);
+    return result;
+  }
+  function pickBestSuggestedCharacterName(allNames, preferredName = "", contextCandidates = []) {
+    const names = Array.isArray(allNames) ? allNames.map((v) => String(v || "").trim()).filter(Boolean) : [];
+    if (names.length === 0) return "";
+    const index = new Map(names.map((name) => [name.toLowerCase(), name]));
+    const preferred = String(preferredName || "").trim().toLowerCase();
+    if (preferred && index.has(preferred)) {
+      return index.get(preferred);
+    }
+    for (const candidate of Array.isArray(contextCandidates) ? contextCandidates : []) {
+      const key = String(candidate || "").trim().toLowerCase();
+      if (!key) continue;
+      if (index.has(key)) return index.get(key);
+    }
+    return names[0];
+  }
+  function listAllCharacterNamesSafe() {
+    try {
+      const getCharacterNames = topWindow?.TavernHelper?.getCharacterNames;
+      if (typeof getCharacterNames !== "function") return [];
+      const names = getCharacterNames();
+      if (!Array.isArray(names)) return [];
+      return names.map((name) => String(name || "").trim()).filter(Boolean);
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] \u83B7\u53D6\u89D2\u8272\u5361\u5217\u8868\u5931\u8D25`, e);
+      return [];
+    }
+  }
+  async function showCharacterExportSelector(characterNames, suggestedName = "") {
+    const names = Array.isArray(characterNames) ? characterNames.map((v) => String(v || "").trim()).filter(Boolean) : [];
+    if (names.length === 0) return null;
+    const suggested = String(suggestedName || "").trim();
+    const hasSuggested = suggested && names.some((n) => n.toLowerCase() === suggested.toLowerCase());
+    const defaultName = hasSuggested ? names.find((n) => n.toLowerCase() === suggested.toLowerCase()) : names[0];
+    return new Promise((resolve) => {
+      const optionsHtml = names.map((name) => `<option value="${escapeHtml(name)}"${name === defaultName ? " selected" : ""}>${escapeHtml(name)}</option>`).join("");
+      const dialogHtml = `
+      <div class="gal-input-modal gal-z-critical" id="gal-export-char-selector">
+        <div class="gal-input-box" style="max-width: 460px; width: 90%; padding: 25px;">
+          <div class="gal-input-title" style="margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between;">
+            <span><i class="fa-solid fa-id-card"></i> \u9009\u62E9\u5BFC\u51FA\u89D2\u8272\u5361</span>
+            <button id="gal-export-char-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div style="margin-bottom: 14px; color: #666; font-size: 0.9rem;">
+            \u5F53\u524D\u4F1A\u8BDD\u4E0D\u662F\u53EF\u5BFC\u51FA\u7684\u89D2\u8272\u5361\u4E0A\u4E0B\u6587\uFF0C\u8BF7\u9009\u62E9\u4E00\u4E2A\u89D2\u8272\u5361\u7EE7\u7EED\u5BFC\u51FA\u3002
+          </div>
+          <div style="margin-bottom: 16px;">
+            <select id="gal-export-char-name"
+                    style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 1rem; box-sizing: border-box;">
+              ${optionsHtml}
+            </select>
+          </div>
+          <div class="gal-input-actions" style="display: flex; gap: 12px;">
+            <button class="gal-action-btn" id="gal-export-char-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
+              <i class="fa-solid fa-check"></i> <span>\u786E\u8BA4\u5BFC\u51FA</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(dialogHtml);
+      const $dialog = $(mountRoot).find("#gal-export-char-selector");
+      makeDraggable($dialog.find(".gal-input-box"), $dialog.find(".gal-input-title"));
+      let settled = false;
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        $dialog.remove();
+        resolve(value);
+      };
+      $dialog.find("#gal-export-char-confirm").on("click", () => {
+        const selected = String($dialog.find("#gal-export-char-name").val() || "").trim();
+        if (!selected) {
+          showToast4("\u8BF7\u9009\u62E9\u4E00\u4E2A\u89D2\u8272\u5361");
+          return;
+        }
+        done(selected);
+      });
+      $dialog.find("#gal-export-char-close-x").on("click", () => done(null));
+      $dialog.on("click", function(e) {
+        if (e.target === this) done(null);
+      });
+    });
+  }
+  async function resolveCharacterCardForExport(options = {}) {
+    const {
+      interactive = true,
+      preferredCharacterName = "",
+      onProgress = null
+    } = options;
+    const reportProgress = typeof onProgress === "function" ? onProgress : () => {
+    };
+    const getCharacter = topWindow?.TavernHelper?.getCharacter;
+    if (typeof getCharacter !== "function") {
+      throw new Error("\u672A\u68C0\u6D4B\u5230 TavernHelper.getCharacter\uFF0C\u65E0\u6CD5\u8BFB\u53D6\u89D2\u8272\u5361");
+    }
+    const tried = /* @__PURE__ */ new Set();
+    let lastError = null;
+    const tryGetCharacter = async (name, reason) => {
+      const safeName = String(name || "").trim();
+      if (!safeName) return null;
+      const key = safeName.toLowerCase();
+      if (tried.has(key)) return null;
+      tried.add(key);
+      reportProgress(76, `\u8BFB\u53D6\u89D2\u8272\u5361: ${safeName}`);
+      try {
+        const card = await getCharacter(safeName);
+        if (card && typeof card === "object") {
+          return { card, resolvedName: safeName, resolveReason: reason };
+        }
+      } catch (e) {
+        lastError = e;
+        console.warn(`[${SCRIPT_NAME}] \u8BFB\u53D6\u89D2\u8272\u5361\u5931\u8D25 (${reason}): ${safeName}`, e);
+      }
+      return null;
+    };
+    const preferred = String(preferredCharacterName || "").trim();
+    if (preferred) {
+      const hit = await tryGetCharacter(preferred, "preferred");
+      if (hit) return hit;
+    }
+    const fromCurrent = await tryGetCharacter("current", "current");
+    if (fromCurrent) return fromCurrent;
+    const contextCandidates = collectCurrentCharacterNameCandidates();
+    for (const candidate of contextCandidates) {
+      const hit = await tryGetCharacter(candidate, "context");
+      if (hit) return hit;
+    }
+    const allNames = listAllCharacterNamesSafe();
+    if (allNames.length > 0 && contextCandidates.length > 0) {
+      const index = new Map(allNames.map((name) => [name.toLowerCase(), name]));
+      for (const candidate of contextCandidates) {
+        const mapped = index.get(String(candidate).toLowerCase());
+        if (!mapped) continue;
+        const hit = await tryGetCharacter(mapped, "context-mapped");
+        if (hit) return hit;
+      }
+    }
+    if (allNames.length === 1) {
+      const hit = await tryGetCharacter(allNames[0], "single-character");
+      if (hit) return hit;
+    }
+    if (interactive && allNames.length > 0) {
+      const suggestedForSelect = pickBestSuggestedCharacterName(allNames, preferred, contextCandidates);
+      const selectedByModal = await showCharacterExportSelector(
+        allNames,
+        suggestedForSelect
+      );
+      if (typeof selectedByModal === "string" && selectedByModal.trim()) {
+        const hit = await tryGetCharacter(selectedByModal.trim(), "manual-select-modal");
+        if (hit) return hit;
+      }
+      if (typeof prompt === "function") {
+        const preview = allNames.slice(0, 20).join("\u3001");
+        const more = allNames.length > 20 ? ` ... \u5171 ${allNames.length} \u4E2A` : "";
+        const answer = prompt(
+          `\u5F53\u524D\u4F1A\u8BDD\u65E0\u6CD5\u901A\u8FC7 'current' \u8BFB\u53D6\u89D2\u8272\u5361\u3002
+\u8BF7\u8F93\u5165\u8981\u5BFC\u51FA\u7684\u89D2\u8272\u5361\u540D\u79F0\uFF1A
+${preview}${more}`,
+          contextCandidates[0] || allNames[0] || ""
+        );
+        if (typeof answer === "string" && answer.trim()) {
+          const hit = await tryGetCharacter(answer.trim(), "manual-input");
+          if (hit) return hit;
+        }
+      }
+    }
+    const parts = [];
+    if (contextCandidates.length > 0) {
+      parts.push(`\u4E0A\u4E0B\u6587\u5019\u9009: ${contextCandidates.join("\u3001")}`);
+    }
+    if (allNames.length > 0) {
+      const preview = allNames.slice(0, 10).join("\u3001");
+      parts.push(`\u89D2\u8272\u5361\u5217\u8868: ${preview}${allNames.length > 10 ? " ..." : ""}`);
+    }
+    if (lastError?.message) {
+      parts.push(`\u6700\u540E\u9519\u8BEF: ${lastError.message}`);
+    }
+    throw new Error(`\u89D2\u8272\u5361 'current' \u4E0D\u5B58\u5728\uFF0C\u4E14\u65E0\u6CD5\u81EA\u52A8\u5B9A\u4F4D\u5BFC\u51FA\u76EE\u6807\u3002${parts.join("\uFF1B")}`);
+  }
+  function isLikelyRawCharacterCard(card) {
+    if (!card || typeof card !== "object") return false;
+    const hasName = typeof card.name === "string" && card.name.trim().length > 0;
+    const hasData = card.data && typeof card.data === "object";
+    const hasDialogField = typeof card.first_mes === "string" || typeof card?.data?.first_mes === "string";
+    return hasName && hasData && hasDialogField;
+  }
+  function resolveRawCharacterCardForExport(options = {}) {
+    const {
+      resolvedName = "",
+      fallbackCharacter = null,
+      onProgress = null
+    } = options;
+    const reportProgress = typeof onProgress === "function" ? onProgress : () => {
+    };
+    const tried = /* @__PURE__ */ new Set();
+    const candidateNames = [];
+    const appendName = (value) => {
+      const name = String(value || "").trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (tried.has(key)) return;
+      tried.add(key);
+      candidateNames.push(name);
+    };
+    appendName(resolvedName);
+    appendName("current");
+    for (const name of collectCurrentCharacterNameCandidates()) appendName(name);
+    const getCharData = topWindow?.TavernHelper?.getCharData;
+    if (typeof getCharData === "function") {
+      for (const name of candidateNames) {
+        reportProgress(79, `\u8BFB\u53D6\u539F\u59CB\u89D2\u8272\u5361: ${name}`);
+        try {
+          const raw = getCharData(name, true);
+          if (isLikelyRawCharacterCard(raw)) {
+            return {
+              card: raw,
+              resolvedName: name,
+              source: "tavern-helper.getCharData"
+            };
+          }
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] getCharData \u8BFB\u53D6\u5931\u8D25: ${name}`, e);
+        }
+      }
+    }
+    const ctx = getSillyTavernContextSafe();
+    if (ctx?.characters && ctx?.characterId != null) {
+      const current = ctx.characters[ctx.characterId];
+      if (isLikelyRawCharacterCard(current)) {
+        return {
+          card: current,
+          resolvedName: String(current?.name || resolvedName || "current"),
+          source: "sillytavern.context"
+        };
+      }
+    }
+    const st = topWindow?.SillyTavern;
+    if (st?.characters && st?.characterId != null) {
+      const current = st.characters[st.characterId];
+      if (isLikelyRawCharacterCard(current)) {
+        return {
+          card: current,
+          resolvedName: String(current?.name || resolvedName || "current"),
+          source: "sillytavern.global"
+        };
+      }
+    }
+    if (isLikelyRawCharacterCard(fallbackCharacter)) {
+      return {
+        card: fallbackCharacter,
+        resolvedName: String(fallbackCharacter?.name || resolvedName || "current"),
+        source: "fallback-getCharacter"
+      };
+    }
+    throw new Error("\u65E0\u6CD5\u83B7\u53D6\u53EF\u5BFC\u5165\u7684\u539F\u59CB\u89D2\u8272\u5361\u7ED3\u6784\uFF08v1/v2\uFF09\uFF0C\u8BF7\u786E\u8BA4\u5DF2\u6253\u5F00\u89D2\u8272\u5361\u4F1A\u8BDD\u540E\u91CD\u8BD5");
+  }
+  async function exportCurrentCharacterCardWithConfig(options = {}) {
+    let progressController = null;
+    let exportSucceeded = false;
+    const updateProgress = (percent, text) => {
+      if (progressController) {
+        progressController.update(percent, text);
+      }
+    };
+    try {
+      if (!topWindow?.TavernHelper?.getCharacter || typeof topWindow.TavernHelper.getCharacter !== "function") {
+        throw new Error("\u672A\u68C0\u6D4B\u5230 TavernHelper.getCharacter\uFF0C\u65E0\u6CD5\u76F4\u63A5\u5BFC\u51FA\u89D2\u8272\u5361");
+      }
+      const interactive = options.interactive !== false;
+      const preferredCharacterName = options.characterName || "";
+      let remoteInput = options.remoteInput || "";
+      let includeAllPacks = options.includeAllPacks;
+      let embedLocalLive2d = options.embedLocalLive2d;
+      let includeLocalLive2dPlaceholder = options.includeLocalLive2dPlaceholder;
+      let maxEmbeddedLive2dBytes = options.maxEmbeddedLive2dBytes;
+      if (interactive) {
+        const remoteAnswer = prompt(
+          "\u8BF7\u8F93\u5165\u56FE\u5305\u8FDC\u7A0B\u914D\u7F6E\uFF08\u53EF\u9009\uFF09:\n- \u53EF\u586B baseUrl\uFF08\u4F8B\u5982 https://cdn.jsdelivr.net/gh/user/repo@main/ \uFF09\n- \u6216\u76F4\u63A5\u586B remote_assets.json \u5B8C\u6574 URL\n\n\u7559\u7A7A\u5219\u53EA\u5BFC\u51FA\u7ED1\u5B9A\u914D\u7F6E",
+          remoteInput || ""
+        );
+        if (remoteAnswer === null) {
+          showToast4("\u672A\u8BBE\u7F6E\u8FDC\u7A0B\u8D44\u6E90\u5730\u5740\uFF0C\u7EE7\u7EED\u4F7F\u7528\u5F53\u524D\u5BFC\u51FA\u53C2\u6570");
+        } else {
+          remoteInput = remoteAnswer.trim();
+        }
+        includeAllPacks = includeAllPacks === void 0 ? confirm("\u662F\u5426\u5BFC\u51FA\u6240\u6709\u56FE\u5305\u8BB0\u5F55\uFF1F\n\u662F\uFF1A\u4FDD\u7559 packs \u5217\u8868\uFF08\u63A8\u8350\uFF09\n\u5426\uFF1A\u53EA\u5BFC\u51FA\u5F53\u524D\u56FE\u5305") : !!includeAllPacks;
+        embedLocalLive2d = embedLocalLive2d === void 0 ? confirm("Live2D \u5BFC\u51FA\u7B56\u7565\uFF1A\n\u662F\uFF1A\u672C\u5730\u6A21\u578B\u5BFC\u51FA\u672C\u4F53\uFF1B\u8FDC\u7A0B\u6A21\u578B\u5BFC\u51FA URL\n\u5426\uFF1A\u672C\u5730\u6A21\u578B\u4E0D\u5BFC\u51FA\u672C\u4F53") : !!embedLocalLive2d;
+        includeLocalLive2dPlaceholder = includeLocalLive2dPlaceholder === void 0 ? true : !!includeLocalLive2dPlaceholder;
+        if (embedLocalLive2d) {
+          const limitInput = prompt(
+            "\u8BF7\u8F93\u5165\u672C\u5730 Live2D \u672C\u4F53\u5BFC\u51FA\u9608\u503C\uFF08MB\uFF09\u3002\n\u8D85\u8FC7\u9608\u503C\u5C06\u81EA\u52A8\u8DF3\u8FC7\u672C\u4F53\u5E76\u5EFA\u8BAE\u6539\u7528 GitHub \u8FDC\u7A0B\u5BFC\u51FA\u3002\n\u9ED8\u8BA4 25",
+            String(Math.round((Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES) / 1024 / 1024))
+          );
+          if (limitInput === null) {
+            showToast4("\u672A\u8BBE\u7F6E Live2D \u672C\u4F53\u9608\u503C\uFF0C\u4F7F\u7528\u9ED8\u8BA4 25MB");
+          } else {
+            const parsedMb = Number(limitInput);
+            maxEmbeddedLive2dBytes = Number.isFinite(parsedMb) && parsedMb > 0 ? Math.floor(parsedMb * 1024 * 1024) : DEFAULT_LIVE2D_EMBED_LIMIT_BYTES;
+          }
+        }
+      }
+      if (includeAllPacks === void 0) includeAllPacks = true;
+      if (embedLocalLive2d === void 0) embedLocalLive2d = true;
+      if (includeLocalLive2dPlaceholder === void 0) includeLocalLive2dPlaceholder = true;
+      if (!Number.isFinite(maxEmbeddedLive2dBytes) || maxEmbeddedLive2dBytes <= 0) {
+        maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES;
+      }
+      showToast4("\u6B63\u5728\u5B9A\u4F4D\u5BFC\u51FA\u89D2\u8272\u5361...");
+      const resolvedCharacter = await resolveCharacterCardForExport({
+        interactive,
+        preferredCharacterName
+      });
+      const currentCharacter = resolvedCharacter?.card;
+      if (!currentCharacter || typeof currentCharacter !== "object") {
+        throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u5F53\u524D\u89D2\u8272\u5361");
+      }
+      progressController = showImportProgress("\u51C6\u5907\u5BFC\u51FA\u89D2\u8272\u5361...", null, {
+        title: "\u6B63\u5728\u5BFC\u51FA\u89D2\u8272\u5361",
+        iconClass: "fa-solid fa-file-export"
+      });
+      updateProgress(3, "\u521D\u59CB\u5316\u5BFC\u51FA\u6D41\u7A0B...");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      updateProgress(8, "\u6536\u96C6\u63D2\u4EF6\u914D\u7F6E...");
+      const config = await buildGalgameCardConfig({
+        remoteInput,
+        includeAllPacks,
+        embedLocalLive2d,
+        includeLocalLive2dPlaceholder,
+        maxEmbeddedLive2dBytes,
+        onProgress: updateProgress
+      });
+      updateProgress(76, "\u8BFB\u53D6\u89D2\u8272\u5361\u6570\u636E...");
+      updateProgress(80, "\u8BFB\u53D6\u53EF\u5BFC\u5165\u7684\u539F\u59CB\u89D2\u8272\u5361\u7ED3\u6784...");
+      const rawResolved = resolveRawCharacterCardForExport({
+        resolvedName: resolvedCharacter?.resolvedName || preferredCharacterName,
+        fallbackCharacter: currentCharacter,
+        onProgress: updateProgress
+      });
+      updateProgress(82, "\u5199\u5165\u89D2\u8272\u5361\u6269\u5C55\u914D\u7F6E...");
+      const card = typeof structuredClone === "function" ? structuredClone(rawResolved.card) : JSON.parse(JSON.stringify(rawResolved.card));
+      const ext = ensureCardExtensions(card);
+      ext.galgame_ui_plugin = config;
+      if (rawResolved?.resolvedName && rawResolved.resolvedName !== "current") {
+        showToast4(`\u5DF2\u81EA\u52A8\u6539\u7528\u89D2\u8272\u5361: ${rawResolved.resolvedName}`);
+      }
+      updateProgress(88, "\u6821\u9A8C\u89D2\u8272\u5361\u4F53\u79EF...");
+      const bytes = estimateCardJsonBytes(card);
+      if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
+        const msg = `\u5BFC\u51FA\u5931\u8D25\uFF1A\u89D2\u8272\u5361\u4F53\u79EF ${formatSizeMb(bytes)} \u8D85\u8FC7 Discord \u9650\u5236 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}\u3002
+\u8BF7\u6539\u7528\u8FDC\u7A0B\u8D44\u6E90\u5BFC\u51FA\u3002`;
+        if (interactive) alert(msg);
+        throw new Error(msg);
+      }
+      const cardName = card?.name || card?.data?.name || "character";
+      const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+      const filename = `${sanitizeFileName(cardName)}.galgame-packed.${date}.json`;
+      updateProgress(94, "\u751F\u6210\u5BFC\u51FA\u6587\u4EF6...");
+      const outputText = JSON.stringify(card, null, 2);
+      downloadTextFile(filename, outputText, "application/json");
+      updateProgress(100, "\u5BFC\u51FA\u5B8C\u6210");
+      exportSucceeded = true;
+      showToast4(`\u89D2\u8272\u5361\u5BFC\u51FA\u6210\u529F: ${filename}`);
+      if (Array.isArray(config?.meta?.warnings) && config.meta.warnings.length > 0) {
+        console.warn(`[${SCRIPT_NAME}] \u89D2\u8272\u5361\u5BFC\u51FA\u8B66\u544A`, config.meta.warnings);
+        if (interactive) {
+          alert(`\u5BFC\u51FA\u5B8C\u6210\uFF0C\u4F46\u6709\u4EE5\u4E0B\u63D0\u9192\uFF1A
+
+${config.meta.warnings.map((w, i) => `${i + 1}. ${w}`).join("\n")}`);
+        }
+      }
+      return true;
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] \u5BFC\u51FA\u89D2\u8272\u5361\u5931\u8D25`, e);
+      const message = `\u5BFC\u51FA\u89D2\u8272\u5361\u5931\u8D25: ${e.message || e}`;
+      if (progressController) {
+        progressController.update(100, message);
+      }
+      showToast4(message);
+      return false;
+    } finally {
+      if (progressController) {
+        const closeDelay = exportSucceeded ? 250 : 1200;
+        setTimeout(() => {
+          progressController.close();
+        }, closeDelay);
+      }
+    }
+  }
   async function importAssetsFromJson(file, targetPackId = null) {
     try {
       const text = await file.text();
@@ -17010,7 +17856,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         const suggestedName = json.packageName || json.name;
         targetPackId = await showImportPackSelector(suggestedName);
         if (!targetPackId) {
-          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5BB8\u63D2\u5F47\u5A11\u581D\uE1F1\u934F?");
           return;
         }
       }
@@ -17032,7 +17878,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
         if (newExpressions.length > 0) {
           saveCustomExpressions(customs);
-          console.log(`[${SCRIPT_NAME}] \u81EA\u52A8\u6CE8\u518C\u8868\u60C5\u6807\u7B7E: ${newExpressions.join(", ")}`);
+          console.log(`[${SCRIPT_NAME}] \u9477\uE044\u59E9\u5A09\u3125\u553D\u741B\u3126\u510F\u93CD\u56E9\uE137: ${newExpressions.join(", ")}`);
         }
       }
       if (json.backgrounds) {
@@ -17045,8 +17891,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       }
       showToast4(`\u6210\u529F\u5BFC\u5165 ${count} \u4E2A\u8FDC\u7A0B\u8D44\u6E90\u94FE\u63A5`);
     } catch (e) {
-      console.error("JSON\u5BFC\u5165\u5931\u8D25", e);
-      showToast4("JSON\u5BFC\u5165\u5931\u8D25: " + e.message);
+      console.error("JSON\u7035\u714E\u53C6\u6FB6\u8FAB\u89E6", e);
+      showToast4("JSON\u7035\u714E\u53C6\u6FB6\u8FAB\u89E6: " + e.message);
     }
   }
   var AssetIO = {
@@ -17062,7 +17908,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         script.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
         script.onload = () => {
           this.jszip = window.JSZip;
-          console.log(`[${SCRIPT_NAME}] JSZip \u52A0\u8F7D\u6210\u529F`);
+          console.log(`[${SCRIPT_NAME}] JSZip \u9354\u72BA\u6D47\u93B4\u612C\u59DB`);
           resolve(this.jszip);
         };
         script.onerror = () => reject(new Error("JSZip load failed"));
@@ -17071,12 +17917,12 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     },
     async exportAllAssets(remoteBaseUrl = null, packageName = null) {
       try {
-        showToast4("\u6B63\u5728\u51C6\u5907\u5BFC\u51FA...");
+        showToast4("\u59DD\uFF45\u6E6A\u9351\u55D7\uE62C\u7035\u714E\u56AD...");
         const zip = new (await this.loadJSZip())();
         const currentPackId = getCurrentPackId();
         const allPacks = await getAllImagePacks();
         const currentPack = allPacks.find((p) => p.id === currentPackId);
-        const currentPackName = currentPack ? currentPack.name : "\u672A\u547D\u540D\u5305";
+        const currentPackName = currentPack ? currentPack.name : "\u93C8\uE044\u61E1\u935A\u5D85\u5BD8";
         const remoteConfig = {
           packageName: packageName || currentPackName,
           exportDate: (/* @__PURE__ */ new Date()).toISOString(),
@@ -17131,7 +17977,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (remoteBaseUrl) {
           zip.file("remote_assets.json", JSON.stringify(remoteConfig, null, 2));
         }
-        showToast4("\u6B63\u5728\u538B\u7F29\u6253\u5305...");
+        showToast4("\u59DD\uFF45\u6E6A\u9358\u5B2C\u7F09\u93B5\u64B3\u5BD8...");
         const content = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(content);
         const a = document.createElement("a");
@@ -17145,21 +17991,21 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         URL.revokeObjectURL(url);
         showToast4(`\u5BFC\u51FA\u6210\u529F\uFF01\u5171\u5BFC\u51FA ${sprites.length} \u4E2A\u7ACB\u7ED8\uFF0C${backgrounds.length} \u4E2A\u80CC\u666F`);
       } catch (e) {
-        console.error(`[${SCRIPT_NAME}] \u5BFC\u51FA\u5931\u8D25:`, e);
-        showToast4("\u5BFC\u51FA\u5931\u8D25: " + e.message);
+        console.error(`[${SCRIPT_NAME}] \u7035\u714E\u56AD\u6FB6\u8FAB\u89E6:`, e);
+        showToast4("\u7035\u714E\u56AD\u6FB6\u8FAB\u89E6: " + e.message);
       }
     },
     async importFiles(fileList, targetPackId = null) {
       if (!targetPackId) {
-        targetPackId = await showImportPackSelector("\u6587\u4EF6\u5939\u5BFC\u5165");
+        targetPackId = await showImportPackSelector("\u93C2\u56E6\u6B22\u6FB6\u7470\uE1F1\u934F?");
         if (!targetPackId) {
-          showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+          showToast4("\u5BB8\u63D2\u5F47\u5A11\u581D\uE1F1\u934F?");
           return false;
         }
       }
       let successCount = 0;
       let failCount = 0;
-      showToast4("\u5F00\u59CB\u5BFC\u5165...");
+      showToast4("\u5BEE\u20AC\u6FEE\u5B2A\uE1F1\u934F?..");
       for (const file of fileList) {
         try {
           const path = file.webkitRelativePath || file.name;
@@ -17181,11 +18027,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
           if (imported) successCount++;
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] \u5BFC\u5165\u6587\u4EF6 ${file.name} \u5931\u8D25:`, e);
+          console.warn(`[${SCRIPT_NAME}] \u7035\u714E\u53C6\u93C2\u56E6\u6B22 ${file.name} \u6FB6\u8FAB\u89E6:`, e);
           failCount++;
         }
       }
-      showToast4(`\u5BFC\u5165\u5B8C\u6210: ${successCount} \u6210\u529F, ${failCount} \u5931\u8D25`);
+      showToast4(`\u7035\u714E\u53C6\u7039\u5C7E\u579A: ${successCount} \u93B4\u612C\u59DB, ${failCount} \u6FB6\u8FAB\u89E6`);
       return successCount > 0;
     },
     async importAsSprite(file, packId = null) {
@@ -17197,35 +18043,35 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         const characterId = parts.join("_");
         if (characterId && expression) {
           await saveSprite(characterId, expression, file, null, packId);
-          console.log(`[${SCRIPT_NAME}] \u5BFC\u5165\u7ACB\u7ED8: ${characterId} - ${expression}`);
+          console.log(`[${SCRIPT_NAME}] \u7035\u714E\u53C6\u7ED4\u5B2C\u7CAF: ${characterId} - ${expression}`);
           const allExpressions = getAllExpressions();
           if (!allExpressions.includes(expression)) {
             const customs = getCustomExpressions();
             if (!customs.find((e) => e.name === expression)) {
               customs.push({ name: expression, emotion: null });
               saveCustomExpressions(customs);
-              console.log(`[${SCRIPT_NAME}] \u81EA\u52A8\u6CE8\u518C\u8868\u60C5\u6807\u7B7E: ${expression}`);
+              console.log(`[${SCRIPT_NAME}] \u9477\uE044\u59E9\u5A09\u3125\u553D\u741B\u3126\u510F\u93CD\u56E9\uE137: ${expression}`);
             }
           }
           return;
         }
       }
-      throw new Error("\u6587\u4EF6\u540D\u683C\u5F0F\u4E0D\u5339\u914D Name_Expression.ext");
+      throw new Error("\u93C2\u56E6\u6B22\u935A\u5D86\u7278\u5BEE\u5FCE\u7B09\u9356\u5F52\u53A4 Name_Expression.ext");
     },
     async importAsBackground(file, packId = null) {
       const fileName = file.name.split("/").pop();
       const sceneName = fileName.substring(0, fileName.lastIndexOf("."));
       if (sceneName) {
         await saveBackground(sceneName, file, null, packId);
-        console.log(`[${SCRIPT_NAME}] \u5BFC\u5165\u80CC\u666F: ${sceneName}`);
+        console.log(`[${SCRIPT_NAME}] \u7035\u714E\u53C6\u9473\u5C7E\u6AD9: ${sceneName}`);
       }
     },
     async importFromGitHub(repoUrl, targetPackId = null) {
       try {
         if (!targetPackId) {
-          targetPackId = await showImportPackSelector(`GitHub\u5BFC\u5165`);
+          targetPackId = await showImportPackSelector(`GitHub\u7035\u714E\u53C6`);
           if (!targetPackId) {
-            showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+            showToast4("\u5BB8\u63D2\u5F47\u5A11\u581D\uE1F1\u934F?");
             return false;
           }
         }
@@ -17251,23 +18097,23 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         }
         if (!owner || !repo) {
-          throw new Error("\u65E0\u6548\u7684 GitHub \u4ED3\u5E93\u5730\u5740");
+          throw new Error("\u93C3\u72B3\u6665\u9428?GitHub \u6D60\u64B3\u7C31\u9366\u677F\u6F43");
         }
-        showToast4(`\u6B63\u5728\u83B7\u53D6\u6587\u4EF6\u5217\u8868: ${owner}/${repo}...`);
+        showToast4(`\u59DD\uFF45\u6E6A\u947E\u5CF0\u5F47\u93C2\u56E6\u6B22\u9352\u6944\u3003: ${owner}/${repo}...`);
         const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error("\u8DEF\u5F84\u4E0D\u662F\u4E00\u4E2A\u76EE\u5F55");
+        if (!Array.isArray(data)) throw new Error("\u74BA\uE21A\u7DDE\u6D93\u5D86\u69F8\u6D93\u20AC\u6D93\uE046\u6D30\u8930?");
         const imageFiles = data.filter((item) => item.type === "file" && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
         if (imageFiles.length === 0) {
-          showToast4("\u8BE5\u76EE\u5F55\u4E0B\u6CA1\u6709\u627E\u5230\u56FE\u7247\u6587\u4EF6");
+          showToast4("\u7487\u30E7\u6D30\u8930\u66DA\u7B05\u5A0C\u2103\u6E41\u93B5\u60E7\u57CC\u9365\u5267\u5896\u93C2\u56E6\u6B22");
           return;
         }
-        if (!confirm(`\u627E\u5230 ${imageFiles.length} \u5F20\u56FE\u7247\uFF0C\u662F\u5426\u5F00\u59CB\u5BFC\u5165\uFF1F`)) return;
+        if (!confirm(`\u93B5\u60E7\u57CC ${imageFiles.length} \u5BEE\u72B2\u6D58\u9417\u56F7\u7D1D\u93C4\uE21A\u60C1\u5BEE\u20AC\u6FEE\u5B2A\uE1F1\u934F\u30EF\u7D35`)) return;
         let count = 0;
         for (const item of imageFiles) {
-          showToast4(`\u6B63\u5728\u4E0B\u8F7D (${count + 1}/${imageFiles.length}): ${item.name}`);
+          showToast4(`\u59DD\uFF45\u6E6A\u6D93\u5B2D\u6D47 (${count + 1}/${imageFiles.length}): ${item.name}`);
           try {
             const imgRes = await fetch(item.download_url);
             const blob = await imgRes.blob();
@@ -17279,14 +18125,14 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
             }
             count++;
           } catch (e) {
-            console.error(`\u4E0B\u8F7D/\u5BFC\u5165 ${item.name} \u5931\u8D25:`, e);
+            console.error(`\u6D93\u5B2D\u6D47/\u7035\u714E\u53C6 ${item.name} \u6FB6\u8FAB\u89E6:`, e);
           }
         }
         showToast4(`GitHub \u5BFC\u5165\u5B8C\u6210\uFF0C\u5171 ${count} \u5F20\u56FE\u7247`);
         return true;
       } catch (e) {
         console.error("GitHub Import Error:", e);
-        showToast4("GitHub \u5BFC\u5165\u5931\u8D25: " + e.message);
+        showToast4("GitHub \u7035\u714E\u53C6\u6FB6\u8FAB\u89E6: " + e.message);
         return false;
       }
     }
@@ -17296,27 +18142,27 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     <div class="gal-input-modal" id="gal-remote-zip-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
         <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-cloud-arrow-down"></i> \u8FDC\u7A0B\u538B\u7F29\u5305\u5BFC\u5165</span>
-          <button id="gal-remote-zip-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-cloud-arrow-down"></i> \u6769\u6EC5\u25BC\u9358\u5B2C\u7F09\u9356\u546D\uE1F1\u934F?/span>
+          <button id="gal-remote-zip-close-x" title="\u934F\u62BD\u68F4" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
-            <i class="fa-solid fa-link"></i> ZIP \u6587\u4EF6\u94FE\u63A5
+            <i class="fa-solid fa-link"></i> ZIP \u93C2\u56E6\u6B22\u95BE\u70AC\u5E34
           </label>
           <input type="text" id="gal-remote-zip-url"
                  placeholder="https://example.com/assets.zip"
                  style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 6px;">
           <small style="color: #888; margin-top: 5px; display: block;">
-            \u652F\u6301\u76F4\u63A5\u4E0B\u8F7D\u94FE\u63A5\uFF0C\u5982 GitHub Release\u3001\u4E91\u76D8\u76F4\u94FE\u7B49<br>
-            <strong style="color: #e74c3c;">\u9650\u5236\uFF1A\u6700\u5927 5GB</strong>
+            \u93C0\uE21B\u5BD4\u9429\u5B58\u5E34\u6D93\u5B2D\u6D47\u95BE\u70AC\u5E34\u951B\u5C7D\uE6E7 GitHub Release\u9286\u4F77\u7C2F\u9429\u6A3C\u6D3F\u95BE\u5267\u74D1<br>
+            <strong style="color: #e74c3c;">\u95C4\u612C\u57D7\u951B\u6C2D\u6E36\u6FB6?5GB</strong>
           </small>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 12px;">
           <button class="gal-action-btn primary" id="gal-remote-zip-confirm" style="flex: 1; min-height: 44px; justify-content: center;">
             <i class="fa-solid fa-download"></i>
-            <span>\u4E0B\u8F7D\u5E76\u5BFC\u5165</span>
+            <span>\u6D93\u5B2D\u6D47\u9A9E\u8DFA\uE1F1\u934F?/span>
           </button>
         </div>
       </div>
@@ -17333,11 +18179,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     $dialog.find("#gal-remote-zip-confirm").on("click", async function() {
       const url = $dialog.find("#gal-remote-zip-url").val().trim();
       if (!url) {
-        showToast4("\u8BF7\u8F93\u5165ZIP\u6587\u4EF6\u94FE\u63A5");
+        showToast4("\u7487\u75AF\u7DED\u934F\uE660IP\u93C2\u56E6\u6B22\u95BE\u70AC\u5E34");
         return;
       }
       if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        showToast4("\u8BF7\u8F93\u5165\u6709\u6548\u7684 HTTP/HTTPS \u94FE\u63A5");
+        showToast4("\u7487\u75AF\u7DED\u934F\u30E6\u6E41\u93C1\u5822\u6B91 HTTP/HTTPS \u95BE\u70AC\u5E34");
         return;
       }
       $dialog.remove();
@@ -17346,9 +18192,9 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
   }
   async function importFromZipFile(file) {
     let isCancelled = false;
-    const progressController = showImportProgress("\u6B63\u5728\u89E3\u538B\u672C\u5730\u6587\u4EF6...", () => {
+    const progressController = showImportProgress("\u59DD\uFF45\u6E6A\u7459\uFF45\u5E07\u93C8\uE100\u6E74\u93C2\u56E6\u6B22...", () => {
       isCancelled = true;
-      showToast4("\u5BFC\u5165\u5DF2\u624B\u52A8\u53D6\u6D88");
+      showToast4("\u7035\u714E\u53C6\u5BB8\u53C9\u589C\u9354\u3125\u5F47\u5A11?");
     });
     try {
       const JSZip = await AssetIO.loadJSZip();
@@ -17356,7 +18202,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         onprogress: (event) => {
           if (isCancelled) return;
           const percent = Math.round(event.percent || 0);
-          progressController.update(percent, `\u89E3\u538B\u4E2D... ${percent}%`);
+          progressController.update(percent, `\u7459\uFF45\u5E07\u6D93?.. ${percent}%`);
         }
       });
       if (isCancelled) {
@@ -17366,24 +18212,24 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast4("ZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("ZIP\u7035\u714E\u53C6\u7039\u5C7E\u579A\u951B?");
       } else {
         progressController.close();
       }
     } catch (e) {
       progressController.close();
       if (isCancelled) return;
-      console.error("ZIP\u5BFC\u5165\u5931\u8D25:", e);
-      showImportError(["ZIP\u6587\u4EF6\u89E3\u6790\u5931\u8D25", e.message || "\u672A\u77E5\u9519\u8BEF", "\u8BF7\u786E\u4FDD\u6587\u4EF6\u662F\u6709\u6548\u7684ZIP\u683C\u5F0F"]);
+      console.error("ZIP\u7035\u714E\u53C6\u6FB6\u8FAB\u89E6:", e);
+      showImportError(["ZIP\u93C2\u56E6\u6B22\u7459\uFF46\u703D\u6FB6\u8FAB\u89E6", e.message || "\u93C8\uE046\u7161\u95BF\u6B12\uE1E4", "\u7487\u98CE\u2018\u6DC7\u6FC7\u6783\u6D60\u8235\u69F8\u93C8\u590B\u6665\u9428\u520FIP\u93CD\u714E\u7D21"]);
     }
   }
   async function importFromRemoteZip(url) {
     const abortController = new AbortController();
     let isCancelled = false;
-    const progressController = showImportProgress("\u6B63\u5728\u4E0B\u8F7D\u8FDC\u7A0B\u6587\u4EF6...", () => {
+    const progressController = showImportProgress("\u59DD\uFF45\u6E6A\u6D93\u5B2D\u6D47\u6769\u6EC5\u25BC\u93C2\u56E6\u6B22...", () => {
       isCancelled = true;
       abortController.abort();
-      showToast4("\u4E0B\u8F7D\u5DF2\u53D6\u6D88");
+      showToast4("\u6D93\u5B2D\u6D47\u5BB8\u63D2\u5F47\u5A11?");
     });
     try {
       const response = await fetch(url, { signal: abortController.signal });
@@ -17393,7 +18239,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       const contentLength = response.headers.get("Content-Length");
       const MAX_SIZE = 5 * 1024 * 1024 * 1024;
       if (contentLength && parseInt(contentLength) > MAX_SIZE) {
-        throw new Error(`\u6587\u4EF6\u5927\u5C0F ${(parseInt(contentLength) / 1024 / 1024 / 1024).toFixed(2)} GB \u8D85\u8FC7 5GB \u9650\u5236`);
+        throw new Error(`\u93C2\u56E6\u6B22\u6FB6\u0443\u76AC ${(parseInt(contentLength) / 1024 / 1024 / 1024).toFixed(2)} GB \u74D2\u5470\u7E43 5GB \u95C4\u612C\u57D7`);
       }
       const reader = response.body.getReader();
       const chunks = [];
@@ -17406,7 +18252,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         chunks.push(value);
         receivedLength += value.length;
         if (receivedLength > MAX_SIZE) {
-          throw new Error("\u4E0B\u8F7D\u7684\u6587\u4EF6\u5927\u5C0F\u8D85\u8FC7 5GB \u9650\u5236");
+          throw new Error("\u6D93\u5B2D\u6D47\u9428\u52EC\u6783\u6D60\u8DFA\u3047\u704F\u5FDA\u79F4\u6769?5GB \u95C4\u612C\u57D7");
         }
         const now = Date.now();
         if (totalLength > 0) {
@@ -17414,13 +18260,13 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
           const total = (totalLength / 1024 / 1024).toFixed(1);
           if (now - lastProgressUpdate > 200 || percent === 100) {
-            progressController.update(percent, `\u4E0B\u8F7D\u4E2D: ${downloaded} MB / ${total} MB`);
+            progressController.update(percent, `\u6D93\u5B2D\u6D47\u6D93? ${downloaded} MB / ${total} MB`);
             lastProgressUpdate = now;
           }
         } else {
           const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
           if (now - lastProgressUpdate > 200) {
-            progressController.update(-1, `\u4E0B\u8F7D\u4E2D: ${downloaded} MB`);
+            progressController.update(-1, `\u6D93\u5B2D\u6D47\u6D93? ${downloaded} MB`);
             lastProgressUpdate = now;
           }
         }
@@ -17430,20 +18276,20 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         return;
       }
       const blob = new Blob(chunks);
-      progressController.update(100, "\u4E0B\u8F7D\u5B8C\u6210\uFF0C\u5F00\u59CB\u89E3\u538B...");
+      progressController.update(100, "\u6D93\u5B2D\u6D47\u7039\u5C7E\u579A\u951B\u5C7D\u7D11\u6FEE\u5B2D\u0412\u9358?..");
       const JSZip = await AssetIO.loadJSZip();
       const zip = await JSZip.loadAsync(blob);
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast4("\u8FDC\u7A0BZIP\u5BFC\u5165\u5B8C\u6210\uFF01");
+        showToast4("\u6769\u6EC5\u25BCZIP\u7035\u714E\u53C6\u7039\u5C7E\u579A\u951B?");
       } else {
         progressController.close();
       }
     } catch (e) {
       progressController.close();
       if (e.name === "AbortError" || isCancelled) return;
-      console.error("\u8FDC\u7A0BZIP\u5BFC\u5165\u5931\u8D25:", e);
+      console.error("\u6769\u6EC5\u25BCZIP\u7035\u714E\u53C6\u6FB6\u8FAB\u89E6:", e);
       showImportError(["\u8FDC\u7A0BZIP\u4E0B\u8F7D/\u5BFC\u5165\u5931\u8D25", e.message || "\u7F51\u7EDC\u9519\u8BEF", "\u8BF7\u68C0\u67E5\u94FE\u63A5\u662F\u5426\u6709\u6548\u3001\u662F\u5426\u652F\u6301\u8DE8\u57DF"]);
     }
   }
@@ -17452,43 +18298,43 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       getAllImagePacks().then((packs) => {
         const currentPackId = getCurrentPackId();
         const currentPack = packs.find((p) => p.id === currentPackId);
-        const currentPackName = currentPack ? currentPack.name : "\u5F53\u524D\u56FE\u5305";
+        const currentPackName = currentPack ? currentPack.name : "\u8930\u64B3\u58A0\u9365\u60E7\u5BD8";
         const packOptions = packs.map(
-          (p) => `<option value="${p.id}">${p.name}${p.id === currentPackId ? " (\u5F53\u524D)" : ""}</option>`
+          (p) => `<option value="${p.id}">${p.name}${p.id === currentPackId ? " (\u8930\u64B3\u58A0)" : ""}</option>`
         ).join("");
-        const defaultNewName = suggestedName || `\u5BFC\u5165\u5305_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
+        const defaultNewName = suggestedName || `\u7035\u714E\u53C6\u9356\u5342${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
         const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
             <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-              <span><i class="fa-solid fa-box-open"></i> \u9009\u62E9\u5BFC\u5165\u76EE\u6807\u56FE\u5305</span>
-              <button id="gal-import-pack-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <span><i class="fa-solid fa-box-open"></i> \u95AB\u590B\u5AE8\u7035\u714E\u53C6\u9429\uE1BD\u7223\u9365\u60E7\u5BD8</span>
+              <button id="gal-import-pack-close-x" title="\u934F\u62BD\u68F4" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
             <div style="margin-bottom: 20px;">
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
                 <input type="radio" name="import-target" value="current" checked style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">\u5BFC\u5165\u5230\u5F53\u524D\u56FE\u5305</span>
+                <span style="font-weight: 600; color: #2b2e38;">\u7035\u714E\u53C6\u9352\u677F\u7D8B\u9353\u5D85\u6D58\u9356?/span>
                 <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${currentPackName}</span>
               </label>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="existing" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">\u5BFC\u5165\u5230\u5DF2\u6709\u56FE\u5305</span>
+                <span style="font-weight: 600; color: #2b2e38;">\u7035\u714E\u53C6\u9352\u677F\u51E1\u93C8\u590A\u6D58\u9356?/span>
               </label>
               <select id="gal-import-existing-pack" disabled style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-bottom: 15px; margin-left: 26px; opacity: 0.6;">
                 ${packOptions}
               </select>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">\u521B\u5EFA\u65B0\u56FE\u5305</span>
+                <span style="font-weight: 600; color: #2b2e38;">\u9352\u6D98\u7F13\u93C2\u677F\u6D58\u9356?/span>
               </label>
-              <input type="text" id="gal-import-new-pack-name" disabled placeholder="\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0" value="${defaultNewName}"
+              <input type="text" id="gal-import-new-pack-name" disabled placeholder="\u6748\u64B3\u53C6\u93C2\u677F\u6D58\u9356\u546D\u6095\u7EC9? value="${defaultNewName}"
                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
             </div>
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
               <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
-                <i class="fa-solid fa-check"></i> <span>\u786E\u8BA4\u5BFC\u5165</span>
+                <i class="fa-solid fa-check"></i> <span>\u7EAD\uE1BF\uE17B\u7035\u714E\u53C6</span>
               </button>
             </div>
           </div>
@@ -17516,14 +18362,14 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           } else if (targetType === "new") {
             const newName = $dialog.find("#gal-import-new-pack-name").val().trim();
             if (!newName) {
-              showToast4("\u8BF7\u8F93\u5165\u65B0\u56FE\u5305\u540D\u79F0");
+              showToast4("\u7487\u75AF\u7DED\u934F\u30E6\u67CA\u9365\u60E7\u5BD8\u935A\u5D87\u041E");
               return;
             }
             createImagePack(newName).then((newPack) => {
               $dialog.remove();
               resolve(newPack.id);
             }).catch((err) => {
-              showToast4("\u521B\u5EFA\u56FE\u5305\u5931\u8D25: " + err.message);
+              showToast4("\u9352\u6D98\u7F13\u9365\u60E7\u5BD8\u6FB6\u8FAB\u89E6: " + err.message);
             });
             return;
           }
@@ -17541,8 +18387,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           }
         });
       }).catch((err) => {
-        console.error("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25:", err);
-        showToast4("\u83B7\u53D6\u56FE\u5305\u5217\u8868\u5931\u8D25");
+        console.error("\u947E\u5CF0\u5F47\u9365\u60E7\u5BD8\u9352\u6944\u3003\u6FB6\u8FAB\u89E6:", err);
+        showToast4("\u947E\u5CF0\u5F47\u9365\u60E7\u5BD8\u9352\u6944\u3003\u6FB6\u8FAB\u89E6");
         resolve(null);
       });
     });
@@ -17551,7 +18397,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const hasSpritesDir = Object.keys(zip.files).some((path) => path.startsWith("sprites/"));
     const hasBackgroundsDir = Object.keys(zip.files).some((path) => path.startsWith("backgrounds/"));
     if (!hasSpritesDir && !hasBackgroundsDir) {
-      throw new Error("ZIP\u5305\u683C\u5F0F\u9519\u8BEF\uFF1A\u5FC5\u987B\u5305\u542B sprites/ \u6216 backgrounds/ \u76EE\u5F55");
+      throw new Error("ZIP\u9356\u546E\u7278\u5BEE\u5FDB\u654A\u7487\uE224\u7D30\u8E47\u5474\u300F\u9356\u546D\u60C8 sprites/ \u93B4?backgrounds/ \u9429\uE1BC\u7D8D");
     }
     let packageInfo = null;
     const infoFile = zip.file("package_info.json");
@@ -17559,16 +18405,16 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       try {
         const infoText = await infoFile.async("text");
         packageInfo = JSON.parse(infoText);
-        console.log(`[${SCRIPT_NAME}] \u8BFB\u53D6\u5230\u5305\u4FE1\u606F:`, packageInfo);
+        console.log(`[${SCRIPT_NAME}] \u7487\u8BF2\u5F47\u9352\u677F\u5BD8\u6DC7\u2103\u4F05:`, packageInfo);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] \u8BFB\u53D6 package_info.json \u5931\u8D25:`, e);
+        console.warn(`[${SCRIPT_NAME}] \u7487\u8BF2\u5F47 package_info.json \u6FB6\u8FAB\u89E6:`, e);
       }
     }
     if (!targetPackId) {
       const suggestedName = packageInfo?.packageName || packageInfo?.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
-        showToast4("\u5DF2\u53D6\u6D88\u5BFC\u5165");
+        showToast4("\u5BB8\u63D2\u5F47\u5A11\u581D\uE1F1\u934F?");
         return;
       }
     }
@@ -17587,9 +18433,9 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       });
     });
     if (imageFiles.length === 0) {
-      throw new Error("ZIP\u5305\u4E2D\u672A\u627E\u5230\u6709\u6548\u7684\u56FE\u7247\u6587\u4EF6");
+      throw new Error("ZIP\u9356\u546C\u8151\u93C8\uE045\u58D8\u9352\u7248\u6E41\u93C1\u5822\u6B91\u9365\u5267\u5896\u93C2\u56E6\u6B22");
     }
-    progressController.update(0, `\u51C6\u5907\u5BFC\u5165 ${imageFiles.length} \u4E2A\u6587\u4EF6...`);
+    progressController.update(0, `\u9351\u55D7\uE62C\u7035\u714E\u53C6 ${imageFiles.length} \u6D93\uE045\u6783\u6D60?..`);
     const BATCH_SIZE = 50;
     let successCount = 0;
     let failedItems = [];
@@ -17619,7 +18465,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
               backgroundBatch.push({ sceneName, imageBlob: blob });
             }
           } catch (e) {
-            console.warn(`\u89E3\u538B ${item.path} \u5931\u8D25:`, e);
+            console.warn(`\u7459\uFF45\u5E07 ${item.path} \u6FB6\u8FAB\u89E6:`, e);
             failedItems.push({ path: item.path, error: e.message });
           }
         })
@@ -17638,7 +18484,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         }
         if (newExpressions.length > 0) {
           saveCustomExpressions(customs);
-          console.log(`[${SCRIPT_NAME}] \u81EA\u52A8\u6CE8\u518C\u8868\u60C5\u6807\u7B7E: ${newExpressions.join(", ")}`);
+          console.log(`[${SCRIPT_NAME}] \u9477\uE044\u59E9\u5A09\u3125\u553D\u741B\u3126\u510F\u93CD\u56E9\uE137: ${newExpressions.join(", ")}`);
         }
       }
       if (backgroundBatch.length > 0) {
@@ -17647,31 +18493,35 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       successCount += spriteBatch.length + backgroundBatch.length;
       const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
       const percent = Math.round(processed / imageFiles.length * 100);
-      progressController.update(percent, `\u5BFC\u5165\u4E2D: ${processed}/${imageFiles.length} (\u6279\u91CF\u6A21\u5F0F)`);
+      progressController.update(percent, `\u7035\u714E\u53C6\u6D93? ${processed}/${imageFiles.length} (\u93B5\u5F52\u567A\u59AF\u2033\u7D21)`);
     }
     if (failedItems.length > 0) {
       showImportError([
         `\u6210\u529F: ${successCount} \u4E2A, \u5931\u8D25: ${failedItems.length} \u4E2A`,
-        "\u90E8\u5206\u6587\u4EF6\u5BFC\u5165\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u8BE6\u60C5..."
+        "\u95AE\u3125\u578E\u93C2\u56E6\u6B22\u7035\u714E\u53C6\u6FB6\u8FAB\u89E6\u951B\u5C83\uE1EC\u59AB\u20AC\u93CC\u30E8\uE1DB\u93AF?.."
       ]);
     }
-    console.log(`[${SCRIPT_NAME}] ZIP\u5BFC\u5165\u5B8C\u6210: \u6210\u529F ${successCount}, \u5931\u8D25 ${failedItems.length}`);
+    console.log(`[${SCRIPT_NAME}] ZIP\u7035\u714E\u53C6\u7039\u5C7E\u579A: \u93B4\u612C\u59DB ${successCount}, \u6FB6\u8FAB\u89E6 ${failedItems.length}`);
   }
-  function showImportProgress(initialText, onCancel) {
+  function showImportProgress(initialText, onCancel, options = {}) {
     $(".gal-import-progress-overlay").remove();
+    const title = String(options.title || "\u6B63\u5728\u5BFC\u5165\u8D44\u6E90");
+    const iconClass = String(options.iconClass || "fa-solid fa-spinner fa-spin");
+    const cancelText = String(options.cancelText || "\u53D6\u6D88");
+    const initialDetails = String(options.initialDetails || "");
     const html = `
     <div class="gal-import-progress-overlay">
       <div class="gal-import-progress-box">
         <div class="gal-import-progress-title">
-          <i class="fa-solid fa-spinner fa-spin"></i> \u6B63\u5728\u5BFC\u5165\u8D44\u6E90
+          <i class="${iconClass}"></i> ${title}
         </div>
         <div class="gal-import-progress-bar-container">
           <div class="gal-import-progress-bar"></div>
         </div>
         <div class="gal-import-progress-text">${initialText}</div>
-        <div class="gal-import-progress-details"></div>
+        <div class="gal-import-progress-details">${initialDetails}</div>
         <button class="gal-action-btn" id="gal-import-cancel-btn" style="margin-top: 15px; background: #e74c3c; color: #fff; border: none; padding: 6px 15px; font-size: 0.9rem;">
-          <i class="fa-solid fa-xmark"></i> \u53D6\u6D88
+          <i class="fa-solid fa-xmark"></i> ${cancelText}
         </button>
       </div>
     </div>
@@ -17685,13 +18535,21 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       $overlay.find("#gal-import-cancel-btn").hide();
     }
     return {
-      update: (percent, text) => {
+      update: (percent, text, details) => {
         if (percent >= 0) {
           $overlay.find(".gal-import-progress-bar").css("width", percent + "%");
         } else {
           $overlay.find(".gal-import-progress-bar").css("width", "30%");
         }
         $overlay.find(".gal-import-progress-text").text(text);
+        if (typeof details === "string") {
+          $overlay.find(".gal-import-progress-details").text(details);
+        }
+      },
+      setDetails: (details) => {
+        if (typeof details === "string") {
+          $overlay.find(".gal-import-progress-details").text(details);
+        }
       },
       close: () => {
         $overlay.fadeOut(300, function() {
@@ -17706,8 +18564,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     <div class="gal-input-modal" id="gal-import-error-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
         <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-circle-exclamation"></i> \u5BFC\u5165\u51FA\u9519</span>
-          <button id="gal-import-error-close-x" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-circle-exclamation"></i> \u7035\u714E\u53C6\u9351\u6D2A\u654A</span>
+          <button id="gal-import-error-close-x" title="\u934F\u62BD\u68F4" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -17958,7 +18816,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       }
     }
   }
-  function escapeHtml(value) {
+  function escapeHtml2(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function getParentPath(path = "") {
@@ -18188,7 +19046,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
                   style="width: 100%; text-align: left; border: none; border-bottom: 1px solid #f1f5f9; background: ${bg}; color: #111827; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
             <span style="display: inline-flex; align-items: center; gap: 8px; min-width: 0;">
               <i class="fa-solid ${icon}" style="color: ${color};"></i>
-              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(entry.name)}</span>
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml2(entry.name)}</span>
             </span>
             <span style="font-size: 0.75rem; color: #94a3b8;">${isDir ? "\u76EE\u5F55" : "\u6A21\u578B"}</span>
           </button>
@@ -18224,7 +19082,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         setStatus(msg, true);
         $libList.html(`
         <div style="padding: 16px; color: #dc2626; text-align: center;">
-          ${escapeHtml(msg)}
+          ${escapeHtml2(msg)}
         </div>
       `);
       }
@@ -19494,6 +20352,9 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
               <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
                 <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i><span>\u5BFC\u51FAGitHub\u8D44\u6E90\u5305</span>
               </div>
+              <div class="gal-export-item" data-action="export-character-card" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-top: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-id-card" style="width: 20px; color: #0d6efd;"></i><span>\u5BFC\u51FA\u6253\u5305\u89D2\u8272\u5361(JSON)</span>
+              </div>
             </div>
           </div>
           <div class="gal-import-dropdown" style="position: relative;">
@@ -19918,6 +20779,8 @@ ${baseUrl}`)) return;
 ${baseUrl}`)) return;
           AssetIO.exportAllAssets(baseUrl, packageName);
         });
+      } else if (action === "export-character-card") {
+        exportCurrentCharacterCardWithConfig();
       }
     });
     $modal.find("#gal-import-dropdown-btn").on("click", function(e) {

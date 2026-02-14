@@ -33,6 +33,7 @@ export async function showLive2DSettingsModal(characterId) {
   let previewIsDragging = false;
   let previewDragStart = { x: 0, y: 0 };
   let previewDragOrigin = { x: 0, y: 0 };
+  let previewRequestToken = 0;
 
   const gameExpressionTags = Object.keys(EXPRESSION_LIVE2D_MAP);
 
@@ -556,6 +557,7 @@ export async function showLive2DSettingsModal(characterId) {
   const cleanupMappingPreview = () => {
     if (!previewMounted) return;
     previewIsDragging = false;
+    previewRequestToken++;
     $modal.find('#gal-live2d-preview-canvas').css('cursor', 'grab');
     try {
       Live2DStage.popMount();
@@ -625,10 +627,51 @@ export async function showLive2DSettingsModal(characterId) {
     return $target;
   };
 
+  const stopPreviewMotion = (model) => {
+    const motionManager = model?.internalModel?.motionManager;
+    if (!motionManager) return;
+
+    try {
+      if (typeof motionManager.stopAllMotions === 'function') {
+        motionManager.stopAllMotions();
+        return;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof motionManager.motionQueueManager?.stopAllMotions === 'function') {
+        motionManager.motionQueueManager.stopAllMotions();
+        return;
+      }
+    } catch (e) {}
+
+    try {
+      if (typeof motionManager.queueManager?.stopAllMotions === 'function') {
+        motionManager.queueManager.stopAllMotions();
+      }
+    } catch (e) {}
+  };
+
+  const normalizePreviewAutoUpdateTicker = (model) => {
+    if (!model) return;
+    const sharedTicker = topWindow?.PIXI?.Ticker?.shared;
+    if (sharedTicker && typeof sharedTicker.remove === 'function' && typeof model.onTickerUpdate === 'function') {
+      try {
+        sharedTicker.remove(model.onTickerUpdate, model);
+      } catch (e) {}
+    }
+    if ('autoUpdate' in model) {
+      try {
+        model.autoUpdate = true;
+      } catch (e) {}
+    }
+  };
+
   const previewMappingForTag = async (tag) => {
     if (!tag) return;
+    const requestToken = ++previewRequestToken;
     const mounted = await ensureMappingPreviewMounted();
-    if (!mounted) return;
+    if (!mounted || requestToken !== previewRequestToken) return;
 
     const model = Live2DManager.models.get(characterId);
     if (!model) {
@@ -642,6 +685,10 @@ export async function showLive2DSettingsModal(characterId) {
     const exprValue = String($row.find('.gal-expr-mapping-select').val() || '');
     const motionValueRaw = $row.find('.gal-motion-mapping-select').val();
     const motionValue = motionValueRaw === null || motionValueRaw === undefined ? '' : String(motionValueRaw);
+
+    if (requestToken !== previewRequestToken) return;
+
+    normalizePreviewAutoUpdateTicker(model);
 
     $modal.find('.gal-mapping-row').removeClass('previewing');
     $row.addClass('previewing');
@@ -662,6 +709,7 @@ export async function showLive2DSettingsModal(characterId) {
     }
 
     try {
+      stopPreviewMotion(model);
       if (motionValue === '__disabled__') {
         playedMotion = '(动作已禁用)';
       } else {
@@ -815,6 +863,7 @@ export async function showLive2DSettingsModal(characterId) {
   });
 
   const closeModal = () => {
+    previewRequestToken++;
     cleanupMappingPreview();
     unbindPreviewViewportEvents();
     $modal.remove();

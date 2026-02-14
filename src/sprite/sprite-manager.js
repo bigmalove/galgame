@@ -247,11 +247,16 @@ export const SpriteManager = {
       slot = info.slot;
       this.slotOwners.set(slot, characterId);
       const isElementValid = this.isCharacterElementValid(info, $overlay);
+      const useLive2D = getCharacterUseLive2D(characterId);
+      const hasLive2D = useLive2D ? await hasLive2DModel(characterId) : false;
+      const hasRenderedLive2D = Live2DManager.containers.has(characterId);
+      const isExistingLive2D = isElementValid && info?.element?.attr('data-live2d') === 'true';
+      const renderModeChanged = hasLive2D !== (isExistingLive2D || hasRenderedLive2D);
 
       if (!isElementValid) {
         info.expression = expression;
         await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken);
-      } else if (info.expression !== expression) {
+      } else if (info.expression !== expression || renderModeChanged) {
         info.expression = expression;
         await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken);
       }
@@ -313,8 +318,11 @@ export const SpriteManager = {
     }
 
     const $existingContainer = $slot.find('.gal-char-container[data-character="' + characterId + '"]');
-    const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr('data-live2d') === 'true';
     const hasRenderedLive2D = Live2DManager.containers.has(characterId);
+    if (!hasLive2D && hasRenderedLive2D) {
+      Live2DManager.releaseCharacter(characterId);
+    }
+    const isExistingLive2D = hasLive2D && $existingContainer.length > 0 && $existingContainer.attr('data-live2d') === 'true';
 
     if (isExistingLive2D && hasRenderedLive2D && !isEntering) {
       $existingContainer.attr('data-expression', expression);

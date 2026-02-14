@@ -3,6 +3,8 @@ import { Live2DLoader } from './loader.js';
 import { getLive2DModel } from '../db/live2d-models.js';
 import { getLive2DConfig, updateLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
 
+const LIVE2D_TICKER_GUARD_KEY = '__galgameLive2dTickerRef__';
+
 // 寤惰繜寮曠敤: Live2DStage (鏉ヨ嚜 ./stage.js锛岄伩鍏嶅惊鐜?, showToast (鏉ヨ嚜 UI 灞?
 let _Live2DStageRef = null;
 let _showToastRef = null;
@@ -537,7 +539,11 @@ export const Live2DManager = {
 
     try {
       const { Live2DModel } = _topWindow.PIXI.live2d;
-      Live2DModel.registerTicker(_topWindow.PIXI.Ticker);
+      const tickerRef = _topWindow.PIXI.Ticker;
+      if (_topWindow[LIVE2D_TICKER_GUARD_KEY] !== tickerRef) {
+        Live2DModel.registerTicker(tickerRef);
+        _topWindow[LIVE2D_TICKER_GUARD_KEY] = tickerRef;
+      }
 
       this.isReady = true;
       this._debugLog(`[${SCRIPT_NAME}] Live2DManager 初始化完成`);

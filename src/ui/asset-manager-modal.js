@@ -10,7 +10,7 @@ import { getCurrentPackId, setCurrentPack, getRenderScope, setRenderScope, getAl
 import { getCharacterListFromDatabase } from '../utils/chat.js';
 import { injectCOTToWorldbook } from '../logic/worldbook.js';
 import { showToast } from './toast.js';
-import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, showImportError } from './asset-io.js';
+import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, showImportError, exportCurrentCharacterCardWithConfig } from './asset-io.js';
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog } from './asset-manager-parts.js';
 import { buildImageGenConfigPane, bindImageGenConfigEvents } from './image-gen-config.js';
 
@@ -118,6 +118,9 @@ export async function buildAssetManagerContent(activeTab) {
               </div>
               <div class="gal-export-item" data-action="export-remote" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
                 <i class="fa-solid fa-cloud-upload" style="width: 20px; color: #6f42c1;"></i><span>导出GitHub资源包</span>
+              </div>
+              <div class="gal-export-item" data-action="export-character-card" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-top: 1px solid #eee; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-id-card" style="width: 20px; color: #0d6efd;"></i><span>导出打包角色卡(JSON)</span>
               </div>
             </div>
           </div>
@@ -554,6 +557,8 @@ function bindExportImportEvents($modal, activeTab) {
         if (!confirm(`确认生成以下 CDN 链接前缀的配置吗？\n${baseUrl}`)) return;
         AssetIO.exportAllAssets(baseUrl, packageName);
       });
+    } else if (action === 'export-character-card') {
+      exportCurrentCharacterCardWithConfig();
     }
   });
 

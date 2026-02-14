@@ -1,15 +1,15 @@
-import { SCRIPT_NAME } from '../core/constants.js';
+﻿import { SCRIPT_NAME } from '../core/constants.js';
 import { Live2DManager } from './manager.js';
 import { getLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
 
-// 延迟引用: showToast (来自 UI 层)
+// 寤惰繜寮曠敤: showToast (鏉ヨ嚜 UI 灞?
 let _showToastRef = null;
 export function setLive2DStageRefs({ showToast }) {
   if (showToast) _showToastRef = showToast;
 }
 
 // ============================================
-// Live2D 舞台渲染器（方案A：单 Canvas / 单 PIXI.Application）
+// Live2D 鑸炲彴娓叉煋鍣紙鏂规A锛氬崟 Canvas / 鍗?PIXI.Application锛?
 // ============================================
 export const Live2DStage = {
   app: null,
@@ -85,7 +85,7 @@ export const Live2DStage = {
 
     if (!mountEl || !mountEl.isConnected) return false;
     if (!PIXI) {
-      console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI 未就绪，无法挂载`);
+      console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI 鏈氨缁紝鏃犳硶鎸傝浇`);
       return false;
     }
 
@@ -138,9 +138,9 @@ export const Live2DStage = {
         });
 
       if (!glContext) {
-        console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL 不可用，无法渲染 Live2D`);
+        console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL 涓嶅彲鐢紝鏃犳硶娓叉煋 Live2D`);
         try {
-          if (_showToastRef) _showToastRef('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
+          if (_showToastRef) _showToastRef('WebGL 涓嶅彲鐢紝Live2D 鏃犳硶娓叉煋锛堣寮€鍚‖浠跺姞閫燂級');
         } catch {}
         return false;
       }
@@ -159,7 +159,7 @@ export const Live2DStage = {
       });
 
       if (!this.app.renderer?.gl) {
-        console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL Renderer 初始化失败`, this.app.renderer);
+        console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL Renderer init failed`, this.app.renderer);
         try {
           this.app.destroy(true);
         } catch {}
@@ -278,7 +278,7 @@ export const Live2DStage = {
     try {
       this.app.renderer.resize(width, height);
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize 失败`, e);
+      console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize 澶辫触`, e);
     }
 
     this._ensureSlotContainers();
@@ -383,7 +383,17 @@ export const Live2DStage = {
         targetContainer.addChild(model);
       }
       if ('autoUpdate' in model) {
-        model.autoUpdate = true;
+        // Deduplicate ticker callback before enabling autoUpdate to avoid speed stacking.
+        const pixiRef = this._getPIXI();
+        const sharedTicker = pixiRef?.Ticker?.shared;
+        if (sharedTicker && typeof sharedTicker.remove === 'function' && typeof model.onTickerUpdate === 'function') {
+          try {
+            sharedTicker.remove(model.onTickerUpdate, model);
+          } catch (e) {}
+        }
+        try {
+          model.autoUpdate = true;
+        } catch (e) {}
       }
     } catch (e) {}
 
@@ -445,6 +455,13 @@ export const Live2DStage = {
     try {
       if (inst.model.parent) {
         inst.model.parent.removeChild(inst.model);
+      }
+      const pixiRef = this._getPIXI();
+      const sharedTicker = pixiRef?.Ticker?.shared;
+      if (sharedTicker && typeof sharedTicker.remove === 'function' && typeof inst.model.onTickerUpdate === 'function') {
+        try {
+          sharedTicker.remove(inst.model.onTickerUpdate, inst.model);
+        } catch (e) {}
       }
       if ('autoUpdate' in inst.model) {
         inst.model.autoUpdate = false;
@@ -524,3 +541,6 @@ export const Live2DStage = {
     return true;
   },
 };
+
+
+

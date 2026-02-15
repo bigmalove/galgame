@@ -17172,6 +17172,265 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
   function escapeHtml(input) {
     return String(input || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  function formatDialogText(input) {
+    return escapeHtml(input).replace(/\r?\n/g, "<br>");
+  }
+  var inAppDialogCounter = 0;
+  function nextInAppDialogId(prefix = "gal-inline-dialog") {
+    inAppDialogCounter += 1;
+    return `${prefix}-${Date.now()}-${inAppDialogCounter}`;
+  }
+  function showInAppPromptDialog(options = {}) {
+    const {
+      title = "\u8BF7\u8F93\u5165",
+      message = "",
+      hint = "",
+      label = "",
+      placeholder = "",
+      defaultValue = "",
+      confirmText = "\u786E\u8BA4",
+      cancelText = "\u53D6\u6D88",
+      iconClass = "fa-solid fa-pen-to-square",
+      accent = "#0d6efd",
+      required = false,
+      requiredMessage = "\u8BF7\u8F93\u5165\u5185\u5BB9",
+      trim = true,
+      inputType = "text",
+      multiline = false,
+      width = "520px"
+    } = options;
+    const dialogId = nextInAppDialogId("gal-inline-prompt");
+    const closeId = `${dialogId}-close`;
+    const cancelId = `${dialogId}-cancel`;
+    const confirmId = `${dialogId}-confirm`;
+    const inputId = `${dialogId}-input`;
+    const messageHtml = message ? `<div style="margin-bottom: 12px; color: #555; font-size: 0.92rem; line-height: 1.6;">${formatDialogText(message)}</div>` : "";
+    const hintHtml = hint ? `<div style="margin-top: 8px; color: #7a7a7a; font-size: 0.82rem; line-height: 1.5;">${formatDialogText(hint)}</div>` : "";
+    const labelHtml = label ? `<label for="${inputId}" style="display: block; margin-bottom: 8px; color: #444; font-size: 0.9rem; font-weight: 600;">${escapeHtml(label)}</label>` : "";
+    const inputHtml = multiline ? `<textarea id="${inputId}" placeholder="${escapeHtml(placeholder)}" style="width: 100%; min-height: 110px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box; resize: vertical;">${escapeHtml(defaultValue)}</textarea>` : `<input id="${inputId}" type="${escapeHtml(inputType)}" value="${escapeHtml(defaultValue)}" placeholder="${escapeHtml(placeholder)}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />`;
+    const html = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: ${escapeHtml(width)}; width: 92%; padding: 24px;">
+        <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="${escapeHtml(iconClass)}" style="color: ${escapeHtml(accent)};"></i> ${escapeHtml(title)}</span>
+          <button id="${closeId}" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        ${messageHtml}
+        <div style="margin-bottom: 14px;">
+          ${labelHtml}
+          ${inputHtml}
+          ${hintHtml}
+        </div>
+        <div class="gal-input-actions" style="display: flex; gap: 10px;">
+          <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml(cancelText)}</span>
+          </button>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml(accent)}; color: #fff; border-color: ${escapeHtml(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml(confirmText)}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+    return new Promise((resolve) => {
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(html);
+      const $dialog = $(mountRoot).find(`#${dialogId}`);
+      const $box = $dialog.find(".gal-input-box");
+      const $input = $dialog.find(`#${inputId}`);
+      makeDraggable($box, $dialog.find(".gal-input-title"));
+      let settled = false;
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        $dialog.remove();
+        resolve(value);
+      };
+      const submit = () => {
+        const raw = String($input.val() ?? "");
+        const value = trim ? raw.trim() : raw;
+        if (required && !value) {
+          showToast4(requiredMessage);
+          $input.trigger("focus");
+          return;
+        }
+        done(value);
+      };
+      $dialog.find(`#${confirmId}`).on("click", submit);
+      $dialog.find(`#${cancelId}`).on("click", () => done(null));
+      $dialog.find(`#${closeId}`).on("click", () => done(null));
+      $dialog.on("click", function(e) {
+        if (e.target === this) done(null);
+      });
+      $dialog.on("keydown", function(e) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          done(null);
+        }
+      });
+      $input.on("keydown", function(e) {
+        const shouldSubmit = multiline ? e.key === "Enter" && (e.ctrlKey || e.metaKey) : e.key === "Enter";
+        if (shouldSubmit) {
+          e.preventDefault();
+          submit();
+        }
+      });
+      setTimeout(() => {
+        $input.trigger("focus");
+        const el = $input.get(0);
+        if (el && !multiline && typeof el.setSelectionRange === "function") {
+          const len = String($input.val() || "").length;
+          el.setSelectionRange(len, len);
+        }
+      }, 0);
+    });
+  }
+  function showInAppConfirmDialog(options = {}) {
+    const {
+      title = "\u8BF7\u786E\u8BA4",
+      message = "",
+      hint = "",
+      confirmText = "\u786E\u8BA4",
+      cancelText = "\u53D6\u6D88",
+      iconClass = "fa-solid fa-circle-question",
+      accent = "#0d6efd",
+      width = "500px",
+      danger = false
+    } = options;
+    const dialogId = nextInAppDialogId("gal-inline-confirm");
+    const closeId = `${dialogId}-close`;
+    const cancelId = `${dialogId}-cancel`;
+    const confirmId = `${dialogId}-confirm`;
+    const messageHtml = message ? `<div style="margin-bottom: 10px; color: #555; font-size: 0.92rem; line-height: 1.6; white-space: normal;">${formatDialogText(message)}</div>` : "";
+    const hintHtml = hint ? `<div style="margin-bottom: 4px; color: #7a7a7a; font-size: 0.82rem; line-height: 1.5;">${formatDialogText(hint)}</div>` : "";
+    const confirmColor = danger ? "#dc3545" : accent;
+    const html = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: ${escapeHtml(width)}; width: 90%; padding: 24px;">
+        <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="${escapeHtml(iconClass)}" style="color: ${escapeHtml(confirmColor)};"></i> ${escapeHtml(title)}</span>
+          <button id="${closeId}" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid ${escapeHtml(confirmColor)};">
+          ${messageHtml}
+          ${hintHtml}
+        </div>
+        <div class="gal-input-actions" style="display: flex; gap: 10px;">
+          <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml(cancelText)}</span>
+          </button>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml(confirmColor)}; color: #fff; border-color: ${escapeHtml(confirmColor)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml(confirmText)}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+    return new Promise((resolve) => {
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(html);
+      const $dialog = $(mountRoot).find(`#${dialogId}`);
+      makeDraggable($dialog.find(".gal-input-box"), $dialog.find(".gal-input-title"));
+      let settled = false;
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        $dialog.remove();
+        resolve(value);
+      };
+      $dialog.find(`#${confirmId}`).on("click", () => done(true));
+      $dialog.find(`#${cancelId}`).on("click", () => done(false));
+      $dialog.find(`#${closeId}`).on("click", () => done(false));
+      $dialog.on("click", function(e) {
+        if (e.target === this) done(false);
+      });
+      $dialog.on("keydown", function(e) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          done(false);
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          done(true);
+        }
+      });
+      setTimeout(() => {
+        $dialog.find(`#${confirmId}`).trigger("focus");
+      }, 0);
+    });
+  }
+  function showInAppAlertDialog(options = {}) {
+    const {
+      title = "\u63D0\u793A",
+      message = "",
+      details = "",
+      buttonText = "\u6211\u77E5\u9053\u4E86",
+      iconClass = "fa-solid fa-circle-info",
+      accent = "#0d6efd",
+      width = "560px"
+    } = options;
+    const detailLines = Array.isArray(details) ? details.map((v) => String(v || "").trim()).filter(Boolean) : String(details || "").trim() ? [String(details || "").trim()] : [];
+    const detailHtml = detailLines.length > 0 ? `
+      <div style="margin-top: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 12px; max-height: 220px; overflow-y: auto;">
+        ${detailLines.map((line) => `<div style="font-size: 0.88rem; line-height: 1.55; color: #555; white-space: pre-wrap; margin-bottom: 4px;">${formatDialogText(line)}</div>`).join("")}
+      </div>
+    ` : "";
+    const dialogId = nextInAppDialogId("gal-inline-alert");
+    const closeId = `${dialogId}-close`;
+    const okId = `${dialogId}-ok`;
+    const html = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: ${escapeHtml(width)}; width: 92%; padding: 24px;">
+        <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="${escapeHtml(iconClass)}" style="color: ${escapeHtml(accent)};"></i> ${escapeHtml(title)}</span>
+          <button id="${closeId}" title="\u5173\u95ED" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div style="margin-bottom: 16px; color: #555; font-size: 0.93rem; line-height: 1.65; white-space: normal;">
+          ${formatDialogText(message)}
+          ${detailHtml}
+        </div>
+        <div class="gal-input-actions" style="display: flex; justify-content: flex-end;">
+          <button class="gal-action-btn" id="${okId}" style="min-width: 130px; min-height: 42px; justify-content: center; background: ${escapeHtml(accent)}; color: #fff; border-color: ${escapeHtml(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml(buttonText)}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+    return new Promise((resolve) => {
+      const mountRoot = getModalMountRoot();
+      $(mountRoot).append(html);
+      const $dialog = $(mountRoot).find(`#${dialogId}`);
+      makeDraggable($dialog.find(".gal-input-box"), $dialog.find(".gal-input-title"));
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        $dialog.remove();
+        resolve();
+      };
+      $dialog.find(`#${okId}`).on("click", done);
+      $dialog.find(`#${closeId}`).on("click", done);
+      $dialog.on("click", function(e) {
+        if (e.target === this) done();
+      });
+      $dialog.on("keydown", function(e) {
+        if (e.key === "Escape" || e.key === "Enter") {
+          e.preventDefault();
+          done();
+        }
+      });
+      setTimeout(() => {
+        $dialog.find(`#${okId}`).trigger("focus");
+      }, 0);
+    });
+  }
   function downloadTextFile(filename, text, mimeType = "application/json") {
     const blob = new Blob([text], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -17666,19 +17925,25 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         const hit = await tryGetCharacter(selectedByModal.trim(), "manual-select-modal");
         if (hit) return hit;
       }
-      if (typeof prompt === "function") {
-        const preview = allNames.slice(0, 20).join("\u3001");
-        const more = allNames.length > 20 ? ` ... \u5171 ${allNames.length} \u4E2A` : "";
-        const answer = prompt(
-          `\u5F53\u524D\u4F1A\u8BDD\u65E0\u6CD5\u901A\u8FC7 'current' \u8BFB\u53D6\u89D2\u8272\u5361\u3002
-\u8BF7\u8F93\u5165\u8981\u5BFC\u51FA\u7684\u89D2\u8272\u5361\u540D\u79F0\uFF1A
-${preview}${more}`,
-          contextCandidates[0] || allNames[0] || ""
-        );
-        if (typeof answer === "string" && answer.trim()) {
-          const hit = await tryGetCharacter(answer.trim(), "manual-input");
-          if (hit) return hit;
-        }
+      const preview = allNames.slice(0, 20).join("\u3001");
+      const more = allNames.length > 20 ? ` ... \u5171 ${allNames.length} \u4E2A` : "";
+      const answer = await showInAppPromptDialog({
+        title: "\u624B\u52A8\u6307\u5B9A\u89D2\u8272\u5361",
+        message: '\u5F53\u524D\u4F1A\u8BDD\u65E0\u6CD5\u901A\u8FC7 "current" \u8BFB\u53D6\u89D2\u8272\u5361\uFF0C\u8BF7\u8F93\u5165\u8981\u5BFC\u51FA\u7684\u89D2\u8272\u5361\u540D\u79F0\u3002',
+        hint: `\u53EF\u9009\u89D2\u8272\uFF1A${preview}${more}`,
+        label: "\u89D2\u8272\u5361\u540D\u79F0",
+        placeholder: "\u8BF7\u8F93\u5165\u89D2\u8272\u5361\u540D\u79F0",
+        defaultValue: contextCandidates[0] || allNames[0] || "",
+        confirmText: "\u7EE7\u7EED\u5BFC\u51FA",
+        cancelText: "\u53D6\u6D88",
+        iconClass: "fa-solid fa-id-card",
+        accent: "#0d6efd",
+        required: true,
+        requiredMessage: "\u8BF7\u8F93\u5165\u89D2\u8272\u5361\u540D\u79F0"
+      });
+      if (typeof answer === "string" && answer.trim()) {
+        const hit = await tryGetCharacter(answer.trim(), "manual-input");
+        if (hit) return hit;
       }
     }
     const parts = [];
@@ -17791,23 +18056,54 @@ ${preview}${more}`,
       let includeLocalLive2dPlaceholder = options.includeLocalLive2dPlaceholder;
       let maxEmbeddedLive2dBytes = options.maxEmbeddedLive2dBytes;
       if (interactive) {
-        const remoteAnswer = prompt(
-          "\u8BF7\u8F93\u5165\u56FE\u5305\u8FDC\u7A0B\u914D\u7F6E\uFF08\u53EF\u9009\uFF09:\n- \u53EF\u586B baseUrl\uFF08\u4F8B\u5982 https://cdn.jsdelivr.net/gh/user/repo@main/ \uFF09\n- \u6216\u76F4\u63A5\u586B remote_assets.json \u5B8C\u6574 URL\n\n\u7559\u7A7A\u5219\u53EA\u5BFC\u51FA\u7ED1\u5B9A\u914D\u7F6E",
-          remoteInput || ""
-        );
+        const remoteAnswer = await showInAppPromptDialog({
+          title: "\u8FDC\u7A0B\u8D44\u6E90\u914D\u7F6E\uFF08\u53EF\u9009\uFF09",
+          message: "\u53EF\u586B\u5199 baseUrl\uFF08\u4F8B\u5982 https://cdn.jsdelivr.net/gh/user/repo@main/ \uFF09\n\u4E5F\u53EF\u76F4\u63A5\u586B\u5199 remote_assets.json \u5B8C\u6574 URL\u3002\n\u7559\u7A7A\u5219\u53EA\u5BFC\u51FA\u7ED1\u5B9A\u914D\u7F6E\u3002",
+          label: "\u8FDC\u7A0B\u914D\u7F6E",
+          placeholder: "https://cdn.jsdelivr.net/gh/user/repo@main/",
+          defaultValue: remoteInput || "",
+          confirmText: "\u786E\u8BA4",
+          cancelText: "\u8DF3\u8FC7",
+          iconClass: "fa-solid fa-cloud",
+          accent: "#17a2b8"
+        });
         if (remoteAnswer === null) {
           showToast4("\u672A\u8BBE\u7F6E\u8FDC\u7A0B\u8D44\u6E90\u5730\u5740\uFF0C\u7EE7\u7EED\u4F7F\u7528\u5F53\u524D\u5BFC\u51FA\u53C2\u6570");
         } else {
           remoteInput = remoteAnswer.trim();
         }
-        includeAllPacks = includeAllPacks === void 0 ? confirm("\u662F\u5426\u5BFC\u51FA\u6240\u6709\u56FE\u5305\u8BB0\u5F55\uFF1F\n\u662F\uFF1A\u4FDD\u7559 packs \u5217\u8868\uFF08\u63A8\u8350\uFF09\n\u5426\uFF1A\u53EA\u5BFC\u51FA\u5F53\u524D\u56FE\u5305") : !!includeAllPacks;
-        embedLocalLive2d = embedLocalLive2d === void 0 ? confirm("Live2D \u5BFC\u51FA\u7B56\u7565\uFF1A\n\u662F\uFF1A\u672C\u5730\u6A21\u578B\u5BFC\u51FA\u672C\u4F53\uFF1B\u8FDC\u7A0B\u6A21\u578B\u5BFC\u51FA URL\n\u5426\uFF1A\u672C\u5730\u6A21\u578B\u4E0D\u5BFC\u51FA\u672C\u4F53") : !!embedLocalLive2d;
+        includeAllPacks = includeAllPacks === void 0 ? await showInAppConfirmDialog({
+          title: "\u56FE\u5305\u8303\u56F4",
+          message: "\u662F\u5426\u5BFC\u51FA\u6240\u6709\u56FE\u5305\u8BB0\u5F55\uFF1F",
+          hint: "\u786E\u8BA4\uFF1A\u4FDD\u7559 packs \u5217\u8868\uFF08\u63A8\u8350\uFF09\n\u53D6\u6D88\uFF1A\u53EA\u5BFC\u51FA\u5F53\u524D\u56FE\u5305",
+          confirmText: "\u5BFC\u51FA\u6240\u6709\u56FE\u5305",
+          cancelText: "\u4EC5\u5F53\u524D\u56FE\u5305",
+          iconClass: "fa-solid fa-layer-group",
+          accent: "#0d6efd"
+        }) : !!includeAllPacks;
+        embedLocalLive2d = embedLocalLive2d === void 0 ? await showInAppConfirmDialog({
+          title: "Live2D \u5BFC\u51FA\u7B56\u7565",
+          message: "\u662F\u5426\u5BFC\u51FA\u672C\u5730 Live2D \u6A21\u578B\u672C\u4F53\uFF1F",
+          hint: "\u786E\u8BA4\uFF1A\u672C\u5730\u6A21\u578B\u5BFC\u51FA\u672C\u4F53\uFF0C\u8FDC\u7A0B\u6A21\u578B\u5BFC\u51FA URL\n\u53D6\u6D88\uFF1A\u672C\u5730\u6A21\u578B\u4E0D\u5BFC\u51FA\u672C\u4F53",
+          confirmText: "\u5BFC\u51FA\u672C\u4F53",
+          cancelText: "\u4EC5\u5BFC\u51FA\u5F15\u7528",
+          iconClass: "fa-solid fa-cube",
+          accent: "#6f42c1"
+        }) : !!embedLocalLive2d;
         includeLocalLive2dPlaceholder = includeLocalLive2dPlaceholder === void 0 ? true : !!includeLocalLive2dPlaceholder;
         if (embedLocalLive2d) {
-          const limitInput = prompt(
-            "\u8BF7\u8F93\u5165\u672C\u5730 Live2D \u672C\u4F53\u5BFC\u51FA\u9608\u503C\uFF08MB\uFF09\u3002\n\u8D85\u8FC7\u9608\u503C\u5C06\u81EA\u52A8\u8DF3\u8FC7\u672C\u4F53\u5E76\u5EFA\u8BAE\u6539\u7528 GitHub \u8FDC\u7A0B\u5BFC\u51FA\u3002\n\u9ED8\u8BA4 25",
-            String(Math.round((Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES) / 1024 / 1024))
-          );
+          const limitInput = await showInAppPromptDialog({
+            title: "Live2D \u672C\u4F53\u5BFC\u51FA\u9608\u503C",
+            message: "\u8BF7\u8F93\u5165\u672C\u5730 Live2D \u672C\u4F53\u5BFC\u51FA\u9608\u503C\uFF08MB\uFF09\u3002\n\u8D85\u8FC7\u9608\u503C\u5C06\u81EA\u52A8\u8DF3\u8FC7\u672C\u4F53\u5E76\u5EFA\u8BAE\u6539\u7528 GitHub \u8FDC\u7A0B\u5BFC\u51FA\u3002",
+            label: "\u9608\u503C\uFF08MB\uFF09",
+            placeholder: "25",
+            defaultValue: String(Math.round((Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES) / 1024 / 1024)),
+            confirmText: "\u786E\u8BA4\u9608\u503C",
+            cancelText: "\u4F7F\u7528\u9ED8\u8BA4",
+            iconClass: "fa-solid fa-gauge-high",
+            accent: "#f39c12",
+            inputType: "number"
+          });
           if (limitInput === null) {
             showToast4("\u672A\u8BBE\u7F6E Live2D \u672C\u4F53\u9608\u503C\uFF0C\u4F7F\u7528\u9ED8\u8BA4 25MB");
           } else {
@@ -17865,7 +18161,14 @@ ${preview}${more}`,
       if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
         const msg = `\u5BFC\u51FA\u5931\u8D25\uFF1A\u89D2\u8272\u5361\u4F53\u79EF ${formatSizeMb(bytes)} \u8D85\u8FC7 Discord \u9650\u5236 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}\u3002
 \u8BF7\u6539\u7528\u8FDC\u7A0B\u8D44\u6E90\u5BFC\u51FA\u3002`;
-        if (interactive) alert(msg);
+        if (interactive) {
+          await showInAppAlertDialog({
+            title: "\u5BFC\u51FA\u5931\u8D25",
+            message: msg,
+            iconClass: "fa-solid fa-circle-exclamation",
+            accent: "#dc3545"
+          });
+        }
         throw new Error(msg);
       }
       const cardName = card?.name || card?.data?.name || "character";
@@ -17880,9 +18183,14 @@ ${preview}${more}`,
       if (Array.isArray(config?.meta?.warnings) && config.meta.warnings.length > 0) {
         console.warn(`[${SCRIPT_NAME}] \u89D2\u8272\u5361\u5BFC\u51FA\u8B66\u544A`, config.meta.warnings);
         if (interactive) {
-          alert(`\u5BFC\u51FA\u5B8C\u6210\uFF0C\u4F46\u6709\u4EE5\u4E0B\u63D0\u9192\uFF1A
-
-${config.meta.warnings.map((w, i) => `${i + 1}. ${w}`).join("\n")}`);
+          await showInAppAlertDialog({
+            title: "\u5BFC\u51FA\u5B8C\u6210\u63D0\u9192",
+            message: "\u5BFC\u51FA\u5B8C\u6210\uFF0C\u4F46\u6709\u4EE5\u4E0B\u63D0\u9192\uFF1A",
+            details: config.meta.warnings.map((w, i) => `${i + 1}. ${w}`),
+            buttonText: "\u6211\u77E5\u9053\u4E86",
+            iconClass: "fa-solid fa-triangle-exclamation",
+            accent: "#f39c12"
+          });
         }
       }
       return true;
@@ -20774,68 +21082,125 @@ ${config.meta.warnings.map((w, i) => `${i + 1}. ${w}`).join("\n")}`);
     $(topWindow.document).on("click.galMenus", function(e) {
       if (!$(e.target).closest(".gal-export-dropdown").length) $("#gal-export-menu").hide();
     });
-    $modal.find(".gal-export-item").on("click", function() {
+    const askExportPackageName = async (dialogTitle = "\u5BFC\u51FA\u8D44\u6E90\u5305") => {
+      const cpId = getCurrentPackId();
+      const packs = await getAllImagePacks();
+      const cp = packs.find((p) => p.id === cpId);
+      const defaultName = cp ? cp.name : "\u56FE\u5305";
+      const defaultPackageName = `${defaultName}_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
+      return showInAppPromptDialog({
+        title: dialogTitle,
+        message: `\u5C06\u5BFC\u51FA\u5F53\u524D\u56FE\u5305\u201C${defaultName}\u201D\u7684\u8D44\u6E90\uFF0C\u8BF7\u8F93\u5165\u5BFC\u51FA\u5305\u540D\u3002`,
+        label: "\u5BFC\u51FA\u5305\u540D",
+        defaultValue: defaultPackageName,
+        placeholder: defaultPackageName,
+        confirmText: "\u5F00\u59CB\u5BFC\u51FA",
+        cancelText: "\u53D6\u6D88",
+        iconClass: "fa-solid fa-file-export",
+        accent: "#0d6efd",
+        required: true,
+        requiredMessage: "\u8BF7\u8F93\u5165\u5BFC\u51FA\u5305\u540D"
+      });
+    };
+    $modal.find(".gal-export-item").on("click", async function() {
       const action = $(this).data("action");
       $("#gal-export-menu").hide();
       if (action === "export-local") {
-        const cpId = getCurrentPackId();
-        getAllImagePacks().then((packs) => {
-          const cp = packs.find((p) => p.id === cpId);
-          const defaultName = cp ? cp.name : "\u56FE\u5305";
-          const packageName = prompt(`\u5C06\u5BFC\u51FA\u5F53\u524D\u56FE\u5305"${defaultName}"\u7684\u8D44\u6E90
-
-\u8BF7\u8F93\u5165\u5BFC\u51FA\u5305\u540D:`, `${defaultName}_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);
-          if (!packageName) return;
-          AssetIO.exportAllAssets(null, packageName);
+        const packageName = await askExportPackageName("\u5BFC\u51FA\u672C\u5730\u538B\u7F29\u5305");
+        if (!packageName) return;
+        AssetIO.exportAllAssets(null, packageName.trim());
+        return;
+      }
+      if (action === "export-remote") {
+        const packageName = await askExportPackageName("\u5BFC\u51FA GitHub \u8D44\u6E90\u5305");
+        if (!packageName) return;
+        const input = await showInAppPromptDialog({
+          title: "GitHub \u4ED3\u5E93\u4FE1\u606F",
+          message: "\u8BF7\u8F93\u5165\u7528\u6237/\u4ED3\u5E93\u540D\u3001GitHub \u4ED3\u5E93\u94FE\u63A5\uFF0C\u6216\u73B0\u6210\u7684 jsDelivr CDN \u524D\u7F00\u3002",
+          hint: "\u793A\u4F8B\uFF1Auser/repo \u6216 https://github.com/user/repo",
+          label: "\u4ED3\u5E93\u4FE1\u606F",
+          placeholder: "user/repo",
+          confirmText: "\u4E0B\u4E00\u6B65",
+          cancelText: "\u53D6\u6D88",
+          iconClass: "fa-brands fa-github",
+          accent: "#6f42c1",
+          required: true,
+          requiredMessage: "\u8BF7\u8F93\u5165 GitHub \u4ED3\u5E93\u4FE1\u606F"
         });
-      } else if (action === "export-remote") {
-        const cpId = getCurrentPackId();
-        getAllImagePacks().then((packs) => {
-          const cp = packs.find((p) => p.id === cpId);
-          const defaultName = cp ? cp.name : "\u56FE\u5305";
-          const packageName = prompt(`\u5C06\u5BFC\u51FA\u5F53\u524D\u56FE\u5305"${defaultName}"\u7684\u8D44\u6E90
-
-\u8BF7\u8F93\u5165\u5BFC\u51FA\u5305\u540D:`, `${defaultName}_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`);
-          if (!packageName) return;
-          const input = prompt("\u8BF7\u8F93\u5165 GitHub \u4ED3\u5E93\u4FE1\u606F (\u683C\u5F0F: \u7528\u6237\u540D/\u4ED3\u5E93\u540D \u6216 GitHub \u4ED3\u5E93\u94FE\u63A5)\n\n\u5C06\u7EDF\u4E00\u751F\u6210 jsDelivr CDN \u52A0\u901F\u94FE\u63A5\u3002");
-          if (!input) return;
-          const rawInput = input.trim();
-          let cleanRepo = "", branch = "", baseUrl = "";
-          if (rawInput.includes("cdn.jsdelivr.net/gh/")) {
-            baseUrl = rawInput.endsWith("/") ? rawInput : `${rawInput}/`;
-            if (!confirm(`\u786E\u8BA4\u4F7F\u7528\u4EE5\u4E0B CDN \u94FE\u63A5\u524D\u7F00\u5417\uFF1F
-${baseUrl}`)) return;
-            AssetIO.exportAllAssets(baseUrl, packageName);
-            return;
+        if (!input) return;
+        const rawInput = input.trim();
+        let cleanRepo = "";
+        let branch = "";
+        let baseUrl = "";
+        if (rawInput.includes("cdn.jsdelivr.net/gh/")) {
+          baseUrl = rawInput.endsWith("/") ? rawInput : `${rawInput}/`;
+          const confirmed2 = await showInAppConfirmDialog({
+            title: "\u786E\u8BA4 CDN \u94FE\u63A5\u524D\u7F00",
+            message: `\u786E\u8BA4\u4F7F\u7528\u4EE5\u4E0B CDN \u94FE\u63A5\u524D\u7F00\u5417\uFF1F
+${baseUrl}`,
+            confirmText: "\u786E\u8BA4\u5BFC\u51FA",
+            cancelText: "\u8FD4\u56DE\u4FEE\u6539",
+            iconClass: "fa-solid fa-link",
+            accent: "#6f42c1"
+          });
+          if (!confirmed2) return;
+          AssetIO.exportAllAssets(baseUrl, packageName.trim());
+          return;
+        }
+        if (rawInput.startsWith("http")) {
+          const rawMatch = rawInput.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\//i);
+          if (rawMatch) {
+            cleanRepo = `${rawMatch[1]}/${rawMatch[2]}`;
+            branch = rawMatch[3];
+          } else {
+            const githubMatch = rawInput.match(/github\.com\/([^/]+)\/([^/#?]+)(?:\.git)?/i);
+            if (githubMatch) cleanRepo = `${githubMatch[1]}/${githubMatch[2].replace(/\.git$/i, "")}`;
           }
-          if (rawInput.startsWith("http")) {
-            const rawMatch = rawInput.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\//i);
-            if (rawMatch) {
-              cleanRepo = `${rawMatch[1]}/${rawMatch[2]}`;
-              branch = rawMatch[3];
-            } else {
-              const githubMatch = rawInput.match(/github\.com\/([^/]+)\/([^/#?]+)(?:\.git)?/i);
-              if (githubMatch) cleanRepo = `${githubMatch[1]}/${githubMatch[2].replace(/\.git$/i, "")}`;
-            }
-          } else if (rawInput.indexOf("/") > 0 && rawInput.split("/").length === 2) {
-            cleanRepo = rawInput.replace(".git", "");
-          }
-          if (!cleanRepo) {
-            alert("\u65E0\u6CD5\u8BC6\u522B GitHub \u4ED3\u5E93\u4FE1\u606F");
-            return;
-          }
-          if (!branch) {
-            const branchInput = prompt("\u8BF7\u8F93\u5165\u5206\u652F\u540D\u6216\u7248\u672C\u53F7:", "main");
-            if (!branchInput) return;
-            branch = branchInput;
-          }
-          baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
-          if (!confirm(`\u786E\u8BA4\u751F\u6210\u4EE5\u4E0B CDN \u94FE\u63A5\u524D\u7F00\u7684\u914D\u7F6E\u5417\uFF1F
-${baseUrl}`)) return;
-          AssetIO.exportAllAssets(baseUrl, packageName);
+        } else if (rawInput.indexOf("/") > 0 && rawInput.split("/").length === 2) {
+          cleanRepo = rawInput.replace(/\.git$/i, "");
+        }
+        if (!cleanRepo) {
+          await showInAppAlertDialog({
+            title: "\u4ED3\u5E93\u4FE1\u606F\u65E0\u6548",
+            message: "\u65E0\u6CD5\u8BC6\u522B GitHub \u4ED3\u5E93\u4FE1\u606F\uFF0C\u8BF7\u8F93\u5165 user/repo \u6216\u6807\u51C6 GitHub \u4ED3\u5E93\u94FE\u63A5\u3002",
+            iconClass: "fa-solid fa-circle-exclamation",
+            accent: "#dc3545"
+          });
+          return;
+        }
+        if (!branch) {
+          const branchInput = await showInAppPromptDialog({
+            title: "\u586B\u5199\u5206\u652F\u6216\u7248\u672C",
+            message: "\u8BF7\u8F93\u5165\u5206\u652F\u540D\u6216\u7248\u672C\u53F7\u3002",
+            label: "\u5206\u652F / \u7248\u672C",
+            defaultValue: "main",
+            placeholder: "main",
+            confirmText: "\u786E\u8BA4",
+            cancelText: "\u53D6\u6D88",
+            iconClass: "fa-solid fa-code-branch",
+            accent: "#6f42c1",
+            required: true,
+            requiredMessage: "\u8BF7\u8F93\u5165\u5206\u652F\u540D\u6216\u7248\u672C\u53F7"
+          });
+          if (!branchInput) return;
+          branch = branchInput.trim();
+        }
+        baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
+        const confirmed = await showInAppConfirmDialog({
+          title: "\u786E\u8BA4\u5BFC\u51FA\u914D\u7F6E",
+          message: `\u786E\u8BA4\u751F\u6210\u5E76\u4F7F\u7528\u4EE5\u4E0B CDN \u94FE\u63A5\u524D\u7F00\u5417\uFF1F
+${baseUrl}`,
+          confirmText: "\u786E\u8BA4\u5BFC\u51FA",
+          cancelText: "\u8FD4\u56DE\u4FEE\u6539",
+          iconClass: "fa-solid fa-link",
+          accent: "#6f42c1"
         });
-      } else if (action === "export-character-card") {
-        exportCurrentCharacterCardWithConfig();
+        if (!confirmed) return;
+        AssetIO.exportAllAssets(baseUrl, packageName.trim());
+        return;
+      }
+      if (action === "export-character-card") {
+        await exportCurrentCharacterCardWithConfig();
       }
     });
     $modal.find("#gal-import-dropdown-btn").on("click", function(e) {

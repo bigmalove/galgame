@@ -10,7 +10,17 @@ import { getCurrentPackId, setCurrentPack, getRenderScope, setRenderScope, getAl
 import { getCharacterListFromDatabase } from '../utils/chat.js';
 import { injectCOTToWorldbook } from '../logic/worldbook.js';
 import { showToast } from './toast.js';
-import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, showImportError, exportCurrentCharacterCardWithConfig } from './asset-io.js';
+import {
+  importAssetsFromJson,
+  AssetIO,
+  showRemoteZipImportDialog,
+  importFromZipFile,
+  showImportError,
+  exportCurrentCharacterCardWithConfig,
+  showInAppPromptDialog,
+  showInAppConfirmDialog,
+  showInAppAlertDialog,
+} from './asset-io.js';
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog } from './asset-manager-parts.js';
 import { buildImageGenConfigPane, bindImageGenConfigEvents } from './image-gen-config.js';
 
@@ -517,48 +527,134 @@ function bindExportImportEvents($modal, activeTab) {
   $(topWindow.document).on('click.galMenus', function (e) {
     if (!$(e.target).closest('.gal-export-dropdown').length) $('#gal-export-menu').hide();
   });
-  $modal.find('.gal-export-item').on('click', function () {
+  const askExportPackageName = async (dialogTitle = '导出资源包') => {
+    const cpId = getCurrentPackId();
+    const packs = await getAllImagePacks();
+    const cp = packs.find(p => p.id === cpId);
+    const defaultName = cp ? cp.name : '图包';
+    const defaultPackageName = `${defaultName}_${new Date().toISOString().slice(0, 10)}`;
+    return showInAppPromptDialog({
+      title: dialogTitle,
+      message: `将导出当前图包“${defaultName}”的资源，请输入导出包名。`,
+      label: '导出包名',
+      defaultValue: defaultPackageName,
+      placeholder: defaultPackageName,
+      confirmText: '开始导出',
+      cancelText: '取消',
+      iconClass: 'fa-solid fa-file-export',
+      accent: '#0d6efd',
+      required: true,
+      requiredMessage: '请输入导出包名',
+    });
+  };
+
+  $modal.find('.gal-export-item').on('click', async function () {
     const action = $(this).data('action');
     $('#gal-export-menu').hide();
+
     if (action === 'export-local') {
-      const cpId = getCurrentPackId();
-      getAllImagePacks().then(packs => {
-        const cp = packs.find(p => p.id === cpId);
-        const defaultName = cp ? cp.name : '图包';
-        const packageName = prompt(`将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`, `${defaultName}_${new Date().toISOString().slice(0, 10)}`);
-        if (!packageName) return;
-        AssetIO.exportAllAssets(null, packageName);
+      const packageName = await askExportPackageName('导出本地压缩包');
+      if (!packageName) return;
+      AssetIO.exportAllAssets(null, packageName.trim());
+      return;
+    }
+
+    if (action === 'export-remote') {
+      const packageName = await askExportPackageName('导出 GitHub 资源包');
+      if (!packageName) return;
+
+      const input = await showInAppPromptDialog({
+        title: 'GitHub 仓库信息',
+        message: '请输入用户/仓库名、GitHub 仓库链接，或现成的 jsDelivr CDN 前缀。',
+        hint: '示例：user/repo 或 https://github.com/user/repo',
+        label: '仓库信息',
+        placeholder: 'user/repo',
+        confirmText: '下一步',
+        cancelText: '取消',
+        iconClass: 'fa-brands fa-github',
+        accent: '#6f42c1',
+        required: true,
+        requiredMessage: '请输入 GitHub 仓库信息',
       });
-    } else if (action === 'export-remote') {
-      const cpId = getCurrentPackId();
-      getAllImagePacks().then(packs => {
-        const cp = packs.find(p => p.id === cpId);
-        const defaultName = cp ? cp.name : '图包';
-        const packageName = prompt(`将导出当前图包"${defaultName}"的资源\n\n请输入导出包名:`, `${defaultName}_${new Date().toISOString().slice(0, 10)}`);
-        if (!packageName) return;
-        const input = prompt('请输入 GitHub 仓库信息 (格式: 用户名/仓库名 或 GitHub 仓库链接)\n\n将统一生成 jsDelivr CDN 加速链接。');
-        if (!input) return;
-        const rawInput = input.trim();
-        let cleanRepo = '', branch = '', baseUrl = '';
-        if (rawInput.includes('cdn.jsdelivr.net/gh/')) {
-          baseUrl = rawInput.endsWith('/') ? rawInput : `${rawInput}/`;
-          if (!confirm(`确认使用以下 CDN 链接前缀吗？\n${baseUrl}`)) return;
-          AssetIO.exportAllAssets(baseUrl, packageName);
-          return;
+      if (!input) return;
+
+      const rawInput = input.trim();
+      let cleanRepo = '';
+      let branch = '';
+      let baseUrl = '';
+
+      if (rawInput.includes('cdn.jsdelivr.net/gh/')) {
+        baseUrl = rawInput.endsWith('/') ? rawInput : `${rawInput}/`;
+        const confirmed = await showInAppConfirmDialog({
+          title: '确认 CDN 链接前缀',
+          message: `确认使用以下 CDN 链接前缀吗？\n${baseUrl}`,
+          confirmText: '确认导出',
+          cancelText: '返回修改',
+          iconClass: 'fa-solid fa-link',
+          accent: '#6f42c1',
+        });
+        if (!confirmed) return;
+        AssetIO.exportAllAssets(baseUrl, packageName.trim());
+        return;
+      }
+
+      if (rawInput.startsWith('http')) {
+        const rawMatch = rawInput.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\//i);
+        if (rawMatch) {
+          cleanRepo = `${rawMatch[1]}/${rawMatch[2]}`;
+          branch = rawMatch[3];
+        } else {
+          const githubMatch = rawInput.match(/github\.com\/([^/]+)\/([^/#?]+)(?:\.git)?/i);
+          if (githubMatch) cleanRepo = `${githubMatch[1]}/${githubMatch[2].replace(/\.git$/i, '')}`;
         }
-        if (rawInput.startsWith('http')) {
-          const rawMatch = rawInput.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\//i);
-          if (rawMatch) { cleanRepo = `${rawMatch[1]}/${rawMatch[2]}`; branch = rawMatch[3]; }
-          else { const githubMatch = rawInput.match(/github\.com\/([^/]+)\/([^/#?]+)(?:\.git)?/i); if (githubMatch) cleanRepo = `${githubMatch[1]}/${githubMatch[2].replace(/\.git$/i, '')}`; }
-        } else if (rawInput.indexOf('/') > 0 && rawInput.split('/').length === 2) { cleanRepo = rawInput.replace('.git', ''); }
-        if (!cleanRepo) { alert('无法识别 GitHub 仓库信息'); return; }
-        if (!branch) { const branchInput = prompt('请输入分支名或版本号:', 'main'); if (!branchInput) return; branch = branchInput; }
-        baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
-        if (!confirm(`确认生成以下 CDN 链接前缀的配置吗？\n${baseUrl}`)) return;
-        AssetIO.exportAllAssets(baseUrl, packageName);
+      } else if (rawInput.indexOf('/') > 0 && rawInput.split('/').length === 2) {
+        cleanRepo = rawInput.replace(/\.git$/i, '');
+      }
+
+      if (!cleanRepo) {
+        await showInAppAlertDialog({
+          title: '仓库信息无效',
+          message: '无法识别 GitHub 仓库信息，请输入 user/repo 或标准 GitHub 仓库链接。',
+          iconClass: 'fa-solid fa-circle-exclamation',
+          accent: '#dc3545',
+        });
+        return;
+      }
+
+      if (!branch) {
+        const branchInput = await showInAppPromptDialog({
+          title: '填写分支或版本',
+          message: '请输入分支名或版本号。',
+          label: '分支 / 版本',
+          defaultValue: 'main',
+          placeholder: 'main',
+          confirmText: '确认',
+          cancelText: '取消',
+          iconClass: 'fa-solid fa-code-branch',
+          accent: '#6f42c1',
+          required: true,
+          requiredMessage: '请输入分支名或版本号',
+        });
+        if (!branchInput) return;
+        branch = branchInput.trim();
+      }
+
+      baseUrl = `https://cdn.jsdelivr.net/gh/${cleanRepo}@${branch}/`;
+      const confirmed = await showInAppConfirmDialog({
+        title: '确认导出配置',
+        message: `确认生成并使用以下 CDN 链接前缀吗？\n${baseUrl}`,
+        confirmText: '确认导出',
+        cancelText: '返回修改',
+        iconClass: 'fa-solid fa-link',
+        accent: '#6f42c1',
       });
-    } else if (action === 'export-character-card') {
-      exportCurrentCharacterCardWithConfig();
+      if (!confirmed) return;
+      AssetIO.exportAllAssets(baseUrl, packageName.trim());
+      return;
+    }
+
+    if (action === 'export-character-card') {
+      await exportCurrentCharacterCardWithConfig();
     }
   });
 

@@ -63,6 +63,313 @@ function escapeHtml(input) {
     .replace(/'/g, '&#39;');
 }
 
+function formatDialogText(input) {
+  return escapeHtml(input).replace(/\r?\n/g, '<br>');
+}
+
+let inAppDialogCounter = 0;
+function nextInAppDialogId(prefix = 'gal-inline-dialog') {
+  inAppDialogCounter += 1;
+  return `${prefix}-${Date.now()}-${inAppDialogCounter}`;
+}
+
+export function showInAppPromptDialog(options = {}) {
+  const {
+    title = '请输入',
+    message = '',
+    hint = '',
+    label = '',
+    placeholder = '',
+    defaultValue = '',
+    confirmText = '确认',
+    cancelText = '取消',
+    iconClass = 'fa-solid fa-pen-to-square',
+    accent = '#0d6efd',
+    required = false,
+    requiredMessage = '请输入内容',
+    trim = true,
+    inputType = 'text',
+    multiline = false,
+    width = '520px',
+  } = options;
+
+  const dialogId = nextInAppDialogId('gal-inline-prompt');
+  const closeId = `${dialogId}-close`;
+  const cancelId = `${dialogId}-cancel`;
+  const confirmId = `${dialogId}-confirm`;
+  const inputId = `${dialogId}-input`;
+
+  const messageHtml = message
+    ? `<div style="margin-bottom: 12px; color: #555; font-size: 0.92rem; line-height: 1.6;">${formatDialogText(message)}</div>`
+    : '';
+  const hintHtml = hint
+    ? `<div style="margin-top: 8px; color: #7a7a7a; font-size: 0.82rem; line-height: 1.5;">${formatDialogText(hint)}</div>`
+    : '';
+  const labelHtml = label
+    ? `<label for="${inputId}" style="display: block; margin-bottom: 8px; color: #444; font-size: 0.9rem; font-weight: 600;">${escapeHtml(label)}</label>`
+    : '';
+  const inputHtml = multiline
+    ? `<textarea id="${inputId}" placeholder="${escapeHtml(placeholder)}" style="width: 100%; min-height: 110px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box; resize: vertical;">${escapeHtml(defaultValue)}</textarea>`
+    : `<input id="${inputId}" type="${escapeHtml(inputType)}" value="${escapeHtml(defaultValue)}" placeholder="${escapeHtml(placeholder)}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />`;
+
+  const html = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: ${escapeHtml(width)}; width: 92%; padding: 24px;">
+        <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="${escapeHtml(iconClass)}" style="color: ${escapeHtml(accent)};"></i> ${escapeHtml(title)}</span>
+          <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        ${messageHtml}
+        <div style="margin-bottom: 14px;">
+          ${labelHtml}
+          ${inputHtml}
+          ${hintHtml}
+        </div>
+        <div class="gal-input-actions" style="display: flex; gap: 10px;">
+          <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml(cancelText)}</span>
+          </button>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml(accent)}; color: #fff; border-color: ${escapeHtml(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml(confirmText)}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return new Promise((resolve) => {
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(html);
+    const $dialog = $(mountRoot).find(`#${dialogId}`);
+    const $box = $dialog.find('.gal-input-box');
+    const $input = $dialog.find(`#${inputId}`);
+    makeDraggable($box, $dialog.find('.gal-input-title'));
+
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      $dialog.remove();
+      resolve(value);
+    };
+
+    const submit = () => {
+      const raw = String($input.val() ?? '');
+      const value = trim ? raw.trim() : raw;
+      if (required && !value) {
+        showToast(requiredMessage);
+        $input.trigger('focus');
+        return;
+      }
+      done(value);
+    };
+
+    $dialog.find(`#${confirmId}`).on('click', submit);
+    $dialog.find(`#${cancelId}`).on('click', () => done(null));
+    $dialog.find(`#${closeId}`).on('click', () => done(null));
+
+    $dialog.on('click', function (e) {
+      if (e.target === this) done(null);
+    });
+    $dialog.on('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        done(null);
+      }
+    });
+    $input.on('keydown', function (e) {
+      const shouldSubmit = multiline
+        ? e.key === 'Enter' && (e.ctrlKey || e.metaKey)
+        : e.key === 'Enter';
+      if (shouldSubmit) {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    setTimeout(() => {
+      $input.trigger('focus');
+      const el = $input.get(0);
+      if (el && !multiline && typeof el.setSelectionRange === 'function') {
+        const len = String($input.val() || '').length;
+        el.setSelectionRange(len, len);
+      }
+    }, 0);
+  });
+}
+
+export function showInAppConfirmDialog(options = {}) {
+  const {
+    title = '请确认',
+    message = '',
+    hint = '',
+    confirmText = '确认',
+    cancelText = '取消',
+    iconClass = 'fa-solid fa-circle-question',
+    accent = '#0d6efd',
+    width = '500px',
+    danger = false,
+  } = options;
+
+  const dialogId = nextInAppDialogId('gal-inline-confirm');
+  const closeId = `${dialogId}-close`;
+  const cancelId = `${dialogId}-cancel`;
+  const confirmId = `${dialogId}-confirm`;
+
+  const messageHtml = message
+    ? `<div style="margin-bottom: 10px; color: #555; font-size: 0.92rem; line-height: 1.6; white-space: normal;">${formatDialogText(message)}</div>`
+    : '';
+  const hintHtml = hint
+    ? `<div style="margin-bottom: 4px; color: #7a7a7a; font-size: 0.82rem; line-height: 1.5;">${formatDialogText(hint)}</div>`
+    : '';
+  const confirmColor = danger ? '#dc3545' : accent;
+
+  const html = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: ${escapeHtml(width)}; width: 90%; padding: 24px;">
+        <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="${escapeHtml(iconClass)}" style="color: ${escapeHtml(confirmColor)};"></i> ${escapeHtml(title)}</span>
+          <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid ${escapeHtml(confirmColor)};">
+          ${messageHtml}
+          ${hintHtml}
+        </div>
+        <div class="gal-input-actions" style="display: flex; gap: 10px;">
+          <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml(cancelText)}</span>
+          </button>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml(confirmColor)}; color: #fff; border-color: ${escapeHtml(confirmColor)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml(confirmText)}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return new Promise((resolve) => {
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(html);
+    const $dialog = $(mountRoot).find(`#${dialogId}`);
+    makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
+
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      $dialog.remove();
+      resolve(value);
+    };
+
+    $dialog.find(`#${confirmId}`).on('click', () => done(true));
+    $dialog.find(`#${cancelId}`).on('click', () => done(false));
+    $dialog.find(`#${closeId}`).on('click', () => done(false));
+    $dialog.on('click', function (e) {
+      if (e.target === this) done(false);
+    });
+    $dialog.on('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        done(false);
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        done(true);
+      }
+    });
+
+    setTimeout(() => {
+      $dialog.find(`#${confirmId}`).trigger('focus');
+    }, 0);
+  });
+}
+
+export function showInAppAlertDialog(options = {}) {
+  const {
+    title = '提示',
+    message = '',
+    details = '',
+    buttonText = '我知道了',
+    iconClass = 'fa-solid fa-circle-info',
+    accent = '#0d6efd',
+    width = '560px',
+  } = options;
+
+  const detailLines = Array.isArray(details)
+    ? details.map(v => String(v || '').trim()).filter(Boolean)
+    : String(details || '').trim()
+      ? [String(details || '').trim()]
+      : [];
+  const detailHtml = detailLines.length > 0
+    ? `
+      <div style="margin-top: 10px; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 12px; max-height: 220px; overflow-y: auto;">
+        ${detailLines.map(line => `<div style="font-size: 0.88rem; line-height: 1.55; color: #555; white-space: pre-wrap; margin-bottom: 4px;">${formatDialogText(line)}</div>`).join('')}
+      </div>
+    `
+    : '';
+
+  const dialogId = nextInAppDialogId('gal-inline-alert');
+  const closeId = `${dialogId}-close`;
+  const okId = `${dialogId}-ok`;
+
+  const html = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: ${escapeHtml(width)}; width: 92%; padding: 24px;">
+        <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="${escapeHtml(iconClass)}" style="color: ${escapeHtml(accent)};"></i> ${escapeHtml(title)}</span>
+          <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div style="margin-bottom: 16px; color: #555; font-size: 0.93rem; line-height: 1.65; white-space: normal;">
+          ${formatDialogText(message)}
+          ${detailHtml}
+        </div>
+        <div class="gal-input-actions" style="display: flex; justify-content: flex-end;">
+          <button class="gal-action-btn" id="${okId}" style="min-width: 130px; min-height: 42px; justify-content: center; background: ${escapeHtml(accent)}; color: #fff; border-color: ${escapeHtml(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml(buttonText)}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return new Promise((resolve) => {
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(html);
+    const $dialog = $(mountRoot).find(`#${dialogId}`);
+    makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
+
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      $dialog.remove();
+      resolve();
+    };
+
+    $dialog.find(`#${okId}`).on('click', done);
+    $dialog.find(`#${closeId}`).on('click', done);
+    $dialog.on('click', function (e) {
+      if (e.target === this) done();
+    });
+    $dialog.on('keydown', function (e) {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        e.preventDefault();
+        done();
+      }
+    });
+
+    setTimeout(() => {
+      $dialog.find(`#${okId}`).trigger('focus');
+    }, 0);
+  });
+}
+
 function downloadTextFile(filename, text, mimeType = 'application/json') {
   const blob = new Blob([text], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -637,17 +944,25 @@ async function resolveCharacterCardForExport(options = {}) {
       if (hit) return hit;
     }
 
-    if (typeof prompt === 'function') {
-      const preview = allNames.slice(0, 20).join('、');
-      const more = allNames.length > 20 ? ` ... 共 ${allNames.length} 个` : '';
-      const answer = prompt(
-        `当前会话无法通过 'current' 读取角色卡。\n请输入要导出的角色卡名称：\n${preview}${more}`,
-        contextCandidates[0] || allNames[0] || '',
-      );
-      if (typeof answer === 'string' && answer.trim()) {
-        const hit = await tryGetCharacter(answer.trim(), 'manual-input');
-        if (hit) return hit;
-      }
+    const preview = allNames.slice(0, 20).join('、');
+    const more = allNames.length > 20 ? ` ... 共 ${allNames.length} 个` : '';
+    const answer = await showInAppPromptDialog({
+      title: '手动指定角色卡',
+      message: '当前会话无法通过 "current" 读取角色卡，请输入要导出的角色卡名称。',
+      hint: `可选角色：${preview}${more}`,
+      label: '角色卡名称',
+      placeholder: '请输入角色卡名称',
+      defaultValue: contextCandidates[0] || allNames[0] || '',
+      confirmText: '继续导出',
+      cancelText: '取消',
+      iconClass: 'fa-solid fa-id-card',
+      accent: '#0d6efd',
+      required: true,
+      requiredMessage: '请输入角色卡名称',
+    });
+    if (typeof answer === 'string' && answer.trim()) {
+      const hit = await tryGetCharacter(answer.trim(), 'manual-input');
+      if (hit) return hit;
     }
   }
 
@@ -772,10 +1087,17 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     let maxEmbeddedLive2dBytes = options.maxEmbeddedLive2dBytes;
 
     if (interactive) {
-      const remoteAnswer = prompt(
-        '请输入图包远程配置（可选）:\n- 可填 baseUrl（例如 https://cdn.jsdelivr.net/gh/user/repo@main/ ）\n- 或直接填 remote_assets.json 完整 URL\n\n留空则只导出绑定配置',
-        remoteInput || '',
-      );
+      const remoteAnswer = await showInAppPromptDialog({
+        title: '远程资源配置（可选）',
+        message: '可填写 baseUrl（例如 https://cdn.jsdelivr.net/gh/user/repo@main/ ）\n也可直接填写 remote_assets.json 完整 URL。\n留空则只导出绑定配置。',
+        label: '远程配置',
+        placeholder: 'https://cdn.jsdelivr.net/gh/user/repo@main/',
+        defaultValue: remoteInput || '',
+        confirmText: '确认',
+        cancelText: '跳过',
+        iconClass: 'fa-solid fa-cloud',
+        accent: '#17a2b8',
+      });
       if (remoteAnswer === null) {
         showToast('未设置远程资源地址，继续使用当前导出参数');
       } else {
@@ -783,11 +1105,27 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       }
 
       includeAllPacks = includeAllPacks === undefined
-        ? confirm('是否导出所有图包记录？\n是：保留 packs 列表（推荐）\n否：只导出当前图包')
+        ? await showInAppConfirmDialog({
+          title: '图包范围',
+          message: '是否导出所有图包记录？',
+          hint: '确认：保留 packs 列表（推荐）\n取消：只导出当前图包',
+          confirmText: '导出所有图包',
+          cancelText: '仅当前图包',
+          iconClass: 'fa-solid fa-layer-group',
+          accent: '#0d6efd',
+        })
         : !!includeAllPacks;
 
       embedLocalLive2d = embedLocalLive2d === undefined
-        ? confirm('Live2D 导出策略：\n是：本地模型导出本体；远程模型导出 URL\n否：本地模型不导出本体')
+        ? await showInAppConfirmDialog({
+          title: 'Live2D 导出策略',
+          message: '是否导出本地 Live2D 模型本体？',
+          hint: '确认：本地模型导出本体，远程模型导出 URL\n取消：本地模型不导出本体',
+          confirmText: '导出本体',
+          cancelText: '仅导出引用',
+          iconClass: 'fa-solid fa-cube',
+          accent: '#6f42c1',
+        })
         : !!embedLocalLive2d;
 
       includeLocalLive2dPlaceholder = includeLocalLive2dPlaceholder === undefined
@@ -795,10 +1133,18 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
         : !!includeLocalLive2dPlaceholder;
 
       if (embedLocalLive2d) {
-        const limitInput = prompt(
-          '请输入本地 Live2D 本体导出阈值（MB）。\n超过阈值将自动跳过本体并建议改用 GitHub 远程导出。\n默认 25',
-          String(Math.round((Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES) / 1024 / 1024)),
-        );
+        const limitInput = await showInAppPromptDialog({
+          title: 'Live2D 本体导出阈值',
+          message: '请输入本地 Live2D 本体导出阈值（MB）。\n超过阈值将自动跳过本体并建议改用 GitHub 远程导出。',
+          label: '阈值（MB）',
+          placeholder: '25',
+          defaultValue: String(Math.round((Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES) / 1024 / 1024)),
+          confirmText: '确认阈值',
+          cancelText: '使用默认',
+          iconClass: 'fa-solid fa-gauge-high',
+          accent: '#f39c12',
+          inputType: 'number',
+        });
         if (limitInput === null) {
           showToast('未设置 Live2D 本体阈值，使用默认 25MB');
         } else {
@@ -868,7 +1214,14 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
       const msg =
         `导出失败：角色卡体积 ${formatSizeMb(bytes)} 超过 Discord 限制 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}。\n请改用远程资源导出。`;
-      if (interactive) alert(msg);
+      if (interactive) {
+        await showInAppAlertDialog({
+          title: '导出失败',
+          message: msg,
+          iconClass: 'fa-solid fa-circle-exclamation',
+          accent: '#dc3545',
+        });
+      }
       throw new Error(msg);
     }
 
@@ -885,7 +1238,14 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     if (Array.isArray(config?.meta?.warnings) && config.meta.warnings.length > 0) {
       console.warn(`[${SCRIPT_NAME}] 角色卡导出警告`, config.meta.warnings);
       if (interactive) {
-        alert(`导出完成，但有以下提醒：\n\n${config.meta.warnings.map((w, i) => `${i + 1}. ${w}`).join('\n')}`);
+        await showInAppAlertDialog({
+          title: '导出完成提醒',
+          message: '导出完成，但有以下提醒：',
+          details: config.meta.warnings.map((w, i) => `${i + 1}. ${w}`),
+          buttonText: '我知道了',
+          iconClass: 'fa-solid fa-triangle-exclamation',
+          accent: '#f39c12',
+        });
       }
     }
     return true;

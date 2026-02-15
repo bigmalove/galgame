@@ -12938,6 +12938,47 @@ ${firstResult}`;
     if (bindAssetsPane) _bindAssetsPaneRef = bindAssetsPane;
     if (assetStyles) _assetStylesRef = assetStyles;
   }
+  function buildAboutPane() {
+    return `
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-bullhorn"></i> \u63D2\u4EF6\u53D1\u5E03\u5730\u5740</h3>
+      <p>
+        <a href="https://discord.com/channels/1134557553011998840/1464262276583395359" target="_blank" rel="noopener noreferrer">
+          Discord \u53D1\u5E03\u5E16\uFF08\u70B9\u51FB\u6253\u5F00\uFF09
+        </a>
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-copyright"></i> Live2D \u7248\u6743\u4E0E\u4F7F\u7528\u58F0\u660E</h3>
+      <p>
+        Live2D \u6A21\u578B\u53CA\u5176\u76F8\u5173\u7D20\u6750\u7684\u7248\u6743\u5F52\u539F\u4F5C\u8005\u6216\u6743\u5229\u4EBA\u6240\u6709\u3002\u9664\u539F\u59CB\u6388\u6743\u53E6\u6709\u660E\u786E\u8BB8\u53EF\u5916\uFF0C\u672C\u63D2\u4EF6\u4E2D\u7684\u6A21\u578B\u4E0E\u8D44\u6E90\u4EC5\u4F9B\u5B66\u4E60\u3001\u7814\u7A76\u4E0E\u6280\u672F\u4EA4\u6D41\u4F7F\u7528\u3002
+      </p>
+      <p class="gal-about-warning">
+        \u7981\u6B62\u5C06 Live2D \u6A21\u578B\u6216\u76F8\u5173\u7D20\u6750\u7528\u4E8E\u4EFB\u4F55\u5546\u4E1A\u7528\u9014\u3002
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-scale-balanced"></i> \u8BB8\u53EF\u534F\u8BAE\uFF08CC BY-NC-SA 4.0\uFF09</h3>
+      <p>
+        \u672C\u63D2\u4EF6\u76F8\u5173\u5185\u5BB9\u9075\u5FAA
+        <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
+        \u58F0\u660E\u3002\u4F60\u53EF\u4EE5\u5728\u7F72\u540D\u5E76\u4EE5\u76F8\u540C\u65B9\u5F0F\u5171\u4EAB\u7684\u524D\u63D0\u4E0B\u8FDB\u884C\u975E\u5546\u4E1A\u4F7F\u7528\u4E0E\u4FEE\u6539\u3002
+      </p>
+      <p class="gal-about-warning">
+        \u660E\u786E\u7981\u6B62\u5546\u7528\uFF0C\u5305\u62EC\u4F46\u4E0D\u9650\u4E8E\u552E\u5356\u3001\u4ED8\u8D39\u5206\u53D1\u3001\u5546\u4E1A\u5F15\u6D41\u3001\u5546\u4E1A\u670D\u52A1\u96C6\u6210\u3002
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-gavel"></i> \u6CD5\u5F8B\u5408\u89C4\u58F0\u660E</h3>
+      <p>
+        \u4F7F\u7528\u8005\u5FC5\u987B\u9075\u5B88\u6240\u5728\u5730\u4EE5\u53CA\u8D44\u6E90\u6765\u6E90\u5730\u7684\u6CD5\u5F8B\u6CD5\u89C4\uFF0C\u7981\u6B62\u5C06\u672C\u63D2\u4EF6\u7528\u4E8E\u8FDD\u6CD5\u3001\u4FB5\u6743\u3001\u89C4\u907F\u76D1\u7BA1\u6216\u5176\u4ED6\u4E0D\u5F53\u7528\u9014\u3002\u56E0\u8FDD\u89C4\u4F7F\u7528\u4EA7\u751F\u7684\u98CE\u9669\u4E0E\u8D23\u4EFB\u7531\u4F7F\u7528\u8005\u81EA\u884C\u627F\u62C5\u3002
+      </p>
+    </div>
+  `;
+  }
   function applySettingsToUI() {
     const settings = getSettings();
     const fontScale = 0.5 + settings.fontSize / 30 * 1;
@@ -13115,6 +13156,7 @@ ${firstResult}`;
         <div class="gal-l1-tab-header">
           <div class="gal-l1-tab-btn ${topTab === "settings" ? "active" : ""}" data-l1-tab="settings"><i class="fa-solid fa-gear"></i> <span>\u57FA\u7840\u8BBE\u7F6E</span></div>
           <div class="gal-l1-tab-btn ${topTab === "assets" ? "active" : ""}" data-l1-tab="assets"><i class="fa-solid fa-folder-open"></i> <span>\u8D44\u6E90\u7BA1\u7406</span></div>
+          <div class="gal-l1-tab-btn ${topTab === "about" ? "active" : ""}" data-l1-tab="about"><i class="fa-solid fa-circle-info"></i> <span>\u5173\u4E8E</span></div>
           <div style="flex:1;"></div>
           <button class="gal-config-close" id="gal-settings-close"><i class="fa-solid fa-times"></i></button>
         </div>
@@ -13434,6 +13476,11 @@ ${firstResult}`;
         <div data-l1-pane="assets" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "assets" ? "display: none;" : ""}">
           ${assetsHtml}
         </div>
+
+        <!-- L1 Pane: \u5173\u4E8E -->
+        <div data-l1-pane="about" class="gal-about-pane" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "about" ? "display: none;" : ""}">
+          ${buildAboutPane()}
+        </div>
       </div>
     </div>
 
@@ -13467,6 +13514,14 @@ ${firstResult}`;
       .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
       .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
       .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
+      .gal-about-pane { display: flex; flex-direction: column; gap: 14px; }
+      .gal-about-card { background: #f8fbff; border: 1px solid #dce9ff; border-radius: 10px; padding: 16px; color: #2f3a4a; line-height: 1.7; }
+      .gal-about-card h3 { margin: 0 0 8px 0; color: ${THEME.dark}; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+      .gal-about-card h3 i { color: ${THEME.accent}; }
+      .gal-about-card p { margin: 0 0 8px 0; }
+      .gal-about-card p:last-child { margin-bottom: 0; }
+      .gal-about-card a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+      .gal-about-warning { color: #b42318; font-weight: 700; }
 
       ${assetStyles}
     </style>

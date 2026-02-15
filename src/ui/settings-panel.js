@@ -35,6 +35,48 @@ export function setSettingsPanelRefs({ buildAssetsPane, bindAssetsPane, assetSty
   if (assetStyles) _assetStylesRef = assetStyles;
 }
 
+function buildAboutPane() {
+  return `
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-bullhorn"></i> 插件发布地址</h3>
+      <p>
+        <a href="https://discord.com/channels/1134557553011998840/1464262276583395359" target="_blank" rel="noopener noreferrer">
+          Discord 发布帖（点击打开）
+        </a>
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-copyright"></i> Live2D 版权与使用声明</h3>
+      <p>
+        Live2D 模型及其相关素材的版权归原作者或权利人所有。除原始授权另有明确许可外，本插件中的模型与资源仅供学习、研究与技术交流使用。
+      </p>
+      <p class="gal-about-warning">
+        禁止将 Live2D 模型或相关素材用于任何商业用途。
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-scale-balanced"></i> 许可协议（CC BY-NC-SA 4.0）</h3>
+      <p>
+        本插件相关内容遵循
+        <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
+        声明。你可以在署名并以相同方式共享的前提下进行非商业使用与修改。
+      </p>
+      <p class="gal-about-warning">
+        明确禁止商用，包括但不限于售卖、付费分发、商业引流、商业服务集成。
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-gavel"></i> 法律合规声明</h3>
+      <p>
+        使用者必须遵守所在地以及资源来源地的法律法规，禁止将本插件用于违法、侵权、规避监管或其他不当用途。因违规使用产生的风险与责任由使用者自行承担。
+      </p>
+    </div>
+  `;
+}
+
 // 应用设置到 UI
 export function applySettingsToUI() {
   const settings = getSettings();
@@ -237,6 +279,7 @@ export async function showSettingsPanel(topTab, subTab) {
         <div class="gal-l1-tab-header">
           <div class="gal-l1-tab-btn ${topTab === 'settings' ? 'active' : ''}" data-l1-tab="settings"><i class="fa-solid fa-gear"></i> <span>基础设置</span></div>
           <div class="gal-l1-tab-btn ${topTab === 'assets' ? 'active' : ''}" data-l1-tab="assets"><i class="fa-solid fa-folder-open"></i> <span>资源管理</span></div>
+          <div class="gal-l1-tab-btn ${topTab === 'about' ? 'active' : ''}" data-l1-tab="about"><i class="fa-solid fa-circle-info"></i> <span>关于</span></div>
           <div style="flex:1;"></div>
           <button class="gal-config-close" id="gal-settings-close"><i class="fa-solid fa-times"></i></button>
         </div>
@@ -556,6 +599,11 @@ export async function showSettingsPanel(topTab, subTab) {
         <div data-l1-pane="assets" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== 'assets' ? 'display: none;' : ''}">
           ${assetsHtml}
         </div>
+
+        <!-- L1 Pane: 关于 -->
+        <div data-l1-pane="about" class="gal-about-pane" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== 'about' ? 'display: none;' : ''}">
+          ${buildAboutPane()}
+        </div>
       </div>
     </div>
 
@@ -589,6 +637,14 @@ export async function showSettingsPanel(topTab, subTab) {
       .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
       .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
       .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
+      .gal-about-pane { display: flex; flex-direction: column; gap: 14px; }
+      .gal-about-card { background: #f8fbff; border: 1px solid #dce9ff; border-radius: 10px; padding: 16px; color: #2f3a4a; line-height: 1.7; }
+      .gal-about-card h3 { margin: 0 0 8px 0; color: ${THEME.dark}; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+      .gal-about-card h3 i { color: ${THEME.accent}; }
+      .gal-about-card p { margin: 0 0 8px 0; }
+      .gal-about-card p:last-child { margin-bottom: 0; }
+      .gal-about-card a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+      .gal-about-warning { color: #b42318; font-weight: 700; }
 
       ${assetStyles}
     </style>

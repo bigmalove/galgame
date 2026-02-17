@@ -1,5 +1,11 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { saveLive2DModel } from '../db/live2d-models.js';
+import { Live2DLoader } from './loader.js';
+import {
+  LIVE2D_RUNTIME_TYPES,
+  inferCubismVersionFromModelJson,
+  resolveRuntimeTypeFromCubismVersion,
+} from './runtime-router.js';
 
 // ============================================
 // Live2D 模型上传器
@@ -66,11 +72,15 @@ export const Live2DUploader = {
 
     let modelData;
     if (isModel3) {
+      const moc3Data = await this._extractFile(zip, modelDir, modelJson.FileReferences?.Moc);
+      const detectedCubismVersion = await this._resolveModel3CubismVersion(modelJson, moc3Data);
+      const runtimeType = resolveRuntimeTypeFromCubismVersion(detectedCubismVersion);
       modelData = {
         modelId: characterId,
-        cubismVersion: 4,
+        cubismVersion: detectedCubismVersion,
+        runtimeType,
         modelJson: modelJson,
-        moc3: await this._extractFile(zip, modelDir, modelJson.FileReferences?.Moc),
+        moc3: moc3Data,
         moc: null,
         textures: await this._extractTextures(zip, modelDir, modelJson),
         motions: await this._extractMotions(zip, modelDir, modelJson),
@@ -91,6 +101,7 @@ export const Live2DUploader = {
       modelData = {
         modelId: characterId,
         cubismVersion: 2,
+        runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
         modelJson: modelJson,
         moc3: null,
         moc: await this._extractFile(zip, modelDir, mocPath),
@@ -114,6 +125,67 @@ export const Live2DUploader = {
 
     console.log(`[${SCRIPT_NAME}] Live2DUploader: 模型 ${characterId} 保存成功`);
     return modelData;
+  },
+
+  _toArrayBuffer(input) {
+    if (!input) return null;
+    if (input instanceof ArrayBuffer) return input;
+    if (ArrayBuffer.isView(input)) {
+      return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+    }
+    return null;
+  },
+
+  _normalizeMocVersion(rawMocVersion) {
+    const value = Number(rawMocVersion || 0) || 0;
+    if (value >= 5) return 5;
+    if (value >= 1) return 4;
+    return null;
+  },
+
+  _detectCubismVersionFromMoc3Buffer(moc3Data) {
+    const moc3Buffer = this._toArrayBuffer(moc3Data);
+    if (!moc3Buffer) return null;
+
+    const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+    const core = _topWindow?.Live2DCubismCore;
+    const Moc = core?.Moc;
+    const Version = core?.Version;
+    if (typeof Moc?.fromArrayBuffer !== 'function' || typeof Version?.csmGetMocVersion !== 'function') {
+      return null;
+    }
+
+    let mocRef = null;
+    try {
+      mocRef = Moc.fromArrayBuffer(moc3Buffer);
+      if (!mocRef) return null;
+
+      const rawMocVersion = Number(Version.csmGetMocVersion(mocRef, moc3Buffer) || 0) || 0;
+      return this._normalizeMocVersion(rawMocVersion);
+    } catch (e) {
+      return null;
+    } finally {
+      try {
+        if (mocRef && typeof mocRef._release === 'function') mocRef._release();
+        else if (mocRef && typeof mocRef.release === 'function') mocRef.release();
+      } catch (e) {}
+    }
+  },
+
+  async _resolveModel3CubismVersion(modelJson, moc3Data) {
+    const jsonFallbackVersion = inferCubismVersionFromModelJson(modelJson, 4) || 4;
+
+    try {
+      await Live2DLoader.ensureCubism5Core();
+    } catch (e) {}
+
+    const mocVersion = this._detectCubismVersionFromMoc3Buffer(moc3Data);
+    if (mocVersion != null && mocVersion !== jsonFallbackVersion) {
+      console.log(
+        `[${SCRIPT_NAME}] Live2DUploader: moc3 version detected as ${mocVersion} (model.json inferred ${jsonFallbackVersion})`,
+      );
+    }
+    return mocVersion || jsonFallbackVersion;
   },
 
   async _findModelJson(zip) {

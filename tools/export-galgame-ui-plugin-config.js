@@ -29,6 +29,61 @@
     LIVE2D_CONFIG: `${SCRIPT_ID}_live2d_config`,
   };
 
+  function parseMajorVersion(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.floor(value);
+    }
+    if (typeof value !== 'string') return null;
+    const match = value.trim().match(/(\d+)(?:\.\d+)?/);
+    if (!match) return null;
+    const major = Number.parseInt(match[1], 10);
+    return Number.isFinite(major) ? major : null;
+  }
+
+  function normalizeCubismVersion(value) {
+    const major = parseMajorVersion(value);
+    if (major == null) return null;
+    if (major >= 5) return 5;
+    if (major >= 3) return 4;
+    if (major === 2) return 2;
+    return null;
+  }
+
+  function inferCubismVersionFromModelJson(modelJson, fallback = null) {
+    if (!modelJson || typeof modelJson !== 'object') {
+      return normalizeCubismVersion(fallback);
+    }
+    const candidates = [
+      modelJson.Version,
+      modelJson.version,
+      modelJson?.Meta?.Version,
+      modelJson?.meta?.version,
+    ];
+    for (const value of candidates) {
+      const parsed = normalizeCubismVersion(value);
+      if (parsed != null) return parsed;
+    }
+    if (modelJson.FileReferences && typeof modelJson.FileReferences === 'object') {
+      return normalizeCubismVersion(fallback) ?? 4;
+    }
+    if (typeof modelJson.model === 'string' || typeof modelJson.Model === 'string') {
+      return normalizeCubismVersion(fallback) ?? 2;
+    }
+    return normalizeCubismVersion(fallback);
+  }
+
+  function withResolvedLive2DRuntime(modelData) {
+    const input = modelData && typeof modelData === 'object' ? modelData : {};
+    const cubismVersion = inferCubismVersionFromModelJson(input.modelJson, input.cubismVersion);
+    const explicitRuntimeType = String(input.runtimeType || '').trim().toLowerCase();
+    const runtimeType = explicitRuntimeType || (cubismVersion >= 5 ? 'cubism5' : 'legacy');
+    return {
+      ...input,
+      runtimeType,
+      cubismVersion: cubismVersion ?? (runtimeType === 'cubism5' ? 5 : null),
+    };
+  }
+
   function safeJsonParse(text, fallback) {
     try {
       if (text == null || text === '') return fallback;
@@ -157,12 +212,14 @@
   }
 
   async function serializeLive2DModelData(modelData) {
+    const normalizedModel = withResolvedLive2DRuntime(modelData);
     const out = {
-      modelId: String(modelData?.modelId || ''),
-      cubismVersion: Number(modelData?.cubismVersion || 0) || null,
-      uploadTime: Number(modelData?.uploadTime || 0) || null,
-      fileSize: Number(modelData?.fileSize || 0) || null,
-      modelJson: modelData?.modelJson || null,
+      modelId: String(normalizedModel?.modelId || ''),
+      runtimeType: String(normalizedModel?.runtimeType || 'legacy'),
+      cubismVersion: Number(normalizedModel?.cubismVersion || 0) || null,
+      uploadTime: Number(normalizedModel?.uploadTime || 0) || null,
+      fileSize: Number(normalizedModel?.fileSize || 0) || null,
+      modelJson: normalizedModel?.modelJson || null,
       moc3Base64: null,
       mocBase64: null,
       physicsBase64: null,
@@ -172,17 +229,17 @@
       expressions: [],
     };
 
-    const moc3 = toArrayBuffer(modelData?.moc3);
-    const moc = toArrayBuffer(modelData?.moc);
-    const physics = toArrayBuffer(modelData?.physics);
-    const pose = toArrayBuffer(modelData?.pose);
+    const moc3 = toArrayBuffer(normalizedModel?.moc3);
+    const moc = toArrayBuffer(normalizedModel?.moc);
+    const physics = toArrayBuffer(normalizedModel?.physics);
+    const pose = toArrayBuffer(normalizedModel?.pose);
     if (moc3) out.moc3Base64 = arrayBufferToBase64(moc3);
     if (moc) out.mocBase64 = arrayBufferToBase64(moc);
     if (physics) out.physicsBase64 = arrayBufferToBase64(physics);
     if (pose) out.poseBase64 = arrayBufferToBase64(pose);
 
-    if (Array.isArray(modelData?.textures)) {
-      for (const tex of modelData.textures) {
+    if (Array.isArray(normalizedModel?.textures)) {
+      for (const tex of normalizedModel.textures) {
         const name = String(tex?.name || '');
         const data = tex?.data;
         if (!data) continue;
@@ -207,7 +264,7 @@
       }
     }
 
-    const motions = modelData?.motions;
+    const motions = normalizedModel?.motions;
     if (motions && typeof motions === 'object') {
       for (const [groupName, list] of Object.entries(motions)) {
         if (!Array.isArray(list) || list.length === 0) continue;
@@ -224,8 +281,8 @@
       }
     }
 
-    if (Array.isArray(modelData?.expressions)) {
-      for (const expr of modelData.expressions) {
+    if (Array.isArray(normalizedModel?.expressions)) {
+      for (const expr of normalizedModel.expressions) {
         const dataBuffer = toArrayBuffer(expr?.data);
         if (!dataBuffer) continue;
         out.expressions.push({
@@ -335,7 +392,8 @@
 
     const live2dOutModels = {};
     const warnings = [];
-    for (const m of Array.isArray(live2dModels) ? live2dModels : []) {
+    for (const rawModel of Array.isArray(live2dModels) ? live2dModels : []) {
+      const m = withResolvedLive2DRuntime(rawModel);
       const characterId = String(m?.modelId || '').trim();
       if (!characterId) continue;
 
@@ -345,6 +403,8 @@
         live2dOutModels[characterId] = {
           source: 'remote',
           modelUrl: m.modelUrl.trim(),
+          runtimeType: m.runtimeType || 'legacy',
+          cubismVersion: Number(m?.cubismVersion || 0) || null,
           ...(charCfg ? { config: charCfg } : {}),
         };
         continue;
@@ -366,6 +426,8 @@
           live2dOutModels[characterId] = {
             source: 'idb',
             modelId: characterId,
+            runtimeType: m.runtimeType || 'legacy',
+            cubismVersion: Number(m?.cubismVersion || 0) || null,
             sizeBytes: modelSizeBytes,
             note: warn,
             ...(charCfg ? { config: charCfg } : {}),
@@ -378,6 +440,8 @@
           live2dOutModels[characterId] = {
             source: 'embedded',
             format: 'live2d_idb_v1',
+            runtimeType: m.runtimeType || 'legacy',
+            cubismVersion: Number(m?.cubismVersion || 0) || null,
             sizeBytes: modelSizeBytes,
             payload,
             ...(charCfg ? { config: charCfg } : {}),
@@ -389,6 +453,8 @@
           live2dOutModels[characterId] = {
             source: 'idb',
             modelId: characterId,
+            runtimeType: m.runtimeType || 'legacy',
+            cubismVersion: Number(m?.cubismVersion || 0) || null,
             sizeBytes: modelSizeBytes,
             note: warn,
             ...(charCfg ? { config: charCfg } : {}),
@@ -401,6 +467,8 @@
         live2dOutModels[characterId] = {
           source: 'idb',
           modelId: characterId,
+          runtimeType: m.runtimeType || 'legacy',
+          cubismVersion: Number(m?.cubismVersion || 0) || null,
           sizeBytes: modelSizeBytes,
           note:
             'Local Live2D model is stored in IndexedDB; binary payload is not exported. Upload to remote and use source=remote if you want portability.',

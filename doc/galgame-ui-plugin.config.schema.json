@@ -46,10 +46,18 @@
             "properties": {
               "source": {
                 "type": "string",
-                "enum": ["remote", "local", "idb"]
+                "enum": ["remote", "local", "idb", "embedded"]
               },
               "modelUrl": { "type": "string" },
               "modelId": { "type": "string" },
+              "runtimeType": {
+                "type": "string",
+                "enum": ["legacy", "cubism5"]
+              },
+              "cubismVersion": {
+                "type": ["number", "null"],
+                "enum": [2, 4, 5, null]
+              },
               "transform": {
                 "type": "object",
                 "additionalProperties": true,

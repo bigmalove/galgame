@@ -17,6 +17,7 @@ import { getCharacterUseLive2D, setCharacterUseLive2D } from '../live2d/render-m
 import { Live2DManager } from '../live2d/manager.js';
 import { Live2DStage } from '../live2d/stage.js';
 import { Live2DUploader } from '../live2d/uploader.js';
+import { LIVE2D_RUNTIME_TYPES } from '../live2d/runtime-router.js';
 import { getLive2DExpressionList, getLive2DMotionGroups } from '../live2d/expression-motion.js';
 import {
   fetchLive2DDirectory,
@@ -152,6 +153,7 @@ function createRemoteLive2DModelData(characterId, modelUrl) {
     source: 'remote',
     modelUrl: modelUrl,
     cubismVersion: null,
+    runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
     modelJson: null,
     moc3: null,
     moc: null,

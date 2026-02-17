@@ -6,6 +6,7 @@ import { getCurrentPackId, getAllImagePacks, createImagePack } from '../db/image
 import { getAllLive2DModels } from '../db/live2d-models.js';
 import { getTTSEnabled, getAllCharacterTTSVoices } from '../audio/tts-config.js';
 import { CHAR_USE_LIVE2D_KEY, LIVE2D_CONFIG_KEY } from '../live2d/render-mode.js';
+import { withResolvedLive2DRuntime } from '../live2d/runtime-router.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { showToast } from './toast.js';
@@ -464,12 +465,14 @@ function estimateLive2DModelSizeBytes(modelData) {
 }
 
 async function serializeLive2DModelData(modelData) {
+  const normalizedModel = withResolvedLive2DRuntime(modelData);
   const out = {
-    modelId: String(modelData?.modelId || ''),
-    cubismVersion: Number(modelData?.cubismVersion || 0) || null,
-    uploadTime: Number(modelData?.uploadTime || 0) || null,
-    fileSize: Number(modelData?.fileSize || 0) || null,
-    modelJson: modelData?.modelJson || null,
+    modelId: String(normalizedModel?.modelId || ''),
+    runtimeType: String(normalizedModel?.runtimeType || 'legacy'),
+    cubismVersion: Number(normalizedModel?.cubismVersion || 0) || null,
+    uploadTime: Number(normalizedModel?.uploadTime || 0) || null,
+    fileSize: Number(normalizedModel?.fileSize || 0) || null,
+    modelJson: normalizedModel?.modelJson || null,
     moc3Base64: null,
     mocBase64: null,
     physicsBase64: null,
@@ -479,17 +482,17 @@ async function serializeLive2DModelData(modelData) {
     expressions: [],
   };
 
-  const moc3 = toArrayBuffer(modelData?.moc3);
-  const moc = toArrayBuffer(modelData?.moc);
-  const physics = toArrayBuffer(modelData?.physics);
-  const pose = toArrayBuffer(modelData?.pose);
+  const moc3 = toArrayBuffer(normalizedModel?.moc3);
+  const moc = toArrayBuffer(normalizedModel?.moc);
+  const physics = toArrayBuffer(normalizedModel?.physics);
+  const pose = toArrayBuffer(normalizedModel?.pose);
   if (moc3) out.moc3Base64 = arrayBufferToBase64(moc3);
   if (moc) out.mocBase64 = arrayBufferToBase64(moc);
   if (physics) out.physicsBase64 = arrayBufferToBase64(physics);
   if (pose) out.poseBase64 = arrayBufferToBase64(pose);
 
-  if (Array.isArray(modelData?.textures)) {
-    for (const tex of modelData.textures) {
+  if (Array.isArray(normalizedModel?.textures)) {
+    for (const tex of normalizedModel.textures) {
       if (!tex?.data) continue;
       let dataBase64 = '';
       let mimeType = 'application/octet-stream';
@@ -511,8 +514,8 @@ async function serializeLive2DModelData(modelData) {
     }
   }
 
-  if (modelData?.motions && typeof modelData.motions === 'object') {
-    for (const [groupName, list] of Object.entries(modelData.motions)) {
+  if (normalizedModel?.motions && typeof normalizedModel.motions === 'object') {
+    for (const [groupName, list] of Object.entries(normalizedModel.motions)) {
       if (!Array.isArray(list)) continue;
       const exportedList = [];
       for (const motion of list) {
@@ -527,8 +530,8 @@ async function serializeLive2DModelData(modelData) {
     }
   }
 
-  if (Array.isArray(modelData?.expressions)) {
-    for (const expr of modelData.expressions) {
+  if (Array.isArray(normalizedModel?.expressions)) {
+    for (const expr of normalizedModel.expressions) {
       const dataBuffer = toArrayBuffer(expr?.data);
       if (!dataBuffer) continue;
       out.expressions.push({
@@ -605,7 +608,7 @@ async function buildGalgameCardConfig(options = {}) {
   }
 
   for (let i = 0; i < live2dList.length; i++) {
-    const model = live2dList[i];
+    const model = withResolvedLive2DRuntime(live2dList[i]);
     const stepPercent = 24 + Math.round((i / Math.max(1, live2dList.length)) * 40);
     reportProgress(stepPercent, `Processing Live2D model ${i + 1}/${live2dList.length}...`);
     const characterId = String(model?.modelId || '').trim();
@@ -619,6 +622,8 @@ async function buildGalgameCardConfig(options = {}) {
       live2dOutModels[characterId] = {
         source: 'remote',
         modelUrl: model.modelUrl.trim(),
+        runtimeType: model.runtimeType || 'legacy',
+        cubismVersion: Number(model?.cubismVersion || 0) || null,
         ...(charCfg ? { config: charCfg } : {}),
       };
       reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
@@ -641,6 +646,8 @@ async function buildGalgameCardConfig(options = {}) {
           live2dOutModels[characterId] = {
             source: 'idb',
             modelId: characterId,
+            runtimeType: model.runtimeType || 'legacy',
+            cubismVersion: Number(model?.cubismVersion || 0) || null,
             sizeBytes: modelSizeBytes,
             note: warn,
             ...(charCfg ? { config: charCfg } : {}),
@@ -655,6 +662,8 @@ async function buildGalgameCardConfig(options = {}) {
         live2dOutModels[characterId] = {
           source: 'embedded',
           format: 'live2d_idb_v1',
+          runtimeType: model.runtimeType || 'legacy',
+          cubismVersion: Number(model?.cubismVersion || 0) || null,
           sizeBytes: modelSizeBytes,
           payload,
           ...(charCfg ? { config: charCfg } : {}),
@@ -667,6 +676,8 @@ async function buildGalgameCardConfig(options = {}) {
           live2dOutModels[characterId] = {
             source: 'idb',
             modelId: characterId,
+            runtimeType: model.runtimeType || 'legacy',
+            cubismVersion: Number(model?.cubismVersion || 0) || null,
             sizeBytes: modelSizeBytes,
             note: warn,
             ...(charCfg ? { config: charCfg } : {}),
@@ -681,6 +692,8 @@ async function buildGalgameCardConfig(options = {}) {
       live2dOutModels[characterId] = {
         source: 'idb',
         modelId: characterId,
+        runtimeType: model.runtimeType || 'legacy',
+        cubismVersion: Number(model?.cubismVersion || 0) || null,
         sizeBytes: modelSizeBytes,
         note:
           'Local Live2D model is stored in IndexedDB; binary payload is not exported. Upload to remote and use source=remote if you want portability.',

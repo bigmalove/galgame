@@ -6,17 +6,19 @@
 export const Live2DLoader = {
   PIXI_URL: 'https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js',
   CUBISM4_CORE_URL: 'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js',
-  CUBISM5_CORE_URL: 'https://cdn.jsdelivr.net/npm/@doki-land/live2d/lib/cubism5.min.js',
+  CUBISM5_CORE_URL: '',
+  CUBISM5_CORE_FILES: Object.freeze(['cubism5.min.js', 'live2dcubismcore.min.js']),
   CUBISM2_CORE_URL: 'https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js',
   SDK_URL: 'https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js',
   CUBISM5_RUNTIME_URL: '',
-  CUBISM5_RUNTIME_FILES: Object.freeze(['cubism5.min.js', 'cubism5.js']),
+  CUBISM5_RUNTIME_FILES: Object.freeze(['cubism5.runtime.min.js', 'cubism5.js']),
   SDK_CACHE_KEY: 'live2d_sdk_v3',
 
   isLoaded: false,
   loadPromise: null,
   cubism5CoreLoaded: false,
   cubism5CorePromise: null,
+  cubism5CoreSource: null,
   cubism5RuntimeLoaded: false,
   cubism5RuntimePromise: null,
   cubism5RuntimeSource: null,
@@ -60,24 +62,44 @@ export const Live2DLoader = {
     if (this.cubism5CorePromise) return this.cubism5CorePromise;
 
     this.cubism5CorePromise = (async () => {
-      try {
-        const coreText = await fetch(this.CUBISM5_CORE_URL).then(r => {
-          if (!r.ok) throw new Error(`Cubism 5 Core 鍔犺浇澶辫触: ${r.status}`);
-          return r.text();
-        });
-        await this._executeScript(coreText, _topWindow);
+      const coreUrls = this._getCubism5CoreUrls(_topWindow);
+      if (!coreUrls.length) {
+        console.error(`[${SCRIPT_NAME}] Cubism 5 Core load failed: no core URL candidates`);
+        this.cubism5CorePromise = null;
+        return false;
+      }
 
-        const loadedVersion = await this._waitForLatestMocVersion(_topWindow, 5, 5000, 80);
-        this.cubism5CoreLoaded = loadedVersion >= 5;
-        if (!this.cubism5CoreLoaded) {
-          console.warn(`[${SCRIPT_NAME}] Cubism 5 Core loaded but latest moc version check failed`, {
-            latestMocVersion: loadedVersion,
-            source: this.CUBISM5_CORE_URL,
-          });
+      let lastError = null;
+      try {
+        for (const coreUrl of coreUrls) {
+          try {
+            const coreText = await fetch(coreUrl).then(r => {
+              if (!r.ok) throw new Error(`Cubism 5 Core load failed: ${r.status}`);
+              return r.text();
+            });
+            await this._executeScript(coreText, _topWindow);
+
+            const loadedVersion = await this._waitForLatestMocVersion(_topWindow, 5, 5000, 80);
+            if (loadedVersion >= 5) {
+              this.cubism5CoreLoaded = true;
+              this.cubism5CoreSource = coreUrl;
+              console.log(`[${SCRIPT_NAME}] Cubism 5 Core loaded from ${coreUrl}`);
+              return true;
+            }
+
+            throw new Error(`latest moc version check failed: ${loadedVersion}`);
+          } catch (candidateError) {
+            lastError = candidateError;
+            console.warn(`[${SCRIPT_NAME}] Cubism 5 Core candidate failed: ${coreUrl}`, candidateError);
+          }
         }
-        return this.cubism5CoreLoaded;
-      } catch (e) {
-        console.error(`[${SCRIPT_NAME}] Cubism 5 Core 鍔犺浇澶辫触:`, e);
+
+        this.cubism5CoreLoaded = false;
+        this.cubism5CoreSource = null;
+        console.error(`[${SCRIPT_NAME}] Cubism 5 Core load failed: all candidates failed`, {
+          candidates: coreUrls,
+          lastError: String(lastError?.message || lastError || ''),
+        });
         return false;
       } finally {
         this.cubism5CorePromise = null;
@@ -140,6 +162,30 @@ export const Live2DLoader = {
     const baseUrls = this._resolvePluginScriptBaseUrls(_topWindow);
     for (const baseUrl of baseUrls) {
       for (const fileName of this.CUBISM5_RUNTIME_FILES) {
+        try {
+          pushUrl(new URL(fileName, baseUrl).toString());
+        } catch (e) {}
+      }
+    }
+
+    return urls;
+  },
+
+  _getCubism5CoreUrls(_topWindow) {
+    const urls = [];
+    const seen = new Set();
+    const pushUrl = (value) => {
+      const normalized = this._normalizeRuntimeUrl(value);
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      urls.push(normalized);
+    };
+
+    pushUrl(this.CUBISM5_CORE_URL);
+
+    const baseUrls = this._resolvePluginScriptBaseUrls(_topWindow);
+    for (const baseUrl of baseUrls) {
+      for (const fileName of this.CUBISM5_CORE_FILES) {
         try {
           pushUrl(new URL(fileName, baseUrl).toString());
         } catch (e) {}
@@ -420,6 +466,7 @@ export const Live2DLoader = {
             this.loadPromise = null;
             this.cubism5CoreLoaded = false;
             this.cubism5CorePromise = null;
+            this.cubism5CoreSource = null;
             this.cubism5RuntimeLoaded = false;
             this.cubism5RuntimePromise = null;
             this.cubism5RuntimeSource = null;

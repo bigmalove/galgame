@@ -5,6 +5,7 @@ import { Live2DManager } from '../live2d/manager.js';
 import { Live2DStage } from '../live2d/stage.js';
 import { Live2DPositionEditor } from '../live2d/position-editor.js';
 import { EXPRESSION_LIVE2D_MAP, matchLive2DExpression, matchLive2DMotion, getLive2DExpressionList, getLive2DMotionGroups } from '../live2d/expression-motion.js';
+import { getAllExpressions } from '../utils/expressions.js';
 import { getModalMountRoot } from './fullscreen.js';
 
 // ============================================
@@ -21,9 +22,12 @@ export async function showLive2DSettingsModal(characterId) {
   const expressionMapping = config.expressionMapping || {};
   const motionMapping = config.motionMapping || {};
   const EMPTY_MOTION_GROUP_VALUE = '__gal_empty_motion_group__';
+  const EMPTY_TAG_FALLBACK = '(空标签)';
 
   let expressionList = [];
   let motionGroups = [];
+  let draftExpressionMapping = { ...expressionMapping };
+  let draftMotionMapping = { ...motionMapping };
   let previewMounted = false;
   let previewMountPromise = null;
   let previewZoomFactor = 1.8;
@@ -35,48 +39,157 @@ export async function showLive2DSettingsModal(characterId) {
   let previewDragOrigin = { x: 0, y: 0 };
   let previewRequestToken = 0;
 
-  const gameExpressionTags = Object.keys(EXPRESSION_LIVE2D_MAP);
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case '\'':
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
+
+  const normalizeTextValue = (value) => String(value ?? '').trim();
+
+  const buildMappingTagList = () => {
+    const tags = [];
+    const seen = new Set();
+    const push = (value) => {
+      const normalized = normalizeTextValue(value);
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      tags.push(normalized);
+    };
+
+    const expressionTags = getAllExpressions();
+    if (Array.isArray(expressionTags)) {
+      for (const tag of expressionTags) push(tag);
+    }
+    for (const tag of Object.keys(EXPRESSION_LIVE2D_MAP || {})) push(tag);
+    for (const tag of Object.keys(draftExpressionMapping || {})) push(tag);
+    for (const tag of Object.keys(draftMotionMapping || {})) push(tag);
+
+    return tags;
+  };
+
+  const applyRowSelectValues = ($mappingContainer) => {
+    $mappingContainer.find('.gal-expr-mapping-select').each(function() {
+      const current = normalizeTextValue(_$(this).data('current'));
+      if (current) {
+        _$(this).val(current);
+      } else {
+        _$(this).val('');
+      }
+    });
+
+    $mappingContainer.find('.gal-motion-mapping-select').each(function() {
+      const current = normalizeTextValue(_$(this).data('current'));
+      const disabled = _$(this).data('disabled') === true || _$(this).data('disabled') === 'true';
+      const hasGroup = _$(this).data('hasGroup') === true || _$(this).data('hasGroup') === 'true';
+      if (disabled) {
+        _$(this).val('__disabled__');
+      } else if (hasGroup && current === '') {
+        _$(this).val(EMPTY_MOTION_GROUP_VALUE);
+      } else if (current) {
+        _$(this).val(current);
+      } else {
+        _$(this).val('');
+      }
+    });
+  };
+
+  const syncDraftMappingsFromDom = () => {
+    const $modal = _$('#gal-live2d-settings-modal');
+    if (!$modal.length) return;
+    const $mappingContainer = $modal.find('#gal-mapping-rows');
+    if (!$mappingContainer.length) return;
+    const $rows = $mappingContainer.find('.gal-mapping-row');
+    if (!$rows.length) return;
+
+    const nextExpressionMapping = {};
+    const nextMotionMapping = {};
+
+    $rows.each(function() {
+      const $row = _$(this);
+      const tag = normalizeTextValue($row.data('tag'));
+      if (!tag) return;
+
+      const exprRaw = $row.find('.gal-expr-mapping-select').val();
+      const exprValue = exprRaw === null || exprRaw === undefined ? '' : String(exprRaw);
+      if (exprValue) {
+        nextExpressionMapping[tag] = exprValue;
+      }
+
+      const motionRaw = $row.find('.gal-motion-mapping-select').val();
+      const motionValue = motionRaw === null || motionRaw === undefined ? '' : String(motionRaw);
+      if (motionValue === '__disabled__') {
+        nextMotionMapping[tag] = { enabled: false };
+      } else if (motionValue || motionValue === EMPTY_MOTION_GROUP_VALUE) {
+        const motionGroup = motionValue === EMPTY_MOTION_GROUP_VALUE ? '' : motionValue;
+        nextMotionMapping[tag] = { group: motionGroup, index: 0, enabled: true };
+      }
+    });
+
+    draftExpressionMapping = nextExpressionMapping;
+    draftMotionMapping = nextMotionMapping;
+  };
 
   const buildMappingRows = () => {
-    const existingMappings = { ...expressionMapping };
-    const existingMotionMappings = { ...motionMapping };
+    const existingMappings = { ...draftExpressionMapping };
+    const existingMotionMappings = { ...draftMotionMapping };
     let rows = '';
 
-    const allTags = [...new Set([...Object.keys(existingMappings), ...gameExpressionTags])];
+    const allTags = buildMappingTagList();
 
     const exprOptionsHtml = expressionList.length > 0
-      ? expressionList.map(e => `<option value="${e}">${e}</option>`).join('')
+      ? expressionList.map((name) => {
+        const normalized = String(name ?? '');
+        return `<option value="${escapeHtml(normalized)}">${escapeHtml(normalized)}</option>`;
+      }).join('')
       : '';
     const motionOptionsHtml = motionGroups.length > 0
       ? motionGroups.map(groupName => {
         const rawGroup = String(groupName ?? '');
         const value = rawGroup === '' ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
         const label = rawGroup === '' ? '(空动作组)' : rawGroup;
-        return `<option value="${value}">${label}</option>`;
+        return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
       }).join('')
       : '';
 
     for (const tag of allTags) {
       const currentExpr = existingMappings[tag] || '';
       const currentMotion = existingMotionMappings[tag] || {};
+      const hasMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, 'group');
       const currentMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, 'group')
         ? String(currentMotion.group ?? '')
         : '';
+      const safeTag = escapeHtml(tag || EMPTY_TAG_FALLBACK);
+      const safeCurrentExpr = escapeHtml(String(currentExpr ?? ''));
+      const safeCurrentMotionGroup = escapeHtml(String(currentMotionGroup ?? ''));
+      const safeDisabled = currentMotion.enabled === false ? 'true' : 'false';
+      const safeHasGroup = hasMotionGroup ? 'true' : 'false';
 
       rows += `
-        <div class="gal-mapping-row" data-tag="${tag}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
-          <span style="min-width: 60px; font-weight: 600;">${tag}</span>
+        <div class="gal-mapping-row" data-tag="${safeTag}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+          <span style="min-width: 60px; font-weight: 600;">${safeTag}</span>
           <span style="color: #666;">→</span>
-          <select class="gal-expr-mapping-select" data-tag="${tag}" data-current="${currentExpr}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+          <select class="gal-expr-mapping-select" data-tag="${safeTag}" data-current="${safeCurrentExpr}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">(自动匹配)</option>
             ${exprOptionsHtml}
           </select>
-          <select class="gal-motion-mapping-select" data-tag="${tag}" data-current="${currentMotionGroup}" data-disabled="${currentMotion.enabled === false}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+          <select class="gal-motion-mapping-select" data-tag="${safeTag}" data-current="${safeCurrentMotionGroup}" data-disabled="${safeDisabled}" data-has-group="${safeHasGroup}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">(自动匹配)</option>
             <option value="__disabled__">(禁用动作)</option>
             ${motionOptionsHtml}
           </select>
-          <button type="button" class="gal-mapping-preview-btn" data-tag="${tag}" title="预览该标签" style="width: 32px; height: 32px; border: 1px solid #0ea5e9; border-radius: 6px; background: #e0f2fe; color: #0369a1; cursor: pointer; flex-shrink: 0;">
+          <button type="button" class="gal-mapping-preview-btn" data-tag="${safeTag}" title="预览该标签" style="width: 32px; height: 32px; border: 1px solid #0ea5e9; border-radius: 6px; background: #e0f2fe; color: #0369a1; cursor: pointer; flex-shrink: 0;">
             <i class="fa-solid fa-play"></i>
           </button>
         </div>
@@ -84,6 +197,25 @@ export async function showLive2DSettingsModal(characterId) {
     }
 
     return rows;
+  };
+
+  const renderMappingRows = async ({ previewAfterRender = false } = {}) => {
+    const $modal = _$('#gal-live2d-settings-modal');
+    if (!$modal.length) return;
+    const $mappingContainer = $modal.find('#gal-mapping-rows');
+    if (!$mappingContainer.length) return;
+
+    syncDraftMappingsFromDom();
+    const rowsHtml = buildMappingRows();
+    $mappingContainer.html(rowsHtml);
+    applyRowSelectValues($mappingContainer);
+    bindMappingContainerEvents($mappingContainer);
+    $mappingContainer.data('loaded', true);
+
+    if (previewAfterRender) {
+      await ensureMappingPreviewMounted();
+      await previewFirstTagIfExists();
+    }
   };
 
   const loadModelDataAsync = async () => {
@@ -100,39 +232,8 @@ export async function showLive2DSettingsModal(characterId) {
       if ($modal.length) {
         $modal.find('.gal-model-info-expr').text(expressionList.length);
         $modal.find('.gal-model-info-motion').text(motionGroups.length);
-
-        setTimeout(async () => {
-          const $mappingContainer = $modal.find('#gal-mapping-rows');
-          if ($mappingContainer.length && !$mappingContainer.data('loaded')) {
-            const rowsHtml = buildMappingRows();
-            $mappingContainer.html(rowsHtml);
-            $mappingContainer.data('loaded', true);
-
-            $mappingContainer.find('.gal-expr-mapping-select').each(function() {
-              const current = _$(this).data('current');
-              if (current) _$(this).val(current);
-            });
-            $mappingContainer.find('.gal-motion-mapping-select').each(function() {
-              const current = _$(this).data('current');
-              const disabled = _$(this).data('disabled');
-              if (disabled) {
-                _$(this).val('__disabled__');
-              } else if (current === '') {
-                _$(this).val(EMPTY_MOTION_GROUP_VALUE);
-              } else if (current) {
-                _$(this).val(current);
-              }
-            });
-
-            bindMappingContainerEvents($mappingContainer);
-
-            const activeTab = $modal.find('.gal-settings-tab.active').data('tab');
-            if (activeTab === 'mapping') {
-              await ensureMappingPreviewMounted();
-              await previewFirstTagIfExists();
-            }
-          }
-        }, 50);
+        const activeTab = $modal.find('.gal-settings-tab.active').data('tab');
+        await renderMappingRows({ previewAfterRender: activeTab === 'mapping' });
       }
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] 加载模型数据失败:`, e);
@@ -745,23 +846,22 @@ export async function showLive2DSettingsModal(characterId) {
 
   const bindMappingContainerEvents = ($mappingContainer) => {
     if (!$mappingContainer.length) return;
-    if ($mappingContainer.data('previewBound')) return;
 
-    $mappingContainer.on('change', '.gal-expr-mapping-select, .gal-motion-mapping-select', async function() {
+    $mappingContainer.off('.galMappingRows');
+    $mappingContainer.on('change.galMappingRows', '.gal-expr-mapping-select, .gal-motion-mapping-select', async function() {
+      syncDraftMappingsFromDom();
       const tag = _$(this).data('tag');
       if (tag) {
         await previewMappingForTag(String(tag));
       }
     });
 
-    $mappingContainer.on('click', '.gal-mapping-preview-btn', async function() {
+    $mappingContainer.on('click.galMappingRows', '.gal-mapping-preview-btn', async function() {
       const tag = _$(this).data('tag');
       if (tag) {
         await previewMappingForTag(String(tag));
       }
     });
-
-    $mappingContainer.data('previewBound', true);
   };
 
   loadModelDataAsync();
@@ -775,9 +875,9 @@ export async function showLive2DSettingsModal(characterId) {
     $modal.find(`.gal-settings-panel[data-panel="${tab}"]`).show();
 
     if (tab === 'mapping') {
-      await ensureMappingPreviewMounted();
-      await previewFirstTagIfExists();
+      await renderMappingRows({ previewAfterRender: true });
     } else {
+      syncDraftMappingsFromDom();
       cleanupMappingPreview();
     }
   });
@@ -827,6 +927,7 @@ export async function showLive2DSettingsModal(characterId) {
       }
     });
 
+    syncDraftMappingsFromDom();
     await previewFirstTagIfExists();
   });
 
@@ -834,6 +935,7 @@ export async function showLive2DSettingsModal(characterId) {
   $modal.find('#gal-live2d-clear-mapping').on('click', async function() {
     $modal.find('.gal-expr-mapping-select').val('');
     $modal.find('.gal-motion-mapping-select').val('');
+    syncDraftMappingsFromDom();
     await previewFirstTagIfExists();
   });
 
@@ -906,26 +1008,9 @@ export async function showLive2DSettingsModal(characterId) {
       newQuality.devicePixelRatio = parseFloat(newQuality.devicePixelRatio);
     }
 
-    const newExpressionMapping = {};
-    $modal.find('.gal-expr-mapping-select').each(function() {
-      const tag = _$(this).data('tag');
-      const val = _$(this).val();
-      if (val) {
-        newExpressionMapping[tag] = val;
-      }
-    });
-
-    const newMotionMapping = {};
-    $modal.find('.gal-motion-mapping-select').each(function() {
-      const tag = _$(this).data('tag');
-      const val = _$(this).val();
-      if (val === '__disabled__') {
-        newMotionMapping[tag] = { enabled: false };
-      } else if (val || val === EMPTY_MOTION_GROUP_VALUE) {
-        const motionGroup = val === EMPTY_MOTION_GROUP_VALUE ? '' : val;
-        newMotionMapping[tag] = { group: motionGroup, index: 0, enabled: true };
-      }
-    });
+    syncDraftMappingsFromDom();
+    const newExpressionMapping = { ...draftExpressionMapping };
+    const newMotionMapping = { ...draftMotionMapping };
 
     const newConfig = {
       transform: newTransform,

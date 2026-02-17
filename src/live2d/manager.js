@@ -2,6 +2,7 @@
 import { Live2DLoader } from './loader.js';
 import { getLive2DModel } from '../db/live2d-models.js';
 import { getLive2DConfig, updateLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
+import { LIVE2D_RUNTIME_TYPES, resolveLive2DRuntime } from './runtime-router.js';
 
 const LIVE2D_TICKER_GUARD_KEY = '__galgameLive2dTickerRef__';
 
@@ -22,11 +23,13 @@ export const Live2DManager = {
   loadingModels: new Map(), // characterId -> Promise<PIXI.Live2DModel|null>
   renderLocks: new Map(),   // characterId -> Promise<void>
   modelBlobUrls: new Map(), // characterId -> Set<string>
+  modelRuntimeInfo: new Map(), // characterId -> { runtimeType, cubismVersion }
   cachedDetachedAt: new Map(), // characterId -> timestamp (宸查€€鍦虹紦瀛?
   maxDetachedCache: 3,
   xhrBlobUrlSupport: null, // null=unknown, boolean=supported
   xhrBlobUrlSupportPromise: null,
   hasLoggedBlobUrlDisabled: false,
+  registeredTickerClasses: new WeakSet(),
   isReady: false,
   debug: false,
 
@@ -37,6 +40,22 @@ export const Live2DManager = {
 
   _markModelActive(characterId) {
     this.cachedDetachedAt.delete(characterId);
+  },
+
+  _registerTickerForLive2DModelClass(Live2DModelClass) {
+    if (!Live2DModelClass || typeof Live2DModelClass.registerTicker !== 'function') return false;
+
+    try {
+      if (this.registeredTickerClasses.has(Live2DModelClass)) return true;
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      Live2DModelClass.registerTicker(_topWindow.PIXI.Ticker);
+      this.registeredTickerClasses.add(Live2DModelClass);
+      _topWindow[LIVE2D_TICKER_GUARD_KEY] = _topWindow.PIXI.Ticker;
+      return true;
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: registerTicker failed`, e);
+      return false;
+    }
   },
 
   _registerModelBlobUrl(characterId, url) {
@@ -63,6 +82,131 @@ export const Live2DManager = {
       } catch (e) {}
     }
     this.modelBlobUrls.delete(characterId);
+  },
+
+  _setModelRuntimeInfo(characterId, runtimeInfo = null) {
+    const resolved = resolveLive2DRuntime(runtimeInfo);
+    this.modelRuntimeInfo.set(characterId, resolved);
+    return resolved;
+  },
+
+  _resolveCharacterRuntime(characterId, modelData = null) {
+    const previous = this.modelRuntimeInfo.get(characterId) || {};
+    const input = modelData && typeof modelData === 'object'
+      ? { ...previous, ...modelData }
+      : previous;
+    return this._setModelRuntimeInfo(characterId, input);
+  },
+
+  _getCharacterRuntime(characterId) {
+    return this.modelRuntimeInfo.get(characterId) || {
+      runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
+      cubismVersion: null,
+    };
+  },
+
+  getCharacterRuntime(characterId) {
+    return this._getCharacterRuntime(characterId);
+  },
+
+  async _ensureRuntimeDependencies(characterId, runtimeInfo = null) {
+    const resolvedRuntime = resolveLive2DRuntime(runtimeInfo || this._getCharacterRuntime(characterId));
+    this.modelRuntimeInfo.set(characterId, resolvedRuntime);
+
+    if (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5) {
+      const coreLoaded = await Live2DLoader.ensureCubism5Core();
+      if (!coreLoaded) {
+        throw new Error(`Cubism 5 Core load failed for ${characterId}`);
+      }
+
+      const runtimeLoaded = await Live2DLoader.ensureCubism5Runtime();
+      if (!runtimeLoaded) {
+        throw new Error(`Cubism 5 runtime load failed for ${characterId}`);
+      }
+      Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.CUBISM5);
+      return true;
+    }
+
+    Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.LEGACY);
+    return true;
+  },
+
+  _toArrayBuffer(input) {
+    if (!input) return null;
+    if (input instanceof ArrayBuffer) return input;
+    if (ArrayBuffer.isView(input)) {
+      return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+    }
+    return null;
+  },
+
+  _normalizeMocVersion(rawMocVersion) {
+    const value = Number(rawMocVersion || 0) || 0;
+    if (value >= 5) return 5;
+    if (value >= 1) return 4;
+    return null;
+  },
+
+  _detectCubismVersionFromMoc3Buffer(moc3Data) {
+    const moc3Buffer = this._toArrayBuffer(moc3Data);
+    if (!moc3Buffer) return null;
+
+    const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+    const core = _topWindow?.Live2DCubismCore;
+    const Moc = core?.Moc;
+    const Version = core?.Version;
+    if (typeof Moc?.fromArrayBuffer !== 'function' || typeof Version?.csmGetMocVersion !== 'function') {
+      return null;
+    }
+
+    let mocRef = null;
+    try {
+      mocRef = Moc.fromArrayBuffer(moc3Buffer);
+      if (!mocRef) return null;
+
+      const rawMocVersion = Number(Version.csmGetMocVersion(mocRef, moc3Buffer) || 0) || 0;
+      return this._normalizeMocVersion(rawMocVersion);
+    } catch (e) {
+      return null;
+    } finally {
+      try {
+        if (mocRef && typeof mocRef._release === 'function') mocRef._release();
+        else if (mocRef && typeof mocRef.release === 'function') mocRef.release();
+      } catch (e) {}
+    }
+  },
+
+  async _detectRuntimeFromMoc3(characterId, moc3Data, runtimeInfo = null) {
+    const resolvedRuntime = resolveLive2DRuntime(runtimeInfo || this._getCharacterRuntime(characterId));
+    if (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5 || Number(resolvedRuntime.cubismVersion || 0) >= 5) {
+      this.modelRuntimeInfo.set(characterId, resolvedRuntime);
+      return resolvedRuntime;
+    }
+
+    const moc3Buffer = this._toArrayBuffer(moc3Data);
+    if (!moc3Buffer) {
+      this.modelRuntimeInfo.set(characterId, resolvedRuntime);
+      return resolvedRuntime;
+    }
+
+    try {
+      await Live2DLoader.ensureCubism5Core();
+    } catch (e) {}
+
+    const mocVersion = this._detectCubismVersionFromMoc3Buffer(moc3Buffer);
+    if (mocVersion >= 5) {
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: moc3 探测为 Cubism 5 (${characterId})`);
+      return this._setModelRuntimeInfo(characterId, {
+        ...resolvedRuntime,
+        cubismVersion: 5,
+        runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
+      });
+    }
+
+    return this._setModelRuntimeInfo(characterId, {
+      ...resolvedRuntime,
+      cubismVersion: resolvedRuntime.cubismVersion ?? mocVersion ?? null,
+    });
   },
 
   async _supportsXhrBlobUrls() {
@@ -417,6 +561,7 @@ export const Live2DManager = {
     if (!model) {
       this.cachedDetachedAt.delete(characterId);
       this.containers.delete(characterId);
+      this.modelRuntimeInfo.delete(characterId);
       this._revokeModelBlobUrls(characterId);
       return false;
     }
@@ -432,6 +577,7 @@ export const Live2DManager = {
     this.containers.delete(characterId);
     this.loadingModels.delete(characterId);
     this.cachedDetachedAt.delete(characterId);
+    this.modelRuntimeInfo.delete(characterId);
     this._revokeModelBlobUrls(characterId);
     return true;
   },
@@ -539,11 +685,7 @@ export const Live2DManager = {
 
     try {
       const { Live2DModel } = _topWindow.PIXI.live2d;
-      const tickerRef = _topWindow.PIXI.Ticker;
-      if (_topWindow[LIVE2D_TICKER_GUARD_KEY] !== tickerRef) {
-        Live2DModel.registerTicker(tickerRef);
-        _topWindow[LIVE2D_TICKER_GUARD_KEY] = tickerRef;
-      }
+      this._registerTickerForLive2DModelClass(Live2DModel);
 
       this.isReady = true;
       this._debugLog(`[${SCRIPT_NAME}] Live2DManager 初始化完成`);
@@ -555,11 +697,6 @@ export const Live2DManager = {
   },
 
   async loadModel(characterId, forceReload = false) {
-    if (!this.isReady) {
-      const ready = await this.init();
-      if (!ready) return null;
-    }
-
     if (!forceReload && this.loadingModels.has(characterId)) {
       return await this.loadingModels.get(characterId);
     }
@@ -578,18 +715,32 @@ export const Live2DManager = {
       console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到角色 ${characterId} 的 Live2D 模型`);
       return null;
     }
+    let modelRuntime = this._resolveCharacterRuntime(characterId, modelData);
+    if (modelData?.moc3) {
+      modelRuntime = await this._detectRuntimeFromMoc3(characterId, modelData.moc3, modelRuntime);
+    }
+
+    if (!this.isReady) {
+      const ready = await this.init();
+      if (!ready) return null;
+    }
 
     const isRemote = this._isRemoteModelData(modelData);
     const remoteModelUrl = isRemote ? this._normalizeRemoteUrl(modelData.modelUrl.trim()) : '';
 
     const loadTask = (async () => {
+      let resolvedRuntime = modelRuntime;
       this._revokeModelBlobUrls(characterId);
       const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
-      const PIXI = _topWindow.PIXI;
-      const { Live2DModel } = PIXI.live2d;
 
       const loadFromUrl = async (modelUrl) => {
-        const model = await Live2DModel.from(modelUrl, {
+        const Live2DModelClass = _topWindow?.PIXI?.live2d?.Live2DModel;
+        if (!Live2DModelClass) {
+          throw new Error('PIXI.live2d.Live2DModel is unavailable for current runtime');
+        }
+        this._registerTickerForLive2DModelClass(Live2DModelClass);
+
+        const model = await Live2DModelClass.from(modelUrl, {
           // 避免在模型尚未挂载到带 WebGL renderer 的舞台前就触发 update，
           // 远程 Cubism2 模型在该阶段容易抛 createProgram undefined。
           autoUpdate: false,
@@ -670,7 +821,9 @@ export const Live2DManager = {
         if (!remoteModelUrl) {
           throw new Error('远程 Live2D modelUrl 为空');
         }
-        return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl);
+        const modelUrl = await this._buildRemoteModelDataUrl(characterId, remoteModelUrl);
+        resolvedRuntime = this._getCharacterRuntime(characterId);
+        return modelUrl;
       };
 
       let usedBlobForLocal = false;
@@ -678,6 +831,10 @@ export const Live2DManager = {
         const modelUrl = isRemote
           ? await buildRemoteModelUrl()
           : await buildLocalModelUrl(true);
+        if (!isRemote) {
+          resolvedRuntime = this._getCharacterRuntime(characterId);
+        }
+        await this._ensureRuntimeDependencies(characterId, resolvedRuntime);
         usedBlobForLocal = !isRemote && String(modelUrl || '').startsWith('blob:');
 
         const model = await loadFromUrl(modelUrl);
@@ -686,6 +843,43 @@ export const Live2DManager = {
         this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
         return model;
       } catch (e) {
+        const errorMessage = String(e?.message || e || '');
+        const errorStack = String(e?.stack || '');
+        const looksLikeCoreParseError =
+          /unknown error/i.test(errorMessage) ||
+          /createcoremodel/i.test(errorStack) ||
+          /be\.create/i.test(errorStack);
+
+        const canRetryAsCubism5 =
+          resolvedRuntime.runtimeType !== LIVE2D_RUNTIME_TYPES.CUBISM5 &&
+          (!!modelData?.moc3 || (isRemote && resolvedRuntime.cubismVersion !== 2));
+
+        if (looksLikeCoreParseError && canRetryAsCubism5) {
+          try {
+            const forcedRuntime = this._setModelRuntimeInfo(characterId, {
+              ...resolvedRuntime,
+              runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
+              cubismVersion: 5,
+            });
+            await this._ensureRuntimeDependencies(characterId, forcedRuntime);
+
+            if (!isRemote) {
+              this._revokeModelBlobUrls(characterId);
+            }
+
+            const retryUrl = isRemote
+              ? await buildRemoteModelUrl()
+              : await buildLocalModelUrl(usedBlobForLocal);
+            const retryModel = await loadFromUrl(retryUrl);
+            this.models.set(characterId, retryModel);
+            this._markModelActive(characterId);
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: Cubism5 runtime 重试加载成功 (${characterId})`);
+            return retryModel;
+          } catch (retryError) {
+            console.warn(`[${SCRIPT_NAME}] Live2DManager: Cubism5 runtime 重试失败 (${characterId})`, retryError);
+          }
+        }
+
         if (!isRemote && usedBlobForLocal) {
           console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL 加载失败，回退 Data URL (${characterId})`, e);
           this._disableXhrBlobUrls('load-failed');
@@ -1302,9 +1496,34 @@ export const Live2DManager = {
 
     if (modifiedModelJson?.FileReferences) {
       rewriteCubism3(modifiedModelJson.FileReferences);
+
+      const remoteMocUrl = String(modifiedModelJson?.FileReferences?.Moc || '').trim();
+      if (remoteMocUrl) {
+        try {
+          const mocResponse = await fetch(remoteMocUrl);
+          if (mocResponse.ok) {
+            const mocBuffer = await mocResponse.arrayBuffer();
+            await this._detectRuntimeFromMoc3(characterId, mocBuffer, this._getCharacterRuntime(characterId));
+          } else {
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 远程 moc3 探测跳过（HTTP ${mocResponse.status}）`);
+          }
+        } catch (e) {
+          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 远程 moc3 探测失败`, e);
+        }
+      }
     } else {
       rewriteCubism2();
     }
+
+    const runtimeHint = this._getCharacterRuntime(characterId);
+    this._setModelRuntimeInfo(characterId, {
+      modelJson: modifiedModelJson,
+      cubismVersion: runtimeHint.cubismVersion,
+      runtimeType:
+        runtimeHint.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5
+          ? LIVE2D_RUNTIME_TYPES.CUBISM5
+          : '',
+    });
 
     const modelJsonStr = JSON.stringify(modifiedModelJson);
     const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));

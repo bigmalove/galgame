@@ -73,6 +73,7 @@ export const Live2DUploader = {
     let modelData;
     if (isModel3) {
       const moc3Data = await this._extractFile(zip, modelDir, modelJson.FileReferences?.Moc);
+      const moc3HeaderVersion = this._readMoc3HeaderVersion(moc3Data);
       const detectedCubismVersion = await this._resolveModel3CubismVersion(modelJson, moc3Data);
       const runtimeType = resolveRuntimeTypeFromCubismVersion(detectedCubismVersion);
       modelData = {
@@ -81,6 +82,7 @@ export const Live2DUploader = {
         runtimeType,
         modelJson: modelJson,
         moc3: moc3Data,
+        moc3Version: moc3HeaderVersion ?? null,
         moc: null,
         textures: await this._extractTextures(zip, modelDir, modelJson),
         motions: await this._extractMotions(zip, modelDir, modelJson),
@@ -121,6 +123,12 @@ export const Live2DUploader = {
       throw new Error('未识别的 Live2D 模型格式：请确保 zip 中包含标准的 model3.json / model.json');
     }
 
+    console.log(`[${SCRIPT_NAME}] Live2DUploader: runtime resolved for ${characterId}`, {
+      runtimeType: modelData.runtimeType,
+      cubismVersion: modelData.cubismVersion,
+      mocBytes: modelData.moc3?.byteLength || modelData.moc?.byteLength || 0,
+    });
+
     await saveLive2DModel(modelData);
 
     console.log(`[${SCRIPT_NAME}] Live2DUploader: 模型 ${characterId} 保存成功`);
@@ -137,10 +145,27 @@ export const Live2DUploader = {
   },
 
   _normalizeMocVersion(rawMocVersion) {
-    const value = Number(rawMocVersion || 0) || 0;
+    const value = Number(rawMocVersion || 0);
+    if (!Number.isFinite(value)) return null;
     if (value >= 5) return 5;
-    if (value >= 1) return 4;
+    if (value >= 1 && value <= 4) return 4;
     return null;
+  },
+
+  _readMoc3HeaderVersion(moc3Data) {
+    const moc3Buffer = this._toArrayBuffer(moc3Data);
+    if (!moc3Buffer || moc3Buffer.byteLength < 8) return null;
+
+    try {
+      const header = new Uint8Array(moc3Buffer, 0, 4);
+      const signature = String.fromCharCode(...header);
+      if (signature !== 'MOC3') return null;
+      const view = new DataView(moc3Buffer);
+      const versionLE = Number(view.getUint32(4, true) || 0) || null;
+      return versionLE;
+    } catch (e) {
+      return null;
+    }
   },
 
   _detectCubismVersionFromMoc3Buffer(moc3Data) {
@@ -161,7 +186,12 @@ export const Live2DUploader = {
       if (!mocRef) return null;
 
       const rawMocVersion = Number(Version.csmGetMocVersion(mocRef, moc3Buffer) || 0) || 0;
-      return this._normalizeMocVersion(rawMocVersion);
+      const latestMocVersion = Number(Version?.csmGetLatestMocVersion?.() || 0) || 0;
+      const normalized = this._normalizeMocVersion(rawMocVersion);
+      if (latestMocVersion > 0 && rawMocVersion > latestMocVersion) {
+        return null;
+      }
+      return normalized;
     } catch (e) {
       return null;
     } finally {
@@ -174,9 +204,12 @@ export const Live2DUploader = {
 
   async _resolveModel3CubismVersion(modelJson, moc3Data) {
     const jsonFallbackVersion = inferCubismVersionFromModelJson(modelJson, 4) || 4;
+    const headerVersionRaw = this._readMoc3HeaderVersion(moc3Data);
+    const headerVersion = this._normalizeMocVersion(headerVersionRaw);
 
     try {
-      await Live2DLoader.ensureCubism5Core();
+      const requiredLatestVersion = headerVersionRaw >= 5 ? headerVersionRaw : 5;
+      await Live2DLoader.ensureCubism5Core(requiredLatestVersion);
     } catch (e) {}
 
     const mocVersion = this._detectCubismVersionFromMoc3Buffer(moc3Data);
@@ -185,7 +218,12 @@ export const Live2DUploader = {
         `[${SCRIPT_NAME}] Live2DUploader: moc3 version detected as ${mocVersion} (model.json inferred ${jsonFallbackVersion})`,
       );
     }
-    return mocVersion || jsonFallbackVersion;
+    if (mocVersion == null && headerVersion != null && headerVersion !== jsonFallbackVersion) {
+      console.log(
+        `[${SCRIPT_NAME}] Live2DUploader: moc3 header version detected as ${headerVersion} (model.json inferred ${jsonFallbackVersion})`,
+      );
+    }
+    return mocVersion ?? headerVersion ?? jsonFallbackVersion;
   },
 
   async _findModelJson(zip) {

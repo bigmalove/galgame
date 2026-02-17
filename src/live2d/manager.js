@@ -86,8 +86,12 @@ export const Live2DManager = {
 
   _setModelRuntimeInfo(characterId, runtimeInfo = null) {
     const resolved = resolveLive2DRuntime(runtimeInfo);
-    this.modelRuntimeInfo.set(characterId, resolved);
-    return resolved;
+    const merged = {
+      ...(runtimeInfo && typeof runtimeInfo === 'object' ? runtimeInfo : null),
+      ...resolved,
+    };
+    this.modelRuntimeInfo.set(characterId, merged);
+    return merged;
   },
 
   _resolveCharacterRuntime(characterId, modelData = null) {
@@ -110,11 +114,13 @@ export const Live2DManager = {
   },
 
   async _ensureRuntimeDependencies(characterId, runtimeInfo = null) {
-    const resolvedRuntime = resolveLive2DRuntime(runtimeInfo || this._getCharacterRuntime(characterId));
-    this.modelRuntimeInfo.set(characterId, resolvedRuntime);
+    const runtimeInput = runtimeInfo || this._getCharacterRuntime(characterId);
+    const resolvedRuntime = this._setModelRuntimeInfo(characterId, runtimeInput);
+    const requiredMocVersion = Number(resolvedRuntime?.moc3Version || 0) || 0;
+    const requiredLatestVersion = requiredMocVersion >= 5 ? requiredMocVersion : 5;
 
     if (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5) {
-      const coreLoaded = await Live2DLoader.ensureCubism5Core();
+      const coreLoaded = await Live2DLoader.ensureCubism5Core(requiredLatestVersion);
       if (!coreLoaded) {
         throw new Error(`Cubism 5 Core load failed for ${characterId}`);
       }
@@ -124,11 +130,39 @@ export const Live2DManager = {
         throw new Error(`Cubism 5 runtime load failed for ${characterId}`);
       }
       Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.CUBISM5);
-      return true;
+      return this._setModelRuntimeInfo(characterId, resolvedRuntime);
     }
 
+    const legacyCoreLoaded = await Live2DLoader.ensureLegacyCore();
+    if (!legacyCoreLoaded) {
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const latestMocVersion = Number(_topWindow?.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() || 0) || 0;
+      if (latestMocVersion >= 5) {
+        const forcedRuntime = this._setModelRuntimeInfo(characterId, {
+          ...resolvedRuntime,
+          runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
+          cubismVersion: 5,
+        });
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: legacy core unavailable, fallback to Cubism5 runtime (${characterId})`, {
+          latestMocVersion,
+          legacyCoreSource: Live2DLoader.legacyCoreSource || null,
+          cubism5CoreSource: Live2DLoader.cubism5CoreSource || null,
+        });
+        const coreLoaded = await Live2DLoader.ensureCubism5Core(requiredLatestVersion);
+        if (!coreLoaded) {
+          throw new Error(`Cubism 5 Core fallback load failed for ${characterId}`);
+        }
+        const runtimeLoaded = await Live2DLoader.ensureCubism5Runtime();
+        if (!runtimeLoaded) {
+          throw new Error(`Cubism 5 runtime fallback load failed for ${characterId}`);
+        }
+        Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.CUBISM5);
+        return forcedRuntime;
+      }
+      throw new Error(`Cubism legacy core load failed for ${characterId}`);
+    }
     Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.LEGACY);
-    return true;
+    return this._setModelRuntimeInfo(characterId, resolvedRuntime);
   },
 
   _toArrayBuffer(input) {
@@ -141,10 +175,27 @@ export const Live2DManager = {
   },
 
   _normalizeMocVersion(rawMocVersion) {
-    const value = Number(rawMocVersion || 0) || 0;
+    const value = Number(rawMocVersion || 0);
+    if (!Number.isFinite(value)) return null;
     if (value >= 5) return 5;
-    if (value >= 1) return 4;
+    if (value >= 1 && value <= 4) return 4;
     return null;
+  },
+
+  _readMoc3HeaderVersion(moc3Data) {
+    const moc3Buffer = this._toArrayBuffer(moc3Data);
+    if (!moc3Buffer || moc3Buffer.byteLength < 8) return null;
+
+    try {
+      const header = new Uint8Array(moc3Buffer, 0, 4);
+      const signature = String.fromCharCode(...header);
+      if (signature !== 'MOC3') return null;
+      const view = new DataView(moc3Buffer);
+      const versionLE = Number(view.getUint32(4, true) || 0) || null;
+      return versionLE;
+    } catch (e) {
+      return null;
+    }
   },
 
   _detectCubismVersionFromMoc3Buffer(moc3Data) {
@@ -165,7 +216,15 @@ export const Live2DManager = {
       if (!mocRef) return null;
 
       const rawMocVersion = Number(Version.csmGetMocVersion(mocRef, moc3Buffer) || 0) || 0;
-      return this._normalizeMocVersion(rawMocVersion);
+      const latestMocVersion = Number(Version?.csmGetLatestMocVersion?.() || 0) || 0;
+      const normalized = this._normalizeMocVersion(rawMocVersion);
+      console.log(
+        `[${SCRIPT_NAME}] Live2DManager: moc3 version probe raw=${rawMocVersion}, latest=${latestMocVersion}, normalized=${normalized}`,
+      );
+      if (latestMocVersion > 0 && rawMocVersion > latestMocVersion) {
+        return null;
+      }
+      return normalized;
     } catch (e) {
       return null;
     } finally {
@@ -189,23 +248,32 @@ export const Live2DManager = {
       return resolvedRuntime;
     }
 
+    const headerVersionRaw = this._readMoc3HeaderVersion(moc3Buffer);
+    const headerVersion = this._normalizeMocVersion(headerVersionRaw);
+    const runtimeWithHeader = {
+      ...resolvedRuntime,
+      moc3Version: headerVersionRaw ?? resolvedRuntime.moc3Version ?? null,
+    };
+
     try {
-      await Live2DLoader.ensureCubism5Core();
+      const requiredLatestVersion = headerVersionRaw >= 5 ? headerVersionRaw : 5;
+      await Live2DLoader.ensureCubism5Core(requiredLatestVersion);
     } catch (e) {}
 
     const mocVersion = this._detectCubismVersionFromMoc3Buffer(moc3Buffer);
-    if (mocVersion >= 5) {
+    const resolvedVersion = mocVersion ?? headerVersion ?? null;
+    if (resolvedVersion >= 5) {
       this._debugLog(`[${SCRIPT_NAME}] Live2DManager: moc3 探测为 Cubism 5 (${characterId})`);
       return this._setModelRuntimeInfo(characterId, {
-        ...resolvedRuntime,
+        ...runtimeWithHeader,
         cubismVersion: 5,
         runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
       });
     }
 
     return this._setModelRuntimeInfo(characterId, {
-      ...resolvedRuntime,
-      cubismVersion: resolvedRuntime.cubismVersion ?? mocVersion ?? null,
+      ...runtimeWithHeader,
+      cubismVersion: resolvedRuntime.cubismVersion ?? resolvedVersion ?? null,
     });
   },
 
@@ -734,6 +802,66 @@ export const Live2DManager = {
       const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
 
       const loadFromUrl = async (modelUrl) => {
+        Live2DLoader._patchPixiUrlResolve?.(_topWindow);
+        const activeRuntimeNamespace = _topWindow?.PIXI?.live2d || Live2DLoader.getRuntimeNamespace?.(resolvedRuntime.runtimeType);
+        Live2DLoader._patchModelSettingsResolveURL?.(activeRuntimeNamespace, `runtime-active:${resolvedRuntime.runtimeType}`);
+        const patchedXhrLoader = Live2DLoader._patchXhrLoader?.(activeRuntimeNamespace, `runtime-active:${resolvedRuntime.runtimeType}`);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: runtime patch state ${characterId}`, {
+          runtimeType: resolvedRuntime.runtimeType,
+          pixiUrlResolvePatched: !!Live2DLoader.pixiUrlResolvePatched,
+          patchedModelSettings: !!activeRuntimeNamespace?.ModelSettings?.prototype?.__galgameResolveUrlPatched,
+          patchedXhrLoader: !!patchedXhrLoader,
+        });
+
+        if (modelData?.moc3) {
+          const mocBuffer = this._toArrayBuffer(modelData.moc3);
+          if (mocBuffer) {
+            const header = new Uint8Array(mocBuffer, 0, Math.min(4, mocBuffer.byteLength));
+            const signature = String.fromCharCode(...header);
+            let versionLE = null;
+            let versionBE = null;
+            if (mocBuffer.byteLength >= 8) {
+              const view = new DataView(mocBuffer);
+              versionLE = view.getUint32(4, true);
+              versionBE = view.getUint32(4, false);
+            }
+            console.log(`[${SCRIPT_NAME}] Live2DManager: moc3 signature preflight (${characterId})`, {
+              signature,
+              byteLength: mocBuffer.byteLength,
+              versionLE,
+              versionBE,
+            });
+
+            try {
+              const core = _topWindow?.Live2DCubismCore;
+              const Moc = core?.Moc;
+              if (typeof Moc?.fromArrayBuffer === 'function') {
+                const mocRef = Moc.fromArrayBuffer(mocBuffer);
+                let mocVersion = null;
+                if (mocRef && typeof core?.Version?.csmGetMocVersion === 'function') {
+                  mocVersion = Number(core.Version.csmGetMocVersion(mocRef, mocBuffer) || 0) || null;
+                }
+                console.log(`[${SCRIPT_NAME}] Live2DManager: moc3 core preflight (${characterId})`, {
+                  success: !!mocRef,
+                  mocVersion,
+                  coreLatest: Number(core?.Version?.csmGetLatestMocVersion?.() || 0) || 0,
+                });
+                try {
+                  if (mocRef && typeof mocRef._release === 'function') mocRef._release();
+                  else if (mocRef && typeof mocRef.release === 'function') mocRef.release();
+                } catch (e) {}
+              } else {
+                console.warn(`[${SCRIPT_NAME}] Live2DManager: moc3 core preflight skipped (${characterId})`, {
+                  hasCore: !!core,
+                  hasMoc: !!Moc,
+                });
+              }
+            } catch (e) {
+              console.warn(`[${SCRIPT_NAME}] Live2DManager: moc3 core preflight failed (${characterId})`, e);
+            }
+          }
+        }
+
         const Live2DModelClass = _topWindow?.PIXI?.live2d?.Live2DModel;
         if (!Live2DModelClass) {
           throw new Error('PIXI.live2d.Live2DModel is unavailable for current runtime');
@@ -834,13 +962,30 @@ export const Live2DManager = {
         if (!isRemote) {
           resolvedRuntime = this._getCharacterRuntime(characterId);
         }
-        await this._ensureRuntimeDependencies(characterId, resolvedRuntime);
+        resolvedRuntime = await this._ensureRuntimeDependencies(characterId, resolvedRuntime);
+        const latestMocVersion = Number(_topWindow?.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() || 0) || 0;
+        const activeCoreSource =
+          resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5
+            ? (Live2DLoader.cubism5CoreSource || null)
+            : (Live2DLoader.legacyCoreSource || null);
+        console.log(`[${SCRIPT_NAME}] Live2DManager: runtime route ${characterId}`, {
+          runtimeType: resolvedRuntime.runtimeType,
+          cubismVersion: resolvedRuntime.cubismVersion,
+          coreSource: activeCoreSource,
+          latestMocVersion,
+          legacyCoreSource: Live2DLoader.legacyCoreSource || null,
+          cubism5CoreSource: Live2DLoader.cubism5CoreSource || null,
+          runtimeSource:
+            resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5
+              ? (Live2DLoader.cubism5RuntimeSource || null)
+              : null,
+        });
         usedBlobForLocal = !isRemote && String(modelUrl || '').startsWith('blob:');
 
         const model = await loadFromUrl(modelUrl);
         this.models.set(characterId, model);
         this._markModelActive(characterId);
-        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功`);
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功 (runtime=${resolvedRuntime.runtimeType})`);
         return model;
       } catch (e) {
         const errorMessage = String(e?.message || e || '');
@@ -849,19 +994,87 @@ export const Live2DManager = {
           /unknown error/i.test(errorMessage) ||
           /createcoremodel/i.test(errorStack) ||
           /be\.create/i.test(errorStack);
+        if (looksLikeCoreParseError) {
+          const latestMocVersion = Number(_topWindow?.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() || 0) || 0;
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: core parse failure context (${characterId})`, {
+            runtimeType: resolvedRuntime.runtimeType,
+            cubismVersion: resolvedRuntime.cubismVersion,
+            latestMocVersion,
+            legacyCoreSource: Live2DLoader.legacyCoreSource || null,
+            cubism5CoreSource: Live2DLoader.cubism5CoreSource || null,
+            cubism5RuntimeSource: Live2DLoader.cubism5RuntimeSource || null,
+          });
+        }
 
+        const currentLatestMocVersion = Number(_topWindow?.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() || 0) || 0;
         const canRetryAsCubism5 =
           resolvedRuntime.runtimeType !== LIVE2D_RUNTIME_TYPES.CUBISM5 &&
-          (!!modelData?.moc3 || (isRemote && resolvedRuntime.cubismVersion !== 2));
+          (
+            Number(resolvedRuntime.cubismVersion || 0) >= 5 ||
+            (
+              currentLatestMocVersion >= 5 &&
+              (!!modelData?.moc3 || (isRemote && resolvedRuntime.cubismVersion !== 2))
+            )
+          );
 
-        if (looksLikeCoreParseError && canRetryAsCubism5) {
+        const tryLegacyCoreSwapRetry = async (preferBlobForLocal) => {
+          if (resolvedRuntime.runtimeType !== LIVE2D_RUNTIME_TYPES.LEGACY) return null;
+          const previousCore = _topWindow?.Live2DCubismCore;
+          const previousLegacySource = Live2DLoader.legacyCoreSource;
           try {
-            const forcedRuntime = this._setModelRuntimeInfo(characterId, {
+            const coreReady = await Live2DLoader.ensureCubism5Core();
+            if (!coreReady) return null;
+            Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.LEGACY);
+            console.warn(`[${SCRIPT_NAME}] Live2DManager: legacy core swap retry (${characterId})`, {
+              legacyCoreSource: Live2DLoader.legacyCoreSource || null,
+              cubism5CoreSource: Live2DLoader.cubism5CoreSource || null,
+            });
+
+            if (!isRemote) {
+              this._revokeModelBlobUrls(characterId);
+            }
+            const retryUrl = isRemote
+              ? await buildRemoteModelUrl()
+              : await buildLocalModelUrl(preferBlobForLocal);
+            const retryModel = await loadFromUrl(retryUrl);
+            this.models.set(characterId, retryModel);
+            this._markModelActive(characterId);
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: legacy core swap retry success (${characterId})`);
+            return retryModel;
+          } catch (swapError) {
+            console.warn(`[${SCRIPT_NAME}] Live2DManager: legacy core swap retry failed (${characterId})`, swapError);
+            return null;
+          } finally {
+            if (previousCore && _topWindow?.Live2DCubismCore !== previousCore) {
+              Live2DLoader._setGlobalCubismCore?.(_topWindow, previousCore);
+              Live2DLoader.legacyCoreSource = previousLegacySource || Live2DLoader.legacyCoreSource;
+              Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.LEGACY);
+            }
+          }
+        };
+
+        if (looksLikeCoreParseError && resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.LEGACY) {
+          const retryModel = await tryLegacyCoreSwapRetry(usedBlobForLocal);
+          if (retryModel) return retryModel;
+        }
+
+        const tryForceCubism5Retry = async (preferBlobForLocal) => {
+          try {
+            let forcedRuntime = this._setModelRuntimeInfo(characterId, {
               ...resolvedRuntime,
               runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
               cubismVersion: 5,
             });
-            await this._ensureRuntimeDependencies(characterId, forcedRuntime);
+            forcedRuntime = await this._ensureRuntimeDependencies(characterId, forcedRuntime);
+            const forcedLatestMocVersion = Number(_topWindow?.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() || 0) || 0;
+            console.log(`[${SCRIPT_NAME}] Live2DManager: force Cubism5 retry route ${characterId}`, {
+              runtimeType: forcedRuntime.runtimeType,
+              cubismVersion: forcedRuntime.cubismVersion,
+              latestMocVersion: forcedLatestMocVersion,
+              legacyCoreSource: Live2DLoader.legacyCoreSource || null,
+              coreSource: Live2DLoader.cubism5CoreSource || null,
+              runtimeSource: Live2DLoader.cubism5RuntimeSource || null,
+            });
 
             if (!isRemote) {
               this._revokeModelBlobUrls(characterId);
@@ -869,7 +1082,7 @@ export const Live2DManager = {
 
             const retryUrl = isRemote
               ? await buildRemoteModelUrl()
-              : await buildLocalModelUrl(usedBlobForLocal);
+              : await buildLocalModelUrl(preferBlobForLocal);
             const retryModel = await loadFromUrl(retryUrl);
             this.models.set(characterId, retryModel);
             this._markModelActive(characterId);
@@ -877,7 +1090,13 @@ export const Live2DManager = {
             return retryModel;
           } catch (retryError) {
             console.warn(`[${SCRIPT_NAME}] Live2DManager: Cubism5 runtime 重试失败 (${characterId})`, retryError);
+            return null;
           }
+        };
+
+        if (looksLikeCoreParseError && canRetryAsCubism5) {
+          const retryModel = await tryForceCubism5Retry(usedBlobForLocal);
+          if (retryModel) return retryModel;
         }
 
         if (!isRemote && usedBlobForLocal) {
@@ -885,11 +1104,26 @@ export const Live2DManager = {
           this._disableXhrBlobUrls('load-failed');
           this._revokeModelBlobUrls(characterId);
           const dataUrl = await buildLocalModelUrl(false);
-          const model = await loadFromUrl(dataUrl);
-          this.models.set(characterId, model);
-          this._markModelActive(characterId);
-          this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} DataURL 回退加载成功`);
-          return model;
+          try {
+            const model = await loadFromUrl(dataUrl);
+            this.models.set(characterId, model);
+            this._markModelActive(characterId);
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} DataURL 回退加载成功`);
+            return model;
+          } catch (fallbackError) {
+            const fallbackErrorMessage = String(fallbackError?.message || fallbackError || '');
+            const fallbackErrorStack = String(fallbackError?.stack || '');
+            const fallbackLooksLikeCoreParseError =
+              /unknown error/i.test(fallbackErrorMessage) ||
+              /createcoremodel/i.test(fallbackErrorStack) ||
+              /be\.create/i.test(fallbackErrorStack);
+
+            if (fallbackLooksLikeCoreParseError && canRetryAsCubism5) {
+              const retryModel = await tryForceCubism5Retry(false);
+              if (retryModel) return retryModel;
+            }
+            throw fallbackError;
+          }
         }
         throw e;
       }
@@ -1130,15 +1364,6 @@ export const Live2DManager = {
 
     const modifiedModelJson = JSON.parse(JSON.stringify(modelData.modelJson));
 
-    const arrayBufferToBase64 = (buffer) => {
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      return btoa(binary);
-    };
-
     const blobToDataUrl = (blob) => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1148,9 +1373,10 @@ export const Live2DManager = {
       });
     };
 
-    const arrayBufferToDataUrl = (buffer, mimeType) => {
-      const base64 = arrayBufferToBase64(buffer);
-      return `data:${mimeType};base64,${base64}`;
+    const binaryToDataUrl = async (data, mimeType = 'application/octet-stream') => {
+      if (!data) return null;
+      const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType || 'application/octet-stream' });
+      return await blobToDataUrl(blob);
     };
 
     const normalizePath = (p) => (typeof p === 'string' ? p.replace(/\\/g, '/') : p);
@@ -1159,7 +1385,15 @@ export const Live2DManager = {
     if (isModel3) {
       // Cubism 3/4: model3.json
       if (modelData.moc3 && modifiedModelJson.FileReferences) {
-        modifiedModelJson.FileReferences.Moc = arrayBufferToDataUrl(modelData.moc3, 'application/octet-stream');
+        const mocDataUrl = await binaryToDataUrl(modelData.moc3, 'application/octet-stream');
+        modifiedModelJson.FileReferences.Moc = mocDataUrl;
+        const mocBase64 = typeof mocDataUrl === 'string' ? mocDataUrl.split('base64,')[1] || '' : '';
+        if (mocBase64 && !mocBase64.startsWith('TU9DMw')) {
+          console.warn(`[${SCRIPT_NAME}] Live2DManager: moc3 data URL signature unexpected (${characterId})`, {
+            prefix: mocBase64.slice(0, 12),
+            byteLength: modelData.moc3?.byteLength || 0,
+          });
+        }
       }
 
       if (modelData.textures && modifiedModelJson.FileReferences?.Textures) {
@@ -1172,11 +1406,11 @@ export const Live2DManager = {
       }
 
       if (modelData.physics && modifiedModelJson.FileReferences?.Physics) {
-        modifiedModelJson.FileReferences.Physics = arrayBufferToDataUrl(modelData.physics, 'application/json');
+        modifiedModelJson.FileReferences.Physics = await binaryToDataUrl(modelData.physics, 'application/json');
       }
 
       if (modelData.pose && modifiedModelJson.FileReferences?.Pose) {
-        modifiedModelJson.FileReferences.Pose = arrayBufferToDataUrl(modelData.pose, 'application/json');
+        modifiedModelJson.FileReferences.Pose = await binaryToDataUrl(modelData.pose, 'application/json');
       }
 
       if (modelData.motions && Object.keys(modelData.motions).length > 0) {
@@ -1192,7 +1426,7 @@ export const Live2DManager = {
           for (let i = 0; i < motionList.length; i++) {
             const motion = motionList[i];
             if (!motion?.data) continue;
-            const motionDataUrl = arrayBufferToDataUrl(motion.data, 'application/json');
+            const motionDataUrl = await binaryToDataUrl(motion.data, 'application/json');
             if (modifiedModelJson.FileReferences.Motions[groupName][i]) {
               modifiedModelJson.FileReferences.Motions[groupName][i].File = motionDataUrl;
             } else {
@@ -1210,7 +1444,7 @@ export const Live2DManager = {
         for (let i = 0; i < modelData.expressions.length; i++) {
           const expr = modelData.expressions[i];
           if (!expr?.data) continue;
-          const exprDataUrl = arrayBufferToDataUrl(expr.data, 'application/json');
+          const exprDataUrl = await binaryToDataUrl(expr.data, 'application/json');
           if (modifiedModelJson.FileReferences.Expressions[i]) {
             modifiedModelJson.FileReferences.Expressions[i].File = exprDataUrl;
           } else {
@@ -1224,7 +1458,7 @@ export const Live2DManager = {
     } else {
       // Cubism 2.1: model.json
       if (modelData.moc) {
-        const mocDataUrl = arrayBufferToDataUrl(modelData.moc, 'application/octet-stream');
+        const mocDataUrl = await binaryToDataUrl(modelData.moc, 'application/octet-stream');
         if (typeof modifiedModelJson.model === 'string') {
           modifiedModelJson.model = mocDataUrl;
         } else if (typeof modifiedModelJson.Model === 'string') {
@@ -1262,7 +1496,7 @@ export const Live2DManager = {
       }
 
       if (modelData.physics) {
-        const physicsDataUrl = arrayBufferToDataUrl(modelData.physics, 'application/json');
+        const physicsDataUrl = await binaryToDataUrl(modelData.physics, 'application/json');
         modifiedModelJson.physics = physicsDataUrl;
         if (typeof modifiedModelJson.Physics === 'string') {
           modifiedModelJson.Physics = physicsDataUrl;
@@ -1270,7 +1504,7 @@ export const Live2DManager = {
       }
 
       if (modelData.pose) {
-        const poseDataUrl = arrayBufferToDataUrl(modelData.pose, 'application/json');
+        const poseDataUrl = await binaryToDataUrl(modelData.pose, 'application/json');
         modifiedModelJson.pose = poseDataUrl;
         if (typeof modifiedModelJson.Pose === 'string') {
           modifiedModelJson.Pose = poseDataUrl;
@@ -1302,7 +1536,7 @@ export const Live2DManager = {
               if (!filePath) continue;
               const data = motionMap.get(normalizePath(filePath));
               if (!data) continue;
-              const dataUrl = arrayBufferToDataUrl(data, guessMime(filePath));
+              const dataUrl = await binaryToDataUrl(data, guessMime(filePath));
               if (typeof motionDef === 'string') {
                 motionList[i] = dataUrl;
               } else if (typeof motionDef?.file === 'string') {
@@ -1331,7 +1565,7 @@ export const Live2DManager = {
             if (!filePath) continue;
             const data = exprMap.get(normalizePath(filePath));
             if (!data) continue;
-            const dataUrl = arrayBufferToDataUrl(data, 'application/json');
+            const dataUrl = await binaryToDataUrl(data, 'application/json');
 
             if (typeof exprDef === 'string') {
               exprList[i] = dataUrl;
@@ -1345,9 +1579,8 @@ export const Live2DManager = {
       }
     }
 
-    const modelJsonStr = JSON.stringify(modifiedModelJson);
-    const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));
-    return `data:application/json;base64,${modelJsonBase64}`;
+    const modelBlob = new Blob([JSON.stringify(modifiedModelJson)], { type: 'application/json' });
+    return await blobToDataUrl(modelBlob);
   },
 
   async _buildRemoteModelDataUrl(characterId, modelUrl, forceProxyResources = false) {
@@ -1525,9 +1758,13 @@ export const Live2DManager = {
           : '',
     });
 
-    const modelJsonStr = JSON.stringify(modifiedModelJson);
-    const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));
-    return `data:application/json;base64,${modelJsonBase64}`;
+    const modelBlob = new Blob([JSON.stringify(modifiedModelJson)], { type: 'application/json' });
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(modelBlob);
+    });
   },
 
   async renderTo(characterId, containerElement, forceReload = false) {

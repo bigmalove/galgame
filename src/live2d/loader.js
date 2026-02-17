@@ -5,17 +5,31 @@
 // ============================================
 export const Live2DLoader = {
   PIXI_URL: 'https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js',
-  CUBISM4_CORE_URL: 'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js',
-  CUBISM5_CORE_URL: '',
-  CUBISM5_CORE_FILES: Object.freeze(['cubism5.min.js', 'live2dcubismcore.min.js']),
+  CUBISM4_CORE_URL: 'https://cdn.jsdelivr.net/npm/live2dcubismcore@1.0.2/live2dcubismcore.min.js',
+  CUBISM4_CORE_FALLBACK_URLS: Object.freeze([
+    'https://gcore.jsdelivr.net/npm/live2dcubismcore@1.0.2/live2dcubismcore.min.js',
+    'https://unpkg.com/live2dcubismcore@1.0.2/live2dcubismcore.min.js',
+    'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js',
+  ]),
+  CUBISM5_CORE_URL: 'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/live2dcubismcore.min.js',
+  CUBISM5_CORE_FALLBACK_URLS: Object.freeze([
+    'https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/live2dcubismcore.min.js',
+  ]),
   CUBISM2_CORE_URL: 'https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js',
   SDK_URL: 'https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js',
-  CUBISM5_RUNTIME_URL: '',
-  CUBISM5_RUNTIME_FILES: Object.freeze(['cubism5.runtime.min.js', 'cubism5.js']),
+  CUBISM5_RUNTIME_URL: 'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.runtime.min.js',
+  CUBISM5_RUNTIME_FALLBACK_URLS: Object.freeze([
+    'https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.runtime.min.js',
+    'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.js',
+    'https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.js',
+  ]),
   SDK_CACHE_KEY: 'live2d_sdk_v3',
 
   isLoaded: false,
   loadPromise: null,
+  legacyCoreLoaded: false,
+  legacyCorePromise: null,
+  legacyCoreSource: null,
   cubism5CoreLoaded: false,
   cubism5CorePromise: null,
   cubism5CoreSource: null,
@@ -24,6 +38,94 @@ export const Live2DLoader = {
   cubism5RuntimeSource: null,
   legacyLive2DNamespace: null,
   cubism5Live2DNamespace: null,
+  patchedResolveUrlPrototypes: new WeakSet(),
+  patchedXhrLoaderNamespaces: new WeakSet(),
+  pixiUrlResolvePatched: false,
+  pixiUrlResolveOriginal: null,
+  legacyCoreObject: null,
+  cubism5CoreObject: null,
+  activeCoreType: null,
+  loadedScriptUrls: new Set(),
+
+  _getUrlBase(url) {
+    try {
+      const resolved = new URL(url, window.location.href);
+      resolved.hash = '';
+      resolved.search = '';
+      const text = resolved.toString();
+      const slashIndex = text.lastIndexOf('/');
+      return slashIndex >= 0 ? text.slice(0, slashIndex + 1) : text;
+    } catch (e) {
+      const value = this._normalizeRuntimeUrl(url);
+      const slashIndex = value.lastIndexOf('/');
+      return slashIndex >= 0 ? value.slice(0, slashIndex + 1) : value;
+    }
+  },
+
+  _ensureCubismCoreLocateFile(_topWindow, coreUrl) {
+    if (!_topWindow) return;
+    const baseUrl = this._getUrlBase(coreUrl);
+    if (!baseUrl) return;
+
+    const existing = _topWindow.Live2DCubismCore;
+    if (existing && typeof existing === 'object') {
+      if (typeof existing.locateFile !== 'function') {
+        existing.locateFile = (path) => `${baseUrl}${path}`;
+      }
+      return;
+    }
+
+    _topWindow.Live2DCubismCore = {
+      locateFile: (path) => `${baseUrl}${path}`,
+    };
+  },
+
+  _loadScriptSrc(url, timeoutMs = 12000) {
+    return new Promise((resolve, reject) => {
+      if (!url) {
+        reject(new Error('Script URL is empty'));
+        return;
+      }
+
+      if (this.loadedScriptUrls.has(url)) {
+        resolve(true);
+        return;
+      }
+
+      const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+      const doc = _topWindow?.document || document;
+      const script = doc.createElement('script');
+      let done = false;
+
+      const finish = (ok, err) => {
+        if (done) return;
+        done = true;
+        if (ok) {
+          this.loadedScriptUrls.add(url);
+          resolve(true);
+        } else {
+          reject(err || new Error(`Script load failed: ${url}`));
+        }
+      };
+
+      const timer = setTimeout(() => {
+        finish(false, new Error(`Script load timeout: ${url}`));
+      }, timeoutMs);
+
+      script.async = true;
+      script.src = url;
+      script.crossOrigin = 'anonymous';
+      script.onload = () => {
+        clearTimeout(timer);
+        finish(true);
+      };
+      script.onerror = () => {
+        clearTimeout(timer);
+        finish(false, new Error(`Script load failed: ${url}`));
+      };
+      doc.head.appendChild(script);
+    });
+  },
 
   async load() {
     if (this.isLoaded) return true;
@@ -51,13 +153,173 @@ export const Live2DLoader = {
     return this._getLatestMocVersion(_topWindow);
   },
 
-  async ensureCubism5Core() {
+  _isLegacyMocVersion(latestMocVersion) {
+    const value = Number(latestMocVersion || 0) || 0;
+    return value > 0 && value <= 4;
+  },
+
+  _isCubism5MocVersion(latestMocVersion, requiredVersion = 5) {
+    const value = Number(latestMocVersion || 0) || 0;
+    const required = Math.max(5, Number(requiredVersion || 0) || 0);
+    return value >= required;
+  },
+
+  _setGlobalCubismCore(_topWindow, coreObject) {
+    if (!_topWindow) return;
+    if (coreObject) {
+      _topWindow.Live2DCubismCore = coreObject;
+      return;
+    }
+    try {
+      delete _topWindow.Live2DCubismCore;
+    } catch (e) {
+      _topWindow.Live2DCubismCore = undefined;
+    }
+  },
+
+  async ensureLegacyCore() {
+    const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
+    const latestVersion = this._getLatestMocVersion(_topWindow);
+    if (this._isLegacyMocVersion(latestVersion)) {
+      this.legacyCoreLoaded = true;
+      this.cubism5CoreLoaded = false;
+      this.activeCoreType = 'legacy';
+      this.legacyCoreObject = _topWindow.Live2DCubismCore || this.legacyCoreObject;
+      if (!this.legacyCoreSource) {
+        this.legacyCoreSource = 'window.Live2DCubismCore(existing)';
+      }
+      return true;
+    }
+
+    if (this._isLegacyMocVersion(this._getLatestMocVersion({ Live2DCubismCore: this.legacyCoreObject }))) {
+      this._setGlobalCubismCore(_topWindow, this.legacyCoreObject);
+      if (this._isLegacyMocVersion(this._getLatestMocVersion(_topWindow))) {
+        this.legacyCoreLoaded = true;
+        this.cubism5CoreLoaded = false;
+        this.activeCoreType = 'legacy';
+        if (!this.legacyCoreSource) {
+          this.legacyCoreSource = 'window.Live2DCubismCore(snapshot)';
+        }
+        return true;
+      }
+    }
+
+    if (this.legacyCorePromise) return this.legacyCorePromise;
+
+    this.legacyCorePromise = (async () => {
+      const previousCore = _topWindow.Live2DCubismCore;
+      const coreUrls = this._getCubism4CoreUrls();
+      if (!coreUrls.length) {
+        console.error(`[${SCRIPT_NAME}] Cubism 4 Core load failed: no core URL candidates`);
+        this.legacyCorePromise = null;
+        return false;
+      }
+
+      let lastError = null;
+      try {
+        for (const coreUrl of coreUrls) {
+          try {
+            const coreText = await fetch(coreUrl).then(r => {
+              if (!r.ok) throw new Error(`Cubism 4 Core load failed: ${r.status}`);
+              return r.text();
+            });
+            this._setGlobalCubismCore(_topWindow, null);
+            await this._executeScript(coreText, _topWindow);
+
+            const startedAt = Date.now();
+            let loadedVersion = this._getLatestMocVersion(_topWindow);
+            while (Date.now() - startedAt < 5000 && !this._isLegacyMocVersion(loadedVersion)) {
+              await new Promise(r => setTimeout(r, 80));
+              loadedVersion = this._getLatestMocVersion(_topWindow);
+            }
+
+            if (!this._isLegacyMocVersion(loadedVersion)) {
+              throw new Error(`latest moc version check failed: ${loadedVersion}`);
+            }
+
+            this.legacyCoreLoaded = true;
+            this.legacyCoreObject = _topWindow.Live2DCubismCore || this.legacyCoreObject;
+            this.legacyCoreSource = coreUrl;
+            this.cubism5CoreLoaded = false;
+            this.activeCoreType = 'legacy';
+            console.log(`[${SCRIPT_NAME}] Cubism 4 Core loaded from ${coreUrl}`);
+            return true;
+          } catch (candidateError) {
+            this._setGlobalCubismCore(_topWindow, previousCore);
+            lastError = candidateError;
+            console.warn(`[${SCRIPT_NAME}] Cubism 4 Core candidate failed: ${coreUrl}`, candidateError);
+          }
+        }
+
+        this._setGlobalCubismCore(_topWindow, previousCore);
+        if (this._isLegacyMocVersion(this._getLatestMocVersion(_topWindow))) {
+          this.legacyCoreLoaded = true;
+          this.cubism5CoreLoaded = false;
+          this.activeCoreType = 'legacy';
+          this.legacyCoreObject = _topWindow.Live2DCubismCore || this.legacyCoreObject;
+          if (!this.legacyCoreSource) {
+            this.legacyCoreSource = 'window.Live2DCubismCore(existing)';
+          }
+          console.warn(`[${SCRIPT_NAME}] Cubism 4 Core candidates failed; fallback to existing core`);
+          return true;
+        }
+
+        console.warn(`[${SCRIPT_NAME}] Cubism 4 Core load failed: all candidates failed`, {
+          candidates: coreUrls,
+          lastError: String(lastError?.message || lastError || ''),
+        });
+        if (lastError) {
+          this._setGlobalCubismCore(_topWindow, previousCore);
+          throw lastError;
+        }
+        return false;
+      } catch (e) {
+        this._setGlobalCubismCore(_topWindow, previousCore);
+        console.error(`[${SCRIPT_NAME}] Cubism 4 Core load failed:`, e);
+        return false;
+      } finally {
+        this.legacyCorePromise = null;
+      }
+    })();
+
+    return this.legacyCorePromise;
+  },
+
+  async ensureCubism5Core(requiredLatestVersion = 5) {
     const _topWindow = typeof window.parent !== 'undefined' ? window.parent : window;
 
+    const requiredVersion = Math.max(5, Number(requiredLatestVersion || 0) || 0);
     const latestVersion = this._getLatestMocVersion(_topWindow);
-    if (latestVersion >= 5) {
+    const existingIsCubism5 = latestVersion >= requiredVersion;
+    const hasPinnedCubism5Source =
+      typeof this.cubism5CoreSource === 'string' &&
+      /^https?:/i.test(this.cubism5CoreSource);
+    if (existingIsCubism5 && hasPinnedCubism5Source) {
       this.cubism5CoreLoaded = true;
+      this.legacyCoreLoaded = false;
+      this.activeCoreType = 'cubism5';
+      this.cubism5CoreObject = _topWindow.Live2DCubismCore || this.cubism5CoreObject;
       return true;
+    }
+
+    if (existingIsCubism5 && !hasPinnedCubism5Source) {
+      this.cubism5CoreObject = _topWindow.Live2DCubismCore || this.cubism5CoreObject;
+      console.warn(
+        `[${SCRIPT_NAME}] Existing Cubism Core detected without pinned source, will try configured Cubism 5 core URL candidates`,
+      );
+    }
+
+    if (this._isCubism5MocVersion(this._getLatestMocVersion({ Live2DCubismCore: this.cubism5CoreObject }), requiredVersion)) {
+      this._setGlobalCubismCore(_topWindow, this.cubism5CoreObject);
+      if (this._isCubism5MocVersion(this._getLatestMocVersion(_topWindow), requiredVersion)) {
+        this.cubism5CoreLoaded = true;
+        this.legacyCoreLoaded = false;
+        this.activeCoreType = 'cubism5';
+        if (!this.cubism5CoreSource) {
+          this.cubism5CoreSource = 'window.Live2DCubismCore(snapshot)';
+        }
+        return true;
+      }
     }
     if (this.cubism5CorePromise) return this.cubism5CorePromise;
 
@@ -70,30 +332,45 @@ export const Live2DLoader = {
       }
 
       let lastError = null;
+      const previousCore = _topWindow.Live2DCubismCore;
       try {
         for (const coreUrl of coreUrls) {
           try {
-            const coreText = await fetch(coreUrl).then(r => {
-              if (!r.ok) throw new Error(`Cubism 5 Core load failed: ${r.status}`);
-              return r.text();
-            });
-            await this._executeScript(coreText, _topWindow);
+            this._setGlobalCubismCore(_topWindow, null);
+            this._ensureCubismCoreLocateFile(_topWindow, coreUrl);
+            await this._loadScriptSrc(coreUrl);
 
-            const loadedVersion = await this._waitForLatestMocVersion(_topWindow, 5, 5000, 80);
-            if (loadedVersion >= 5) {
+            const loadedVersion = await this._waitForLatestMocVersion(_topWindow, requiredVersion, 8000, 80);
+            if (loadedVersion >= requiredVersion) {
               this.cubism5CoreLoaded = true;
+              this.legacyCoreLoaded = false;
+              this.activeCoreType = 'cubism5';
+              this.cubism5CoreObject = _topWindow.Live2DCubismCore || this.cubism5CoreObject;
               this.cubism5CoreSource = coreUrl;
               console.log(`[${SCRIPT_NAME}] Cubism 5 Core loaded from ${coreUrl}`);
               return true;
             }
 
-            throw new Error(`latest moc version check failed: ${loadedVersion}`);
+            throw new Error(`latest moc version check failed: ${loadedVersion} (required >= ${requiredVersion})`);
           } catch (candidateError) {
+            this._setGlobalCubismCore(_topWindow, previousCore);
             lastError = candidateError;
             console.warn(`[${SCRIPT_NAME}] Cubism 5 Core candidate failed: ${coreUrl}`, candidateError);
           }
         }
 
+        this._setGlobalCubismCore(_topWindow, previousCore);
+        if (this._isCubism5MocVersion(this._getLatestMocVersion(_topWindow), requiredVersion)) {
+          this.cubism5CoreLoaded = true;
+          this.legacyCoreLoaded = false;
+          this.activeCoreType = 'cubism5';
+          this.cubism5CoreObject = _topWindow.Live2DCubismCore || this.cubism5CoreObject;
+          if (!this.cubism5CoreSource) {
+            this.cubism5CoreSource = 'window.Live2DCubismCore(existing)';
+          }
+          console.warn(`[${SCRIPT_NAME}] Cubism 5 Core candidates failed; fallback to existing core`);
+          return true;
+        }
         this.cubism5CoreLoaded = false;
         this.cubism5CoreSource = null;
         console.error(`[${SCRIPT_NAME}] Cubism 5 Core load failed: all candidates failed`, {
@@ -114,40 +391,123 @@ export const Live2DLoader = {
     return url.trim();
   },
 
-  _resolvePluginScriptBaseUrls(_topWindow) {
-    const doc = _topWindow?.document;
-    if (!doc) return [];
-
-    const baseUrls = [];
-    const seen = new Set();
-    const scripts = Array.from(doc.querySelectorAll('script[src]'));
-
-    const isPluginScript = (src) => {
-      if (!src) return false;
-      let decoded = src;
-      try {
-        decoded = decodeURIComponent(src);
-      } catch (e) {}
-      return /数据库界面插件\.dist\.js|galgame.*\.dist\.js|galgame-ui-plugin/i.test(decoded);
-    };
-
-    for (const script of scripts) {
-      const src = this._normalizeRuntimeUrl(script?.src || script?.getAttribute?.('src'));
-      if (!src || !isPluginScript(src)) continue;
-
-      try {
-        const absoluteUrl = new URL(src, _topWindow.location?.href || window.location.href).toString();
-        const baseUrl = new URL('.', absoluteUrl).toString();
-        if (seen.has(baseUrl)) continue;
-        seen.add(baseUrl);
-        baseUrls.push(baseUrl);
-      } catch (e) {}
-    }
-
-    return baseUrls;
+  _isDirectResourceUrl(url) {
+    const value = this._normalizeRuntimeUrl(url);
+    if (!value) return false;
+    if (value.startsWith('//')) return true;
+    return /^(?:blob|data|https?|file|stscript|chrome-extension|moz-extension|capacitor|app):/i.test(value);
   },
 
-  _getCubism5RuntimeUrls(_topWindow) {
+  _patchPixiUrlResolve(_topWindow) {
+    if (this.pixiUrlResolvePatched) return true;
+    const utils = _topWindow?.PIXI?.utils;
+    const urlApi = utils?.url;
+    const originalResolve = urlApi?.resolve;
+    if (typeof originalResolve !== 'function') return false;
+
+    const loaderRef = this;
+    this.pixiUrlResolveOriginal = originalResolve;
+    urlApi.resolve = function patchedPixiUrlResolve(baseUrl, resourcePath) {
+      if (loaderRef._isDirectResourceUrl(resourcePath)) {
+        return loaderRef._normalizeRuntimeUrl(resourcePath);
+      }
+      return originalResolve.call(this, baseUrl, resourcePath);
+    };
+
+    this.pixiUrlResolvePatched = true;
+    console.log(`[${SCRIPT_NAME}] Patched PIXI.utils.url.resolve`);
+    return true;
+  },
+
+  _patchModelSettingsResolveURL(runtimeNamespace, runtimeLabel = 'unknown') {
+    if (!runtimeNamespace || typeof runtimeNamespace !== 'object') return 0;
+
+    const candidates = [
+      'ModelSettings',
+      'Cubism2ModelSettings',
+      'Cubism4ModelSettings',
+      'Cubism5ModelSettings',
+    ];
+    let patchedCount = 0;
+
+    for (const ctorName of candidates) {
+      const proto = runtimeNamespace?.[ctorName]?.prototype;
+      if (!proto || typeof proto.resolveURL !== 'function') continue;
+      if (this.patchedResolveUrlPrototypes.has(proto) || proto.__galgameResolveUrlPatched) continue;
+
+      const originalResolveURL = proto.resolveURL;
+      const loaderRef = this;
+      proto.resolveURL = function patchedResolveURL(resourcePath) {
+        if (loaderRef._isDirectResourceUrl(resourcePath)) {
+          return loaderRef._normalizeRuntimeUrl(resourcePath);
+        }
+        return originalResolveURL.call(this, resourcePath);
+      };
+
+      try {
+        proto.__galgameResolveUrlPatched = true;
+      } catch (e) {}
+      this.patchedResolveUrlPrototypes.add(proto);
+      patchedCount++;
+      console.log(`[${SCRIPT_NAME}] Patched ModelSettings.resolveURL (${runtimeLabel}:${ctorName})`);
+    }
+
+    return patchedCount;
+  },
+
+  _patchXhrLoader(runtimeNamespace, runtimeLabel = 'unknown') {
+    if (!runtimeNamespace || typeof runtimeNamespace !== 'object') return false;
+    if (this.patchedXhrLoaderNamespaces.has(runtimeNamespace)) return true;
+
+    const XHRLoader = runtimeNamespace.XHRLoader;
+    const originalLoader = XHRLoader?.loader;
+    if (typeof originalLoader !== 'function') {
+      console.warn(`[${SCRIPT_NAME}] XHRLoader.loader missing (${runtimeLabel})`, {
+        hasNamespace: !!runtimeNamespace,
+        hasXHRLoader: !!XHRLoader,
+        loaderType: typeof originalLoader,
+      });
+      return false;
+    }
+
+    const loaderRef = this;
+    XHRLoader.loader = (context) => {
+      const rawUrl = context?.settings ? context.settings.resolveURL(context.url) : context?.url;
+      const requestUrl = loaderRef._normalizeRuntimeUrl(rawUrl);
+      if (!loaderRef._isDirectResourceUrl(requestUrl)) {
+        return originalLoader(context);
+      }
+
+      const requestType = String(context?.type || '').toLowerCase();
+      return fetch(requestUrl)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Fetch failed (${response.status}) for ${requestUrl}`);
+          }
+          if (requestType === 'json') return response.json();
+          if (requestType === 'text') return response.text();
+          return response.arrayBuffer();
+        })
+        .then((payload) => {
+          if (requestType !== 'json' && requestType !== 'text' && payload instanceof ArrayBuffer) {
+            const header = new Uint8Array(payload, 0, Math.min(4, payload.byteLength));
+            const signature = String.fromCharCode(...header);
+            console.log(`[${SCRIPT_NAME}] XHRLoader patched fetch arraybuffer`, {
+              url: requestUrl.slice(0, 128),
+              byteLength: payload.byteLength,
+              signature,
+            });
+          }
+          context.result = payload;
+        });
+    };
+
+    this.patchedXhrLoaderNamespaces.add(runtimeNamespace);
+    console.log(`[${SCRIPT_NAME}] Patched XHRLoader.loader (${runtimeLabel})`);
+    return true;
+  },
+
+  _getCubism5RuntimeUrls() {
     const urls = [];
     const seen = new Set();
     const pushUrl = (value) => {
@@ -158,20 +518,14 @@ export const Live2DLoader = {
     };
 
     pushUrl(this.CUBISM5_RUNTIME_URL);
-
-    const baseUrls = this._resolvePluginScriptBaseUrls(_topWindow);
-    for (const baseUrl of baseUrls) {
-      for (const fileName of this.CUBISM5_RUNTIME_FILES) {
-        try {
-          pushUrl(new URL(fileName, baseUrl).toString());
-        } catch (e) {}
-      }
+    for (const fallbackUrl of this.CUBISM5_RUNTIME_FALLBACK_URLS) {
+      pushUrl(fallbackUrl);
     }
 
     return urls;
   },
 
-  _getCubism5CoreUrls(_topWindow) {
+  _getCubism5CoreUrls() {
     const urls = [];
     const seen = new Set();
     const pushUrl = (value) => {
@@ -182,21 +536,35 @@ export const Live2DLoader = {
     };
 
     pushUrl(this.CUBISM5_CORE_URL);
-
-    const baseUrls = this._resolvePluginScriptBaseUrls(_topWindow);
-    for (const baseUrl of baseUrls) {
-      for (const fileName of this.CUBISM5_CORE_FILES) {
-        try {
-          pushUrl(new URL(fileName, baseUrl).toString());
-        } catch (e) {}
-      }
+    for (const fallbackUrl of this.CUBISM5_CORE_FALLBACK_URLS) {
+      pushUrl(fallbackUrl);
     }
 
     return urls;
   },
 
+  _getCubism4CoreUrls() {
+    const urls = [];
+    const seen = new Set();
+    const pushUrl = (value) => {
+      const normalized = this._normalizeRuntimeUrl(value);
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      urls.push(normalized);
+    };
+
+    pushUrl(this.CUBISM4_CORE_URL);
+    for (const fallbackUrl of this.CUBISM4_CORE_FALLBACK_URLS) {
+      pushUrl(fallbackUrl);
+    }
+    return urls;
+  },
+
   async ensureCubism5Runtime() {
     if (this.cubism5RuntimeLoaded && this.cubism5Live2DNamespace?.Live2DModel) {
+      if (!this.cubism5RuntimeSource) {
+        this.cubism5RuntimeSource = 'window.PIXI.live2d(existing)';
+      }
       return true;
     }
     if (this.cubism5RuntimePromise) return this.cubism5RuntimePromise;
@@ -216,7 +584,7 @@ export const Live2DLoader = {
       }
 
       try {
-        const runtimeUrls = this._getCubism5RuntimeUrls(_topWindow);
+        const runtimeUrls = this._getCubism5RuntimeUrls();
         if (!runtimeUrls.length) {
           console.error(`[${SCRIPT_NAME}] Cubism 5 runtime load failed: no runtime URL candidates`);
           return false;
@@ -236,6 +604,9 @@ export const Live2DLoader = {
             if (!runtimeNamespace?.Live2DModel) {
               throw new Error('Live2DModel is unavailable after Cubism 5 runtime script execution');
             }
+
+            this._patchModelSettingsResolveURL(runtimeNamespace, 'cubism5');
+            this._patchXhrLoader(runtimeNamespace, 'cubism5');
 
             this.cubism5Live2DNamespace = runtimeNamespace;
             this.cubism5RuntimeLoaded = true;
@@ -295,7 +666,10 @@ export const Live2DLoader = {
     try {
       if (_topWindow.PIXI?.live2d?.Live2DModel) {
         console.log(`[${SCRIPT_NAME}] Live2D SDK already available`);
+        this._patchPixiUrlResolve(_topWindow);
         this.legacyLive2DNamespace = _topWindow.PIXI.live2d;
+        this._patchModelSettingsResolveURL(this.legacyLive2DNamespace, 'legacy-existing');
+        this._patchXhrLoader(this.legacyLive2DNamespace, 'legacy-existing');
         this.isLoaded = true;
         return true;
       }
@@ -314,6 +688,8 @@ export const Live2DLoader = {
         _topWindow.window.PIXI = _topWindow.PIXI;
       }
 
+      this._patchPixiUrlResolve(_topWindow);
+
       if (!_topWindow.Live2DCubismCore) {
         console.log(`[${SCRIPT_NAME}] 鍔犺浇 Cubism 4 Core...`);
         try {
@@ -322,9 +698,26 @@ export const Live2DLoader = {
             return r.text();
           });
           await this._executeScript(coreText, _topWindow);
+          this.legacyCoreLoaded = true;
+          this.legacyCoreSource = this.CUBISM4_CORE_URL;
+          this.legacyCoreObject = _topWindow.Live2DCubismCore || this.legacyCoreObject;
+          this.activeCoreType = 'legacy';
           console.log(`[${SCRIPT_NAME}] Cubism 4 Core 鍔犺浇瀹屾垚`);
         } catch (e) {
           console.warn(`[${SCRIPT_NAME}] Cubism 4 Core 鍔犺浇澶辫触锛屽皾璇曞鐢ㄦ簮...`, e);
+        }
+      } else {
+        const latestMocVersion = this._getLatestMocVersion(_topWindow);
+        if (latestMocVersion >= 5) {
+          this.cubism5CoreLoaded = true;
+          this.cubism5CoreSource = this.cubism5CoreSource || 'window.Live2DCubismCore(existing)';
+          this.cubism5CoreObject = _topWindow.Live2DCubismCore || this.cubism5CoreObject;
+          this.activeCoreType = 'cubism5';
+        } else if (this._isLegacyMocVersion(latestMocVersion)) {
+          this.legacyCoreLoaded = true;
+          this.legacyCoreSource = this.legacyCoreSource || 'window.Live2DCubismCore(existing)';
+          this.legacyCoreObject = _topWindow.Live2DCubismCore || this.legacyCoreObject;
+          this.activeCoreType = 'legacy';
         }
       }
 
@@ -357,9 +750,12 @@ export const Live2DLoader = {
       }
 
       await new Promise(r => setTimeout(r, 100));
+      this._patchPixiUrlResolve(_topWindow);
 
       if (_topWindow.PIXI?.live2d?.Live2DModel) {
         this.legacyLive2DNamespace = _topWindow.PIXI.live2d;
+        this._patchModelSettingsResolveURL(this.legacyLive2DNamespace, 'legacy');
+        this._patchXhrLoader(this.legacyLive2DNamespace, 'legacy');
       }
 
       this.isLoaded = true;
@@ -464,6 +860,9 @@ export const Live2DLoader = {
             database.close();
             this.isLoaded = false;
             this.loadPromise = null;
+            this.legacyCoreLoaded = false;
+            this.legacyCorePromise = null;
+            this.legacyCoreSource = null;
             this.cubism5CoreLoaded = false;
             this.cubism5CorePromise = null;
             this.cubism5CoreSource = null;
@@ -472,6 +871,14 @@ export const Live2DLoader = {
             this.cubism5RuntimeSource = null;
             this.legacyLive2DNamespace = null;
             this.cubism5Live2DNamespace = null;
+            this.patchedResolveUrlPrototypes = new WeakSet();
+            this.patchedXhrLoaderNamespaces = new WeakSet();
+            this.pixiUrlResolvePatched = false;
+            this.pixiUrlResolveOriginal = null;
+            this.legacyCoreObject = null;
+            this.cubism5CoreObject = null;
+            this.activeCoreType = null;
+            this.loadedScriptUrls = new Set();
             console.log(`[${SCRIPT_NAME}] Live2D SDK cache cleared`);
             resolve();
           };

@@ -2169,82 +2169,277 @@
   var Live2DLoader = {
     PIXI_URL: "https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js",
     CUBISM4_CORE_URL: "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js",
+    CUBISM5_CORE_URL: "https://cdn.jsdelivr.net/npm/@doki-land/live2d/lib/cubism5.min.js",
     CUBISM2_CORE_URL: "https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js",
     SDK_URL: "https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js",
+    CUBISM5_RUNTIME_URL: "",
+    CUBISM5_RUNTIME_FILES: Object.freeze(["cubism5.min.js", "cubism5.js"]),
     SDK_CACHE_KEY: "live2d_sdk_v3",
     isLoaded: false,
     loadPromise: null,
+    cubism5CoreLoaded: false,
+    cubism5CorePromise: null,
+    cubism5RuntimeLoaded: false,
+    cubism5RuntimePromise: null,
+    cubism5RuntimeSource: null,
+    legacyLive2DNamespace: null,
+    cubism5Live2DNamespace: null,
     async load() {
       if (this.isLoaded) return true;
       if (this.loadPromise) return this.loadPromise;
       this.loadPromise = this._doLoad();
       return this.loadPromise;
     },
+    _getLatestMocVersion(_topWindow) {
+      try {
+        return Number(_topWindow?.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() || 0) || 0;
+      } catch (e) {
+        return 0;
+      }
+    },
+    async _waitForLatestMocVersion(_topWindow, expectedMajor = 5, timeoutMs = 4e3, intervalMs = 50) {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < timeoutMs) {
+        const latestVersion = this._getLatestMocVersion(_topWindow);
+        if (latestVersion >= expectedMajor) return latestVersion;
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+      return this._getLatestMocVersion(_topWindow);
+    },
+    async ensureCubism5Core() {
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      const latestVersion = this._getLatestMocVersion(_topWindow);
+      if (latestVersion >= 5) {
+        this.cubism5CoreLoaded = true;
+        return true;
+      }
+      if (this.cubism5CorePromise) return this.cubism5CorePromise;
+      this.cubism5CorePromise = (async () => {
+        try {
+          const coreText = await fetch(this.CUBISM5_CORE_URL).then((r) => {
+            if (!r.ok) throw new Error(`Cubism 5 Core \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6: ${r.status}`);
+            return r.text();
+          });
+          await this._executeScript(coreText, _topWindow);
+          const loadedVersion = await this._waitForLatestMocVersion(_topWindow, 5, 5e3, 80);
+          this.cubism5CoreLoaded = loadedVersion >= 5;
+          if (!this.cubism5CoreLoaded) {
+            console.warn(`[${SCRIPT_NAME}] Cubism 5 Core loaded but latest moc version check failed`, {
+              latestMocVersion: loadedVersion,
+              source: this.CUBISM5_CORE_URL
+            });
+          }
+          return this.cubism5CoreLoaded;
+        } catch (e) {
+          console.error(`[${SCRIPT_NAME}] Cubism 5 Core \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6:`, e);
+          return false;
+        } finally {
+          this.cubism5CorePromise = null;
+        }
+      })();
+      return this.cubism5CorePromise;
+    },
+    _normalizeRuntimeUrl(url) {
+      if (typeof url !== "string") return "";
+      return url.trim();
+    },
+    _resolvePluginScriptBaseUrls(_topWindow) {
+      const doc = _topWindow?.document;
+      if (!doc) return [];
+      const baseUrls = [];
+      const seen = /* @__PURE__ */ new Set();
+      const scripts = Array.from(doc.querySelectorAll("script[src]"));
+      const isPluginScript = (src) => {
+        if (!src) return false;
+        let decoded = src;
+        try {
+          decoded = decodeURIComponent(src);
+        } catch (e) {
+        }
+        return /数据库界面插件\.dist\.js|galgame.*\.dist\.js|galgame-ui-plugin/i.test(decoded);
+      };
+      for (const script of scripts) {
+        const src = this._normalizeRuntimeUrl(script?.src || script?.getAttribute?.("src"));
+        if (!src || !isPluginScript(src)) continue;
+        try {
+          const absoluteUrl = new URL(src, _topWindow.location?.href || window.location.href).toString();
+          const baseUrl = new URL(".", absoluteUrl).toString();
+          if (seen.has(baseUrl)) continue;
+          seen.add(baseUrl);
+          baseUrls.push(baseUrl);
+        } catch (e) {
+        }
+      }
+      return baseUrls;
+    },
+    _getCubism5RuntimeUrls(_topWindow) {
+      const urls = [];
+      const seen = /* @__PURE__ */ new Set();
+      const pushUrl = (value) => {
+        const normalized = this._normalizeRuntimeUrl(value);
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        urls.push(normalized);
+      };
+      pushUrl(this.CUBISM5_RUNTIME_URL);
+      const baseUrls = this._resolvePluginScriptBaseUrls(_topWindow);
+      for (const baseUrl of baseUrls) {
+        for (const fileName of this.CUBISM5_RUNTIME_FILES) {
+          try {
+            pushUrl(new URL(fileName, baseUrl).toString());
+          } catch (e) {
+          }
+        }
+      }
+      return urls;
+    },
+    async ensureCubism5Runtime() {
+      if (this.cubism5RuntimeLoaded && this.cubism5Live2DNamespace?.Live2DModel) {
+        return true;
+      }
+      if (this.cubism5RuntimePromise) return this.cubism5RuntimePromise;
+      this.cubism5RuntimePromise = (async () => {
+        const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+        if (!this.isLoaded) {
+          const loaded = await this.load();
+          if (!loaded) return false;
+        }
+        const coreReady = await this.ensureCubism5Core();
+        if (!coreReady) {
+          console.error(`[${SCRIPT_NAME}] Cubism 5 runtime load aborted: core unavailable`);
+          return false;
+        }
+        try {
+          const runtimeUrls = this._getCubism5RuntimeUrls(_topWindow);
+          if (!runtimeUrls.length) {
+            console.error(`[${SCRIPT_NAME}] Cubism 5 runtime load failed: no runtime URL candidates`);
+            return false;
+          }
+          let lastError = null;
+          for (const runtimeUrl of runtimeUrls) {
+            try {
+              const runtimeText = await fetch(runtimeUrl).then((r) => {
+                if (!r.ok) throw new Error(`Cubism 5 runtime load failed: ${r.status}`);
+                return r.text();
+              });
+              await this._executeScript(runtimeText, _topWindow);
+              await new Promise((r) => setTimeout(r, 100));
+              const runtimeNamespace = _topWindow?.PIXI?.live2d;
+              if (!runtimeNamespace?.Live2DModel) {
+                throw new Error("Live2DModel is unavailable after Cubism 5 runtime script execution");
+              }
+              this.cubism5Live2DNamespace = runtimeNamespace;
+              this.cubism5RuntimeLoaded = true;
+              this.cubism5RuntimeSource = runtimeUrl;
+              if (this.legacyLive2DNamespace?.Live2DModel) {
+                _topWindow.PIXI.live2d = this.legacyLive2DNamespace;
+              }
+              console.log(`[${SCRIPT_NAME}] Cubism 5 runtime loaded from ${runtimeUrl}`);
+              return true;
+            } catch (candidateError) {
+              lastError = candidateError;
+              console.warn(`[${SCRIPT_NAME}] Cubism 5 runtime candidate failed: ${runtimeUrl}`, candidateError);
+            }
+          }
+          console.error(`[${SCRIPT_NAME}] Cubism 5 runtime load failed: all candidates failed`, {
+            candidates: runtimeUrls,
+            lastError: String(lastError?.message || lastError || "")
+          });
+          return false;
+        } catch (e) {
+          console.error(`[${SCRIPT_NAME}] Cubism 5 runtime load failed:`, e);
+          return false;
+        } finally {
+          this.cubism5RuntimePromise = null;
+        }
+      })();
+      return this.cubism5RuntimePromise;
+    },
+    getRuntimeNamespace(runtimeType = "legacy") {
+      if (runtimeType === "cubism5" && this.cubism5Live2DNamespace?.Live2DModel) {
+        return this.cubism5Live2DNamespace;
+      }
+      if (this.legacyLive2DNamespace?.Live2DModel) return this.legacyLive2DNamespace;
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      return _topWindow?.PIXI?.live2d || null;
+    },
+    activateRuntime(runtimeType = "legacy") {
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      if (!_topWindow?.PIXI) return false;
+      const target = this.getRuntimeNamespace(runtimeType);
+      if (!target?.Live2DModel) return false;
+      _topWindow.PIXI.live2d = target;
+      return true;
+    },
     async _doLoad() {
       const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
       try {
         if (_topWindow.PIXI?.live2d?.Live2DModel) {
-          console.log(`[${SCRIPT_NAME}] Live2D SDK \u5DF2\u5B58\u5728`);
+          console.log(`[${SCRIPT_NAME}] Live2D SDK already available`);
+          this.legacyLive2DNamespace = _topWindow.PIXI.live2d;
           this.isLoaded = true;
           return true;
         }
         if (!_topWindow.PIXI) {
-          console.log(`[${SCRIPT_NAME}] \u52A0\u8F7D PIXI.js...`);
+          console.log(`[${SCRIPT_NAME}] \u9354\u72BA\u6D47 PIXI.js...`);
           const pixiText = await fetch(this.PIXI_URL).then((r) => {
-            if (!r.ok) throw new Error(`PIXI.js \u52A0\u8F7D\u5931\u8D25: ${r.status}`);
+            if (!r.ok) throw new Error(`PIXI.js \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6: ${r.status}`);
             return r.text();
           });
           await this._executeScript(pixiText, _topWindow);
-          console.log(`[${SCRIPT_NAME}] PIXI.js \u52A0\u8F7D\u5B8C\u6210`);
+          console.log(`[${SCRIPT_NAME}] PIXI.js \u9354\u72BA\u6D47\u7039\u5C7E\u579A`);
         }
         if (!_topWindow.window.PIXI) {
           _topWindow.window.PIXI = _topWindow.PIXI;
         }
         if (!_topWindow.Live2DCubismCore) {
-          console.log(`[${SCRIPT_NAME}] \u52A0\u8F7D Cubism 4 Core...`);
+          console.log(`[${SCRIPT_NAME}] \u9354\u72BA\u6D47 Cubism 4 Core...`);
           try {
             const coreText = await fetch(this.CUBISM4_CORE_URL).then((r) => {
-              if (!r.ok) throw new Error(`Cubism 4 Core \u52A0\u8F7D\u5931\u8D25: ${r.status}`);
+              if (!r.ok) throw new Error(`Cubism 4 Core \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6: ${r.status}`);
               return r.text();
             });
             await this._executeScript(coreText, _topWindow);
-            console.log(`[${SCRIPT_NAME}] Cubism 4 Core \u52A0\u8F7D\u5B8C\u6210`);
+            console.log(`[${SCRIPT_NAME}] Cubism 4 Core \u9354\u72BA\u6D47\u7039\u5C7E\u579A`);
           } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] Cubism 4 Core \u52A0\u8F7D\u5931\u8D25\uFF0C\u5C1D\u8BD5\u5907\u7528\u6E90...`, e);
+            console.warn(`[${SCRIPT_NAME}] Cubism 4 Core \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6\u951B\u5C7D\u76BE\u7487\u66DE\uE62C\u9422\u3126\u7C2E...`, e);
           }
         }
         if (!_topWindow.Live2D) {
-          console.log(`[${SCRIPT_NAME}] \u52A0\u8F7D Cubism 2.1 Core...`);
+          console.log(`[${SCRIPT_NAME}] \u9354\u72BA\u6D47 Cubism 2.1 Core...`);
           try {
             const core2Text = await fetch(this.CUBISM2_CORE_URL).then((r) => {
-              if (!r.ok) throw new Error(`Cubism 2.1 Core \u52A0\u8F7D\u5931\u8D25: ${r.status}`);
+              if (!r.ok) throw new Error(`Cubism 2.1 Core \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6: ${r.status}`);
               return r.text();
             });
             await this._executeScript(core2Text, _topWindow);
-            console.log(`[${SCRIPT_NAME}] Cubism 2.1 Core \u52A0\u8F7D\u5B8C\u6210`);
+            console.log(`[${SCRIPT_NAME}] Cubism 2.1 Core \u9354\u72BA\u6D47\u7039\u5C7E\u579A`);
           } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] Cubism 2.1 Core \u52A0\u8F7D\u5931\u8D25\uFF08\u65E7\u6A21\u578B\u53EF\u80FD\u4E0D\u53EF\u7528\uFF09:`, e);
+            console.warn(`[${SCRIPT_NAME}] Cubism 2.1 Core \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6\u951B\u581F\u68EB\u59AF\u2033\u7037\u9359\uE21D\u5158\u6D93\u5D85\u5F72\u9422\uE7D2\u7D1A:`, e);
           }
         }
         const cached = await this._getFromCache();
         if (cached && cached.sdk) {
-          console.log(`[${SCRIPT_NAME}] \u4ECE\u7F13\u5B58\u52A0\u8F7D pixi-live2d-display`);
+          console.log(`[${SCRIPT_NAME}] \u6D60\u5EA3\u7D26\u701B\u6A3A\u59DE\u675E?pixi-live2d-display`);
           await this._executeScript(cached.sdk, _topWindow);
         } else {
-          console.log(`[${SCRIPT_NAME}] \u4ECE CDN \u52A0\u8F7D pixi-live2d-display...`);
+          console.log(`[${SCRIPT_NAME}] \u6D60?CDN \u9354\u72BA\u6D47 pixi-live2d-display...`);
           const sdkText = await fetch(this.SDK_URL).then((r) => {
-            if (!r.ok) throw new Error(`pixi-live2d-display \u52A0\u8F7D\u5931\u8D25: ${r.status}`);
+            if (!r.ok) throw new Error(`pixi-live2d-display \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6: ${r.status}`);
             return r.text();
           });
           await this._saveToCache({ sdk: sdkText });
           await this._executeScript(sdkText, _topWindow);
         }
         await new Promise((r) => setTimeout(r, 100));
+        if (_topWindow.PIXI?.live2d?.Live2DModel) {
+          this.legacyLive2DNamespace = _topWindow.PIXI.live2d;
+        }
         this.isLoaded = true;
-        console.log(`[${SCRIPT_NAME}] Live2D SDK \u52A0\u8F7D\u5B8C\u6210`);
+        console.log(`[${SCRIPT_NAME}] Live2D SDK \u9354\u72BA\u6D47\u7039\u5C7E\u579A`);
         return true;
       } catch (e) {
-        console.error(`[${SCRIPT_NAME}] Live2D SDK \u52A0\u8F7D\u5931\u8D25:`, e);
+        console.error(`[${SCRIPT_NAME}] Live2D SDK \u9354\u72BA\u6D47\u6FB6\u8FAB\u89E6:`, e);
         this.loadPromise = null;
         return false;
       }
@@ -2306,7 +2501,7 @@
             store.put({ id: this.SDK_CACHE_KEY, data, timestamp: Date.now() });
             tx.oncomplete = () => {
               database.close();
-              console.log(`[${SCRIPT_NAME}] Live2D SDK \u5DF2\u7F13\u5B58\u5230 IndexedDB`);
+              console.log(`[${SCRIPT_NAME}] Live2D SDK \u5BB8\u832C\u7D26\u701B\u6A3A\u57CC IndexedDB`);
               resolve();
             };
             tx.onerror = () => {
@@ -2338,7 +2533,14 @@
               database.close();
               this.isLoaded = false;
               this.loadPromise = null;
-              console.log(`[${SCRIPT_NAME}] Live2D SDK \u7F13\u5B58\u5DF2\u6E05\u9664`);
+              this.cubism5CoreLoaded = false;
+              this.cubism5CorePromise = null;
+              this.cubism5RuntimeLoaded = false;
+              this.cubism5RuntimePromise = null;
+              this.cubism5RuntimeSource = null;
+              this.legacyLive2DNamespace = null;
+              this.cubism5Live2DNamespace = null;
+              console.log(`[${SCRIPT_NAME}] Live2D SDK cache cleared`);
               resolve();
             };
           };
@@ -3115,6 +3317,85 @@ ${lines.join("\n")}`;
     }
   };
 
+  // src/live2d/runtime-router.js
+  var LIVE2D_RUNTIME_TYPES = Object.freeze({
+    LEGACY: "legacy",
+    CUBISM5: "cubism5"
+  });
+  var RUNTIME_TYPE_SET = new Set(Object.values(LIVE2D_RUNTIME_TYPES));
+  function parseMajorVersion(value) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.floor(value);
+    }
+    if (typeof value !== "string") return null;
+    const match = value.trim().match(/(\d+)(?:\.\d+)?/);
+    if (!match) return null;
+    const major = Number.parseInt(match[1], 10);
+    return Number.isFinite(major) ? major : null;
+  }
+  function normalizeCubismVersion(value) {
+    const major = parseMajorVersion(value);
+    if (major == null) return null;
+    if (major >= 5) return 5;
+    if (major >= 3) return 4;
+    if (major === 2) return 2;
+    return null;
+  }
+  function inferCubismVersionFromModelJson(modelJson, fallback = null) {
+    if (!modelJson || typeof modelJson !== "object") {
+      return normalizeCubismVersion(fallback);
+    }
+    const directCandidates = [
+      modelJson.Version,
+      modelJson.version,
+      modelJson?.Meta?.Version,
+      modelJson?.meta?.version
+    ];
+    for (const candidate of directCandidates) {
+      const parsed = normalizeCubismVersion(candidate);
+      if (parsed != null) return parsed;
+    }
+    if (modelJson.FileReferences && typeof modelJson.FileReferences === "object") {
+      return normalizeCubismVersion(fallback) ?? 4;
+    }
+    if (typeof modelJson.model === "string" || typeof modelJson.Model === "string") {
+      return normalizeCubismVersion(fallback) ?? 2;
+    }
+    return normalizeCubismVersion(fallback);
+  }
+  function normalizeLive2DRuntimeType(value, fallback = LIVE2D_RUNTIME_TYPES.LEGACY) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (RUNTIME_TYPE_SET.has(normalized)) return normalized;
+    return fallback;
+  }
+  function resolveRuntimeTypeFromCubismVersion(cubismVersion) {
+    const normalized = normalizeCubismVersion(cubismVersion);
+    if (normalized != null && normalized >= 5) {
+      return LIVE2D_RUNTIME_TYPES.CUBISM5;
+    }
+    return LIVE2D_RUNTIME_TYPES.LEGACY;
+  }
+  function resolveLive2DRuntime(modelData = null) {
+    const input = modelData && typeof modelData === "object" ? modelData : {};
+    const inferredVersion = inferCubismVersionFromModelJson(input.modelJson, input.cubismVersion);
+    const explicitRuntime = normalizeLive2DRuntimeType(input.runtimeType || "", "");
+    const runtimeType = explicitRuntime || resolveRuntimeTypeFromCubismVersion(inferredVersion);
+    const cubismVersion = inferredVersion ?? (runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5 ? 5 : null);
+    return {
+      runtimeType,
+      cubismVersion
+    };
+  }
+  function withResolvedLive2DRuntime(modelData = null) {
+    const input = modelData && typeof modelData === "object" ? modelData : {};
+    const resolved = resolveLive2DRuntime(input);
+    return {
+      ...input,
+      runtimeType: resolved.runtimeType,
+      cubismVersion: resolved.cubismVersion
+    };
+  }
+
   // src/live2d/manager.js
   var LIVE2D_TICKER_GUARD_KEY = "__galgameLive2dTickerRef__";
   var _Live2DStageRef = null;
@@ -3134,6 +3415,8 @@ ${lines.join("\n")}`;
     // characterId -> Promise<void>
     modelBlobUrls: /* @__PURE__ */ new Map(),
     // characterId -> Set<string>
+    modelRuntimeInfo: /* @__PURE__ */ new Map(),
+    // characterId -> { runtimeType, cubismVersion }
     cachedDetachedAt: /* @__PURE__ */ new Map(),
     // characterId -> timestamp (宸查€€鍦虹紦瀛?
     maxDetachedCache: 3,
@@ -3141,6 +3424,7 @@ ${lines.join("\n")}`;
     // null=unknown, boolean=supported
     xhrBlobUrlSupportPromise: null,
     hasLoggedBlobUrlDisabled: false,
+    registeredTickerClasses: /* @__PURE__ */ new WeakSet(),
     isReady: false,
     debug: false,
     _debugLog(...args) {
@@ -3149,6 +3433,20 @@ ${lines.join("\n")}`;
     },
     _markModelActive(characterId) {
       this.cachedDetachedAt.delete(characterId);
+    },
+    _registerTickerForLive2DModelClass(Live2DModelClass) {
+      if (!Live2DModelClass || typeof Live2DModelClass.registerTicker !== "function") return false;
+      try {
+        if (this.registeredTickerClasses.has(Live2DModelClass)) return true;
+        const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+        Live2DModelClass.registerTicker(_topWindow.PIXI.Ticker);
+        this.registeredTickerClasses.add(Live2DModelClass);
+        _topWindow[LIVE2D_TICKER_GUARD_KEY] = _topWindow.PIXI.Ticker;
+        return true;
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: registerTicker failed`, e);
+        return false;
+      }
     },
     _registerModelBlobUrl(characterId, url) {
       if (!url || typeof url !== "string") return;
@@ -3174,6 +3472,112 @@ ${lines.join("\n")}`;
         }
       }
       this.modelBlobUrls.delete(characterId);
+    },
+    _setModelRuntimeInfo(characterId, runtimeInfo = null) {
+      const resolved = resolveLive2DRuntime(runtimeInfo);
+      this.modelRuntimeInfo.set(characterId, resolved);
+      return resolved;
+    },
+    _resolveCharacterRuntime(characterId, modelData = null) {
+      const previous = this.modelRuntimeInfo.get(characterId) || {};
+      const input = modelData && typeof modelData === "object" ? { ...previous, ...modelData } : previous;
+      return this._setModelRuntimeInfo(characterId, input);
+    },
+    _getCharacterRuntime(characterId) {
+      return this.modelRuntimeInfo.get(characterId) || {
+        runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
+        cubismVersion: null
+      };
+    },
+    getCharacterRuntime(characterId) {
+      return this._getCharacterRuntime(characterId);
+    },
+    async _ensureRuntimeDependencies(characterId, runtimeInfo = null) {
+      const resolvedRuntime = resolveLive2DRuntime(runtimeInfo || this._getCharacterRuntime(characterId));
+      this.modelRuntimeInfo.set(characterId, resolvedRuntime);
+      if (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5) {
+        const coreLoaded = await Live2DLoader.ensureCubism5Core();
+        if (!coreLoaded) {
+          throw new Error(`Cubism 5 Core load failed for ${characterId}`);
+        }
+        const runtimeLoaded = await Live2DLoader.ensureCubism5Runtime();
+        if (!runtimeLoaded) {
+          throw new Error(`Cubism 5 runtime load failed for ${characterId}`);
+        }
+        Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.CUBISM5);
+        return true;
+      }
+      Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.LEGACY);
+      return true;
+    },
+    _toArrayBuffer(input) {
+      if (!input) return null;
+      if (input instanceof ArrayBuffer) return input;
+      if (ArrayBuffer.isView(input)) {
+        return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+      }
+      return null;
+    },
+    _normalizeMocVersion(rawMocVersion) {
+      const value = Number(rawMocVersion || 0) || 0;
+      if (value >= 5) return 5;
+      if (value >= 1) return 4;
+      return null;
+    },
+    _detectCubismVersionFromMoc3Buffer(moc3Data) {
+      const moc3Buffer = this._toArrayBuffer(moc3Data);
+      if (!moc3Buffer) return null;
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      const core = _topWindow?.Live2DCubismCore;
+      const Moc = core?.Moc;
+      const Version = core?.Version;
+      if (typeof Moc?.fromArrayBuffer !== "function" || typeof Version?.csmGetMocVersion !== "function") {
+        return null;
+      }
+      let mocRef = null;
+      try {
+        mocRef = Moc.fromArrayBuffer(moc3Buffer);
+        if (!mocRef) return null;
+        const rawMocVersion = Number(Version.csmGetMocVersion(mocRef, moc3Buffer) || 0) || 0;
+        return this._normalizeMocVersion(rawMocVersion);
+      } catch (e) {
+        return null;
+      } finally {
+        try {
+          if (mocRef && typeof mocRef._release === "function") mocRef._release();
+          else if (mocRef && typeof mocRef.release === "function") mocRef.release();
+        } catch (e) {
+        }
+      }
+    },
+    async _detectRuntimeFromMoc3(characterId, moc3Data, runtimeInfo = null) {
+      const resolvedRuntime = resolveLive2DRuntime(runtimeInfo || this._getCharacterRuntime(characterId));
+      if (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5 || Number(resolvedRuntime.cubismVersion || 0) >= 5) {
+        this.modelRuntimeInfo.set(characterId, resolvedRuntime);
+        return resolvedRuntime;
+      }
+      const moc3Buffer = this._toArrayBuffer(moc3Data);
+      if (!moc3Buffer) {
+        this.modelRuntimeInfo.set(characterId, resolvedRuntime);
+        return resolvedRuntime;
+      }
+      try {
+        await Live2DLoader.ensureCubism5Core();
+      } catch (e) {
+      }
+      const mocVersion = this._detectCubismVersionFromMoc3Buffer(moc3Buffer);
+      if (mocVersion >= 5) {
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: moc3 \u63A2\u6D4B\u4E3A Cubism 5 (${characterId})`);
+        return this._setModelRuntimeInfo(characterId, {
+          ...resolvedRuntime,
+          cubismVersion: 5,
+          runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5
+        });
+      }
+      return this._setModelRuntimeInfo(characterId, {
+        ...resolvedRuntime,
+        cubismVersion: resolvedRuntime.cubismVersion ?? mocVersion ?? null
+      });
     },
     async _supportsXhrBlobUrls() {
       if (this.xhrBlobUrlSupport === true || this.xhrBlobUrlSupport === false) {
@@ -3461,6 +3865,7 @@ ${lines.join("\n")}`;
       if (!model) {
         this.cachedDetachedAt.delete(characterId);
         this.containers.delete(characterId);
+        this.modelRuntimeInfo.delete(characterId);
         this._revokeModelBlobUrls(characterId);
         return false;
       }
@@ -3476,6 +3881,7 @@ ${lines.join("\n")}`;
       this.containers.delete(characterId);
       this.loadingModels.delete(characterId);
       this.cachedDetachedAt.delete(characterId);
+      this.modelRuntimeInfo.delete(characterId);
       this._revokeModelBlobUrls(characterId);
       return true;
     },
@@ -3568,11 +3974,7 @@ ${lines.join("\n")}`;
       }
       try {
         const { Live2DModel } = _topWindow.PIXI.live2d;
-        const tickerRef = _topWindow.PIXI.Ticker;
-        if (_topWindow[LIVE2D_TICKER_GUARD_KEY] !== tickerRef) {
-          Live2DModel.registerTicker(tickerRef);
-          _topWindow[LIVE2D_TICKER_GUARD_KEY] = tickerRef;
-        }
+        this._registerTickerForLive2DModelClass(Live2DModel);
         this.isReady = true;
         this._debugLog(`[${SCRIPT_NAME}] Live2DManager \u521D\u59CB\u5316\u5B8C\u6210`);
         return true;
@@ -3582,10 +3984,6 @@ ${lines.join("\n")}`;
       }
     },
     async loadModel(characterId, forceReload = false) {
-      if (!this.isReady) {
-        const ready = await this.init();
-        if (!ready) return null;
-      }
       if (!forceReload && this.loadingModels.has(characterId)) {
         return await this.loadingModels.get(characterId);
       }
@@ -3601,15 +3999,27 @@ ${lines.join("\n")}`;
         console.warn(`[${SCRIPT_NAME}] Live2DManager: \u672A\u627E\u5230\u89D2\u8272 ${characterId} \u7684 Live2D \u6A21\u578B`);
         return null;
       }
+      let modelRuntime = this._resolveCharacterRuntime(characterId, modelData);
+      if (modelData?.moc3) {
+        modelRuntime = await this._detectRuntimeFromMoc3(characterId, modelData.moc3, modelRuntime);
+      }
+      if (!this.isReady) {
+        const ready = await this.init();
+        if (!ready) return null;
+      }
       const isRemote = this._isRemoteModelData(modelData);
       const remoteModelUrl = isRemote ? this._normalizeRemoteUrl(modelData.modelUrl.trim()) : "";
       const loadTask = (async () => {
+        let resolvedRuntime = modelRuntime;
         this._revokeModelBlobUrls(characterId);
         const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
-        const PIXI = _topWindow.PIXI;
-        const { Live2DModel } = PIXI.live2d;
         const loadFromUrl = async (modelUrl) => {
-          const model = await Live2DModel.from(modelUrl, {
+          const Live2DModelClass = _topWindow?.PIXI?.live2d?.Live2DModel;
+          if (!Live2DModelClass) {
+            throw new Error("PIXI.live2d.Live2DModel is unavailable for current runtime");
+          }
+          this._registerTickerForLive2DModelClass(Live2DModelClass);
+          const model = await Live2DModelClass.from(modelUrl, {
             // 避免在模型尚未挂载到带 WebGL renderer 的舞台前就触发 update，
             // 远程 Cubism2 模型在该阶段容易抛 createProgram undefined。
             autoUpdate: false,
@@ -3674,11 +4084,17 @@ ${lines.join("\n")}`;
           if (!remoteModelUrl) {
             throw new Error("\u8FDC\u7A0B Live2D modelUrl \u4E3A\u7A7A");
           }
-          return await this._buildRemoteModelDataUrl(characterId, remoteModelUrl);
+          const modelUrl = await this._buildRemoteModelDataUrl(characterId, remoteModelUrl);
+          resolvedRuntime = this._getCharacterRuntime(characterId);
+          return modelUrl;
         };
         let usedBlobForLocal = false;
         try {
           const modelUrl = isRemote ? await buildRemoteModelUrl() : await buildLocalModelUrl(true);
+          if (!isRemote) {
+            resolvedRuntime = this._getCharacterRuntime(characterId);
+          }
+          await this._ensureRuntimeDependencies(characterId, resolvedRuntime);
           usedBlobForLocal = !isRemote && String(modelUrl || "").startsWith("blob:");
           const model = await loadFromUrl(modelUrl);
           this.models.set(characterId, model);
@@ -3686,6 +4102,31 @@ ${lines.join("\n")}`;
           this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u6A21\u578B ${characterId} \u52A0\u8F7D\u6210\u529F`);
           return model;
         } catch (e) {
+          const errorMessage = String(e?.message || e || "");
+          const errorStack = String(e?.stack || "");
+          const looksLikeCoreParseError = /unknown error/i.test(errorMessage) || /createcoremodel/i.test(errorStack) || /be\.create/i.test(errorStack);
+          const canRetryAsCubism5 = resolvedRuntime.runtimeType !== LIVE2D_RUNTIME_TYPES.CUBISM5 && (!!modelData?.moc3 || isRemote && resolvedRuntime.cubismVersion !== 2);
+          if (looksLikeCoreParseError && canRetryAsCubism5) {
+            try {
+              const forcedRuntime = this._setModelRuntimeInfo(characterId, {
+                ...resolvedRuntime,
+                runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
+                cubismVersion: 5
+              });
+              await this._ensureRuntimeDependencies(characterId, forcedRuntime);
+              if (!isRemote) {
+                this._revokeModelBlobUrls(characterId);
+              }
+              const retryUrl = isRemote ? await buildRemoteModelUrl() : await buildLocalModelUrl(usedBlobForLocal);
+              const retryModel = await loadFromUrl(retryUrl);
+              this.models.set(characterId, retryModel);
+              this._markModelActive(characterId);
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: Cubism5 runtime \u91CD\u8BD5\u52A0\u8F7D\u6210\u529F (${characterId})`);
+              return retryModel;
+            } catch (retryError) {
+              console.warn(`[${SCRIPT_NAME}] Live2DManager: Cubism5 runtime \u91CD\u8BD5\u5931\u8D25 (${characterId})`, retryError);
+            }
+          }
           if (!isRemote && usedBlobForLocal) {
             console.warn(`[${SCRIPT_NAME}] Live2DManager: Blob URL \u52A0\u8F7D\u5931\u8D25\uFF0C\u56DE\u9000 Data URL (${characterId})`, e);
             this._disableXhrBlobUrls("load-failed");
@@ -4221,9 +4662,29 @@ ${lines.join("\n")}`;
       };
       if (modifiedModelJson?.FileReferences) {
         rewriteCubism3(modifiedModelJson.FileReferences);
+        const remoteMocUrl = String(modifiedModelJson?.FileReferences?.Moc || "").trim();
+        if (remoteMocUrl) {
+          try {
+            const mocResponse = await fetch(remoteMocUrl);
+            if (mocResponse.ok) {
+              const mocBuffer = await mocResponse.arrayBuffer();
+              await this._detectRuntimeFromMoc3(characterId, mocBuffer, this._getCharacterRuntime(characterId));
+            } else {
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u8FDC\u7A0B moc3 \u63A2\u6D4B\u8DF3\u8FC7\uFF08HTTP ${mocResponse.status}\uFF09`);
+            }
+          } catch (e) {
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: \u8FDC\u7A0B moc3 \u63A2\u6D4B\u5931\u8D25`, e);
+          }
+        }
       } else {
         rewriteCubism2();
       }
+      const runtimeHint = this._getCharacterRuntime(characterId);
+      this._setModelRuntimeInfo(characterId, {
+        modelJson: modifiedModelJson,
+        cubismVersion: runtimeHint.cubismVersion,
+        runtimeType: runtimeHint.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5 ? LIVE2D_RUNTIME_TYPES.CUBISM5 : ""
+      });
       const modelJsonStr = JSON.stringify(modifiedModelJson);
       const modelJsonBase64 = btoa(unescape(encodeURIComponent(modelJsonStr)));
       return `data:application/json;base64,${modelJsonBase64}`;
@@ -6182,11 +6643,15 @@ ${lines.join("\n")}`;
       );
       let modelData;
       if (isModel3) {
+        const moc3Data = await this._extractFile(zip, modelDir, modelJson.FileReferences?.Moc);
+        const detectedCubismVersion = await this._resolveModel3CubismVersion(modelJson, moc3Data);
+        const runtimeType = resolveRuntimeTypeFromCubismVersion(detectedCubismVersion);
         modelData = {
           modelId: characterId,
-          cubismVersion: 4,
+          cubismVersion: detectedCubismVersion,
+          runtimeType,
           modelJson,
-          moc3: await this._extractFile(zip, modelDir, modelJson.FileReferences?.Moc),
+          moc3: moc3Data,
           moc: null,
           textures: await this._extractTextures(zip, modelDir, modelJson),
           motions: await this._extractMotions(zip, modelDir, modelJson),
@@ -6203,6 +6668,7 @@ ${lines.join("\n")}`;
         modelData = {
           modelId: characterId,
           cubismVersion: 2,
+          runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
           modelJson,
           moc3: null,
           moc: await this._extractFile(zip, modelDir, mocPath),
@@ -6220,6 +6686,60 @@ ${lines.join("\n")}`;
       await saveLive2DModel(modelData);
       console.log(`[${SCRIPT_NAME}] Live2DUploader: \u6A21\u578B ${characterId} \u4FDD\u5B58\u6210\u529F`);
       return modelData;
+    },
+    _toArrayBuffer(input) {
+      if (!input) return null;
+      if (input instanceof ArrayBuffer) return input;
+      if (ArrayBuffer.isView(input)) {
+        return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+      }
+      return null;
+    },
+    _normalizeMocVersion(rawMocVersion) {
+      const value = Number(rawMocVersion || 0) || 0;
+      if (value >= 5) return 5;
+      if (value >= 1) return 4;
+      return null;
+    },
+    _detectCubismVersionFromMoc3Buffer(moc3Data) {
+      const moc3Buffer = this._toArrayBuffer(moc3Data);
+      if (!moc3Buffer) return null;
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      const core = _topWindow?.Live2DCubismCore;
+      const Moc = core?.Moc;
+      const Version = core?.Version;
+      if (typeof Moc?.fromArrayBuffer !== "function" || typeof Version?.csmGetMocVersion !== "function") {
+        return null;
+      }
+      let mocRef = null;
+      try {
+        mocRef = Moc.fromArrayBuffer(moc3Buffer);
+        if (!mocRef) return null;
+        const rawMocVersion = Number(Version.csmGetMocVersion(mocRef, moc3Buffer) || 0) || 0;
+        return this._normalizeMocVersion(rawMocVersion);
+      } catch (e) {
+        return null;
+      } finally {
+        try {
+          if (mocRef && typeof mocRef._release === "function") mocRef._release();
+          else if (mocRef && typeof mocRef.release === "function") mocRef.release();
+        } catch (e) {
+        }
+      }
+    },
+    async _resolveModel3CubismVersion(modelJson, moc3Data) {
+      const jsonFallbackVersion = inferCubismVersionFromModelJson(modelJson, 4) || 4;
+      try {
+        await Live2DLoader.ensureCubism5Core();
+      } catch (e) {
+      }
+      const mocVersion = this._detectCubismVersionFromMoc3Buffer(moc3Data);
+      if (mocVersion != null && mocVersion !== jsonFallbackVersion) {
+        console.log(
+          `[${SCRIPT_NAME}] Live2DUploader: moc3 version detected as ${mocVersion} (model.json inferred ${jsonFallbackVersion})`
+        );
+      }
+      return mocVersion || jsonFallbackVersion;
     },
     async _findModelJson(zip) {
       const candidates = [];
@@ -13947,8 +14467,11 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     const expressionMapping = config.expressionMapping || {};
     const motionMapping = config.motionMapping || {};
     const EMPTY_MOTION_GROUP_VALUE = "__gal_empty_motion_group__";
+    const EMPTY_TAG_FALLBACK = "(\u7A7A\u6807\u7B7E)";
     let expressionList = [];
     let motionGroups = [];
+    let draftExpressionMapping = { ...expressionMapping };
+    let draftMotionMapping = { ...motionMapping };
     let previewMounted = false;
     let previewMountPromise = null;
     let previewZoomFactor = 1.8;
@@ -13959,43 +14482,156 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     let previewDragStart = { x: 0, y: 0 };
     let previewDragOrigin = { x: 0, y: 0 };
     let previewRequestToken = 0;
-    const gameExpressionTags = Object.keys(EXPRESSION_LIVE2D_MAP);
+    const escapeHtml3 = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => {
+      switch (char) {
+        case "&":
+          return "&amp;";
+        case "<":
+          return "&lt;";
+        case ">":
+          return "&gt;";
+        case '"':
+          return "&quot;";
+        case "'":
+          return "&#39;";
+        default:
+          return char;
+      }
+    });
+    const normalizeTextValue = (value) => String(value ?? "").trim();
+    const buildMappingTagList = () => {
+      const tags = [];
+      const seen = /* @__PURE__ */ new Set();
+      const push = (value) => {
+        const normalized = normalizeTextValue(value);
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        tags.push(normalized);
+      };
+      const expressionTags = getAllExpressions();
+      if (Array.isArray(expressionTags)) {
+        for (const tag of expressionTags) push(tag);
+      }
+      for (const tag of Object.keys(EXPRESSION_LIVE2D_MAP || {})) push(tag);
+      for (const tag of Object.keys(draftExpressionMapping || {})) push(tag);
+      for (const tag of Object.keys(draftMotionMapping || {})) push(tag);
+      return tags;
+    };
+    const applyRowSelectValues = ($mappingContainer) => {
+      $mappingContainer.find(".gal-expr-mapping-select").each(function() {
+        const current = normalizeTextValue(_$(this).data("current"));
+        if (current) {
+          _$(this).val(current);
+        } else {
+          _$(this).val("");
+        }
+      });
+      $mappingContainer.find(".gal-motion-mapping-select").each(function() {
+        const current = normalizeTextValue(_$(this).data("current"));
+        const disabled = _$(this).data("disabled") === true || _$(this).data("disabled") === "true";
+        const hasGroup = _$(this).data("hasGroup") === true || _$(this).data("hasGroup") === "true";
+        if (disabled) {
+          _$(this).val("__disabled__");
+        } else if (hasGroup && current === "") {
+          _$(this).val(EMPTY_MOTION_GROUP_VALUE);
+        } else if (current) {
+          _$(this).val(current);
+        } else {
+          _$(this).val("");
+        }
+      });
+    };
+    const syncDraftMappingsFromDom = () => {
+      const $modal2 = _$("#gal-live2d-settings-modal");
+      if (!$modal2.length) return;
+      const $mappingContainer = $modal2.find("#gal-mapping-rows");
+      if (!$mappingContainer.length) return;
+      const $rows = $mappingContainer.find(".gal-mapping-row");
+      if (!$rows.length) return;
+      const nextExpressionMapping = {};
+      const nextMotionMapping = {};
+      $rows.each(function() {
+        const $row = _$(this);
+        const tag = normalizeTextValue($row.data("tag"));
+        if (!tag) return;
+        const exprRaw = $row.find(".gal-expr-mapping-select").val();
+        const exprValue = exprRaw === null || exprRaw === void 0 ? "" : String(exprRaw);
+        if (exprValue) {
+          nextExpressionMapping[tag] = exprValue;
+        }
+        const motionRaw = $row.find(".gal-motion-mapping-select").val();
+        const motionValue = motionRaw === null || motionRaw === void 0 ? "" : String(motionRaw);
+        if (motionValue === "__disabled__") {
+          nextMotionMapping[tag] = { enabled: false };
+        } else if (motionValue || motionValue === EMPTY_MOTION_GROUP_VALUE) {
+          const motionGroup = motionValue === EMPTY_MOTION_GROUP_VALUE ? "" : motionValue;
+          nextMotionMapping[tag] = { group: motionGroup, index: 0, enabled: true };
+        }
+      });
+      draftExpressionMapping = nextExpressionMapping;
+      draftMotionMapping = nextMotionMapping;
+    };
     const buildMappingRows = () => {
-      const existingMappings = { ...expressionMapping };
-      const existingMotionMappings = { ...motionMapping };
+      const existingMappings = { ...draftExpressionMapping };
+      const existingMotionMappings = { ...draftMotionMapping };
       let rows = "";
-      const allTags = [.../* @__PURE__ */ new Set([...Object.keys(existingMappings), ...gameExpressionTags])];
-      const exprOptionsHtml = expressionList.length > 0 ? expressionList.map((e) => `<option value="${e}">${e}</option>`).join("") : "";
+      const allTags = buildMappingTagList();
+      const exprOptionsHtml = expressionList.length > 0 ? expressionList.map((name) => {
+        const normalized = String(name ?? "");
+        return `<option value="${escapeHtml3(normalized)}">${escapeHtml3(normalized)}</option>`;
+      }).join("") : "";
       const motionOptionsHtml = motionGroups.length > 0 ? motionGroups.map((groupName) => {
         const rawGroup = String(groupName ?? "");
         const value = rawGroup === "" ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
         const label = rawGroup === "" ? "(\u7A7A\u52A8\u4F5C\u7EC4)" : rawGroup;
-        return `<option value="${value}">${label}</option>`;
+        return `<option value="${escapeHtml3(value)}">${escapeHtml3(label)}</option>`;
       }).join("") : "";
       for (const tag of allTags) {
         const currentExpr = existingMappings[tag] || "";
         const currentMotion = existingMotionMappings[tag] || {};
+        const hasMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, "group");
         const currentMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, "group") ? String(currentMotion.group ?? "") : "";
+        const safeTag = escapeHtml3(tag || EMPTY_TAG_FALLBACK);
+        const safeCurrentExpr = escapeHtml3(String(currentExpr ?? ""));
+        const safeCurrentMotionGroup = escapeHtml3(String(currentMotionGroup ?? ""));
+        const safeDisabled = currentMotion.enabled === false ? "true" : "false";
+        const safeHasGroup = hasMotionGroup ? "true" : "false";
         rows += `
-        <div class="gal-mapping-row" data-tag="${tag}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
-          <span style="min-width: 60px; font-weight: 600;">${tag}</span>
+        <div class="gal-mapping-row" data-tag="${safeTag}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
+          <span style="min-width: 60px; font-weight: 600;">${safeTag}</span>
           <span style="color: #666;">\u2192</span>
-          <select class="gal-expr-mapping-select" data-tag="${tag}" data-current="${currentExpr}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+          <select class="gal-expr-mapping-select" data-tag="${safeTag}" data-current="${safeCurrentExpr}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">(\u81EA\u52A8\u5339\u914D)</option>
             ${exprOptionsHtml}
           </select>
-          <select class="gal-motion-mapping-select" data-tag="${tag}" data-current="${currentMotionGroup}" data-disabled="${currentMotion.enabled === false}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
+          <select class="gal-motion-mapping-select" data-tag="${safeTag}" data-current="${safeCurrentMotionGroup}" data-disabled="${safeDisabled}" data-has-group="${safeHasGroup}" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px;">
             <option value="">(\u81EA\u52A8\u5339\u914D)</option>
             <option value="__disabled__">(\u7981\u7528\u52A8\u4F5C)</option>
             ${motionOptionsHtml}
           </select>
-          <button type="button" class="gal-mapping-preview-btn" data-tag="${tag}" title="\u9884\u89C8\u8BE5\u6807\u7B7E" style="width: 32px; height: 32px; border: 1px solid #0ea5e9; border-radius: 6px; background: #e0f2fe; color: #0369a1; cursor: pointer; flex-shrink: 0;">
+          <button type="button" class="gal-mapping-preview-btn" data-tag="${safeTag}" title="\u9884\u89C8\u8BE5\u6807\u7B7E" style="width: 32px; height: 32px; border: 1px solid #0ea5e9; border-radius: 6px; background: #e0f2fe; color: #0369a1; cursor: pointer; flex-shrink: 0;">
             <i class="fa-solid fa-play"></i>
           </button>
         </div>
       `;
       }
       return rows;
+    };
+    const renderMappingRows = async ({ previewAfterRender = false } = {}) => {
+      const $modal2 = _$("#gal-live2d-settings-modal");
+      if (!$modal2.length) return;
+      const $mappingContainer = $modal2.find("#gal-mapping-rows");
+      if (!$mappingContainer.length) return;
+      syncDraftMappingsFromDom();
+      const rowsHtml = buildMappingRows();
+      $mappingContainer.html(rowsHtml);
+      applyRowSelectValues($mappingContainer);
+      bindMappingContainerEvents($mappingContainer);
+      $mappingContainer.data("loaded", true);
+      if (previewAfterRender) {
+        await ensureMappingPreviewMounted();
+        await previewFirstTagIfExists();
+      }
     };
     const loadModelDataAsync = async () => {
       try {
@@ -14009,35 +14645,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         if ($modal2.length) {
           $modal2.find(".gal-model-info-expr").text(expressionList.length);
           $modal2.find(".gal-model-info-motion").text(motionGroups.length);
-          setTimeout(async () => {
-            const $mappingContainer = $modal2.find("#gal-mapping-rows");
-            if ($mappingContainer.length && !$mappingContainer.data("loaded")) {
-              const rowsHtml = buildMappingRows();
-              $mappingContainer.html(rowsHtml);
-              $mappingContainer.data("loaded", true);
-              $mappingContainer.find(".gal-expr-mapping-select").each(function() {
-                const current = _$(this).data("current");
-                if (current) _$(this).val(current);
-              });
-              $mappingContainer.find(".gal-motion-mapping-select").each(function() {
-                const current = _$(this).data("current");
-                const disabled = _$(this).data("disabled");
-                if (disabled) {
-                  _$(this).val("__disabled__");
-                } else if (current === "") {
-                  _$(this).val(EMPTY_MOTION_GROUP_VALUE);
-                } else if (current) {
-                  _$(this).val(current);
-                }
-              });
-              bindMappingContainerEvents($mappingContainer);
-              const activeTab = $modal2.find(".gal-settings-tab.active").data("tab");
-              if (activeTab === "mapping") {
-                await ensureMappingPreviewMounted();
-                await previewFirstTagIfExists();
-              }
-            }
-          }, 50);
+          const activeTab = $modal2.find(".gal-settings-tab.active").data("tab");
+          await renderMappingRows({ previewAfterRender: activeTab === "mapping" });
         }
       } catch (e) {
         console.warn(`[${SCRIPT_NAME}] \u52A0\u8F7D\u6A21\u578B\u6570\u636E\u5931\u8D25:`, e);
@@ -14607,20 +15216,20 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     };
     const bindMappingContainerEvents = ($mappingContainer) => {
       if (!$mappingContainer.length) return;
-      if ($mappingContainer.data("previewBound")) return;
-      $mappingContainer.on("change", ".gal-expr-mapping-select, .gal-motion-mapping-select", async function() {
+      $mappingContainer.off(".galMappingRows");
+      $mappingContainer.on("change.galMappingRows", ".gal-expr-mapping-select, .gal-motion-mapping-select", async function() {
+        syncDraftMappingsFromDom();
         const tag = _$(this).data("tag");
         if (tag) {
           await previewMappingForTag(String(tag));
         }
       });
-      $mappingContainer.on("click", ".gal-mapping-preview-btn", async function() {
+      $mappingContainer.on("click.galMappingRows", ".gal-mapping-preview-btn", async function() {
         const tag = _$(this).data("tag");
         if (tag) {
           await previewMappingForTag(String(tag));
         }
       });
-      $mappingContainer.data("previewBound", true);
     };
     loadModelDataAsync();
     $modal.find(".gal-settings-tab").on("click", async function() {
@@ -14630,9 +15239,9 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       $modal.find(".gal-settings-panel").hide();
       $modal.find(`.gal-settings-panel[data-panel="${tab}"]`).show();
       if (tab === "mapping") {
-        await ensureMappingPreviewMounted();
-        await previewFirstTagIfExists();
+        await renderMappingRows({ previewAfterRender: true });
       } else {
+        syncDraftMappingsFromDom();
         cleanupMappingPreview();
       }
     });
@@ -14674,11 +15283,13 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           _$(this).val(value);
         }
       });
+      syncDraftMappingsFromDom();
       await previewFirstTagIfExists();
     });
     $modal.find("#gal-live2d-clear-mapping").on("click", async function() {
       $modal.find(".gal-expr-mapping-select").val("");
       $modal.find(".gal-motion-mapping-select").val("");
+      syncDraftMappingsFromDom();
       await previewFirstTagIfExists();
     });
     $modal.find("#gal-live2d-preview-replay").on("click", async function() {
@@ -14737,25 +15348,9 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       if (newQuality.devicePixelRatio !== "auto") {
         newQuality.devicePixelRatio = parseFloat(newQuality.devicePixelRatio);
       }
-      const newExpressionMapping = {};
-      $modal.find(".gal-expr-mapping-select").each(function() {
-        const tag = _$(this).data("tag");
-        const val = _$(this).val();
-        if (val) {
-          newExpressionMapping[tag] = val;
-        }
-      });
-      const newMotionMapping = {};
-      $modal.find(".gal-motion-mapping-select").each(function() {
-        const tag = _$(this).data("tag");
-        const val = _$(this).val();
-        if (val === "__disabled__") {
-          newMotionMapping[tag] = { enabled: false };
-        } else if (val || val === EMPTY_MOTION_GROUP_VALUE) {
-          const motionGroup = val === EMPTY_MOTION_GROUP_VALUE ? "" : val;
-          newMotionMapping[tag] = { group: motionGroup, index: 0, enabled: true };
-        }
-      });
+      syncDraftMappingsFromDom();
+      const newExpressionMapping = { ...draftExpressionMapping };
+      const newMotionMapping = { ...draftMotionMapping };
       const newConfig = {
         transform: newTransform,
         quality: newQuality,
@@ -17513,12 +18108,14 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
     return total;
   }
   async function serializeLive2DModelData(modelData) {
+    const normalizedModel = withResolvedLive2DRuntime(modelData);
     const out = {
-      modelId: String(modelData?.modelId || ""),
-      cubismVersion: Number(modelData?.cubismVersion || 0) || null,
-      uploadTime: Number(modelData?.uploadTime || 0) || null,
-      fileSize: Number(modelData?.fileSize || 0) || null,
-      modelJson: modelData?.modelJson || null,
+      modelId: String(normalizedModel?.modelId || ""),
+      runtimeType: String(normalizedModel?.runtimeType || "legacy"),
+      cubismVersion: Number(normalizedModel?.cubismVersion || 0) || null,
+      uploadTime: Number(normalizedModel?.uploadTime || 0) || null,
+      fileSize: Number(normalizedModel?.fileSize || 0) || null,
+      modelJson: normalizedModel?.modelJson || null,
       moc3Base64: null,
       mocBase64: null,
       physicsBase64: null,
@@ -17527,16 +18124,16 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       motions: {},
       expressions: []
     };
-    const moc3 = toArrayBuffer(modelData?.moc3);
-    const moc = toArrayBuffer(modelData?.moc);
-    const physics = toArrayBuffer(modelData?.physics);
-    const pose = toArrayBuffer(modelData?.pose);
+    const moc3 = toArrayBuffer(normalizedModel?.moc3);
+    const moc = toArrayBuffer(normalizedModel?.moc);
+    const physics = toArrayBuffer(normalizedModel?.physics);
+    const pose = toArrayBuffer(normalizedModel?.pose);
     if (moc3) out.moc3Base64 = arrayBufferToBase64(moc3);
     if (moc) out.mocBase64 = arrayBufferToBase64(moc);
     if (physics) out.physicsBase64 = arrayBufferToBase64(physics);
     if (pose) out.poseBase64 = arrayBufferToBase64(pose);
-    if (Array.isArray(modelData?.textures)) {
-      for (const tex of modelData.textures) {
+    if (Array.isArray(normalizedModel?.textures)) {
+      for (const tex of normalizedModel.textures) {
         if (!tex?.data) continue;
         let dataBase64 = "";
         let mimeType = "application/octet-stream";
@@ -17555,8 +18152,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         });
       }
     }
-    if (modelData?.motions && typeof modelData.motions === "object") {
-      for (const [groupName, list] of Object.entries(modelData.motions)) {
+    if (normalizedModel?.motions && typeof normalizedModel.motions === "object") {
+      for (const [groupName, list] of Object.entries(normalizedModel.motions)) {
         if (!Array.isArray(list)) continue;
         const exportedList = [];
         for (const motion of list) {
@@ -17570,8 +18167,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         if (exportedList.length > 0) out.motions[groupName] = exportedList;
       }
     }
-    if (Array.isArray(modelData?.expressions)) {
-      for (const expr of modelData.expressions) {
+    if (Array.isArray(normalizedModel?.expressions)) {
+      for (const expr of normalizedModel.expressions) {
         const dataBuffer = toArrayBuffer(expr?.data);
         if (!dataBuffer) continue;
         out.expressions.push({
@@ -17635,7 +18232,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       reportProgress(68, "No Live2D models detected, skipping embedded model stage");
     }
     for (let i = 0; i < live2dList.length; i++) {
-      const model = live2dList[i];
+      const model = withResolvedLive2DRuntime(live2dList[i]);
       const stepPercent = 24 + Math.round(i / Math.max(1, live2dList.length) * 40);
       reportProgress(stepPercent, `Processing Live2D model ${i + 1}/${live2dList.length}...`);
       const characterId = String(model?.modelId || "").trim();
@@ -17648,6 +18245,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         live2dOutModels[characterId] = {
           source: "remote",
           modelUrl: model.modelUrl.trim(),
+          runtimeType: model.runtimeType || "legacy",
+          cubismVersion: Number(model?.cubismVersion || 0) || null,
           ...charCfg ? { config: charCfg } : {}
         };
         reportProgress(24 + Math.round((i + 1) / Math.max(1, live2dList.length) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
@@ -17663,6 +18262,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
             live2dOutModels[characterId] = {
               source: "idb",
               modelId: characterId,
+              runtimeType: model.runtimeType || "legacy",
+              cubismVersion: Number(model?.cubismVersion || 0) || null,
               sizeBytes: modelSizeBytes,
               note: warn,
               ...charCfg ? { config: charCfg } : {}
@@ -17676,6 +18277,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
           live2dOutModels[characterId] = {
             source: "embedded",
             format: "live2d_idb_v1",
+            runtimeType: model.runtimeType || "legacy",
+            cubismVersion: Number(model?.cubismVersion || 0) || null,
             sizeBytes: modelSizeBytes,
             payload,
             ...charCfg ? { config: charCfg } : {}
@@ -17688,6 +18291,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
             live2dOutModels[characterId] = {
               source: "idb",
               modelId: characterId,
+              runtimeType: model.runtimeType || "legacy",
+              cubismVersion: Number(model?.cubismVersion || 0) || null,
               sizeBytes: modelSizeBytes,
               note: warn,
               ...charCfg ? { config: charCfg } : {}
@@ -17701,6 +18306,8 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
         live2dOutModels[characterId] = {
           source: "idb",
           modelId: characterId,
+          runtimeType: model.runtimeType || "legacy",
+          cubismVersion: Number(model?.cubismVersion || 0) || null,
           sizeBytes: modelSizeBytes,
           note: "Local Live2D model is stored in IndexedDB; binary payload is not exported. Upload to remote and use source=remote if you want portability.",
           ...charCfg ? { config: charCfg } : {}
@@ -19210,6 +19817,7 @@ ${prompts.userPrompt}`).then(() => showToast4("\u5DF2\u590D\u5236\u5230\u526A\u8
       source: "remote",
       modelUrl,
       cubismVersion: null,
+      runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
       modelJson: null,
       moc3: null,
       moc: null,

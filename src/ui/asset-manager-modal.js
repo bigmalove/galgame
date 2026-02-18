@@ -163,12 +163,14 @@ export async function buildAssetManagerContent(activeTab) {
       <button class="gal-tab-btn ${activeTab === 'sprites' ? 'active' : ''}" data-tab="sprites"><i class="fa-solid fa-user"></i> 立绘管理</button>
       <button class="gal-tab-btn ${activeTab === 'backgrounds' ? 'active' : ''}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> 背景管理</button>
       <button class="gal-tab-btn ${activeTab === 'imagegen' ? 'active' : ''}" data-tab="imagegen"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图配置</button>
+      <button class="gal-tab-btn ${activeTab === 'bgm' ? 'active' : ''}" data-tab="bgm"><i class="fa-solid fa-music"></i> 指定BGM</button>
       <button class="gal-tab-btn ${activeTab === 'custom' ? 'active' : ''}" data-tab="custom"><i class="fa-solid fa-code"></i> 自定义模块</button>
     </div>
     <div class="gal-tab-content">
       ${buildSpritesTab(activeTab, allSprites, charactersData)}
       ${buildBackgroundsTab(settings, allBackgrounds)}
       ${buildImagegenTab(activeTab, settings)}
+      ${buildBgmTab(activeTab, settings)}
       ${buildCustomTab(settings)}
     </div>
   `;
@@ -203,6 +205,31 @@ export function bindAssetManagerContentEvents($modal, activeTab) {
       showToast('自定义配置已保存，并已同步到世界书');
     } else {
       showToast('自定义配置已保存，但世界书同步失败', 'warning');
+    }
+  });
+
+  // 指定 BGM 歌单保存
+  $modal.find('#gal-save-bgm-whitelist').on('click', async function() {
+    const rawText = String($('#gal-custom-bgm-list').val() || '');
+    const whitelist = Array.from(
+      new Set(
+        rawText
+          .split(/\r?\n/)
+          .map(name => String(name || '').trim())
+          .filter(Boolean),
+      ),
+    );
+    settings.bgmWhitelist = whitelist;
+    saveSettings();
+    const injected = await injectCOTToWorldbook();
+    if (injected) {
+      if (whitelist.length > 0) {
+        showToast(`指定BGM歌单已保存（${whitelist.length} 首），并已同步到世界书`);
+      } else {
+        showToast('已清空指定BGM歌单，并已同步到世界书');
+      }
+    } else {
+      showToast('指定BGM歌单已保存，但世界书同步失败', 'warning');
     }
   });
 
@@ -300,6 +327,44 @@ function buildImagegenTab(activeTab, settings) {
   </div>`;
 }
 
+function buildBgmTab(activeTab, settings) {
+  const bgmWhitelist = Array.from(
+    new Set(
+      (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : [])
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+  const bgmText = bgmWhitelist.join('\n');
+
+  return `
+  <div class="gal-tab-pane" data-pane="bgm" style="${activeTab !== 'bgm' ? 'display: none;' : ''}">
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+          <i class="fa-solid fa-music" style="color: ${THEME.accent};"></i> 指定BGM歌单（注入到COT规则）
+        </label>
+        <textarea
+          id="gal-custom-bgm-list"
+          placeholder="每行填写一首歌曲名，例如：&#10;夜に駆ける&#10;unravel&#10;打上花火"
+          style="width: 100%; height: 220px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;"
+        >${bgmText}</textarea>
+      </div>
+      <div style="text-align: right;">
+        <button class="gal-action-btn primary" id="gal-save-bgm-whitelist" style="padding: 8px 20px;">
+          <i class="fa-solid fa-save"></i> 保存歌单
+        </button>
+      </div>
+    </div>
+    <div style="padding: 15px; color: #666; font-size: 0.9rem; line-height: 1.7;">
+      <strong><i class="fa-solid fa-lightbulb"></i> 说明：</strong><br>
+      1. 每行一首歌，保存后会更新 COT：模型只能从该歌单中输出 <code>&lt;bgm&gt;</code>。<br>
+      2. 留空并保存则取消限制，恢复原有通用 BGM 规则。<br>
+      3. 建议填写你确认可搜索到的曲名（尽量完整、标准）。
+    </div>
+  </div>`;
+}
+
 function buildCustomTab(settings) {
   return `
   <div class="gal-tab-pane" data-pane="custom" style="display: none;">
@@ -367,6 +432,7 @@ export function buildAssetManagerStyles() {
     .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
     .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
     .gal-pill.active { background:linear-gradient(135deg,${THEME.accent},#00a8cc); color:#fff; border-color:transparent; }
+    #gal-unified-panel #gal-custom-bgm-list,
     #gal-unified-panel #gal-custom-location-html,
     #gal-unified-panel #gal-custom-time-html {
       background: #ffffff !important;
@@ -375,6 +441,7 @@ export function buildAssetManagerStyles() {
       caret-color: #1f2937 !important;
       line-height: 1.5 !important;
     }
+    #gal-unified-panel #gal-custom-bgm-list::placeholder,
     #gal-unified-panel #gal-custom-location-html::placeholder,
     #gal-unified-panel #gal-custom-time-html::placeholder {
       color: #9ca3af !important;

@@ -52,7 +52,7 @@ export const EXPRESSION_TAG_MAP = {
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i;
+export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|地点状态栏|时间状态栏)[^>]*>/i;
 export const RE_CLOSED_P = /<\/p>/i;
 export const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 export const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;

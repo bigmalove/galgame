@@ -8,7 +8,7 @@ import { getCharacterTTSVoice } from '../audio/tts-config.js';
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i;
+export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|地点状态栏|时间状态栏)[^>]*>/i;
 const RE_CLOSED_P = /<\/p>/i;
 const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;
@@ -28,6 +28,8 @@ const RE_OPTION = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
 const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
 const RE_LOCATION_STATUS_BAR = /<地点状态栏>([\s\S]*?)<\/地点状态栏>/gi;
 const RE_TIME_STATUS_BAR = /<时间状态栏>([\s\S]*?)<\/时间状态栏>/gi;
+const RE_FIRST_GAL_TAG = /<(background|p|pixiPerform|pixiInit)[\s/>]/i;
+const RE_PIXI_TAGS = /<pixiPerform\b([^>]*)\/?>|<pixiInit\s*\/?>/gi;
 
 const RE_ILLEGAL_TAGS = [
   /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
@@ -184,6 +186,8 @@ export function parseGalgameContent(html, messageId) {
     bgm: null,
     options: [],
     backgroundChanges: [],
+    effectEvents: [],
+    hasEffects: false,
     locationStatusBarHtml: null,
     timeStatusBarHtml: null,
   };
@@ -234,12 +238,53 @@ export function parseGalgameContent(html, messageId) {
     extractLastStatusTagContent(rawInputHtml, RE_TIME_STATUS_BAR) ||
     null;
 
+  function parseTagAttributes(rawAttrText) {
+    const attrs = {};
+    if (!rawAttrText) return attrs;
+    const attrRegex = /([a-zA-Z_][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+    let attrMatch;
+    while ((attrMatch = attrRegex.exec(rawAttrText)) !== null) {
+      const key = String(attrMatch[1] || '').trim();
+      if (!key) continue;
+      attrs[key] = (attrMatch[2] ?? attrMatch[3] ?? '').trim();
+    }
+    return attrs;
+  }
+
+  function getFixedEffectLayer(effectName) {
+    return String(effectName || '').trim() === 'fog' ? 'bg' : 'fg';
+  }
+
   // 找到 <maintext> 内第一个 Galgame 标签
-  const firstGalMatch = content.match(/<(background|p)[\s>]/i);
+  const firstGalMatch = content.match(RE_FIRST_GAL_TAG);
   if (firstGalMatch && firstGalMatch.index > 0) {
     console.log(`[${SCRIPT_NAME}] [DEBUG] 清理 <maintext> 前 ${firstGalMatch.index} 字符的污染内容`);
     content = content.substring(firstGalMatch.index);
   }
+
+  const effectEvents = [];
+  let pixiTagMatch;
+  while ((pixiTagMatch = RE_PIXI_TAGS.exec(content)) !== null) {
+    if (pixiTagMatch[1] !== undefined) {
+      const attrs = parseTagAttributes(pixiTagMatch[1]);
+      const effectName = String(attrs.name || '').trim();
+      if (!effectName) continue;
+      effectEvents.push({
+        position: pixiTagMatch.index,
+        action: 'perform',
+        name: effectName,
+        layer: getFixedEffectLayer(effectName),
+      });
+    } else {
+      effectEvents.push({
+        position: pixiTagMatch.index,
+        action: 'init',
+      });
+    }
+  }
+  RE_PIXI_TAGS.lastIndex = 0;
+  result.effectEvents = effectEvents;
+  result.hasEffects = effectEvents.length > 0;
 
   // 段落级背景跟随：收集所有背景标签及其位置
   const backgroundChanges = [];
@@ -306,6 +351,23 @@ export function parseGalgameContent(html, messageId) {
       }
     }
     return bestBg;
+  }
+
+  let effectEventCursor = 0;
+  function consumeEffectOpsUntil(position) {
+    const ops = [];
+    while (
+      effectEventCursor < effectEvents.length &&
+      effectEvents[effectEventCursor].position <= position
+    ) {
+      const evt = effectEvents[effectEventCursor++];
+      ops.push({
+        action: evt.action,
+        name: evt.name,
+        layer: evt.layer,
+      });
+    }
+    return ops;
   }
 
   // 解析 BGM 标签
@@ -461,6 +523,7 @@ export function parseGalgameContent(html, messageId) {
     const ttsConfig = match[1];
     const seg = parseSegmentText(match[2], ttsConfig);
     if (seg) {
+      seg.effectOps = consumeEffectOpsUntil(match.index);
       const bgAtThisPos = getBackgroundAtPosition(match.index);
       if (bgAtThisPos) {
         seg.backgroundScene = bgAtThisPos.scene;
@@ -478,10 +541,12 @@ export function parseGalgameContent(html, messageId) {
   if (unclosedPMatch) {
     const rawContent = unclosedPMatch[2];
     const ttsConfig = unclosedPMatch[1];
+    const segmentPosition = content.length - remainingText.length + unclosedPMatch.index;
     if (rawContent && rawContent.trim()) {
       const seg = parseSegmentText(rawContent, ttsConfig);
       if (seg) {
-        const bgAtThisPos = getBackgroundAtPosition(content.length - remainingText.length + unclosedPMatch.index);
+        seg.effectOps = consumeEffectOpsUntil(segmentPosition);
+        const bgAtThisPos = getBackgroundAtPosition(segmentPosition);
         if (bgAtThisPos) {
           seg.backgroundScene = bgAtThisPos.scene;
         }
@@ -499,6 +564,7 @@ export function parseGalgameContent(html, messageId) {
         speaker: null,
         text: plainText,
         expression: null,
+        effectOps: consumeEffectOpsUntil(content.length),
       };
       if (backgroundChanges.length > 0) {
         seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
@@ -511,11 +577,13 @@ export function parseGalgameContent(html, messageId) {
   const MAX_SEG_LENGTH = 120;
   const finalSegments = [];
   result.segments.forEach(seg => {
+    const baseEffectOps = Array.isArray(seg.effectOps) ? seg.effectOps : [];
     if (!seg.text || seg.text.length <= MAX_SEG_LENGTH) {
-      finalSegments.push(seg);
+      finalSegments.push(Object.assign({}, seg, { effectOps: baseEffectOps }));
       return;
     }
     let text = seg.text;
+    let isFirstChunk = true;
     while (text.length > MAX_SEG_LENGTH) {
       let splitIdx = -1;
       const punctuations = ['。', '！', '？', '…', '\n', '.', '!', '?'];
@@ -532,13 +600,36 @@ export function parseGalgameContent(html, messageId) {
       if (splitIdx === -1 || splitIdx < Math.floor(MAX_SEG_LENGTH * 0.6)) {
         splitIdx = MAX_SEG_LENGTH;
       }
-      finalSegments.push(Object.assign({}, seg, { text: text.substring(0, splitIdx).trim() }));
+      finalSegments.push(Object.assign({}, seg, {
+        text: text.substring(0, splitIdx).trim(),
+        effectOps: isFirstChunk ? baseEffectOps : [],
+      }));
+      isFirstChunk = false;
       text = text.substring(splitIdx).trim();
     }
     if (text) {
-      finalSegments.push(Object.assign({}, seg, { text: text }));
+      finalSegments.push(Object.assign({}, seg, {
+        text: text,
+        effectOps: isFirstChunk ? baseEffectOps : [],
+      }));
     }
   });
+  if (effectEventCursor < effectEvents.length) {
+    if (finalSegments.length > 0) {
+      const tailSegment = finalSegments[finalSegments.length - 1];
+      const tailOps = consumeEffectOpsUntil(Number.POSITIVE_INFINITY);
+      tailSegment.effectOps = (Array.isArray(tailSegment.effectOps) ? tailSegment.effectOps : []).concat(tailOps);
+    } else {
+      finalSegments.push({
+        type: 'narration',
+        speaker: null,
+        text: '',
+        expression: null,
+        effectOps: consumeEffectOpsUntil(Number.POSITIVE_INFINITY),
+      });
+    }
+  }
+
   result.segments = finalSegments;
 
   // 缓存解析结果

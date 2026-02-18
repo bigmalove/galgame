@@ -4,6 +4,7 @@ import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
 import { getIsSkipping, setIsSkipping, getSkipTimer, setSkipTimer, getIsRewinding, setIsRewinding, getIsEnabled, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
 import { TTSManager } from '../audio/tts-manager.js';
+import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
 import { scheduleOverlaySegmentDisplay, setCurrentDisplayMesId } from './overlay.js';
 import { showToast } from './toast.js';
 import { getModalMountRoot } from './fullscreen.js';
@@ -93,6 +94,7 @@ export function getIsRerolling() { return isRerolling; }
 
 export function triggerReroll() {
   isRerolling = true;
+  clearAllPixiEffects();
   if (_hideGalgameChoicesRef) _hideGalgameChoicesRef();
   setLastGalgameOptionHash(null);
   setCurrentDisplayMesId(null);

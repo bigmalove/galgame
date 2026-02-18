@@ -1,5 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
+import { resizePixiEffects } from '../effects/pixi-effect-manager.js';
 
 // ============================================
 // 全屏模式
@@ -56,6 +57,7 @@ export async function toggleFullscreen() {
         await topWindow.document.msExitFullscreen();
       }
       $(overlay).removeClass('fullscreen');
+      resizePixiEffects();
       $btn.html('<i class="fa-solid fa-expand"></i><span>全屏</span>');
       console.log(`[${SCRIPT_NAME}] 退出全屏模式`);
     } catch (e) {
@@ -73,6 +75,7 @@ export async function toggleFullscreen() {
         await overlay.msRequestFullscreen();
       }
       $(overlay).addClass('fullscreen');
+      resizePixiEffects();
       $btn.html('<i class="fa-solid fa-compress"></i><span>退出</span>');
       console.log(`[${SCRIPT_NAME}] 进入全屏模式`);
     } catch (e) {
@@ -92,10 +95,12 @@ export function setupFullscreenChangeListener() {
       $(overlay).addClass('fullscreen');
       $btn.html('<i class="fa-solid fa-compress"></i><span>退出</span>');
       if (_resetGameContentScaleRef) _resetGameContentScaleRef();
+      resizePixiEffects();
     } else {
       $(overlay).removeClass('fullscreen');
       $btn.html('<i class="fa-solid fa-expand"></i><span>全屏</span>');
       if (_adjustGameContentScaleRef) setTimeout(_adjustGameContentScaleRef, 100);
+      setTimeout(() => resizePixiEffects(), 120);
     }
   };
   topWindow.document.addEventListener('fullscreenchange', handleFullscreenChange);

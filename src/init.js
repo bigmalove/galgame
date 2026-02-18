@@ -16,19 +16,20 @@ import { TTSManager } from './audio/tts-manager.js';
 import { BGMManager } from './audio/bgm-manager.js';
 import { SpriteManager } from './sprite/sprite-manager.js';
 import { resetGenerationState, getGenerationState, getVerificationDelayMs, verifyGenerationComplete } from './logic/generation-state.js';
-import { parseGalgameContent } from './logic/parser.js';
+import { RE_GAL_TAGS } from './logic/parser.js';
 import { injectCOTToWorldbook } from './logic/worldbook.js';
 import { initEnhancedModeListener, initWorldbookInjectionListener } from './logic/enhanced-mode.js';
 import { setupMessageObserver } from './logic/message-observer.js';
 import { injectStyles } from './ui/styles.js';
 import { setupFullscreenChangeListener } from './ui/fullscreen.js';
-import { showGlobalOverlay, setupGameContentResizeListener } from './ui/overlay.js';
+import { ensureGlobalOverlay, showGlobalOverlay, setupGameContentResizeListener } from './ui/overlay.js';
 import { injectGalgameButton, addMenuButton, updateButtonState } from './ui/menu-button.js';
 import { processNewMessage } from './ui/process-message.js';
 import { setupGlobalEventListeners } from './ui/events.js';
 import { setupKeyboardShortcuts } from './ui/interaction.js';
 import { setupOptionsPanelObserver } from './ui/choices.js';
 import { applyGalgameMode, restoreOriginalViews, hideNonLastFloors } from './ui/galgame-mode.js';
+import { applyPixiEffectOps, clearAllPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
 
 // ============================================
 // 初始化
@@ -112,7 +113,7 @@ async function init() {
                 const $mesText = $(mesNode).find('.mes_text');
                 content = decodeHtml($mesText.html() || '');
               }
-              const hasGalTags = /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i.test(content);
+              const hasGalTags = RE_GAL_TAGS.test(content);
               if (hasGalTags) {
                 processNewMessage(mesNode);
               } else if (mesNode.classList.contains('gal-hidden')) {
@@ -172,5 +173,66 @@ topWindow.galgame.LipSyncManager = LipSyncManager;
 topWindow.galgame.Live2DManager = Live2DManager;
 topWindow.galgame.TTSManager = TTSManager;
 topWindow.galgame.BGMManager = BGMManager;
+topWindow.galgame.effects = {
+  help() {
+    console.log('[galgame.effects] commands:');
+    console.log('  preload()');
+    console.log('  play(name = "rain")');
+    console.log('  run([{ action: "perform", name: "snow" }])');
+    console.log('  clear()');
+    console.log('  enable(true|false)');
+    console.log('  quality("mobile"|"balanced"|"high")');
+    console.log('  maxActive(1-6)');
+    console.log('  state()');
+  },
+  preload() {
+    return preloadPixiEffectsRuntime();
+  },
+  play(name = 'rain') {
+    const $overlay = ensureGlobalOverlay();
+    return applyPixiEffectOps([{ action: 'perform', name: String(name || 'rain') }], $overlay[0]);
+  },
+  run(ops) {
+    const $overlay = ensureGlobalOverlay();
+    const list = Array.isArray(ops) ? ops : [ops];
+    return applyPixiEffectOps(list, $overlay[0]);
+  },
+  clear() {
+    clearAllPixiEffects();
+    return true;
+  },
+  enable(enabled = true) {
+    const settings = getSettings();
+    settings.effectsEnabled = !!enabled;
+    if (!settings.effectsEnabled) {
+      clearAllPixiEffects();
+    }
+    syncPixiEffectsSettings();
+    return settings.effectsEnabled;
+  },
+  quality(level = 'balanced') {
+    const nextLevel = ['mobile', 'balanced', 'high'].includes(level) ? level : 'balanced';
+    const settings = getSettings();
+    settings.effectsQuality = nextLevel;
+    syncPixiEffectsSettings();
+    return settings.effectsQuality;
+  },
+  maxActive(value = 2) {
+    const parsed = parseInt(value, 10);
+    const settings = getSettings();
+    settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
+    syncPixiEffectsSettings();
+    return settings.effectsMaxActive;
+  },
+  state() {
+    const settings = getSettings();
+    return {
+      effectsEnabled: settings.effectsEnabled !== false,
+      effectsQuality: settings.effectsQuality,
+      effectsAutoClearOnSceneChange: settings.effectsAutoClearOnSceneChange !== false,
+      effectsMaxActive: settings.effectsMaxActive,
+    };
+  },
+};
 
-console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager}`);
+console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager, effects}`);

@@ -1,4 +1,4 @@
-import { SCRIPT_NAME, RE_THINK_CLOSED, RE_THINK_UNCLOSED } from '../core/constants.js';
+import { SCRIPT_NAME, RE_GAL_TAGS, RE_THINK_CLOSED, RE_THINK_UNCLOSED } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
 
 // ============================================
@@ -55,7 +55,7 @@ export function getFormattedSwipeContent(mesId) {
 
     for (let i = 0; i < swipes.length; i++) {
       let swipeContent = swipes[i];
-      if (swipeContent && /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i.test(swipeContent)) {
+      if (swipeContent && RE_GAL_TAGS.test(swipeContent)) {
         console.log(`[${SCRIPT_NAME}] 找到格式化 swipe[${i}] 用于消息 ${mesId}`);
         swipeContent = swipeContent.replace(RE_THINK_CLOSED, '');
         swipeContent = swipeContent.replace(RE_THINK_UNCLOSED, '');

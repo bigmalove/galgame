@@ -1,5 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $ } from '../core/env.js';
+import { clearAllPixiEffects, preloadPixiEffectsRuntime } from '../effects/pixi-effect-manager.js';
 import { hideGlobalOverlay } from './overlay.js';
 
 // ============================================
@@ -16,6 +17,8 @@ export function setGalgameModeRefs({ processNewMessage, applySettingsToUI }) {
 }
 
 export function applyGalgameMode() {
+  void preloadPixiEffectsRuntime();
+
   const $allMes = $('#chat > .mes');
   let $lastAiMes = null;
   $allMes.each(function () {
@@ -38,6 +41,7 @@ export function applyGalgameMode() {
 }
 
 export function restoreOriginalViews() {
+  clearAllPixiEffects();
   hideGlobalOverlay();
 
   $('.gal-game-container')

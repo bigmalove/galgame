@@ -10,7 +10,8 @@ import { SpriteManager } from '../sprite/sprite-manager.js';
 import { TTSManager } from '../audio/tts-manager.js';
 import { getIsGeneratingResponse } from '../logic/generation-state.js';
 import { checkSillyTavernGenerating, resetGenerationState } from '../logic/generation-state.js';
-import { parseGalgameContent } from '../logic/parser.js';
+import { RE_GAL_TAGS, parseGalgameContent } from '../logic/parser.js';
+import { applyPixiEffectOps, clearAllPixiEffects, mountPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { getCurrentDisplayMesId, setCurrentDisplayMesId, ensureGlobalOverlay, nextOverlayRenderToken, scheduleOverlaySegmentDisplay, showGlobalOverlay } from './overlay.js';
 import { updateNextBtnForGeneratingState, stopNextBtnAnimation } from './next-btn.js';
 
@@ -19,6 +20,79 @@ import { updateNextBtnForGeneratingState, stopNextBtnAnimation } from './next-bt
 // ============================================
 
 const messageSegmentState = GalgameStore.cache.segments;
+
+async function syncEffectsForSegmentDisplay($overlay, state, currentIndex, { isNewMessage = false } = {}) {
+  if (!state) return;
+  const settings = getSettings();
+  if (!settings.effectsEnabled) {
+    clearAllPixiEffects();
+    state.lastAppliedEffectIndex = currentIndex;
+    return;
+  }
+
+  const mounted = await mountPixiEffects($overlay[0]);
+  if (!mounted) return;
+  syncPixiEffectsSettings();
+
+  const lastApplied = Number.isFinite(state.lastAppliedEffectIndex) ? state.lastAppliedEffectIndex : -1;
+  const shouldClearOnSceneChange = !!settings.effectsAutoClearOnSceneChange;
+  const shouldAutoClearOnMessageSwitch = isNewMessage;
+  const shouldReplay = shouldAutoClearOnMessageSwitch || currentIndex <= lastApplied || lastApplied < 0;
+
+  const clearIfSceneChangedAt = (segmentIndex) => {
+    if (!shouldClearOnSceneChange || segmentIndex <= 0) return;
+    const prevScene = state.segments[segmentIndex - 1]?.backgroundScene || null;
+    const currentScene = state.segments[segmentIndex]?.backgroundScene || null;
+    if (currentScene && currentScene !== prevScene) {
+      clearAllPixiEffects();
+    }
+  };
+
+  if (shouldReplay) {
+    if (shouldAutoClearOnMessageSwitch || currentIndex <= lastApplied) {
+      clearAllPixiEffects();
+    }
+    for (let i = 0; i <= currentIndex; i++) {
+      clearIfSceneChangedAt(i);
+      const ops = Array.isArray(state.segments[i]?.effectOps) ? state.segments[i].effectOps : [];
+      if (ops.length > 0) {
+        await applyPixiEffectOps(ops, $overlay[0]);
+      }
+    }
+  } else {
+    for (let i = lastApplied + 1; i <= currentIndex; i++) {
+      clearIfSceneChangedAt(i);
+      const ops = Array.isArray(state.segments[i]?.effectOps) ? state.segments[i].effectOps : [];
+      if (ops.length > 0) {
+        await applyPixiEffectOps(ops, $overlay[0]);
+      }
+    }
+  }
+
+  state.lastAppliedEffectIndex = currentIndex;
+}
+
+function queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, options = {}) {
+  if (!state) return;
+
+  state.effectSyncTicket = (Number.isFinite(state.effectSyncTicket) ? state.effectSyncTicket : 0) + 1;
+  const ticket = state.effectSyncTicket;
+
+  const run = async () => {
+    if (ticket !== state.effectSyncTicket) return;
+    try {
+      await syncEffectsForSegmentDisplay($overlay, state, currentIndex, options);
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] 特效同步失败`, error);
+    }
+  };
+
+  const basePromise =
+    state.effectSyncPromise && typeof state.effectSyncPromise.then === 'function'
+      ? state.effectSyncPromise
+      : Promise.resolve();
+  state.effectSyncPromise = basePromise.then(run, run);
+}
 
 export async function updateGlobalOverlayContent(mesId, parsedContent) {
   console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
@@ -29,7 +103,15 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
 
   let state = messageSegmentState.get(mesIdStr);
   if (!state) {
-    state = { currentIndex: 0, segments: segments, parsedContent: parsedContent, renderToken: 0 };
+    state = {
+      currentIndex: 0,
+      segments: segments,
+      parsedContent: parsedContent,
+      renderToken: 0,
+      lastAppliedEffectIndex: -1,
+      effectSyncTicket: 0,
+      effectSyncPromise: Promise.resolve(),
+    };
     messageSegmentState.set(mesIdStr, state);
     console.log(`[${SCRIPT_NAME}] [DEBUG] 新建状态，段落数: ${segments.length}`);
   } else {
@@ -37,11 +119,21 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
     if (segmentCountDiff > 5) {
       console.log(`[${SCRIPT_NAME}] [DEBUG] 段落数变化较大 (${state.segments.length} -> ${segments.length})，重置到第一段`);
       state.currentIndex = 0;
+      state.lastAppliedEffectIndex = -1;
     }
     state.segments = segments;
     state.parsedContent = parsedContent;
     if (!Number.isFinite(state.renderToken)) {
       state.renderToken = 0;
+    }
+    if (!Number.isFinite(state.lastAppliedEffectIndex)) {
+      state.lastAppliedEffectIndex = -1;
+    }
+    if (!Number.isFinite(state.effectSyncTicket)) {
+      state.effectSyncTicket = 0;
+    }
+    if (!state.effectSyncPromise || typeof state.effectSyncPromise.then !== 'function') {
+      state.effectSyncPromise = Promise.resolve();
     }
     console.log(`[${SCRIPT_NAME}] [DEBUG] 更新状态，当前索引: ${state.currentIndex}, 段落数: ${segments.length}`);
   }
@@ -99,6 +191,8 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
     await SpriteManager.applySceneTint($overlay, sceneToApply);
     console.log(`[${SCRIPT_NAME}] [DEBUG] 应用背景场景: "${sceneToApply}" (段落 ${currentIndex + 1}/${segments.length})`);
   }
+
+  queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, { isNewMessage });
 
   const $nextBtn = $overlay.find('[data-action="next"]');
   const hasNextSegment = !!segments[currentIndex + 1];
@@ -222,6 +316,8 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
     console.log(`[${SCRIPT_NAME}] [DEBUG] updateOverlaySegmentDisplay 应用背景: "${sceneToApply}" (段落 ${currentIndex + 1}/${total})`);
   }
 
+  queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex);
+
   return true;
 }
 
@@ -253,7 +349,7 @@ export async function refreshOverlayFromLastAiMessage() {
     contentToProcess = decodeHtml(html);
   }
 
-  const hasGalTags = /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i.test(contentToProcess);
+  const hasGalTags = RE_GAL_TAGS.test(contentToProcess);
   if (!hasGalTags) {
     console.log(`[${SCRIPT_NAME}] 最后AI消息不包含Galgame标签`);
     return;

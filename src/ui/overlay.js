@@ -4,6 +4,7 @@ import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { getTTSEnabled } from '../audio/tts-config.js';
+import { pausePixiEffects, resizePixiEffects, resumePixiEffects } from '../effects/pixi-effect-manager.js';
 
 // ============================================
 // 全局覆盖层架构
@@ -95,6 +96,8 @@ export function ensureGlobalOverlay() {
             <div class="gal-bg-layer gal-bg-front"></div>
           </div>
 
+          <div class="gal-layer-effect-bg"></div>
+
           <!-- 游戏内容层 -->
           <div class="gal-game-content">
             <!-- 立绘层 -->
@@ -102,6 +105,8 @@ export function ensureGlobalOverlay() {
               <div class="gal-char-slot slot-left"></div>
               <div class="gal-char-slot slot-right"></div>
             </div>
+
+            <div class="gal-layer-effect-fg"></div>
 
             <!-- 对话框层 -->
             <div class="gal-dialog-layer">
@@ -282,6 +287,7 @@ export function syncOverlayHeightToChatViewport(overlay, { force = false } = {})
     overlay.style.minHeight = '0px';
     overlay.style.maxHeight = `${lockedHeight}px`;
     overlay.style.height = `${lockedHeight}px`;
+    resizePixiEffects();
     return;
   }
 
@@ -302,6 +308,7 @@ export function syncOverlayHeightToChatViewport(overlay, { force = false } = {})
   overlay.style.height = `${targetHeight}px`;
   overlayHeightLockState.lastViewportHeight = viewportHeight;
   overlayHeightLockState.lastOverlayHeight = targetHeight;
+  resizePixiEffects();
 }
 
 export function adjustGameContentScale() {
@@ -311,6 +318,7 @@ export function adjustGameContentScale() {
 
   if (overlay.classList.contains('fullscreen')) {
     overlay.style.setProperty('--ui-scale', '1');
+    resizePixiEffects();
     return;
   }
 
@@ -326,6 +334,7 @@ export function adjustGameContentScale() {
   if (Math.abs(currentScale - newScale) < 0.001) return;
 
   overlay.style.setProperty('--ui-scale', String(newScale));
+  resizePixiEffects();
 }
 
 export function resetGameContentScale() {
@@ -349,6 +358,7 @@ export function resetGameContentScale() {
     'bottom': '',
     'margin': '',
   });
+  resizePixiEffects();
 }
 
 export function adjustToolbarForSpace() {
@@ -368,6 +378,7 @@ export function showGlobalOverlay() {
   const $overlay = ensureGlobalOverlay();
   if ($overlay.length) {
     $overlay.addClass('active');
+    resumePixiEffects();
     setChatScrollLock(true);
     overlayHeightLockState.lastViewportHeight = 0;
     overlayHeightLockState.lastOverlayHeight = 0;
@@ -375,6 +386,7 @@ export function showGlobalOverlay() {
       syncOverlayHeightToChatViewport($overlay[0], { force: true });
       adjustGameContentScale();
       adjustToolbarForSpace();
+      resizePixiEffects();
     }, 0);
   } else {
     console.error(`[${SCRIPT_NAME}] showGlobalOverlay: 无法获取覆盖层元素！`);
@@ -384,6 +396,7 @@ export function showGlobalOverlay() {
 export function hideGlobalOverlay() {
   const targetDoc = topWindow.document;
   $(targetDoc).find('#gal-global-overlay').removeClass('active');
+  pausePixiEffects();
   setChatScrollLock(false);
   overlayHeightLockState.lastViewportHeight = 0;
   overlayHeightLockState.lastOverlayHeight = 0;
@@ -458,6 +471,7 @@ export function setupGameContentResizeListener() {
           adjustGameContentScale();
         }
         adjustToolbarForSpace();
+        resizePixiEffects();
       }
 
       requestAnimationFrame(() => {
@@ -476,5 +490,6 @@ export function setupGameContentResizeListener() {
       adjustGameContentScale();
     }
     adjustToolbarForSpace();
+    resizePixiEffects();
   }, 800);
 }

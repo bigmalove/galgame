@@ -31,6 +31,10 @@ export const DEFAULT_SETTINGS = {
   hideOtherFloors: true,
   fullscreenMode: false,
   bgFillMode: 'cover',
+  effectsEnabled: true,
+  effectsQuality: 'balanced',
+  effectsAutoClearOnSceneChange: true,
+  effectsMaxActive: 2,
   // 立绘设置
   spriteScale: 100,
   spriteBottomOffset: 20,
@@ -53,6 +57,8 @@ export const DEFAULT_SETTINGS = {
   realTimeBackgroundGen: false,
   // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven'
   bgImageSource: 'none',
+  // 指定可用 BGM 歌单（为空表示不限制）
+  bgmWhitelist: [],
   // TTS 设置
   ttsEnabled: true,
   ttsAutoPlay: true,
@@ -147,6 +153,20 @@ function _safeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function normalizeBgmWhitelist(rawList) {
+  const sourceList = Array.isArray(rawList)
+    ? rawList
+    : (typeof rawList === 'string' ? rawList.split(/\r?\n/) : []);
+
+  return Array.from(
+    new Set(
+      sourceList
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 export function createDefaultEnhancedModeSettings() {
   return {
     enabled: false,
@@ -238,6 +258,19 @@ export function loadSettings() {
       }
       _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
+      _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
+      const allowedEffectQualities = ['mobile', 'balanced', 'high'];
+      if (!allowedEffectQualities.includes(_settings.effectsQuality)) {
+        _settings.effectsQuality = DEFAULT_SETTINGS.effectsQuality;
+      }
+      _settings.effectsEnabled = _settings.effectsEnabled !== false;
+      _settings.effectsAutoClearOnSceneChange = _settings.effectsAutoClearOnSceneChange !== false;
+      const parsedEffectMaxActive = parseInt(_settings.effectsMaxActive, 10);
+      if (Number.isFinite(parsedEffectMaxActive)) {
+        _settings.effectsMaxActive = Math.max(1, Math.min(parsedEffectMaxActive, 6));
+      } else {
+        _settings.effectsMaxActive = DEFAULT_SETTINGS.effectsMaxActive;
+      }
       // 兼容旧版 sceneMode -> cgMode
       if (_settings.bananaImageGen) {
         if (_settings.bananaImageGen.cgMode === undefined && _settings.bananaImageGen.sceneMode !== undefined) {
@@ -291,6 +324,7 @@ export function saveSettings() {
   const SETTINGS_STORAGE_KEY = GalgameStore.STORAGE_KEYS.SETTINGS;
   try {
     _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
+    _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 保存设置失败:`, e);

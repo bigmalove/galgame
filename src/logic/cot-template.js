@@ -56,10 +56,6 @@ ${statusTagInstructions.join('\n')}
 - 以上标签请放在 <maintext> 内。消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
 `
     : '';
-  const statusTagExampleBlock = [locationStatusTag, timeStatusTag]
-    .filter(Boolean)
-    .map(tag => `  ${tag}`)
-    .join('\n');
 
   // 构建场景列表说明
   let sceneListText = '';
@@ -83,11 +79,20 @@ ${statusTagInstructions.join('\n')}
 
     const customCot = (bs.cotTemplate || '').trim();
     const customCotText = customCot ? `\n### 🍌 自定义COT（必须遵守）\n${customCot}\n` : '';
+    const localSceneHint = sceneNames.length > 0
+      ? `\n### 🗂️ 本地背景优先复用（必须遵守）
+- 可用本地场景: ${sceneNames.join(', ')}
+- 当剧情能匹配以上任一场景时，优先输出：\`<background scene="已有场景名" />\`
+- 只有在本地场景都不匹配时，才输出 \`<bnimg>\` 触发大香蕉生图`
+      : `\n### 🗂️ 本地背景提示
+- 当前暂无本地场景，可按需输出 \`<bnimg>\` 生成新场景`;
 
     sceneListText = `**🍌 大香蕉 AI 生图模式**: 当场景变化时，使用自然语言描述画面，系统将调用 AI 生成对应背景图片。
 
 ${modeHint}
-${customCotText}- **生成格式**: \`<background scene="场景中文名"><bnimg>自然语言画面描述</bnimg>\`
+${customCotText}${localSceneHint}
+- **复用本地格式**: \`<background scene="已有场景名" />\`
+- **新场景生成格式**: \`<background scene="场景中文名"><bnimg>自然语言画面描述</bnimg>\`
 - **描述语言**: 中文或英文均可，建议使用详细的自然语言描述
 
 ### 🍌 大香蕉描述规范（必须遵守）
@@ -216,9 +221,50 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
       ? sceneNames[0]
       : '场景名';
 
-  const extraRule = isGenerativeEngine
-    ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
-    : `5. **背景场景必须使用已配置的场景名称**`;
+  const extraRule = bgSrc === 'banana'
+    ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。`
+    : isGenerativeEngine
+      ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
+      : `5. **背景场景必须使用已配置的场景名称**`;
+
+  const pixiEffectNames = ['rain', 'snow', 'heavySnow', 'cherryBlossoms', 'fog', 'fireflies', 'embers', 'screenFlash'];
+  const pixiEffectListText = pixiEffectNames.join(', ');
+  const pixiEffectTagSection = `
+### Pixi 特效标签（可选）
+- 可用特效: ${pixiEffectListText}
+- 叠加特效格式: \`<pixiPerform name="特效名" />\`
+- 新消息切换时系统会自动清空特效，无需输出 \`<pixiInit />\`
+- 使用规则:
+  - 仅在场景氛围明显变化时使用，避免每句都触发。
+  - 特效层由系统按特效名自动分配（雾固定背景层，其余固定前景层），不要输出 \`layer\`。
+  - 同一场景不要高频重复输出同一个特效。
+  - \`screenFlash\` 用于短暂强调（爆炸、雷电、强光），不要连续刷屏。
+`;
+
+  const bgmWhitelist = Array.from(
+    new Set(
+      (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : [])
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+  const bgmWhitelistText = bgmWhitelist.map(name => `  - ${name}`).join('\n');
+  const bgmRuleSection = bgmWhitelist.length > 0
+    ? `### 背景音乐 (BGM)
+- **格式**: \`<bgm>歌曲名</bgm>\`
+- **使用规则**:
+  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
+  - **指定歌单（必须遵守）**: 仅允许从以下歌单中选择歌曲，禁止输出列表外曲名。
+${bgmWhitelistText}
+  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
+  - **示例**: \`<bgm>歌曲名</bgm>\``
+    : `### 背景音乐 (BGM)
+- **格式**: \`<bgm>歌曲名</bgm>\`
+- **使用规则**:
+  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
+  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
+  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
+  - **示例**: \`<bgm>歌曲名</bgm>\``;
 
   const ttsEnabled = getTTSEnabled();
 
@@ -255,13 +301,7 @@ ${charVoiceBindingText}
 - 格式: \`<p>旁白内容</p>\`
 - 无需表情和音色
 
-### 背景音乐 (BGM)
-- **格式**: \`<bgm>歌曲名</bgm>\`
-- **使用规则**:
-  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
-  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
-  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
-  - **示例**: \`<bgm>歌曲名</bgm>\`
+${bgmRuleSection}
 
 ### 背景标签 (场景环境强制)
 - 格式: \`<background scene="场景名" />\`
@@ -269,13 +309,14 @@ ${charVoiceBindingText}
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
 - ${sceneListText}
+${pixiEffectTagSection}
 
 ## 输出结构示例
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
-${statusTagExampleBlock ? `${statusTagExampleBlock}
-` : ''}  <p>夜色深沉，街灯在雨中摇曳。</p>
+  <pixiPerform name="rain" />
+  <p>夜色深沉，街灯在雨中摇曳。</p>
   <p>少女[微笑,桃夭]: "你终于来了～"</p>
   <bgm>歌曲名</bgm>
   <p>她撑着伞，静静地站在那里。</p>
@@ -317,13 +358,7 @@ ${statusTagSection}
 - 格式: \`<p>旁白内容</p>\`
 - 无需表情标签
 
-### 背景音乐 (BGM)
-- **格式**: \`<bgm>歌曲名</bgm>\`
-- **使用规则**:
-  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
-  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
-  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
-  - **示例**: \`<bgm>歌曲名</bgm>\`
+${bgmRuleSection}
 
 ### 背景标签 (场景环境强制)
 - 格式: \`<background scene="场景名" />\`
@@ -331,13 +366,14 @@ ${statusTagSection}
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
 - ${sceneListText}
+${pixiEffectTagSection}
 
 ## 输出结构示例
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
-${statusTagExampleBlock ? `${statusTagExampleBlock}
-` : ''}  <p>第一句旁白描述。</p>
+  <pixiPerform name="fog" />
+  <p>第一句旁白描述。</p>
   <p>角色名: "这是角色的对话内容。"<微笑></p>
   <bgm>歌曲名</bgm>
   <p>继续旁白描述。</p>

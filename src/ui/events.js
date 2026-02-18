@@ -7,6 +7,7 @@ import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from '../u
 import { TTSManager } from '../audio/tts-manager.js';
 import { parseGalgameContent } from '../logic/parser.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook, enableWorldbookGlobally } from '../logic/worldbook.js';
+import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
 import { toggleFullscreen } from './fullscreen.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { getHistoryFromDatabase, showHistoryModal } from './history.js';
@@ -145,6 +146,7 @@ export function setupGlobalEventListeners() {
     await disableWorldbookGlobally();
     console.log(`[${SCRIPT_NAME}] Galgame模式关闭（已取消世界书全局启用）`);
 
+    clearAllPixiEffects();
     closeEmbeddedViewer();
     restoreOriginalViews();
 

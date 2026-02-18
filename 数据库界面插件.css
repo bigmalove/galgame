@@ -431,6 +431,35 @@
         z-index: 1;
       }
 
+      .gal-layer-effect-bg,
+      .gal-layer-effect-fg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .gal-layer-effect-bg {
+        z-index: 3;
+      }
+
+      .gal-layer-effect-fg {
+        z-index: 12;
+      }
+
+      .gal-layer-effect-bg .gal-pixi-effect-canvas,
+      .gal-layer-effect-fg .gal-pixi-effect-canvas,
+      .gal-layer-effect-bg canvas,
+      .gal-layer-effect-fg canvas {
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+        pointer-events: none;
+      }
+
       .gal-layer-bg::before {
         content: '';
         position: absolute;

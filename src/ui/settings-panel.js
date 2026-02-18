@@ -8,6 +8,7 @@ import { TTS_PROVIDER, getTTSProvider, getGptSoVitsConfig, getTTSVoiceListAsync,
 import { TTSManager } from '../audio/tts-manager.js';
 import { getAvailablePresets, getAvailableProfiles, getAvailableModels, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
 import { injectCOTToWorldbook, enableWorldbookGlobally, disableWorldbookGlobally } from '../logic/worldbook.js';
+import { clearAllPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { showToast } from './toast.js';
 import { showGlobalOverlay, hideGlobalOverlay } from './overlay.js';
@@ -120,6 +121,7 @@ export function applySettingsToUI() {
 
   applyBgFillMode();
   applyTextEffect();
+  syncPixiEffectsSettings();
 }
 
 export function applyBgFillMode() {
@@ -227,6 +229,17 @@ export async function showSettingsPanel(topTab, subTab) {
   topTab = topTab || 'settings';
 
   const settings = getSettings();
+  const effectQuality = ['mobile', 'balanced', 'high'].includes(settings.effectsQuality)
+    ? settings.effectsQuality
+    : 'balanced';
+  const effectMaxActiveParsed = parseInt(settings.effectsMaxActive, 10);
+  const effectMaxActive = Number.isFinite(effectMaxActiveParsed)
+    ? Math.max(1, Math.min(effectMaxActiveParsed, 6))
+    : 2;
+  settings.effectsQuality = effectQuality;
+  settings.effectsMaxActive = effectMaxActive;
+  settings.effectsEnabled = settings.effectsEnabled !== false;
+  settings.effectsAutoClearOnSceneChange = settings.effectsAutoClearOnSceneChange !== false;
   const live2dManager = getLive2DManagerRef();
   if (live2dManager) {
     live2dManager.debug = !!settings.globalDebug;
@@ -364,6 +377,36 @@ export async function showSettingsPanel(topTab, subTab) {
                 <option value="cover" ${settings.bgFillMode === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
                 <option value="contain" ${settings.bgFillMode === 'contain' ? 'selected' : ''}>Contain (完整显示)</option>
               </select>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- Pixi 特效 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Pixi特效</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">启用特效</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-effects-enabled" ${settings.effectsEnabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">质量档位</span>
+              <select id="gal-effects-quality" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                <option value="mobile" ${effectQuality === 'mobile' ? 'selected' : ''}>Mobile（省电）</option>
+                <option value="balanced" ${effectQuality === 'balanced' ? 'selected' : ''}>Balanced（默认）</option>
+                <option value="high" ${effectQuality === 'high' ? 'selected' : ''}>High（高画质）</option>
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">切场景自动清空</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-effects-autoclear" ${settings.effectsAutoClearOnSceneChange ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">并发上限</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-effects-max-active" min="1" max="6" step="1" value="${effectMaxActive}">
+                <span class="gal-range-value" id="gal-effects-max-active-value">${effectMaxActive}</span>
+              </div>
             </div>
           </div>
 
@@ -729,6 +772,31 @@ export async function showSettingsPanel(topTab, subTab) {
     saveSettings();
   });
   $('#gal-bg-fill-mode').on('change', function () { settings.bgFillMode = $(this).val(); applyBgFillMode(); saveSettings(); });
+  $('#gal-effects-enabled').on('change', function () {
+    settings.effectsEnabled = $(this).is(':checked');
+    if (!settings.effectsEnabled) {
+      clearAllPixiEffects();
+    }
+    syncPixiEffectsSettings();
+    saveSettings();
+  });
+  $('#gal-effects-quality').on('change', function () {
+    const nextQuality = String($(this).val() || '').trim();
+    settings.effectsQuality = ['mobile', 'balanced', 'high'].includes(nextQuality) ? nextQuality : 'balanced';
+    syncPixiEffectsSettings();
+    saveSettings();
+  });
+  $('#gal-effects-autoclear').on('change', function () {
+    settings.effectsAutoClearOnSceneChange = $(this).is(':checked');
+    saveSettings();
+  });
+  $('#gal-effects-max-active').on('input change', function () {
+    const parsed = parseInt($(this).val(), 10);
+    settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
+    $('#gal-effects-max-active-value').text(settings.effectsMaxActive);
+    syncPixiEffectsSettings();
+    saveSettings();
+  });
   $('#gal-space-next').on('change', function () { settings.spaceKeyNext = $(this).is(':checked'); saveSettings(); });
   $('#gal-enter-next').on('change', function () { settings.enterKeyNext = $(this).is(':checked'); saveSettings(); });
   $('#gal-ctrl-skip').on('change', function () { settings.ctrlKeySkip = $(this).is(':checked'); saveSettings(); });

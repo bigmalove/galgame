@@ -52,6 +52,21 @@ export const Live2DStage = {
     this.canvas.style.cursor = enabled ? 'move' : 'default';
   },
 
+  _setModelAutoUpdate(model, enabled) {
+    if (!model) return false;
+    try {
+      if (model.automator && typeof model.automator === 'object' && 'autoUpdate' in model.automator) {
+        model.automator.autoUpdate = !!enabled;
+        return true;
+      }
+      if ('autoUpdate' in model) {
+        model.autoUpdate = !!enabled;
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  },
+
   _requestLayout() {
     const _topWindow = this._getTopWindow();
     if (this._layoutRaf) return;
@@ -362,6 +377,68 @@ export const Live2DStage = {
     return true;
   },
 
+  _resetAfterFatalRenderError(reason = 'unknown') {
+    const prevMount = this.mountEl;
+    const prevMode = this.mode;
+    const prevFocusCharacterId = this.focusCharacterId;
+    console.warn(`[${SCRIPT_NAME}] Live2DStage: resetting stage after fatal render error (${reason})`);
+
+    for (const [id, inst] of Array.from(this.instances.entries())) {
+      try {
+        if (inst?.model) {
+          this._setModelAutoUpdate(inst.model, false);
+          if (inst.model.parent) {
+            inst.model.parent.removeChild(inst.model);
+          }
+        }
+      } catch (e) {}
+      Live2DManager.containers.delete(id);
+    }
+    this.instances.clear();
+
+    try {
+      if (this.app?.ticker?.started) {
+        this.app.stop();
+      }
+    } catch (e) {}
+
+    try {
+      this.app?.stage?.removeChildren?.();
+    } catch (e) {}
+
+    try {
+      if (this.app) {
+        this.app.destroy(true);
+      }
+    } catch (e) {}
+
+    this.app = null;
+    this.slots.left.container = null;
+    this.slots.right.container = null;
+    this.slots.left.rect = null;
+    this.slots.right.rect = null;
+
+    try {
+      if (this.canvas?.parentNode) {
+        this.canvas.parentNode.removeChild(this.canvas);
+      }
+    } catch (e) {}
+    this.canvas = null;
+
+    try {
+      if (typeof Live2DManager?.cleanupAll === 'function') {
+        Live2DManager.cleanupAll();
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] Live2DStage: cleanupAll after fatal render error failed`, e);
+    }
+
+    if (prevMount && prevMount.isConnected) {
+      this.focusCharacterId = prevFocusCharacterId;
+      this.ensureMounted(prevMount, { mode: prevMode });
+    }
+  },
+
   attach(characterId, model, slot, { entering = false } = {}) {
     if (!characterId || !model) return false;
     if (!this.app || !this.mountEl) return false;
@@ -382,19 +459,7 @@ export const Live2DStage = {
       if (!model.parent) {
         targetContainer.addChild(model);
       }
-      if ('autoUpdate' in model) {
-        // Deduplicate ticker callback before enabling autoUpdate to avoid speed stacking.
-        const pixiRef = this._getPIXI();
-        const sharedTicker = pixiRef?.Ticker?.shared;
-        if (sharedTicker && typeof sharedTicker.remove === 'function' && typeof model.onTickerUpdate === 'function') {
-          try {
-            sharedTicker.remove(model.onTickerUpdate, model);
-          } catch (e) {}
-        }
-        try {
-          model.autoUpdate = true;
-        } catch (e) {}
-      }
+      this._setModelAutoUpdate(model, true);
     } catch (e) {}
 
     if (!inst.bounds) {
@@ -421,6 +486,38 @@ export const Live2DStage = {
     }
 
     this.applyTransform(characterId);
+
+    // Cubism5 renderer may read viewport[0..3] before PIXI renderTarget viewport is populated.
+    // Provide a safe fallback viewport to avoid first-frame crash in doDrawModel.
+    try {
+      const internalModel = model?.internalModel;
+      const viewport = internalModel?.viewport;
+      const invalidViewport =
+        !Array.isArray(viewport) ||
+        viewport.length < 4 ||
+        viewport.some((v) => !Number.isFinite(Number(v)));
+      if (internalModel && invalidViewport) {
+        const w = Math.max(
+          1,
+          Math.floor(
+            Number(this.app?.renderer?.width) ||
+              Number(this.canvas?.width) ||
+              Number(this.mountEl?.clientWidth) ||
+              1,
+          ),
+        );
+        const h = Math.max(
+          1,
+          Math.floor(
+            Number(this.app?.renderer?.height) ||
+              Number(this.canvas?.height) ||
+              Number(this.mountEl?.clientHeight) ||
+              1,
+          ),
+        );
+        internalModel.viewport = [0, 0, w, h];
+      }
+    } catch (e) {}
 
     const slotRect = this.slots[key]?.rect;
     if (slotRect) {
@@ -456,16 +553,7 @@ export const Live2DStage = {
       if (inst.model.parent) {
         inst.model.parent.removeChild(inst.model);
       }
-      const pixiRef = this._getPIXI();
-      const sharedTicker = pixiRef?.Ticker?.shared;
-      if (sharedTicker && typeof sharedTicker.remove === 'function' && typeof inst.model.onTickerUpdate === 'function') {
-        try {
-          sharedTicker.remove(inst.model.onTickerUpdate, inst.model);
-        } catch (e) {}
-      }
-      if ('autoUpdate' in inst.model) {
-        inst.model.autoUpdate = false;
-      }
+      this._setModelAutoUpdate(inst.model, false);
     } catch (e) {}
 
     this.instances.delete(characterId);
@@ -541,6 +629,3 @@ export const Live2DStage = {
     return true;
   },
 };
-
-
-

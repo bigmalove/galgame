@@ -687,15 +687,22 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
 
   const cleanupLive2DStageMount = () => {
     try {
-      if ($modal.find('#gal-char-live2d-preview-container').is(':visible')) {
+      const modalEl = $modal[0];
+      const stageMountEl = Live2DStage?.mountEl;
+      const mountedInsideModal = !!(modalEl && stageMountEl && modalEl.contains(stageMountEl));
+      if ($modal.find('#gal-char-live2d-preview-container').is(':visible') || mountedInsideModal) {
         Live2DStage.popMount();
       }
     } catch (e) {}
   };
 
-  const handleClose = () => {
+  const removeModal = () => {
     cleanupLive2DStageMount();
     $modal.remove();
+  };
+
+  const handleClose = () => {
+    removeModal();
     if (typeof onCloseCallback === 'function') {
       try { onCloseCallback(); } catch (e) {
         console.warn(`[${SCRIPT_NAME}] 回调执行失败:`, e);
@@ -709,7 +716,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
   });
 
   $('#gal-char-add-sprite-btn').on('click', async () => {
-    $modal.remove();
+    removeModal();
     if (_showSpriteUploadDialogRef) await _showSpriteUploadDialogRef(characterId, '默认', () => showCharacterSpritesModal(characterId));
   });
 
@@ -721,7 +728,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     } else {
       showToast(`已清除音色绑定: ${characterId}`);
     }
-    $modal.remove();
+    removeModal();
     showCharacterSpritesModal(characterId);
   });
 
@@ -765,7 +772,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
 
     $('#gal-char-live2d-upload').on('click', function() {
     showLive2DModelSourceDialog(characterId, async () => {
-      $modal.remove();
+      removeModal();
       showCharacterSpritesModal(characterId);
     });
   });
@@ -780,7 +787,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
         Live2DManager.cleanup(characterId);
       }
       showToast('Live2D 模型已删除');
-      $modal.remove();
+      removeModal();
       showCharacterSpritesModal(characterId);
     } catch (err) {
       console.error(`[${SCRIPT_NAME}] Live2D 删除失败:`, err);
@@ -868,6 +875,13 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
       const retryRefresh = () => {
         if (!Live2DManager.models.has(characterId)) return;
         if (!$previewContainer.is(':visible')) return;
+        if (!Live2DStage.canvas?.isConnected) {
+          const remounted = Live2DStage.ensureMounted($previewCanvas[0], { mode: 'single' });
+          if (!remounted || !Live2DStage.attach(characterId, model, 'left', { entering: false })) {
+            console.warn(`[${SCRIPT_NAME}] Live2D 预览重挂载失败: ${characterId}`);
+            return;
+          }
+        }
 
         const { expressionsCount, motionGroupCount } = refreshPreviewSelectors();
         if (expressionsCount > 0 && motionGroupCount > 0) {
@@ -928,7 +942,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     if ($(e.target).closest('.gal-sprite-delete').length) return;
     const charId = $(this).data('char');
     const expr = $(this).data('expr');
-    $modal.remove();
+    removeModal();
     if (_showSpriteUploadDialogRef) await _showSpriteUploadDialogRef(charId, expr, () => showCharacterSpritesModal(charId));
   });
 
@@ -940,7 +954,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     if (confirm(`确定删除 ${charId} 的表情「${expr}」吗？`)) {
       await deleteSprite(charId, expr);
       showToast(`已删除：${charId} - ${expr}`);
-      $modal.remove();
+      removeModal();
       showCharacterSpritesModal(charId);
     }
   });

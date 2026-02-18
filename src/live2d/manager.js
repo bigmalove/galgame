@@ -32,6 +32,7 @@ export const Live2DManager = {
   registeredTickerClasses: new WeakSet(),
   isReady: false,
   debug: false,
+  preferCubism5Runtime: true,
 
   _debugLog(...args) {
     if (!this.debug) return;
@@ -115,7 +116,7 @@ export const Live2DManager = {
 
   async _ensureRuntimeDependencies(characterId, runtimeInfo = null) {
     const runtimeInput = runtimeInfo || this._getCharacterRuntime(characterId);
-    const resolvedRuntime = this._setModelRuntimeInfo(characterId, runtimeInput);
+    let resolvedRuntime = this._setModelRuntimeInfo(characterId, runtimeInput);
     const requiredMocVersion = Number(resolvedRuntime?.moc3Version || 0) || 0;
     const requiredLatestVersion = requiredMocVersion >= 5 ? requiredMocVersion : 5;
 
@@ -131,6 +132,22 @@ export const Live2DManager = {
       }
       Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.CUBISM5);
       return this._setModelRuntimeInfo(characterId, resolvedRuntime);
+    }
+
+    if (requiredMocVersion >= 5) {
+      const coreLoaded = await Live2DLoader.ensureCubism5Core(requiredLatestVersion);
+      if (!coreLoaded) {
+        throw new Error(`Cubism 5 Core load failed for legacy runtime (${characterId})`);
+      }
+      Live2DLoader.activateRuntime(LIVE2D_RUNTIME_TYPES.LEGACY);
+      this._debugLog(
+        `[${SCRIPT_NAME}] Live2DManager: legacy runtime with Cubism5 core (${characterId}, moc3=${requiredMocVersion})`,
+      );
+      return this._setModelRuntimeInfo(characterId, {
+        ...resolvedRuntime,
+        runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
+        cubismVersion: resolvedRuntime.cubismVersion ?? 5,
+      });
     }
 
     const legacyCoreLoaded = await Live2DLoader.ensureLegacyCore();
@@ -237,7 +254,7 @@ export const Live2DManager = {
 
   async _detectRuntimeFromMoc3(characterId, moc3Data, runtimeInfo = null) {
     const resolvedRuntime = resolveLive2DRuntime(runtimeInfo || this._getCharacterRuntime(characterId));
-    if (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5 || Number(resolvedRuntime.cubismVersion || 0) >= 5) {
+    if (this.preferCubism5Runtime && (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.CUBISM5 || Number(resolvedRuntime.cubismVersion || 0) >= 5)) {
       this.modelRuntimeInfo.set(characterId, resolvedRuntime);
       return resolvedRuntime;
     }
@@ -263,11 +280,19 @@ export const Live2DManager = {
     const mocVersion = this._detectCubismVersionFromMoc3Buffer(moc3Buffer);
     const resolvedVersion = mocVersion ?? headerVersion ?? null;
     if (resolvedVersion >= 5) {
-      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: moc3 探测为 Cubism 5 (${characterId})`);
+      if (this.preferCubism5Runtime) {
+        this._debugLog(`[${SCRIPT_NAME}] Live2DManager: moc3 探测为 Cubism 5 (${characterId})`);
+        return this._setModelRuntimeInfo(characterId, {
+          ...runtimeWithHeader,
+          cubismVersion: 5,
+          runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
+        });
+      }
+      this._debugLog(`[${SCRIPT_NAME}] Live2DManager: moc3>=5, prefer legacy runtime (${characterId})`);
       return this._setModelRuntimeInfo(characterId, {
         ...runtimeWithHeader,
         cubismVersion: 5,
-        runtimeType: LIVE2D_RUNTIME_TYPES.CUBISM5,
+        runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
       });
     }
 
@@ -346,6 +371,139 @@ export const Live2DManager = {
       this.hasLoggedBlobUrlDisabled = true;
       console.warn(`[${SCRIPT_NAME}] Live2DManager: 已禁用 Blob URL（XHR 不兼容或加载失败: ${reason}），将回退使用 Data URL`);
     }
+  },
+
+  _patchModelRenderViewportGuard(model, characterId) {
+    if (!model || model.__galgameViewportGuardPatched) return false;
+    if (typeof model.render !== 'function') return false;
+
+    const originalRender = model.render;
+    const ensureModelUpdated = (modelRef) => {
+      if (!modelRef?.internalModel) return;
+      try {
+        const delta = Number(modelRef.deltaTime);
+        if (!Number.isFinite(delta) || delta <= 0) {
+          if (typeof modelRef.internalModel.update === 'function') {
+            const nextNow = Math.max(Number(modelRef.elapsedTime) || 0, 0) + 16.7;
+            modelRef.internalModel.update(16.7, nextNow);
+          } else if (typeof modelRef.update === 'function') {
+            modelRef.update(16.7);
+          } else {
+            modelRef.deltaTime = 16.7;
+            modelRef.elapsedTime = Math.max(Number(modelRef.elapsedTime) || 0, 16.7);
+          }
+        }
+      } catch (e) {}
+    };
+
+    const patchInternalDraw = (modelRef) => {
+      const internalModel = modelRef?.internalModel;
+      if (!internalModel || internalModel.__galgameDrawViewportGuardPatched) return false;
+      if (typeof internalModel.draw !== 'function') return false;
+
+      const originalDraw = internalModel.draw;
+      internalModel.draw = function patchedInternalDraw(gl) {
+        const viewport = this?.viewport;
+        const invalidViewport =
+          !Array.isArray(viewport) ||
+          viewport.length < 4 ||
+          viewport.some((v) => !Number.isFinite(Number(v)));
+
+        if (invalidViewport) {
+          let glViewport = null;
+          try {
+            glViewport = gl?.getParameter?.(gl?.VIEWPORT);
+          } catch (e) {}
+          if (glViewport && glViewport.length >= 4) {
+            this.viewport = [
+              Number(glViewport[0]) || 0,
+              Number(glViewport[1]) || 0,
+              Math.max(1, Math.floor(Number(glViewport[2]) || 1)),
+              Math.max(1, Math.floor(Number(glViewport[3]) || 1)),
+            ];
+          } else {
+            const width = Math.max(1, Math.floor(Number(gl?.drawingBufferWidth) || 1));
+            const height = Math.max(1, Math.floor(Number(gl?.drawingBufferHeight) || 1));
+            this.viewport = [0, 0, width, height];
+          }
+        }
+
+        return originalDraw.call(this, gl);
+      };
+      internalModel.__galgameDrawViewportGuardPatched = true;
+      return true;
+    };
+
+    const ensureViewport = (renderer, modelRef) => {
+      const internalModel = modelRef?.internalModel;
+      if (!internalModel) return;
+
+      const viewport = internalModel.viewport;
+      const invalidViewport =
+        !Array.isArray(viewport) ||
+        viewport.length < 4 ||
+        viewport.some((v) => !Number.isFinite(Number(v)));
+      if (!invalidViewport) return;
+
+      const fromTarget = renderer?.renderTarget?.viewport;
+      const width = Math.max(
+        1,
+        Math.floor(
+          Number(fromTarget?.width) ||
+            Number(renderer?.width) ||
+            Number(renderer?.screen?.width) ||
+            Number(renderer?.view?.width) ||
+            Number(renderer?.canvas?.width) ||
+            1,
+        ),
+      );
+      const height = Math.max(
+        1,
+        Math.floor(
+          Number(fromTarget?.height) ||
+            Number(renderer?.height) ||
+            Number(renderer?.screen?.height) ||
+            Number(renderer?.view?.height) ||
+            Number(renderer?.canvas?.height) ||
+            1,
+        ),
+      );
+      internalModel.viewport = [0, 0, width, height];
+    };
+
+    patchInternalDraw(model);
+    model.render = function patchedRender(renderer) {
+      patchInternalDraw(this);
+      ensureModelUpdated(this);
+      ensureViewport(renderer, this);
+      try {
+        return originalRender.call(this, renderer);
+      } catch (e) {
+        const message = String(e?.message || e || '');
+        const looksLikeViewportCrash =
+          message.includes("reading '0'") ||
+          message.includes('reading "0"');
+        if (!looksLikeViewportCrash) {
+          throw e;
+        }
+        ensureModelUpdated(this);
+        ensureViewport(renderer, this);
+        try {
+          const gl = renderer?.gl;
+          const internalModel = this?.internalModel;
+          if (gl && internalModel?.renderer?.setRenderState) {
+            const fallbackViewport = Array.isArray(internalModel.viewport) && internalModel.viewport.length >= 4
+              ? internalModel.viewport
+              : [0, 0, Math.max(1, Number(gl?.drawingBufferWidth) || 1), Math.max(1, Number(gl?.drawingBufferHeight) || 1)];
+            internalModel.renderer.setRenderState(gl.getParameter(gl.FRAMEBUFFER_BINDING), fallbackViewport);
+          }
+        } catch (e2) {}
+        return originalRender.call(this, renderer);
+      }
+    };
+    model.__galgameViewportGuardPatched = true;
+    this._debugLog(`[${SCRIPT_NAME}] Live2DManager: render viewport guard patched (${characterId})`);
+    return true;
   },
 
   _isRemoteModelData(modelData) {
@@ -874,6 +1032,7 @@ export const Live2DManager = {
           autoUpdate: false,
           autoInteract: false,
         });
+        this._patchModelRenderViewportGuard(model, characterId);
 
         await new Promise((resolve) => {
           let retryCount = 0;
@@ -894,28 +1053,55 @@ export const Live2DManager = {
               return;
             }
 
-            const textures = internalModel.textures || internalModel._textures || [];
+            const modelTextures = Array.isArray(model?.textures) ? model.textures : [];
+            const internalTextures = Array.isArray(internalModel?.textures)
+              ? internalModel.textures
+              : (Array.isArray(internalModel?._textures) ? internalModel._textures : []);
+            const textures = modelTextures.length > 0 ? modelTextures : internalTextures;
+            const expectedTextureCount = (() => {
+              const settingsTextures =
+                internalModel?.settings?.textures ||
+                internalModel?.modelSettings?.textures ||
+                model?.modelSettings?.textures;
+              if (Array.isArray(settingsTextures) && settingsTextures.length > 0) {
+                return settingsTextures.length;
+              }
+              return textures.length;
+            })();
 
-            if (textures.length === 0) {
+            if (expectedTextureCount === 0) {
               this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型无外部纹理，跳过等待`);
               resolve(true);
               return;
             }
 
-            const allLoaded = textures.every(tex => {
+            if (!textures.length) {
+              if (retryCount % 5 === 0) {
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 等待纹理对象创建... (0/${expectedTextureCount})`);
+              }
+              setTimeout(checkTextures, 100);
+              return;
+            }
+
+            const isTextureReady = (tex) => {
               if (!tex) return false;
               if (tex.baseTexture) {
-                return tex.baseTexture.valid;
+                return !!tex.baseTexture.valid;
+              }
+              if (typeof tex.valid === 'boolean') {
+                return tex.valid;
               }
               return true;
-            });
+            };
+            const readyCount = textures.filter(isTextureReady).length;
+            const allLoaded = readyCount >= expectedTextureCount;
 
             if (allLoaded) {
-              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${textures.length} 张)`);
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 纹理全部加载完成 (${readyCount}/${expectedTextureCount})`);
               resolve(true);
             } else {
               if (retryCount % 5 === 0) {
-                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${textures.filter(t => t?.baseTexture?.valid).length}/${textures.length})`);
+                this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 等待纹理加载... (${readyCount}/${expectedTextureCount})`);
               }
               setTimeout(checkTextures, 100);
             }
@@ -1008,6 +1194,7 @@ export const Live2DManager = {
 
         const currentLatestMocVersion = Number(_topWindow?.Live2DCubismCore?.Version?.csmGetLatestMocVersion?.() || 0) || 0;
         const canRetryAsCubism5 =
+          this.preferCubism5Runtime &&
           resolvedRuntime.runtimeType !== LIVE2D_RUNTIME_TYPES.CUBISM5 &&
           (
             Number(resolvedRuntime.cubismVersion || 0) >= 5 ||
@@ -1806,7 +1993,14 @@ export const Live2DManager = {
           if (forceReload) {
             _Live2DStageRef.detach(characterId);
           }
-          _Live2DStageRef.attach(characterId, model, slot, { entering: false });
+          const attached = _Live2DStageRef.attach(characterId, model, slot, { entering: false });
+          if (!attached) {
+            try {
+              _Live2DStageRef._resetAfterFatalRenderError?.(`attach-failed:${characterId}`);
+            } catch (e) {}
+            this._destroyModel(characterId, 'stage-attach-failed');
+            return false;
+          }
         } else {
           _Live2DStageRef.focusCharacterId = characterId;
           if (!_Live2DStageRef.ensureMounted(targetEl, { mode: 'single' })) return false;
@@ -1819,7 +2013,14 @@ export const Live2DManager = {
           if (forceReload) {
             _Live2DStageRef.detach(characterId);
           }
-          _Live2DStageRef.attach(characterId, model, 'left', { entering: false });
+          const attached = _Live2DStageRef.attach(characterId, model, 'left', { entering: false });
+          if (!attached) {
+            try {
+              _Live2DStageRef._resetAfterFatalRenderError?.(`attach-failed:${characterId}`);
+            } catch (e) {}
+            this._destroyModel(characterId, 'stage-attach-failed');
+            return false;
+          }
         }
 
         this._markModelActive(characterId);
@@ -1962,6 +2163,49 @@ export const Live2DManager = {
       model.alpha = 1;
 
       app.stage.addChild(model);
+
+      try {
+        const internalModel = model?.internalModel;
+        const viewport = internalModel?.viewport;
+        const invalidViewport =
+          !Array.isArray(viewport) ||
+          viewport.length < 4 ||
+          viewport.some((v) => !Number.isFinite(Number(v)));
+        if (internalModel && invalidViewport) {
+          const vw = Math.max(
+            1,
+            Math.floor(
+              Number(app?.renderer?.width) ||
+                Number(canvas?.width) ||
+                Number(containerElement?.clientWidth) ||
+                1,
+            ),
+          );
+          const vh = Math.max(
+            1,
+            Math.floor(
+              Number(app?.renderer?.height) ||
+                Number(canvas?.height) ||
+                Number(containerElement?.clientHeight) ||
+                1,
+            ),
+          );
+          internalModel.viewport = [0, 0, vw, vh];
+        }
+      } catch (e) {}
+
+      try {
+        if (typeof model.onTickerUpdate === 'function') {
+          model.onTickerUpdate();
+        } else if (typeof model.deltaTime === 'number' && model.deltaTime <= 0) {
+          model.deltaTime = 16.7;
+          if (typeof model.elapsedTime === 'number') {
+            model.elapsedTime = Math.max(model.elapsedTime || 0, 16.7);
+          }
+        }
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: model ticker prime failed (${characterId})`, e);
+      }
 
       app.renderer.render(app.stage);
       if (!app.ticker?.started) {

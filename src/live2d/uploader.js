@@ -75,7 +75,8 @@ export const Live2DUploader = {
       const moc3Data = await this._extractFile(zip, modelDir, modelJson.FileReferences?.Moc);
       const moc3HeaderVersion = this._readMoc3HeaderVersion(moc3Data);
       const detectedCubismVersion = await this._resolveModel3CubismVersion(modelJson, moc3Data);
-      const runtimeType = resolveRuntimeTypeFromCubismVersion(detectedCubismVersion);
+      const detectedRuntimeType = resolveRuntimeTypeFromCubismVersion(detectedCubismVersion);
+      const runtimeType = detectedRuntimeType;
       modelData = {
         modelId: characterId,
         cubismVersion: detectedCubismVersion,
@@ -207,6 +208,17 @@ export const Live2DUploader = {
     const headerVersionRaw = this._readMoc3HeaderVersion(moc3Data);
     const headerVersion = this._normalizeMocVersion(headerVersionRaw);
 
+    // MOC3 header is the most stable signal for runtime routing.
+    // Use it directly when available to avoid probe timing/caching drift.
+    if (headerVersion != null) {
+      if (headerVersion !== jsonFallbackVersion) {
+        console.log(
+          `[${SCRIPT_NAME}] Live2DUploader: moc3 header version detected as ${headerVersion} (model.json inferred ${jsonFallbackVersion})`,
+        );
+      }
+      return headerVersion;
+    }
+
     try {
       const requiredLatestVersion = headerVersionRaw >= 5 ? headerVersionRaw : 5;
       await Live2DLoader.ensureCubism5Core(requiredLatestVersion);
@@ -216,11 +228,6 @@ export const Live2DUploader = {
     if (mocVersion != null && mocVersion !== jsonFallbackVersion) {
       console.log(
         `[${SCRIPT_NAME}] Live2DUploader: moc3 version detected as ${mocVersion} (model.json inferred ${jsonFallbackVersion})`,
-      );
-    }
-    if (mocVersion == null && headerVersion != null && headerVersion !== jsonFallbackVersion) {
-      console.log(
-        `[${SCRIPT_NAME}] Live2DUploader: moc3 header version detected as ${headerVersion} (model.json inferred ${jsonFallbackVersion})`,
       );
     }
     return mocVersion ?? headerVersion ?? jsonFallbackVersion;

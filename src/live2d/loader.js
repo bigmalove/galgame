@@ -11,8 +11,9 @@ export const Live2DLoader = {
     'https://unpkg.com/live2dcubismcore@1.0.2/live2dcubismcore.min.js',
     'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js',
   ]),
-  CUBISM5_CORE_URL: 'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/live2dcubismcore.min.js',
+  CUBISM5_CORE_URL: 'https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js',
   CUBISM5_CORE_FALLBACK_URLS: Object.freeze([
+    'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/live2dcubismcore.min.js',
     'https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/live2dcubismcore.min.js',
   ]),
   CUBISM2_CORE_URL: 'https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js',
@@ -890,5 +891,4 @@ export const Live2DLoader = {
     });
   }
 };
-
 

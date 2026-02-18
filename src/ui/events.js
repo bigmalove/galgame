@@ -25,8 +25,8 @@ import { restoreOriginalViews, hideNonLastFloors } from './galgame-mode.js';
 
 const messageSegmentState = GalgameStore.cache.segments;
 
-const CUSTOM_LOCATION_HTML_KEY = 'gal_custom_location_html';
-const CUSTOM_TIME_HTML_KEY = 'gal_custom_time_html';
+const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
+const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 
 // 延迟引用
 let _showSettingsPanelRef = null;
@@ -44,17 +44,49 @@ export function setupGlobalEventListeners() {
   const doc = topWindow.document;
   const settings = getSettings();
 
+  function normalizeStatusPopupHtml(value) {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    return trimmed ? trimmed : '';
+  }
+
+  function getCurrentParsedContent() {
+    const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
+    if (!mesId) return null;
+    return messageSegmentState.get(String(mesId))?.parsedContent || null;
+  }
+
+  function getLocationPopupHtml() {
+    const parsed = getCurrentParsedContent();
+    const fromTag = normalizeStatusPopupHtml(parsed?.locationStatusBarHtml);
+    return fromTag;
+  }
+
+  function getTimePopupHtml() {
+    const parsed = getCurrentParsedContent();
+    const fromTag = normalizeStatusPopupHtml(parsed?.timeStatusBarHtml);
+    return fromTag;
+  }
+
   // 地点/时间状态栏点击
   $(doc).on('click', '#gal-location-bar', function (e) {
     e.stopPropagation();
-    const customHtml = localStorage.getItem(CUSTOM_LOCATION_HTML_KEY);
-    if (customHtml) showCustomPopupPanel('地点详情', customHtml);
+    const popupHtml = getLocationPopupHtml();
+    if (popupHtml) {
+      showCustomPopupPanel('地点详情', popupHtml);
+      return;
+    }
+    showToast('未找到 <地点状态栏> 标签内容');
   });
 
   $(doc).on('click', '#gal-time-bar', function (e) {
     e.stopPropagation();
-    const customHtml = localStorage.getItem(CUSTOM_TIME_HTML_KEY);
-    if (customHtml) showCustomPopupPanel('时间详情', customHtml);
+    const popupHtml = getTimePopupHtml();
+    if (popupHtml) {
+      showCustomPopupPanel('时间详情', popupHtml);
+      return;
+    }
+    showToast('未找到 <时间状态栏> 标签内容');
   });
 
   // PREV按钮长按快退

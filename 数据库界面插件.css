@@ -4687,6 +4687,7 @@
     }
     .gal-popup-panel {
         background: var(--SmartThemeFormBg, #fff);
+        color: #2b2e38;
         border-radius: 12px;
         max-width: 700px;
         width: 100%;
@@ -4707,6 +4708,8 @@
     .gal-popup-title {
         font-weight: 700;
         font-size: 1.1rem;
+        color: #2b2e38 !important;
+        text-shadow: none;
     }
     .gal-popup-close {
         background: none;
@@ -4729,6 +4732,15 @@
         padding: 20px;
         overflow-y: auto;
         flex: 1;
+        color: #2b2e38 !important;
+        line-height: 1.7;
+        text-shadow: none;
+    }
+    .gal-popup-body a {
+        color: #1f5fbf;
+    }
+    .gal-popup-body *:not([style*="color"]) {
+        color: inherit !important;
     }
 
     /* --- B. 移动端通用基础修复 (<=48rem) --- */

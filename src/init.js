@@ -112,7 +112,7 @@ async function init() {
                 const $mesText = $(mesNode).find('.mes_text');
                 content = decodeHtml($mesText.html() || '');
               }
-              const hasGalTags = /<(p|sprite|maintext|background)[^>]*>/i.test(content);
+              const hasGalTags = /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i.test(content);
               if (hasGalTags) {
                 processNewMessage(mesNode);
               } else if (mesNode.classList.contains('gal-hidden')) {

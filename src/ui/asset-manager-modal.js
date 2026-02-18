@@ -193,12 +193,17 @@ export function bindAssetManagerContentEvents($modal, activeTab) {
   });
 
   // 自定义HTML保存
-  $modal.find('#gal-save-custom-html').on('click', function() {
+  $modal.find('#gal-save-custom-html').on('click', async function() {
     const locHtml = $('#gal-custom-location-html').val();
     const timeHtml = $('#gal-custom-time-html').val();
     localStorage.setItem(CUSTOM_LOCATION_HTML_KEY, locHtml);
     localStorage.setItem(CUSTOM_TIME_HTML_KEY, timeHtml);
-    showToast('自定义配置已保存');
+    const injected = await injectCOTToWorldbook();
+    if (injected) {
+      showToast('自定义配置已保存，并已同步到世界书');
+    } else {
+      showToast('自定义配置已保存，但世界书同步失败', 'warning');
+    }
   });
 
   // 生图配置事件
@@ -299,11 +304,11 @@ function buildCustomTab(settings) {
   return `
   <div class="gal-tab-pane" data-pane="custom" style="display: none;">
     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> 地点状态栏 - 自定义内容 HTML</label><textarea id="gal-custom-location-html" placeholder="<div>自定义地点介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY) || ''}</textarea></div>
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> 时间状态栏 - 自定义内容 HTML</label><textarea id="gal-custom-time-html" placeholder="<div>自定义时间介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY) || ''}</textarea></div>
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> 地点状态栏 - 自定义内容格式要求（注入到世界书）</label><textarea id="gal-custom-location-html" placeholder="<div>自定义地点介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY) || ''}</textarea></div>
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> 时间状态栏 - 自定义内容格式要求（注入到世界书）</label><textarea id="gal-custom-time-html" placeholder="<div>自定义时间介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY) || ''}</textarea></div>
       <div style="text-align: right;"><button class="gal-action-btn primary" id="gal-save-custom-html" style="padding: 8px 20px;"><i class="fa-solid fa-save"></i> 保存配置</button></div>
     </div>
-    <div style="padding: 15px; color: #666; font-size: 0.9rem; line-height: 1.6;"><strong><i class="fa-solid fa-lightbulb"></i> 说明：</strong><br>此处配置的 HTML 内容将在点击主界面的地点/时间状态栏时弹窗显示。<br>支持标准 HTML 标签和内联样式。</div>
+    <div style="padding: 15px; color: #666; font-size: 0.9rem; line-height: 1.7;"><strong><i class="fa-solid fa-lightbulb"></i> 说明：</strong><br>1. 保存后，若填写了内容，会自动同步到世界书并注入标签：<br><code>&lt;地点状态栏&gt;...&lt;/地点状态栏&gt;</code><br><code>&lt;时间状态栏&gt;...&lt;/时间状态栏&gt;</code><br>2. 点击状态栏弹窗只读取当前消息中的标签内容，不再直接显示这里输入的备用内容。<br>3. 支持标准 HTML 和内联样式，建议保持简洁，不要放脚本标签。</div>
   </div>`;
 }
 
@@ -362,6 +367,19 @@ export function buildAssetManagerStyles() {
     .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
     .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
     .gal-pill.active { background:linear-gradient(135deg,${THEME.accent},#00a8cc); color:#fff; border-color:transparent; }
+    #gal-unified-panel #gal-custom-location-html,
+    #gal-unified-panel #gal-custom-time-html {
+      background: #ffffff !important;
+      color: #1f2937 !important;
+      border: 1px solid #cbd5e1 !important;
+      caret-color: #1f2937 !important;
+      line-height: 1.5 !important;
+    }
+    #gal-unified-panel #gal-custom-location-html::placeholder,
+    #gal-unified-panel #gal-custom-time-html::placeholder {
+      color: #9ca3af !important;
+      opacity: 1 !important;
+    }
   `;
 }
 

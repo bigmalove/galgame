@@ -253,7 +253,7 @@ export async function refreshOverlayFromLastAiMessage() {
     contentToProcess = decodeHtml(html);
   }
 
-  const hasGalTags = /<(p|sprite|maintext|background)[^>]*>/i.test(contentToProcess);
+  const hasGalTags = /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i.test(contentToProcess);
   if (!hasGalTags) {
     console.log(`[${SCRIPT_NAME}] 最后AI消息不包含Galgame标签`);
     return;

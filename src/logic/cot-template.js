@@ -1,5 +1,7 @@
 import { SCRIPT_NAME } from '../core/constants.js';
+import { topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
+import { CUSTOM_LOCATION_HTML_KEY, CUSTOM_TIME_HTML_KEY } from '../core/store.js';
 import { getAllBackgrounds } from '../db/backgrounds.js';
 import { getAllExpressions } from '../utils/expressions.js';
 import { getTTSVoiceListAsync, getAllCharacterTTSVoices, getTTSEnabled } from '../audio/tts-config.js';
@@ -39,6 +41,25 @@ export async function generateCOTTemplate() {
         .join('\n') +
       '\n**重要**: 以上角色必须使用绑定的指定音色，不可更改！\n';
   }
+
+  const locationStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_LOCATION_HTML_KEY) || '').trim();
+  const timeStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_TIME_HTML_KEY) || '').trim();
+  const locationStatusTag = locationStatusHtml ? `<地点状态栏>${locationStatusHtml}</地点状态栏>` : '';
+  const timeStatusTag = timeStatusHtml ? `<时间状态栏>${timeStatusHtml}</时间状态栏>` : '';
+  const statusTagInstructions = [];
+  if (locationStatusTag) statusTagInstructions.push(`- 地点状态栏（必须原样输出）: ${locationStatusTag}`);
+  if (timeStatusTag) statusTagInstructions.push(`- 时间状态栏（必须原样输出）: ${timeStatusTag}`);
+  const statusTagSection = statusTagInstructions.length > 0
+    ? `
+### 状态栏标签（根据用户配置自动注入）
+${statusTagInstructions.join('\n')}
+- 以上标签请放在 <maintext> 内。消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
+`
+    : '';
+  const statusTagExampleBlock = [locationStatusTag, timeStatusTag]
+    .filter(Boolean)
+    .map(tag => `  ${tag}`)
+    .join('\n');
 
   // 构建场景列表说明
   let sceneListText = '';
@@ -208,6 +229,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 
 ## 输出格式要求
 - 每个<p></p>的字数: 25-70字
+${statusTagSection}
 
 ## 标签系统
 
@@ -252,7 +274,8 @@ ${charVoiceBindingText}
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
-  <p>夜色深沉，街灯在雨中摇曳。</p>
+${statusTagExampleBlock ? `${statusTagExampleBlock}
+` : ''}  <p>夜色深沉，街灯在雨中摇曳。</p>
   <p>少女[微笑,桃夭]: "你终于来了～"</p>
   <bgm>歌曲名</bgm>
   <p>她撑着伞，静静地站在那里。</p>
@@ -277,6 +300,7 @@ ${extraRule}
 
 ## 输出格式要求
 - 每段字数: 不大于70字
+${statusTagSection}
 
 ## 标签系统
 
@@ -312,7 +336,8 @@ ${extraRule}
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
-  <p>第一句旁白描述。</p>
+${statusTagExampleBlock ? `${statusTagExampleBlock}
+` : ''}  <p>第一句旁白描述。</p>
   <p>角色名: "这是角色的对话内容。"<微笑></p>
   <bgm>歌曲名</bgm>
   <p>继续旁白描述。</p>

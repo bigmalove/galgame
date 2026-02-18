@@ -8,7 +8,7 @@ import { getCharacterTTSVoice } from '../audio/tts-config.js';
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background)[^>]*>/i;
+export const RE_GAL_TAGS = /<(p|sprite|maintext|background|地点状态栏|时间状态栏)[^>]*>/i;
 const RE_CLOSED_P = /<\/p>/i;
 const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;
@@ -26,6 +26,8 @@ const RE_BNIMG = /<bnimg>([\s\S]*?)<\/bnimg>/i;
 const RE_BGM = /<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i;
 const RE_OPTION = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
 const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
+const RE_LOCATION_STATUS_BAR = /<地点状态栏>([\s\S]*?)<\/地点状态栏>/gi;
+const RE_TIME_STATUS_BAR = /<时间状态栏>([\s\S]*?)<\/时间状态栏>/gi;
 
 const RE_ILLEGAL_TAGS = [
   /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
@@ -147,6 +149,7 @@ function preprocessSimplifiedFormat(html) {
 // 消息解析器
 // ============================================
 export function parseGalgameContent(html, messageId) {
+  const rawInputHtml = typeof html === 'string' ? html : '';
   const settings = getSettings();
   const isEnabled = getIsEnabled();
   const parseCache = GalgameStore.cache.parse;
@@ -181,6 +184,8 @@ export function parseGalgameContent(html, messageId) {
     bgm: null,
     options: [],
     backgroundChanges: [],
+    locationStatusBarHtml: null,
+    timeStatusBarHtml: null,
   };
 
   // 移除 highlight.js 标签
@@ -203,6 +208,31 @@ export function parseGalgameContent(html, messageId) {
       content = maintextStart[1];
     }
   }
+
+  function extractLastStatusTagContent(source, regex) {
+    if (!source) return null;
+    const pattern = new RegExp(regex.source, regex.flags);
+    let match;
+    let lastContent = null;
+    while ((match = pattern.exec(source)) !== null) {
+      const html = typeof match[1] === 'string' ? match[1].trim() : '';
+      if (html) {
+        lastContent = html;
+      }
+    }
+    return lastContent;
+  }
+
+  result.locationStatusBarHtml =
+    extractLastStatusTagContent(content, RE_LOCATION_STATUS_BAR) ||
+    extractLastStatusTagContent(cleanedHtml, RE_LOCATION_STATUS_BAR) ||
+    extractLastStatusTagContent(rawInputHtml, RE_LOCATION_STATUS_BAR) ||
+    null;
+  result.timeStatusBarHtml =
+    extractLastStatusTagContent(content, RE_TIME_STATUS_BAR) ||
+    extractLastStatusTagContent(cleanedHtml, RE_TIME_STATUS_BAR) ||
+    extractLastStatusTagContent(rawInputHtml, RE_TIME_STATUS_BAR) ||
+    null;
 
   // 找到 <maintext> 内第一个 Galgame 标签
   const firstGalMatch = content.match(/<(background|p)[\s>]/i);

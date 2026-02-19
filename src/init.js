@@ -17,7 +17,7 @@ import { BGMManager } from './audio/bgm-manager.js';
 import { SpriteManager } from './sprite/sprite-manager.js';
 import { resetGenerationState, getGenerationState, getVerificationDelayMs, verifyGenerationComplete } from './logic/generation-state.js';
 import { RE_GAL_TAGS } from './logic/parser.js';
-import { injectCOTToWorldbook } from './logic/worldbook.js';
+import { injectCOTToWorldbook, disableWorldbookGlobally } from './logic/worldbook.js';
 import { initEnhancedModeListener, initWorldbookInjectionListener } from './logic/enhanced-mode.js';
 import { setupMessageObserver } from './logic/message-observer.js';
 import { injectStyles } from './ui/styles.js';
@@ -87,6 +87,8 @@ async function init() {
         setTimeout(() => updateLocationTimeDisplay(), 500);
 
         if (settings.hideOtherFloors) hideNonLastFloors();
+      } else {
+        disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 初始化状态同步：关闭世界书失败`, e));
       }
 
       if (typeof topWindow.eventOn === 'function' && topWindow.tavern_events) {
@@ -125,7 +127,7 @@ async function init() {
         });
         console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件监听已注册`);
 
-        topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, () => {
+        topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, async () => {
           resetGenerationState('切换聊天');
           const newEnabled = isCurrentCharEnabled();
           if (newEnabled !== getIsEnabled()) {
@@ -137,6 +139,7 @@ async function init() {
               const currentSettings = getSettings();
               if (currentSettings.hideOtherFloors) hideNonLastFloors();
             } else {
+              await disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));
               restoreOriginalViews();
             }
           }

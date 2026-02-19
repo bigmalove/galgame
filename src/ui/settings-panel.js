@@ -1,19 +1,18 @@
-import { SCRIPT_NAME, THEME } from '../core/constants.js';
-import { $, topWindow } from '../core/env.js';
-import { ensureEnhancedModeSettings, getSettings, setCurrentCharEnabled, saveSettings } from '../core/settings.js';
-import { setGlobalDebugEnabled } from '../core/debug.js';
-import { getIsEnabled, setIsEnabled, setHideOtherFloors } from '../core/state.js';
-import { GalgameStore } from '../core/store.js';
-import { TTS_PROVIDER, getTTSProvider, getGptSoVitsConfig, getTTSVoiceListAsync, getTTSEnabled, setTTSEnabled, getGptSoVitsVoiceList, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice } from '../audio/tts-config.js';
+import { TTS_PROVIDER, getGptSoVitsVoiceList, getTTSEnabled, getTTSProvider, getTTSVoiceListAsync, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice, setTTSEnabled } from '../audio/tts-config.js';
 import { TTSManager } from '../audio/tts-manager.js';
-import { getAvailablePresets, getAvailableProfiles, getAvailableModels, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
-import { injectCOTToWorldbook, enableWorldbookGlobally, disableWorldbookGlobally } from '../logic/worldbook.js';
+import { SCRIPT_NAME, THEME } from '../core/constants.js';
+import { setGlobalDebugEnabled } from '../core/debug.js';
+import { $, topWindow } from '../core/env.js';
+import { ensureEnhancedModeSettings, getSettings, saveSettings, setCurrentCharEnabled } from '../core/settings.js';
+import { getIsEnabled, setHideOtherFloors, setIsEnabled } from '../core/state.js';
+import { GalgameStore } from '../core/store.js';
 import { clearAllPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
+import { getAvailableModels, getAvailablePresets, getAvailableProfiles, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
+import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
 import { getModalMountRoot } from './fullscreen.js';
-import { showToast } from './toast.js';
-import { showGlobalOverlay, hideGlobalOverlay } from './overlay.js';
+import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloors } from './galgame-mode.js';
 import { updateButtonState } from './menu-button.js';
-import { hideNonLastFloors, showAllFloors, applyGalgameMode, restoreOriginalViews } from './galgame-mode.js';
+import { showToast } from './toast.js';
 
 // ============================================
 // 统一设置面板 + UI 应用函数
@@ -78,6 +77,27 @@ function buildAboutPane() {
   `;
 }
 
+// 皮肤列表定义
+const SKIN_LIST = [
+  { value: 'none',    label: '默认' },
+  { value: 'skin-ancient', label: '墨染千秋（中国古风）' },
+  { value: 'skin-western', label: '冒险者酒馆（西方奇幻）' },
+  { value: 'skin-persona', label: '心之怪盗（女神异闻录）' },
+  { value: 'skin-jrpg',    label: '苍穹之庭（日式奇幻）' },
+  { value: 'skin-classic',  label: '樱色物语（经典Galgame）' },
+];
+
+// 应用皮肤到覆盖层
+export function applySkin() {
+  const settings = getSettings();
+  const skin = settings.skin || 'none';
+  const $overlay = $('#gal-global-overlay');
+  // 移除所有皮肤 class
+  SKIN_LIST.forEach(s => { if (s.value !== 'none') $overlay.removeClass(s.value); });
+  // 添加选中的皮肤 class
+  if (skin !== 'none') $overlay.addClass(skin);
+}
+
 // 应用设置到 UI
 export function applySettingsToUI() {
   const settings = getSettings();
@@ -85,10 +105,18 @@ export function applySettingsToUI() {
   $('#gal-global-overlay').css('--font-scale', fontScale);
 
   const opacity = settings.dialogOpacity;
-  $('.gal-text-panel').css({
-    'background-color': `rgba(255, 255, 255, ${opacity})`,
-    'background-image': `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
-  });
+  // 只在非皮肤模式下应用默认面板样式
+  if (!settings.skin || settings.skin === 'none') {
+    $('.gal-text-panel').css({
+      'background-color': `rgba(255, 255, 255, ${opacity})`,
+      'background-image': `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
+    });
+  } else {
+    // 皮肤模式：将透明度存为 CSS 变量供皮肤 CSS 引用
+    $('#gal-global-overlay').css('--panel-opacity', opacity);
+    // 清除内联的 background 样式，让皮肤 CSS 接管
+    $('.gal-text-panel').css({ 'background-color': '', 'background-image': '' });
+  }
 
   if (settings.showSprites) {
     $('.gal-layer-character').show();
@@ -120,6 +148,7 @@ export function applySettingsToUI() {
   }
 
   applyBgFillMode();
+  applySkin();
   applyTextEffect();
   syncPixiEffectsSettings();
 }
@@ -376,6 +405,12 @@ export async function showSettingsPanel(topTab, subTab) {
               <select id="gal-bg-fill-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
                 <option value="cover" ${settings.bgFillMode === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
                 <option value="contain" ${settings.bgFillMode === 'contain' ? 'selected' : ''}>Contain (完整显示)</option>
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">界面皮肤</span>
+              <select id="gal-skin-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 200px;">
+                ${SKIN_LIST.map(s => `<option value="${s.value}" ${settings.skin === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -744,7 +779,6 @@ export async function showSettingsPanel(topTab, subTab) {
     if (newEnabled) {
       $(this).removeClass('gal-toggle-off').addClass('gal-toggle-on').html('<i class="fa-solid fa-toggle-on" style="font-size: 1.3rem;"></i><span>Galgame 模式已开启</span>');
       await injectCOTToWorldbook();
-      await enableWorldbookGlobally();
       applyGalgameMode();
       if (settings.hideOtherFloors) hideNonLastFloors();
       showToast('Galgame 模式已开启');
@@ -772,6 +806,7 @@ export async function showSettingsPanel(topTab, subTab) {
     saveSettings();
   });
   $('#gal-bg-fill-mode').on('change', function () { settings.bgFillMode = $(this).val(); applyBgFillMode(); saveSettings(); });
+  $('#gal-skin-select').on('change', function () { settings.skin = $(this).val(); applySkin(); applySettingsToUI(); saveSettings(); });
   $('#gal-effects-enabled').on('change', function () {
     settings.effectsEnabled = $(this).is(':checked');
     if (!settings.effectsEnabled) {

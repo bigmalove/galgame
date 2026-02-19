@@ -6,7 +6,7 @@ import { getIsEnabled, setIsEnabled, getIsRewinding, REWIND_HOLD_DELAY, getPendi
 import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from '../utils/html.js';
 import { TTSManager } from '../audio/tts-manager.js';
 import { parseGalgameContent } from '../logic/parser.js';
-import { disableWorldbookGlobally, injectCOTToWorldbook, enableWorldbookGlobally } from '../logic/worldbook.js';
+import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
 import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
 import { toggleFullscreen } from './fullscreen.js';
 import { getModalMountRoot } from './fullscreen.js';
@@ -176,8 +176,7 @@ export function setupGlobalEventListeners() {
 
     try {
       await injectCOTToWorldbook();
-      await enableWorldbookGlobally();
-      console.log(`[${SCRIPT_NAME}] Galgame模式开启（已全局启用世界书）`);
+      console.log(`[${SCRIPT_NAME}] Galgame模式开启（世界书按需附加）`);
     } catch (err) {
       console.error('Galgame模式开启出错:', err);
     }
@@ -191,18 +190,42 @@ export function setupGlobalEventListeners() {
       contentToProcess = decodeHtml($mesText.html());
     }
 
+    const buildFallbackParsed = () => {
+      const fallbackText = String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）';
+      return {
+        segments: [{ type: 'narration', speaker: null, text: fallbackText, expression: null }],
+        currentBackground: null,
+        bgm: null,
+        options: [],
+        backgroundChanges: [],
+        effectEvents: [],
+        hasEffects: false,
+        locationStatusBarHtml: null,
+        timeStatusBarHtml: null,
+      };
+    };
+
+    let parsed = null;
     if (contentToProcess) {
-      const parsed = parseGalgameContent(contentToProcess);
+      parsed = parseGalgameContent(contentToProcess);
       detectAndCaptureCg(mesId, $mes[0], parsed);
-      if (parsed.segments.length > 0 && _updateGlobalOverlayContentRef) {
-        await _updateGlobalOverlayContentRef(mesId, parsed);
-        showGlobalOverlay();
-        if (settings.hideOtherFloors) hideNonLastFloors();
-        showToast('Galgame 模式已开启');
-      }
-    } else {
-      if (settings.hideOtherFloors) hideNonLastFloors();
     }
+
+    if (!parsed || parsed.segments.length === 0) {
+      console.warn(`[${SCRIPT_NAME}] 点击进入时未解析到可显示段落，使用纯文本兜底显示`);
+      parsed = buildFallbackParsed();
+    }
+
+    if (!_updateGlobalOverlayContentRef) {
+      console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，无法显示主界面`);
+      showToast('主界面初始化失败，请刷新页面后重试');
+      return;
+    }
+
+    await _updateGlobalOverlayContentRef(mesId, parsed);
+    showGlobalOverlay();
+    if (settings.hideOtherFloors) hideNonLastFloors();
+    showToast('Galgame 模式已开启');
   });
 
   // 快进按钮

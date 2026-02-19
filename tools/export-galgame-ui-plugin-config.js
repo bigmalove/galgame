@@ -23,10 +23,13 @@
 
   const STORAGE_KEYS = {
     CURRENT_PACK: `${SCRIPT_ID}_current_pack`,
+    SETTINGS: `${SCRIPT_ID}_settings`,
     CHAR_TTS_VOICE: `${SCRIPT_ID}_char_tts_voice`,
     TTS_ENABLED: `${SCRIPT_ID}_tts_enabled`,
     CHAR_USE_LIVE2D: `${SCRIPT_ID}_char_use_live2d`,
     LIVE2D_CONFIG: `${SCRIPT_ID}_live2d_config`,
+    CUSTOM_LOCATION_HTML: `${SCRIPT_ID}_custom_location_html`,
+    CUSTOM_TIME_HTML: `${SCRIPT_ID}_custom_time_html`,
   };
 
   function parseMajorVersion(value) {
@@ -111,6 +114,19 @@
     }
   }
 
+  function normalizeStringList(rawList) {
+    const source = Array.isArray(rawList)
+      ? rawList
+      : (typeof rawList === 'string' ? rawList.split(/\r?\n/) : []);
+    return Array.from(
+      new Set(
+        source
+          .map(name => String(name || '').trim())
+          .filter(Boolean),
+      ),
+    );
+  }
+
   function ensureTrailingSlash(url) {
     if (!url) return '';
     return url.endsWith('/') ? url : url + '/';
@@ -126,6 +142,10 @@
 
     const base = ensureTrailingSlash(raw);
     return { remoteBaseUrl: base, remoteAssetsUrl: base + 'remote_assets.json' };
+  }
+
+  function normalizeRemoteMode(value) {
+    return String(value || '').trim().toLowerCase() === 'remote' ? 'remote' : 'local';
   }
 
   function toArrayBuffer(input) {
@@ -341,9 +361,16 @@
       remoteInput = '',
       targetPackId = null,
       includeAllPacks = true,
+      selectedPackId = '',
+      spriteResourceMode = '',
+      spriteRemoteInput = '',
+      backgroundResourceMode = '',
+      backgroundRemoteInput = '',
       includeLocalLive2d = false,
       embedLocalLive2d = includeLocalLive2d,
       maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
+      includeCustomModuleSettings = true,
+      includeBgmSettings = true,
     } = options;
 
     const currentPackId =
@@ -351,13 +378,12 @@
       String(localStorage.getItem(STORAGE_KEYS.CURRENT_PACK) || '').trim() ||
       DEFAULT_PACK_ID;
 
-    const { remoteBaseUrl, remoteAssetsUrl } = normalizeRemoteInput(remoteInput);
-
     // LocalStorage
     const ttsEnabled = readLocalStorageBool(STORAGE_KEYS.TTS_ENABLED, true);
     const characterVoice = readLocalStorageJson(STORAGE_KEYS.CHAR_TTS_VOICE, {});
     const live2dEnabledMap = readLocalStorageJson(STORAGE_KEYS.CHAR_USE_LIVE2D, {});
     const live2dConfigMap = readLocalStorageJson(STORAGE_KEYS.LIVE2D_CONFIG, {});
+    const settings = readLocalStorageJson(STORAGE_KEYS.SETTINGS, {});
 
     // IndexedDB
     let packs = [];
@@ -375,23 +401,50 @@
       packs = [{ id: DEFAULT_PACK_ID, name: DEFAULT_PACK_NAME, isDefault: true }];
     }
 
+    const activePackId = includeAllPacks
+      ? String(currentPackId)
+      : String(selectedPackId || currentPackId || DEFAULT_PACK_ID);
+    const normalizedSpriteMode = normalizeRemoteMode(
+      spriteResourceMode || ((String(spriteRemoteInput || remoteInput || '').trim()) ? 'remote' : 'local'),
+    );
+    const normalizedBackgroundMode = normalizeRemoteMode(
+      backgroundResourceMode || ((String(backgroundRemoteInput || remoteInput || '').trim()) ? 'remote' : 'local'),
+    );
+    const normalizedSpriteRemote = normalizedSpriteMode === 'remote'
+      ? normalizeRemoteInput(spriteRemoteInput || remoteInput || '')
+      : { remoteBaseUrl: '', remoteAssetsUrl: '' };
+    const normalizedBackgroundRemote = normalizedBackgroundMode === 'remote'
+      ? normalizeRemoteInput(backgroundRemoteInput || remoteInput || '')
+      : { remoteBaseUrl: '', remoteAssetsUrl: '' };
+    const isUnifiedPackRemote =
+      normalizedSpriteMode === 'remote'
+      && normalizedBackgroundMode === 'remote'
+      && String(normalizedSpriteRemote.remoteAssetsUrl || '')
+      && normalizedSpriteRemote.remoteAssetsUrl === normalizedBackgroundRemote.remoteAssetsUrl
+      && normalizedSpriteRemote.remoteBaseUrl === normalizedBackgroundRemote.remoteBaseUrl;
+
     const packList = includeAllPacks
       ? packs
-      : packs.filter(p => p && String(p.id) === String(currentPackId));
+      : packs.filter(p => p && String(p.id) === String(activePackId));
 
     const exportedPacks = packList.map(p => {
       const packId = String(p.id || DEFAULT_PACK_ID);
       const name = String(p.name || DEFAULT_PACK_NAME);
       const out = { packId, name };
-      if (packId === currentPackId && (remoteBaseUrl || remoteAssetsUrl)) {
-        if (remoteBaseUrl) out.remoteBaseUrl = remoteBaseUrl;
-        if (remoteAssetsUrl) out.remoteAssetsUrl = remoteAssetsUrl;
+      if (packId === activePackId && isUnifiedPackRemote) {
+        if (normalizedSpriteRemote.remoteBaseUrl) out.remoteBaseUrl = normalizedSpriteRemote.remoteBaseUrl;
+        if (normalizedSpriteRemote.remoteAssetsUrl) out.remoteAssetsUrl = normalizedSpriteRemote.remoteAssetsUrl;
       }
       return out;
     });
 
     const live2dOutModels = {};
     const warnings = [];
+    if ((normalizedSpriteMode === 'remote' || normalizedBackgroundMode === 'remote') && !isUnifiedPackRemote) {
+      warnings.push(
+        '[Assets] 立绘/背景采用了分离资源模式。旧版仅识别 packs.remote*，请使用支持 assets.resourceModes 的版本导入。',
+      );
+    }
     for (const rawModel of Array.isArray(live2dModels) ? live2dModels : []) {
       const m = withResolvedLive2DRuntime(rawModel);
       const characterId = String(m?.modelId || '').trim();
@@ -478,7 +531,7 @@
     }
 
     const cfg = {
-      schema: 'galgame_ui_plugin_config_v1',
+      schema: 'galgame_ui_plugin_config_v2',
       meta: {
         exportedAt: new Date().toISOString(),
         exporter: 'export-galgame-ui-plugin-config.js',
@@ -488,8 +541,22 @@
         ...(warnings.length > 0 ? { warnings } : {}),
       },
       assets: {
-        activePackId: currentPackId,
+        activePackId,
         packs: exportedPacks,
+        resourceModes: {
+          sprites: {
+            mode: normalizedSpriteMode,
+            ...(normalizedSpriteMode === 'remote' ? normalizedSpriteRemote : {}),
+          },
+          backgrounds: {
+            mode: normalizedBackgroundMode,
+            ...(normalizedBackgroundMode === 'remote' ? normalizedBackgroundRemote : {}),
+          },
+          live2d: {
+            mode: embedLocalLive2d ? 'embedded' : (includeLocalLive2d ? 'idb-placeholder' : 'skip-local'),
+            includeLocalPlaceholder: !embedLocalLive2d && !!includeLocalLive2d,
+          },
+        },
       },
       live2d: {
         enabledMap: live2dEnabledMap || {},
@@ -500,6 +567,19 @@
         characterVoice: characterVoice || {},
       },
     };
+
+    if (includeCustomModuleSettings) {
+      cfg.custom = {
+        locationStatusHtml: String(localStorage.getItem(STORAGE_KEYS.CUSTOM_LOCATION_HTML) || ''),
+        timeStatusHtml: String(localStorage.getItem(STORAGE_KEYS.CUSTOM_TIME_HTML) || ''),
+      };
+    }
+
+    if (includeBgmSettings) {
+      cfg.bgm = {
+        whitelist: normalizeStringList(settings?.bgmWhitelist),
+      };
+    }
 
     return cfg;
   }

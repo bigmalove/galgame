@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Galgame UI Plugin Config v1",
+  "title": "Galgame UI Plugin Config v2",
   "type": "object",
   "additionalProperties": true,
   "required": ["schema"],
   "properties": {
     "schema": {
       "type": "string",
-      "const": "galgame_ui_plugin_config_v1"
+      "const": "galgame_ui_plugin_config_v2"
     },
     "assets": {
       "type": "object",
@@ -25,6 +25,41 @@
               "name": { "type": "string" },
               "remoteAssetsUrl": { "type": "string" },
               "remoteBaseUrl": { "type": "string" }
+            }
+          }
+        },
+        "resourceModes": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "sprites": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "mode": { "type": "string", "enum": ["local", "remote"] },
+                "remoteAssetsUrl": { "type": "string" },
+                "remoteBaseUrl": { "type": "string" }
+              }
+            },
+            "backgrounds": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "mode": { "type": "string", "enum": ["local", "remote"] },
+                "remoteAssetsUrl": { "type": "string" },
+                "remoteBaseUrl": { "type": "string" }
+              }
+            },
+            "live2d": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "mode": { "type": "string", "enum": ["embedded", "idb-placeholder", "skip-local", "remote"] },
+                "includeLocalPlaceholder": { "type": "boolean" },
+                "remoteInput": { "type": "string" },
+                "remoteAssetsUrl": { "type": "string" },
+                "remoteBaseUrl": { "type": "string" }
+              }
             }
           }
         }
@@ -82,6 +117,24 @@
         "characterVoice": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "custom": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "locationStatusHtml": { "type": "string" },
+        "timeStatusHtml": { "type": "string" }
+      }
+    },
+    "bgm": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "whitelist": {
+          "type": "array",
+          "items": { "type": "string" }
         }
       }
     }

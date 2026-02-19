@@ -545,13 +545,16 @@ export function initWorldbookInjectionListener() {
     return;
   }
 
-  const settings = getSettings();
-  const isEnabled = getIsEnabled();
-
   if (typeof eventOn === 'function' && typeof tavern_events !== 'undefined') {
     // 生成开始时
     eventOn(tavern_events.GENERATION_STARTED, async () => {
       const currentSettings = getSettings();
+      const isEnabled = getIsEnabled();
+
+      if (!isEnabled) {
+        console.log(`[${SCRIPT_NAME}] 世界书注入: Galgame模式未开启，跳过`);
+        return;
+      }
 
       if (enhancedModeState.isSecondGeneration) {
         console.log(`[${SCRIPT_NAME}] 世界书注入: 第二次生成，跳过`);

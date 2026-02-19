@@ -1,5 +1,7 @@
-﻿import { SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
+﻿import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
+import { getSettings } from '../core/settings.js';
+import { GalgameStore } from '../core/store.js';
 import { saveSprite, saveSpritesBatch, getAllSprites } from '../db/sprites.js';
 import { saveBackground, saveBackgroundsBatch, getAllBackgrounds } from '../db/backgrounds.js';
 import { getCurrentPackId, getAllImagePacks, createImagePack } from '../db/image-packs.js';
@@ -8,6 +10,7 @@ import { getTTSEnabled, getAllCharacterTTSVoices } from '../audio/tts-config.js'
 import { CHAR_USE_LIVE2D_KEY, LIVE2D_CONFIG_KEY } from '../live2d/render-mode.js';
 import { withResolvedLive2DRuntime } from '../live2d/runtime-router.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
+import { embedCardIntoPngBytes, isPngBytes } from '../utils/png-character-card.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
@@ -18,6 +21,9 @@ import { makeDraggable } from './interaction.js';
 
 const DISCORD_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
 const DEFAULT_LIVE2D_EMBED_LIMIT_BYTES = DISCORD_UPLOAD_LIMIT_BYTES;
+const CARD_EXPORT_PREFS_KEY = `${SCRIPT_ID}_card_export_prefs`;
+const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
+const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 
 function safeJsonParse(text, fallback) {
   try {
@@ -36,6 +42,27 @@ function readLocalStorageJson(key, fallback) {
   }
 }
 
+function saveLocalStorageJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 写入本地存储失败: ${key}`, e);
+  }
+}
+
+function normalizeStringList(rawList) {
+  const source = Array.isArray(rawList)
+    ? rawList
+    : (typeof rawList === 'string' ? rawList.split(/\r?\n/) : []);
+  return Array.from(
+    new Set(
+      source
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 function ensureTrailingSlash(url) {
   if (!url) return '';
   return url.endsWith('/') ? url : `${url}/`;
@@ -49,6 +76,105 @@ function normalizeRemoteInput(input) {
   }
   const base = ensureTrailingSlash(raw);
   return { remoteBaseUrl: base, remoteAssetsUrl: `${base}remote_assets.json` };
+}
+
+function convertGithubInputToCdn(rawInput) {
+  const raw = String(rawInput || '').trim();
+  if (!raw) return '';
+
+  if (/^https?:\/\/cdn\.jsdelivr\.net\/gh\//i.test(raw)) {
+    return /\.json(\?.*)?$/i.test(raw) ? raw : ensureTrailingSlash(raw);
+  }
+
+  const buildCdnUrl = (repo, branch = 'main', path = '') => {
+    const safeRepo = String(repo || '').trim().replace(/\.git$/i, '');
+    const safeBranch = String(branch || 'main').trim() || 'main';
+    const safePath = String(path || '').trim().replace(/^\/+/, '');
+    const base = `https://cdn.jsdelivr.net/gh/${safeRepo}@${safeBranch}/`;
+    if (!safePath) return base;
+    return /\.json(\?.*)?$/i.test(safePath)
+      ? `${base}${safePath}`
+      : `${base}${safePath.replace(/\/+$/, '')}/`;
+  };
+
+  const shortMatch = raw.match(/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:@([^/\s]+))?(?:\/(.+))?$/);
+  if (shortMatch) {
+    return buildCdnUrl(shortMatch[1], shortMatch[2] || 'main', shortMatch[3] || '');
+  }
+
+  const githubMatch = raw.match(/^https?:\/\/github\.com\/([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:\/(?:tree|blob)\/([^/\s#?]+)(?:\/([^?#]+))?)?\/?$/i);
+  if (githubMatch) {
+    const repo = `${githubMatch[1]}/${githubMatch[2]}`;
+    const branch = githubMatch[3] || 'main';
+    const path = githubMatch[4] || '';
+    return buildCdnUrl(repo, branch, path);
+  }
+
+  const rawMatch = raw.match(/^https?:\/\/raw\.githubusercontent\.com\/([^/\s]+)\/([^/\s]+)\/([^/\s]+)(?:\/([^?#]+))?\/?$/i);
+  if (rawMatch) {
+    const repo = `${rawMatch[1]}/${rawMatch[2]}`;
+    const branch = rawMatch[3] || 'main';
+    const path = rawMatch[4] || '';
+    return buildCdnUrl(repo, branch, path);
+  }
+
+  return '';
+}
+
+function resolveRemoteAddressInput(rawInput, useCdn) {
+  const raw = String(rawInput || '').trim();
+  if (!raw) {
+    return { ok: false, value: '', error: '请输入远程地址' };
+  }
+
+  if (useCdn) {
+    const converted = convertGithubInputToCdn(raw);
+    if (converted) return { ok: true, value: converted, converted: converted !== raw };
+  }
+
+  if (!/^https?:\/\//i.test(raw)) {
+    return {
+      ok: false,
+      value: '',
+      error: '地址必须是 http:// 或 https://。开启 CDN 套壳后可直接填 user/repo',
+    };
+  }
+
+  const normalized = /^https?:\/\/cdn\.jsdelivr\.net\/gh\//i.test(raw) && !/\.json(\?.*)?$/i.test(raw)
+    ? ensureTrailingSlash(raw)
+    : raw;
+  return { ok: true, value: normalized, converted: false };
+}
+
+function buildLive2dRemoteModelUrl(templateInput, characterId) {
+  const raw = String(templateInput || '').trim();
+  if (!raw) return '';
+  const encodedChar = encodeURIComponent(String(characterId || '').trim());
+  if (!encodedChar) return '';
+  if (raw.includes('{character}')) {
+    return raw.replace(/\{character\}/g, encodedChar);
+  }
+  if (/\.json(\?.*)?$/i.test(raw)) {
+    return raw;
+  }
+  return `${ensureTrailingSlash(raw)}${encodedChar}/model3.json`;
+}
+
+function normalizeRemoteMode(value) {
+  return String(value || '').trim().toLowerCase() === 'remote' ? 'remote' : 'local';
+}
+
+function normalizeExportOutputFormat(value) {
+  return String(value || '').trim().toLowerCase() === 'png' ? 'png' : 'json';
+}
+
+function readCardExportPrefs() {
+  const raw = readLocalStorageJson(CARD_EXPORT_PREFS_KEY, {});
+  return raw && typeof raw === 'object' ? raw : {};
+}
+
+function saveCardExportPrefs(prefs) {
+  saveLocalStorageJson(CARD_EXPORT_PREFS_KEY, prefs || {});
 }
 
 function sanitizeFileName(name) {
@@ -383,6 +509,291 @@ function downloadTextFile(filename, text, mimeType = 'application/json') {
   URL.revokeObjectURL(url);
 }
 
+function downloadBlob(filename, blob) {
+  if (!(blob instanceof Blob)) {
+    throw new Error('无效的下载数据');
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function collectAvatarFieldsFromCharacterObject(target, add) {
+  if (!target || typeof target !== 'object') return;
+  add(target.avatar);
+  add(target.avatar_url);
+  add(target.image);
+  add(target.image_url);
+  add(target.portrait);
+  add(target.thumbnail);
+  add(target.img);
+  add(target.icon);
+  const data = target.data;
+  if (data && typeof data === 'object') {
+    add(data.avatar);
+    add(data.avatar_url);
+    add(data.image);
+    add(data.image_url);
+    add(data.portrait);
+    add(data.thumbnail);
+    add(data.img);
+    add(data.icon);
+  }
+}
+
+function collectCurrentCharacterAvatarCandidates(options = {}) {
+  const {
+    resolvedCard = null,
+    fallbackCharacter = null,
+    resolvedName = '',
+  } = options;
+  const candidates = [];
+  const seen = new Set();
+  const add = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return;
+    if (seen.has(text)) return;
+    seen.add(text);
+    candidates.push(text);
+  };
+
+  collectAvatarFieldsFromCharacterObject(resolvedCard, add);
+  collectAvatarFieldsFromCharacterObject(fallbackCharacter, add);
+
+  const ctx = getSillyTavernContextSafe();
+  if (ctx?.characters && ctx?.characterId != null) {
+    collectAvatarFieldsFromCharacterObject(ctx.characters[ctx.characterId], add);
+  }
+
+  const st = topWindow?.SillyTavern;
+  if (st?.characters && st?.characterId != null) {
+    collectAvatarFieldsFromCharacterObject(st.characters[st.characterId], add);
+  }
+
+  const safeName = String(resolvedName || '').trim();
+  if (safeName) {
+    add(`/thumbnail?type=avatar&file=${encodeURIComponent(safeName)}`);
+    add(`/thumbnail?type=avatar&file=${encodeURIComponent(`${safeName}.png`)}`);
+  }
+  return candidates;
+}
+
+function expandAvatarCandidateUrls(rawCandidate) {
+  const raw = String(rawCandidate || '').trim();
+  if (!raw) return [];
+  if (/^data:image\//i.test(raw)) return [raw];
+  if (/^blob:/i.test(raw)) return [raw];
+  if (/^https?:\/\//i.test(raw)) return [raw];
+
+  const out = [];
+  const seen = new Set();
+  const add = (url) => {
+    const text = String(url || '').trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    out.push(text);
+  };
+
+  add(raw);
+  if (!raw.startsWith('/')) {
+    add(`/${raw}`);
+    add(`./${raw}`);
+  }
+
+  const normalizedPath = raw.replace(/^\/+/, '');
+  if (normalizedPath) {
+    add(`/thumbnail?type=avatar&file=${encodeURIComponent(normalizedPath)}`);
+    const fileName = normalizedPath.split('/').pop();
+    if (fileName && fileName !== normalizedPath) {
+      add(`/thumbnail?type=avatar&file=${encodeURIComponent(fileName)}`);
+    }
+  }
+
+  return out;
+}
+
+async function fetchImageBlobByUrl(url) {
+  const targetUrl = String(url || '').trim();
+  if (!targetUrl) return null;
+  try {
+    const response = await fetch(targetUrl, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (!(blob instanceof Blob)) return null;
+    const type = String(blob.type || '').toLowerCase();
+    if (!type.startsWith('image/')) return null;
+    return blob;
+  } catch {
+    return null;
+  }
+}
+
+function loadImageElementFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const imageUrl = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(imageUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl);
+      reject(new Error('加载头像图片失败'));
+    };
+    image.src = imageUrl;
+  });
+}
+
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('图片转换 PNG 失败'));
+        return;
+      }
+      resolve(blob);
+    }, 'image/png');
+  });
+}
+
+async function convertImageBlobToPngBytes(blob) {
+  const type = String(blob?.type || '').toLowerCase();
+  if (type === 'image/png') {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  const image = await loadImageElementFromBlob(blob);
+  const width = Math.max(1, Number(image.naturalWidth || image.width || 0));
+  const height = Math.max(1, Number(image.naturalHeight || image.height || 0));
+  const doc = topWindow?.document || document;
+  const canvas = doc.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('创建图片画布失败');
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+  const pngBlob = await canvasToPngBlob(canvas);
+  return new Uint8Array(await pngBlob.arrayBuffer());
+}
+
+async function tryResolveCurrentCharacterAvatarPngBytes(options = {}) {
+  const candidates = collectCurrentCharacterAvatarCandidates(options);
+  if (candidates.length === 0) {
+    return { ok: false, error: '未检测到当前角色头像字段' };
+  }
+
+  for (const candidate of candidates) {
+    const urls = expandAvatarCandidateUrls(candidate);
+    for (const url of urls) {
+      const blob = await fetchImageBlobByUrl(url);
+      if (!blob) continue;
+      try {
+        const pngBytes = await convertImageBlobToPngBytes(blob);
+        if (isPngBytes(pngBytes)) {
+          return { ok: true, value: pngBytes, source: url };
+        }
+      } catch {
+        // try next source
+      }
+    }
+  }
+
+  return { ok: false, error: '自动获取头像失败，未找到可用图片资源' };
+}
+
+function showPngBaseFallbackSelectorDialog(options = {}) {
+  const reason = String(options.reason || '').trim();
+  const dialogId = nextInAppDialogId('gal-png-base-fallback');
+  const closeId = `${dialogId}-close`;
+  const cancelId = `${dialogId}-cancel`;
+  const confirmId = `${dialogId}-confirm`;
+  const fileInputId = `${dialogId}-file`;
+  const reasonHtml = reason
+    ? `<div style="margin-bottom: 10px; font-size: 0.84rem; color: #b45309; line-height: 1.5;">自动头像失败：${escapeHtml(reason)}</div>`
+    : '';
+
+  const dialogHtml = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: 520px; width: 92%; padding: 22px;">
+        <div class="gal-input-title" style="margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="fa-solid fa-image" style="color: #0d6efd;"></i> 选择 PNG 底图</span>
+          <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div style="margin-bottom: 12px; color: #555; font-size: 0.9rem; line-height: 1.6;">
+          自动获取当前角色头像失败，请手动选择 PNG 文件继续导出。
+        </div>
+        ${reasonHtml}
+        <div style="margin-bottom: 14px;">
+          <input id="${fileInputId}" type="file" accept=".png,image/png"
+                 style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;" />
+        </div>
+        <div class="gal-input-actions" style="display: flex; gap: 10px;">
+          <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
+            <i class="fa-solid fa-xmark"></i> <span>取消</span>
+          </button>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: #0d6efd; color: #fff; border-color: #0d6efd;">
+            <i class="fa-solid fa-check"></i> <span>继续导出</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return new Promise((resolve) => {
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(dialogHtml);
+    const $dialog = $(mountRoot).find(`#${dialogId}`);
+    makeDraggable($dialog.find('.gal-input-box'), $dialog.find('.gal-input-title'));
+
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      $dialog.remove();
+      resolve(value);
+    };
+
+    const submit = () => {
+      const inputEl = $dialog.find(`#${fileInputId}`).get(0);
+      const file = inputEl?.files?.[0] || null;
+      if (!file) {
+        showToast('请选择 PNG 底图文件');
+        $dialog.find(`#${fileInputId}`).trigger('focus');
+        return;
+      }
+      const fileName = String(file.name || '').toLowerCase();
+      const mimeType = String(file.type || '').toLowerCase();
+      if (!fileName.endsWith('.png') && mimeType !== 'image/png') {
+        showToast('底图文件必须是 PNG 格式');
+        $dialog.find(`#${fileInputId}`).trigger('focus');
+        return;
+      }
+      done(file);
+    };
+
+    $dialog.find(`#${confirmId}`).on('click', submit);
+    $dialog.find(`#${cancelId}`).on('click', () => done(null));
+    $dialog.find(`#${closeId}`).on('click', () => done(null));
+    $dialog.on('click', function (e) {
+      if (e.target === this) done(null);
+    });
+    setTimeout(() => {
+      $dialog.find(`#${fileInputId}`).trigger('focus');
+    }, 0);
+  });
+}
+
 function toArrayBuffer(input) {
   if (!input) return null;
   if (input instanceof ArrayBuffer) return input;
@@ -560,9 +971,18 @@ async function buildGalgameCardConfig(options = {}) {
   const {
     remoteInput = '',
     includeAllPacks = true,
+    selectedPackId = '',
+    spriteResourceMode = '',
+    spriteRemoteInput = '',
+    backgroundResourceMode = '',
+    backgroundRemoteInput = '',
+    live2dResourceMode = '',
+    live2dRemoteInput = '',
     embedLocalLive2d = true,
     includeLocalLive2dPlaceholder = true,
     maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
+    includeCustomModuleSettings = true,
+    includeBgmSettings = true,
     onProgress = null,
   } = options;
   const reportProgress = typeof onProgress === 'function'
@@ -576,18 +996,48 @@ async function buildGalgameCardConfig(options = {}) {
     packs = [{ id: DEFAULT_PACK_ID, name: '未定义', isDefault: true }];
   }
 
-  const { remoteBaseUrl, remoteAssetsUrl } = normalizeRemoteInput(remoteInput);
+  const activePackId = includeAllPacks
+    ? String(currentPackId)
+    : String(selectedPackId || currentPackId || DEFAULT_PACK_ID);
+
+  const normalizedSpriteMode = normalizeRemoteMode(
+    spriteResourceMode || ((String(spriteRemoteInput || remoteInput || '').trim()) ? 'remote' : 'local'),
+  );
+  const normalizedBackgroundMode = normalizeRemoteMode(
+    backgroundResourceMode || ((String(backgroundRemoteInput || remoteInput || '').trim()) ? 'remote' : 'local'),
+  );
+  const normalizedSpriteRemote = normalizedSpriteMode === 'remote'
+    ? normalizeRemoteInput(spriteRemoteInput || remoteInput || '')
+    : { remoteBaseUrl: '', remoteAssetsUrl: '' };
+  const normalizedBackgroundRemote = normalizedBackgroundMode === 'remote'
+    ? normalizeRemoteInput(backgroundRemoteInput || remoteInput || '')
+    : { remoteBaseUrl: '', remoteAssetsUrl: '' };
+  const normalizedLive2dMode = normalizeRemoteMode(
+    live2dResourceMode || ((String(live2dRemoteInput || '').trim()) ? 'remote' : 'local'),
+  );
+  const resolvedLive2dRemoteInput = String(live2dRemoteInput || '').trim();
+  const normalizedLive2dRemote = normalizedLive2dMode === 'remote' && resolvedLive2dRemoteInput
+    ? normalizeRemoteInput(resolvedLive2dRemoteInput)
+    : { remoteBaseUrl: '', remoteAssetsUrl: '' };
+
+  const isUnifiedPackRemote =
+    normalizedSpriteMode === 'remote'
+    && normalizedBackgroundMode === 'remote'
+    && String(normalizedSpriteRemote.remoteAssetsUrl || '')
+    && normalizedSpriteRemote.remoteAssetsUrl === normalizedBackgroundRemote.remoteAssetsUrl
+    && normalizedSpriteRemote.remoteBaseUrl === normalizedBackgroundRemote.remoteBaseUrl;
+
   const packList = includeAllPacks
     ? packs
-    : packs.filter(p => p && String(p.id) === String(currentPackId));
+    : packs.filter(p => p && String(p.id) === String(activePackId));
 
   const exportedPacks = packList.map(p => {
     const packId = String(p.id || DEFAULT_PACK_ID);
     const name = String(p.name || '鏈畾涔?');
     const out = { packId, name };
-    if (packId === currentPackId && (remoteBaseUrl || remoteAssetsUrl)) {
-      if (remoteBaseUrl) out.remoteBaseUrl = remoteBaseUrl;
-      if (remoteAssetsUrl) out.remoteAssetsUrl = remoteAssetsUrl;
+    if (packId === activePackId && isUnifiedPackRemote) {
+      if (normalizedSpriteRemote.remoteBaseUrl) out.remoteBaseUrl = normalizedSpriteRemote.remoteBaseUrl;
+      if (normalizedSpriteRemote.remoteAssetsUrl) out.remoteAssetsUrl = normalizedSpriteRemote.remoteAssetsUrl;
     }
     return out;
   });
@@ -595,6 +1045,7 @@ async function buildGalgameCardConfig(options = {}) {
   reportProgress(18, 'Loading TTS and Live2D settings...');
   const ttsEnabled = !!getTTSEnabled();
   const characterVoice = getAllCharacterTTSVoices() || {};
+  const settings = getSettings();
 
   const live2dEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
   const live2dConfigMap = readLocalStorageJson(LIVE2D_CONFIG_KEY, {});
@@ -602,6 +1053,12 @@ async function buildGalgameCardConfig(options = {}) {
   const live2dList = Array.isArray(live2dModels) ? live2dModels : [];
   const live2dOutModels = {};
   const warnings = [];
+
+  if ((normalizedSpriteMode === 'remote' || normalizedBackgroundMode === 'remote') && !isUnifiedPackRemote) {
+    warnings.push(
+      '[Assets] 立绘/背景采用了分离资源模式。旧版仅识别 packs.remote*，请使用支持 assets.resourceModes 的版本导入。',
+    );
+  }
 
   if (live2dList.length === 0) {
     reportProgress(68, 'No Live2D models detected, skipping embedded model stage');
@@ -617,6 +1074,33 @@ async function buildGalgameCardConfig(options = {}) {
       continue;
     }
     const charCfg = live2dConfigMap && typeof live2dConfigMap === 'object' ? live2dConfigMap[characterId] : null;
+
+    if (normalizedLive2dMode === 'remote') {
+      if (model?.source === 'remote' && typeof model?.modelUrl === 'string' && model.modelUrl.trim()) {
+        live2dOutModels[characterId] = {
+          source: 'remote',
+          modelUrl: model.modelUrl.trim(),
+          runtimeType: model.runtimeType || 'legacy',
+          cubismVersion: Number(model?.cubismVersion || 0) || null,
+          ...(charCfg ? { config: charCfg } : {}),
+        };
+      } else {
+        const mappedUrl = buildLive2dRemoteModelUrl(resolvedLive2dRemoteInput, characterId);
+        if (!mappedUrl) {
+          warnings.push(`[Live2D] ${characterId} 未生成远程 URL（请检查远程地址配置）`);
+        } else {
+          live2dOutModels[characterId] = {
+            source: 'remote',
+            modelUrl: mappedUrl,
+            runtimeType: model.runtimeType || 'legacy',
+            cubismVersion: Number(model?.cubismVersion || 0) || null,
+            ...(charCfg ? { config: charCfg } : {}),
+          };
+        }
+      }
+      reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
+      continue;
+    }
 
     if (model?.source === 'remote' && typeof model?.modelUrl === 'string' && model.modelUrl.trim()) {
       live2dOutModels[characterId] = {
@@ -704,19 +1188,42 @@ async function buildGalgameCardConfig(options = {}) {
   }
 
   reportProgress(72, 'Finalizing character-card extension config...');
-  return {
+  const out = {
     schema: 'galgame_ui_plugin_config_v2',
       meta: {
         exportedAt: new Date().toISOString(),
         exporter: 'galgame-ui-plugin.asset-io',
-        live2dExportMode: embedLocalLive2d ? 'embedded' : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local'),
+        live2dExportMode: normalizedLive2dMode === 'remote'
+          ? 'remote-url'
+          : (embedLocalLive2d ? 'embedded' : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local')),
         maxEmbeddedLive2dBytes: Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
         discordUploadLimitBytes: DISCORD_UPLOAD_LIMIT_BYTES,
         ...(warnings.length > 0 ? { warnings } : {}),
       },
     assets: {
-      activePackId: currentPackId,
+      activePackId,
       packs: exportedPacks,
+      resourceModes: {
+        sprites: {
+          mode: normalizedSpriteMode,
+          ...(normalizedSpriteMode === 'remote' ? normalizedSpriteRemote : {}),
+        },
+        backgrounds: {
+          mode: normalizedBackgroundMode,
+          ...(normalizedBackgroundMode === 'remote' ? normalizedBackgroundRemote : {}),
+        },
+        live2d: {
+          mode: normalizedLive2dMode === 'remote'
+            ? 'remote'
+            : (embedLocalLive2d ? 'embedded' : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local')),
+          includeLocalPlaceholder: !!includeLocalLive2dPlaceholder,
+          ...(normalizedLive2dMode === 'remote' ? {
+            remoteInput: resolvedLive2dRemoteInput,
+            ...(normalizedLive2dRemote.remoteBaseUrl ? { remoteBaseUrl: normalizedLive2dRemote.remoteBaseUrl } : {}),
+            ...(normalizedLive2dRemote.remoteAssetsUrl ? { remoteAssetsUrl: normalizedLive2dRemote.remoteAssetsUrl } : {}),
+          } : {}),
+        },
+      },
     },
     live2d: {
       enabledMap: live2dEnabledMap || {},
@@ -727,6 +1234,21 @@ async function buildGalgameCardConfig(options = {}) {
       characterVoice: characterVoice || {},
     },
   };
+
+  if (includeCustomModuleSettings) {
+    out.custom = {
+      locationStatusHtml: String(localStorage.getItem(CUSTOM_LOCATION_HTML_KEY) || ''),
+      timeStatusHtml: String(localStorage.getItem(CUSTOM_TIME_HTML_KEY) || ''),
+    };
+  }
+
+  if (includeBgmSettings) {
+    out.bgm = {
+      whitelist: normalizeStringList(settings?.bgmWhitelist),
+    };
+  }
+
+  return out;
 }
 
 function estimateCardJsonBytes(cardObj) {
@@ -877,6 +1399,595 @@ async function showCharacterExportSelector(characterNames, suggestedName = '') {
     $dialog.on('click', function (e) {
       if (e.target === this) done(null);
     });
+  });
+}
+
+export async function showCharacterCardExportConfigDialog(options = {}) {
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(options, key);
+  const prefs = readCardExportPrefs();
+  const contextCandidates = collectCurrentCharacterNameCandidates();
+  const characterNames = listAllCharacterNamesSafe();
+  const preferredCharacterName = hasOwn('characterName')
+    ? String(options.characterName || '').trim()
+    : String(prefs.characterName || '').trim();
+  const suggestedCharacterName = pickBestSuggestedCharacterName(
+    characterNames,
+    preferredCharacterName,
+    contextCandidates,
+  );
+
+  const sharedRemoteInputDefault = hasOwn('remoteInput')
+    ? String(options.remoteInput || '').trim()
+    : String(prefs.remoteInput || '').trim();
+  const spriteRemoteInputDefault = hasOwn('spriteRemoteInput')
+    ? String(options.spriteRemoteInput || '').trim()
+    : String(prefs.spriteRemoteInput || sharedRemoteInputDefault).trim();
+  const backgroundRemoteInputDefault = hasOwn('backgroundRemoteInput')
+    ? String(options.backgroundRemoteInput || '').trim()
+    : String(prefs.backgroundRemoteInput || sharedRemoteInputDefault).trim();
+  const spriteResourceModeDefault = hasOwn('spriteResourceMode')
+    ? normalizeRemoteMode(options.spriteResourceMode)
+    : normalizeRemoteMode(prefs.spriteResourceMode || (spriteRemoteInputDefault ? 'remote' : 'local'));
+  const backgroundResourceModeDefault = hasOwn('backgroundResourceMode')
+    ? normalizeRemoteMode(options.backgroundResourceMode)
+    : normalizeRemoteMode(prefs.backgroundResourceMode || (backgroundRemoteInputDefault ? 'remote' : 'local'));
+  const live2dRemoteInputDefault = hasOwn('live2dRemoteInput')
+    ? String(options.live2dRemoteInput || '').trim()
+    : String(prefs.live2dRemoteInput || '').trim();
+  const live2dResourceModeDefault = hasOwn('live2dResourceMode')
+    ? normalizeRemoteMode(options.live2dResourceMode)
+    : normalizeRemoteMode(prefs.live2dResourceMode || (live2dRemoteInputDefault ? 'remote' : 'local'));
+  const remoteUseCdnDefault = hasOwn('remoteUseCdn')
+    ? !!options.remoteUseCdn
+    : (prefs.remoteUseCdn !== undefined ? !!prefs.remoteUseCdn : true);
+
+  const embedLocalLive2dDefault = hasOwn('embedLocalLive2d')
+    ? !!options.embedLocalLive2d
+    : (prefs.embedLocalLive2d !== undefined ? !!prefs.embedLocalLive2d : true);
+  const includeLocalLive2dPlaceholderDefault = hasOwn('includeLocalLive2dPlaceholder')
+    ? !!options.includeLocalLive2dPlaceholder
+    : (prefs.includeLocalLive2dPlaceholder !== undefined ? !!prefs.includeLocalLive2dPlaceholder : true);
+  const includeCustomModuleSettingsDefault = hasOwn('includeCustomModuleSettings')
+    ? !!options.includeCustomModuleSettings
+    : (prefs.includeCustomModuleSettings !== undefined ? !!prefs.includeCustomModuleSettings : true);
+  const includeBgmSettingsDefault = hasOwn('includeBgmSettings')
+    ? !!options.includeBgmSettings
+    : (prefs.includeBgmSettings !== undefined ? !!prefs.includeBgmSettings : true);
+  const outputFormatDefault = hasOwn('outputFormat')
+    ? normalizeExportOutputFormat(options.outputFormat)
+    : normalizeExportOutputFormat(prefs.outputFormat || 'json');
+  const pngAutoUseAvatarDefault = hasOwn('pngAutoUseAvatar')
+    ? !!options.pngAutoUseAvatar
+    : (prefs.pngAutoUseAvatar !== undefined ? !!prefs.pngAutoUseAvatar : true);
+
+  const optionsLimitBytes = Number(options.maxEmbeddedLive2dBytes);
+  const optionsLimitMb = Number.isFinite(optionsLimitBytes) && optionsLimitBytes > 0
+    ? Math.round(optionsLimitBytes / 1024 / 1024)
+    : null;
+  const prefsLimitMb = Number(prefs.maxEmbeddedLive2dMb);
+  const defaultLimitMb = optionsLimitMb
+    || (Number.isFinite(prefsLimitMb) && prefsLimitMb > 0 ? Math.round(prefsLimitMb) : Math.round(DEFAULT_LIVE2D_EMBED_LIMIT_BYTES / 1024 / 1024));
+
+  const currentPackId = getCurrentPackId() || DEFAULT_PACK_ID;
+  let currentPackName = '未定义';
+  let allPacks = [];
+  try {
+    const packs = await getAllImagePacks();
+    allPacks = Array.isArray(packs) ? packs : [];
+    const hit = allPacks.find(pack => String(pack.id || '') === String(currentPackId));
+    if (hit?.name) currentPackName = String(hit.name);
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 获取图包信息失败`, e);
+  }
+  if (allPacks.length === 0) {
+    allPacks = [{ id: DEFAULT_PACK_ID, name: currentPackName || '未定义' }];
+  }
+  const includeAllPacksDefault = hasOwn('includeAllPacks')
+    ? !!options.includeAllPacks
+    : (prefs.includeAllPacks !== undefined ? !!prefs.includeAllPacks : true);
+  const selectedPackIdRaw = hasOwn('selectedPackId')
+    ? String(options.selectedPackId || '').trim()
+    : String(prefs.selectedPackId || '').trim();
+  const selectedPackExists = allPacks.some(pack => String(pack.id || '') === selectedPackIdRaw);
+  const selectedPackIdDefault = selectedPackExists ? selectedPackIdRaw : String(currentPackId || DEFAULT_PACK_ID);
+
+  const dialogId = nextInAppDialogId('gal-charcard-export-config');
+  const closeId = `${dialogId}-close`;
+  const cancelId = `${dialogId}-cancel`;
+  const confirmId = `${dialogId}-confirm`;
+  const packScopeName = `${dialogId}-pack-scope`;
+  const remoteUseCdnId = `${dialogId}-remote-use-cdn`;
+  const spriteModeName = `${dialogId}-sprite-mode`;
+  const backgroundModeName = `${dialogId}-background-mode`;
+  const live2dModeName = `${dialogId}-live2d-mode`;
+  const characterSelectId = `${dialogId}-character-select`;
+  const characterInputId = `${dialogId}-character-input`;
+  const packSelectId = `${dialogId}-pack-select`;
+  const spriteRemoteInputId = `${dialogId}-sprite-remote-input`;
+  const spriteRemoteWrapId = `${dialogId}-sprite-remote-wrap`;
+  const backgroundRemoteInputId = `${dialogId}-background-remote-input`;
+  const backgroundRemoteWrapId = `${dialogId}-background-remote-wrap`;
+  const live2dRemoteInputId = `${dialogId}-live2d-remote-input`;
+  const live2dRemoteWrapId = `${dialogId}-live2d-remote-wrap`;
+  const embedLocalLive2dId = `${dialogId}-embed-live2d`;
+  const includePlaceholderId = `${dialogId}-include-placeholder`;
+  const limitInputId = `${dialogId}-limit-mb`;
+  const outputFormatName = `${dialogId}-output-format`;
+  const pngAutoAvatarId = `${dialogId}-png-auto-avatar`;
+  const pngBaseInputId = `${dialogId}-png-base-input`;
+  const pngBaseWrapId = `${dialogId}-png-base-wrap`;
+  const includeCustomId = `${dialogId}-include-custom`;
+  const includeBgmId = `${dialogId}-include-bgm`;
+
+  const characterFieldHtml = characterNames.length > 0
+    ? `
+      <select id="${characterSelectId}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;">
+        <option value="">自动选择（当前会话）</option>
+        ${characterNames.map((name) => `<option value="${escapeHtml(name)}"${name === suggestedCharacterName ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('')}
+      </select>
+      <div style="margin-top: 6px; font-size: 0.82rem; color: #7a7a7a;">
+        未手动选择时，会优先尝试 current 与当前会话角色。
+      </div>
+    `
+    : `
+      <input id="${characterInputId}" type="text" value="${escapeHtml(preferredCharacterName)}" placeholder="留空则自动选择 current"
+             style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />
+      <div style="margin-top: 6px; font-size: 0.82rem; color: #7a7a7a;">
+        未能读取角色列表时可手动输入角色卡名称。
+      </div>
+    `;
+  const packOptionsHtml = allPacks
+    .map((pack) => {
+      const packId = String(pack.id || '');
+      const packName = String(pack.name || packId || '未命名图包');
+      const suffix = packId === String(currentPackId) ? '（当前）' : '';
+      return `<option value="${escapeHtml(packId)}">${escapeHtml(packName)}${escapeHtml(suffix)}</option>`;
+    })
+    .join('');
+
+  const dialogHtml = `
+    <div class="gal-input-modal gal-z-critical" id="${dialogId}">
+      <div class="gal-input-box" style="max-width: 860px; width: 96%; max-height: 88vh; overflow-y: auto; padding: 22px;">
+        <div class="gal-input-title" style="margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+          <span><i class="fa-solid fa-id-card" style="color: #0d6efd;"></i> 导出角色卡（完整设置）</span>
+          <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div style="margin-bottom: 14px; padding: 10px 12px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #0d6efd; color: #555; font-size: 0.9rem; line-height: 1.6;">
+          当前图包：<strong>${escapeHtml(currentPackName)}</strong>（${escapeHtml(String(currentPackId))}）<br>
+          一次设置完成后直接导出，可自由切换本地/远程导出。
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr; gap: 14px;">
+          <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
+            <div style="font-weight: 700; color: #333; margin-bottom: 8px;">1) 导出目标角色卡</div>
+            ${characterFieldHtml}
+          </section>
+
+          <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
+            <div style="font-weight: 700; color: #333; margin-bottom: 8px;">2) 图包范围</div>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
+              <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                <input type="radio" name="${packScopeName}" value="all" ${includeAllPacksDefault ? 'checked' : ''}>
+                <span>导出全部图包</span>
+              </label>
+              <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                <input type="radio" name="${packScopeName}" value="selected" ${includeAllPacksDefault ? '' : 'checked'}>
+                <span>仅导出所选图包</span>
+              </label>
+            </div>
+            <select id="${packSelectId}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;">
+              ${packOptionsHtml}
+            </select>
+          </section>
+
+          <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
+            <div style="font-weight: 700; color: #333; margin-bottom: 8px;">3) 资源模式（细分）</div>
+            <div style="font-size: 0.84rem; color: #6b7280; margin-bottom: 10px;">
+              可分别为立绘和背景设置本地/远程地址，互不影响。
+            </div>
+            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #333; cursor: pointer;">
+              <input type="checkbox" id="${remoteUseCdnId}" ${remoteUseCdnDefault ? 'checked' : ''}>
+              <span>远程资源启用 jsDelivr CDN 套壳（默认开启）</span>
+            </label>
+            <div style="font-size: 0.82rem; color: #6b7280; margin-bottom: 10px; line-height: 1.5;">
+              GitHub 填写说明：可填 <code>user/repo</code>、<code>user/repo@branch/path</code>、<code>https://github.com/user/repo/tree/main/path</code>。
+            </div>
+
+            <div style="padding: 10px; border: 1px dashed #d1d5db; border-radius: 6px; margin-bottom: 10px;">
+              <div style="font-weight: 600; color: #374151; margin-bottom: 6px;">立绘资源模式</div>
+              <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${spriteModeName}" value="local" ${spriteResourceModeDefault === 'local' ? 'checked' : ''}>
+                  <span>本地</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${spriteModeName}" value="remote" ${spriteResourceModeDefault === 'remote' ? 'checked' : ''}>
+                  <span>远程</span>
+                </label>
+              </div>
+              <div id="${spriteRemoteWrapId}">
+                <input id="${spriteRemoteInputId}" type="text" value="${escapeHtml(spriteRemoteInputDefault)}"
+                       placeholder="例如 user/repo@main/sprites/ 或 https://.../remote_assets.json"
+                       style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
+              </div>
+            </div>
+
+            <div style="padding: 10px; border: 1px dashed #d1d5db; border-radius: 6px;">
+              <div style="font-weight: 600; color: #374151; margin-bottom: 6px;">背景图包模式</div>
+              <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${backgroundModeName}" value="local" ${backgroundResourceModeDefault === 'local' ? 'checked' : ''}>
+                  <span>本地</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${backgroundModeName}" value="remote" ${backgroundResourceModeDefault === 'remote' ? 'checked' : ''}>
+                  <span>远程</span>
+                </label>
+              </div>
+              <div id="${backgroundRemoteWrapId}">
+                <input id="${backgroundRemoteInputId}" type="text" value="${escapeHtml(backgroundRemoteInputDefault)}"
+                       placeholder="例如 user/repo@main/backgrounds/ 或 https://.../remote_assets.json"
+                       style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
+              </div>
+            </div>
+          </section>
+
+          <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
+            <div style="font-weight: 700; color: #333; margin-bottom: 8px;">4) Live2D 导出模式</div>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
+              <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                <input type="radio" name="${live2dModeName}" value="local" ${live2dResourceModeDefault === 'local' ? 'checked' : ''}>
+                <span>本地（嵌入/占位）</span>
+              </label>
+              <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                <input type="radio" name="${live2dModeName}" value="remote" ${live2dResourceModeDefault === 'remote' ? 'checked' : ''}>
+                <span>远程地址</span>
+              </label>
+            </div>
+            <div id="${live2dRemoteWrapId}" style="margin-bottom: 10px;">
+              <input id="${live2dRemoteInputId}" type="text" value="${escapeHtml(live2dRemoteInputDefault)}"
+                     placeholder="例如 user/repo@main/live2d/ 或 https://cdn.../{character}/model3.json"
+                     style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
+              <div style="margin-top: 6px; font-size: 0.82rem; color: #6b7280; line-height: 1.5;">
+                远程地址支持 <code>{character}</code> 占位符；不含占位符时默认拼接为 <code>{base}/{character}/model3.json</code>。
+              </div>
+            </div>
+            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #333; cursor: pointer;">
+              <input type="checkbox" id="${embedLocalLive2dId}" ${embedLocalLive2dDefault ? 'checked' : ''}>
+              <span>导出本地 Live2D 本体（仅本地模式生效）</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #333; cursor: pointer;">
+              <input type="checkbox" id="${includePlaceholderId}" ${includeLocalLive2dPlaceholderDefault ? 'checked' : ''}>
+              <span>本地模式且不导出本体时，保留 Live2D 占位记录</span>
+            </label>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <label for="${limitInputId}" style="font-size: 0.9rem; color: #555;">Live2D 本体导出阈值（MB，仅本地模式）</label>
+              <input id="${limitInputId}" type="number" min="1" step="1" value="${escapeHtml(String(defaultLimitMb))}"
+                     style="width: 110px; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px;" />
+            </div>
+          </section>
+
+          <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
+            <div style="font-weight: 700; color: #333; margin-bottom: 8px;">5) 导出文件格式</div>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
+              <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                <input type="radio" name="${outputFormatName}" value="json" ${outputFormatDefault === 'json' ? 'checked' : ''}>
+                <span>JSON</span>
+              </label>
+              <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                <input type="radio" name="${outputFormatName}" value="png" ${outputFormatDefault === 'png' ? 'checked' : ''}>
+                <span>PNG（角色卡元数据）</span>
+              </label>
+            </div>
+            <div id="${pngBaseWrapId}" style="padding: 10px; border: 1px dashed #d1d5db; border-radius: 6px;">
+              <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #333; cursor: pointer;">
+                <input type="checkbox" id="${pngAutoAvatarId}" ${pngAutoUseAvatarDefault ? 'checked' : ''}>
+                <span>优先自动使用当前角色头像（失败后再手动选择）</span>
+              </label>
+              <label for="${pngBaseInputId}" style="display: block; font-size: 0.9rem; color: #444; margin-bottom: 6px;">
+                PNG 底图文件
+              </label>
+              <input id="${pngBaseInputId}" type="file" accept=".png,image/png"
+                     style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;" />
+              <div style="margin-top: 6px; font-size: 0.82rem; color: #6b7280; line-height: 1.5;">
+                说明：会把角色卡 JSON 写入 PNG 元数据（keyword: <code>chara</code>），用于兼容 PNG 角色卡格式。若自动头像可用，可不手选底图。
+              </div>
+            </div>
+          </section>
+
+          <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
+            <div style="font-weight: 700; color: #333; margin-bottom: 8px;">6) 角色卡扩展导出内容</div>
+            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #333; cursor: pointer;">
+              <input type="checkbox" id="${includeCustomId}" ${includeCustomModuleSettingsDefault ? 'checked' : ''}>
+              <span>导出自定义模块设置（地点/时间状态栏 HTML）</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; color: #333; cursor: pointer;">
+              <input type="checkbox" id="${includeBgmId}" ${includeBgmSettingsDefault ? 'checked' : ''}>
+              <span>导出 BGM 白名单设置</span>
+            </label>
+          </section>
+        </div>
+
+        <div class="gal-input-actions" style="display: flex; gap: 10px; margin-top: 16px;">
+          <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
+            <i class="fa-solid fa-xmark"></i> <span>取消</span>
+          </button>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: #0d6efd; color: #fff; border-color: #0d6efd;">
+            <i class="fa-solid fa-file-export"></i> <span>开始导出</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return new Promise((resolve) => {
+    const mountRoot = getModalMountRoot();
+    $(mountRoot).append(dialogHtml);
+    const $dialog = $(mountRoot).find(`#${dialogId}`);
+    const $box = $dialog.find('.gal-input-box');
+    const $packSelect = $dialog.find(`#${packSelectId}`);
+    const $remoteUseCdn = $dialog.find(`#${remoteUseCdnId}`);
+    const $spriteRemoteWrap = $dialog.find(`#${spriteRemoteWrapId}`);
+    const $spriteRemoteInput = $dialog.find(`#${spriteRemoteInputId}`);
+    const $backgroundRemoteWrap = $dialog.find(`#${backgroundRemoteWrapId}`);
+    const $backgroundRemoteInput = $dialog.find(`#${backgroundRemoteInputId}`);
+    const $live2dRemoteWrap = $dialog.find(`#${live2dRemoteWrapId}`);
+    const $live2dRemoteInput = $dialog.find(`#${live2dRemoteInputId}`);
+    const $embedLive2d = $dialog.find(`#${embedLocalLive2dId}`);
+    const $includePlaceholder = $dialog.find(`#${includePlaceholderId}`);
+    const $limitInput = $dialog.find(`#${limitInputId}`);
+    const $pngBaseWrap = $dialog.find(`#${pngBaseWrapId}`);
+    const $pngAutoAvatar = $dialog.find(`#${pngAutoAvatarId}`);
+    const $pngBaseInput = $dialog.find(`#${pngBaseInputId}`);
+    const $characterSelect = $dialog.find(`#${characterSelectId}`);
+    const $characterInput = $dialog.find(`#${characterInputId}`);
+    makeDraggable($box, $dialog.find('.gal-input-title'));
+    if ($packSelect.length > 0) {
+      $packSelect.val(selectedPackIdDefault);
+    }
+
+    const syncState = () => {
+      const packScope = String($dialog.find(`input[name="${packScopeName}"]:checked`).val() || 'all');
+      const useAllPacks = packScope === 'all';
+      $packSelect.prop('disabled', useAllPacks);
+      $packSelect.css('opacity', useAllPacks ? 0.6 : 1);
+
+      const outputFormat = normalizeExportOutputFormat(
+        $dialog.find(`input[name="${outputFormatName}"]:checked`).val() || 'json',
+      );
+      const isPngOutput = outputFormat === 'png';
+      $pngAutoAvatar.prop('disabled', !isPngOutput);
+      $pngAutoAvatar.closest('label').css('opacity', isPngOutput ? 1 : 0.6);
+      $pngBaseInput.prop('disabled', !isPngOutput);
+      $pngBaseWrap.css('opacity', isPngOutput ? 1 : 0.6);
+      $pngBaseWrap.css('pointer-events', isPngOutput ? 'auto' : 'none');
+
+      const spriteMode = String($dialog.find(`input[name="${spriteModeName}"]:checked`).val() || 'local');
+      const spriteIsRemote = spriteMode === 'remote';
+      $spriteRemoteInput.prop('disabled', !spriteIsRemote);
+      $spriteRemoteWrap.css('opacity', spriteIsRemote ? 1 : 0.6);
+      $spriteRemoteWrap.css('pointer-events', spriteIsRemote ? 'auto' : 'none');
+
+      const backgroundMode = String($dialog.find(`input[name="${backgroundModeName}"]:checked`).val() || 'local');
+      const backgroundIsRemote = backgroundMode === 'remote';
+      $backgroundRemoteInput.prop('disabled', !backgroundIsRemote);
+      $backgroundRemoteWrap.css('opacity', backgroundIsRemote ? 1 : 0.6);
+      $backgroundRemoteWrap.css('pointer-events', backgroundIsRemote ? 'auto' : 'none');
+
+      const live2dMode = String($dialog.find(`input[name="${live2dModeName}"]:checked`).val() || 'local');
+      const live2dIsRemote = live2dMode === 'remote';
+      $live2dRemoteInput.prop('disabled', !live2dIsRemote);
+      $live2dRemoteWrap.css('opacity', live2dIsRemote ? 1 : 0.6);
+      $live2dRemoteWrap.css('pointer-events', live2dIsRemote ? 'auto' : 'none');
+
+      const embedLocal = !!$embedLive2d.prop('checked');
+      const localLive2dOptionsEnabled = !live2dIsRemote;
+      $embedLive2d.prop('disabled', !localLive2dOptionsEnabled);
+      $limitInput.prop('disabled', !localLive2dOptionsEnabled || !embedLocal);
+      $limitInput.css('opacity', localLive2dOptionsEnabled && embedLocal ? 1 : 0.6);
+      $includePlaceholder.prop('disabled', !localLive2dOptionsEnabled || embedLocal);
+      if (embedLocal) $includePlaceholder.prop('checked', true);
+      $embedLive2d.closest('label').css('opacity', localLive2dOptionsEnabled ? 1 : 0.6);
+      $includePlaceholder.closest('label').css('opacity', localLive2dOptionsEnabled && !embedLocal ? 1 : 0.6);
+    };
+
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      $dialog.remove();
+      resolve(value);
+    };
+
+    const submit = () => {
+      let characterName = '';
+      if ($characterSelect.length > 0) {
+        characterName = String($characterSelect.val() || '').trim();
+      } else if ($characterInput.length > 0) {
+        characterName = String($characterInput.val() || '').trim();
+      }
+
+      const outputFormat = normalizeExportOutputFormat(
+        $dialog.find(`input[name="${outputFormatName}"]:checked`).val() || 'json',
+      );
+      const pngAutoUseAvatar = !!$pngAutoAvatar.prop('checked');
+      let pngBaseFile = null;
+      if (outputFormat === 'png') {
+        const inputEl = $pngBaseInput.get(0);
+        const pickedFile = inputEl && inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
+        if (pickedFile) {
+          const fileName = String(pickedFile.name || '').toLowerCase();
+          const mimeType = String(pickedFile.type || '').toLowerCase();
+          if (!fileName.endsWith('.png') && mimeType !== 'image/png') {
+            showToast('底图文件必须是 PNG 格式');
+            $pngBaseInput.trigger('focus');
+            return;
+          }
+          pngBaseFile = pickedFile;
+        }
+        if (!pngAutoUseAvatar && !pngBaseFile) {
+          showToast('请手动选择 PNG 底图文件，或开启自动头像底图');
+          $pngBaseInput.trigger('focus');
+          return;
+        }
+      }
+
+      const packScope = String($dialog.find(`input[name="${packScopeName}"]:checked`).val() || 'all');
+      const includeAllPacks = packScope === 'all';
+      const selectedPackId = String($packSelect.val() || '').trim();
+      if (!includeAllPacks && !selectedPackId) {
+        showToast('请选择要导出的图包');
+        $packSelect.trigger('focus');
+        return;
+      }
+
+      const remoteUseCdn = !!$remoteUseCdn.prop('checked');
+
+      const spriteResourceMode = String($dialog.find(`input[name="${spriteModeName}"]:checked`).val() || 'local');
+      const spriteRemoteInputRaw = String($spriteRemoteInput.val() || '').trim();
+      let spriteRemoteInput = spriteResourceMode === 'remote' ? spriteRemoteInputRaw : '';
+      if (spriteResourceMode === 'remote') {
+        const resolvedSpriteInput = resolveRemoteAddressInput(spriteRemoteInputRaw, remoteUseCdn);
+        if (!resolvedSpriteInput.ok) {
+          showToast(`立绘远程地址无效：${resolvedSpriteInput.error}`);
+          $spriteRemoteInput.trigger('focus');
+          return;
+        }
+        spriteRemoteInput = resolvedSpriteInput.value;
+      }
+
+      const backgroundResourceMode = String($dialog.find(`input[name="${backgroundModeName}"]:checked`).val() || 'local');
+      const backgroundRemoteInputRaw = String($backgroundRemoteInput.val() || '').trim();
+      let backgroundRemoteInput = backgroundResourceMode === 'remote' ? backgroundRemoteInputRaw : '';
+      if (backgroundResourceMode === 'remote') {
+        const resolvedBackgroundInput = resolveRemoteAddressInput(backgroundRemoteInputRaw, remoteUseCdn);
+        if (!resolvedBackgroundInput.ok) {
+          showToast(`背景远程地址无效：${resolvedBackgroundInput.error}`);
+          $backgroundRemoteInput.trigger('focus');
+          return;
+        }
+        backgroundRemoteInput = resolvedBackgroundInput.value;
+      }
+
+      const live2dResourceMode = String($dialog.find(`input[name="${live2dModeName}"]:checked`).val() || 'local');
+      const live2dRemoteInputRaw = String($live2dRemoteInput.val() || '').trim();
+      let live2dRemoteInput = live2dResourceMode === 'remote' ? live2dRemoteInputRaw : '';
+      if (live2dResourceMode === 'remote') {
+        const resolvedLive2dInput = resolveRemoteAddressInput(live2dRemoteInputRaw, remoteUseCdn);
+        if (!resolvedLive2dInput.ok) {
+          showToast(`Live2D 远程地址无效：${resolvedLive2dInput.error}`);
+          $live2dRemoteInput.trigger('focus');
+          return;
+        }
+        live2dRemoteInput = resolvedLive2dInput.value;
+      }
+
+      const remoteInput = spriteRemoteInput || backgroundRemoteInput || live2dRemoteInput || '';
+
+      const embedLocalLive2d = !!$embedLive2d.prop('checked');
+      const includeLocalLive2dPlaceholder = live2dResourceMode === 'remote'
+        ? true
+        : (embedLocalLive2d ? true : !!$includePlaceholder.prop('checked'));
+
+      const rawLimitMb = Number($limitInput.val());
+      if (live2dResourceMode !== 'remote' && embedLocalLive2d && (!Number.isFinite(rawLimitMb) || rawLimitMb <= 0)) {
+        showToast('请输入有效的 Live2D 本体导出阈值（MB）');
+        $limitInput.trigger('focus');
+        return;
+      }
+      const normalizedLimitMb = Number.isFinite(rawLimitMb) && rawLimitMb > 0
+        ? Math.floor(rawLimitMb)
+        : Math.round(DEFAULT_LIVE2D_EMBED_LIMIT_BYTES / 1024 / 1024);
+      const maxEmbeddedLive2dBytes = normalizedLimitMb * 1024 * 1024;
+
+      const includeCustomModuleSettings = !!$dialog.find(`#${includeCustomId}`).prop('checked');
+      const includeBgmSettings = !!$dialog.find(`#${includeBgmId}`).prop('checked');
+
+      const result = {
+        characterName,
+        outputFormat,
+        pngAutoUseAvatar,
+        pngBaseFile,
+        remoteInput,
+        includeAllPacks,
+        selectedPackId,
+        spriteResourceMode,
+        spriteRemoteInput,
+        backgroundResourceMode,
+        backgroundRemoteInput,
+        live2dResourceMode,
+        live2dRemoteInput,
+        remoteUseCdn,
+        embedLocalLive2d,
+        includeLocalLive2dPlaceholder,
+        maxEmbeddedLive2dBytes,
+        includeCustomModuleSettings,
+        includeBgmSettings,
+      };
+
+      saveCardExportPrefs({
+        characterName,
+        outputFormat,
+        pngAutoUseAvatar,
+        remoteInput,
+        includeAllPacks,
+        selectedPackId,
+        spriteResourceMode,
+        spriteRemoteInput,
+        backgroundResourceMode,
+        backgroundRemoteInput,
+        live2dResourceMode,
+        live2dRemoteInput,
+        remoteUseCdn,
+        embedLocalLive2d,
+        includeLocalLive2dPlaceholder,
+        maxEmbeddedLive2dMb: normalizedLimitMb,
+        includeCustomModuleSettings,
+        includeBgmSettings,
+      });
+
+      done(result);
+    };
+
+    $dialog.find(`input[name="${packScopeName}"]`).on('change', syncState);
+    $dialog.find(`input[name="${outputFormatName}"]`).on('change', syncState);
+    $dialog.find(`input[name="${spriteModeName}"]`).on('change', syncState);
+    $dialog.find(`input[name="${backgroundModeName}"]`).on('change', syncState);
+    $dialog.find(`input[name="${live2dModeName}"]`).on('change', syncState);
+    $embedLive2d.on('change', syncState);
+    syncState();
+
+    $dialog.find(`#${confirmId}`).on('click', submit);
+    $dialog.find(`#${cancelId}`).on('click', () => done(null));
+    $dialog.find(`#${closeId}`).on('click', () => done(null));
+    $dialog.on('click', function (e) {
+      if (e.target === this) done(null);
+    });
+    $dialog.on('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        done(null);
+      }
+    });
+    $dialog.find('input').on('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    setTimeout(() => {
+      if ($characterSelect.length > 0) {
+        $characterSelect.trigger('focus');
+      } else if ($characterInput.length > 0) {
+        $characterInput.trigger('focus');
+      } else {
+        $dialog.find(`#${confirmId}`).trigger('focus');
+      }
+    }, 0);
   });
 }
 
@@ -1092,93 +2203,136 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     }
 
     const interactive = options.interactive !== false;
-    const preferredCharacterName = options.characterName || '';
+    let preferredCharacterName = options.characterName || '';
+    let outputFormat = normalizeExportOutputFormat(options.outputFormat || 'json');
+    let pngAutoUseAvatar = options.pngAutoUseAvatar;
+    let pngBaseFile = options.pngBaseFile || null;
+    let pngPrettyJsonIndent = options.pngPrettyJsonIndent;
     let remoteInput = options.remoteInput || '';
     let includeAllPacks = options.includeAllPacks;
+    let selectedPackId = options.selectedPackId || '';
+    let spriteResourceMode = options.spriteResourceMode;
+    let spriteRemoteInput = options.spriteRemoteInput || '';
+    let backgroundResourceMode = options.backgroundResourceMode;
+    let backgroundRemoteInput = options.backgroundRemoteInput || '';
+    let live2dResourceMode = options.live2dResourceMode;
+    let live2dRemoteInput = options.live2dRemoteInput || '';
+    let remoteUseCdn = options.remoteUseCdn;
     let embedLocalLive2d = options.embedLocalLive2d;
     let includeLocalLive2dPlaceholder = options.includeLocalLive2dPlaceholder;
     let maxEmbeddedLive2dBytes = options.maxEmbeddedLive2dBytes;
+    let includeCustomModuleSettings = options.includeCustomModuleSettings;
+    let includeBgmSettings = options.includeBgmSettings;
 
     if (interactive) {
-      const remoteAnswer = await showInAppPromptDialog({
-        title: '远程资源配置（可选）',
-        message: '可填写 baseUrl（例如 https://cdn.jsdelivr.net/gh/user/repo@main/ ）\n也可直接填写 remote_assets.json 完整 URL。\n留空则只导出绑定配置。',
-        label: '远程配置',
-        placeholder: 'https://cdn.jsdelivr.net/gh/user/repo@main/',
-        defaultValue: remoteInput || '',
-        confirmText: '确认',
-        cancelText: '跳过',
-        iconClass: 'fa-solid fa-cloud',
-        accent: '#17a2b8',
+      const exportParams = await showCharacterCardExportConfigDialog({
+        characterName: preferredCharacterName,
+        outputFormat,
+        pngAutoUseAvatar,
+        remoteInput,
+        includeAllPacks,
+        selectedPackId,
+        spriteResourceMode,
+        spriteRemoteInput,
+        backgroundResourceMode,
+        backgroundRemoteInput,
+        live2dResourceMode,
+        live2dRemoteInput,
+        remoteUseCdn,
+        embedLocalLive2d,
+        includeLocalLive2dPlaceholder,
+        maxEmbeddedLive2dBytes,
+        includeCustomModuleSettings,
+        includeBgmSettings,
       });
-      if (remoteAnswer === null) {
-        showToast('未设置远程资源地址，继续使用当前导出参数');
-      } else {
-        remoteInput = remoteAnswer.trim();
+      if (!exportParams) {
+        showToast('已取消导出角色卡');
+        return false;
       }
-
-      includeAllPacks = includeAllPacks === undefined
-        ? await showInAppConfirmDialog({
-          title: '图包范围',
-          message: '是否导出所有图包记录？',
-          hint: '确认：保留 packs 列表（推荐）\n取消：只导出当前图包',
-          confirmText: '导出所有图包',
-          cancelText: '仅当前图包',
-          iconClass: 'fa-solid fa-layer-group',
-          accent: '#0d6efd',
-        })
-        : !!includeAllPacks;
-
-      embedLocalLive2d = embedLocalLive2d === undefined
-        ? await showInAppConfirmDialog({
-          title: 'Live2D 导出策略',
-          message: '是否导出本地 Live2D 模型本体？',
-          hint: '确认：本地模型导出本体，远程模型导出 URL\n取消：本地模型不导出本体',
-          confirmText: '导出本体',
-          cancelText: '仅导出引用',
-          iconClass: 'fa-solid fa-cube',
-          accent: '#6f42c1',
-        })
-        : !!embedLocalLive2d;
-
-      includeLocalLive2dPlaceholder = includeLocalLive2dPlaceholder === undefined
-        ? true
-        : !!includeLocalLive2dPlaceholder;
-
-      if (embedLocalLive2d) {
-        const limitInput = await showInAppPromptDialog({
-          title: 'Live2D 本体导出阈值',
-          message: '请输入本地 Live2D 本体导出阈值（MB）。\n超过阈值将自动跳过本体并建议改用 GitHub 远程导出。',
-          label: '阈值（MB）',
-          placeholder: '25',
-          defaultValue: String(Math.round((Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES) / 1024 / 1024)),
-          confirmText: '确认阈值',
-          cancelText: '使用默认',
-          iconClass: 'fa-solid fa-gauge-high',
-          accent: '#f39c12',
-          inputType: 'number',
-        });
-        if (limitInput === null) {
-          showToast('未设置 Live2D 本体阈值，使用默认 25MB');
-        } else {
-          const parsedMb = Number(limitInput);
-          maxEmbeddedLive2dBytes = Number.isFinite(parsedMb) && parsedMb > 0
-            ? Math.floor(parsedMb * 1024 * 1024)
-            : DEFAULT_LIVE2D_EMBED_LIMIT_BYTES;
-        }
-      }
+      preferredCharacterName = exportParams.characterName || '';
+      outputFormat = normalizeExportOutputFormat(exportParams.outputFormat || outputFormat);
+      pngAutoUseAvatar = exportParams.pngAutoUseAvatar;
+      pngBaseFile = exportParams.pngBaseFile || pngBaseFile;
+      remoteInput = exportParams.remoteInput || '';
+      includeAllPacks = exportParams.includeAllPacks;
+      selectedPackId = exportParams.selectedPackId || '';
+      spriteResourceMode = exportParams.spriteResourceMode;
+      spriteRemoteInput = exportParams.spriteRemoteInput || '';
+      backgroundResourceMode = exportParams.backgroundResourceMode;
+      backgroundRemoteInput = exportParams.backgroundRemoteInput || '';
+      live2dResourceMode = exportParams.live2dResourceMode;
+      live2dRemoteInput = exportParams.live2dRemoteInput || '';
+      remoteUseCdn = exportParams.remoteUseCdn;
+      embedLocalLive2d = exportParams.embedLocalLive2d;
+      includeLocalLive2dPlaceholder = exportParams.includeLocalLive2dPlaceholder;
+      maxEmbeddedLive2dBytes = exportParams.maxEmbeddedLive2dBytes;
+      includeCustomModuleSettings = exportParams.includeCustomModuleSettings;
+      includeBgmSettings = exportParams.includeBgmSettings;
     }
 
     if (includeAllPacks === undefined) includeAllPacks = true;
+    if (!selectedPackId) selectedPackId = getCurrentPackId() || DEFAULT_PACK_ID;
+    if (!spriteRemoteInput && remoteInput) spriteRemoteInput = remoteInput;
+    if (!backgroundRemoteInput && remoteInput) backgroundRemoteInput = remoteInput;
+    if (spriteResourceMode === undefined || spriteResourceMode === null || spriteResourceMode === '') {
+      spriteResourceMode = spriteRemoteInput ? 'remote' : 'local';
+    }
+    if (backgroundResourceMode === undefined || backgroundResourceMode === null || backgroundResourceMode === '') {
+      backgroundResourceMode = backgroundRemoteInput ? 'remote' : 'local';
+    }
+    spriteResourceMode = normalizeRemoteMode(spriteResourceMode);
+    backgroundResourceMode = normalizeRemoteMode(backgroundResourceMode);
+    if (!live2dRemoteInput && remoteInput) live2dRemoteInput = remoteInput;
+    if (live2dResourceMode === undefined || live2dResourceMode === null || live2dResourceMode === '') {
+      live2dResourceMode = live2dRemoteInput ? 'remote' : 'local';
+    }
+    live2dResourceMode = normalizeRemoteMode(live2dResourceMode);
+    if (remoteUseCdn === undefined) remoteUseCdn = true;
+    if (spriteResourceMode === 'remote') {
+      const resolvedSpriteInput = resolveRemoteAddressInput(spriteRemoteInput, remoteUseCdn);
+      if (!resolvedSpriteInput.ok) {
+        throw new Error(`立绘资源模式设置为远程，但远程地址无效：${resolvedSpriteInput.error}`);
+      }
+      spriteRemoteInput = resolvedSpriteInput.value;
+    }
+    if (backgroundResourceMode === 'remote') {
+      const resolvedBackgroundInput = resolveRemoteAddressInput(backgroundRemoteInput, remoteUseCdn);
+      if (!resolvedBackgroundInput.ok) {
+        throw new Error(`背景图包模式设置为远程，但远程地址无效：${resolvedBackgroundInput.error}`);
+      }
+      backgroundRemoteInput = resolvedBackgroundInput.value;
+    }
+    if (live2dResourceMode === 'remote') {
+      const resolvedLive2dInput = resolveRemoteAddressInput(live2dRemoteInput, remoteUseCdn);
+      if (!resolvedLive2dInput.ok) {
+        throw new Error(`Live2D 资源模式设置为远程，但远程地址无效：${resolvedLive2dInput.error}`);
+      }
+      live2dRemoteInput = resolvedLive2dInput.value;
+    }
+    remoteInput = spriteRemoteInput || backgroundRemoteInput || live2dRemoteInput || remoteInput;
     if (embedLocalLive2d === undefined) embedLocalLive2d = true;
     if (includeLocalLive2dPlaceholder === undefined) includeLocalLive2dPlaceholder = true;
+    if (includeCustomModuleSettings === undefined) includeCustomModuleSettings = true;
+    if (includeBgmSettings === undefined) includeBgmSettings = true;
     if (!Number.isFinite(maxEmbeddedLive2dBytes) || maxEmbeddedLive2dBytes <= 0) {
       maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES;
+    }
+    outputFormat = normalizeExportOutputFormat(outputFormat);
+    if (pngAutoUseAvatar === undefined) pngAutoUseAvatar = true;
+    if (!Number.isFinite(Number(pngPrettyJsonIndent))) {
+      pngPrettyJsonIndent = 2;
+    } else {
+      pngPrettyJsonIndent = Math.min(8, Math.max(0, Math.floor(Number(pngPrettyJsonIndent))));
+    }
+    if (outputFormat === 'png') {
+      if (!pngAutoUseAvatar && (!pngBaseFile || typeof pngBaseFile.arrayBuffer !== 'function')) {
+        throw new Error('PNG 导出模式需要提供有效的 PNG 底图文件');
+      }
     }
 
     showToast('正在定位导出角色卡...');
     const resolvedCharacter = await resolveCharacterCardForExport({
-      interactive,
+      interactive: false,
       preferredCharacterName,
     });
     const currentCharacter = resolvedCharacter?.card;
@@ -1197,9 +2351,18 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     const config = await buildGalgameCardConfig({
       remoteInput,
       includeAllPacks,
+      selectedPackId,
+      spriteResourceMode,
+      spriteRemoteInput,
+      backgroundResourceMode,
+      backgroundRemoteInput,
+      live2dResourceMode,
+      live2dRemoteInput,
       embedLocalLive2d,
       includeLocalLive2dPlaceholder,
       maxEmbeddedLive2dBytes,
+      includeCustomModuleSettings,
+      includeBgmSettings,
       onProgress: updateProgress,
     });
 
@@ -1223,27 +2386,87 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     }
 
     updateProgress(88, '校验角色卡体积...');
-    const bytes = estimateCardJsonBytes(card);
-    if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
-      const msg =
-        `导出失败：角色卡体积 ${formatSizeMb(bytes)} 超过 Discord 限制 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}。\n请改用远程资源导出。`;
-      if (interactive) {
-        await showInAppAlertDialog({
-          title: '导出失败',
-          message: msg,
-          iconClass: 'fa-solid fa-circle-exclamation',
-          accent: '#dc3545',
-        });
-      }
-      throw new Error(msg);
-    }
-
     const cardName = card?.name || card?.data?.name || 'character';
     const date = new Date().toISOString().slice(0, 10);
-    const filename = `${sanitizeFileName(cardName)}.galgame-packed.${date}.json`;
-    updateProgress(94, '生成导出文件...');
-    const outputText = JSON.stringify(card, null, 2);
-    downloadTextFile(filename, outputText, 'application/json');
+    let filename = '';
+
+    if (outputFormat === 'png') {
+      let baseBytes = null;
+      let autoAvatarError = '';
+
+      if (pngAutoUseAvatar) {
+        updateProgress(90, '尝试自动获取当前角色头像...');
+        const avatarResult = await tryResolveCurrentCharacterAvatarPngBytes({
+          resolvedCard: rawResolved?.card,
+          fallbackCharacter: currentCharacter,
+          resolvedName: resolvedCharacter?.resolvedName || preferredCharacterName,
+        });
+        if (avatarResult.ok) {
+          baseBytes = avatarResult.value;
+        } else {
+          autoAvatarError = String(avatarResult.error || '未知错误');
+        }
+      }
+
+      if (!baseBytes && pngBaseFile && typeof pngBaseFile.arrayBuffer === 'function') {
+        baseBytes = new Uint8Array(await pngBaseFile.arrayBuffer());
+      }
+
+      if (!baseBytes && interactive && pngAutoUseAvatar) {
+        const selectedFile = await showPngBaseFallbackSelectorDialog({
+          reason: autoAvatarError,
+        });
+        if (!selectedFile) {
+          throw new Error('自动头像失败，且未选择 PNG 底图文件');
+        }
+        pngBaseFile = selectedFile;
+        baseBytes = new Uint8Array(await selectedFile.arrayBuffer());
+      }
+
+      if (!baseBytes) {
+        throw new Error('PNG 导出模式需要提供有效的 PNG 底图文件');
+      }
+      if (!isPngBytes(baseBytes)) {
+        throw new Error('底图不是有效 PNG 文件');
+      }
+      const pngBytes = embedCardIntoPngBytes(baseBytes, card, pngPrettyJsonIndent);
+      const bytes = pngBytes.byteLength;
+      if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
+        const msg =
+          `导出失败：PNG 角色卡体积 ${formatSizeMb(bytes)} 超过 Discord 限制 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}。\n请改用远程资源导出。`;
+        if (interactive) {
+          await showInAppAlertDialog({
+            title: '导出失败',
+            message: msg,
+            iconClass: 'fa-solid fa-circle-exclamation',
+            accent: '#dc3545',
+          });
+        }
+        throw new Error(msg);
+      }
+      filename = `${sanitizeFileName(cardName)}.galgame-packed.${date}.png`;
+      updateProgress(94, '生成 PNG 角色卡...');
+      downloadBlob(filename, new Blob([pngBytes], { type: 'image/png' }));
+    } else {
+      const bytes = estimateCardJsonBytes(card);
+      if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
+        const msg =
+          `导出失败：角色卡体积 ${formatSizeMb(bytes)} 超过 Discord 限制 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}。\n请改用远程资源导出。`;
+        if (interactive) {
+          await showInAppAlertDialog({
+            title: '导出失败',
+            message: msg,
+            iconClass: 'fa-solid fa-circle-exclamation',
+            accent: '#dc3545',
+          });
+        }
+        throw new Error(msg);
+      }
+      filename = `${sanitizeFileName(cardName)}.galgame-packed.${date}.json`;
+      updateProgress(94, '生成导出文件...');
+      const outputText = JSON.stringify(card, null, 2);
+      downloadTextFile(filename, outputText, 'application/json');
+    }
 
     updateProgress(100, '导出完成');
     exportSucceeded = true;

@@ -1,6 +1,6 @@
 {
   "$schema": "./galgame-ui-plugin.config.schema.json",
-  "schema": "galgame_ui_plugin_config_v1",
+  "schema": "galgame_ui_plugin_config_v2",
   "assets": {
     "activePackId": "pack_main",
     "packs": [
@@ -10,7 +10,22 @@
         "remoteAssetsUrl": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/remote_assets.json",
         "remoteBaseUrl": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/"
       }
-    ]
+    ],
+    "resourceModes": {
+      "sprites": {
+        "mode": "remote",
+        "remoteAssetsUrl": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/remote_assets.json",
+        "remoteBaseUrl": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/"
+      },
+      "backgrounds": {
+        "mode": "local"
+      },
+      "live2d": {
+        "mode": "remote",
+        "includeLocalPlaceholder": true,
+        "remoteInput": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/live2d/{character}/model3.json"
+      }
+    }
   },
   "live2d": {
     "enabledMap": {
@@ -35,6 +50,17 @@
     "characterVoice": {
       "柚": "奥泽美咲"
     }
+  },
+  "custom": {
+    "locationStatusHtml": "<div>教学楼天台，风很大。</div>",
+    "timeStatusHtml": "<div>放学后 / 黄昏</div>"
+  },
+  "bgm": {
+    "whitelist": [
+      "宁静校园",
+      "黄昏微风",
+      "雨夜"
+    ]
   }
 }
 

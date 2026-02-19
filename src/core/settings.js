@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS = {
   hideOtherFloors: true,
   fullscreenMode: false,
   bgFillMode: 'cover',
+  skin: 'none',
   effectsEnabled: true,
   effectsQuality: 'balanced',
   effectsAutoClearOnSceneChange: true,

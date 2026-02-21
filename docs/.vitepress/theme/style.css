@@ -1,0 +1,138 @@
+/* === 自定义 VitePress 主题：优雅 & 设计感 === */
+
+/* 引入更具现代感的字体（可选，但系统默认字体也可以通过字重优化） */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ================= 核心品牌色 ================= */
+  /* 主色调改为优雅的紫罗兰/品红渐变色调，适合 Galgame 插件的梦幻/精致感 */
+  --vp-c-brand-1: #9865ff;
+  --vp-c-brand-2: #bd73ff;
+  --vp-c-brand-3: #e08aff;
+  
+  --vp-c-brand-soft: rgba(152, 101, 255, 0.14);
+  
+  /* 首页 Hero 渐变文字的剪切背景 */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #6c32f8 30%, #ec77ff);
+  
+  /* ================= 全局排版 & 圆角 ================= */
+  --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  --vp-custom-block-font-size: 14px;
+  
+  /* 增加所有圆角的弧度，让元素看起来更加柔和优雅 */
+  --vp-border-radius: 12px;
+  --vp-border-radius-sm: 8px;
+}
+
+/* 深色模式品牌色微调 */
+.dark {
+  --vp-c-brand-1: #bd73ff;
+  --vp-c-brand-2: #d094ff;
+  --vp-c-brand-3: #ecbbff;
+
+  --vp-home-hero-name-background: -webkit-linear-gradient(120deg, #a673ff 30%, #ff9efc);
+}
+
+/* ================= 首页美化 ================= */
+
+/* Hero 背景光晕，增加氛围感 */
+.VPHero {
+  position: relative;
+}
+
+.VPHero::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle at 50% 50%, rgba(152, 101, 255, 0.15) 0%, transparent 60%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* 首页主按钮的美化 */
+.VPButton.brand {
+  background-image: linear-gradient(to right, #6c32f8, #c458ff);
+  border: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 14px rgba(152, 101, 255, 0.3);
+}
+
+.VPButton.brand:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(152, 101, 255, 0.5);
+}
+
+/* 特性卡片的优雅悬浮效果 */
+.VPFeature {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border: 1px solid var(--vp-c-bg-soft);
+  background: var(--vp-c-bg-soft);
+  border-radius: 16px;
+}
+
+.VPFeature:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  border-color: var(--vp-c-brand-1);
+}
+
+.dark .VPFeature:hover {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* 特性图标居中并带有柔和背景 */
+.VPFeature .icon {
+  background-color: var(--vp-c-brand-soft);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 20px;
+  font-size: 28px;
+}
+
+/* ================= 文档区域美化 ================= */
+
+/* 平滑图片和视频圆角 */
+.vp-doc img, .vp-doc video {
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  transition: box-shadow 0.3s ease;
+}
+
+.vp-doc img:hover, .vp-doc video:hover {
+  box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+.dark .vp-doc img, .dark .vp-doc video {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+/* 提示块样式更清晰精致 */
+.custom-block {
+  border-radius: 12px;
+  border-left-width: 4px;
+}
+
+/* 代码块更圆润，并添加深色模式下一点点的高光 */
+div[class*="language-"] {
+  border-radius: 12px;
+  border: 1px solid var(--vp-c-divider-light);
+}
+
+.dark div[class*="language-"] {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1e1e20;
+}
+
+/* 让导航栏底部在滚动时带有模糊阴影 */
+.VPNav {
+  backdrop-filter: blur(12px) saturate(180%);
+}

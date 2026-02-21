@@ -1,5 +1,5 @@
 import { SCRIPT_NAME } from '../core/constants.js';
-import { topWindow, $ } from '../core/env.js';
+import { $, topWindow } from '../core/env.js';
 
 // ============================================
 // 从全局数据表获取地点和时间信息
@@ -82,7 +82,7 @@ export function getGlobalLocationAndTime() {
 }
 
 /**
- * 更新地点和时间状态栏显示
+ * 更新地点和弹窗二显示
  * @param {number} retryCount - 当前重试次数
  */
 export function updateLocationTimeDisplay(retryCount = 0) {

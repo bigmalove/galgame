@@ -1,6 +1,5 @@
 import { SCRIPT_ID, SCRIPT_NAME } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
-import { METAL_TEXTURE, PARCHMENT_TEXTURE, WOOD_TEXTURE } from './dnd-textures.js';
 
 // ============================================
 // 样式注入
@@ -149,210 +148,348 @@ export function injectStyles() {
 #gal-global-overlay.skin-ancient .gal-progress-bar { background: linear-gradient(90deg, #5a1e1e, #8B2626) !important; box-shadow: none !important; }
 
 /* =========================================================
-   2. 冒险者酒馆 (Western) — 龙与地下城 D&D 风格
-   严格按参考图还原: 羊皮纸卷轴 · 华丽金属边框 · 暗铁按钮
+   2. 冒险者酒馆 (Western) — 元素级图片皮肤
+   说明: 由 skin-western-runtime 注入 CSS 变量
    ========================================================= */
 #gal-global-overlay.skin-western {
+    --western-scene-clip: inset(14% 18% 54% 18%);
+    --western-control-top: clamp(5.5rem, 10vh, 7.5rem);
     font-family: "Georgia", "Palatino Linotype", "Times New Roman", serif;
 }
 
-/* 游戏容器 — 深木质外框 + 金属角饰效果 */
+@media screen and (max-width: 48rem) {
+    #gal-global-overlay.skin-western {
+        --western-scene-clip: inset(17% 15% 55% 15%);
+        --western-control-top: clamp(4.7rem, 10vh, 6rem);
+    }
+}
+
 #gal-global-overlay.skin-western .gal-game-container {
-    border: calc(5px * var(--ui-scale, 1)) solid #3A2517 !important;
-    border-radius: calc(6px * var(--ui-scale, 1)) !important;
-    outline: calc(2px * var(--ui-scale, 1)) solid #5A3D25 !important;
-    outline-offset: calc(-7px * var(--ui-scale, 1)) !important;
-    box-shadow:
-        inset 0 0 calc(40px * var(--ui-scale, 1)) rgba(0,0,0,0.3),
-        0 0 calc(30px * var(--ui-scale, 1)) rgba(0,0,0,0.8),
-        0 0 calc(80px * var(--ui-scale, 1)) rgba(0,0,0,0.4) !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: #1f130b !important;
+    position: relative !important;
+    isolation: isolate;
 }
 
-/* 背景层 — 深色木纹纹理（无背景图时的兜底） */
-#gal-global-overlay.skin-western .gal-layer-bg {
-    background-color: #2A1A0E !important;
-    background-image: url(${WOOD_TEXTURE}) !important;
-    background-size: cover !important;
+#gal-global-overlay.skin-western.skin-western-image-mode .gal-game-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: var(--western-main_frame_scene-normal-image);
+    background-repeat: no-repeat;
+    background-size: var(--western-main_frame_scene-bg-size, 100% 100%);
+    transform: translate(
+      calc(var(--western-main_frame_scene-offset-x, 0px) + var(--western-main_frame_scene-anchor-x, 0px)),
+      calc(var(--western-main_frame_scene-offset-y, 0px) + var(--western-main_frame_scene-anchor-y, 0px))
+    );
 }
 
-/* ===== 文字面板 — 羊皮纸纹理 + 华丽多层边框 ===== */
-#gal-global-overlay.skin-western .gal-text-panel {
-    background-color: rgba(216, 200, 168, var(--panel-opacity, 0.96)) !important;
-    background-image: url(${PARCHMENT_TEXTURE}) !important;
-    background-size: cover !important;
-    background-blend-mode: multiply !important;
-    /* 主边框 — 暗棕/皮革色 */
-    border: calc(4px * var(--ui-scale, 1)) solid #5A3D25 !important;
-    border-radius: calc(3px * var(--ui-scale, 1)) !important;
-    /* outline 做第二层金色装饰边框 */
-    outline: calc(3px * var(--ui-scale, 1)) solid #8B6914 !important;
-    outline-offset: calc(-8px * var(--ui-scale, 1)) !important;
-    box-shadow:
-        /* 最内层：暗色渐晕（模拟羊皮纸边缘发暗） */
-        inset 0 0 calc(50px * var(--ui-scale, 1)) rgba(90,61,37,0.3),
-        inset 0 0 calc(100px * var(--ui-scale, 1)) rgba(42,26,14,0.15),
-        /* 外层金色装饰 */
-        0 0 0 calc(6px * var(--ui-scale, 1)) #8B6914,
-        0 0 0 calc(8px * var(--ui-scale, 1)) #3A2517,
-        0 0 0 calc(10px * var(--ui-scale, 1)) #6B4F0A,
-        0 0 0 calc(12px * var(--ui-scale, 1)) #2A1A0E,
-        /* 投影 */
-        0 calc(8px * var(--ui-scale, 1)) calc(30px * var(--ui-scale, 1)) rgba(0,0,0,0.6) !important;
+#gal-global-overlay.skin-western.skin-western-image-mode .gal-layer-bg {
+    clip-path: var(--western-scene-clip) !important;
+    -webkit-clip-path: var(--western-scene-clip) !important;
 }
 
-/* 参考图: 对话文字深棕墨色写在羊皮纸上 */
-#gal-global-overlay.skin-western .gal-dialog-text {
-    color: #2C1A0E !important;
-    text-shadow: 0 1px 0 rgba(216,200,168,0.5) !important;
-    letter-spacing: 0.5px;
-    font-family: "Georgia", "Palatino Linotype", serif !important;
+#gal-global-overlay.skin-western .gal-layer-bg::before,
+#gal-global-overlay.skin-western .gal-layer-bg.generating-bg::after {
+    display: none !important;
+    content: none !important;
 }
 
-/* 参考图: 名牌 — 深皮革底 + 金边 + 浅金字 */
-#gal-global-overlay.skin-western .gal-name-badge {
-    background-color: #2A1A0E !important;
-    background-image: none !important;
-    color: #D4BC94 !important;
-    border: calc(2px * var(--ui-scale, 1)) solid #8B6914 !important;
-    border-radius: calc(2px * var(--ui-scale, 1)) !important;
-    box-shadow:
-        inset 0 1px 0 rgba(139,105,20,0.25),
-        inset 0 -1px 0 rgba(0,0,0,0.5),
-        0 0 0 calc(1px * var(--ui-scale, 1)) #3A2517,
-        0 calc(3px * var(--ui-scale, 1)) calc(10px * var(--ui-scale, 1)) rgba(0,0,0,0.7) !important;
-    padding: calc(0.4rem * var(--ui-scale, 1)) calc(1.6rem * var(--ui-scale, 1)) !important;
-    left: 15px !important; top: -20px !important;
-}
-#gal-global-overlay.skin-western .gal-name-badge span {
-    font-weight: 700; text-shadow: 0 0 6px rgba(139,105,20,0.3), 0 1px 2px rgba(0,0,0,0.8); letter-spacing: 2px;
-    font-family: "Georgia", serif !important;
-    color: #D4BC94 !important;
+#gal-global-overlay.skin-western .gal-layer-bg.generating-bg .gal-bg-layer {
+    opacity: 1 !important;
 }
 
-/* 参考图: 底部工具栏 — 暗铁底板 + 金属纹理 */
-#gal-global-overlay.skin-western .gal-bottom-toolbar {
-    background-color: rgba(32, 20, 12, 0.9) !important;
-    background-image: url(${METAL_TEXTURE}) !important;
-    background-size: cover !important;
-    background-blend-mode: overlay !important;
-    border-top: calc(2px * var(--ui-scale, 1)) solid #5A3D25 !important;
-    box-shadow: inset 0 1px 0 rgba(139,105,20,0.12) !important;
+#gal-global-overlay.skin-western .gal-game-content {
+    z-index: 4 !important;
 }
 
-/* 参考图: 普通按钮 — 暗铁圆章（深棕色圆形金属徽章） */
+#gal-global-overlay.skin-western .gal-dialog-layer,
+#gal-global-overlay.skin-western .gal-text-panel,
+#gal-global-overlay.skin-western .gal-name-badge,
+#gal-global-overlay.skin-western .gal-action-btn,
 #gal-global-overlay.skin-western .gal-footer-btn,
-#gal-global-overlay.skin-western .gal-pending-choices-btn {
-    background-color: #342820 !important;
-    background-image: none !important;
-    border: calc(2px * var(--ui-scale, 1)) solid #5A4A38 !important;
-    color: #C9B89A !important;
-    border-radius: calc(20px * var(--ui-scale, 1)) !important;
-    box-shadow:
-        inset 0 1px 0 rgba(201,168,108,0.1),
-        inset 0 -1px 2px rgba(0,0,0,0.5),
-        0 calc(2px * var(--ui-scale, 1)) calc(4px * var(--ui-scale, 1)) rgba(0,0,0,0.7) !important;
-    transition: all 0.2s ease-out !important;
-    font-weight: 600 !important;
-    font-family: "Georgia", serif !important;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
+#gal-global-overlay.skin-western .gal-footer-btn-next,
+#gal-global-overlay.skin-western .gal-pending-choices-btn,
+#gal-global-overlay.skin-western .gal-location-bar,
+#gal-global-overlay.skin-western .gal-time-bar,
+#gal-global-overlay.skin-western .gal-fullscreen-btn,
+#gal-global-overlay.skin-western .gal-bgm-widget {
+    border: none !important;
+    box-shadow: none !important;
 }
 
-/* 参考图: NEXT 按钮 — 暗铁矩形 + 琥珀金边 */
-#gal-global-overlay.skin-western .gal-footer-btn-next {
-    background-color: #2A1E16 !important;
-    background-image: none !important;
-    border: calc(2px * var(--ui-scale, 1)) solid #8B6914 !important;
-    color: #E8D5B5 !important;
-    border-radius: calc(4px * var(--ui-scale, 1)) !important;
-    box-shadow:
-        inset 0 1px 0 rgba(201,168,108,0.15),
-        inset 0 -1px 2px rgba(0,0,0,0.5),
-        0 0 calc(8px * var(--ui-scale, 1)) rgba(139,105,20,0.15),
-        0 calc(3px * var(--ui-scale, 1)) calc(8px * var(--ui-scale, 1)) rgba(0,0,0,0.7) !important;
-    font-weight: 900 !important;
-    text-shadow: 0 0 6px rgba(232,168,76,0.15), 0 1px 2px rgba(0,0,0,0.8) !important;
-    font-family: "Georgia", serif !important;
-    transition: all 0.2s ease-out !important;
+#gal-global-overlay.skin-western .gal-text-panel,
+#gal-global-overlay.skin-western .gal-name-badge,
+#gal-global-overlay.skin-western .gal-action-btn,
+#gal-global-overlay.skin-western .gal-footer-btn,
+#gal-global-overlay.skin-western .gal-footer-btn-next,
+#gal-global-overlay.skin-western .gal-pending-choices-btn,
+#gal-global-overlay.skin-western .gal-location-bar,
+#gal-global-overlay.skin-western .gal-time-bar,
+#gal-global-overlay.skin-western .gal-fullscreen-btn,
+#gal-global-overlay.skin-western .gal-bgm-widget {
+    background-color: transparent !important;
+    background-repeat: no-repeat !important;
+    background-size: 100% 100% !important;
 }
 
-/* 参考图: 交互按钮（重绘/自由对话） — 同暗铁风格 */
-#gal-global-overlay.skin-western .gal-action-btn {
-    background-color: #342820 !important;
-    background-image: none !important;
-    border: calc(2px * var(--ui-scale, 1)) solid #5A4A38 !important;
-    color: #B8A888 !important;
-    border-radius: calc(4px * var(--ui-scale, 1)) !important;
-    box-shadow:
-        inset 0 1px 0 rgba(201,168,108,0.08),
-        0 calc(2px * var(--ui-scale, 1)) calc(4px * var(--ui-scale, 1)) rgba(0,0,0,0.6) !important;
-    font-family: "Georgia", serif !important;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
-    transition: all 0.2s ease-out !important;
+#gal-global-overlay.skin-western .gal-text-panel {
+    background-color: rgba(225, 205, 168, var(--panel-opacity, 0.92)) !important;
+    background-image: var(--western-dialog_panel-normal-image) !important;
+    background-size: var(--western-dialog_panel-bg-size, 100% 100%) !important;
+    color: #2f1d10 !important;
+    transform: translate(
+      calc(var(--western-dialog_panel-offset-x, 0px) + var(--western-dialog_panel-anchor-x, 0px)),
+      calc(var(--western-dialog_panel-offset-y, 0px) + var(--western-dialog_panel-anchor-y, 0px))
+    ) !important;
+    width: var(--western-dialog_panel-width, auto) !important;
+    height: var(--western-dialog_panel-height, auto) !important;
+    padding-top: var(--western-dialog-panel-padding-top, 0.9rem) !important;
+    padding-right: var(--western-dialog-panel-padding-right, 0.95rem) !important;
+    padding-bottom: var(--western-dialog-panel-padding-bottom, 0.55rem) !important;
+    padding-left: var(--western-dialog-panel-padding-left, 0.95rem) !important;
 }
 
-/* Hover — 金色微光 */
-#gal-global-overlay.skin-western .gal-footer-btn:hover,
-#gal-global-overlay.skin-western .gal-action-btn:hover,
-#gal-global-overlay.skin-western .gal-pending-choices-btn:hover {
-    background-color: #4A3A2E !important;
-    color: #E8D5B5 !important; border-color: #8B6914 !important;
-    box-shadow:
-        inset 0 1px 0 rgba(232,168,76,0.2),
-        0 0 calc(10px * var(--ui-scale, 1)) rgba(139,105,20,0.12) !important;
-}
-#gal-global-overlay.skin-western .gal-footer-btn-next:hover {
-    background-color: #3A2E22 !important;
-    border-color: #C9A84C !important;
-    box-shadow:
-        inset 0 1px 0 rgba(232,168,76,0.25),
-        0 0 calc(16px * var(--ui-scale, 1)) rgba(232,168,76,0.2),
-        0 0 calc(30px * var(--ui-scale, 1)) rgba(139,105,20,0.08),
-        0 calc(3px * var(--ui-scale, 1)) calc(8px * var(--ui-scale, 1)) rgba(0,0,0,0.6) !important;
-    color: #FFE8C0 !important;
-    text-shadow: 0 0 8px rgba(232,168,76,0.3), 0 1px 2px rgba(0,0,0,0.8) !important;
+#gal-global-overlay.skin-western .gal-dialog-text {
+    color: #2f1d10 !important;
+    text-shadow: 0 1px 0 rgba(243, 224, 185, 0.35) !important;
 }
 
-/* Active 状态 */
-#gal-global-overlay.skin-western .gal-footer-btn:active,
-#gal-global-overlay.skin-western .gal-action-btn:active,
-#gal-global-overlay.skin-western .gal-pending-choices-btn:active,
-#gal-global-overlay.skin-western .gal-footer-btn-next:active {
-    transform: translateY(1px) !important; box-shadow: inset 0 2px 6px rgba(0,0,0,0.7) !important;
+#gal-global-overlay.skin-western .gal-name-badge {
+    background-color: rgba(61, 40, 24, 0.86) !important;
+    background-image: var(--western-name_badge-normal-image) !important;
+    background-size: var(--western-name_badge-bg-size, 100% 100%) !important;
+    transform: translate(
+      calc(var(--western-name_badge-offset-x, 0px) + var(--western-name_badge-anchor-x, 0px)),
+      calc(var(--western-name_badge-offset-y, 0px) + var(--western-name_badge-anchor-y, 0px))
+    ) !important;
+    width: var(--western-name_badge-width, auto) !important;
+    height: var(--western-name_badge-height, auto) !important;
 }
 
-/* 全屏按钮 — 铁质勋章 */
+#gal-global-overlay.skin-western .gal-name-badge span {
+    color: #2b1b0f !important;
+    text-shadow: 0 1px 2px rgba(255, 246, 220, 0.5) !important;
+}
+
+#gal-global-overlay.skin-western .gal-bottom-toolbar {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+#gal-global-overlay.skin-western .gal-action-btn,
+#gal-global-overlay.skin-western .gal-footer-btn,
+#gal-global-overlay.skin-western .gal-footer-btn-next,
+#gal-global-overlay.skin-western .gal-pending-choices-btn,
 #gal-global-overlay.skin-western .gal-fullscreen-btn {
-    background-color: #2A1E16 !important;
-    background-image: none !important;
-    border: calc(2px * var(--ui-scale, 1)) solid #5A4A38 !important;
-    color: #C9A84C !important;
-    border-radius: calc(4px * var(--ui-scale, 1)) !important;
-    box-shadow: 0 calc(2px * var(--ui-scale, 1)) calc(8px * var(--ui-scale, 1)) rgba(0,0,0,0.6) !important;
-}
-#gal-global-overlay.skin-western .gal-fullscreen-btn:hover {
-    background-color: #3A2E22 !important;
-    border-color: #8B6914 !important;
-    color: #E8D5B5 !important;
+    background-color: rgba(55, 36, 23, 0.86) !important;
+    position: relative !important;
+    overflow: visible !important;
+    color: #f4e6ca !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65) !important;
 }
 
-/* 状态栏（地点/时间） — 铁牌 */
+#gal-global-overlay.skin-western .gal-action-btn::before,
+#gal-global-overlay.skin-western .gal-footer-btn::before,
+#gal-global-overlay.skin-western .gal-footer-btn-next::before,
+#gal-global-overlay.skin-western .gal-pending-choices-btn::before,
+#gal-global-overlay.skin-western .gal-fullscreen-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    transition: filter 0.14s ease, transform 0.14s ease;
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-reroll {
+    width: var(--western-btn_reroll-width, auto) !important;
+    height: var(--western-btn_reroll-height, auto) !important;
+    transform: translate(
+      calc(var(--western-btn_reroll-offset-x, 0px) + var(--western-btn_reroll-anchor-x, 0px)),
+      calc(var(--western-btn_reroll-offset-y, 0px) + var(--western-btn_reroll-anchor-y, 0px))
+    ) !important;
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-reroll::before {
+    background-image: var(--western-btn_reroll-normal-image);
+    background-size: var(--western-btn_reroll-bg-size, 100% 100%);
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-reroll:hover::before {
+    background-image: var(--western-btn_reroll-hover-image, var(--western-btn_reroll-normal-image));
+    filter: brightness(1.08);
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-reroll:active::before {
+    background-image: var(--western-btn_reroll-active-image, var(--western-btn_reroll-hover-image, var(--western-btn_reroll-normal-image)));
+    filter: brightness(0.94);
+    transform: translateY(1px);
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-free {
+    width: var(--western-btn_free_input-width, auto) !important;
+    height: var(--western-btn_free_input-height, auto) !important;
+    transform: translate(
+      calc(var(--western-btn_free_input-offset-x, 0px) + var(--western-btn_free_input-anchor-x, 0px)),
+      calc(var(--western-btn_free_input-offset-y, 0px) + var(--western-btn_free_input-anchor-y, 0px))
+    ) !important;
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-free::before {
+    background-image: var(--western-btn_free_input-normal-image);
+    background-size: var(--western-btn_free_input-bg-size, 100% 100%);
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-free:hover::before {
+    background-image: var(--western-btn_free_input-hover-image, var(--western-btn_free_input-normal-image));
+    filter: brightness(1.08);
+}
+
+#gal-global-overlay.skin-western .gal-action-btn.btn-free:active::before {
+    background-image: var(--western-btn_free_input-active-image, var(--western-btn_free_input-hover-image, var(--western-btn_free_input-normal-image)));
+    filter: brightness(0.94);
+    transform: translateY(1px);
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn {
+    width: var(--western-footer_btn_common-width, auto) !important;
+    height: var(--western-footer_btn_common-height, auto) !important;
+    transform: translate(
+      calc(var(--western-footer_btn_common-offset-x, 0px) + var(--western-footer_btn_common-anchor-x, 0px)),
+      calc(var(--western-footer_btn_common-offset-y, 0px) + var(--western-footer_btn_common-anchor-y, 0px))
+    ) !important;
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn::before {
+    background-image: var(--western-footer_btn_common-normal-image);
+    background-size: var(--western-footer_btn_common-bg-size, 100% 100%);
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn:hover::before {
+    background-image: var(--western-footer_btn_common-hover-image, var(--western-footer_btn_common-normal-image));
+    filter: brightness(1.08);
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn:active::before {
+    background-image: var(--western-footer_btn_common-active-image, var(--western-footer_btn_common-hover-image, var(--western-footer_btn_common-normal-image)));
+    filter: brightness(0.94);
+    transform: translateY(1px);
+}
+
+#gal-global-overlay.skin-western .gal-pending-choices-btn {
+    width: var(--western-footer_btn_choices-width, auto) !important;
+    height: var(--western-footer_btn_choices-height, auto) !important;
+    transform: translate(
+      calc(var(--western-footer_btn_choices-offset-x, 0px) + var(--western-footer_btn_choices-anchor-x, 0px)),
+      calc(var(--western-footer_btn_choices-offset-y, 0px) + var(--western-footer_btn_choices-anchor-y, 0px))
+    ) !important;
+}
+
+#gal-global-overlay.skin-western .gal-pending-choices-btn::before {
+    background-image: var(--western-footer_btn_choices-normal-image);
+    background-size: var(--western-footer_btn_choices-bg-size, 100% 100%);
+}
+
+#gal-global-overlay.skin-western .gal-pending-choices-btn:hover::before {
+    background-image: var(--western-footer_btn_choices-hover-image, var(--western-footer_btn_choices-normal-image));
+    filter: brightness(1.08);
+}
+
+#gal-global-overlay.skin-western .gal-pending-choices-btn:active::before {
+    background-image: var(--western-footer_btn_choices-active-image, var(--western-footer_btn_choices-hover-image, var(--western-footer_btn_choices-normal-image)));
+    filter: brightness(0.94);
+    transform: translateY(1px);
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn-next {
+    width: var(--western-footer_btn_next-width, auto) !important;
+    height: var(--western-footer_btn_next-height, auto) !important;
+    transform: translate(
+      calc(var(--western-footer_btn_next-offset-x, 0px) + var(--western-footer_btn_next-anchor-x, 0px)),
+      calc(var(--western-footer_btn_next-offset-y, 0px) + var(--western-footer_btn_next-anchor-y, 0px))
+    ) !important;
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn-next::before {
+    background-image: var(--western-footer_btn_next-normal-image);
+    background-size: var(--western-footer_btn_next-bg-size, 100% 100%);
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn-next:hover::before {
+    background-image: var(--western-footer_btn_next-hover-image, var(--western-footer_btn_next-normal-image));
+    filter: brightness(1.08);
+}
+
+#gal-global-overlay.skin-western .gal-footer-btn-next:active::before {
+    background-image: var(--western-footer_btn_next-active-image, var(--western-footer_btn_next-hover-image, var(--western-footer_btn_next-normal-image)));
+    filter: brightness(0.94);
+    transform: translateY(1px);
+}
+
 #gal-global-overlay.skin-western .gal-location-bar,
 #gal-global-overlay.skin-western .gal-time-bar {
-    background-color: rgba(42, 30, 22, 0.95) !important;
-    background-image: none !important;
-    border: calc(1px * var(--ui-scale, 1)) solid #5A4A38 !important;
-    border-radius: calc(3px * var(--ui-scale, 1)) !important;
-    box-shadow: inset 0 1px 0 rgba(201,168,108,0.08), 0 calc(2px * var(--ui-scale, 1)) calc(6px * var(--ui-scale, 1)) rgba(0,0,0,0.5) !important;
-    color: #C9B89A !important;
+    background-color: rgba(44, 28, 18, 0.9) !important;
+    background-image: var(--western-status_bar_container-normal-image) !important;
+    background-size: var(--western-status_bar_container-bg-size, 100% 100%) !important;
+    color: #ead7b3 !important;
 }
-#gal-global-overlay.skin-western .gal-location-bar i,
-#gal-global-overlay.skin-western .gal-time-bar i { color: #C9A84C !important; }
 
-/* 交互栏定位 */
-#gal-global-overlay.skin-western .gal-interaction-bar { right: 10px !important; }
+#gal-global-overlay.skin-western .gal-status-bar-container,
+#gal-global-overlay.skin-western .gal-fullscreen-btn,
+#gal-global-overlay.skin-western .gal-bgm-widget {
+    top: var(--western-control-top, clamp(5.5rem, 10vh, 7.5rem)) !important;
+}
 
-/* 进度条 — 古铜渐变 */
-#gal-global-overlay.skin-western .gal-progress-bar { background: linear-gradient(90deg, #6B4F0A, #C9A84C, #8B6914) !important; box-shadow: 0 0 8px rgba(232,168,76,0.3) !important; }
+#gal-global-overlay.skin-western .gal-fullscreen-btn {
+    width: var(--western-fullscreen_btn-width, auto) !important;
+    height: var(--western-fullscreen_btn-height, auto) !important;
+    transform: translate(
+      calc(var(--western-fullscreen_btn-offset-x, 0px) + var(--western-fullscreen_btn-anchor-x, 0px)),
+      calc(var(--western-fullscreen_btn-offset-y, 0px) + var(--western-fullscreen_btn-anchor-y, 0px))
+    ) !important;
+}
+
+#gal-global-overlay.skin-western .gal-fullscreen-btn::before {
+    background-image: var(--western-fullscreen_btn-normal-image);
+    background-size: var(--western-fullscreen_btn-bg-size, 100% 100%);
+}
+
+#gal-global-overlay.skin-western .gal-fullscreen-btn:hover::before {
+    background-image: var(--western-fullscreen_btn-hover-image, var(--western-fullscreen_btn-normal-image));
+    filter: brightness(1.08);
+}
+
+#gal-global-overlay.skin-western .gal-fullscreen-btn:active::before {
+    background-image: var(--western-fullscreen_btn-active-image, var(--western-fullscreen_btn-hover-image, var(--western-fullscreen_btn-normal-image)));
+    filter: brightness(0.94);
+    transform: translateY(1px);
+}
+
+#gal-global-overlay.skin-western .gal-bgm-widget {
+    background-color: rgba(44, 28, 18, 0.88) !important;
+    background-image: var(--western-bgm_widget-normal-image) !important;
+    background-size: var(--western-bgm_widget-bg-size, 100% 100%) !important;
+    width: var(--western-bgm_widget-width, auto) !important;
+    height: var(--western-bgm_widget-height, auto) !important;
+    transform: translate(
+      calc(var(--western-bgm_widget-offset-x, 0px) + var(--western-bgm_widget-anchor-x, 0px)),
+      calc(var(--western-bgm_widget-offset-y, 0px) + var(--western-bgm_widget-anchor-y, 0px))
+    ) !important;
+    color: #f5e7c8 !important;
+}
+
+#gal-global-overlay.skin-western .gal-progress-bar {
+    background: linear-gradient(90deg, #6b4f0a, #c9a84c, #8b6914) !important;
+    box-shadow: 0 0 8px rgba(232, 168, 76, 0.25) !important;
+}
 
 /* =========================================================
    3. 心之怪盗 (Persona) — Neubrutalism

@@ -60,6 +60,11 @@ export const DEFAULT_SETTINGS = {
   bgImageSource: 'none',
   // 指定可用 BGM 歌单（为空表示不限制）
   bgmWhitelist: [],
+  mapSystemEnabled: true,
+  mapUseLocationBarClick: true,
+  mapMarkerStyle: 'pin',
+  mapLayoutSeed: 'default',
+  mapCoordsByRegion: {},
   // TTS 设置
   ttsEnabled: true,
   ttsAutoPlay: true,
@@ -76,6 +81,13 @@ export const DEFAULT_SETTINGS = {
     textLang: 'auto',
     textSplitMethod: 'cut5',
     speedFactor: 1,
+    strictWeightSwitch: false,
+    probeOnAudioError: false,
+    modelSwitchMode: 'set_weights',
+    setModelEndpoint: '/set_model',
+    importPathPrefix: '',
+    rootDir: '',
+    models: [],
     voices: [],
   },
   // 加强模式设置
@@ -168,6 +180,134 @@ function normalizeBgmWhitelist(rawList) {
   );
 }
 
+function normalizeMapMarkerStyle(rawStyle) {
+  const style = String(rawStyle || '').trim().toLowerCase();
+  return style === 'dot' ? 'dot' : 'pin';
+}
+
+function normalizeMapCoordsByRegion(rawValue) {
+  const source = _safeObject(rawValue);
+  const result = {};
+  Object.entries(source).forEach(([rawRegionKey, rawRegionMap]) => {
+    const regionKey = String(rawRegionKey || '').trim();
+    if (!regionKey) return;
+    const regionMap = _safeObject(rawRegionMap);
+    const normalizedRegionMap = {};
+    Object.entries(regionMap).forEach(([rawLocation, rawCoord]) => {
+      const location = String(rawLocation || '').trim();
+      if (!location) return;
+      const coord = _safeObject(rawCoord);
+      const x = Number(coord.x);
+      const y = Number(coord.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      normalizedRegionMap[location] = {
+        x: Math.max(0, Math.min(1, x)),
+        y: Math.max(0, Math.min(1, y)),
+        anchor: String(coord.anchor || '').trim(),
+        updatedAt: coord.updatedAt ? String(coord.updatedAt) : undefined,
+      };
+    });
+    result[regionKey] = normalizedRegionMap;
+  });
+  return result;
+}
+
+export function ensureMapSettings() {
+  if (!_settings || typeof _settings !== 'object') {
+    _settings = Object.assign({}, DEFAULT_SETTINGS);
+  }
+  if (typeof _settings.mapSystemEnabled !== 'boolean') {
+    _settings.mapSystemEnabled = DEFAULT_SETTINGS.mapSystemEnabled;
+  }
+  if (typeof _settings.mapUseLocationBarClick !== 'boolean') {
+    _settings.mapUseLocationBarClick = DEFAULT_SETTINGS.mapUseLocationBarClick;
+  }
+  _settings.mapMarkerStyle = normalizeMapMarkerStyle(_settings.mapMarkerStyle);
+  _settings.mapLayoutSeed = String(_settings.mapLayoutSeed || DEFAULT_SETTINGS.mapLayoutSeed || 'default').trim() || 'default';
+  _settings.mapCoordsByRegion = normalizeMapCoordsByRegion(_settings.mapCoordsByRegion);
+  return {
+    mapSystemEnabled: _settings.mapSystemEnabled,
+    mapUseLocationBarClick: _settings.mapUseLocationBarClick,
+    mapMarkerStyle: _settings.mapMarkerStyle,
+    mapLayoutSeed: _settings.mapLayoutSeed,
+    mapCoordsByRegion: _settings.mapCoordsByRegion,
+  };
+}
+
+export function getMapSettings() {
+  return ensureMapSettings();
+}
+
+export function updateMapSettings(patch = {}) {
+  const safePatch = _safeObject(patch);
+  ensureMapSettings();
+  if (Object.prototype.hasOwnProperty.call(safePatch, 'mapSystemEnabled')) {
+    _settings.mapSystemEnabled = !!safePatch.mapSystemEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(safePatch, 'mapUseLocationBarClick')) {
+    _settings.mapUseLocationBarClick = !!safePatch.mapUseLocationBarClick;
+  }
+  if (Object.prototype.hasOwnProperty.call(safePatch, 'mapMarkerStyle')) {
+    _settings.mapMarkerStyle = normalizeMapMarkerStyle(safePatch.mapMarkerStyle);
+  }
+  if (Object.prototype.hasOwnProperty.call(safePatch, 'mapLayoutSeed')) {
+    _settings.mapLayoutSeed = String(safePatch.mapLayoutSeed || '').trim() || 'default';
+  }
+  if (Object.prototype.hasOwnProperty.call(safePatch, 'mapCoordsByRegion')) {
+    _settings.mapCoordsByRegion = normalizeMapCoordsByRegion(safePatch.mapCoordsByRegion);
+  }
+  saveSettings();
+  return getMapSettings();
+}
+
+export function getMapCoords(regionKey) {
+  const settings = ensureMapSettings();
+  const key = String(regionKey || '').trim() || 'default-region';
+  return _safeObject(settings.mapCoordsByRegion[key]);
+}
+
+export function setMapCoord(regionKey, detailedLocation, coord) {
+  const key = String(regionKey || '').trim() || 'default-region';
+  const location = String(detailedLocation || '').trim();
+  if (!location) return false;
+  const c = _safeObject(coord);
+  const x = Number(c.x);
+  const y = Number(c.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  ensureMapSettings();
+  if (!_settings.mapCoordsByRegion[key]) _settings.mapCoordsByRegion[key] = {};
+  _settings.mapCoordsByRegion[key][location] = {
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+    anchor: String(c.anchor || '').trim(),
+    updatedAt: new Date().toISOString(),
+  };
+  saveSettings();
+  return true;
+}
+
+export function removeMapCoord(regionKey, detailedLocation) {
+  const key = String(regionKey || '').trim() || 'default-region';
+  const location = String(detailedLocation || '').trim();
+  if (!location) return false;
+  ensureMapSettings();
+  if (!_settings.mapCoordsByRegion[key] || !_settings.mapCoordsByRegion[key][location]) {
+    return false;
+  }
+  delete _settings.mapCoordsByRegion[key][location];
+  saveSettings();
+  return true;
+}
+
+export function clearMapCoordsByRegion(regionKey) {
+  const key = String(regionKey || '').trim() || 'default-region';
+  ensureMapSettings();
+  if (!_settings.mapCoordsByRegion[key]) return false;
+  delete _settings.mapCoordsByRegion[key];
+  saveSettings();
+  return true;
+}
+
 export function createDefaultEnhancedModeSettings() {
   return {
     enabled: false,
@@ -217,6 +357,7 @@ export function ensureEnhancedModeSettings() {
   return _settings.enhancedMode;
 }
 ensureEnhancedModeSettings();
+ensureMapSettings();
 
 export function getSettings() { return _settings; }
 export function setSettings(v) { _settings = v; }
@@ -260,6 +401,21 @@ export function loadSettings() {
       _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
+      if (!_settings.gptSoVits || typeof _settings.gptSoVits !== 'object') {
+        _settings.gptSoVits = Object.assign({}, DEFAULT_SETTINGS.gptSoVits);
+      }
+      if (!Array.isArray(_settings.gptSoVits.voices)) {
+        _settings.gptSoVits.voices = [];
+      }
+      if (!Array.isArray(_settings.gptSoVits.models)) {
+        _settings.gptSoVits.models = [];
+      }
+      if (typeof _settings.gptSoVits.rootDir !== 'string') {
+        _settings.gptSoVits.rootDir = '';
+      }
+      if (typeof _settings.gptSoVits.importPathPrefix !== 'string') {
+        _settings.gptSoVits.importPathPrefix = '';
+      }
       const allowedEffectQualities = ['mobile', 'balanced', 'high'];
       if (!allowedEffectQualities.includes(_settings.effectsQuality)) {
         _settings.effectsQuality = DEFAULT_SETTINGS.effectsQuality;
@@ -305,6 +461,7 @@ export function loadSettings() {
           delete _settings.realTimeBackgroundGen;
         }
       }
+      ensureMapSettings();
     }
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 加载设置失败:`, e);
@@ -326,6 +483,7 @@ export function saveSettings() {
   try {
     _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
     _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
+    ensureMapSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 保存设置失败:`, e);

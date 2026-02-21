@@ -1,33 +1,40 @@
-import { SCRIPT_NAME } from '../core/constants.js';
-import { topWindow, $ } from '../core/env.js';
-import { GalgameStore } from '../core/store.js';
-import { getSettings, setCurrentCharEnabled } from '../core/settings.js';
-import { getIsEnabled, setIsEnabled, getIsRewinding, REWIND_HOLD_DELAY, getPendingOptions } from '../core/state.js';
-import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from '../utils/html.js';
 import { TTSManager } from '../audio/tts-manager.js';
+import { SCRIPT_NAME } from '../core/constants.js';
+import { $, topWindow } from '../core/env.js';
+import { getMapSettings, getSettings, setCurrentCharEnabled } from '../core/settings.js';
+import { getIsRewinding, getPendingOptions, REWIND_HOLD_DELAY, setIsEnabled } from '../core/state.js';
+import { GalgameStore } from '../core/store.js';
+import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
 import { parseGalgameContent } from '../logic/parser.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
-import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
-import { toggleFullscreen } from './fullscreen.js';
-import { getModalMountRoot } from './fullscreen.js';
-import { getHistoryFromDatabase, showHistoryModal } from './history.js';
-import { showToast } from './toast.js';
-import { showCustomPopupPanel } from './modal.js';
-import { ensureGlobalOverlay, showGlobalOverlay, scheduleOverlaySegmentDisplay } from './overlay.js';
-import { detectAndCaptureCg } from './overlay-content.js';
-import { showFreeInputModal, triggerReroll, startSkipping, stopSkipping, startRewinding, stopRewinding, triggerPrevSegment, clearRewindHoldTimer, setRewindHoldTimer } from './interaction.js';
+import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
 import { renderGalgameChoices } from './choices.js';
+import { toggleFullscreen } from './fullscreen.js';
+import { hideNonLastFloors, restoreOriginalViews } from './galgame-mode.js';
+import { getHistoryFromDatabase, showHistoryModal } from './history.js';
+import {
+  clearRewindHoldTimer,
+  setRewindHoldTimer,
+  showFreeInputModal,
+  startRewinding,
+  startSkipping,
+  stopRewinding,
+  stopSkipping,
+  triggerPrevSegment,
+  triggerReroll,
+} from './interaction.js';
 import { updateButtonState } from './menu-button.js';
-import { restoreOriginalViews, hideNonLastFloors } from './galgame-mode.js';
+import { showCustomPopupPanel } from './modal.js';
+import { detectAndCaptureCg } from './overlay-content.js';
+import { scheduleOverlaySegmentDisplay, showGlobalOverlay } from './overlay.js';
+import { showToast } from './toast.js';
+import { showMapModal } from '../map/map-modal.js';
 
 // ============================================
 // 全局事件监听器 (委托模式)
 // ============================================
 
 const messageSegmentState = GalgameStore.cache.segments;
-
-const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
-const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 
 // 延迟引用
 let _showSettingsPanelRef = null;
@@ -69,34 +76,56 @@ export function setupGlobalEventListeners() {
     return fromTag;
   }
 
-  // 地点/时间状态栏点击
-  $(doc).on('click', '#gal-location-bar', function (e) {
+  // 弹窗一图标：始终显示地点弹窗内容
+  $(doc).on('click', '#gal-location-popup-trigger', function (e) {
     e.stopPropagation();
     const popupHtml = getLocationPopupHtml();
     if (popupHtml) {
       showCustomPopupPanel('地点详情', popupHtml);
       return;
     }
-    showToast('未找到 <地点状态栏> 标签内容');
+    showToast('未找到 <弹窗一> 标签内容');
   });
 
-  $(doc).on('click', '#gal-time-bar', function (e) {
+  // 地点栏：地图系统入口（保留失败回退到弹窗一）
+  $(doc).on('click', '#gal-location-bar', async function (e) {
+    e.stopPropagation();
+    try {
+      const mapSettings = getMapSettings();
+      if (mapSettings.mapSystemEnabled && mapSettings.mapUseLocationBarClick) {
+        await showMapModal();
+        return;
+      }
+    } catch (mapError) {
+      console.warn(`[${SCRIPT_NAME}] map modal open failed, fallback to location popup`, mapError);
+    }
+    const popupHtml = getLocationPopupHtml();
+    if (popupHtml) {
+      showCustomPopupPanel('地点详情', popupHtml);
+      return;
+    }
+    showToast('未找到 <弹窗一> 标签内容');
+  });
+
+  $(doc).on('click', '#gal-time-popup-trigger', function (e) {
     e.stopPropagation();
     const popupHtml = getTimePopupHtml();
     if (popupHtml) {
       showCustomPopupPanel('时间详情', popupHtml);
       return;
     }
-    showToast('未找到 <时间状态栏> 标签内容');
+    showToast('未找到 <弹窗二> 标签内容');
   });
 
   // PREV按钮长按快退
   $(doc).on('mousedown touchstart', '#gal-global-overlay [data-action="prev"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
-    setRewindHoldTimer(setTimeout(() => {
-      startRewinding();
-    }, REWIND_HOLD_DELAY));
+    setRewindHoldTimer(
+      setTimeout(() => {
+        startRewinding();
+      }, REWIND_HOLD_DELAY),
+    );
   });
 
   $(doc).on('mouseup touchend', '#gal-global-overlay [data-action="prev"]', function (e) {
@@ -285,8 +314,8 @@ export function setupGlobalEventListeners() {
         const overlayRect = $overlay[0].getBoundingClientRect();
         const btnRect = this.getBoundingClientRect();
         $menu.css({
-          bottom: (overlayRect.bottom - btnRect.top + 8) + 'px',
-          left: (btnRect.left - overlayRect.left) + 'px'
+          bottom: overlayRect.bottom - btnRect.top + 8 + 'px',
+          left: btnRect.left - overlayRect.left + 'px',
         });
       }
       $menu.toggleClass('active');
@@ -316,7 +345,18 @@ export function setupGlobalEventListeners() {
   });
 
   // 查看消息内嵌界面
-  const GAL_TAG_NAMES = new Set(['p', 'background', 'bgm', 'option', 'maintext', 'bgimg', 'whimg', 'bnimg', 'sprite', 'br']);
+  const GAL_TAG_NAMES = new Set([
+    'p',
+    'background',
+    'bgm',
+    'option',
+    'maintext',
+    'bgimg',
+    'whimg',
+    'bnimg',
+    'sprite',
+    'br',
+  ]);
   let embeddedViewerState = null; // { nodes: [{node, parent, nextSibling}], $viewer }
 
   function closeEmbeddedViewer() {

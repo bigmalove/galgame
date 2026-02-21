@@ -351,129 +351,14 @@ export const TTSManager = {
     if (!raw) return '';
     if (/^https?:\/\//i.test(raw)) return raw;
     if (_looksLikeAbsoluteFsPath(raw)) return raw;
-    return raw;
-  },
 
-  _buildGptSoVitsRefAudioPathCandidates(pathStr, options = null) {
-    const opts = _safeObject(options);
-    const modelCfg = _safeObject(opts.modelCfg);
-    const voiceCfg = _safeObject(opts.voiceCfg);
-    const rawSeed = _normalizePathSep(pathStr);
-    const rawFromVoice = _normalizePathSep(opts.rawRefPath || voiceCfg.refAudioPath || '');
+    const resolvedCfg = cfg || getGptSoVitsConfig();
+    const prefix = _normalizePathSep(resolvedCfg.importPathPrefix || resolvedCfg.rootDir || '');
+    if (!prefix) return raw;
 
-    const out = [];
-    const seen = new Set();
-    const addOne = value => {
-      const v = _normalizePathSep(value);
-      if (!v || seen.has(v)) return;
-      seen.add(v);
-      out.push(v);
-    };
-    const addPath = value => {
-      const v = _normalizePathSep(value);
-      if (!v) return;
-      addOne(v);
-      try { addOne(v.normalize('NFC')); } catch (e) {}
-      try { addOne(v.normalize('NFD')); } catch (e) {}
-      try { addOne(v.normalize('NFKC')); } catch (e) {}
-      try { addOne(v.normalize('NFKD')); } catch (e) {}
-      addOne(v.replace(/\//g, '\\'));
-      addOne(v.replace(/\\/g, '/'));
-    };
-    const dirname = p => {
-      const s = _normalizePathSep(p);
-      if (!s) return '';
-      const idx = s.lastIndexOf('/');
-      if (idx <= 0) return '';
-      return s.slice(0, idx);
-    };
-    const basename = p => {
-      const s = _normalizePathSep(p);
-      if (!s) return '';
-      const idx = s.lastIndexOf('/');
-      return idx < 0 ? s : s.slice(idx + 1);
-    };
-    const extractDrive = p => {
-      const m = String(p || '').match(/^([a-zA-Z]):[\\/]/);
-      return m ? m[1].toUpperCase() : '';
-    };
-
-    const seedSources = [];
-    const pushSeed = value => {
-      const v = _normalizePathSep(value);
-      if (!v) return;
-      if (seedSources.includes(v)) return;
-      seedSources.push(v);
-    };
-
-    pushSeed(rawSeed);
-    pushSeed(rawFromVoice);
-    pushSeed(modelCfg?.paths?.defaultRefAudioPath);
-    for (const ref of _safeArray(modelCfg?.refAudios)) {
-      pushSeed(ref?.path);
-    }
-
-    for (const seed of seedSources) addPath(seed);
-
-    const mainSeed = seedSources[0] || '';
-    const fileName = basename(mainSeed);
-    const segs = _normalizePathSep(mainSeed).split('/').filter(Boolean);
-    const tail2 = segs.length >= 2 ? `${segs[segs.length - 2]}/${segs[segs.length - 1]}` : '';
-    const tail3 = segs.length >= 3 ? `${segs[segs.length - 3]}/${segs[segs.length - 2]}/${segs[segs.length - 1]}` : '';
-
-    const weightPaths = []
-      .concat([
-        voiceCfg.gptWeightsPath,
-        voiceCfg.sovitsWeightsPath,
-        modelCfg?.paths?.gptWeightsPath,
-        modelCfg?.paths?.sovitsWeightsPath,
-      ])
-      .map(v => _normalizePathSep(v))
-      .filter(Boolean);
-    const weightDirs = [];
-    for (const p of weightPaths) {
-      const d = dirname(p);
-      if (d && !weightDirs.includes(d)) weightDirs.push(d);
-    }
-    for (const d of weightDirs) {
-      if (fileName) addPath(`${d}/${fileName}`);
-      if (tail2) addPath(`${d}/${tail2}`);
-      if (tail3) addPath(`${d}/${tail3}`);
-    }
-
-    const seedDrive = extractDrive(mainSeed);
-    const altDrives = [];
-    for (const p of weightPaths) {
-      const d = extractDrive(p);
-      if (d && d !== seedDrive && !altDrives.includes(d)) altDrives.push(d);
-    }
-    if (seedDrive) {
-      const snapshot = out.slice();
-      for (const item of snapshot) {
-        if (!new RegExp(`^${seedDrive}:`, 'i').test(item)) continue;
-        for (const d of altDrives) {
-          addPath(item.replace(new RegExp(`^${seedDrive}:`, 'i'), `${d}:`));
-        }
-      }
-    }
-
-    const wavePairs = [
-      ['\u301C', '\uFF5E'],
-      ['\u301C', '~'],
-      ['\uFF5E', '\u301C'],
-      ['\uFF5E', '~'],
-      ['~', '\u301C'],
-      ['~', '\uFF5E'],
-    ];
-    for (const [from, to] of wavePairs) {
-      const snapshot = out.slice();
-      for (const item of snapshot) {
-        if (!item.includes(from)) continue;
-        addPath(item.split(from).join(to));
-      }
-    }
-
-    return out.slice(0, 64);
+    const normalizedPrefix = prefix.replace(/\/+$/, '');
+    const normalizedRaw = raw.replace(/^\/+/, '');
+    return _normalizePathSep(`${normalizedPrefix}/${normalizedRaw}`);
   },
 
   _isProxyUrl(url) {
@@ -1220,102 +1105,9 @@ export const TTSManager = {
     throw new Error('tts request failed');
   },
 
-  async _getGptSoVitsTtsBlob(payload, playbackSessionId = null) {
-    const cfg = getGptSoVitsConfig();
-    const endpointRaw = String(cfg.endpoint || '/tts').trim();
-    const endpoint = endpointRaw.startsWith('/') ? endpointRaw : `/${endpointRaw}`;
-    const directUrl = this._buildGptSoVitsApiUrl(endpoint, payload || {});
-    if (!directUrl) throw new Error('invalid apiUrl');
-
-    const candidates = this._buildGptSoVitsApiCandidates(directUrl, !!cfg.useCorsProxy);
-    let lastError = null;
-    const routeErrors = [];
-
-    const requestBlob = async (url, route) => {
-      const headers = {
-        ...(this._shouldAttachStProxyHeaders(route, url) ? this._getSillyTavernRequestHeaders() : {}),
-        Accept: 'audio/wav, audio/*;q=0.9, application/octet-stream;q=0.8, */*;q=0.5',
-      };
-      const options = { method: 'GET', headers };
-      const signal = Number(playbackSessionId) > 0 ? this._getGptSoVitsAbortSignal(playbackSessionId) : null;
-      if (signal) options.signal = signal;
-
-      const response = await fetch(url, options);
-      const contentType = String(response.headers?.get('content-type') || '').toLowerCase();
-      const blob = await response.blob().catch(() => null);
-
-      if (!response.ok) {
-        const text = blob ? await blob.text().catch(() => '') : '';
-        return { ok: false, status: response.status, text, contentType };
-      }
-      if (!blob || blob.size === 0) {
-        return { ok: false, status: response.status, text: 'empty response body', contentType };
-      }
-
-      const isAudioByHeader = contentType.startsWith('audio/') || contentType.includes('octet-stream');
-      if (isAudioByHeader) {
-        return { ok: true, status: response.status, blob, contentType };
-      }
-
-      try {
-        const ab = await blob.arrayBuffer();
-        if (this._looksLikeAudioArrayBuffer(ab)) {
-          return { ok: true, status: response.status, blob, contentType: contentType || 'audio/unknown' };
-        }
-      } catch (e) {}
-
-      const text = await blob.text().catch(() => '');
-      const audioRef = this._extractGptSoVitsAudioRefFromText(text);
-      if (audioRef) {
-        const fetchedBlob = await this._fetchGptSoVitsAudioBlobFromRef(audioRef, playbackSessionId);
-        if (fetchedBlob && fetchedBlob.size > 0) {
-          return { ok: true, status: response.status, blob: fetchedBlob, contentType: 'audio/derived' };
-        }
-      }
-
-      return { ok: false, status: response.status, text: text || `unexpected content-type: ${contentType}`, contentType };
-    };
-
-    for (const candidate of candidates) {
-      const route = candidate.route;
-      const isDirect = route === 'direct';
-      if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return null;
-
-      try {
-        const result = await requestBlob(candidate.url, route);
-        if (result.ok) {
-          this._rememberProxyRoute(route, candidate.url);
-          return result.blob;
-        }
-
-        if (!isDirect && this._isGptSoVitsProxyNotFound(result.status, result.text)) {
-          routeErrors.push(`${route}:HTTP404(proxy-not-found)`);
-          continue;
-        }
-
-        const detail = this._summarizeGptSoVitsApiText(result.text);
-        lastError = new Error(detail || `HTTP ${result.status}`);
-        routeErrors.push(`${route}:${detail || `HTTP${result.status}`}`);
-      } catch (e) {
-        if (e?.name === 'AbortError') throw e;
-        const message = e?.message || String(e || 'unknown error');
-        lastError = new Error(message);
-        routeErrors.push(`${route}:${message}`);
-      }
-    }
-
-    if (lastError) {
-      const compactRoutes = routeErrors.slice(0, 4).join(' | ');
-      const detail = compactRoutes ? `${lastError.message} [routes: ${compactRoutes}]` : lastError.message;
-      throw new Error(detail);
-    }
-    throw new Error('tts request failed');
-  },
-
   async _requestGptSoVitsTtsBlobWithCompat(payload, playbackSessionId = null) {
     const variants = this._buildGptSoVitsTtsPayloadVariants(payload);
-    let lastPostError = null;
-    let shouldTryGetFallback = false;
+    let lastError = null;
 
     for (let i = 0; i < variants.length; i++) {
       const body = variants[i];
@@ -1323,34 +1115,14 @@ export const TTSManager = {
         return await this._postGptSoVitsTtsBlob(body, playbackSessionId);
       } catch (e) {
         if (e?.name === 'AbortError') throw e;
-        lastPostError = e;
+        lastError = e;
         const msg = String(e?.message || e || '').replace(/\s+/g, ' ').trim();
         if (this._isGptSoVitsRefAudioDurationError(msg)) break;
-        if (this._isLikelyGptSoVitsTtsPayloadError(msg) || /405|method not allowed|cannot\s+post|not support post/i.test(msg)) {
-          shouldTryGetFallback = true;
-        }
         const canRetry = i < variants.length - 1 && this._isLikelyGptSoVitsTtsPayloadError(msg);
         if (!canRetry) break;
       }
     }
-
-    if (shouldTryGetFallback) {
-      let lastGetError = null;
-      for (let i = 0; i < variants.length; i++) {
-        const query = variants[i];
-        try {
-          return await this._getGptSoVitsTtsBlob(query, playbackSessionId);
-        } catch (e) {
-          if (e?.name === 'AbortError') throw e;
-          lastGetError = e;
-          const msg = String(e?.message || e || '').replace(/\s+/g, ' ').trim();
-          if (this._isGptSoVitsRefAudioDurationError(msg)) break;
-        }
-      }
-      throw lastGetError || lastPostError || new Error('tts request failed');
-    }
-
-    throw lastPostError || new Error('tts request failed');
+    throw lastError || new Error('tts request failed');
   },
 
   _enqueueGptSoVitsSwitch(taskFn, playbackSessionId = null) {
@@ -1602,67 +1374,159 @@ export const TTSManager = {
   },
 
   async _speakWithGptSoVits(segment, segmentId, resolvedVoice, playbackSessionId = null) {
-    const cfg = getGptSoVitsConfig();
-    const vcfg = resolvedVoice?.gptSoVits || {};
+    const cfg2 = getGptSoVitsConfig();
+    const vcfg2 = resolvedVoice?.gptSoVits || {};
     const modelCfg = resolvedVoice?.gptSoVitsModel || null;
+    const modelParams = _safeObject(modelCfg?.params);
 
     if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
-    if (!cfg.apiUrl) {
-      showToast('GPT-SoVITS: 请先在设置中填写 API 地址');
+    if (!cfg2.apiUrl) {
+      showToast('GPT-SoVITS: please set API URL first');
       return false;
     }
 
     const refs = _safeArray(modelCfg?.refAudios);
-    const defaultRefPath = String(modelCfg?.paths?.defaultRefAudioPath || '').trim();
     const defaultRef =
-      refs.find(item => item.path === defaultRefPath) ||
       refs.find(item => item.id === modelCfg?.defaultRefId) ||
+      refs.find(item => item.path === modelCfg?.paths?.defaultRefAudioPath) ||
       refs[0] ||
       null;
-    const refAudioRaw = String(defaultRef?.path || defaultRefPath || vcfg.refAudioPath || '').trim();
-    const refAudioPath = this._resolveGptSoVitsServerPath(refAudioRaw, cfg);
+    const refAudioRaw = String(vcfg2.refAudioPath || defaultRef?.path || modelCfg?.paths?.defaultRefAudioPath || '').trim();
+    const refAudioPath = this._resolveGptSoVitsServerPath(refAudioRaw, cfg2);
     if (!refAudioPath) {
+      showToast('GPT-SoVITS: current voice has no valid refAudioPath');
+      return false;
+    }
+
+    const ensureWeightsPromise = this._ensureGptSoVitsWeights(resolvedVoice, playbackSessionId);
+
+    const textLang = String(vcfg2.textLang || modelParams.textLang || cfg2.textLang || 'auto').trim() || 'auto';
+    const promptLang = String(vcfg2.promptLang || modelParams.promptLang || 'zh').trim() || 'zh';
+    const promptText = String(vcfg2.promptText || modelParams.promptText || '').trim();
+    const activeTextSplitMethod = String(vcfg2.textSplitMethod || modelParams.textSplitMethod || cfg2.textSplitMethod || 'cut5').trim() || 'cut5';
+    const activeMediaType = String(vcfg2.mediaType || modelParams.mediaType || cfg2.mediaType || 'wav').trim() || 'wav';
+    const activeSpeedFactor = _toFiniteNumber(vcfg2.speedFactor ?? modelParams.speedFactor ?? cfg2.speedFactor, 1);
+    const requestedStreaming = !!(vcfg2.streamingMode ?? modelParams.streamingMode ?? cfg2.streamingMode);
+    const effectiveStreaming = false;
+    if (requestedStreaming && !this._gptSoVitsStreamingWarned) {
+      this._gptSoVitsStreamingWarned = true;
+      console.warn(`[${SCRIPT_NAME}] GPT-SoVITS browser playback forces streaming_mode=false for stability`);
+    }
+
+    const payload = {
+      text: String(segment.text || ''),
+      text_lang: textLang,
+      ref_audio_path: refAudioPath,
+      prompt_lang: promptLang,
+      prompt_text: promptText,
+      text_split_method: activeTextSplitMethod,
+      media_type: activeMediaType,
+      streaming_mode: effectiveStreaming,
+      speed_factor: activeSpeedFactor,
+    };
+    Object.keys(payload).forEach(key => {
+      if (payload[key] === undefined || payload[key] === null || payload[key] === '') delete payload[key];
+    });
+
+    let blob = null;
+    try {
+      blob = await this._enqueueGptSoVitsSwitch(async () => {
+        if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return null;
+        await ensureWeightsPromise;
+        if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return null;
+        return this._requestGptSoVitsTtsBlobWithCompat(payload, playbackSessionId);
+      }, playbackSessionId);
+    } catch (e) {
+      if (e?.name === 'AbortError') return false;
+      const msg = String(e?.message || e || '').replace(/\s+/g, ' ').trim();
+      if (/ref_audio_path.*not exists|no such file|not exists|系统找不到指定的文件|找不到文件/i.test(msg)) {
+        showToast(`GPT-SoVITS: refAudioPath not found: ${clipText(refAudioPath, 96)}`);
+      } else if (this._isGptSoVitsRefAudioDurationError(msg)) {
+        showToast('GPT-SoVITS: reference audio duration should be 3-10 seconds');
+      }
+      showToast(`GPT-SoVITS synthesis failed: ${clipText(msg || 'unknown error', 120)}`);
+      return false;
+    }
+
+    if (!blob) return false;
+    if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
+
+    const objectUrl2 = URL.createObjectURL(blob);
+    const audio2 = new Audio(objectUrl2);
+    this._gptSoVitsCurrentObjectUrl = objectUrl2;
+
+    this.currentAudio = audio2;
+    this.currentSegmentId = segmentId;
+
+    const onEnded2 = () => {
+      if (this.currentAudio === audio2) {
+        this._onPlaybackEnded('gpt_sovits_audio_ended');
+      }
+      try { URL.revokeObjectURL(objectUrl2); } catch (e) {}
+      if (this._gptSoVitsCurrentObjectUrl === objectUrl2) {
+        this._gptSoVitsCurrentObjectUrl = '';
+      }
+    };
+    const onError2 = e => {
+      console.warn(`[${SCRIPT_NAME}] GPT-SoVITS audio error`, e);
+      showToast('GPT-SoVITS playback failed: unsupported or broken audio stream');
+      onEnded2();
+    };
+
+    audio2.addEventListener('ended', onEnded2, { once: true });
+    audio2.addEventListener('error', onError2, { once: true });
+
+    try {
+      if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
+      await audio2.play();
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] GPT-SoVITS play() failed`, e);
+      showToast('GPT-SoVITS playback blocked by browser autoplay policy');
+      onEnded2();
+      return false;
+    }
+
+    if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) {
+      try { audio2.pause(); } catch (e) {}
+      try {
+        audio2.src = '';
+        if (typeof audio2.load === 'function') audio2.load();
+      } catch (e) {}
+      return false;
+    }
+
+    this.isPlaying = true;
+    if (segment.speaker) {
+      const hasLive2D = Live2DManager.models.has(segment.speaker);
+      if (hasLive2D) this._startLipSyncOnPlay(segment.speaker);
+      else this._startLipSyncWhenModelReady(segment.speaker);
+    }
+    return true;
+    const cfg = getGptSoVitsConfig();
+    const vcfg = resolvedVoice?.gptSoVits || {};
+
+    if (!cfg.apiUrl) {
+      showToast('GPT-SoVITS: 请先在设置中填写 API 地址');
+      return false;
+    }
+    if (!String(vcfg.refAudioPath || '').trim()) {
       showToast('GPT-SoVITS: 当前音色缺少 refAudioPath');
       return false;
     }
 
-    await this._ensureGptSoVitsWeights(resolvedVoice, playbackSessionId);
-    if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
+    await this._ensureGptSoVitsWeights(resolvedVoice);
 
-    const requestText = String(segment.text || '');
-    const refAudioPathCandidates = this._buildGptSoVitsRefAudioPathCandidates(refAudioPath, {
-      cfg,
-      modelCfg,
-      voiceCfg: vcfg,
-      rawRefPath: refAudioRaw,
-    }).map(p => this._resolveGptSoVitsServerPath(p, cfg));
-    if (refAudioPathCandidates.length === 0) refAudioPathCandidates.push(refAudioPath);
-
-    const directUrlCandidates = [];
-    const seenDirectUrl = new Set();
-    for (const candidateRefPath of refAudioPathCandidates) {
-      const voiceForRequest = {
-        ...resolvedVoice,
-        gptSoVits: {
-          ...vcfg,
-          refAudioPath: candidateRefPath,
-        },
-      };
-      const directUrl = this._buildGptSoVitsTtsUrl(requestText, voiceForRequest);
-      if (!directUrl || seenDirectUrl.has(directUrl)) continue;
-      seenDirectUrl.add(directUrl);
-      directUrlCandidates.push(directUrl);
-    }
-
-    if (directUrlCandidates.length === 0) {
-      showToast('GPT-SoVITS: 无法生成请求 URL');
+    const directUrl = this._buildGptSoVitsTtsUrl(segment.text, resolvedVoice);
+    if (!directUrl) {
+      showToast('GPT-SoVITS: 无法生成请求URL');
       return false;
     }
 
-    const audioUrlCandidates = directUrlCandidates.map(url => (cfg.useCorsProxy ? this._getProxiedAudioUrl(url) : url));
+    const audioUrl = cfg.useCorsProxy ? this._getProxiedAudioUrl(directUrl) : directUrl;
 
     const audio = new Audio();
     audio.crossOrigin = 'anonymous';
+    audio.src = audioUrl;
 
     this.currentAudio = audio;
     this.currentSegmentId = segmentId;
@@ -1683,57 +1547,32 @@ export const TTSManager = {
       onEnded();
     };
 
-    let playError = null;
-    let started = false;
-    for (let i = 0; i < audioUrlCandidates.length; i++) {
-      const nextUrl = audioUrlCandidates[i];
-      if (!nextUrl) continue;
-      audio.src = nextUrl;
-      try {
-        if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
-        await audio.play();
-        started = true;
-        if (i > 0) {
-          console.warn(`[${SCRIPT_NAME}] GPT-SoVITS refAudioPath fallback hit`, {
-            candidateIndex: i,
-            totalCandidates: audioUrlCandidates.length,
-          });
-        }
-        break;
-      } catch (e) {
-        playError = e;
-      }
-    }
+    audio.addEventListener('ended', onEnded, { once: true });
+    audio.addEventListener('error', onError, { once: true });
 
-    if (!started) {
-      const msg = String(playError?.message || '').toLowerCase();
-      const blockedByAutoplay = /autoplay|notallowederror|user.*interact|play\(\) failed/i.test(msg);
-      console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: play() 失败`, playError);
-      showToast(blockedByAutoplay
-        ? 'GPT-SoVITS 播放被浏览器拦截（需要用户交互）'
-        : 'GPT-SoVITS 播放失败（请检查 refAudioPath 路径）');
+    try {
+      await audio.play();
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: play() 失败`, e);
+      showToast('GPT-SoVITS 播放被浏览器拦截（需要用户交互）');
       onEnded();
       return false;
     }
 
-    audio.addEventListener('ended', onEnded, { once: true });
-    audio.addEventListener('error', onError, { once: true });
-
-    if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) {
-      try { audio.pause(); } catch (e) {}
-      try {
-        audio.src = '';
-        if (typeof audio.load === 'function') audio.load();
-      } catch (e) {}
-      return false;
-    }
-
     this.isPlaying = true;
+
     if (segment.speaker) {
       const hasLive2D = Live2DManager.models.has(segment.speaker);
-      if (hasLive2D) this._startLipSyncOnPlay(segment.speaker);
-      else this._startLipSyncWhenModelReady(segment.speaker);
+      console.log(`[${SCRIPT_NAME}] TTS: 检查口型同步 - hasLive2D=${hasLive2D}, speaker=${segment.speaker}`);
+      if (hasLive2D) {
+        this._startLipSyncOnPlay(segment.speaker);
+      } else {
+        this._startLipSyncWhenModelReady(segment.speaker);
+      }
+    } else {
+      console.log(`[${SCRIPT_NAME}] TTS: speaker为空，跳过口型同步`);
     }
+
     return true;
   },
 

@@ -1,8 +1,8 @@
-import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SPRITES, STORE_BACKGROUNDS, STORE_IMAGE_PACKS, STORE_LIVE2D_MODELS, STORE_SDK_CACHE, DEFAULT_PACK_ID, DEFAULT_PACK_NAME } from '../core/constants.js';
+﻿import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_IMAGE_PACKS, STORE_LIVE2D_MODELS, STORE_SDK_CACHE, STORE_UI_SKINS, DEFAULT_PACK_ID, DEFAULT_PACK_NAME } from '../core/constants.js';
 import { getDb, setDb } from '../core/state.js';
 
 // ============================================
-// IndexedDB 初始化
+// IndexedDB 鍒濆鍖?
 // ============================================
 export function initDB() {
   return new Promise((resolve, reject) => {
@@ -18,19 +18,19 @@ export function initDB() {
       const transaction = event.target.transaction;
       const oldVersion = event.oldVersion;
 
-      // 立绘存储
+      // 绔嬬粯瀛樺偍
       if (!database.objectStoreNames.contains(STORE_SPRITES)) {
         const store = database.createObjectStore(STORE_SPRITES, { keyPath: 'id' });
         store.createIndex('characterId', 'characterId', { unique: false });
         store.createIndex('expression', 'expression', { unique: false });
       }
-      // 背景存储
+      // 鑳屾櫙瀛樺偍
       if (!database.objectStoreNames.contains(STORE_BACKGROUNDS)) {
         const bgStore = database.createObjectStore(STORE_BACKGROUNDS, { keyPath: 'id' });
         bgStore.createIndex('sceneName', 'sceneName', { unique: true });
       }
 
-      // 版本3: 添加图包支持
+      // 鐗堟湰3: 娣诲姞鍥惧寘鏀寔
       if (oldVersion < 3) {
         if (!database.objectStoreNames.contains(STORE_IMAGE_PACKS)) {
           database.createObjectStore(STORE_IMAGE_PACKS, { keyPath: 'id' });
@@ -59,7 +59,7 @@ export function initDB() {
         };
         packStore.add(defaultPack);
 
-        // 迁移现有 sprites 数据
+        // 杩佺Щ鐜版湁 sprites 鏁版嵁
         if (database.objectStoreNames.contains(STORE_SPRITES)) {
           const spriteStore = transaction.objectStore(STORE_SPRITES);
           const spriteRequest = spriteStore.openCursor();
@@ -76,7 +76,7 @@ export function initDB() {
           };
         }
 
-        // 迁移现有 backgrounds 数据
+        // 杩佺Щ鐜版湁 backgrounds 鏁版嵁
         if (database.objectStoreNames.contains(STORE_BACKGROUNDS)) {
           const bgStore = transaction.objectStore(STORE_BACKGROUNDS);
           const bgRequest = bgStore.openCursor();
@@ -93,24 +93,53 @@ export function initDB() {
           };
         }
 
-        console.log(`[${SCRIPT_NAME}] 数据库升级到版本3: 已添加图包支持并迁移现有数据`);
+        console.log(`[${SCRIPT_NAME}] 鏁版嵁搴撳崌绾у埌鐗堟湰3: 宸叉坊鍔犲浘鍖呮敮鎸佸苟杩佺Щ鐜版湁鏁版嵁`);
       }
 
-      // 版本4: 添加 Live2D 支持
+      // 鐗堟湰4: 娣诲姞 Live2D 鏀寔
       if (oldVersion < 4) {
         if (!database.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
           const live2dStore = database.createObjectStore(STORE_LIVE2D_MODELS, { keyPath: 'modelId' });
           live2dStore.createIndex('uploadTime', 'uploadTime', { unique: false });
-          console.log(`[${SCRIPT_NAME}] 已创建 Live2D 模型存储`);
+          console.log(`[${SCRIPT_NAME}] 宸插垱寤?Live2D 妯″瀷瀛樺偍`);
         }
 
         if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
           database.createObjectStore(STORE_SDK_CACHE, { keyPath: 'id' });
-          console.log(`[${SCRIPT_NAME}] 已创建 SDK 缓存存储`);
+          console.log(`[${SCRIPT_NAME}] 宸插垱寤?SDK 缂撳瓨瀛樺偍`);
         }
 
-        console.log(`[${SCRIPT_NAME}] 数据库升级到版本4: 已添加 Live2D 支持`);
+        console.log(`[${SCRIPT_NAME}] 鏁版嵁搴撳崌绾у埌鐗堟湰4: 宸叉坊鍔?Live2D 鏀寔`);
+      }
+      // 版本5: 新增 UI 皮肤元素存储
+      if (oldVersion < 5) {
+        if (!database.objectStoreNames.contains(STORE_UI_SKINS)) {
+          const uiSkinStore = database.createObjectStore(STORE_UI_SKINS, { keyPath: 'id' });
+          uiSkinStore.createIndex('packId', 'packId', { unique: false });
+          uiSkinStore.createIndex('skinId', 'skinId', { unique: false });
+          uiSkinStore.createIndex('elementId', 'elementId', { unique: false });
+          uiSkinStore.createIndex('device', 'device', { unique: false });
+          uiSkinStore.createIndex('state', 'state', { unique: false });
+          uiSkinStore.createIndex('packSkinKey', 'packSkinKey', { unique: false });
+          uiSkinStore.createIndex('packSkinDeviceKey', 'packSkinDeviceKey', { unique: false });
+          uiSkinStore.createIndex('lookupKey', 'lookupKey', { unique: true });
+          console.log(`[${SCRIPT_NAME}] 已创建 UI 皮肤元素存储`);
+        }
+
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本5: 已添加 UI 皮肤存储`);
+      }
+      // 版本6: 新增地图图片存储
+      if (oldVersion < 6) {
+        if (!database.objectStoreNames.contains(STORE_MAP_IMAGES)) {
+          const mapStore = database.createObjectStore(STORE_MAP_IMAGES, { keyPath: 'id' });
+          mapStore.createIndex('regionKey', 'regionKey', { unique: false });
+          mapStore.createIndex('packId', 'packId', { unique: false });
+          mapStore.createIndex('regionPackKey', 'regionPackKey', { unique: true });
+          console.log(`[${SCRIPT_NAME}] 已创建地图图片存储`);
+        }
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本6: 已添加地图图片存储`);
       }
     };
   });
 }
+

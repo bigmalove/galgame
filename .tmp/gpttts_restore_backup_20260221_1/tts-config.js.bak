@@ -64,15 +64,6 @@ function _normalizeExpressionLookupKey(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, '');
 }
 
-function _normalizeModelMatchKey(value) {
-  let s = String(value || '').trim();
-  if (!s) return '';
-  try {
-    s = s.normalize('NFKC');
-  } catch (e) {}
-  return s.toLowerCase();
-}
-
 function _normalizeGptSoVitsModel(model, globalDefaults = {}) {
   if (!model || typeof model !== 'object' || Array.isArray(model)) return null;
   const raw = _safeObject(model);
@@ -137,26 +128,14 @@ function _normalizeGptSoVitsModel(model, globalDefaults = {}) {
   }
 
   let defaultRefId = String(raw.defaultRefId || raw.defaultRefAudioId || '').trim();
-  const defaultRefPath = _normalizePathSep(paths.defaultRefAudioPath);
-  let defaultRef = null;
-
-  // Path wins when present to match UI editing expectations.
-  if (defaultRefPath) {
-    defaultRef = refAudios.find(item => item.path === defaultRefPath) || null;
+  if (!defaultRefId && paths.defaultRefAudioPath) {
+    defaultRefId = refAudios.find(item => item.path === paths.defaultRefAudioPath)?.id || '';
   }
-  if (!defaultRef && defaultRefId) {
-    defaultRef = refAudios.find(item => item.id === defaultRefId) || null;
+  if (!defaultRefId && refAudios.length > 0) {
+    defaultRefId = refAudios[0].id;
   }
-  if (!defaultRef && refAudios.length > 0) {
-    defaultRef = refAudios[0];
-  }
-
-  if (defaultRef) {
-    defaultRefId = defaultRef.id;
-    paths.defaultRefAudioPath = defaultRef.path;
-  } else {
-    defaultRefId = '';
-    paths.defaultRefAudioPath = defaultRefPath;
+  if (!paths.defaultRefAudioPath && defaultRefId) {
+    paths.defaultRefAudioPath = refAudios.find(item => item.id === defaultRefId)?.path || '';
   }
 
   const rawMap = _safeObject(raw.expressionRefMap || raw.expressionMap || raw.refMap);
@@ -268,10 +247,9 @@ function _modelToVoice(model, globalDefaults = {}) {
   if (!normalized) return null;
 
   const refs = _safeArray(normalized.refAudios);
-  const defaultRefPath = String(normalized.paths?.defaultRefAudioPath || '').trim();
   const defaultRef =
-    refs.find(item => item.path === defaultRefPath) ||
     refs.find(item => item.id === normalized.defaultRefId) ||
+    refs.find(item => item.path === normalized.paths?.defaultRefAudioPath) ||
     refs[0] ||
     null;
 
@@ -279,7 +257,7 @@ function _modelToVoice(model, globalDefaults = {}) {
   if (!name) return null;
 
   const params = _safeObject(normalized.params);
-  const refAudioPath = String(defaultRef?.path || defaultRefPath || '').trim();
+  const refAudioPath = String(defaultRef?.path || normalized.paths?.defaultRefAudioPath || '').trim();
 
   return {
     name,
@@ -312,14 +290,9 @@ function _getGptSoVitsVoiceSourceList(cfg) {
     .filter(Boolean);
   const manualVoices = _safeArray(cfg.voices).map(normalizeGptSoVitsVoice).filter(Boolean);
 
-  // If model manager data exists, use it as the single source of truth.
-  // This prevents stale legacy `voices` entries (often old absolute paths)
-  // from being picked during playback.
-  if (modelVoices.length > 0) return modelVoices;
-
   const mergedMap = new Map();
-  manualVoices.forEach(v => mergedMap.set(v.name, v));
   modelVoices.forEach(v => mergedMap.set(v.name, v));
+  manualVoices.forEach(v => mergedMap.set(v.name, v));
   return Array.from(mergedMap.values());
 }
 
@@ -972,17 +945,9 @@ export function mergeAutoImportedGptSoVitsModels(currentModels, discoveredModels
   _safeArray(discoveredModels).forEach(item => {
     const incoming = _normalizeGptSoVitsModel(item, cfg);
     if (!incoming) return;
-    const incomingName = _normalizeModelMatchKey(incoming.name);
-    const incomingId = _normalizeModelMatchKey(incoming.id);
-    if (!incomingName && !incomingId) return;
-
-    const index = next.findIndex(model => {
-      const name = _normalizeModelMatchKey(model?.name);
-      const id = _normalizeModelMatchKey(model?.id);
-      if (incomingName && name === incomingName) return true;
-      if (incomingId && id === incomingId) return true;
-      return false;
-    });
+    const incomingName = String(incoming.name || '').trim().toLowerCase();
+    if (!incomingName) return;
+    const index = next.findIndex(model => String(model?.name || '').trim().toLowerCase() === incomingName);
     if (index < 0) {
       next.push(incoming);
       added += 1;
@@ -990,12 +955,22 @@ export function mergeAutoImportedGptSoVitsModels(currentModels, discoveredModels
     }
 
     const current = next[index];
-    const currentText = JSON.stringify(current || {});
-    const incomingText = JSON.stringify(incoming || {});
-    if (currentText === incomingText) return;
+    const prevGpt = String(current?.paths?.gptWeightsPath || '').trim();
+    const prevSovits = String(current?.paths?.sovitsWeightsPath || '').trim();
+    const nextGpt = String(incoming?.paths?.gptWeightsPath || '').trim() || prevGpt;
+    const nextSovits = String(incoming?.paths?.sovitsWeightsPath || '').trim() || prevSovits;
+    if (nextGpt === prevGpt && nextSovits === prevSovits) return;
 
-    // Import wins: replace whole model payload (paths/refs/defaultRef/params).
-    next[index] = incoming;
+    next[index] = _normalizeGptSoVitsModel(
+      Object.assign({}, current, {
+        desc: String(current?.desc || '').trim() || String(incoming?.desc || '').trim(),
+        paths: Object.assign({}, _safeObject(current.paths), {
+          gptWeightsPath: nextGpt,
+          sovitsWeightsPath: nextSovits,
+        }),
+      }),
+      cfg,
+    );
     updated += 1;
   });
 

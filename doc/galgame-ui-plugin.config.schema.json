@@ -125,7 +125,9 @@
       "additionalProperties": true,
       "properties": {
         "locationStatusHtml": { "type": "string" },
-        "timeStatusHtml": { "type": "string" }
+        "timeStatusHtml": { "type": "string" },
+        "locationStatusIconClass": { "type": "string" },
+        "timeStatusIconClass": { "type": "string" }
       }
     },
     "bgm": {

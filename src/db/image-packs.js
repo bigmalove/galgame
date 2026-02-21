@@ -1,11 +1,11 @@
-import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, BG_TRANSITION_MS } from '../core/constants.js';
+﻿import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, BG_TRANSITION_MS } from '../core/constants.js';
 import { $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 
 // ============================================
-// 图包管理函数
+// 鍥惧寘绠＄悊鍑芥暟
 // ============================================
 
 export function getCurrentPackId() {
@@ -63,7 +63,7 @@ export async function createImagePack(name) {
     const store = transaction.objectStore(STORE_IMAGE_PACKS);
     const request = store.add(newPack);
     request.onsuccess = () => {
-      console.log(`[${SCRIPT_NAME}] 创建图包: ${name}`);
+      console.log(`[${SCRIPT_NAME}] 鍒涘缓鍥惧寘: ${name}`);
       resolve(newPack);
     };
     request.onerror = () => reject(request.error);
@@ -89,7 +89,7 @@ export async function renameImagePack(packId, newName) {
       pack.name = newName;
       const putRequest = store.put(pack);
       putRequest.onsuccess = () => {
-        console.log(`[${SCRIPT_NAME}] 重命名图包: ${packId} -> ${newName}`);
+        console.log(`[${SCRIPT_NAME}] 閲嶅懡鍚嶅浘鍖? ${packId} -> ${newName}`);
         resolve();
       };
       putRequest.onerror = () => reject(putRequest.error);
@@ -102,7 +102,7 @@ export async function deleteImagePack(packId) {
   if (!getDb()) await initDB();
   const db = getDb();
   if (packId === DEFAULT_PACK_ID) {
-    throw new Error('不能删除默认图包');
+    throw new Error('涓嶈兘鍒犻櫎榛樿鍥惧寘');
   }
   await transferAllResourcesToDefaultPack(packId);
   return new Promise((resolve, reject) => {
@@ -110,7 +110,7 @@ export async function deleteImagePack(packId) {
     const store = transaction.objectStore(STORE_IMAGE_PACKS);
     const request = store.delete(packId);
     request.onsuccess = () => {
-      console.log(`[${SCRIPT_NAME}] 删除图包: ${packId}`);
+      console.log(`[${SCRIPT_NAME}] 鍒犻櫎鍥惧寘: ${packId}`);
       if (getCurrentPackId() === packId) {
         setCurrentPack(DEFAULT_PACK_ID);
       }
@@ -191,6 +191,7 @@ async function transferAllResourcesToDefaultPack(packId) {
   const db = getDb();
   let spriteCount = 0;
   let bgCount = 0;
+  let mapCount = 0;
 
   await new Promise((resolve) => {
     const transaction = db.transaction([STORE_SPRITES], 'readwrite');
@@ -234,8 +235,30 @@ async function transferAllResourcesToDefaultPack(packId) {
     request.onerror = () => resolve();
   });
 
-  console.log(`[${SCRIPT_NAME}] 从图包 ${packId} 转移了 ${spriteCount} 个立绘和 ${bgCount} 个背景到默认图包`);
-  return { sprites: spriteCount, backgrounds: bgCount };
+  await new Promise((resolve) => {
+    const transaction = db.transaction([STORE_MAP_IMAGES], 'readwrite');
+    const store = transaction.objectStore(STORE_MAP_IMAGES);
+    const request = store.openCursor();
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        const mapItem = cursor.value;
+        if (mapItem.packId === packId) {
+          mapItem.packId = DEFAULT_PACK_ID;
+          mapItem.regionPackKey = `${mapItem.regionKey || ''}__${DEFAULT_PACK_ID}`;
+          cursor.update(mapItem);
+          mapCount++;
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    request.onerror = () => resolve();
+  });
+
+  console.log(`[${SCRIPT_NAME}] moved ${spriteCount} sprites, ${bgCount} backgrounds and ${mapCount} maps from pack ${packId} to default pack`);
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount };
 }
 
 export async function getPackResourceCount(packId) {
@@ -243,6 +266,7 @@ export async function getPackResourceCount(packId) {
   const db = getDb();
   let spriteCount = 0;
   let bgCount = 0;
+  let mapCount = 0;
 
   await new Promise((resolve) => {
     const transaction = db.transaction([STORE_SPRITES], 'readonly');
@@ -268,7 +292,19 @@ export async function getPackResourceCount(packId) {
     request.onerror = () => resolve();
   });
 
-  return { sprites: spriteCount, backgrounds: bgCount };
+  await new Promise((resolve) => {
+    const transaction = db.transaction([STORE_MAP_IMAGES], 'readonly');
+    const store = transaction.objectStore(STORE_MAP_IMAGES);
+    const index = store.index('packId');
+    const request = index.count(IDBKeyRange.only(packId));
+    request.onsuccess = () => {
+      mapCount = request.result;
+      resolve();
+    };
+    request.onerror = () => resolve();
+  });
+
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount };
 }
 
 export function ensureBackgroundLayers($bgLayer) {
@@ -306,3 +342,4 @@ export function setBackgroundWithTransition($bgLayer, bgUrl) {
     $front.removeClass('is-active').css('background-image', '');
   }, BG_TRANSITION_MS);
 }
+

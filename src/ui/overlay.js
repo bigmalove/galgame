@@ -1,10 +1,10 @@
-import { SCRIPT_ID, SCRIPT_NAME } from '../core/constants.js';
-import { topWindow, $ } from '../core/env.js';
-import { GalgameStore } from '../core/store.js';
-import { getSettings } from '../core/settings.js';
-import { getIsEnabled } from '../core/state.js';
 import { getTTSEnabled } from '../audio/tts-config.js';
+import { SCRIPT_NAME } from '../core/constants.js';
+import { $, topWindow } from '../core/env.js';
+import { getSettings } from '../core/settings.js';
+import { GalgameStore } from '../core/store.js';
 import { pausePixiEffects, resizePixiEffects, resumePixiEffects } from '../effects/pixi-effect-manager.js';
+import { normalizeLocationStatusIconClass, normalizeTimeStatusIconClass } from '../utils/status-popup-icons.js';
 
 // ============================================
 // 全局覆盖层架构
@@ -50,7 +50,9 @@ export function nextOverlayRenderToken(state) {
 export function scheduleOverlaySegmentDisplay(state, source = 'unknown') {
   if (!state) return Promise.resolve(false);
   const token = nextOverlayRenderToken(state);
-  return queueOverlayUpdate(source, () => _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state, token) : Promise.resolve(false));
+  return queueOverlayUpdate(source, () =>
+    _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state, token) : Promise.resolve(false),
+  );
 }
 
 // 延迟引用
@@ -69,9 +71,15 @@ export function ensureGlobalOverlay() {
   let $overlay = $(targetDoc).find('#gal-global-overlay');
 
   if (!$overlay.length) {
+    const locationIconClass = normalizeLocationStatusIconClass(
+      topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS) || '',
+    );
+    const timeIconClass = normalizeTimeStatusIconClass(
+      topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS) || '',
+    );
     const overlayHtml = `
       <div id="gal-global-overlay">
-        <!-- 地点时间状态栏 -->
+        <!-- 地点弹窗二（仅展示，不作为弹窗入口） -->
         <div class="gal-status-bar-container">
           <div class="gal-location-bar" id="gal-location-bar" title="当前地点">
             <i class="fa-solid fa-location-dot"></i>
@@ -112,6 +120,12 @@ export function ensureGlobalOverlay() {
             <div class="gal-dialog-layer">
               <button class="gal-sprite-toggle" title="显示/隐藏立绘">
                 <span class="gal-eye-icon">\u{1F441}</span>
+              </button>
+              <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="地点详情">
+                <i class="gal-status-popup-icon ${locationIconClass}"></i>
+              </button>
+              <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="时间详情">
+                <i class="gal-status-popup-icon ${timeIconClass}"></i>
               </button>
               <div class="gal-name-badge">
                 <span>旁白</span>
@@ -273,11 +287,7 @@ export function syncOverlayHeightToChatViewport(overlay, { force = false } = {})
 
   const viewportHeight = Math.max(
     1,
-    Math.floor(
-      Number(topWindow.innerHeight)
-      || Number(targetDoc.documentElement?.clientHeight)
-      || 0,
-    ),
+    Math.floor(Number(topWindow.innerHeight) || Number(targetDoc.documentElement?.clientHeight) || 0),
   );
   const lastViewportHeight = Number(overlayHeightLockState.lastViewportHeight) || 0;
   const viewportChanged = Math.abs(viewportHeight - lastViewportHeight) > OVERLAY_HEIGHT_RECALC_THRESHOLD;
@@ -348,15 +358,15 @@ export function resetGameContentScale() {
   if (!$gameContainer.length) return;
 
   $gameContainer.css({
-    'transform': '',
-    'width': '',
-    'height': '',
-    'position': '',
-    'left': '',
-    'right': '',
-    'top': '',
-    'bottom': '',
-    'margin': '',
+    transform: '',
+    width: '',
+    height: '',
+    position: '',
+    left: '',
+    right: '',
+    top: '',
+    bottom: '',
+    margin: '',
   });
   resizePixiEffects();
 }

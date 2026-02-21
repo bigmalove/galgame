@@ -45,7 +45,8 @@ export class ImageCropper {
   }
   loadImage(source) {
     return new Promise((resolve, reject) => {
-      this.image = new Image();
+      const ImageCtor = topWindow?.Image || Image;
+      this.image = new ImageCtor();
       this.image.onload = () => {
         this.imageLoaded = true;
         if (this.canvas) {
@@ -58,16 +59,31 @@ export class ImageCropper {
         console.error('[Galgame界面插件] 图片加载失败:', e);
         reject(e);
       };
-      if (source instanceof File) {
-        const reader = new FileReader();
+
+      if (typeof source === 'string') {
+        this.image.src = source;
+        return;
+      }
+
+      // 兼容跨窗口/跨 iframe 的 File/Blob 对象
+      const isFileLike = !!source
+        && typeof source === 'object'
+        && typeof source.size === 'number'
+        && typeof source.type === 'string'
+        && (typeof source.arrayBuffer === 'function' || typeof source.slice === 'function');
+
+      if (isFileLike) {
+        const ReaderCtor = topWindow?.FileReader || FileReader;
+        const reader = new ReaderCtor();
         reader.onload = e => {
           this.image.src = e.target.result;
         };
         reader.onerror = reject;
         reader.readAsDataURL(source);
-      } else if (typeof source === 'string') {
-        this.image.src = source;
+        return;
       }
+
+      reject(new Error('不支持的图片来源'));
     });
   }
   calculateInitialScale() {

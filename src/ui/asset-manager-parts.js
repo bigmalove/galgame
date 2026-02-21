@@ -991,7 +991,7 @@ export async function showPackManagerModal() {
           </div>
           <div class="gal-pack-list" style="display: flex; flex-direction: column; gap: 10px;">
             ${allPacks.map(pack => {
-              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0 };
+              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0 };
               const isDefault = pack.id === DEFAULT_PACK_ID;
               const isCurrent = pack.id === currentPackId;
               return `
@@ -1006,7 +1006,8 @@ export async function showPackManagerModal() {
                       </div>
                       <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">
                         <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘&nbsp;|&nbsp;
-                        <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景
+                        <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景&nbsp;|&nbsp;
+                        <i class="fa-solid fa-map-location-dot"></i> ${stats.maps || 0} 张地图
                       </div>
                     </div>
                   </div>

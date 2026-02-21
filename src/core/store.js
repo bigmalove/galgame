@@ -80,6 +80,8 @@ export const GalgameStore = {
     CUSTOM_EXPRESSIONS: `${SCRIPT_ID}_custom_expressions`,
     CUSTOM_LOCATION_HTML: `${SCRIPT_ID}_custom_location_html`,
     CUSTOM_TIME_HTML: `${SCRIPT_ID}_custom_time_html`,
+    CUSTOM_LOCATION_ICON_CLASS: `${SCRIPT_ID}_custom_location_icon_class`,
+    CUSTOM_TIME_ICON_CLASS: `${SCRIPT_ID}_custom_time_icon_class`,
     COMFYUI_SETTINGS: `${SCRIPT_ID}_comfyui_settings`,
     COMFY_WORKFLOWS: `${SCRIPT_ID}_comfy_workflows`,
     CHAR_APPEARANCE: `${SCRIPT_ID}_char_appearance_prompts`,
@@ -87,6 +89,7 @@ export const GalgameStore = {
     BGM_PAUSED: `${SCRIPT_ID}_bgm_user_paused`,
     CURRENT_PACK: `${SCRIPT_ID}_current_pack`,
     RENDER_SCOPE: `${SCRIPT_ID}_render_scope`,
+    MAP_SETTINGS: `${SCRIPT_ID}_map_settings`,
   },
 
   // ===== 方法 =====
@@ -169,6 +172,8 @@ export const TTS_ENABLED_KEY = GalgameStore.STORAGE_KEYS.TTS_ENABLED;
 export const CUSTOM_EXPRESSIONS_STORAGE_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_EXPRESSIONS;
 export const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
 export const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
+export const CUSTOM_LOCATION_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS;
+export const CUSTOM_TIME_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS;
 export const COMFYUI_SETTINGS_KEY = GalgameStore.STORAGE_KEYS.COMFYUI_SETTINGS;
 export const COMFY_WORKFLOWS_KEY = GalgameStore.STORAGE_KEYS.COMFY_WORKFLOWS;
 export const CHAR_APPEARANCE_PROMPTS_KEY = GalgameStore.STORAGE_KEYS.CHAR_APPEARANCE;

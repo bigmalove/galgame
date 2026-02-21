@@ -5,12 +5,14 @@ export const SCRIPT_ID = 'galgame-ui-plugin';
 export const SCRIPT_NAME = 'Galgame界面插件';
 export const VERSION = '2.2.1';
 export const DB_NAME = 'GalgameUIPluginDB';
-export const DB_VERSION = 4;
+export const DB_VERSION = 6;
 export const STORE_SPRITES = 'sprites';
 export const STORE_BACKGROUNDS = 'backgrounds';
+export const STORE_MAP_IMAGES = 'mapImages';
 export const STORE_IMAGE_PACKS = 'imagePacks';
 export const STORE_LIVE2D_MODELS = 'live2dModels';
 export const STORE_SDK_CACHE = 'sdkCache';
+export const STORE_UI_SKINS = 'uiSkins';
 export const DEFAULT_PACK_ID = 'pack_default';
 export const DEFAULT_PACK_NAME = '未定义';
 
@@ -48,11 +50,10 @@ export const EXPRESSION_TAG_MAP = {
   搞怪: 'playful, wink, tongue out, silly face',
 };
 
-
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|地点状态栏|时间状态栏)[^>]*>/i;
+export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|弹窗一|弹窗二)[^>]*>/i;
 export const RE_CLOSED_P = /<\/p>/i;
 export const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 export const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;

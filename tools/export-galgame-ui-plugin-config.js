@@ -30,7 +30,64 @@
     LIVE2D_CONFIG: `${SCRIPT_ID}_live2d_config`,
     CUSTOM_LOCATION_HTML: `${SCRIPT_ID}_custom_location_html`,
     CUSTOM_TIME_HTML: `${SCRIPT_ID}_custom_time_html`,
+    CUSTOM_LOCATION_ICON_CLASS: `${SCRIPT_ID}_custom_location_icon_class`,
+    CUSTOM_TIME_ICON_CLASS: `${SCRIPT_ID}_custom_time_icon_class`,
   };
+
+  const LOCATION_STATUS_ICON_VALUES = [
+    'fa-solid fa-location-dot',
+    'fa-solid fa-map-pin',
+    'fa-solid fa-compass',
+    'fa-solid fa-map',
+    'fa-solid fa-route',
+    'fa-solid fa-signs-post',
+    'fa-solid fa-location-crosshairs',
+    'fa-solid fa-earth-asia',
+    'fa-solid fa-city',
+    'fa-solid fa-building',
+    'fa-solid fa-house',
+    'fa-solid fa-landmark',
+    'fa-solid fa-road',
+    'fa-solid fa-mountain',
+    'fa-solid fa-tree',
+    'fa-solid fa-campground',
+    'fa-solid fa-plane',
+    'fa-solid fa-ship',
+    'fa-solid fa-train-subway',
+    'fa-solid fa-car-side',
+    'fa-solid fa-water',
+    'fa-solid fa-store',
+    'fa-solid fa-school',
+    'fa-solid fa-hospital',
+  ];
+  const TIME_STATUS_ICON_VALUES = [
+    'fa-regular fa-clock',
+    'fa-solid fa-clock',
+    'fa-solid fa-hourglass-half',
+    'fa-solid fa-calendar-days',
+    'fa-solid fa-sun',
+    'fa-solid fa-moon',
+    'fa-solid fa-cloud-sun',
+    'fa-solid fa-cloud-moon',
+    'fa-solid fa-stopwatch',
+    'fa-solid fa-business-time',
+    'fa-solid fa-calendar-day',
+    'fa-solid fa-calendar-week',
+    'fa-solid fa-calendar-check',
+    'fa-solid fa-hourglass-start',
+    'fa-solid fa-hourglass-end',
+    'fa-solid fa-bell',
+    'fa-solid fa-star',
+    'fa-solid fa-fire',
+    'fa-solid fa-snowflake',
+    'fa-solid fa-cloud-rain',
+    'fa-solid fa-meteor',
+    'fa-solid fa-bolt',
+    'fa-solid fa-clock-rotate-left',
+    'fa-solid fa-forward',
+  ];
+  const DEFAULT_LOCATION_STATUS_ICON_CLASS = LOCATION_STATUS_ICON_VALUES[0];
+  const DEFAULT_TIME_STATUS_ICON_CLASS = TIME_STATUS_ICON_VALUES[0];
 
   function parseMajorVersion(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -122,9 +179,24 @@
       new Set(
         source
           .map(name => String(name || '').trim())
-          .filter(Boolean),
+        .filter(Boolean),
       ),
     );
+  }
+
+  function normalizeStatusIconClass(value, allowedValues, fallbackValue) {
+    const normalized = String(value || '').trim().replace(/\s+/g, ' ');
+    if (!normalized) return fallbackValue;
+    if (!allowedValues.includes(normalized)) return fallbackValue;
+    return normalized;
+  }
+
+  function normalizeLocationStatusIconClass(value) {
+    return normalizeStatusIconClass(value, LOCATION_STATUS_ICON_VALUES, DEFAULT_LOCATION_STATUS_ICON_CLASS);
+  }
+
+  function normalizeTimeStatusIconClass(value) {
+    return normalizeStatusIconClass(value, TIME_STATUS_ICON_VALUES, DEFAULT_TIME_STATUS_ICON_CLASS);
   }
 
   function ensureTrailingSlash(url) {
@@ -572,6 +644,8 @@
       cfg.custom = {
         locationStatusHtml: String(localStorage.getItem(STORAGE_KEYS.CUSTOM_LOCATION_HTML) || ''),
         timeStatusHtml: String(localStorage.getItem(STORAGE_KEYS.CUSTOM_TIME_HTML) || ''),
+        locationStatusIconClass: normalizeLocationStatusIconClass(localStorage.getItem(STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS) || ''),
+        timeStatusIconClass: normalizeTimeStatusIconClass(localStorage.getItem(STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS) || ''),
       };
     }
 

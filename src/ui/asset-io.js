@@ -1,17 +1,21 @@
 ﻿import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
-import { getSettings } from '../core/settings.js';
+import { getMapSettings, getSettings, updateMapSettings } from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
 import { saveSprite, saveSpritesBatch, getAllSprites } from '../db/sprites.js';
 import { saveBackground, saveBackgroundsBatch, getAllBackgrounds } from '../db/backgrounds.js';
+import { GLOBAL_MAP_REGION_KEY, getAllMapImages, saveUnifiedMapImage } from '../db/map-images.js';
 import { getCurrentPackId, getAllImagePacks, createImagePack } from '../db/image-packs.js';
+import { getAllUiSkinAssets, saveUiSkinAsset } from '../db/ui-skins.js';
 import { getAllLive2DModels } from '../db/live2d-models.js';
 import { getTTSEnabled, getAllCharacterTTSVoices } from '../audio/tts-config.js';
 import { CHAR_USE_LIVE2D_KEY, LIVE2D_CONFIG_KEY } from '../live2d/render-mode.js';
 import { withResolvedLive2DRuntime } from '../live2d/runtime-router.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
 import { embedCardIntoPngBytes, isPngBytes } from '../utils/png-character-card.js';
+import { normalizeLocationStatusIconClass, normalizeTimeStatusIconClass } from '../utils/status-popup-icons.js';
 import { getModalMountRoot } from './fullscreen.js';
+import { WESTERN_SKIN_ID } from './skin-western-runtime.js';
 import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
 
@@ -24,6 +28,8 @@ const DEFAULT_LIVE2D_EMBED_LIMIT_BYTES = DISCORD_UPLOAD_LIMIT_BYTES;
 const CARD_EXPORT_PREFS_KEY = `${SCRIPT_ID}_card_export_prefs`;
 const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
 const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
+const CUSTOM_LOCATION_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS;
+const CUSTOM_TIME_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS;
 
 function safeJsonParse(text, fallback) {
   try {
@@ -61,6 +67,100 @@ function normalizeStringList(rawList) {
         .filter(Boolean),
     ),
   );
+}
+
+function normalizeMapMarkerStyleValue(value) {
+  return String(value || '').trim().toLowerCase() === 'dot' ? 'dot' : 'pin';
+}
+
+function normalizeMapCoordsByRegionValue(rawValue) {
+  const source = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : {};
+  const normalized = {};
+  Object.entries(source).forEach(([rawRegionKey, rawRegionMap]) => {
+    const regionKey = String(rawRegionKey || '').trim();
+    if (!regionKey) return;
+    const regionMap = rawRegionMap && typeof rawRegionMap === 'object' && !Array.isArray(rawRegionMap)
+      ? rawRegionMap
+      : {};
+    const nextRegion = {};
+    Object.entries(regionMap).forEach(([rawLocation, rawCoord]) => {
+      const location = String(rawLocation || '').trim();
+      if (!location) return;
+      const coord = rawCoord && typeof rawCoord === 'object' ? rawCoord : {};
+      const x = Number(coord.x);
+      const y = Number(coord.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      nextRegion[location] = {
+        x: Math.max(0, Math.min(1, x)),
+        y: Math.max(0, Math.min(1, y)),
+        anchor: String(coord.anchor || '').trim(),
+      };
+    });
+    normalized[regionKey] = nextRegion;
+  });
+  return normalized;
+}
+
+function mergeMapCoordsByRegion(baseRaw, incomingRaw) {
+  const base = normalizeMapCoordsByRegionValue(baseRaw);
+  const incoming = normalizeMapCoordsByRegionValue(incomingRaw);
+  const merged = { ...base };
+  Object.entries(incoming).forEach(([regionKey, regionMap]) => {
+    merged[regionKey] = {
+      ...(merged[regionKey] || {}),
+      ...regionMap,
+    };
+  });
+  return merged;
+}
+
+function buildExportableMapSettings() {
+  const mapSettings = getMapSettings();
+  return {
+    mapSystemEnabled: mapSettings.mapSystemEnabled !== false,
+    mapUseLocationBarClick: mapSettings.mapUseLocationBarClick !== false,
+    mapMarkerStyle: normalizeMapMarkerStyleValue(mapSettings.mapMarkerStyle),
+    mapLayoutSeed: String(mapSettings.mapLayoutSeed || 'default').trim() || 'default',
+    mapCoordsByRegion: normalizeMapCoordsByRegionValue(mapSettings.mapCoordsByRegion),
+  };
+}
+
+function applyImportedMapSettings(rawSettings) {
+  const hasOwn = Object.prototype.hasOwnProperty;
+  const source = rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
+    ? rawSettings
+    : null;
+  if (!source) return false;
+
+  const current = buildExportableMapSettings();
+  const patch = {};
+  let changed = false;
+
+  if (hasOwn.call(source, 'mapSystemEnabled')) {
+    patch.mapSystemEnabled = !!source.mapSystemEnabled;
+    changed = true;
+  }
+  if (hasOwn.call(source, 'mapUseLocationBarClick')) {
+    patch.mapUseLocationBarClick = !!source.mapUseLocationBarClick;
+    changed = true;
+  }
+  if (hasOwn.call(source, 'mapMarkerStyle')) {
+    patch.mapMarkerStyle = normalizeMapMarkerStyleValue(source.mapMarkerStyle);
+    changed = true;
+  }
+  if (hasOwn.call(source, 'mapLayoutSeed')) {
+    patch.mapLayoutSeed = String(source.mapLayoutSeed || '').trim() || 'default';
+    changed = true;
+  }
+  if (hasOwn.call(source, 'mapCoordsByRegion')) {
+    patch.mapCoordsByRegion = mergeMapCoordsByRegion(current.mapCoordsByRegion, source.mapCoordsByRegion);
+    changed = true;
+  }
+
+  if (changed) {
+    updateMapSettings(patch);
+  }
+  return changed;
 }
 
 function ensureTrailingSlash(url) {
@@ -179,6 +279,46 @@ function saveCardExportPrefs(prefs) {
 
 function sanitizeFileName(name) {
   return String(name || 'character').replace(/[\\/:*?"<>|]/g, '_').trim() || 'character';
+}
+
+function normalizeUiSkinMetaRecord(raw = {}) {
+  const skinId = String(raw.skinId || WESTERN_SKIN_ID).trim() || WESTERN_SKIN_ID;
+  const elementId = String(raw.elementId || '').trim();
+  const device = String(raw.device || 'desktop').trim() || 'desktop';
+  const state = String(raw.state || 'normal').trim() || 'normal';
+  if (!elementId) return null;
+  return {
+    skinId,
+    elementId,
+    device,
+    state,
+    scaleMode: String(raw.scaleMode || 'stretch').trim() || 'stretch',
+    layout: raw.layout && typeof raw.layout === 'object' ? raw.layout : {},
+    slice: raw.slice && typeof raw.slice === 'object' ? raw.slice : {},
+    textPadding: raw.textPadding && typeof raw.textPadding === 'object' ? raw.textPadding : {},
+    meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},
+  };
+}
+
+function buildUiSkinZipFilename(record, ext = 'png') {
+  const safeSkin = sanitizeFileName(record.skinId || WESTERN_SKIN_ID);
+  const safeElement = sanitizeFileName(record.elementId || 'element');
+  const safeDevice = sanitizeFileName(record.device || 'desktop');
+  const safeState = sanitizeFileName(record.state || 'normal');
+  const safeExt = sanitizeFileName(ext || 'png');
+  return `${safeSkin}__${safeElement}__${safeDevice}__${safeState}.${safeExt}`;
+}
+
+function parseUiSkinMetaFromFilename(fileName) {
+  const baseName = String(fileName || '').replace(/\.[^.]+$/, '');
+  const parts = baseName.split('__');
+  if (parts.length < 4) return null;
+  return normalizeUiSkinMetaRecord({
+    skinId: parts[0],
+    elementId: parts[1],
+    device: parts[2],
+    state: parts.slice(3).join('__') || 'normal',
+  });
 }
 
 function escapeHtml(input) {
@@ -1239,6 +1379,9 @@ async function buildGalgameCardConfig(options = {}) {
     out.custom = {
       locationStatusHtml: String(localStorage.getItem(CUSTOM_LOCATION_HTML_KEY) || ''),
       timeStatusHtml: String(localStorage.getItem(CUSTOM_TIME_HTML_KEY) || ''),
+      locationStatusIconClass: normalizeLocationStatusIconClass(localStorage.getItem(CUSTOM_LOCATION_ICON_CLASS_KEY) || ''),
+      timeStatusIconClass: normalizeTimeStatusIconClass(localStorage.getItem(CUSTOM_TIME_ICON_CLASS_KEY) || ''),
+      map: buildExportableMapSettings(),
     };
   }
 
@@ -1702,7 +1845,7 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
             <div style="font-weight: 700; color: #333; margin-bottom: 8px;">6) 角色卡扩展导出内容</div>
             <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #333; cursor: pointer;">
               <input type="checkbox" id="${includeCustomId}" ${includeCustomModuleSettingsDefault ? 'checked' : ''}>
-              <span>导出自定义模块设置（地点/时间状态栏 HTML）</span>
+              <span>导出自定义模块设置（地点/时间弹窗内容 HTML + 图标）</span>
             </label>
             <label style="display: flex; align-items: center; gap: 8px; color: #333; cursor: pointer;">
               <input type="checkbox" id="${includeBgmId}" ${includeBgmSettingsDefault ? 'checked' : ''}>
@@ -2546,7 +2689,50 @@ export async function importAssetsFromJson(file, targetPackId = null) {
         }
       }
     }
-    showToast(`成功导入 ${count} 个远程资源链接`);
+    if (Array.isArray(json.maps)) {
+      const mapCandidates = json.maps
+        .map(rawMap => ({
+          regionKey: String(rawMap?.regionKey || '').trim(),
+          remoteUrl: String(rawMap?.url || rawMap?.imageUrl || '').trim(),
+        }))
+        .filter(item => !!item.remoteUrl);
+      const preferredMap = mapCandidates.find(item => item.regionKey === GLOBAL_MAP_REGION_KEY) || mapCandidates[0] || null;
+      if (preferredMap) {
+        await saveUnifiedMapImage(null, preferredMap.remoteUrl, targetPackId);
+        count++;
+      }
+    }
+    if (Array.isArray(json.uiSkins)) {
+      for (const rawItem of json.uiSkins) {
+        const meta = normalizeUiSkinMetaRecord(rawItem);
+        if (!meta) continue;
+        const remoteUrl = String(rawItem.url || rawItem.imageUrl || '').trim();
+        const payload = {
+          packId: targetPackId,
+          skinId: meta.skinId,
+          elementId: meta.elementId,
+          device: meta.device,
+          state: meta.state,
+          layout: meta.layout,
+          scaleMode: meta.scaleMode,
+          slice: meta.slice,
+          textPadding: meta.textPadding,
+          meta: meta.meta,
+        };
+        if (remoteUrl) {
+          payload.imageUrl = remoteUrl;
+          payload.imageBlob = null;
+        }
+        await saveUiSkinAsset(payload);
+        count++;
+      }
+    }
+    const mapSettingsApplied = applyImportedMapSettings(json.mapSettings || json?.custom?.map || json?.meta?.mapSettings);
+    showToast(
+      mapSettingsApplied
+        ? `成功导入 ${count} 个远程资源链接，并同步地图设置`
+        : `成功导入 ${count} 个远程资源链接`,
+    );
   } catch (e) {
     console.error('JSON瀵煎叆澶辫触', e);
     showToast('JSON瀵煎叆澶辫触: ' + e.message);
@@ -2589,6 +2775,9 @@ export const AssetIO = {
         packId: currentPackId,
         sprites: [],
         backgrounds: [],
+        maps: [],
+        uiSkins: [],
+        mapSettings: buildExportableMapSettings(),
       };
       const baseUrl = remoteBaseUrl ? (remoteBaseUrl.endsWith('/') ? remoteBaseUrl : remoteBaseUrl + '/') : '';
       const sprites = await getAllSprites(currentPackId);
@@ -2627,11 +2816,120 @@ export const AssetIO = {
           }
         }
       }
+
+      const allMaps = await getAllMapImages(currentPackId);
+      const preferredMap = allMaps.find(item => String(item?.regionKey || '').trim() === GLOBAL_MAP_REGION_KEY) || allMaps[0] || null;
+      const maps = preferredMap ? [preferredMap] : [];
+      const mapManifest = [];
+      if (maps.length > 0) {
+        const mapFolder = zip.folder('maps');
+        const mapFileNameSet = new Set();
+        for (const rawMap of maps) {
+          const regionKey = GLOBAL_MAP_REGION_KEY;
+          const manifestRecord = {
+            regionKey,
+            packId: String(rawMap?.packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID,
+            lastModified: rawMap?.lastModified ? String(rawMap.lastModified) : '',
+          };
+          if (rawMap.imageBlob) {
+            const ext = rawMap.imageBlob.type.split('/')[1] || 'png';
+            const safeBase = 'world_map';
+            let fileName = `${safeBase}.${ext}`;
+            let seq = 2;
+            while (mapFileNameSet.has(fileName)) {
+              fileName = `${safeBase}_${seq}.${ext}`;
+              seq += 1;
+            }
+            mapFileNameSet.add(fileName);
+            mapFolder.file(fileName, rawMap.imageBlob);
+            manifestRecord.file = fileName;
+            if (remoteBaseUrl) {
+              remoteConfig.maps.push({
+                regionKey,
+                url: `${baseUrl}maps/${fileName}`,
+                packId: manifestRecord.packId,
+              });
+            }
+          } else if (rawMap.imageUrl) {
+            const remoteUrl = String(rawMap.imageUrl || '').trim();
+            if (!remoteUrl) continue;
+            manifestRecord.imageUrl = remoteUrl;
+            if (remoteBaseUrl) {
+              remoteConfig.maps.push({
+                regionKey,
+                url: remoteUrl,
+                packId: manifestRecord.packId,
+              });
+            }
+          } else {
+            continue;
+          }
+          mapManifest.push(manifestRecord);
+        }
+      }
+      if (mapManifest.length > 0) {
+        zip.file('maps/manifest.json', JSON.stringify({ version: '1.0', assets: mapManifest }, null, 2));
+      }
+
+      const allUiSkinAssets = await getAllUiSkinAssets();
+      const uiSkinAssets = allUiSkinAssets.filter(asset => {
+        const assetPackId = String(asset?.packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID;
+        return assetPackId === currentPackId;
+      });
+      const uiSkinManifest = [];
+      if (uiSkinAssets.length > 0) {
+        const uiSkinFolder = zip.folder('ui-skins');
+        for (const rawAsset of uiSkinAssets) {
+          const meta = normalizeUiSkinMetaRecord(rawAsset);
+          if (!meta) continue;
+          const manifestRecord = {
+            skinId: meta.skinId,
+            elementId: meta.elementId,
+            device: meta.device,
+            state: meta.state,
+            scaleMode: meta.scaleMode,
+            layout: meta.layout,
+            slice: meta.slice,
+            textPadding: meta.textPadding,
+            meta: meta.meta,
+          };
+          if (rawAsset.imageBlob) {
+            const ext = rawAsset.imageBlob.type.split('/')[1] || 'png';
+            const fileName = buildUiSkinZipFilename(meta, ext);
+            uiSkinFolder.file(fileName, rawAsset.imageBlob);
+            manifestRecord.file = fileName;
+            if (remoteBaseUrl) {
+              remoteConfig.uiSkins.push({
+                ...manifestRecord,
+                url: `${baseUrl}ui-skins/${fileName}`,
+                packId: currentPackId,
+              });
+            }
+          } else if (rawAsset.imageUrl) {
+            manifestRecord.imageUrl = rawAsset.imageUrl;
+            if (remoteBaseUrl) {
+              remoteConfig.uiSkins.push({
+                ...manifestRecord,
+                url: rawAsset.imageUrl,
+                packId: currentPackId,
+              });
+            }
+          }
+          uiSkinManifest.push(manifestRecord);
+        }
+        zip.file('ui-skins/manifest.json', JSON.stringify({ version: '1.0', assets: uiSkinManifest }, null, 2));
+      }
+
       const packageInfo = {
         packageName: packageName || currentPackName,
         exportDate: new Date().toISOString(),
-        version: '1.0',
+        version: '1.2',
         packId: currentPackId,
+        spriteCount: sprites.length,
+        backgroundCount: backgrounds.length,
+        mapCount: maps.length,
+        uiSkinCount: uiSkinAssets.length,
+        mapSettings: remoteConfig.mapSettings,
       };
       zip.file('package_info.json', JSON.stringify(packageInfo, null, 2));
       if (remoteBaseUrl) {
@@ -2649,7 +2947,7 @@ export const AssetIO = {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景`);
+      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${maps.length} 张地图，${uiSkinAssets.length} 个皮肤元素`);
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 瀵煎嚭澶辫触:`, e);
       showToast('瀵煎嚭澶辫触: ' + e.message);
@@ -2672,12 +2970,16 @@ export const AssetIO = {
         const path = file.webkitRelativePath || file.name;
         const isSpriteFolder = path.includes('sprites/');
         const isBgFolder = path.includes('backgrounds/');
+        const isMapFolder = path.includes('maps/');
         let imported = false;
         if (isSpriteFolder) {
           await this.importAsSprite(file, targetPackId);
           imported = true;
         } else if (isBgFolder) {
           await this.importAsBackground(file, targetPackId);
+          imported = true;
+        } else if (isMapFolder) {
+          await this.importAsMap(file, targetPackId);
           imported = true;
         } else if (file.name.includes('_')) {
           await this.importAsSprite(file, targetPackId);
@@ -2726,6 +3028,12 @@ export const AssetIO = {
       await saveBackground(sceneName, file, null, packId);
       console.log(`[${SCRIPT_NAME}] 瀵煎叆鑳屾櫙: ${sceneName}`);
     }
+  },
+  async importAsMap(file, packId = null) {
+    const fileName = file.name.split('/').pop();
+    if (!fileName) return;
+    await saveUnifiedMapImage(file, null, packId);
+    console.log(`[${SCRIPT_NAME}] 导入统一世界地图: ${fileName}`);
   },
   async importFromGitHub(repoUrl, targetPackId = null) {
     try {
@@ -2780,7 +3088,10 @@ export const AssetIO = {
           const imgRes = await fetch(item.download_url);
           const blob = await imgRes.blob();
           const file = new File([blob], item.name, { type: blob.type });
-          if (item.name.includes('_')) {
+          const itemPath = String(item.path || item.name || '').toLowerCase();
+          if (itemPath.includes('/maps/') || itemPath.startsWith('maps/')) {
+            await this.importAsMap(file, targetPackId);
+          } else if (item.name.includes('_')) {
             await this.importAsSprite(file, targetPackId);
           } else {
             await this.importAsBackground(file, targetPackId);
@@ -3092,12 +3403,11 @@ export async function showImportPackSelector(suggestedName = null) {
 }
 
 export async function processZipContents(zip, progressController, isCancelledCheck, targetPackId = null) {
-  const hasSpritesDir = Object.keys(zip.files).some(path => path.startsWith('sprites/'));
-  const hasBackgroundsDir = Object.keys(zip.files).some(path => path.startsWith('backgrounds/'));
-
-  if (!hasSpritesDir && !hasBackgroundsDir) {
-    throw new Error('ZIP鍖呮牸寮忛敊璇細蹇呴』鍖呭惈 sprites/ 鎴?backgrounds/ 鐩綍');
-  }
+  const zipPaths = Object.keys(zip.files);
+  const hasSpritesDir = zipPaths.some(path => path.startsWith('sprites/'));
+  const hasBackgroundsDir = zipPaths.some(path => path.startsWith('backgrounds/'));
+  const hasMapsDir = zipPaths.some(path => path.startsWith('maps/'));
+  const hasUiSkinsDir = zipPaths.some(path => path.startsWith('ui-skins/'));
 
   let packageInfo = null;
   const infoFile = zip.file('package_info.json');
@@ -3105,17 +3415,85 @@ export async function processZipContents(zip, progressController, isCancelledChe
     try {
       const infoText = await infoFile.async('text');
       packageInfo = JSON.parse(infoText);
-      console.log(`[${SCRIPT_NAME}] 璇诲彇鍒板寘淇℃伅:`, packageInfo);
+      console.log(`[${SCRIPT_NAME}] 读取到包信息:`, packageInfo);
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 璇诲彇 package_info.json 澶辫触:`, e);
+      console.warn(`[${SCRIPT_NAME}] 读取 package_info.json 失败:`, e);
     }
+  }
+
+  let uiSkinManifestAssets = [];
+  const uiSkinManifestFile = zip.file('ui-skins/manifest.json');
+  if (uiSkinManifestFile) {
+    try {
+      const manifestText = await uiSkinManifestFile.async('text');
+      const manifestJson = JSON.parse(manifestText);
+      if (Array.isArray(manifestJson?.assets)) {
+        uiSkinManifestAssets = manifestJson.assets;
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 读取 ui-skins/manifest.json 失败:`, e);
+    }
+  }
+
+  let mapManifestAssets = [];
+  const mapManifestFile = zip.file('maps/manifest.json');
+  if (mapManifestFile) {
+    try {
+      const manifestText = await mapManifestFile.async('text');
+      const manifestJson = JSON.parse(manifestText);
+      if (Array.isArray(manifestJson?.assets)) {
+        mapManifestAssets = manifestJson.assets;
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 读取 maps/manifest.json 失败:`, e);
+    }
+  }
+
+  const uiSkinManifestByFile = new Map();
+  const uiSkinManifestUrlOnly = [];
+  uiSkinManifestAssets.forEach(item => {
+    const meta = normalizeUiSkinMetaRecord(item);
+    if (!meta) return;
+    const fileName = String(item.file || '').trim();
+    const imageUrl = String(item.imageUrl || item.url || '').trim();
+    if (fileName) {
+      uiSkinManifestByFile.set(fileName, { ...meta, imageUrl });
+      uiSkinManifestByFile.set(`ui-skins/${fileName}`, { ...meta, imageUrl });
+      return;
+    }
+    if (imageUrl) {
+      uiSkinManifestUrlOnly.push({ ...meta, imageUrl });
+    }
+  });
+
+  const mapManifestByFile = new Map();
+  const mapManifestUrlOnly = [];
+  mapManifestAssets.forEach(item => {
+    const regionKey = String(item?.regionKey || '').trim();
+    if (!regionKey) return;
+    const fileName = String(item?.file || '').trim();
+    const imageUrl = String(item?.imageUrl || item?.url || '').trim();
+    const lastModified = String(item?.lastModified || '').trim();
+    const payload = { regionKey, imageUrl, lastModified };
+    if (fileName) {
+      mapManifestByFile.set(fileName, payload);
+      mapManifestByFile.set(`maps/${fileName}`, payload);
+      return;
+    }
+    if (imageUrl) {
+      mapManifestUrlOnly.push(payload);
+    }
+  });
+
+  if (!hasSpritesDir && !hasBackgroundsDir && !hasMapsDir && !hasUiSkinsDir && uiSkinManifestUrlOnly.length === 0 && mapManifestUrlOnly.length === 0) {
+    throw new Error('ZIP 包格式错误：需包含 sprites/、backgrounds/、maps/ 或 ui-skins/ 目录');
   }
 
   if (!targetPackId) {
     const suggestedName = packageInfo?.packageName || packageInfo?.name;
     targetPackId = await showImportPackSelector(suggestedName);
     if (!targetPackId) {
-      showToast('宸插彇娑堝鍏?');
+      showToast('已取消导入');
       return;
     }
   }
@@ -3125,25 +3503,28 @@ export async function processZipContents(zip, progressController, isCancelledChe
     if (zipEntry.dir) return;
     const isSprite = relativePath.startsWith('sprites/');
     const isBackground = relativePath.startsWith('backgrounds/');
-    if (!isSprite && !isBackground) return;
+    const isMap = relativePath.startsWith('maps/');
+    const isUiSkin = relativePath.startsWith('ui-skins/');
+    if (!isSprite && !isBackground && !isMap && !isUiSkin) return;
     const ext = relativePath.split('.').pop().toLowerCase();
     if (!['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) return;
     imageFiles.push({
       path: relativePath,
       entry: zipEntry,
-      type: isSprite ? 'sprite' : 'background',
+      type: isSprite ? 'sprite' : isBackground ? 'background' : isMap ? 'map' : 'ui-skin',
     });
   });
 
-  if (imageFiles.length === 0) {
-    throw new Error('ZIP鍖呬腑鏈壘鍒版湁鏁堢殑鍥剧墖鏂囦欢');
+  const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + mapManifestUrlOnly.length;
+  if (totalItems === 0) {
+    throw new Error('ZIP 包中未找到有效资源文件');
   }
 
-  progressController.update(0, `鍑嗗瀵煎叆 ${imageFiles.length} 涓枃浠?..`);
+  progressController.update(0, `准备导入 ${totalItems} 个资源...`);
 
   const BATCH_SIZE = 50;
   let successCount = 0;
-  let failedItems = [];
+  const failedItems = [];
 
   for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
     if (isCancelledCheck && isCancelledCheck()) {
@@ -3154,9 +3535,11 @@ export async function processZipContents(zip, progressController, isCancelledChe
     const batch = imageFiles.slice(i, i + BATCH_SIZE);
     const spriteBatch = [];
     const backgroundBatch = [];
+    const mapBatch = [];
+    const uiSkinBatch = [];
 
     await Promise.all(
-      batch.map(async (item) => {
+      batch.map(async item => {
         try {
           const blob = await item.entry.async('blob');
           const fileName = item.path.split('/').pop();
@@ -3169,12 +3552,44 @@ export async function processZipContents(zip, progressController, isCancelledChe
               const characterId = parts.join('_');
               spriteBatch.push({ characterId, expression, imageBlob: blob });
             }
-          } else if (item.type === 'background') {
+            return;
+          }
+
+          if (item.type === 'background') {
             const sceneName = fileName.substring(0, fileName.lastIndexOf('.'));
             backgroundBatch.push({ sceneName, imageBlob: blob });
+            return;
           }
+
+          if (item.type === 'map') {
+            const manifestMeta = mapManifestByFile.get(item.path) || mapManifestByFile.get(fileName);
+            let regionKey = String(manifestMeta?.regionKey || '').trim();
+            if (!regionKey) {
+              regionKey = fileName.substring(0, fileName.lastIndexOf('.')).trim();
+            }
+            if (!regionKey) {
+              throw new Error('无法解析地图 regionKey，请提供 maps/manifest.json');
+            }
+            mapBatch.push({
+              regionKey: GLOBAL_MAP_REGION_KEY,
+              imageBlob: blob,
+              imageUrl: null,
+            });
+            return;
+          }
+
+          const manifestMeta = uiSkinManifestByFile.get(item.path) || uiSkinManifestByFile.get(fileName);
+          const parsedMeta = manifestMeta ? normalizeUiSkinMetaRecord(manifestMeta) : parseUiSkinMetaFromFilename(fileName);
+          if (!parsedMeta) {
+            throw new Error('无法解析 UI 皮肤文件名，请提供 manifest');
+          }
+          uiSkinBatch.push({
+            ...parsedMeta,
+            imageBlob: blob,
+            imageUrl: null,
+          });
         } catch (e) {
-          console.warn(`瑙ｅ帇 ${item.path} 澶辫触:`, e);
+          console.warn(`解压 ${item.path} 失败:`, e);
           failedItems.push({ path: item.path, error: e.message });
         }
       }),
@@ -3194,28 +3609,107 @@ export async function processZipContents(zip, progressController, isCancelledChe
       }
       if (newExpressions.length > 0) {
         saveCustomExpressions(customs);
-        console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${newExpressions.join(', ')}`);
+        console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(', ')}`);
       }
     }
+
     if (backgroundBatch.length > 0) {
       await saveBackgroundsBatch(backgroundBatch, targetPackId);
     }
 
-    successCount += spriteBatch.length + backgroundBatch.length;
+    if (mapBatch.length > 0) {
+      const preferredMap = mapBatch.find(item => String(item?.regionKey || '').trim() === GLOBAL_MAP_REGION_KEY) || mapBatch[mapBatch.length - 1];
+      await saveUnifiedMapImage(preferredMap?.imageBlob || null, preferredMap?.imageUrl || null, targetPackId);
+    }
 
+    if (uiSkinBatch.length > 0) {
+      await Promise.all(
+        uiSkinBatch.map(asset =>
+          saveUiSkinAsset({
+            packId: targetPackId,
+            skinId: asset.skinId,
+            elementId: asset.elementId,
+            device: asset.device,
+            state: asset.state,
+            imageBlob: asset.imageBlob || null,
+            imageUrl: null,
+            layout: asset.layout || {},
+            scaleMode: asset.scaleMode || 'stretch',
+            slice: asset.slice || {},
+            textPadding: asset.textPadding || {},
+            meta: asset.meta || {},
+          }),
+        ),
+      );
+    }
+
+    successCount += spriteBatch.length + backgroundBatch.length + (mapBatch.length > 0 ? 1 : 0) + uiSkinBatch.length;
     const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
-    const percent = Math.round((processed / imageFiles.length) * 100);
-    progressController.update(percent, `瀵煎叆涓? ${processed}/${imageFiles.length} (鎵归噺妯″紡)`);
+    const percent = Math.round((processed / totalItems) * 100);
+    progressController.update(percent, `导入中... ${processed}/${totalItems} (文件资源)`);
   }
+
+  if (!isCancelledCheck || !isCancelledCheck()) {
+    for (let i = 0; i < uiSkinManifestUrlOnly.length; i++) {
+      if (isCancelledCheck && isCancelledCheck()) {
+        console.log(`[${SCRIPT_NAME}] 导入已取消`);
+        return;
+      }
+      const item = uiSkinManifestUrlOnly[i];
+      try {
+        await saveUiSkinAsset({
+          packId: targetPackId,
+          skinId: item.skinId,
+          elementId: item.elementId,
+          device: item.device,
+          state: item.state,
+          imageBlob: null,
+          imageUrl: item.imageUrl,
+          layout: item.layout || {},
+          scaleMode: item.scaleMode || 'stretch',
+          slice: item.slice || {},
+          textPadding: item.textPadding || {},
+          meta: item.meta || {},
+        });
+        successCount++;
+      } catch (e) {
+        failedItems.push({ path: `${item.skinId}/${item.elementId}/${item.device}/${item.state}`, error: e.message });
+      }
+      const processed = imageFiles.length + i + 1;
+      const percent = Math.round((processed / totalItems) * 100);
+      progressController.update(percent, `导入中... ${processed}/${totalItems} (皮肤链接)`);
+    }
+  }
+
+  if (!isCancelledCheck || !isCancelledCheck()) {
+    if (isCancelledCheck && isCancelledCheck()) {
+      console.log(`[${SCRIPT_NAME}] 导入已取消`);
+      return;
+    }
+    if (mapManifestUrlOnly.length > 0) {
+      const preferredMap = mapManifestUrlOnly.find(item => String(item?.regionKey || '').trim() === GLOBAL_MAP_REGION_KEY) || mapManifestUrlOnly[0];
+      try {
+        await saveUnifiedMapImage(null, preferredMap.imageUrl, targetPackId);
+        successCount++;
+      } catch (e) {
+        failedItems.push({ path: `maps/${preferredMap.regionKey || GLOBAL_MAP_REGION_KEY}`, error: e.message });
+      }
+      const processed = imageFiles.length + uiSkinManifestUrlOnly.length + mapManifestUrlOnly.length;
+      const percent = Math.round((processed / totalItems) * 100);
+      progressController.update(percent, `导入中... ${processed}/${totalItems} (地图链接)`);
+    }
+  }
+
+  const mapSettingsApplied = applyImportedMapSettings(packageInfo?.mapSettings);
 
   if (failedItems.length > 0) {
     showImportError([
       `成功: ${successCount} 个, 失败: ${failedItems.length} 个`,
-      '閮ㄥ垎鏂囦欢瀵煎叆澶辫触锛岃妫€鏌ヨ鎯?..',
+      '部分文件导入失败，请检查详情。',
     ]);
   }
 
-  console.log(`[${SCRIPT_NAME}] ZIP瀵煎叆瀹屾垚: 鎴愬姛 ${successCount}, 澶辫触 ${failedItems.length}`);
+  console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}, 地图设置同步=${mapSettingsApplied}`);
 }
 
 export function showImportProgress(initialText, onCancel, options = {}) {

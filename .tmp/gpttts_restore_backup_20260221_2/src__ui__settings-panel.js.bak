@@ -11,7 +11,6 @@ import { getAvailableModels, getAvailablePresets, getAvailableProfiles, getAvail
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloors } from './galgame-mode.js';
-import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
 import { updateButtonState } from './menu-button.js';
 import { showToast } from './toast.js';
 
@@ -497,6 +496,7 @@ export async function showSettingsPanel(topTab, subTab) {
               <select id="gal-tts-provider" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
                 <option value="littlewhitebox" ${settings.ttsProvider === 'littlewhitebox' ? 'selected' : ''}>小白X（豆包火山）</option>
                 <option value="gpt_sovits_v2" ${settings.ttsProvider === 'gpt_sovits_v2' ? 'selected' : ''}>GPT-SoVITS v2ProPlus</option>
+                <option value="edge_tts_direct" ${settings.ttsProvider === 'edge_tts_direct' ? 'selected' : ''}>EdgeTTS Direct</option>
               </select>
             </div>
             <div class="gal-settings-row">
@@ -525,26 +525,28 @@ export async function showSettingsPanel(topTab, subTab) {
                 <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-proxy" ${settings.gptSoVits?.useCorsProxy ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
               </div>
               <div class="gal-settings-row">
-                <span class="gal-settings-label">模型切换模式</span>
-                <select id="gal-gpt-sovits-switch-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 210px;">
-                  <option value="set_weights" ${(settings.gptSoVits?.modelSwitchMode || 'set_weights') === 'set_weights' ? 'selected' : ''}>set_weights (api_v2.py)</option>
-                  <option value="set_model" ${(settings.gptSoVits?.modelSwitchMode || '') === 'set_model' ? 'selected' : ''}>set_model (api.py)</option>
-                  <option value="none" ${(settings.gptSoVits?.modelSwitchMode || '') === 'none' ? 'selected' : ''}>none（不自动切换）</option>
+                <span class="gal-settings-label">text_lang</span>
+                <input type="text" id="gal-gpt-sovits-text-lang" value="${settings.gptSoVits?.textLang || 'auto'}" placeholder="auto/zh/en/ja..." style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">切分策略</span>
+                <input type="text" id="gal-gpt-sovits-split" value="${settings.gptSoVits?.textSplitMethod || 'cut5'}" placeholder="cut5" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">media_type</span>
+                <select id="gal-gpt-sovits-media-type" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 160px;">
+                  <option value="wav" ${(settings.gptSoVits?.mediaType || 'wav') === 'wav' ? 'selected' : ''}>wav</option>
+                  <option value="ogg" ${(settings.gptSoVits?.mediaType || '') === 'ogg' ? 'selected' : ''}>ogg</option>
+                  <option value="raw" ${(settings.gptSoVits?.mediaType || '') === 'raw' ? 'selected' : ''}>raw</option>
                 </select>
               </div>
               <div class="gal-settings-row">
-                <span class="gal-settings-label">set_model 接口</span>
-                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${settings.gptSoVits?.setModelEndpoint || '/set_model'}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <span class="gal-settings-label">streaming_mode</span>
+                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-streaming" ${(settings.gptSoVits?.streamingMode ?? true) ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
               </div>
               <div class="gal-settings-row">
-                <span class="gal-settings-label">严格切换 <small style="color:#999;">(失败不回退)</small></span>
-                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-strict-switch" ${settings.gptSoVits?.strictWeightSwitch ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
-              </div>
-              <div class="gal-settings-row">
-                <span class="gal-settings-label">模型管理</span>
-                <button class="gal-action-btn" id="gal-gpt-sovits-open-model-manager" style="min-width: 180px; padding: 8px 14px;">
-                  <i class="fa-solid fa-layer-group"></i> 打开管理面板
-                </button>
+                <span class="gal-settings-label">speed_factor</span>
+                <input type="number" id="gal-gpt-sovits-speed" value="${settings.gptSoVits?.speedFactor ?? 1}" min="0.5" max="2" step="0.05" style="width: 120px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
               </div>
               <div style="margin-top: 10px;">
                 <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">音色列表（JSON）</div>
@@ -746,9 +748,11 @@ export async function showSettingsPanel(topTab, subTab) {
     $sel.val(current);
     const provider = getTTSProvider();
     const providerHint = provider === TTS_PROVIDER.GPT_SOVITS_V2
-      ? 'GPT-SoVITS：建议把音色 name 设为角色名。'
-      : 'LittleWhiteBox：未指定/未绑定时使用此默认音色。';
-    if ($hint.length) $hint.text(providerHint + (voiceList.length === 0 ? '（当前音色列表为空）' : ''));
+      ? 'GPT-SoVITS: set voice name to the character name.'
+      : provider === TTS_PROVIDER.EDGE_TTS_DIRECT
+        ? 'EdgeTTS Direct: only Chinese/Japanese voices are listed.'
+        : 'LittleWhiteBox: default voice used when no binding is set.';
+    if ($hint.length) $hint.text(providerHint + (voiceList.length === 0 ? ' (voice list is empty)' : ''));
   };
 
   if ($('#gal-gpt-sovits-voices-json').length) {
@@ -946,25 +950,11 @@ export async function showSettingsPanel(topTab, subTab) {
   // GPT-SoVITS
   $('#gal-gpt-sovits-url').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.apiUrl = $(this).val().trim(); saveSettings(); });
   $('#gal-gpt-sovits-proxy').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.useCorsProxy = $(this).is(':checked'); saveSettings(); });
-  $('#gal-gpt-sovits-switch-mode').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.modelSwitchMode = $(this).val(); saveSettings(); });
-  $('#gal-gpt-sovits-set-model-endpoint').on('change', function () {
-    settings.gptSoVits = settings.gptSoVits || {};
-    const endpoint = String($(this).val() || '').trim();
-    settings.gptSoVits.setModelEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint || 'set_model'}`;
-    saveSettings();
-  });
-  $('#gal-gpt-sovits-strict-switch').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.strictWeightSwitch = $(this).is(':checked'); saveSettings(); });
-  $('#gal-gpt-sovits-open-model-manager').on('click', function () {
-    openGptSoVitsModelManager({
-      onChanged: async () => {
-        await refreshTtsVoiceOptions();
-        if ($('#gal-gpt-sovits-voices-json').length) {
-          try { $('#gal-gpt-sovits-voices-json').val(JSON.stringify(getSettings().gptSoVits?.voices || [], null, 2)); } catch (e) {}
-        }
-        injectCOTToWorldbook().catch(() => {});
-      },
-    });
-  });
+  $('#gal-gpt-sovits-text-lang').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.textLang = $(this).val().trim() || 'auto'; saveSettings(); });
+  $('#gal-gpt-sovits-split').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.textSplitMethod = $(this).val().trim() || 'cut5'; saveSettings(); });
+  $('#gal-gpt-sovits-media-type').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.mediaType = $(this).val(); saveSettings(); });
+  $('#gal-gpt-sovits-streaming').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.streamingMode = $(this).is(':checked'); saveSettings(); });
+  $('#gal-gpt-sovits-speed').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; const v = parseFloat($(this).val()); settings.gptSoVits.speedFactor = isFinite(v) ? v : 1; saveSettings(); });
   $('#gal-gpt-sovits-voices-save').on('click', async function () {
     settings.gptSoVits = settings.gptSoVits || {};
     let parsed = null;

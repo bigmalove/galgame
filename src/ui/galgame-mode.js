@@ -16,21 +16,38 @@ export function setGalgameModeRefs({ processNewMessage, applySettingsToUI }) {
   if (applySettingsToUI) _applySettingsToUIRef = applySettingsToUI;
 }
 
-export function applyGalgameMode() {
+export async function applyGalgameMode() {
   void preloadPixiEffectsRuntime();
 
-  const $allMes = $('#chat > .mes');
+  // 等待消息楼层渲染到 DOM 中（SillyTavern 可能尚未完成渲染）
   let $lastAiMes = null;
-  $allMes.each(function () {
-    if ($(this).attr('is_user') !== 'true') {
-      $lastAiMes = $(this);
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 300;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const $allMes = $('#chat > .mes');
+    $lastAiMes = null;
+    $allMes.each(function () {
+      if ($(this).attr('is_user') !== 'true') {
+        $lastAiMes = $(this);
+      }
+    });
+
+    if ($lastAiMes && $lastAiMes.length) {
+      break;
     }
-  });
+
+    if (attempt < MAX_RETRIES) {
+      console.log(`[${SCRIPT_NAME}] applyGalgameMode: 未找到AI消息，等待 ${RETRY_DELAY_MS}ms 后重试 (${attempt + 1}/${MAX_RETRIES})`);
+      await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+    }
+  }
 
   console.log(`[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}`);
 
   if ($lastAiMes && $lastAiMes.length && _processNewMessageRef) {
-    _processNewMessageRef($lastAiMes[0], { forceRender: true });
+    // 等待 processNewMessage 完成（内部包含 async 的 overlay 更新）
+    await _processNewMessageRef($lastAiMes[0], { forceRender: true });
   }
 
   showAllFloors();
@@ -38,6 +55,9 @@ export function applyGalgameMode() {
   if (_applySettingsToUIRef) {
     _applySettingsToUIRef();
   }
+
+  // 返回是否成功找到并渲染了 AI 消息
+  return !!($lastAiMes && $lastAiMes.length);
 }
 
 export function restoreOriginalViews() {

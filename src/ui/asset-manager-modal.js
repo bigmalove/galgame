@@ -4,40 +4,40 @@ import { getSettings, saveSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { deleteBackground, getAllBackgrounds } from '../db/backgrounds.js';
-import { GLOBAL_MAP_REGION_KEY, deleteMapImage, getAllMapImages, getUnifiedMapImage } from '../db/map-images.js';
 import {
-  createImagePack,
-  getAllImagePacks,
-  getCurrentPackId,
-  getRenderScope,
-  setCurrentPack,
-  setRenderScope,
+    createImagePack,
+    getAllImagePacks,
+    getCurrentPackId,
+    getRenderScope,
+    setCurrentPack,
+    setRenderScope,
 } from '../db/image-packs.js';
+import { GLOBAL_MAP_REGION_KEY, deleteMapImage, getAllMapImages, getUnifiedMapImage } from '../db/map-images.js';
 import { deleteSprite, getAllSprites } from '../db/sprites.js';
 import { convertTextToCotFormat } from '../logic/enhanced-mode.js';
 import { injectCOTToWorldbook } from '../logic/worldbook.js';
+import { showMapModal } from '../map/map-modal.js';
 import { getCharacterListFromDatabase } from '../utils/chat.js';
 import {
-  LOCATION_STATUS_ICON_OPTIONS,
-  TIME_STATUS_ICON_OPTIONS,
-  normalizeLocationStatusIconClass,
-  normalizeTimeStatusIconClass,
+    LOCATION_STATUS_ICON_OPTIONS,
+    TIME_STATUS_ICON_OPTIONS,
+    normalizeLocationStatusIconClass,
+    normalizeTimeStatusIconClass,
 } from '../utils/status-popup-icons.js';
 import {
-  AssetIO,
-  exportCurrentCharacterCardWithConfig,
-  importAssetsFromJson,
-  importFromZipFile,
-  showImportError,
-  showInAppAlertDialog,
-  showInAppConfirmDialog,
-  showInAppPromptDialog,
-  showRemoteZipImportDialog,
+    AssetIO,
+    exportCurrentCharacterCardWithConfig,
+    importAssetsFromJson,
+    importFromZipFile,
+    showImportError,
+    showInAppAlertDialog,
+    showInAppConfirmDialog,
+    showInAppPromptDialog,
+    showRemoteZipImportDialog,
 } from './asset-io.js';
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog } from './asset-manager-parts.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { bindImageGenConfigEvents, buildImageGenConfigPane } from './image-gen-config.js';
-import { showMapModal } from '../map/map-modal.js';
 import { showMapUploadDialog } from './map-upload.js';
 import { bindWesternSkinEditorEvents, buildWesternSkinEditorTab } from './skin-western-editor.js';
 import { applyWesternSkinRuntime } from './skin-western-runtime.js';
@@ -198,7 +198,7 @@ export async function buildAssetManagerContent(activeTab) {
       <button class="gal-tab-btn ${activeTab === 'sprites' ? 'active' : ''}" data-tab="sprites"><i class="fa-solid fa-user"></i> 立绘管理</button>
       <button class="gal-tab-btn ${activeTab === 'backgrounds' ? 'active' : ''}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> 背景管理</button>
       <button class="gal-tab-btn ${activeTab === 'maps' ? 'active' : ''}" data-tab="maps"><i class="fa-solid fa-map-location-dot"></i> 地图管理</button>
-      <button class="gal-tab-btn ${activeTab === 'skin' ? 'active' : ''}" data-tab="skin"><i class="fa-solid fa-palette"></i> 皮肤编辑</button>
+      <button class="gal-tab-btn ${activeTab === 'skin' ? 'active' : ''}" data-tab="skin"><i class="fa-solid fa-palette"></i> 皮肤编辑(未实装)</button>
       <button class="gal-tab-btn ${activeTab === 'imagegen' ? 'active' : ''}" data-tab="imagegen"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图配置</button>
       <button class="gal-tab-btn ${activeTab === 'opening' ? 'active' : ''}" data-tab="opening"><i class="fa-solid fa-pen-to-square"></i> 开场白转换</button>
       <button class="gal-tab-btn ${activeTab === 'bgm' ? 'active' : ''}" data-tab="bgm"><i class="fa-solid fa-music"></i> 指定BGM</button>
@@ -852,6 +852,7 @@ function bindOpeningEvents($modal) {
     const previousResult = String($result.val() || '');
     try {
       const { formattedText } = await convertTextToCotFormat(sourceText, {
+        independent: true,
         onStream: text => {
           $result.val(text || '');
         },

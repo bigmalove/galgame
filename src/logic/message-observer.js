@@ -1,9 +1,9 @@
-import { SCRIPT_NAME } from '../core/constants.js';
-import { topWindow } from '../core/env.js';
-import { getIsEnabled } from '../core/state.js';
-import { getSettings } from '../core/settings.js';
 import { BGMManager } from '../audio/bgm-manager.js';
 import { TTSManager } from '../audio/tts-manager.js';
+import { SCRIPT_NAME } from '../core/constants.js';
+import { topWindow } from '../core/env.js';
+import { getSettings } from '../core/settings.js';
+import { getIsEnabled } from '../core/state.js';
 
 // ============================================
 // 消息监听器
@@ -30,13 +30,22 @@ export function setupMessageObserver() {
     return;
   }
 
+  // 聊天稳定化检测：当新消息批量加入且 overlay 不存在时，延迟重建
+  let chatStabilizeTimer = null;
+
   const chatObserver = new MutationObserver(mutations => {
     const settings = getSettings();
     const isEnabled = getIsEnabled();
+    // 检测 overlay 是否仍存在（切换聊天时 SillyTavern 会清空 #chat，overlay 会被销毁）
+    const overlayActive = !!topWindow.document.querySelector('#gal-global-overlay.active');
+    let hasNewMessages = false;
+
     mutations.forEach(mutation => {
       mutation.addedNodes.forEach(node => {
         if (node.nodeType === 1 && node.classList?.contains('mes')) {
-          if (isEnabled && settings.hideOtherFloors) {
+          hasNewMessages = true;
+          // ★ 仅当 overlay 存在且激活时才隐藏新消息，否则会导致空白屏幕
+          if (isEnabled && settings.hideOtherFloors && overlayActive) {
             node.classList.add('gal-hidden');
           }
           setTimeout(() => {
@@ -47,6 +56,30 @@ export function setupMessageObserver() {
         }
       });
     });
+
+    // ★ 当检测到新消息但 overlay 不存在时，说明聊天已切换
+    // 使用 debounce 等待所有消息加载完毕后，强制渲染最后AI消息重建界面
+    if (hasNewMessages && isEnabled && !overlayActive) {
+      if (chatStabilizeTimer) clearTimeout(chatStabilizeTimer);
+      chatStabilizeTimer = setTimeout(() => {
+        chatStabilizeTimer = null;
+        // 再次检查 overlay 是否仍然缺失（可能 CHAT_CHANGED 已经处理了）
+        if (topWindow.document.querySelector('#gal-global-overlay.active')) return;
+
+        const allMes = chatContainer.querySelectorAll('.mes');
+        let lastAiMes = null;
+        allMes.forEach(mes => {
+          if (mes.getAttribute('is_user') !== 'true') {
+            lastAiMes = mes;
+          }
+        });
+
+        if (lastAiMes && _processNewMessageRef) {
+          console.log(`[${SCRIPT_NAME}] 检测到聊天变更且界面缺失，重新渲染最后AI消息`);
+          _processNewMessageRef(lastAiMes, { forceRender: true });
+        }
+      }, 500);
+    }
   });
   chatObserver.observe(chatContainer, { childList: true, subtree: false });
 

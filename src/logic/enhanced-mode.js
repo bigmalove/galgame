@@ -4,18 +4,18 @@ import { ensureEnhancedModeSettings, getSettings, SYSTEM_PROMPT_FOR_SECOND_GENER
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { generateCOTTemplate } from './cot-template.js';
-import { parseGalgameContent } from './parser.js';
 import {
-  getIsGeneratingResponse,
-  setIsGeneratingResponse,
-  getInitializationTime,
-  getGenerationState,
-  getVerificationDelayMs,
-  resetGenerationState,
-  checkSillyTavernGenerating,
-  startGenerationTimeout,
-  stopGenerationTimeout,
+    checkSillyTavernGenerating,
+    getGenerationState,
+    getInitializationTime,
+    getIsGeneratingResponse,
+    getVerificationDelayMs,
+    resetGenerationState,
+    setIsGeneratingResponse,
+    startGenerationTimeout,
+    stopGenerationTimeout,
 } from './generation-state.js';
+import { parseGalgameContent } from './parser.js';
 
 // ============================================
 // 加强模式
@@ -45,7 +45,7 @@ export function setEnhancedModeRefs({
   if (updateGeneratingStatus) _updateGeneratingStatusRef = updateGeneratingStatus;
 }
 
-export { WORLDBOOK_NAME, COT_ENTRY_NAME };
+export { COT_ENTRY_NAME, WORLDBOOK_NAME };
 
 function showToast(msg, duration) {
   if (_showToastRef) _showToastRef(msg, duration);
@@ -354,6 +354,15 @@ async function updateStreamingSwipe(messageId, swipeId, text) {
 
 /**
  * 将原始文本转换为 COT 格式（不修改聊天楼层/swipe）
+ *
+ * @param {string} sourceText 待转换的原始文本
+ * @param {object} options
+ * @param {function} [options.onStream] 流式回调
+ * @param {boolean} [options.independent=false]
+ *   - true:  完全独立模式（开场白转换）。使用 generateRaw，仅发送 system + user_input，
+ *            不包含角色描述、世界书、预设、聊天历史等任何上下文。
+ *   - false: 预设模式（加强模式第二次生成）。使用 generate，保留当前预设、世界书等设置，
+ *            但强制排除聊天历史和深度注入条目，确保转换仅基于原文输入。
  */
 export async function convertTextToCotFormat(sourceText, options = {}) {
   const normalizedSource = String(sourceText || '').trim();
@@ -361,6 +370,7 @@ export async function convertTextToCotFormat(sourceText, options = {}) {
     throw new Error('待转换文本为空');
   }
 
+  const independent = !!options.independent;
   const onStream = typeof options.onStream === 'function' ? options.onStream : null;
   const streamState = { latestText: '' };
   let stopStreamListener = null;
@@ -390,15 +400,38 @@ export async function convertTextToCotFormat(sourceText, options = {}) {
       firstResult: normalizedSource,
       timestamp: new Date().toLocaleString('zh-CN'),
     };
-    console.log(`[${SCRIPT_NAME}] 加强模式: 已保存提示词信息`);
+    console.log(`[${SCRIPT_NAME}] COT转换: 模式=${independent ? '独立(开场白)' : '预设(加强模式)'}`);
 
-    const formattedText = await generate({
-      user_input: userPrompt,
-      injects: [{ role: 'system', content: systemPrompt }],
-      should_silence: true,
-      should_stream: true,
-      max_chat_history: 0,
-    });
+    let formattedText;
+
+    if (independent) {
+      // 独立模式：仅发送 system prompt + user input，完全不受预设/世界书/聊天历史影响
+      formattedText = await generateRaw({
+        user_input: userPrompt,
+        should_silence: true,
+        should_stream: true,
+        ordered_prompts: [
+          { role: 'system', content: systemPrompt },
+          'user_input',
+        ],
+      });
+    } else {
+      // 预设模式：使用当前预设和世界书，但排除聊天历史
+      formattedText = await generate({
+        user_input: userPrompt,
+        injects: [{ role: 'system', content: systemPrompt }],
+        should_silence: true,
+        should_stream: true,
+        max_chat_history: 0,
+        overrides: {
+          chat_history: {
+            prompts: [],
+            with_depth_entries: false,
+          },
+          dialogue_examples: '',
+        },
+      });
+    }
 
     const safeFormattedText = typeof formattedText === 'string' ? formattedText : String(formattedText || '');
     if (onStream && safeFormattedText && streamState.latestText !== safeFormattedText) {

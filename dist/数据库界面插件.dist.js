@@ -10446,6 +10446,10 @@ ${lines.join("\n")}`;
         adjustGameContentScale();
         adjustToolbarForSpace();
         resizePixiEffects();
+        const chatEl = topWindow.document.getElementById("chat");
+        if (chatEl) {
+          chatEl.scrollTop = $overlay[0].offsetTop;
+        }
       }, 0);
     } else {
       console.error(`[${SCRIPT_NAME}] showGlobalOverlay: 无法获取覆盖层元素！`);
@@ -15130,6 +15134,117 @@ ${extraRule}
     }
   }
 
+  // src/logic/generation-state.js
+  var isGeneratingResponse = false;
+  var nextBtnAnimationTimer = null;
+  var NEXT_BTN_ANIMATION_INTERVAL = 500;
+  var initializationTime = Date.now();
+  var generationState = {
+    isGenerating: false,
+    startTime: 0,
+    lastMessageId: null,
+    pendingMessageId: null,
+    verificationTimer: null
+  };
+  var GENERATION_TIMEOUT_MS = 12e4;
+  var VERIFICATION_DELAY_MS = 2e3;
+  var _stopNextBtnAnimationRef = null;
+  var _refreshNextBtnDisplayRef = null;
+  var _updateNextBtnForGeneratingStateRef = null;
+  var _updateGeneratingStatusRef = null;
+  function setGenerationStateRefs({
+    stopNextBtnAnimation: stopNextBtnAnimation2,
+    refreshNextBtnDisplay: refreshNextBtnDisplay2,
+    updateNextBtnForGeneratingState: updateNextBtnForGeneratingState2,
+    updateGeneratingStatus: updateGeneratingStatus2
+  }) {
+    if (stopNextBtnAnimation2) _stopNextBtnAnimationRef = stopNextBtnAnimation2;
+    if (refreshNextBtnDisplay2) _refreshNextBtnDisplayRef = refreshNextBtnDisplay2;
+    if (updateNextBtnForGeneratingState2) _updateNextBtnForGeneratingStateRef = updateNextBtnForGeneratingState2;
+    if (updateGeneratingStatus2) _updateGeneratingStatusRef = updateGeneratingStatus2;
+  }
+  function getIsGeneratingResponse() {
+    return isGeneratingResponse;
+  }
+  function setIsGeneratingResponse(val) {
+    isGeneratingResponse = val;
+  }
+  function getInitializationTime() {
+    return initializationTime;
+  }
+  function getGenerationState() {
+    return generationState;
+  }
+  function getGenerationTimeoutMs() {
+    return GENERATION_TIMEOUT_MS;
+  }
+  function getVerificationDelayMs() {
+    return VERIFICATION_DELAY_MS;
+  }
+  function resetGenerationState(reason = "unknown") {
+    console.log(`[${SCRIPT_NAME}] 重置生成状态，原因: ${reason}`);
+    isGeneratingResponse = false;
+    generationState.isGenerating = false;
+    generationState.pendingMessageId = null;
+    if (_stopNextBtnAnimationRef) _stopNextBtnAnimationRef();
+    if (_refreshNextBtnDisplayRef) _refreshNextBtnDisplayRef();
+  }
+  function checkSillyTavernGenerating() {
+    try {
+      if (typeof window !== "undefined" && window.SillyTavern?.generating) {
+        return true;
+      }
+      if (topWindow?.SillyTavern?.generating) {
+        return true;
+      }
+      if (typeof window !== "undefined" && window.isGenerating) {
+        return true;
+      }
+    } catch (e) {
+    }
+    return false;
+  }
+  function verifyGenerationComplete(messageId) {
+    console.log(`[${SCRIPT_NAME}] 验证生成完成 - messageId: ${messageId}, pendingId: ${generationState.pendingMessageId}`);
+    if (!generationState.isGenerating && !isGeneratingResponse) {
+      console.log(`[${SCRIPT_NAME}] 无正在进行的生成，跳过验证`);
+      return;
+    }
+    if (checkSillyTavernGenerating()) {
+      console.log(`[${SCRIPT_NAME}] SillyTavern 仍在生成中，延迟验证`);
+      setTimeout(() => verifyGenerationComplete(messageId), 1e3);
+      return;
+    }
+    resetGenerationState(`消息 ${messageId} 验证完成`);
+  }
+  function startGenerationTimeout() {
+    if (generationState.verificationTimer) {
+      clearTimeout(generationState.verificationTimer);
+    }
+    generationState.startTime = Date.now();
+    generationState.isGenerating = true;
+    console.log(`[${SCRIPT_NAME}] 启动生成超时保护 (${GENERATION_TIMEOUT_MS}ms)`);
+    generationState.verificationTimer = setTimeout(() => {
+      const elapsed = Date.now() - generationState.startTime;
+      console.log(`[${SCRIPT_NAME}] 生成超时保护触发 - 已等待 ${elapsed}ms`);
+      if (checkSillyTavernGenerating()) {
+        console.log(`[${SCRIPT_NAME}] SillyTavern 仍在生成中，延长超时`);
+        generationState.verificationTimer = setTimeout(() => {
+          resetGenerationState("超时保护强制重置");
+        }, GENERATION_TIMEOUT_MS);
+        return;
+      }
+      resetGenerationState("超时保护触发");
+    }, GENERATION_TIMEOUT_MS);
+  }
+  function stopGenerationTimeout() {
+    if (generationState.verificationTimer) {
+      clearTimeout(generationState.verificationTimer);
+      generationState.verificationTimer = null;
+    }
+    generationState.isGenerating = false;
+  }
+
   // src/logic/parser.js
   var RE_GAL_TAGS2 = /<(p|sprite|maintext|background)[^>]*>/i;
   var RE_CLOSED_P2 = /<\/p>/i;
@@ -15569,117 +15684,6 @@ ${extraRule}
     return result;
   }
 
-  // src/logic/generation-state.js
-  var isGeneratingResponse = false;
-  var nextBtnAnimationTimer = null;
-  var NEXT_BTN_ANIMATION_INTERVAL = 500;
-  var initializationTime = Date.now();
-  var generationState = {
-    isGenerating: false,
-    startTime: 0,
-    lastMessageId: null,
-    pendingMessageId: null,
-    verificationTimer: null
-  };
-  var GENERATION_TIMEOUT_MS = 12e4;
-  var VERIFICATION_DELAY_MS = 2e3;
-  var _stopNextBtnAnimationRef = null;
-  var _refreshNextBtnDisplayRef = null;
-  var _updateNextBtnForGeneratingStateRef = null;
-  var _updateGeneratingStatusRef = null;
-  function setGenerationStateRefs({
-    stopNextBtnAnimation: stopNextBtnAnimation2,
-    refreshNextBtnDisplay: refreshNextBtnDisplay2,
-    updateNextBtnForGeneratingState: updateNextBtnForGeneratingState2,
-    updateGeneratingStatus: updateGeneratingStatus2
-  }) {
-    if (stopNextBtnAnimation2) _stopNextBtnAnimationRef = stopNextBtnAnimation2;
-    if (refreshNextBtnDisplay2) _refreshNextBtnDisplayRef = refreshNextBtnDisplay2;
-    if (updateNextBtnForGeneratingState2) _updateNextBtnForGeneratingStateRef = updateNextBtnForGeneratingState2;
-    if (updateGeneratingStatus2) _updateGeneratingStatusRef = updateGeneratingStatus2;
-  }
-  function getIsGeneratingResponse() {
-    return isGeneratingResponse;
-  }
-  function setIsGeneratingResponse(val) {
-    isGeneratingResponse = val;
-  }
-  function getInitializationTime() {
-    return initializationTime;
-  }
-  function getGenerationState() {
-    return generationState;
-  }
-  function getGenerationTimeoutMs() {
-    return GENERATION_TIMEOUT_MS;
-  }
-  function getVerificationDelayMs() {
-    return VERIFICATION_DELAY_MS;
-  }
-  function resetGenerationState(reason = "unknown") {
-    console.log(`[${SCRIPT_NAME}] 重置生成状态，原因: ${reason}`);
-    isGeneratingResponse = false;
-    generationState.isGenerating = false;
-    generationState.pendingMessageId = null;
-    if (_stopNextBtnAnimationRef) _stopNextBtnAnimationRef();
-    if (_refreshNextBtnDisplayRef) _refreshNextBtnDisplayRef();
-  }
-  function checkSillyTavernGenerating() {
-    try {
-      if (typeof window !== "undefined" && window.SillyTavern?.generating) {
-        return true;
-      }
-      if (topWindow?.SillyTavern?.generating) {
-        return true;
-      }
-      if (typeof window !== "undefined" && window.isGenerating) {
-        return true;
-      }
-    } catch (e) {
-    }
-    return false;
-  }
-  function verifyGenerationComplete(messageId) {
-    console.log(`[${SCRIPT_NAME}] 验证生成完成 - messageId: ${messageId}, pendingId: ${generationState.pendingMessageId}`);
-    if (!generationState.isGenerating && !isGeneratingResponse) {
-      console.log(`[${SCRIPT_NAME}] 无正在进行的生成，跳过验证`);
-      return;
-    }
-    if (checkSillyTavernGenerating()) {
-      console.log(`[${SCRIPT_NAME}] SillyTavern 仍在生成中，延迟验证`);
-      setTimeout(() => verifyGenerationComplete(messageId), 1e3);
-      return;
-    }
-    resetGenerationState(`消息 ${messageId} 验证完成`);
-  }
-  function startGenerationTimeout() {
-    if (generationState.verificationTimer) {
-      clearTimeout(generationState.verificationTimer);
-    }
-    generationState.startTime = Date.now();
-    generationState.isGenerating = true;
-    console.log(`[${SCRIPT_NAME}] 启动生成超时保护 (${GENERATION_TIMEOUT_MS}ms)`);
-    generationState.verificationTimer = setTimeout(() => {
-      const elapsed = Date.now() - generationState.startTime;
-      console.log(`[${SCRIPT_NAME}] 生成超时保护触发 - 已等待 ${elapsed}ms`);
-      if (checkSillyTavernGenerating()) {
-        console.log(`[${SCRIPT_NAME}] SillyTavern 仍在生成中，延长超时`);
-        generationState.verificationTimer = setTimeout(() => {
-          resetGenerationState("超时保护强制重置");
-        }, GENERATION_TIMEOUT_MS);
-        return;
-      }
-      resetGenerationState("超时保护触发");
-    }, GENERATION_TIMEOUT_MS);
-  }
-  function stopGenerationTimeout() {
-    if (generationState.verificationTimer) {
-      clearTimeout(generationState.verificationTimer);
-      generationState.verificationTimer = null;
-    }
-    generationState.isGenerating = false;
-  }
-
   // src/logic/enhanced-mode.js
   var WORLDBOOK_NAME2 = "galgame界面插件";
   var COT_ENTRY_NAME2 = "Galgame输出格式规范";
@@ -15956,6 +15960,7 @@ ${extraRule}
     if (!normalizedSource) {
       throw new Error("待转换文本为空");
     }
+    const independent = !!options.independent;
     const onStream = typeof options.onStream === "function" ? options.onStream : null;
     const streamState = { latestText: "" };
     let stopStreamListener = null;
@@ -15985,14 +15990,34 @@ ${normalizedSource}`;
         firstResult: normalizedSource,
         timestamp: (/* @__PURE__ */ new Date()).toLocaleString("zh-CN")
       };
-      console.log(`[${SCRIPT_NAME}] 加强模式: 已保存提示词信息`);
-      const formattedText = await generate({
-        user_input: userPrompt,
-        injects: [{ role: "system", content: systemPrompt }],
-        should_silence: true,
-        should_stream: true,
-        max_chat_history: 0
-      });
+      console.log(`[${SCRIPT_NAME}] COT转换: 模式=${independent ? "独立(开场白)" : "预设(加强模式)"}`);
+      let formattedText;
+      if (independent) {
+        formattedText = await generateRaw({
+          user_input: userPrompt,
+          should_silence: true,
+          should_stream: true,
+          ordered_prompts: [
+            { role: "system", content: systemPrompt },
+            "user_input"
+          ]
+        });
+      } else {
+        formattedText = await generate({
+          user_input: userPrompt,
+          injects: [{ role: "system", content: systemPrompt }],
+          should_silence: true,
+          should_stream: true,
+          max_chat_history: 0,
+          overrides: {
+            chat_history: {
+              prompts: [],
+              with_depth_entries: false
+            },
+            dialogue_examples: ""
+          }
+        });
+      }
       const safeFormattedText = typeof formattedText === "string" ? formattedText : String(formattedText || "");
       if (onStream && safeFormattedText && streamState.latestText !== safeFormattedText) {
         onStream(safeFormattedText);
@@ -16947,13 +16972,17 @@ ${normalizedSource}`;
       console.warn(`[${SCRIPT_NAME}] 未找到 #chat 容器`);
       return;
     }
+    let chatStabilizeTimer = null;
     const chatObserver = new MutationObserver((mutations) => {
       const settings = getSettings();
       const isEnabled = getIsEnabled();
+      const overlayActive = !!topWindow.document.querySelector("#gal-global-overlay.active");
+      let hasNewMessages = false;
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1 && node.classList?.contains("mes")) {
-            if (isEnabled && settings.hideOtherFloors) {
+            hasNewMessages = true;
+            if (isEnabled && settings.hideOtherFloors && overlayActive) {
               node.classList.add("gal-hidden");
             }
             setTimeout(() => {
@@ -16964,6 +16993,24 @@ ${normalizedSource}`;
           }
         });
       });
+      if (hasNewMessages && isEnabled && !overlayActive) {
+        if (chatStabilizeTimer) clearTimeout(chatStabilizeTimer);
+        chatStabilizeTimer = setTimeout(() => {
+          chatStabilizeTimer = null;
+          if (topWindow.document.querySelector("#gal-global-overlay.active")) return;
+          const allMes = chatContainer.querySelectorAll(".mes");
+          let lastAiMes = null;
+          allMes.forEach((mes) => {
+            if (mes.getAttribute("is_user") !== "true") {
+              lastAiMes = mes;
+            }
+          });
+          if (lastAiMes && _processNewMessageRef) {
+            console.log(`[${SCRIPT_NAME}] 检测到聊天变更且界面缺失，重新渲染最后AI消息`);
+            _processNewMessageRef(lastAiMes, { forceRender: true });
+          }
+        }, 500);
+      }
     });
     chatObserver.observe(chatContainer, { childList: true, subtree: false });
     chatContainer.querySelectorAll(".mes").forEach((mes) => {
@@ -19131,23 +19178,36 @@ ${normalizedSource}`;
     if (processNewMessage2) _processNewMessageRef2 = processNewMessage2;
     if (applySettingsToUI2) _applySettingsToUIRef = applySettingsToUI2;
   }
-  function applyGalgameMode() {
+  async function applyGalgameMode() {
     void preloadPixiEffectsRuntime();
-    const $allMes = $("#chat > .mes");
     let $lastAiMes = null;
-    $allMes.each(function() {
-      if ($(this).attr("is_user") !== "true") {
-        $lastAiMes = $(this);
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 300;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const $allMes = $("#chat > .mes");
+      $lastAiMes = null;
+      $allMes.each(function() {
+        if ($(this).attr("is_user") !== "true") {
+          $lastAiMes = $(this);
+        }
+      });
+      if ($lastAiMes && $lastAiMes.length) {
+        break;
       }
-    });
+      if (attempt < MAX_RETRIES) {
+        console.log(`[${SCRIPT_NAME}] applyGalgameMode: 未找到AI消息，等待 ${RETRY_DELAY_MS}ms 后重试 (${attempt + 1}/${MAX_RETRIES})`);
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      }
+    }
     console.log(`[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? "是" : "否"}`);
     if ($lastAiMes && $lastAiMes.length && _processNewMessageRef2) {
-      _processNewMessageRef2($lastAiMes[0], { forceRender: true });
+      await _processNewMessageRef2($lastAiMes[0], { forceRender: true });
     }
     showAllFloors();
     if (_applySettingsToUIRef) {
       _applySettingsToUIRef();
     }
+    return !!($lastAiMes && $lastAiMes.length);
   }
   function restoreOriginalViews() {
     clearAllPixiEffects();
@@ -19313,7 +19373,7 @@ ${normalizedSource}`;
       }
     }, 120);
   }
-  function processNewMessage(mesNode, options = {}) {
+  async function processNewMessage(mesNode, options = {}) {
     const { forceRender = false } = options || {};
     injectGalgameButton(mesNode);
     if (!getIsEnabled()) return;
@@ -19345,14 +19405,15 @@ ${normalizedSource}`;
       const isLastAi2 = $mes.nextAll('.mes[is_user!="true"]').length === 0;
       if (isLastAi2) {
         if (_updateGlobalOverlayContentRef3) {
-          Promise.resolve(_updateGlobalOverlayContentRef3(mesId, loadingParsed)).then(() => {
+          try {
+            await _updateGlobalOverlayContentRef3(mesId, loadingParsed);
             showGlobalOverlay();
             syncFloorVisibilityAfterOverlay(mesId);
-          }).catch((error) => {
+          } catch (error) {
             console.error(`[${SCRIPT_NAME}] 流式内容渲染失败，使用兜底覆盖层`, error);
             renderFallbackOverlay(mesId, "生成中...");
             showAllFloors();
-          });
+          }
         } else {
           renderFallbackOverlay(mesId, "生成中...");
         }
@@ -19427,23 +19488,23 @@ ${normalizedSource}`;
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
     if (isLastAi) {
       const fallbackText = String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
-      const finishRender = () => {
-        showGlobalOverlay();
-        requestAnimationFrame(() => {
-          if (_applySettingsToUIRef2) _applySettingsToUIRef2();
-        });
-        if (parsed.bgm && parsed.bgm.keyword) {
-          BGMManager.play(parsed.bgm.keyword);
-        }
-        renderBGMWidget();
-        syncFloorVisibilityAfterOverlay(mesId);
-      };
       if (_updateGlobalOverlayContentRef3) {
-        Promise.resolve(_updateGlobalOverlayContentRef3(mesId, parsed)).then(finishRender).catch((error) => {
+        try {
+          await _updateGlobalOverlayContentRef3(mesId, parsed);
+          showGlobalOverlay();
+          requestAnimationFrame(() => {
+            if (_applySettingsToUIRef2) _applySettingsToUIRef2();
+          });
+          if (parsed.bgm && parsed.bgm.keyword) {
+            BGMManager.play(parsed.bgm.keyword);
+          }
+          renderBGMWidget();
+          syncFloorVisibilityAfterOverlay(mesId);
+        } catch (error) {
           console.error(`[${SCRIPT_NAME}] 主界面渲染失败，使用兜底覆盖层`, error);
           renderFallbackOverlay(mesId, fallbackText);
           showAllFloors();
-        });
+        }
       } else {
         console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，使用兜底覆盖层`);
         renderFallbackOverlay(mesId, fallbackText);
@@ -32927,7 +32988,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       <button class="gal-tab-btn ${activeTab === "sprites" ? "active" : ""}" data-tab="sprites"><i class="fa-solid fa-user"></i> 立绘管理</button>
       <button class="gal-tab-btn ${activeTab === "backgrounds" ? "active" : ""}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> 背景管理</button>
       <button class="gal-tab-btn ${activeTab === "maps" ? "active" : ""}" data-tab="maps"><i class="fa-solid fa-map-location-dot"></i> 地图管理</button>
-      <button class="gal-tab-btn ${activeTab === "skin" ? "active" : ""}" data-tab="skin"><i class="fa-solid fa-palette"></i> 皮肤编辑</button>
+      <button class="gal-tab-btn ${activeTab === "skin" ? "active" : ""}" data-tab="skin"><i class="fa-solid fa-palette"></i> 皮肤编辑(未实装)</button>
       <button class="gal-tab-btn ${activeTab === "imagegen" ? "active" : ""}" data-tab="imagegen"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图配置</button>
       <button class="gal-tab-btn ${activeTab === "opening" ? "active" : ""}" data-tab="opening"><i class="fa-solid fa-pen-to-square"></i> 开场白转换</button>
       <button class="gal-tab-btn ${activeTab === "bgm" ? "active" : ""}" data-tab="bgm"><i class="fa-solid fa-music"></i> 指定BGM</button>
@@ -33492,6 +33553,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const previousResult = String($result.val() || "");
       try {
         const { formattedText } = await convertTextToCotFormat(sourceText, {
+          independent: true,
           onStream: (text) => {
             $result.val(text || "");
           }
@@ -33966,7 +34028,7 @@ ${baseUrl}`,
       Live2DPreloadManager.scheduleSdkPreload("init");
       injectStyles();
       resetGenerationState("页面初始化（事件注册前）");
-      setTimeout(() => {
+      setTimeout(async () => {
         resetGenerationState("页面初始化（延迟执行）");
         setIsEnabled(isCurrentCharEnabled());
         console.log(`[${SCRIPT_NAME}] 当前角色ID: ${getCurrentCharId()}, Galgame模式: ${getIsEnabled() ? "开" : "关"}`);
@@ -33985,14 +34047,17 @@ ${baseUrl}`,
         if (getIsEnabled()) {
           injectCOTToWorldbook().catch((e) => console.warn(`[${SCRIPT_NAME}] 世界书注入失败:`, e));
           console.log(`[${SCRIPT_NAME}] 初始化完成（世界书按需附加模式）`);
-          applyGalgameMode();
-          setTimeout(() => {
+          const overlayShown = await applyGalgameMode();
+          if (!overlayShown) {
+            console.log(`[${SCRIPT_NAME}] applyGalgameMode 未找到AI消息，强制显示界面`);
+            showGlobalOverlay();
+          } else {
             const $overlay = $("#gal-global-overlay");
             if (!$overlay.hasClass("active")) {
-              console.log(`[${SCRIPT_NAME}] 初始化时强制显示界面`);
+              console.log(`[${SCRIPT_NAME}] 初始化后 overlay 未 active，强制显示界面`);
               showGlobalOverlay();
             }
-          }, 100);
+          }
           setTimeout(() => updateLocationTimeDisplay(), 500);
         } else {
           disableWorldbookGlobally().catch((e) => console.warn(`[${SCRIPT_NAME}] 初始化状态同步：关闭世界书失败`, e));
@@ -34031,16 +34096,18 @@ ${baseUrl}`,
           topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, async () => {
             resetGenerationState("切换聊天");
             const newEnabled = isCurrentCharEnabled();
-            if (newEnabled !== getIsEnabled()) {
+            const wasEnabled = getIsEnabled();
+            if (newEnabled !== wasEnabled) {
               setIsEnabled(newEnabled);
               updateButtonState();
               console.log(`[${SCRIPT_NAME}] 角色卡切换，Galgame模式: ${newEnabled ? "开" : "关"}`);
-              if (newEnabled) {
-                applyGalgameMode();
-              } else {
-                await disableWorldbookGlobally().catch((e) => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));
-                restoreOriginalViews();
-              }
+            }
+            if (newEnabled) {
+              console.log(`[${SCRIPT_NAME}] 聊天切换，重新应用 Galgame 模式`);
+              await applyGalgameMode();
+            } else if (wasEnabled) {
+              await disableWorldbookGlobally().catch((e) => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));
+              restoreOriginalViews();
             }
           });
           console.log(`[${SCRIPT_NAME}] CHAT_CHANGED 事件监听已注册`);

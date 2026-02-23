@@ -1,35 +1,34 @@
-import { SCRIPT_ID, SCRIPT_NAME, VERSION, THEME } from './core/constants.js';
-import { topWindow, $ } from './core/env.js';
-import { loadSettings, getCurrentCharId, isCurrentCharEnabled } from './core/settings.js';
-import { getIsEnabled, setIsEnabled, setHideOtherFloors } from './core/state.js';
-import { getSettings } from './core/settings.js';
+import { BGMManager } from './audio/bgm-manager.js';
+import { TTSManager } from './audio/tts-manager.js';
+import { SCRIPT_NAME, VERSION } from './core/constants.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
-import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from './utils/html.js';
-import { updateLocationTimeDisplay } from './utils/location-time.js';
+import { $, topWindow } from './core/env.js';
+import { getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings } from './core/settings.js';
+import { getIsEnabled, setHideOtherFloors, setIsEnabled } from './core/state.js';
+import { loadAllBackgroundsToCache } from './db/backgrounds.js';
 import { initDB } from './db/init.js';
 import { loadAllSpritesToCache } from './db/sprites.js';
-import { loadAllBackgroundsToCache } from './db/backgrounds.js';
-import { Live2DPreloadManager } from './live2d/preload.js';
+import { applyPixiEffectOps, clearAllPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
 import { LipSyncManager } from './live2d/lip-sync.js';
 import { Live2DManager } from './live2d/manager.js';
-import { TTSManager } from './audio/tts-manager.js';
-import { BGMManager } from './audio/bgm-manager.js';
-import { SpriteManager } from './sprite/sprite-manager.js';
-import { resetGenerationState, getGenerationState, getVerificationDelayMs, verifyGenerationComplete } from './logic/generation-state.js';
-import { RE_GAL_TAGS } from './logic/parser.js';
-import { injectCOTToWorldbook, disableWorldbookGlobally } from './logic/worldbook.js';
+import { Live2DPreloadManager } from './live2d/preload.js';
 import { initEnhancedModeListener, initWorldbookInjectionListener } from './logic/enhanced-mode.js';
+import { getGenerationState, getVerificationDelayMs, resetGenerationState, verifyGenerationComplete } from './logic/generation-state.js';
 import { setupMessageObserver } from './logic/message-observer.js';
-import { injectStyles } from './ui/styles.js';
-import { setupFullscreenChangeListener } from './ui/fullscreen.js';
-import { ensureGlobalOverlay, showGlobalOverlay, setupGameContentResizeListener } from './ui/overlay.js';
-import { injectGalgameButton, addMenuButton, updateButtonState } from './ui/menu-button.js';
-import { processNewMessage } from './ui/process-message.js';
-import { setupGlobalEventListeners } from './ui/events.js';
-import { setupKeyboardShortcuts } from './ui/interaction.js';
+import { RE_GAL_TAGS } from './logic/parser.js';
+import { disableWorldbookGlobally, injectCOTToWorldbook } from './logic/worldbook.js';
+import { SpriteManager } from './sprite/sprite-manager.js';
 import { setupOptionsPanelObserver } from './ui/choices.js';
+import { setupGlobalEventListeners } from './ui/events.js';
+import { setupFullscreenChangeListener } from './ui/fullscreen.js';
 import { applyGalgameMode, restoreOriginalViews } from './ui/galgame-mode.js';
-import { applyPixiEffectOps, clearAllPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
+import { setupKeyboardShortcuts } from './ui/interaction.js';
+import { addMenuButton, injectGalgameButton, updateButtonState } from './ui/menu-button.js';
+import { ensureGlobalOverlay, setupGameContentResizeListener, showGlobalOverlay } from './ui/overlay.js';
+import { processNewMessage } from './ui/process-message.js';
+import { injectStyles } from './ui/styles.js';
+import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from './utils/html.js';
+import { updateLocationTimeDisplay } from './utils/location-time.js';
 
 // ============================================
 // 初始化
@@ -52,7 +51,7 @@ async function init() {
     injectStyles();
     resetGenerationState('页面初始化（事件注册前）');
 
-    setTimeout(() => {
+    setTimeout(async () => {
       resetGenerationState('页面初始化（延迟执行）');
 
       setIsEnabled(isCurrentCharEnabled());
@@ -74,15 +73,21 @@ async function init() {
       if (getIsEnabled()) {
         injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 世界书注入失败:`, e));
         console.log(`[${SCRIPT_NAME}] 初始化完成（世界书按需附加模式）`);
-        applyGalgameMode();
+        // 等待 applyGalgameMode 完成（包括异步的 overlay 渲染）
+        const overlayShown = await applyGalgameMode();
 
-        setTimeout(() => {
+        // 仅当 applyGalgameMode 未能成功显示界面时，才执行后备强制显示
+        if (!overlayShown) {
+          console.log(`[${SCRIPT_NAME}] applyGalgameMode 未找到AI消息，强制显示界面`);
+          showGlobalOverlay();
+        } else {
+          // 确保 overlay 确实被激活
           const $overlay = $('#gal-global-overlay');
           if (!$overlay.hasClass('active')) {
-            console.log(`[${SCRIPT_NAME}] 初始化时强制显示界面`);
+            console.log(`[${SCRIPT_NAME}] 初始化后 overlay 未 active，强制显示界面`);
             showGlobalOverlay();
           }
-        }, 100);
+        }
 
         setTimeout(() => updateLocationTimeDisplay(), 500);
 
@@ -129,16 +134,23 @@ async function init() {
         topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, async () => {
           resetGenerationState('切换聊天');
           const newEnabled = isCurrentCharEnabled();
-          if (newEnabled !== getIsEnabled()) {
+          const wasEnabled = getIsEnabled();
+
+          if (newEnabled !== wasEnabled) {
             setIsEnabled(newEnabled);
             updateButtonState();
             console.log(`[${SCRIPT_NAME}] 角色卡切换，Galgame模式: ${newEnabled ? '开' : '关'}`);
-            if (newEnabled) {
-              applyGalgameMode();
-            } else {
-              await disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));
-              restoreOriginalViews();
-            }
+          }
+
+          if (newEnabled) {
+            // 切换聊天时 SillyTavern 会清除 #chat 內容，overlay 会被销毁
+            // 必须重新创建 overlay 并渲染最新消息
+            console.log(`[${SCRIPT_NAME}] 聊天切换，重新应用 Galgame 模式`);
+            await applyGalgameMode();
+          } else if (wasEnabled) {
+            // 从启用变为禁用
+            await disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));
+            restoreOriginalViews();
           }
         });
         console.log(`[${SCRIPT_NAME}] CHAT_CHANGED 事件监听已注册`);

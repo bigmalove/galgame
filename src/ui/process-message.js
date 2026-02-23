@@ -1,19 +1,18 @@
+import { BGMManager } from '../audio/bgm-manager.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $ } from '../core/env.js';
-import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
-import { getIsEnabled, getHideOtherFloors, getPendingOptions } from '../core/state.js';
-import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from '../utils/html.js';
-import { Live2DPreloadManager } from '../live2d/preload.js';
-import { BGMManager } from '../audio/bgm-manager.js';
-import { RE_GAL_TAGS } from '../logic/parser.js';
-import { parseGalgameContent } from '../logic/parser.js';
+import { getHideOtherFloors, getIsEnabled, getPendingOptions } from '../core/state.js';
+import { GalgameStore } from '../core/store.js';
 import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.js';
-import { ensureGlobalOverlay, showGlobalOverlay, adjustToolbarForSpace } from './overlay.js';
-import { detectAndCaptureCg } from './overlay-content.js';
-import { injectGalgameButton } from './menu-button.js';
+import { Live2DPreloadManager } from '../live2d/preload.js';
+import { parseGalgameContent, RE_GAL_TAGS } from '../logic/parser.js';
+import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
 import { renderBGMWidget } from './bgm-widget.js';
 import { hideNonLastFloors, showAllFloors } from './galgame-mode.js';
+import { injectGalgameButton } from './menu-button.js';
+import { detectAndCaptureCg } from './overlay-content.js';
+import { adjustToolbarForSpace, ensureGlobalOverlay, showGlobalOverlay } from './overlay.js';
 
 // ============================================
 // 新消息处理
@@ -76,7 +75,7 @@ function syncFloorVisibilityAfterOverlay(mesId) {
   }, 120);
 }
 
-export function processNewMessage(mesNode, options = {}) {
+export async function processNewMessage(mesNode, options = {}) {
   const { forceRender = false } = options || {};
   injectGalgameButton(mesNode);
   if (!getIsEnabled()) return;
@@ -113,16 +112,15 @@ export function processNewMessage(mesNode, options = {}) {
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
     if (isLastAi) {
       if (_updateGlobalOverlayContentRef) {
-        Promise.resolve(_updateGlobalOverlayContentRef(mesId, loadingParsed))
-          .then(() => {
-            showGlobalOverlay();
-            syncFloorVisibilityAfterOverlay(mesId);
-          })
-          .catch(error => {
-            console.error(`[${SCRIPT_NAME}] 流式内容渲染失败，使用兜底覆盖层`, error);
-            renderFallbackOverlay(mesId, '生成中...');
-            showAllFloors();
-          });
+        try {
+          await _updateGlobalOverlayContentRef(mesId, loadingParsed);
+          showGlobalOverlay();
+          syncFloorVisibilityAfterOverlay(mesId);
+        } catch (error) {
+          console.error(`[${SCRIPT_NAME}] 流式内容渲染失败，使用兜底覆盖层`, error);
+          renderFallbackOverlay(mesId, '生成中...');
+          showAllFloors();
+        }
       } else {
         renderFallbackOverlay(mesId, '生成中...');
       }
@@ -209,28 +207,26 @@ export function processNewMessage(mesNode, options = {}) {
   const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
   if (isLastAi) {
     const fallbackText = String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）';
-    const finishRender = () => {
-      showGlobalOverlay();
-
-      requestAnimationFrame(() => {
-        if (_applySettingsToUIRef) _applySettingsToUIRef();
-      });
-
-      if (parsed.bgm && parsed.bgm.keyword) {
-        BGMManager.play(parsed.bgm.keyword);
-      }
-      renderBGMWidget();
-      syncFloorVisibilityAfterOverlay(mesId);
-    };
 
     if (_updateGlobalOverlayContentRef) {
-      Promise.resolve(_updateGlobalOverlayContentRef(mesId, parsed))
-        .then(finishRender)
-        .catch(error => {
-          console.error(`[${SCRIPT_NAME}] 主界面渲染失败，使用兜底覆盖层`, error);
-          renderFallbackOverlay(mesId, fallbackText);
-          showAllFloors();
+      try {
+        await _updateGlobalOverlayContentRef(mesId, parsed);
+        showGlobalOverlay();
+
+        requestAnimationFrame(() => {
+          if (_applySettingsToUIRef) _applySettingsToUIRef();
         });
+
+        if (parsed.bgm && parsed.bgm.keyword) {
+          BGMManager.play(parsed.bgm.keyword);
+        }
+        renderBGMWidget();
+        syncFloorVisibilityAfterOverlay(mesId);
+      } catch (error) {
+        console.error(`[${SCRIPT_NAME}] 主界面渲染失败，使用兜底覆盖层`, error);
+        renderFallbackOverlay(mesId, fallbackText);
+        showAllFloors();
+      }
     } else {
       console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，使用兜底覆盖层`);
       renderFallbackOverlay(mesId, fallbackText);

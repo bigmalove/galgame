@@ -398,6 +398,11 @@ export function showGlobalOverlay() {
       adjustGameContentScale();
       adjustToolbarForSpace();
       resizePixiEffects();
+      // 确保 overlay 在 #chat 的可视区域内（overlay 在 #chat 末尾，可能被滚动裁剪）
+      const chatEl = topWindow.document.getElementById('chat');
+      if (chatEl) {
+        chatEl.scrollTop = $overlay[0].offsetTop;
+      }
     }, 0);
   } else {
     console.error(`[${SCRIPT_NAME}] showGlobalOverlay: 无法获取覆盖层元素！`);

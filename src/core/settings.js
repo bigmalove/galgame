@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS = {
   fontSize: 15,
   dialogOpacity: 0.5,
   textEffect: 'none',
+  dialogFontFamily: 'sans',
   // 自动播放
   autoPlaySpeed: 2,
   // 显示设置
@@ -178,6 +179,12 @@ function normalizeBgmWhitelist(rawList) {
         .filter(Boolean),
     ),
   );
+}
+
+function normalizeDialogFontFamily(rawValue) {
+  const allowed = ['sans', 'serif', 'wenkai', 'kaiti', 'mono'];
+  const normalized = String(rawValue || '').trim().toLowerCase();
+  return allowed.includes(normalized) ? normalized : DEFAULT_SETTINGS.dialogFontFamily;
 }
 
 function normalizeMapMarkerStyle(rawStyle) {
@@ -401,6 +408,7 @@ export function loadSettings() {
       _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
+      _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
       if (!_settings.gptSoVits || typeof _settings.gptSoVits !== 'object') {
         _settings.gptSoVits = Object.assign({}, DEFAULT_SETTINGS.gptSoVits);
       }
@@ -483,6 +491,7 @@ export function saveSettings() {
   try {
     _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
     _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
+    _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
     ensureMapSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
   } catch (e) {

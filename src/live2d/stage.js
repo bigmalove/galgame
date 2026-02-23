@@ -26,6 +26,7 @@ export const Live2DStage = {
 
   slots: {
     left: { el: null, rect: null, container: null },
+    center: { el: null, rect: null, container: null },
     right: { el: null, rect: null, container: null },
   },
 
@@ -85,6 +86,11 @@ export const Live2DStage = {
       const c = new PIXI.Container();
       this.app.stage.addChild(c);
       this.slots.left.container = c;
+    }
+    if (!this.slots.center.container) {
+      const c = new PIXI.Container();
+      this.app.stage.addChild(c);
+      this.slots.center.container = c;
     }
     if (!this.slots.right.container) {
       const c = new PIXI.Container();
@@ -301,16 +307,20 @@ export const Live2DStage = {
     if (this.mode === 'single') {
       const fullRect = { x: 0, y: 0, width, height };
       this._applySlotRect('left', fullRect);
+      if (this.slots.center.container) this.slots.center.container.visible = false;
       if (this.slots.right.container) this.slots.right.container.visible = false;
     } else {
+      if (this.slots.center.container) this.slots.center.container.visible = true;
       if (this.slots.right.container) this.slots.right.container.visible = true;
 
       const leftEl = this.mountEl.querySelector?.('.gal-char-slot.slot-left');
+      const centerEl = this.mountEl.querySelector?.('.gal-char-slot.slot-center');
       const rightEl = this.mountEl.querySelector?.('.gal-char-slot.slot-right');
 
-      let leftCenterX = width * 0.32;
-      let rightCenterX = width * 0.68;
-      let domSlotWidth = width * 0.3;
+      let leftCenterX = width * 0.2;
+      let centerCenterX = width * 0.5;
+      let rightCenterX = width * 0.8;
+      let domSlotWidth = width * 0.26;
 
       const toLocalRect = (el) => {
         if (!el) return null;
@@ -336,26 +346,35 @@ export const Live2DStage = {
       };
 
       const leftDom = toLocalRect(leftEl);
+      const centerDom = toLocalRect(centerEl);
       const rightDom = toLocalRect(rightEl);
       if (leftDom) {
         leftCenterX = leftDom.x + leftDom.width / 2;
         domSlotWidth = leftDom.width;
+      }
+      if (centerDom) {
+        centerCenterX = centerDom.x + centerDom.width / 2;
+        domSlotWidth = Math.max(domSlotWidth, centerDom.width);
       }
       if (rightDom) {
         rightCenterX = rightDom.x + rightDom.width / 2;
         domSlotWidth = Math.max(domSlotWidth, rightDom.width);
       }
 
-      let virtualWidth = Math.max(width * 0.45, domSlotWidth * 1.7);
+      const hasCenterSlot = !!centerEl;
+      let virtualWidth = Math.max(width * (hasCenterSlot ? 0.34 : 0.45), domSlotWidth * 1.65);
       virtualWidth = Math.max(1, Math.min(width, Math.floor(virtualWidth)));
 
       const clampX = (x) => Math.max(0, Math.min(width - virtualWidth, Math.floor(x)));
       const leftX = clampX(leftCenterX - virtualWidth / 2);
+      const centerX = clampX(centerCenterX - virtualWidth / 2);
       const rightX = clampX(rightCenterX - virtualWidth / 2);
 
       this.slots.left.el = leftEl;
+      this.slots.center.el = centerEl;
       this.slots.right.el = rightEl;
       this._applySlotRect('left', { x: leftX, y: 0, width: virtualWidth, height });
+      this._applySlotRect('center', { x: centerX, y: 0, width: virtualWidth, height });
       this._applySlotRect('right', { x: rightX, y: 0, width: virtualWidth, height });
     }
 
@@ -414,8 +433,10 @@ export const Live2DStage = {
 
     this.app = null;
     this.slots.left.container = null;
+    this.slots.center.container = null;
     this.slots.right.container = null;
     this.slots.left.rect = null;
+    this.slots.center.rect = null;
     this.slots.right.rect = null;
 
     try {
@@ -443,7 +464,13 @@ export const Live2DStage = {
     if (!characterId || !model) return false;
     if (!this.app || !this.mountEl) return false;
 
-    const key = this.mode === 'single' ? 'left' : slot === 'right' ? 'right' : 'left';
+    const key = this.mode === 'single'
+      ? 'left'
+      : slot === 'right'
+        ? 'right'
+        : slot === 'center'
+          ? 'center'
+          : 'left';
     const targetContainer = this.slots[key]?.container;
     if (!targetContainer) return false;
 
@@ -572,7 +599,13 @@ export const Live2DStage = {
     const inst = this.instances.get(characterId);
     if (!inst?.model) return false;
 
-    const slotKey = this.mode === 'single' ? 'left' : inst.slot === 'right' ? 'right' : 'left';
+    const slotKey = this.mode === 'single'
+      ? 'left'
+      : inst.slot === 'right'
+        ? 'right'
+        : inst.slot === 'center'
+          ? 'center'
+          : 'left';
     const targetContainer = this.slots[slotKey]?.container;
     if (targetContainer && inst.model.parent !== targetContainer) {
       try {

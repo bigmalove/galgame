@@ -42,6 +42,7 @@ const buildOptions = {
   format: 'iife',
   target: ['es2020'],
   platform: 'browser',
+  charset: 'utf8',
 
   // 不压缩，保持可读性
   minify: false,

@@ -30,10 +30,10 @@ export function applyGalgameMode() {
   console.log(`[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? '是' : '否'}`);
 
   if ($lastAiMes && $lastAiMes.length && _processNewMessageRef) {
-    _processNewMessageRef($lastAiMes[0]);
+    _processNewMessageRef($lastAiMes[0], { forceRender: true });
   }
 
-  hideNonLastFloors();
+  showAllFloors();
 
   if (_applySettingsToUIRef) {
     _applySettingsToUIRef();
@@ -62,11 +62,20 @@ export function restoreOriginalViews() {
 }
 
 export function hideNonLastFloors() {
+  const $overlay = $('#gal-global-overlay');
+  const isOverlayActive = $overlay.length > 0 && $overlay.hasClass('active');
+  if (!isOverlayActive) {
+    console.warn(`[${SCRIPT_NAME}] 覆盖层未激活，跳过隐藏消息楼层`);
+    showAllFloors();
+    return false;
+  }
+
   const $allMes = $('#chat > .mes');
   $allMes.each(function () {
     $(this).addClass('gal-hidden');
   });
   console.log(`[${SCRIPT_NAME}] 已隐藏 ${$allMes.length} 个消息楼层`);
+  return true;
 }
 
 export function showAllFloors() {

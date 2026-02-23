@@ -828,8 +828,11 @@
 .gal-char-slot.slot-left {
   order: 1;
 }
-.gal-char-slot.slot-right {
+.gal-char-slot.slot-center {
   order: 2;
+}
+.gal-char-slot.slot-right {
+  order: 3;
 }
 
 .gal-char-container {
@@ -876,6 +879,10 @@
   pointer-events: none;
 }
 .gal-char-container.exiting-right {
+  animation: galSpriteSlideOutRight 0.4s ease-in forwards;
+  pointer-events: none;
+}
+.gal-char-container.exiting-center {
   animation: galSpriteSlideOutRight 0.4s ease-in forwards;
   pointer-events: none;
 }

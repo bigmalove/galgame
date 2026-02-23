@@ -88,6 +88,40 @@ const SKIN_LIST = [
   { value: 'skin-classic',  label: '樱色物语（经典Galgame）' },
 ];
 
+const DIALOG_FONT_PRESETS = [
+  {
+    value: 'sans',
+    label: '现代黑体（默认）',
+    stack: '"Noto Sans SC","PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif',
+  },
+  {
+    value: 'serif',
+    label: '思源宋体',
+    stack: '"Noto Serif SC","Songti SC","SimSun","STSong",serif',
+  },
+  {
+    value: 'wenkai',
+    label: '霞鹜文楷',
+    stack: '"LXGW WenKai Screen","LXGW WenKai","KaiTi","STKaiti",serif',
+  },
+  {
+    value: 'kaiti',
+    label: '经典楷体',
+    stack: '"KaiTi","STKaiti","Kaiti SC","DFKai-SB","Noto Serif SC",serif',
+  },
+  {
+    value: 'mono',
+    label: '等宽字体',
+    stack: '"Sarasa Mono SC","Cascadia Mono","JetBrains Mono","SFMono-Regular","Consolas","Liberation Mono",monospace',
+  },
+];
+
+function getDialogFontStack(fontKey) {
+  const normalizedKey = String(fontKey || '').trim().toLowerCase();
+  const matched = DIALOG_FONT_PRESETS.find(item => item.value === normalizedKey);
+  return matched ? matched.stack : DIALOG_FONT_PRESETS[0].stack;
+}
+
 // 应用皮肤到覆盖层
 export function applySkin() {
   const settings = getSettings();
@@ -103,7 +137,11 @@ export function applySkin() {
 export function applySettingsToUI() {
   const settings = getSettings();
   const fontScale = 0.5 + (settings.fontSize / 30) * 1.0;
-  $('#gal-global-overlay').css('--font-scale', fontScale);
+  const dialogFontStack = getDialogFontStack(settings.dialogFontFamily);
+  $('#gal-global-overlay').css({
+    '--font-scale': fontScale,
+    '--gal-dialog-font-family': dialogFontStack,
+  });
 
   const opacity = settings.dialogOpacity;
   // 只在非皮肤模式下应用默认面板样式
@@ -173,8 +211,23 @@ export function applyTextEffect() {
   const $dialogText = $('.gal-dialog-text');
   const $nameBadge = $('.gal-name-badge');
 
+  const setInlineStyles = ($els, styles, forceImportant = false) => {
+    const priority = forceImportant ? 'important' : '';
+    $els.each(function () {
+      const el = this;
+      if (!el || !el.style) return;
+      Object.entries(styles).forEach(([prop, value]) => {
+        if (value === '' || value === null || value === undefined) {
+          el.style.removeProperty(prop);
+        } else {
+          el.style.setProperty(prop, String(value), priority);
+        }
+      });
+    });
+  };
+
   $textPanel.removeClass('text-effect-glass text-effect-gradient text-effect-text-bg');
-  $dialogText.css({
+  setInlineStyles($dialogText, {
     'text-shadow': '',
     '-webkit-text-stroke': '',
     'background-color': '',
@@ -182,70 +235,69 @@ export function applyTextEffect() {
     'border-radius': '',
     'color': ''
   });
-  $nameBadge.css({
+  setInlineStyles($nameBadge, {
     'text-shadow': '',
     '-webkit-text-stroke': ''
   });
 
   switch (effect) {
     case 'shadow':
-      $dialogText.css({
+      setInlineStyles($dialogText, {
         'text-shadow': '0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5)',
         'color': '#fff'
-      });
-      $nameBadge.css({
+      }, true);
+      setInlineStyles($nameBadge, {
         'text-shadow': '0 0 4px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.5)'
-      });
+      }, true);
       break;
 
     case 'glow':
-      $dialogText.css({
+      setInlineStyles($dialogText, {
         'text-shadow': '0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(0,210,255,0.4)',
         'color': '#fff'
-      });
-      $nameBadge.css({
+      }, true);
+      setInlineStyles($nameBadge, {
         'text-shadow': '0 0 5px rgba(0,210,255,0.8), 0 0 10px rgba(0,210,255,0.5)'
-      });
+      }, true);
       break;
 
     case 'stroke':
-      $dialogText.css({
+      setInlineStyles($dialogText, {
         '-webkit-text-stroke': '1.5px rgba(0,0,0,0.8)',
         'text-shadow': '0 2px 4px rgba(0,0,0,0.3)',
         'color': '#fff'
-      });
-      $nameBadge.css({
+      }, true);
+      setInlineStyles($nameBadge, {
         '-webkit-text-stroke': '1px rgba(0,0,0,0.6)',
         'text-shadow': '0 1px 2px rgba(0,0,0,0.3)'
-      });
+      }, true);
       break;
 
     case 'glass':
       $textPanel.addClass('text-effect-glass');
-      $dialogText.css('color', '#333');
+      setInlineStyles($dialogText, { 'color': '#333' }, true);
       break;
 
     case 'gradient':
       $textPanel.addClass('text-effect-gradient');
-      $dialogText.css({
+      setInlineStyles($dialogText, {
         'text-shadow': '0 1px 2px rgba(0,0,0,0.3)',
         'color': '#fff'
-      });
+      }, true);
       break;
 
     case 'text-bg':
       $textPanel.addClass('text-effect-text-bg');
-      $dialogText.css({
+      setInlineStyles($dialogText, {
         'background-color': 'rgba(0,0,0,0.6)',
         'padding': '8px 12px',
         'border-radius': '8px',
         'color': '#fff',
         'text-shadow': '0 1px 2px rgba(0,0,0,0.3)'
-      });
+      }, true);
       break;
 
     default:
-      $dialogText.css('color', '#333');
       break;
   }
 }
@@ -307,6 +359,9 @@ export async function showSettingsPanel(topTab, subTab) {
           </label>
         `).join('')}
       </div>`;
+  const dialogFontOptions = DIALOG_FONT_PRESETS
+    .map(item => `<option value="${item.value}" ${settings.dialogFontFamily === item.value ? 'selected' : ''}>${item.label}</option>`)
+    .join('');
 
   // 构建资源管理 pane (async)
   let assetsHtml = '';
@@ -349,6 +404,14 @@ export async function showSettingsPanel(topTab, subTab) {
               <div class="gal-settings-control">
                 <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${settings.fontSize}">
                 <span class="gal-range-value" id="gal-font-size-value">${settings.fontSize}</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">对话字体</span>
+              <div class="gal-settings-control">
+                <select id="gal-dialog-font-family" class="gal-select">
+                  ${dialogFontOptions}
+                </select>
               </div>
             </div>
             <div class="gal-settings-row">
@@ -779,7 +842,7 @@ export async function showSettingsPanel(topTab, subTab) {
       $(this).removeClass('gal-toggle-off').addClass('gal-toggle-on').html('<i class="fa-solid fa-toggle-on" style="font-size: 1.3rem;"></i><span>Galgame 模式已开启</span>');
       await injectCOTToWorldbook();
       applyGalgameMode();
-      if (settings.hideOtherFloors) hideNonLastFloors();
+      if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
       showToast('Galgame 模式已开启');
     } else {
       $(this).removeClass('gal-toggle-on').addClass('gal-toggle-off').html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame 模式已关闭</span>');
@@ -792,6 +855,7 @@ export async function showSettingsPanel(topTab, subTab) {
 
   // 滑块设置
   $('#gal-font-size').on('input', function () { settings.fontSize = parseInt($(this).val()); $('#gal-font-size-value').text(settings.fontSize); applySettingsToUI(); saveSettings(); });
+  $('#gal-dialog-font-family').on('change', function () { settings.dialogFontFamily = $(this).val(); applySettingsToUI(); saveSettings(); });
   $('#gal-dialog-opacity').on('input', function () { const t = parseInt($(this).val()); settings.dialogOpacity = 1 - (t / 100); $('#gal-dialog-opacity-value').text(t + '%'); applySettingsToUI(); saveSettings(); });
   $('#gal-text-effect').on('change', function () { settings.textEffect = $(this).val(); applySettingsToUI(); saveSettings(); });
   $('#gal-auto-speed').on('input', function () { settings.autoPlaySpeed = parseFloat($(this).val()); $('#gal-auto-speed-value').text(settings.autoPlaySpeed + '秒'); saveSettings(); });
@@ -1010,7 +1074,7 @@ export async function showSettingsPanel(topTab, subTab) {
   });
 
   // 刷新视图
-  $('#gal-refresh-views').on('click', () => { if (getIsEnabled()) { applyGalgameMode(); if (settings.hideOtherFloors) hideNonLastFloors(); showToast('视图已刷新'); } else { showToast('请先开启 Galgame 模式'); } });
+  $('#gal-refresh-views').on('click', () => { if (getIsEnabled()) { applyGalgameMode(); if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80); showToast('视图已刷新'); } else { showToast('请先开启 Galgame 模式'); } });
 
   // 绑定资源管理事件
   if (_bindAssetsPaneRef) {

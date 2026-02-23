@@ -183,6 +183,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
   const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
   $overlay.find('.gal-progress-bar').css('width', `${progressPercent}%`);
 
+  await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
   const expression = displaySegment.expression || '默认';
   await SpriteManager.updateSprite($overlay, speaker, expression, renderToken);
 
@@ -304,6 +305,9 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
     stopNextBtnAnimation();
     $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
   }
+
+  await SpriteManager.applySpriteCommands($overlay, segment.spriteCommands, expectedRenderToken);
+  if (isRenderTokenStale()) return false;
 
   const expression = segment.expression || '默认';
   await SpriteManager.updateSprite($overlay, speaker, expression, expectedRenderToken);

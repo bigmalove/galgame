@@ -1984,6 +1984,8 @@ export const Live2DManager = {
         if (isStory) {
           const slot = slotEl.classList.contains('slot-right')
             ? 'right'
+            : slotEl.classList.contains('slot-center')
+              ? 'center'
             : slotEl.classList.contains('slot-left')
               ? 'left'
               : 'left';

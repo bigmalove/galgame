@@ -26,6 +26,7 @@ const RE_BNIMG = /<bnimg>([\s\S]*?)<\/bnimg>/i;
 const RE_BGM = /<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i;
 const RE_OPTION = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
 const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
+const RE_SPRITE_TAG = /<sprite\b([^>]*)\/?>/gi;
 
 const RE_ILLEGAL_TAGS = [
   /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
@@ -278,6 +279,32 @@ export function parseGalgameContent(html, messageId) {
     return bestBg;
   }
 
+  function parseTagAttributes(raw) {
+    const attrs = {};
+    if (!raw) return attrs;
+    const attrRegex = /([a-zA-Z_:][\w:.-]*)\s*=\s*["']([^"']*)["']/g;
+    let attrMatch;
+    while ((attrMatch = attrRegex.exec(raw)) !== null) {
+      attrs[String(attrMatch[1] || '').toLowerCase()] = String(attrMatch[2] || '').trim();
+    }
+    return attrs;
+  }
+
+  const spriteCommands = [];
+  let spriteTagMatch;
+  while ((spriteTagMatch = RE_SPRITE_TAG.exec(content)) !== null) {
+    const attrs = parseTagAttributes(spriteTagMatch[1] || '');
+    if (String(attrs.action || '').toLowerCase() !== 'exit') continue;
+    const targetCharacter = String(attrs.character || attrs.char || '').trim();
+    if (!targetCharacter) continue;
+    spriteCommands.push({
+      position: spriteTagMatch.index,
+      action: 'exit',
+      character: targetCharacter,
+    });
+  }
+  RE_SPRITE_TAG.lastIndex = 0;
+
   // 解析 BGM 标签
   const bgmMatch = content.match(RE_BGM);
   if (bgmMatch) {
@@ -391,6 +418,7 @@ export function parseGalgameContent(html, messageId) {
     const ttsConfig = match[1];
     const seg = parseSegmentText(match[2], ttsConfig);
     if (seg) {
+      seg._sourcePos = match.index;
       const bgAtThisPos = getBackgroundAtPosition(match.index);
       if (bgAtThisPos) {
         seg.backgroundScene = bgAtThisPos.scene;
@@ -411,7 +439,9 @@ export function parseGalgameContent(html, messageId) {
     if (rawContent && rawContent.trim()) {
       const seg = parseSegmentText(rawContent, ttsConfig);
       if (seg) {
-        const bgAtThisPos = getBackgroundAtPosition(content.length - remainingText.length + unclosedPMatch.index);
+        const segPos = content.length - remainingText.length + unclosedPMatch.index;
+        seg._sourcePos = segPos;
+        const bgAtThisPos = getBackgroundAtPosition(segPos);
         if (bgAtThisPos) {
           seg.backgroundScene = bgAtThisPos.scene;
         }
@@ -429,11 +459,34 @@ export function parseGalgameContent(html, messageId) {
         speaker: null,
         text: plainText,
         expression: null,
+        _sourcePos: content.length,
       };
       if (backgroundChanges.length > 0) {
         seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
       }
       result.segments.push(seg);
+    }
+  }
+
+  if (spriteCommands.length > 0 && result.segments.length > 0) {
+    for (const cmd of spriteCommands) {
+      let targetSegment = null;
+      for (const seg of result.segments) {
+        if ((Number(seg._sourcePos) || 0) >= cmd.position) {
+          targetSegment = seg;
+          break;
+        }
+      }
+      if (!targetSegment) {
+        targetSegment = result.segments[result.segments.length - 1];
+      }
+      if (!targetSegment.spriteCommands) {
+        targetSegment.spriteCommands = [];
+      }
+      targetSegment.spriteCommands.push({
+        action: cmd.action,
+        character: cmd.character,
+      });
     }
   }
 
@@ -446,6 +499,7 @@ export function parseGalgameContent(html, messageId) {
       return;
     }
     let text = seg.text;
+    let isFirstChunk = true;
     while (text.length > MAX_SEG_LENGTH) {
       let splitIdx = -1;
       const punctuations = ['。', '！', '？', '…', '\n', '.', '!', '?'];
@@ -462,14 +516,26 @@ export function parseGalgameContent(html, messageId) {
       if (splitIdx === -1 || splitIdx < Math.floor(MAX_SEG_LENGTH * 0.6)) {
         splitIdx = MAX_SEG_LENGTH;
       }
-      finalSegments.push(Object.assign({}, seg, { text: text.substring(0, splitIdx).trim() }));
+      const nextSeg = Object.assign({}, seg, { text: text.substring(0, splitIdx).trim() });
+      if (!isFirstChunk) {
+        delete nextSeg.spriteCommands;
+      }
+      finalSegments.push(nextSeg);
       text = text.substring(splitIdx).trim();
+      isFirstChunk = false;
     }
     if (text) {
-      finalSegments.push(Object.assign({}, seg, { text: text }));
+      const nextSeg = Object.assign({}, seg, { text: text });
+      if (!isFirstChunk) {
+        delete nextSeg.spriteCommands;
+      }
+      finalSegments.push(nextSeg);
     }
   });
   result.segments = finalSegments;
+  result.segments.forEach(seg => {
+    delete seg._sourcePos;
+  });
 
   // 缓存解析结果
   if (parseCache.size >= PARSE_CACHE_MAX_SIZE) {

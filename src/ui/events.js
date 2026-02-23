@@ -253,7 +253,7 @@ export function setupGlobalEventListeners() {
 
     await _updateGlobalOverlayContentRef(mesId, parsed);
     showGlobalOverlay();
-    if (settings.hideOtherFloors) hideNonLastFloors();
+    if (getSettings().hideOtherFloors) setTimeout(hideNonLastFloors, 80);
     showToast('Galgame 模式已开启');
   });
 
@@ -298,9 +298,14 @@ export function setupGlobalEventListeners() {
   }
 
   function isMobileMenuMode() {
+    const isNarrowViewport = !!(
+      topWindow &&
+      typeof topWindow.matchMedia === 'function' &&
+      topWindow.matchMedia('(max-width: 768px)').matches
+    );
     const $logBtn = $('#gal-global-overlay .gal-footer-btn[data-action="log"]');
-    if ($logBtn.length) return !$logBtn.is(':visible');
-    return !!(window.matchMedia && window.matchMedia('(max-width: 48rem)').matches);
+    if (!$logBtn.length) return isNarrowViewport;
+    return isNarrowViewport || !$logBtn.is(':visible');
   }
 
   // 设置按钮

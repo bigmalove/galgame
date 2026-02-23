@@ -171,6 +171,18 @@ function makePngChunkBytes(type, dataBytes) {
   return concatBytes([lenBytes, typeBytes, dataBytes, crcBytes]);
 }
 
+function stringifyCardAsV3(cardObj) {
+  const base = typeof structuredClone === 'function'
+    ? structuredClone(cardObj)
+    : JSON.parse(JSON.stringify(cardObj));
+  if (!base || typeof base !== 'object') {
+    throw new Error('角色卡数据无效');
+  }
+  base.spec = 'chara_card_v3';
+  base.spec_version = '3.0';
+  return JSON.stringify(base);
+}
+
 export function isPngBytes(bytes) {
   if (!bytes || bytes.length < PNG_SIGNATURE.length) return false;
   for (let i = 0; i < PNG_SIGNATURE.length; i++) {
@@ -239,7 +251,16 @@ export function embedCardIntoPngBytes(originalBytes, cardObj, prettyIndent = 2) 
   const jsonText = JSON.stringify(cardObj, null, normalizedIndent);
   const jsonBytes = new TextEncoder().encode(jsonText);
   const base64 = bytesToBase64(jsonBytes);
-  const newTextData = concatBytes([encodeAscii('chara'), new Uint8Array([0]), encodeAscii(base64)]);
+  const charaTextData = concatBytes([encodeAscii('chara'), new Uint8Array([0]), encodeAscii(base64)]);
+  let ccv3TextData = null;
+  try {
+    const v3Json = stringifyCardAsV3(cardObj);
+    const v3Bytes = new TextEncoder().encode(v3Json);
+    const v3Base64 = bytesToBase64(v3Bytes);
+    ccv3TextData = concatBytes([encodeAscii('ccv3'), new Uint8Array([0]), encodeAscii(v3Base64)]);
+  } catch {
+    // Ignore v3 fallback failure and keep v2 chara chunk.
+  }
 
   const removeKeywords = new Set(['chara', 'ccv3']);
   const cleaned = [];
@@ -251,9 +272,12 @@ export function embedCardIntoPngBytes(originalBytes, cardObj, prettyIndent = 2) 
     cleaned.push({ type: chunk.type, data: chunk.data });
   }
 
-  const ihdrIndex = cleaned.findIndex(chunk => chunk.type === 'IHDR');
-  const insertAt = ihdrIndex >= 0 ? ihdrIndex + 1 : 0;
-  cleaned.splice(insertAt, 0, { type: 'tEXt', data: newTextData });
+  const iendIndex = cleaned.findIndex(chunk => chunk.type === 'IEND');
+  const insertAt = iendIndex >= 0 ? iendIndex : cleaned.length;
+  cleaned.splice(insertAt, 0, { type: 'tEXt', data: charaTextData });
+  if (ccv3TextData) {
+    cleaned.splice(insertAt + 1, 0, { type: 'tEXt', data: ccv3TextData });
+  }
 
   const parts = [PNG_SIGNATURE];
   for (const chunk of cleaned) {
@@ -261,4 +285,3 @@ export function embedCardIntoPngBytes(originalBytes, cardObj, prettyIndent = 2) 
   }
   return concatBytes(parts);
 }
-

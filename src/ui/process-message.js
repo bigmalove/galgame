@@ -9,11 +9,11 @@ import { BGMManager } from '../audio/bgm-manager.js';
 import { RE_GAL_TAGS } from '../logic/parser.js';
 import { parseGalgameContent } from '../logic/parser.js';
 import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.js';
-import { showGlobalOverlay, adjustToolbarForSpace } from './overlay.js';
+import { ensureGlobalOverlay, showGlobalOverlay, adjustToolbarForSpace } from './overlay.js';
 import { detectAndCaptureCg } from './overlay-content.js';
 import { injectGalgameButton } from './menu-button.js';
 import { renderBGMWidget } from './bgm-widget.js';
-import { hideNonLastFloors } from './galgame-mode.js';
+import { hideNonLastFloors, showAllFloors } from './galgame-mode.js';
 
 // ============================================
 // 新消息处理
@@ -38,7 +38,46 @@ export function setProcessMessageRefs({ updateGlobalOverlayContent, applySetting
   if (handleNovelAIBackgroundGeneration) _handleNovelAIBackgroundGenerationRef = handleNovelAIBackgroundGeneration;
 }
 
-export function processNewMessage(mesNode) {
+function buildFallbackParsed(text) {
+  return {
+    segments: [{ type: 'narration', speaker: null, text: text || '（当前消息无可显示内容）', expression: null }],
+    currentBackground: null,
+    bgm: null,
+    options: [],
+  };
+}
+
+function renderFallbackOverlay(mesId, text) {
+  const $overlay = ensureGlobalOverlay();
+  $overlay.find('.gal-name-badge span').text('旁白');
+  $overlay.find('.gal-name-badge').addClass('gal-narrator-label');
+  $overlay.find('.gal-dialog-text').text(text || '（当前消息无可显示内容）');
+  $overlay.find('.gal-progress-bar').css('width', '100%');
+  $overlay.find('.gal-game-container').attr('data-mes-id', String(mesId));
+  showGlobalOverlay();
+}
+
+function syncFloorVisibilityAfterOverlay(mesId) {
+  if (!getHideOtherFloors()) {
+    showAllFloors();
+    return;
+  }
+
+  setTimeout(() => {
+    const $overlay = $('#gal-global-overlay');
+    const overlayMesId = String($overlay.find('.gal-game-container').attr('data-mes-id') || '');
+    const ready = $overlay.length > 0 && $overlay.hasClass('active') && overlayMesId === String(mesId);
+    if (ready) {
+      hideNonLastFloors();
+    } else {
+      console.warn(`[${SCRIPT_NAME}] 覆盖层未就绪，取消隐藏消息楼层（mesId=${mesId}, overlayMesId=${overlayMesId || 'none'}）`);
+      showAllFloors();
+    }
+  }, 120);
+}
+
+export function processNewMessage(mesNode, options = {}) {
+  const { forceRender = false } = options || {};
   injectGalgameButton(mesNode);
   if (!getIsEnabled()) return;
 
@@ -56,26 +95,37 @@ export function processNewMessage(mesNode) {
   if (!contentToProcess) {
     const $mesText = $mes.find('.mes_text');
     const html = $mesText.html();
-    if (!html) return;
-    contentToProcess = decodeHtml(html);
+    if (!html) {
+      if (!forceRender) return;
+      contentToProcess = String($mesText.text() || '').trim();
+    } else {
+      contentToProcess = decodeHtml(html);
+    }
   }
 
   const hasGalTags = RE_GAL_TAGS.test(contentToProcess);
-  if (settings.smartDetection && !hasGalTags) return;
+  if (settings.smartDetection && !hasGalTags && !forceRender) return;
 
   const hasClosedP = RE_CLOSED_P.test(contentToProcess);
-  if (!hasClosedP) {
+  if (!hasClosedP && !forceRender) {
     console.log(`[${SCRIPT_NAME}] 流式输出中，等待完整内容...`);
-    const loadingParsed = {
-      segments: [{ type: 'narration', speaker: null, text: '生成中...', expression: null }],
-      currentBackground: null,
-      bgm: null,
-      options: [],
-    };
+    const loadingParsed = buildFallbackParsed('生成中...');
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
-    if (isLastAi && _updateGlobalOverlayContentRef) {
-      _updateGlobalOverlayContentRef(mesId, loadingParsed);
-      showGlobalOverlay();
+    if (isLastAi) {
+      if (_updateGlobalOverlayContentRef) {
+        Promise.resolve(_updateGlobalOverlayContentRef(mesId, loadingParsed))
+          .then(() => {
+            showGlobalOverlay();
+            syncFloorVisibilityAfterOverlay(mesId);
+          })
+          .catch(error => {
+            console.error(`[${SCRIPT_NAME}] 流式内容渲染失败，使用兜底覆盖层`, error);
+            renderFallbackOverlay(mesId, '生成中...');
+            showAllFloors();
+          });
+      } else {
+        renderFallbackOverlay(mesId, '生成中...');
+      }
       const pending = getPendingOptions();
       if (pending && pending.length > 0) {
         $('.gal-game-container .gal-pending-choices-btn').addClass('show');
@@ -85,10 +135,16 @@ export function processNewMessage(mesNode) {
     return;
   }
 
-  let parsed = parseGalgameContent(contentToProcess);
+  let parsed = null;
+  try {
+    parsed = parseGalgameContent(contentToProcess);
+  } catch (error) {
+    console.error(`[${SCRIPT_NAME}] 解析消息失败，使用纯文本兜底`, error);
+    parsed = buildFallbackParsed(String(contentToProcess || '').trim());
+  }
 
   // 实时背景生成处理 (根据 bgImageSource 单选分派)
-  if (parsed.backgroundChanges) {
+  if (parsed && parsed.backgroundChanges) {
     const bgSrc = settings.bgImageSource || 'none';
     const bgDispatch = {
       comfyui:   { tagKey: 'generationTags', handler: _handleRealTimeBackgroundGenerationRef, label: 'ComfyUI 背景生成' },
@@ -102,25 +158,31 @@ export function processNewMessage(mesNode) {
         const tags = bgChange[entry.tagKey];
         if (tags) {
           console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ${entry.label}: "${bgChange.scene}"`);
-          entry.handler(bgChange.scene, tags);
+          try {
+            entry.handler(bgChange.scene, tags);
+          } catch (error) {
+            console.warn(`[${SCRIPT_NAME}] 背景处理失败: ${entry.label}`, error);
+          }
         }
       }
     }
   }
 
   // CG 图片：从 DOM 检测 st-chatu8 渲染的图片
-  detectAndCaptureCg(mesId, mesNode, parsed);
+  try {
+    detectAndCaptureCg(mesId, mesNode, parsed);
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] CG 检测失败`, error);
+  }
 
-  console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed.segments.length}`);
+  console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed?.segments?.length || 0}`);
 
-  if (parsed.segments.length === 0) {
-    if (!settings.smartDetection && contentToProcess && contentToProcess.trim().length > 0) {
-      parsed = {
-        segments: [{ type: 'narration', speaker: null, text: contentToProcess, expression: null }],
-        currentBackground: null,
-        bgm: null,
-        options: [],
-      };
+  if (!parsed || parsed.segments.length === 0) {
+    if (!settings.smartDetection || forceRender) {
+      const fallbackText = (contentToProcess && contentToProcess.trim().length > 0)
+        ? contentToProcess
+        : (String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）');
+      parsed = buildFallbackParsed(fallbackText);
     } else {
       return;
     }
@@ -146,23 +208,35 @@ export function processNewMessage(mesNode) {
 
   const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
   if (isLastAi) {
+    const fallbackText = String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）';
+    const finishRender = () => {
+      showGlobalOverlay();
+
+      requestAnimationFrame(() => {
+        if (_applySettingsToUIRef) _applySettingsToUIRef();
+      });
+
+      if (parsed.bgm && parsed.bgm.keyword) {
+        BGMManager.play(parsed.bgm.keyword);
+      }
+      renderBGMWidget();
+      syncFloorVisibilityAfterOverlay(mesId);
+    };
+
     if (_updateGlobalOverlayContentRef) {
-      _updateGlobalOverlayContentRef(mesId, parsed);
+      Promise.resolve(_updateGlobalOverlayContentRef(mesId, parsed))
+        .then(finishRender)
+        .catch(error => {
+          console.error(`[${SCRIPT_NAME}] 主界面渲染失败，使用兜底覆盖层`, error);
+          renderFallbackOverlay(mesId, fallbackText);
+          showAllFloors();
+        });
+    } else {
+      console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，使用兜底覆盖层`);
+      renderFallbackOverlay(mesId, fallbackText);
+      syncFloorVisibilityAfterOverlay(mesId);
     }
-    showGlobalOverlay();
 
-    requestAnimationFrame(() => {
-      if (_applySettingsToUIRef) _applySettingsToUIRef();
-    });
-
-    if (parsed.bgm && parsed.bgm.keyword) {
-      BGMManager.play(parsed.bgm.keyword);
-    }
-    renderBGMWidget();
-
-    if (getHideOtherFloors()) {
-      setTimeout(hideNonLastFloors, 100);
-    }
   } else {
     console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 不是最后一条AI消息，跳过全局UI更新`);
   }

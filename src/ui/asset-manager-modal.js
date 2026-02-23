@@ -14,6 +14,7 @@ import {
   setRenderScope,
 } from '../db/image-packs.js';
 import { deleteSprite, getAllSprites } from '../db/sprites.js';
+import { convertTextToCotFormat } from '../logic/enhanced-mode.js';
 import { injectCOTToWorldbook } from '../logic/worldbook.js';
 import { getCharacterListFromDatabase } from '../utils/chat.js';
 import {
@@ -199,6 +200,7 @@ export async function buildAssetManagerContent(activeTab) {
       <button class="gal-tab-btn ${activeTab === 'maps' ? 'active' : ''}" data-tab="maps"><i class="fa-solid fa-map-location-dot"></i> 地图管理</button>
       <button class="gal-tab-btn ${activeTab === 'skin' ? 'active' : ''}" data-tab="skin"><i class="fa-solid fa-palette"></i> 皮肤编辑</button>
       <button class="gal-tab-btn ${activeTab === 'imagegen' ? 'active' : ''}" data-tab="imagegen"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图配置</button>
+      <button class="gal-tab-btn ${activeTab === 'opening' ? 'active' : ''}" data-tab="opening"><i class="fa-solid fa-pen-to-square"></i> 开场白转换</button>
       <button class="gal-tab-btn ${activeTab === 'bgm' ? 'active' : ''}" data-tab="bgm"><i class="fa-solid fa-music"></i> 指定BGM</button>
       <button class="gal-tab-btn ${activeTab === 'custom' ? 'active' : ''}" data-tab="custom"><i class="fa-solid fa-code"></i> 自定义模块</button>
     </div>
@@ -208,6 +210,7 @@ export async function buildAssetManagerContent(activeTab) {
       ${buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount)}
       ${buildWesternSkinEditorTab(activeTab, currentPackId)}
       ${buildImagegenTab(activeTab, settings)}
+      ${buildOpeningTab(activeTab)}
       ${buildBgmTab(activeTab, settings)}
       ${buildCustomTab(settings)}
     </div>
@@ -304,6 +307,7 @@ export function bindAssetManagerContentEvents($modal, activeTab) {
   // 生图配置事件
   bindImageGenConfigEvents($modal, settings);
   bindWesternSkinEditorEvents($modal);
+  bindOpeningEvents($modal);
 
   bindSpriteEvents($modal, activeTab);
   bindBackgroundEvents($modal, activeTab);
@@ -465,6 +469,49 @@ function buildImagegenTab(activeTab, settings) {
   </div>`;
 }
 
+function buildOpeningTab(activeTab) {
+  return `
+  <div class="gal-tab-pane" data-pane="opening" style="${activeTab !== 'opening' ? 'display: none;' : ''}">
+    <div class="gal-opening-layout">
+      <div class="gal-opening-column">
+        <div class="gal-opening-title">
+          <i class="fa-solid fa-file-lines" style="color: ${THEME.accentSub};"></i> 原文输入
+        </div>
+        <textarea
+          id="gal-opening-source"
+          class="gal-opening-textarea"
+          placeholder="在这里粘贴或输入开场白原文..."
+        ></textarea>
+      </div>
+      <div class="gal-opening-column">
+        <div class="gal-opening-title">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color: ${THEME.accent};"></i> COT 转换结果
+        </div>
+        <textarea
+          id="gal-opening-result"
+          class="gal-opening-textarea"
+          placeholder="点击“转换”后将在这里显示 COT 格式结果（可手动微调）..."
+        ></textarea>
+      </div>
+    </div>
+    <div class="gal-opening-actions">
+      <button class="gal-action-btn gal-pane-btn primary" id="gal-opening-convert-btn">
+        <i class="fa-solid fa-arrows-rotate"></i> <span>转换</span>
+      </button>
+      <button class="gal-action-btn gal-pane-btn teal" id="gal-opening-copy-btn">
+        <i class="fa-solid fa-copy"></i> <span>复制结果</span>
+      </button>
+      <button class="gal-action-btn gal-pane-btn purple" id="gal-opening-write-btn">
+        <i class="fa-solid fa-pen-to-square"></i> <span>写入开场白</span>
+      </button>
+    </div>
+    <div class="gal-opening-hint">
+      <strong><i class="fa-solid fa-circle-info"></i> 说明：</strong>
+      仅做格式转换，不会改写剧情；点击“写入开场白”后会覆盖当前角色卡首条开场白，其余条目保留。
+    </div>
+  </div>`;
+}
+
 function buildBgmTab(activeTab, settings) {
   const bgmWhitelist = Array.from(
     new Set(
@@ -615,6 +662,15 @@ export function buildAssetManagerStyles() {
     .gal-pane-btn.teal:hover { background: #138496; color: #fff; }
     .gal-pane-btn.primary { background: ${THEME.accent}; color: ${THEME.dark}; }
     .gal-pane-btn.primary:hover { background: #00a8cc; color: #fff; }
+    #gal-unified-panel .gal-opening-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+    #gal-unified-panel .gal-opening-column { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 360px; }
+    #gal-unified-panel .gal-opening-title { font-size: 0.92rem; font-weight: 700; color: ${THEME.dark}; display: flex; align-items: center; gap: 6px; }
+    #gal-unified-panel .gal-opening-textarea { width: 100%; min-height: 300px; resize: vertical; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 0.86rem; line-height: 1.55; color: #1f2937; background: #ffffff; caret-color: #1f2937; }
+    #gal-unified-panel .gal-opening-textarea::placeholder { color: #9ca3af; opacity: 1; }
+    #gal-unified-panel .gal-opening-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; margin-bottom: 10px; }
+    #gal-unified-panel .gal-opening-actions .gal-pane-btn { min-width: 140px; justify-content: center; }
+    #gal-unified-panel .gal-opening-hint { padding: 10px 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #f8fafc; color: #475569; font-size: 0.82rem; line-height: 1.6; }
+    #gal-unified-panel .gal-opening-hint i { color: #0ea5e9; }
     .gal-imagegen-pills { display:flex; gap:8px; padding:12px 0; flex-wrap:wrap; }
     .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
     .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
@@ -720,6 +776,22 @@ export function buildAssetManagerStyles() {
       box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.2);
     }
     @media (max-width: 768px) {
+      #gal-unified-panel .gal-tab-header {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        flex-wrap: nowrap !important;
+        justify-content: flex-start !important;
+        gap: 6px !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      #gal-unified-panel .gal-tab-btn {
+        flex: 0 0 auto !important;
+        min-width: 102px !important;
+      }
+      #gal-unified-panel .gal-opening-layout { grid-template-columns: 1fr; }
+      #gal-unified-panel .gal-opening-column { min-height: 220px; }
+      #gal-unified-panel .gal-opening-textarea { min-height: 180px; }
+      #gal-unified-panel .gal-opening-actions .gal-pane-btn { flex: 1 1 100%; min-width: 0; }
       #gal-unified-panel .gal-custom-icon-grid {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
         max-height: 220px;
@@ -731,6 +803,130 @@ export function buildAssetManagerStyles() {
 // ============================================
 // 事件绑定 (内部)
 // ============================================
+
+function bindOpeningEvents($modal) {
+  const $source = $modal.find('#gal-opening-source');
+  const $result = $modal.find('#gal-opening-result');
+  const $convertBtn = $modal.find('#gal-opening-convert-btn');
+  const $copyBtn = $modal.find('#gal-opening-copy-btn');
+  const $writeBtn = $modal.find('#gal-opening-write-btn');
+  if (!$source.length || !$result.length) return;
+
+  let converting = false;
+
+  const updateConvertButton = (busy) => {
+    $convertBtn.prop('disabled', busy);
+    if (busy) {
+      $convertBtn.html('<i class="fa-solid fa-spinner fa-spin"></i> <span>转换中...</span>');
+    } else {
+      $convertBtn.html('<i class="fa-solid fa-arrows-rotate"></i> <span>转换</span>');
+    }
+  };
+
+  const fallbackCopyText = (text) => {
+    const doc = topWindow.document;
+    const textarea = doc.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    doc.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    const copied = doc.execCommand('copy');
+    doc.body.removeChild(textarea);
+    return copied;
+  };
+
+  $convertBtn.on('click', async function () {
+    if (converting) return;
+    const sourceText = String($source.val() || '').trim();
+    if (!sourceText) {
+      showToast('请输入要转换的开场白原文');
+      return;
+    }
+
+    converting = true;
+    updateConvertButton(true);
+    const previousResult = String($result.val() || '');
+    try {
+      const { formattedText } = await convertTextToCotFormat(sourceText, {
+        onStream: text => {
+          $result.val(text || '');
+        },
+      });
+      $result.val(formattedText || '');
+      showToast('开场白转换完成');
+    } catch (e) {
+      $result.val(previousResult);
+      showToast(`转换失败: ${e?.message || e}`);
+    } finally {
+      converting = false;
+      updateConvertButton(false);
+    }
+  });
+
+  $copyBtn.on('click', async function () {
+    const resultText = String($result.val() || '').trim();
+    if (!resultText) {
+      showToast('暂无可复制的转换结果');
+      return;
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(resultText);
+      } else {
+        const copied = fallbackCopyText(resultText);
+        if (!copied) throw new Error('复制失败');
+      }
+      showToast('已复制转换结果');
+    } catch (e) {
+      showToast(`复制失败: ${e?.message || e}`);
+    }
+  });
+
+  $writeBtn.on('click', async function () {
+    const resultText = String($result.val() || '').trim();
+    if (!resultText) {
+      showToast('请先完成转换并确认结果');
+      return;
+    }
+    if (typeof updateCharacterWith !== 'function') {
+      showToast('当前环境不支持写入角色卡开场白');
+      return;
+    }
+
+    const confirmed = await showInAppConfirmDialog({
+      title: '确认写入开场白',
+      message: '将把当前转换结果写入当前角色卡首条开场白。',
+      hint: '仅覆盖第一条开场白，其余开场白保留不变。',
+      iconClass: 'fa-solid fa-pen-to-square',
+      accent: '#0d6efd',
+      confirmText: '确认写入',
+      cancelText: '取消',
+    });
+    if (!confirmed) return;
+
+    try {
+      await updateCharacterWith('current', character => {
+        const next = character && typeof character === 'object' ? character : {};
+        const firstMessages = Array.isArray(next.first_messages) ? [...next.first_messages] : [];
+        if (firstMessages.length === 0) {
+          firstMessages.push(resultText);
+        } else {
+          firstMessages[0] = resultText;
+        }
+        next.first_messages = firstMessages;
+        return next;
+      });
+      showToast('已写入当前角色卡首条开场白');
+    } catch (e) {
+      showToast(`写入失败: ${e?.message || e}`);
+    }
+  });
+}
 
 function bindSpriteEvents($modal, activeTab) {
   $modal.find('#gal-batch-upload-btn').on('click', () => {

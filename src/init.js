@@ -1,7 +1,7 @@
 import { SCRIPT_ID, SCRIPT_NAME, VERSION, THEME } from './core/constants.js';
 import { topWindow, $ } from './core/env.js';
 import { loadSettings, getCurrentCharId, isCurrentCharEnabled } from './core/settings.js';
-import { getIsEnabled, setIsEnabled, setHideOtherFloors, getHideOtherFloors } from './core/state.js';
+import { getIsEnabled, setIsEnabled, setHideOtherFloors } from './core/state.js';
 import { getSettings } from './core/settings.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
 import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from './utils/html.js';
@@ -28,7 +28,7 @@ import { processNewMessage } from './ui/process-message.js';
 import { setupGlobalEventListeners } from './ui/events.js';
 import { setupKeyboardShortcuts } from './ui/interaction.js';
 import { setupOptionsPanelObserver } from './ui/choices.js';
-import { applyGalgameMode, restoreOriginalViews, hideNonLastFloors } from './ui/galgame-mode.js';
+import { applyGalgameMode, restoreOriginalViews } from './ui/galgame-mode.js';
 import { applyPixiEffectOps, clearAllPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
 
 // ============================================
@@ -86,7 +86,6 @@ async function init() {
 
         setTimeout(() => updateLocationTimeDisplay(), 500);
 
-        if (settings.hideOtherFloors) hideNonLastFloors();
       } else {
         disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 初始化状态同步：关闭世界书失败`, e));
       }
@@ -136,8 +135,6 @@ async function init() {
             console.log(`[${SCRIPT_NAME}] 角色卡切换，Galgame模式: ${newEnabled ? '开' : '关'}`);
             if (newEnabled) {
               applyGalgameMode();
-              const currentSettings = getSettings();
-              if (currentSettings.hideOtherFloors) hideNonLastFloors();
             } else {
               await disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));
               restoreOriginalViews();

@@ -13,14 +13,20 @@ export function injectStyles() {
   if (oldStyle) oldStyle.remove();
 
   topWindow[STYLES_INJECTED_FLAG] = true;
-  // 注入字体
-  if (!targetDoc.querySelector('link[href*="Noto+Sans+SC"]')) {
+  // 注入字体（免翻墙 CDN）
+  const webFontUrls = [
+    'https://gcore.jsdelivr.net/npm/@fontsource/barlow/index.css',
+    'https://gcore.jsdelivr.net/npm/@fontsource/noto-sans-sc/index.css',
+    'https://gcore.jsdelivr.net/npm/@fontsource/noto-serif-sc/index.css',
+    'https://gcore.jsdelivr.net/npm/lxgw-wenkai-screen-webfont/style.css',
+  ];
+  webFontUrls.forEach(href => {
+    if (targetDoc.querySelector(`link[href="${href}"]`)) return;
     const fontLink = targetDoc.createElement('link');
-    fontLink.href =
-      'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Barlow:ital,wght@0,400;0,800;1,600&display=swap';
+    fontLink.href = href;
     fontLink.rel = 'stylesheet';
     (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
-  }
+  });
   const css = `__CSS_PLACEHOLDER__`;
 
   // Galgame UI 皮肤库（基于 UI/UX Pro Max 设计系统重构）
@@ -727,6 +733,75 @@ export function injectStyles() {
     transform: translateY(2px) !important; box-shadow: inset 0 2px 4px rgba(107,58,94,0.15) !important;
 }
 #gal-global-overlay.skin-classic .gal-progress-bar { background: linear-gradient(90deg, #E8A2B6, #D4849E) !important; box-shadow: none !important; }
+
+/* === 非默认皮肤移动端：设置/LOG 合体菜单适配 === */
+@media screen and (max-width: 48rem) {
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn .gal-btn-text,
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-pending-choices-btn .gal-btn-text,
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn-next .gal-btn-text {
+        display: none !important;
+    }
+
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='log'],
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='view-original'] {
+        display: none !important;
+    }
+
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='close-mode'] {
+        order: -1 !important;
+    }
+
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-bottom-toolbar {
+        justify-content: flex-start !important;
+        gap: 0.3rem !important;
+        padding: 0 1.5rem 0.5rem 0.5rem !important;
+        overflow: visible !important;
+    }
+
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn,
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-pending-choices-btn {
+        flex: 1 !important;
+        width: auto !important;
+        min-width: 0 !important;
+        height: 2.5rem !important;
+        min-height: 2.5rem !important;
+        margin-left: 0 !important;
+        padding: 0 !important;
+        justify-content: center !important;
+        transform: none !important;
+    }
+
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn i,
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-pending-choices-btn i {
+        margin: 0 !important;
+        font-size: 1.15rem !important;
+    }
+
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn-next {
+        flex: 0 0 auto !important;
+        width: 5rem !important;
+        min-width: 5rem !important;
+        height: 2.5rem !important;
+        min-height: 2.5rem !important;
+        margin-left: 0.5rem !important;
+        margin-right: -0.5rem !important;
+        padding: 0 !important;
+        justify-content: center !important;
+        transform: none !important;
+        z-index: 100 !important;
+    }
+
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn-next i {
+        margin: 0 !important;
+        font-size: 1.6rem !important;
+    }
+}
+
+/* === 对话字体最终兜底：始终由设置项控制 === */
+#gal-global-overlay .gal-dialog-text,
+#gal-global-overlay[class*="skin-"] .gal-dialog-text {
+    font-family: var(--gal-dialog-font-family, "Noto Sans SC","PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif) !important;
+}
 
 /* === 减少运动偏好支持 === */
 @media (prefers-reduced-motion: reduce) {

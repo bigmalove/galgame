@@ -23,13 +23,14 @@ import { makeDraggable } from './interaction.js';
 // 璧勬簮瀵煎叆瀵煎嚭绠＄悊鍣?(Asset IO)
 // ============================================
 
-const DISCORD_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
-const DEFAULT_LIVE2D_EMBED_LIMIT_BYTES = DISCORD_UPLOAD_LIMIT_BYTES;
+const CARD_EXPORT_WARN_LIMIT_BYTES = 10 * 1024 * 1024;
+const CARD_EXPORT_HARD_LIMIT_BYTES = 20 * 1024 * 1024;
 const CARD_EXPORT_PREFS_KEY = `${SCRIPT_ID}_card_export_prefs`;
 const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
 const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 const CUSTOM_LOCATION_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS;
 const CUSTOM_TIME_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS;
+const MAP_IMAGE_CARD_PAYLOAD_SCHEMA = 'galgame_map_image_v1';
 
 function safeJsonParse(text, fallback) {
   try {
@@ -161,6 +162,116 @@ function applyImportedMapSettings(rawSettings) {
     updateMapSettings(patch);
   }
   return changed;
+}
+
+function pickPreferredMapRecordFromList(rawList, preferredRegionKey = GLOBAL_MAP_REGION_KEY) {
+  const list = Array.isArray(rawList) ? rawList : [];
+  if (list.length === 0) return null;
+  const preferredKey = String(preferredRegionKey || GLOBAL_MAP_REGION_KEY).trim() || GLOBAL_MAP_REGION_KEY;
+  const matched = list.find(item => String(item?.regionKey || '').trim() === preferredKey);
+  return matched || list[0] || null;
+}
+
+async function buildExportableMapImagePayload(packId = null) {
+  const allMaps = await getAllMapImages(packId);
+  const preferredMap = pickPreferredMapRecordFromList(allMaps, GLOBAL_MAP_REGION_KEY);
+  if (!preferredMap) return null;
+
+  const regionKey = String(preferredMap?.regionKey || GLOBAL_MAP_REGION_KEY).trim() || GLOBAL_MAP_REGION_KEY;
+  const imageBlob = preferredMap?.imageBlob;
+  if (typeof imageBlob?.arrayBuffer === 'function') {
+    const bytes = await imageBlob.arrayBuffer();
+    const dataBase64 = arrayBufferToBase64(bytes);
+    if (!dataBase64) return null;
+    return {
+      schema: MAP_IMAGE_CARD_PAYLOAD_SCHEMA,
+      source: 'embedded',
+      regionKey,
+      mimeType: String(imageBlob?.type || 'application/octet-stream').trim() || 'application/octet-stream',
+      dataBase64,
+    };
+  }
+
+  const imageUrl = String(preferredMap?.imageUrl || '').trim();
+  if (imageUrl) {
+    return {
+      schema: MAP_IMAGE_CARD_PAYLOAD_SCHEMA,
+      source: 'remote',
+      regionKey,
+      url: imageUrl,
+    };
+  }
+  return null;
+}
+
+function normalizeCardMapImagePayload(rawPayload) {
+  if (!rawPayload) return null;
+  if (typeof rawPayload === 'string') {
+    const remoteUrl = String(rawPayload || '').trim();
+    if (!remoteUrl) return null;
+    return {
+      mode: 'remote',
+      regionKey: GLOBAL_MAP_REGION_KEY,
+      imageUrl: remoteUrl,
+    };
+  }
+  if (typeof rawPayload !== 'object' || Array.isArray(rawPayload)) return null;
+
+  const source = String(rawPayload.source || '').trim().toLowerCase();
+  const regionKey = String(rawPayload.regionKey || GLOBAL_MAP_REGION_KEY).trim() || GLOBAL_MAP_REGION_KEY;
+  const remoteUrl = String(rawPayload.url || rawPayload.imageUrl || rawPayload.remoteUrl || '').trim();
+  const dataBase64 = String(rawPayload.dataBase64 || rawPayload.base64 || rawPayload.imageBase64 || '').trim();
+  const mimeType = String(rawPayload.mimeType || rawPayload.contentType || 'application/octet-stream').trim() || 'application/octet-stream';
+
+  if ((source === 'embedded' || source === 'local') && dataBase64) {
+    return {
+      mode: 'embedded',
+      regionKey,
+      mimeType,
+      dataBase64,
+    };
+  }
+  if ((source === 'remote' || source === 'url') && remoteUrl) {
+    return {
+      mode: 'remote',
+      regionKey,
+      imageUrl: remoteUrl,
+    };
+  }
+  if (dataBase64) {
+    return {
+      mode: 'embedded',
+      regionKey,
+      mimeType,
+      dataBase64,
+    };
+  }
+  if (remoteUrl) {
+    return {
+      mode: 'remote',
+      regionKey,
+      imageUrl: remoteUrl,
+    };
+  }
+  return null;
+}
+
+async function applyImportedCardMapImagePayload(rawPayload, targetPackId = null) {
+  const normalized = normalizeCardMapImagePayload(rawPayload);
+  if (!normalized) return false;
+
+  if (normalized.mode === 'remote') {
+    await saveUnifiedMapImage(null, normalized.imageUrl, targetPackId);
+    return true;
+  }
+
+  const bytes = base64ToUint8Array(normalized.dataBase64);
+  if (!bytes || bytes.byteLength <= 0) {
+    throw new Error('地图图片 base64 数据无效');
+  }
+  const blob = new Blob([bytes], { type: normalized.mimeType || 'application/octet-stream' });
+  await saveUnifiedMapImage(blob, null, targetPackId);
+  return true;
 }
 
 function ensureTrailingSlash(url) {
@@ -856,7 +967,9 @@ function showPngBaseFallbackSelectorDialog(options = {}) {
   const closeId = `${dialogId}-close`;
   const cancelId = `${dialogId}-cancel`;
   const confirmId = `${dialogId}-confirm`;
+  const pickFileId = `${dialogId}-pick-file`;
   const fileInputId = `${dialogId}-file`;
+  const fileNameId = `${dialogId}-file-name`;
   const reasonHtml = reason
     ? `<div style="margin-bottom: 10px; font-size: 0.84rem; color: #b45309; line-height: 1.5;">自动头像失败：${escapeHtml(reason)}</div>`
     : '';
@@ -874,9 +987,13 @@ function showPngBaseFallbackSelectorDialog(options = {}) {
           自动获取当前角色头像失败，请手动选择 PNG 文件继续导出。
         </div>
         ${reasonHtml}
-        <div style="margin-bottom: 14px;">
+        <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
           <input id="${fileInputId}" type="file" accept=".png,image/png"
-                 style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;" />
+                 style="position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; pointer-events: none;" />
+          <button class="gal-action-btn" id="${pickFileId}" style="min-height: 40px; justify-content: center; background: #f8f9fa; color: #333; border: 1px solid #d1d5db;">
+            <i class="fa-solid fa-folder-open"></i> <span>选择 PNG 文件</span>
+          </button>
+          <span id="${fileNameId}" style="font-size: 0.86rem; color: #666; word-break: break-all;">未选择文件</span>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 10px;">
           <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
@@ -904,21 +1021,68 @@ function showPngBaseFallbackSelectorDialog(options = {}) {
       resolve(value);
     };
 
-    const submit = () => {
-      const inputEl = $dialog.find(`#${fileInputId}`).get(0);
-      const file = inputEl?.files?.[0] || null;
+    const $fileInput = $dialog.find(`#${fileInputId}`);
+    const fileInputEl = $fileInput.get(0);
+    const $fileName = $dialog.find(`#${fileNameId}`);
+    let pendingSubmitAfterPick = false;
+
+    const openFilePicker = () => {
+      if (fileInputEl && typeof fileInputEl.click === 'function') {
+        fileInputEl.click();
+      }
+    };
+
+    const updatePickedFileName = (file) => {
       if (!file) {
-        showToast('请选择 PNG 底图文件');
-        $dialog.find(`#${fileInputId}`).trigger('focus');
+        $fileName.text('未选择文件');
         return;
       }
+      $fileName.text(String(file.name || '未命名文件'));
+    };
+
+    const validatePngFile = (file) => {
+      if (!file) return { ok: false, message: '请选择 PNG 底图文件' };
       const fileName = String(file.name || '').toLowerCase();
       const mimeType = String(file.type || '').toLowerCase();
       if (!fileName.endsWith('.png') && mimeType !== 'image/png') {
-        showToast('底图文件必须是 PNG 格式');
-        $dialog.find(`#${fileInputId}`).trigger('focus');
+        return { ok: false, message: '底图文件必须是 PNG 格式' };
+      }
+      return { ok: true };
+    };
+
+    $dialog.find(`#${pickFileId}`).on('click', () => {
+      pendingSubmitAfterPick = false;
+      openFilePicker();
+    });
+
+    $fileInput.on('change', () => {
+      const picked = fileInputEl?.files?.[0] || null;
+      const check = validatePngFile(picked);
+      if (!check.ok) {
+        if (picked) {
+          showToast(check.message);
+          if (fileInputEl) fileInputEl.value = '';
+        }
+        updatePickedFileName(null);
         return;
       }
+      updatePickedFileName(picked);
+      if (pendingSubmitAfterPick && picked) {
+        pendingSubmitAfterPick = false;
+        done(picked);
+      }
+    });
+
+    const submit = () => {
+      const file = fileInputEl?.files?.[0] || null;
+      const check = validatePngFile(file);
+      if (!check.ok) {
+        pendingSubmitAfterPick = true;
+        showToast(check.message);
+        openFilePicker();
+        return;
+      }
+      pendingSubmitAfterPick = false;
       done(file);
     };
 
@@ -929,7 +1093,7 @@ function showPngBaseFallbackSelectorDialog(options = {}) {
       if (e.target === this) done(null);
     });
     setTimeout(() => {
-      $dialog.find(`#${fileInputId}`).trigger('focus');
+      $dialog.find(`#${pickFileId}`).trigger('focus');
     }, 0);
   });
 }
@@ -968,21 +1132,35 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = String(reader.result || '');
-        const idx = result.indexOf(',');
-        resolve(idx >= 0 ? result.slice(idx + 1) : result);
-      };
-      reader.onerror = () => reject(reader.error || new Error('Blob read failed'));
-      reader.readAsDataURL(blob);
-    } catch (e) {
-      reject(e);
+function base64ToUint8Array(base64) {
+  const raw = String(base64 || '').replace(/\s+/g, '');
+  if (!raw) return null;
+  try {
+    const binary = atob(raw);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
     }
-  });
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+async function encodeBlobToInlineAsset(blobLike, fallbackMimeType = 'application/octet-stream') {
+  const blob = blobLike && typeof blobLike.arrayBuffer === 'function'
+    ? blobLike
+    : null;
+  if (!blob) return null;
+  const bytes = await blob.arrayBuffer();
+  const dataBase64 = arrayBufferToBase64(bytes);
+  if (!dataBase64) return null;
+  const mimeType = String(blob?.type || fallbackMimeType || 'application/octet-stream').trim() || 'application/octet-stream';
+  return {
+    dataBase64,
+    sizeBytes: bytes.byteLength,
+    mimeType,
+  };
 }
 
 function estimateLive2DModelSizeBytes(modelData) {
@@ -1015,87 +1193,6 @@ function estimateLive2DModelSizeBytes(modelData) {
   return total;
 }
 
-async function serializeLive2DModelData(modelData) {
-  const normalizedModel = withResolvedLive2DRuntime(modelData);
-  const out = {
-    modelId: String(normalizedModel?.modelId || ''),
-    runtimeType: String(normalizedModel?.runtimeType || 'legacy'),
-    cubismVersion: Number(normalizedModel?.cubismVersion || 0) || null,
-    uploadTime: Number(normalizedModel?.uploadTime || 0) || null,
-    fileSize: Number(normalizedModel?.fileSize || 0) || null,
-    modelJson: normalizedModel?.modelJson || null,
-    moc3Base64: null,
-    mocBase64: null,
-    physicsBase64: null,
-    poseBase64: null,
-    textures: [],
-    motions: {},
-    expressions: [],
-  };
-
-  const moc3 = toArrayBuffer(normalizedModel?.moc3);
-  const moc = toArrayBuffer(normalizedModel?.moc);
-  const physics = toArrayBuffer(normalizedModel?.physics);
-  const pose = toArrayBuffer(normalizedModel?.pose);
-  if (moc3) out.moc3Base64 = arrayBufferToBase64(moc3);
-  if (moc) out.mocBase64 = arrayBufferToBase64(moc);
-  if (physics) out.physicsBase64 = arrayBufferToBase64(physics);
-  if (pose) out.poseBase64 = arrayBufferToBase64(pose);
-
-  if (Array.isArray(normalizedModel?.textures)) {
-    for (const tex of normalizedModel.textures) {
-      if (!tex?.data) continue;
-      let dataBase64 = '';
-      let mimeType = 'application/octet-stream';
-
-      if (typeof Blob !== 'undefined' && tex.data instanceof Blob) {
-        mimeType = tex.data.type || mimeType;
-        dataBase64 = await blobToBase64(tex.data);
-      } else {
-        const texBuffer = toArrayBuffer(tex.data);
-        if (!texBuffer) continue;
-        dataBase64 = arrayBufferToBase64(texBuffer);
-      }
-
-      out.textures.push({
-        name: String(tex?.name || ''),
-        mimeType,
-        dataBase64,
-      });
-    }
-  }
-
-  if (normalizedModel?.motions && typeof normalizedModel.motions === 'object') {
-    for (const [groupName, list] of Object.entries(normalizedModel.motions)) {
-      if (!Array.isArray(list)) continue;
-      const exportedList = [];
-      for (const motion of list) {
-        const dataBuffer = toArrayBuffer(motion?.data);
-        if (!dataBuffer) continue;
-        exportedList.push({
-          name: String(motion?.name || ''),
-          dataBase64: arrayBufferToBase64(dataBuffer),
-        });
-      }
-      if (exportedList.length > 0) out.motions[groupName] = exportedList;
-    }
-  }
-
-  if (Array.isArray(normalizedModel?.expressions)) {
-    for (const expr of normalizedModel.expressions) {
-      const dataBuffer = toArrayBuffer(expr?.data);
-      if (!dataBuffer) continue;
-      out.expressions.push({
-        name: String(expr?.name || ''),
-        file: String(expr?.file || ''),
-        dataBase64: arrayBufferToBase64(dataBuffer),
-      });
-    }
-  }
-
-  return out;
-}
-
 function ensureCardExtensions(card) {
   if (!card || typeof card !== 'object') {
     throw new Error('褰撳墠瑙掕壊鍗℃暟鎹棤鏁?');
@@ -1105,6 +1202,108 @@ function ensureCardExtensions(card) {
     data.extensions = {};
   }
   return data.extensions;
+}
+
+function toCardString(value, fallback = '') {
+  const text = String(value ?? '').trim();
+  return text || fallback;
+}
+
+function toCardStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => String(item ?? '').trim())
+    .filter(Boolean);
+}
+
+function toCardNumber(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function normalizeCardTags(card, data) {
+  if (Array.isArray(data?.tags)) return toCardStringArray(data.tags);
+  if (Array.isArray(card?.tags)) return toCardStringArray(card.tags);
+  return [];
+}
+
+function ensureCharacterCardImportCompatibility(card) {
+  if (!card || typeof card !== 'object') {
+    throw new Error('角色卡数据无效');
+  }
+
+  const data = card.data && typeof card.data === 'object'
+    ? card.data
+    : (card.data = {});
+  const dataExt = data.extensions && typeof data.extensions === 'object'
+    ? data.extensions
+    : (data.extensions = {});
+
+  const name = toCardString(data.name || card.name, 'character');
+  const description = toCardString(data.description || card.description, '');
+  const personality = toCardString(data.personality || card.personality, '');
+  const scenario = toCardString(data.scenario || card.scenario, '');
+  const firstMes = toCardString(data.first_mes || card.first_mes, '');
+  const mesExample = toCardString(data.mes_example || card.mes_example, '');
+  const creatorNotes = toCardString(data.creator_notes || card.creatorcomment, '');
+  const creator = toCardString(data.creator || card.creator, '');
+  const systemPrompt = toCardString(data.system_prompt, '');
+  const postHistoryInstructions = toCardString(data.post_history_instructions, '');
+  const characterVersion = toCardString(data.character_version, '');
+  const tags = normalizeCardTags(card, data);
+  const alternateGreetings = toCardStringArray(data.alternate_greetings);
+
+  data.name = name;
+  data.description = description;
+  data.personality = personality;
+  data.scenario = scenario;
+  data.first_mes = firstMes;
+  data.mes_example = mesExample;
+  data.creator_notes = creatorNotes;
+  data.creator = creator;
+  data.system_prompt = systemPrompt;
+  data.post_history_instructions = postHistoryInstructions;
+  data.character_version = characterVersion;
+  data.tags = tags;
+  data.alternate_greetings = alternateGreetings;
+  if (!data.character_book || typeof data.character_book !== 'object') {
+    data.character_book = { name: '', entries: [] };
+  }
+  if (!Array.isArray(data.character_book.entries)) {
+    data.character_book.entries = [];
+  }
+
+  dataExt.talkativeness = toCardNumber(
+    dataExt.talkativeness ?? card.talkativeness,
+    0.5,
+  );
+  dataExt.fav = !!(dataExt.fav ?? card.fav);
+
+  card.spec = toCardString(card.spec, 'chara_card_v2');
+  card.spec_version = toCardString(card.spec_version, '2.0');
+  card.name = name;
+  card.description = description;
+  card.personality = personality;
+  card.scenario = scenario;
+  card.first_mes = firstMes;
+  card.mes_example = mesExample;
+  card.creatorcomment = creatorNotes;
+  card.creator = creator;
+  card.tags = tags;
+  card.talkativeness = dataExt.talkativeness;
+  card.fav = dataExt.fav;
+  card.avatar = toCardString(card.avatar, 'none');
+  card.chat = toCardString(card.chat, `${name} - ${new Date().toISOString()}`);
+  card.create_date = toCardString(card.create_date, new Date().toISOString());
+
+  delete card.json_data;
+  delete card.shallow;
+  delete card.chat_size;
+  delete card.date_added;
+  delete card.date_last_chat;
+  delete card.data_size;
+
+  return card;
 }
 
 async function buildGalgameCardConfig(options = {}) {
@@ -1118,9 +1317,7 @@ async function buildGalgameCardConfig(options = {}) {
     backgroundRemoteInput = '',
     live2dResourceMode = '',
     live2dRemoteInput = '',
-    embedLocalLive2d = true,
     includeLocalLive2dPlaceholder = true,
-    maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
     includeCustomModuleSettings = true,
     includeBgmSettings = true,
     onProgress = null,
@@ -1193,6 +1390,14 @@ async function buildGalgameCardConfig(options = {}) {
   const live2dList = Array.isArray(live2dModels) ? live2dModels : [];
   const live2dOutModels = {};
   const warnings = [];
+  const embeddedAssets = {
+    sprites: [],
+    backgrounds: [],
+  };
+  const embeddedAssetStats = {
+    spriteBytes: 0,
+    backgroundBytes: 0,
+  };
 
   if ((normalizedSpriteMode === 'remote' || normalizedBackgroundMode === 'remote') && !isUnifiedPackRemote) {
     warnings.push(
@@ -1200,8 +1405,99 @@ async function buildGalgameCardConfig(options = {}) {
     );
   }
 
+  const packIds = Array.from(
+    new Set(
+      packList
+        .map(p => String(p?.id || '').trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (normalizedSpriteMode === 'local') {
+    reportProgress(22, 'Embedding local sprite assets into card config...');
+    let skippedNoDataCount = 0;
+    for (const packId of packIds) {
+      const sprites = await getAllSprites(packId);
+      for (const rawSprite of Array.isArray(sprites) ? sprites : []) {
+        const characterId = String(rawSprite?.characterId || '').trim();
+        const expression = String(rawSprite?.expression || '').trim();
+        if (!characterId || !expression) continue;
+        const record = {
+          packId: String(rawSprite?.packId || packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID,
+          characterId,
+          expression,
+        };
+        const encoded = await encodeBlobToInlineAsset(rawSprite?.imageBlob, 'image/png');
+        if (encoded) {
+          record.source = 'embedded';
+          record.mimeType = encoded.mimeType;
+          record.dataBase64 = encoded.dataBase64;
+          record.sizeBytes = encoded.sizeBytes;
+          embeddedAssetStats.spriteBytes += encoded.sizeBytes;
+          embeddedAssets.sprites.push(record);
+          continue;
+        }
+        const fallbackUrl = String(rawSprite?.imageUrl || '').trim();
+        if (fallbackUrl) {
+          record.source = 'remote';
+          record.url = fallbackUrl;
+          embeddedAssets.sprites.push(record);
+          continue;
+        }
+        skippedNoDataCount += 1;
+      }
+    }
+    if (skippedNoDataCount > 0) {
+      warnings.push(`[Assets] 有 ${skippedNoDataCount} 条立绘缺失可导出的本地数据，已跳过。`);
+    }
+  }
+
+  if (normalizedBackgroundMode === 'local') {
+    reportProgress(26, 'Embedding local background assets into card config...');
+    let skippedNoDataCount = 0;
+    for (const packId of packIds) {
+      const backgrounds = await getAllBackgrounds(packId);
+      for (const rawBackground of Array.isArray(backgrounds) ? backgrounds : []) {
+        const sceneName = String(rawBackground?.sceneName || '').trim();
+        if (!sceneName) continue;
+        const record = {
+          packId: String(rawBackground?.packId || packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID,
+          sceneName,
+        };
+        const encoded = await encodeBlobToInlineAsset(rawBackground?.imageBlob, 'image/png');
+        if (encoded) {
+          record.source = 'embedded';
+          record.mimeType = encoded.mimeType;
+          record.dataBase64 = encoded.dataBase64;
+          record.sizeBytes = encoded.sizeBytes;
+          embeddedAssetStats.backgroundBytes += encoded.sizeBytes;
+          embeddedAssets.backgrounds.push(record);
+          continue;
+        }
+        const fallbackUrl = String(rawBackground?.imageUrl || '').trim();
+        if (fallbackUrl) {
+          record.source = 'remote';
+          record.url = fallbackUrl;
+          embeddedAssets.backgrounds.push(record);
+          continue;
+        }
+        skippedNoDataCount += 1;
+      }
+    }
+    if (skippedNoDataCount > 0) {
+      warnings.push(`[Assets] 有 ${skippedNoDataCount} 条背景缺失可导出的本地数据，已跳过。`);
+    }
+  }
+
+  const embeddedAssetTotalBytes = embeddedAssetStats.spriteBytes + embeddedAssetStats.backgroundBytes;
+  if (embeddedAssetTotalBytes > 0) {
+    warnings.push(
+      `[Assets] 本地模式已内嵌资源：立绘 ${formatSizeMb(embeddedAssetStats.spriteBytes)}，背景 ${formatSizeMb(embeddedAssetStats.backgroundBytes)}。`,
+    );
+  }
+
   if (live2dList.length === 0) {
-    reportProgress(68, 'No Live2D models detected, skipping embedded model stage');
+    reportProgress(68, 'No Live2D models detected, skipping local placeholder stage');
   }
 
   for (let i = 0; i < live2dList.length; i++) {
@@ -1255,63 +1551,6 @@ async function buildGalgameCardConfig(options = {}) {
     }
 
     const modelSizeBytes = estimateLive2DModelSizeBytes(model);
-    if (embedLocalLive2d) {
-      const overLimit =
-        Number.isFinite(maxEmbeddedLive2dBytes) &&
-        maxEmbeddedLive2dBytes > 0 &&
-        modelSizeBytes > maxEmbeddedLive2dBytes;
-
-      if (overLimit) {
-        const warn =
-          `[Live2D] ${characterId} size ${formatSizeMb(modelSizeBytes)} exceeds Discord limit ` +
-          `${formatSizeMb(maxEmbeddedLive2dBytes)}; skipped embedded export, upload to GitHub and use remote URL.`;
-        warnings.push(warn);
-        if (includeLocalLive2dPlaceholder) {
-          live2dOutModels[characterId] = {
-            source: 'idb',
-            modelId: characterId,
-            runtimeType: model.runtimeType || 'legacy',
-            cubismVersion: Number(model?.cubismVersion || 0) || null,
-            sizeBytes: modelSizeBytes,
-            note: warn,
-            ...(charCfg ? { config: charCfg } : {}),
-          };
-        }
-        reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
-        continue;
-      }
-
-      try {
-        const payload = await serializeLive2DModelData(model);
-        live2dOutModels[characterId] = {
-          source: 'embedded',
-          format: 'live2d_idb_v1',
-          runtimeType: model.runtimeType || 'legacy',
-          cubismVersion: Number(model?.cubismVersion || 0) || null,
-          sizeBytes: modelSizeBytes,
-          payload,
-          ...(charCfg ? { config: charCfg } : {}),
-        };
-      } catch (e) {
-        const errMsg = e && e.message ? e.message : String(e);
-        const warn = `[Live2D] ${characterId} 鏈綋瀵煎嚭澶辫触锛屽凡閫€鍥炲崰浣嶈褰曪細${errMsg}`;
-        warnings.push(warn);
-        if (includeLocalLive2dPlaceholder) {
-          live2dOutModels[characterId] = {
-            source: 'idb',
-            modelId: characterId,
-            runtimeType: model.runtimeType || 'legacy',
-            cubismVersion: Number(model?.cubismVersion || 0) || null,
-            sizeBytes: modelSizeBytes,
-            note: warn,
-            ...(charCfg ? { config: charCfg } : {}),
-          };
-        }
-      }
-      reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
-      continue;
-    }
-
     if (includeLocalLive2dPlaceholder) {
       live2dOutModels[characterId] = {
         source: 'idb',
@@ -1327,6 +1566,12 @@ async function buildGalgameCardConfig(options = {}) {
     reportProgress(24 + Math.round(((i + 1) / Math.max(1, live2dList.length)) * 40), `Processed Live2D model ${i + 1}/${live2dList.length}`);
   }
 
+  let customMapImagePayload = null;
+  if (includeCustomModuleSettings) {
+    reportProgress(70, 'Collecting map payload for character card...');
+    customMapImagePayload = await buildExportableMapImagePayload(activePackId);
+  }
+
   reportProgress(72, 'Finalizing character-card extension config...');
   const out = {
     schema: 'galgame_ui_plugin_config_v2',
@@ -1335,9 +1580,20 @@ async function buildGalgameCardConfig(options = {}) {
         exporter: 'galgame-ui-plugin.asset-io',
         live2dExportMode: normalizedLive2dMode === 'remote'
           ? 'remote-url'
-          : (embedLocalLive2d ? 'embedded' : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local')),
-        maxEmbeddedLive2dBytes: Number(maxEmbeddedLive2dBytes) || DEFAULT_LIVE2D_EMBED_LIMIT_BYTES,
-        discordUploadLimitBytes: DISCORD_UPLOAD_LIMIT_BYTES,
+          : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local'),
+        exportWarnLimitBytes: CARD_EXPORT_WARN_LIMIT_BYTES,
+        exportHardLimitBytes: CARD_EXPORT_HARD_LIMIT_BYTES,
+        // 兼容旧字段名，语义改为当前导出硬限制
+        discordUploadLimitBytes: CARD_EXPORT_HARD_LIMIT_BYTES,
+        ...(embeddedAssetTotalBytes > 0 ? {
+          embeddedAssets: {
+            spriteCount: embeddedAssets.sprites.length,
+            backgroundCount: embeddedAssets.backgrounds.length,
+            spriteBytes: embeddedAssetStats.spriteBytes,
+            backgroundBytes: embeddedAssetStats.backgroundBytes,
+            totalBytes: embeddedAssetTotalBytes,
+          },
+        } : {}),
         ...(warnings.length > 0 ? { warnings } : {}),
       },
     assets: {
@@ -1355,7 +1611,7 @@ async function buildGalgameCardConfig(options = {}) {
         live2d: {
           mode: normalizedLive2dMode === 'remote'
             ? 'remote'
-            : (embedLocalLive2d ? 'embedded' : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local')),
+            : (includeLocalLive2dPlaceholder ? 'idb-placeholder' : 'skip-local'),
           includeLocalPlaceholder: !!includeLocalLive2dPlaceholder,
           ...(normalizedLive2dMode === 'remote' ? {
             remoteInput: resolvedLive2dRemoteInput,
@@ -1364,6 +1620,14 @@ async function buildGalgameCardConfig(options = {}) {
           } : {}),
         },
       },
+      ...(embeddedAssets.sprites.length > 0 || embeddedAssets.backgrounds.length > 0
+        ? {
+            embedded: {
+              ...(embeddedAssets.sprites.length > 0 ? { sprites: embeddedAssets.sprites } : {}),
+              ...(embeddedAssets.backgrounds.length > 0 ? { backgrounds: embeddedAssets.backgrounds } : {}),
+            },
+          }
+        : {}),
     },
     live2d: {
       enabledMap: live2dEnabledMap || {},
@@ -1382,6 +1646,7 @@ async function buildGalgameCardConfig(options = {}) {
       locationStatusIconClass: normalizeLocationStatusIconClass(localStorage.getItem(CUSTOM_LOCATION_ICON_CLASS_KEY) || ''),
       timeStatusIconClass: normalizeTimeStatusIconClass(localStorage.getItem(CUSTOM_TIME_ICON_CLASS_KEY) || ''),
       map: buildExportableMapSettings(),
+      ...(customMapImagePayload ? { mapImage: customMapImagePayload } : {}),
     };
   }
 
@@ -1394,9 +1659,26 @@ async function buildGalgameCardConfig(options = {}) {
   return out;
 }
 
-function estimateCardJsonBytes(cardObj) {
-  const text = JSON.stringify(cardObj);
-  return new TextEncoder().encode(text).length;
+function checkCharacterCardExportSizePolicy(bytes, appendExportNotice) {
+  const safeBytes = Number(bytes) || 0;
+
+  if (safeBytes > CARD_EXPORT_HARD_LIMIT_BYTES) {
+    const message =
+      `角色卡体积 ${formatSizeMb(safeBytes)} 超过导出上限 ${formatSizeMb(CARD_EXPORT_HARD_LIMIT_BYTES)}（20 MB），已阻止导出。请改用远程资源或减少本地内嵌资源。`;
+    if (typeof appendExportNotice === 'function') {
+      appendExportNotice(message);
+    }
+    throw new Error(message);
+  }
+
+  if (safeBytes > CARD_EXPORT_WARN_LIMIT_BYTES) {
+    const message =
+      `角色卡体积 ${formatSizeMb(safeBytes)} 超过预警阈值 ${formatSizeMb(CARD_EXPORT_WARN_LIMIT_BYTES)}（10 MB），建议改用远程资源导出。`;
+    if (typeof appendExportNotice === 'function') {
+      appendExportNotice(message);
+    }
+    showToast('角色卡体积超过 10 MB，建议改用远程资源导出（已继续导出）');
+  }
 }
 
 function getSillyTavernContextSafe() {
@@ -1584,12 +1866,9 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
     ? !!options.remoteUseCdn
     : (prefs.remoteUseCdn !== undefined ? !!prefs.remoteUseCdn : true);
 
-  const embedLocalLive2dDefault = hasOwn('embedLocalLive2d')
-    ? !!options.embedLocalLive2d
-    : (prefs.embedLocalLive2d !== undefined ? !!prefs.embedLocalLive2d : true);
   const includeLocalLive2dPlaceholderDefault = hasOwn('includeLocalLive2dPlaceholder')
     ? !!options.includeLocalLive2dPlaceholder
-    : (prefs.includeLocalLive2dPlaceholder !== undefined ? !!prefs.includeLocalLive2dPlaceholder : true);
+    : true;
   const includeCustomModuleSettingsDefault = hasOwn('includeCustomModuleSettings')
     ? !!options.includeCustomModuleSettings
     : (prefs.includeCustomModuleSettings !== undefined ? !!prefs.includeCustomModuleSettings : true);
@@ -1599,17 +1878,6 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
   const outputFormatDefault = hasOwn('outputFormat')
     ? normalizeExportOutputFormat(options.outputFormat)
     : normalizeExportOutputFormat(prefs.outputFormat || 'json');
-  const pngAutoUseAvatarDefault = hasOwn('pngAutoUseAvatar')
-    ? !!options.pngAutoUseAvatar
-    : (prefs.pngAutoUseAvatar !== undefined ? !!prefs.pngAutoUseAvatar : true);
-
-  const optionsLimitBytes = Number(options.maxEmbeddedLive2dBytes);
-  const optionsLimitMb = Number.isFinite(optionsLimitBytes) && optionsLimitBytes > 0
-    ? Math.round(optionsLimitBytes / 1024 / 1024)
-    : null;
-  const prefsLimitMb = Number(prefs.maxEmbeddedLive2dMb);
-  const defaultLimitMb = optionsLimitMb
-    || (Number.isFinite(prefsLimitMb) && prefsLimitMb > 0 ? Math.round(prefsLimitMb) : Math.round(DEFAULT_LIVE2D_EMBED_LIMIT_BYTES / 1024 / 1024));
 
   const currentPackId = getCurrentPackId() || DEFAULT_PACK_ID;
   let currentPackName = '未定义';
@@ -1652,13 +1920,11 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
   const backgroundRemoteWrapId = `${dialogId}-background-remote-wrap`;
   const live2dRemoteInputId = `${dialogId}-live2d-remote-input`;
   const live2dRemoteWrapId = `${dialogId}-live2d-remote-wrap`;
-  const embedLocalLive2dId = `${dialogId}-embed-live2d`;
-  const includePlaceholderId = `${dialogId}-include-placeholder`;
-  const limitInputId = `${dialogId}-limit-mb`;
   const outputFormatName = `${dialogId}-output-format`;
-  const pngAutoAvatarId = `${dialogId}-png-auto-avatar`;
   const pngBaseInputId = `${dialogId}-png-base-input`;
   const pngBaseWrapId = `${dialogId}-png-base-wrap`;
+  const pngBasePickBtnId = `${dialogId}-png-base-pick-btn`;
+  const pngBaseFileNameId = `${dialogId}-png-base-file-name`;
   const includeCustomId = `${dialogId}-include-custom`;
   const includeBgmId = `${dialogId}-include-bgm`;
 
@@ -1783,7 +2049,7 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
             <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
               <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
                 <input type="radio" name="${live2dModeName}" value="local" ${live2dResourceModeDefault === 'local' ? 'checked' : ''}>
-                <span>本地（嵌入/占位）</span>
+                <span>只导出占位记录</span>
               </label>
               <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
                 <input type="radio" name="${live2dModeName}" value="remote" ${live2dResourceModeDefault === 'remote' ? 'checked' : ''}>
@@ -1798,18 +2064,8 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
                 远程地址支持 <code>{character}</code> 占位符；不含占位符时默认拼接为 <code>{base}/{character}/model3.json</code>。
               </div>
             </div>
-            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #333; cursor: pointer;">
-              <input type="checkbox" id="${embedLocalLive2dId}" ${embedLocalLive2dDefault ? 'checked' : ''}>
-              <span>导出本地 Live2D 本体（仅本地模式生效）</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #333; cursor: pointer;">
-              <input type="checkbox" id="${includePlaceholderId}" ${includeLocalLive2dPlaceholderDefault ? 'checked' : ''}>
-              <span>本地模式且不导出本体时，保留 Live2D 占位记录</span>
-            </label>
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <label for="${limitInputId}" style="font-size: 0.9rem; color: #555;">Live2D 本体导出阈值（MB，仅本地模式）</label>
-              <input id="${limitInputId}" type="number" min="1" step="1" value="${escapeHtml(String(defaultLimitMb))}"
-                     style="width: 110px; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px;" />
+            <div style="font-size: 0.84rem; color: #6b7280; line-height: 1.5;">
+               导出IndexedDB 占位记录。需配合远程地址使用，或由第三方工具读取占位记录后自行处理模型数据。占位记录不包含模型二进制数据，仅供兼容性和后续处理使用。
             </div>
           </section>
 
@@ -1826,17 +2082,20 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
               </label>
             </div>
             <div id="${pngBaseWrapId}" style="padding: 10px; border: 1px dashed #d1d5db; border-radius: 6px;">
-              <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #333; cursor: pointer;">
-                <input type="checkbox" id="${pngAutoAvatarId}" ${pngAutoUseAvatarDefault ? 'checked' : ''}>
-                <span>优先自动使用当前角色头像（失败后再手动选择）</span>
-              </label>
               <label for="${pngBaseInputId}" style="display: block; font-size: 0.9rem; color: #444; margin-bottom: 6px;">
                 PNG 底图文件
               </label>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px;">
+                <button type="button" class="gal-action-btn" id="${pngBasePickBtnId}"
+                        style="min-height: 36px; padding: 0 12px; border: 1px solid #0d6efd; background: #fff; color: #0d6efd;">
+                  <i class="fa-solid fa-image"></i> <span>选择 PNG 底图</span>
+                </button>
+                <span id="${pngBaseFileNameId}" style="font-size: 0.84rem; color: #6b7280;">未选择文件</span>
+              </div>
               <input id="${pngBaseInputId}" type="file" accept=".png,image/png"
-                     style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;" />
+                     style="position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none;" />
               <div style="margin-top: 6px; font-size: 0.82rem; color: #6b7280; line-height: 1.5;">
-                说明：会把角色卡 JSON 写入 PNG 元数据（keyword: <code>chara</code>），用于兼容 PNG 角色卡格式。若自动头像可用，可不手选底图。
+                说明：会把角色卡 JSON 写入 PNG 元数据（keyword: <code>chara</code>），用于兼容 PNG 角色卡格式。请手动选择一张 PNG 作为底图。
               </div>
             </div>
           </section>
@@ -1845,7 +2104,7 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
             <div style="font-weight: 700; color: #333; margin-bottom: 8px;">6) 角色卡扩展导出内容</div>
             <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #333; cursor: pointer;">
               <input type="checkbox" id="${includeCustomId}" ${includeCustomModuleSettingsDefault ? 'checked' : ''}>
-              <span>导出自定义模块设置（地点/时间弹窗内容 HTML + 图标）</span>
+              <span>导出自定义模块设置（地点/时间弹窗内容 HTML + 图标 + 地图设置/图片）</span>
             </label>
             <label style="display: flex; align-items: center; gap: 8px; color: #333; cursor: pointer;">
               <input type="checkbox" id="${includeBgmId}" ${includeBgmSettingsDefault ? 'checked' : ''}>
@@ -1879,12 +2138,10 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
     const $backgroundRemoteInput = $dialog.find(`#${backgroundRemoteInputId}`);
     const $live2dRemoteWrap = $dialog.find(`#${live2dRemoteWrapId}`);
     const $live2dRemoteInput = $dialog.find(`#${live2dRemoteInputId}`);
-    const $embedLive2d = $dialog.find(`#${embedLocalLive2dId}`);
-    const $includePlaceholder = $dialog.find(`#${includePlaceholderId}`);
-    const $limitInput = $dialog.find(`#${limitInputId}`);
     const $pngBaseWrap = $dialog.find(`#${pngBaseWrapId}`);
-    const $pngAutoAvatar = $dialog.find(`#${pngAutoAvatarId}`);
     const $pngBaseInput = $dialog.find(`#${pngBaseInputId}`);
+    const $pngBasePickBtn = $dialog.find(`#${pngBasePickBtnId}`);
+    const $pngBaseFileName = $dialog.find(`#${pngBaseFileNameId}`);
     const $characterSelect = $dialog.find(`#${characterSelectId}`);
     const $characterInput = $dialog.find(`#${characterInputId}`);
     makeDraggable($box, $dialog.find('.gal-input-title'));
@@ -1902,9 +2159,10 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
         $dialog.find(`input[name="${outputFormatName}"]:checked`).val() || 'json',
       );
       const isPngOutput = outputFormat === 'png';
-      $pngAutoAvatar.prop('disabled', !isPngOutput);
-      $pngAutoAvatar.closest('label').css('opacity', isPngOutput ? 1 : 0.6);
       $pngBaseInput.prop('disabled', !isPngOutput);
+      $pngBasePickBtn.prop('disabled', !isPngOutput);
+      $pngBasePickBtn.css('opacity', isPngOutput ? 1 : 0.6);
+      $pngBasePickBtn.css('cursor', isPngOutput ? 'pointer' : 'not-allowed');
       $pngBaseWrap.css('opacity', isPngOutput ? 1 : 0.6);
       $pngBaseWrap.css('pointer-events', isPngOutput ? 'auto' : 'none');
 
@@ -1925,16 +2183,6 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
       $live2dRemoteInput.prop('disabled', !live2dIsRemote);
       $live2dRemoteWrap.css('opacity', live2dIsRemote ? 1 : 0.6);
       $live2dRemoteWrap.css('pointer-events', live2dIsRemote ? 'auto' : 'none');
-
-      const embedLocal = !!$embedLive2d.prop('checked');
-      const localLive2dOptionsEnabled = !live2dIsRemote;
-      $embedLive2d.prop('disabled', !localLive2dOptionsEnabled);
-      $limitInput.prop('disabled', !localLive2dOptionsEnabled || !embedLocal);
-      $limitInput.css('opacity', localLive2dOptionsEnabled && embedLocal ? 1 : 0.6);
-      $includePlaceholder.prop('disabled', !localLive2dOptionsEnabled || embedLocal);
-      if (embedLocal) $includePlaceholder.prop('checked', true);
-      $embedLive2d.closest('label').css('opacity', localLive2dOptionsEnabled ? 1 : 0.6);
-      $includePlaceholder.closest('label').css('opacity', localLive2dOptionsEnabled && !embedLocal ? 1 : 0.6);
     };
 
     let settled = false;
@@ -1945,154 +2193,163 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
       resolve(value);
     };
 
-    const submit = () => {
-      let characterName = '';
-      if ($characterSelect.length > 0) {
-        characterName = String($characterSelect.val() || '').trim();
-      } else if ($characterInput.length > 0) {
-        characterName = String($characterInput.val() || '').trim();
+    const $confirmBtn = $dialog.find(`#${confirmId}`);
+    const confirmOriginalHtml = $confirmBtn.length > 0 ? $confirmBtn.html() : '';
+    const setSubmitBusy = (busy) => {
+      if ($confirmBtn.length === 0) return;
+      $confirmBtn.prop('disabled', !!busy);
+      $confirmBtn.css('opacity', busy ? 0.72 : 1);
+      $confirmBtn.css('cursor', busy ? 'wait' : 'pointer');
+      if (busy) {
+        $confirmBtn.html('<i class="fa-solid fa-spinner fa-spin"></i> <span>处理中...</span>');
+      } else if (confirmOriginalHtml) {
+        $confirmBtn.html(confirmOriginalHtml);
       }
+    };
 
-      const outputFormat = normalizeExportOutputFormat(
-        $dialog.find(`input[name="${outputFormatName}"]:checked`).val() || 'json',
-      );
-      const pngAutoUseAvatar = !!$pngAutoAvatar.prop('checked');
-      let pngBaseFile = null;
-      if (outputFormat === 'png') {
-        const inputEl = $pngBaseInput.get(0);
-        const pickedFile = inputEl && inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
-        if (pickedFile) {
-          const fileName = String(pickedFile.name || '').toLowerCase();
-          const mimeType = String(pickedFile.type || '').toLowerCase();
-          if (!fileName.endsWith('.png') && mimeType !== 'image/png') {
-            showToast('底图文件必须是 PNG 格式');
-            $pngBaseInput.trigger('focus');
+    const submit = () => {
+      if (settled) return;
+      if ($confirmBtn.length > 0 && $confirmBtn.prop('disabled')) return;
+      setSubmitBusy(true);
+      try {
+        let characterName = '';
+        if ($characterSelect.length > 0) {
+          characterName = String($characterSelect.val() || '').trim();
+        } else if ($characterInput.length > 0) {
+          characterName = String($characterInput.val() || '').trim();
+        }
+        if (!characterName && suggestedCharacterName) {
+          characterName = String(suggestedCharacterName || '').trim();
+        }
+
+        const outputFormat = normalizeExportOutputFormat(
+          $dialog.find(`input[name="${outputFormatName}"]:checked`).val() || 'json',
+        );
+        let pngBaseFile = null;
+        if (outputFormat === 'png') {
+          const inputEl = $pngBaseInput.get(0);
+          const pickedFile = inputEl && inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
+          if (pickedFile) {
+            const fileName = String(pickedFile.name || '').toLowerCase();
+            const mimeType = String(pickedFile.type || '').toLowerCase();
+            if (!fileName.endsWith('.png') && mimeType !== 'image/png') {
+              showToast('底图文件必须是 PNG 格式');
+              $pngBaseInput.trigger('focus');
+              return;
+            }
+            pngBaseFile = pickedFile;
+          }
+          if (!pngBaseFile) {
+            showToast('请先选择 PNG 底图文件');
+            if (inputEl && typeof inputEl.click === 'function') {
+              inputEl.click();
+            }
             return;
           }
-          pngBaseFile = pickedFile;
         }
-        if (!pngAutoUseAvatar && !pngBaseFile) {
-          showToast('请手动选择 PNG 底图文件，或开启自动头像底图');
-          $pngBaseInput.trigger('focus');
+
+        const packScope = String($dialog.find(`input[name="${packScopeName}"]:checked`).val() || 'all');
+        const includeAllPacks = packScope === 'all';
+        const selectedPackId = String($packSelect.val() || '').trim();
+        if (!includeAllPacks && !selectedPackId) {
+          showToast('请选择要导出的图包');
+          $packSelect.trigger('focus');
           return;
         }
-      }
 
-      const packScope = String($dialog.find(`input[name="${packScopeName}"]:checked`).val() || 'all');
-      const includeAllPacks = packScope === 'all';
-      const selectedPackId = String($packSelect.val() || '').trim();
-      if (!includeAllPacks && !selectedPackId) {
-        showToast('请选择要导出的图包');
-        $packSelect.trigger('focus');
-        return;
-      }
+        const remoteUseCdn = !!$remoteUseCdn.prop('checked');
 
-      const remoteUseCdn = !!$remoteUseCdn.prop('checked');
-
-      const spriteResourceMode = String($dialog.find(`input[name="${spriteModeName}"]:checked`).val() || 'local');
-      const spriteRemoteInputRaw = String($spriteRemoteInput.val() || '').trim();
-      let spriteRemoteInput = spriteResourceMode === 'remote' ? spriteRemoteInputRaw : '';
-      if (spriteResourceMode === 'remote') {
-        const resolvedSpriteInput = resolveRemoteAddressInput(spriteRemoteInputRaw, remoteUseCdn);
-        if (!resolvedSpriteInput.ok) {
-          showToast(`立绘远程地址无效：${resolvedSpriteInput.error}`);
-          $spriteRemoteInput.trigger('focus');
-          return;
+        const spriteResourceMode = String($dialog.find(`input[name="${spriteModeName}"]:checked`).val() || 'local');
+        const spriteRemoteInputRaw = String($spriteRemoteInput.val() || '').trim();
+        let spriteRemoteInput = spriteResourceMode === 'remote' ? spriteRemoteInputRaw : '';
+        if (spriteResourceMode === 'remote') {
+          const resolvedSpriteInput = resolveRemoteAddressInput(spriteRemoteInputRaw, remoteUseCdn);
+          if (!resolvedSpriteInput.ok) {
+            showToast(`立绘远程地址无效：${resolvedSpriteInput.error}`);
+            $spriteRemoteInput.trigger('focus');
+            return;
+          }
+          spriteRemoteInput = resolvedSpriteInput.value;
         }
-        spriteRemoteInput = resolvedSpriteInput.value;
-      }
 
-      const backgroundResourceMode = String($dialog.find(`input[name="${backgroundModeName}"]:checked`).val() || 'local');
-      const backgroundRemoteInputRaw = String($backgroundRemoteInput.val() || '').trim();
-      let backgroundRemoteInput = backgroundResourceMode === 'remote' ? backgroundRemoteInputRaw : '';
-      if (backgroundResourceMode === 'remote') {
-        const resolvedBackgroundInput = resolveRemoteAddressInput(backgroundRemoteInputRaw, remoteUseCdn);
-        if (!resolvedBackgroundInput.ok) {
-          showToast(`背景远程地址无效：${resolvedBackgroundInput.error}`);
-          $backgroundRemoteInput.trigger('focus');
-          return;
+        const backgroundResourceMode = String($dialog.find(`input[name="${backgroundModeName}"]:checked`).val() || 'local');
+        const backgroundRemoteInputRaw = String($backgroundRemoteInput.val() || '').trim();
+        let backgroundRemoteInput = backgroundResourceMode === 'remote' ? backgroundRemoteInputRaw : '';
+        if (backgroundResourceMode === 'remote') {
+          const resolvedBackgroundInput = resolveRemoteAddressInput(backgroundRemoteInputRaw, remoteUseCdn);
+          if (!resolvedBackgroundInput.ok) {
+            showToast(`背景远程地址无效：${resolvedBackgroundInput.error}`);
+            $backgroundRemoteInput.trigger('focus');
+            return;
+          }
+          backgroundRemoteInput = resolvedBackgroundInput.value;
         }
-        backgroundRemoteInput = resolvedBackgroundInput.value;
-      }
 
-      const live2dResourceMode = String($dialog.find(`input[name="${live2dModeName}"]:checked`).val() || 'local');
-      const live2dRemoteInputRaw = String($live2dRemoteInput.val() || '').trim();
-      let live2dRemoteInput = live2dResourceMode === 'remote' ? live2dRemoteInputRaw : '';
-      if (live2dResourceMode === 'remote') {
-        const resolvedLive2dInput = resolveRemoteAddressInput(live2dRemoteInputRaw, remoteUseCdn);
-        if (!resolvedLive2dInput.ok) {
-          showToast(`Live2D 远程地址无效：${resolvedLive2dInput.error}`);
-          $live2dRemoteInput.trigger('focus');
-          return;
+        const live2dResourceMode = String($dialog.find(`input[name="${live2dModeName}"]:checked`).val() || 'local');
+        const live2dRemoteInputRaw = String($live2dRemoteInput.val() || '').trim();
+        let live2dRemoteInput = live2dResourceMode === 'remote' ? live2dRemoteInputRaw : '';
+        if (live2dResourceMode === 'remote') {
+          const resolvedLive2dInput = resolveRemoteAddressInput(live2dRemoteInputRaw, remoteUseCdn);
+          if (!resolvedLive2dInput.ok) {
+            showToast(`Live2D 远程地址无效：${resolvedLive2dInput.error}`);
+            $live2dRemoteInput.trigger('focus');
+            return;
+          }
+          live2dRemoteInput = resolvedLive2dInput.value;
         }
-        live2dRemoteInput = resolvedLive2dInput.value;
+
+        const remoteInput = spriteRemoteInput || backgroundRemoteInput || live2dRemoteInput || '';
+        const includeLocalLive2dPlaceholder = live2dResourceMode === 'remote'
+          ? true
+          : includeLocalLive2dPlaceholderDefault;
+
+        const includeCustomModuleSettings = !!$dialog.find(`#${includeCustomId}`).prop('checked');
+        const includeBgmSettings = !!$dialog.find(`#${includeBgmId}`).prop('checked');
+
+        const result = {
+          characterName,
+          outputFormat,
+          pngBaseFile,
+          remoteInput,
+          includeAllPacks,
+          selectedPackId,
+          spriteResourceMode,
+          spriteRemoteInput,
+          backgroundResourceMode,
+          backgroundRemoteInput,
+          live2dResourceMode,
+          live2dRemoteInput,
+          remoteUseCdn,
+          includeLocalLive2dPlaceholder,
+          includeCustomModuleSettings,
+          includeBgmSettings,
+        };
+
+        saveCardExportPrefs({
+          characterName,
+          outputFormat,
+          remoteInput,
+          includeAllPacks,
+          selectedPackId,
+          spriteResourceMode,
+          spriteRemoteInput,
+          backgroundResourceMode,
+          backgroundRemoteInput,
+          live2dResourceMode,
+          live2dRemoteInput,
+          remoteUseCdn,
+          includeLocalLive2dPlaceholder,
+          includeCustomModuleSettings,
+          includeBgmSettings,
+        });
+
+        done(result);
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 收集导出参数失败`, e);
+        showToast(`导出参数异常: ${e?.message || e}`);
+      } finally {
+        if (!settled) setSubmitBusy(false);
       }
-
-      const remoteInput = spriteRemoteInput || backgroundRemoteInput || live2dRemoteInput || '';
-
-      const embedLocalLive2d = !!$embedLive2d.prop('checked');
-      const includeLocalLive2dPlaceholder = live2dResourceMode === 'remote'
-        ? true
-        : (embedLocalLive2d ? true : !!$includePlaceholder.prop('checked'));
-
-      const rawLimitMb = Number($limitInput.val());
-      if (live2dResourceMode !== 'remote' && embedLocalLive2d && (!Number.isFinite(rawLimitMb) || rawLimitMb <= 0)) {
-        showToast('请输入有效的 Live2D 本体导出阈值（MB）');
-        $limitInput.trigger('focus');
-        return;
-      }
-      const normalizedLimitMb = Number.isFinite(rawLimitMb) && rawLimitMb > 0
-        ? Math.floor(rawLimitMb)
-        : Math.round(DEFAULT_LIVE2D_EMBED_LIMIT_BYTES / 1024 / 1024);
-      const maxEmbeddedLive2dBytes = normalizedLimitMb * 1024 * 1024;
-
-      const includeCustomModuleSettings = !!$dialog.find(`#${includeCustomId}`).prop('checked');
-      const includeBgmSettings = !!$dialog.find(`#${includeBgmId}`).prop('checked');
-
-      const result = {
-        characterName,
-        outputFormat,
-        pngAutoUseAvatar,
-        pngBaseFile,
-        remoteInput,
-        includeAllPacks,
-        selectedPackId,
-        spriteResourceMode,
-        spriteRemoteInput,
-        backgroundResourceMode,
-        backgroundRemoteInput,
-        live2dResourceMode,
-        live2dRemoteInput,
-        remoteUseCdn,
-        embedLocalLive2d,
-        includeLocalLive2dPlaceholder,
-        maxEmbeddedLive2dBytes,
-        includeCustomModuleSettings,
-        includeBgmSettings,
-      };
-
-      saveCardExportPrefs({
-        characterName,
-        outputFormat,
-        pngAutoUseAvatar,
-        remoteInput,
-        includeAllPacks,
-        selectedPackId,
-        spriteResourceMode,
-        spriteRemoteInput,
-        backgroundResourceMode,
-        backgroundRemoteInput,
-        live2dResourceMode,
-        live2dRemoteInput,
-        remoteUseCdn,
-        embedLocalLive2d,
-        includeLocalLive2dPlaceholder,
-        maxEmbeddedLive2dMb: normalizedLimitMb,
-        includeCustomModuleSettings,
-        includeBgmSettings,
-      });
-
-      done(result);
     };
 
     $dialog.find(`input[name="${packScopeName}"]`).on('change', syncState);
@@ -2100,10 +2357,22 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
     $dialog.find(`input[name="${spriteModeName}"]`).on('change', syncState);
     $dialog.find(`input[name="${backgroundModeName}"]`).on('change', syncState);
     $dialog.find(`input[name="${live2dModeName}"]`).on('change', syncState);
-    $embedLive2d.on('change', syncState);
+    const updatePngFileLabel = () => {
+      const inputEl = $pngBaseInput.get(0);
+      const pickedFile = inputEl && inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
+      $pngBaseFileName.text(pickedFile ? `已选择：${pickedFile.name}` : '未选择文件');
+    };
+    $pngBasePickBtn.on('click', (e) => {
+      e.preventDefault();
+      const inputEl = $pngBaseInput.get(0);
+      if (!inputEl || $pngBaseInput.prop('disabled')) return;
+      inputEl.click();
+    });
+    $pngBaseInput.on('change', updatePngFileLabel);
+    updatePngFileLabel();
     syncState();
 
-    $dialog.find(`#${confirmId}`).on('click', submit);
+    $confirmBtn.on('click', submit);
     $dialog.find(`#${cancelId}`).on('click', () => done(null));
     $dialog.find(`#${closeId}`).on('click', () => done(null));
     $dialog.on('click', function (e) {
@@ -2334,6 +2603,8 @@ function resolveRawCharacterCardForExport(options = {}) {
 export async function exportCurrentCharacterCardWithConfig(options = {}) {
   let progressController = null;
   let exportSucceeded = false;
+  const interactive = options.interactive !== false;
+  let requireErrorConfirm = false;
   const updateProgress = (percent, text) => {
     if (progressController) {
       progressController.update(percent, text);
@@ -2345,10 +2616,8 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       throw new Error('未检测到 TavernHelper.getCharacter，无法直接导出角色卡');
     }
 
-    const interactive = options.interactive !== false;
     let preferredCharacterName = options.characterName || '';
     let outputFormat = normalizeExportOutputFormat(options.outputFormat || 'json');
-    let pngAutoUseAvatar = options.pngAutoUseAvatar;
     let pngBaseFile = options.pngBaseFile || null;
     let pngPrettyJsonIndent = options.pngPrettyJsonIndent;
     let remoteInput = options.remoteInput || '';
@@ -2361,9 +2630,7 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     let live2dResourceMode = options.live2dResourceMode;
     let live2dRemoteInput = options.live2dRemoteInput || '';
     let remoteUseCdn = options.remoteUseCdn;
-    let embedLocalLive2d = options.embedLocalLive2d;
     let includeLocalLive2dPlaceholder = options.includeLocalLive2dPlaceholder;
-    let maxEmbeddedLive2dBytes = options.maxEmbeddedLive2dBytes;
     let includeCustomModuleSettings = options.includeCustomModuleSettings;
     let includeBgmSettings = options.includeBgmSettings;
 
@@ -2371,7 +2638,6 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       const exportParams = await showCharacterCardExportConfigDialog({
         characterName: preferredCharacterName,
         outputFormat,
-        pngAutoUseAvatar,
         remoteInput,
         includeAllPacks,
         selectedPackId,
@@ -2382,9 +2648,7 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
         live2dResourceMode,
         live2dRemoteInput,
         remoteUseCdn,
-        embedLocalLive2d,
         includeLocalLive2dPlaceholder,
-        maxEmbeddedLive2dBytes,
         includeCustomModuleSettings,
         includeBgmSettings,
       });
@@ -2394,7 +2658,6 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       }
       preferredCharacterName = exportParams.characterName || '';
       outputFormat = normalizeExportOutputFormat(exportParams.outputFormat || outputFormat);
-      pngAutoUseAvatar = exportParams.pngAutoUseAvatar;
       pngBaseFile = exportParams.pngBaseFile || pngBaseFile;
       remoteInput = exportParams.remoteInput || '';
       includeAllPacks = exportParams.includeAllPacks;
@@ -2406,9 +2669,7 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       live2dResourceMode = exportParams.live2dResourceMode;
       live2dRemoteInput = exportParams.live2dRemoteInput || '';
       remoteUseCdn = exportParams.remoteUseCdn;
-      embedLocalLive2d = exportParams.embedLocalLive2d;
       includeLocalLive2dPlaceholder = exportParams.includeLocalLive2dPlaceholder;
-      maxEmbeddedLive2dBytes = exportParams.maxEmbeddedLive2dBytes;
       includeCustomModuleSettings = exportParams.includeCustomModuleSettings;
       includeBgmSettings = exportParams.includeBgmSettings;
     }
@@ -2453,29 +2714,24 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       live2dRemoteInput = resolvedLive2dInput.value;
     }
     remoteInput = spriteRemoteInput || backgroundRemoteInput || live2dRemoteInput || remoteInput;
-    if (embedLocalLive2d === undefined) embedLocalLive2d = true;
     if (includeLocalLive2dPlaceholder === undefined) includeLocalLive2dPlaceholder = true;
     if (includeCustomModuleSettings === undefined) includeCustomModuleSettings = true;
     if (includeBgmSettings === undefined) includeBgmSettings = true;
-    if (!Number.isFinite(maxEmbeddedLive2dBytes) || maxEmbeddedLive2dBytes <= 0) {
-      maxEmbeddedLive2dBytes = DEFAULT_LIVE2D_EMBED_LIMIT_BYTES;
-    }
     outputFormat = normalizeExportOutputFormat(outputFormat);
-    if (pngAutoUseAvatar === undefined) pngAutoUseAvatar = true;
     if (!Number.isFinite(Number(pngPrettyJsonIndent))) {
       pngPrettyJsonIndent = 2;
     } else {
       pngPrettyJsonIndent = Math.min(8, Math.max(0, Math.floor(Number(pngPrettyJsonIndent))));
     }
     if (outputFormat === 'png') {
-      if (!pngAutoUseAvatar && (!pngBaseFile || typeof pngBaseFile.arrayBuffer !== 'function')) {
+      if (!pngBaseFile || typeof pngBaseFile.arrayBuffer !== 'function') {
         throw new Error('PNG 导出模式需要提供有效的 PNG 底图文件');
       }
     }
 
     showToast('正在定位导出角色卡...');
     const resolvedCharacter = await resolveCharacterCardForExport({
-      interactive: false,
+      interactive,
       preferredCharacterName,
     });
     const currentCharacter = resolvedCharacter?.card;
@@ -2501,13 +2757,24 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       backgroundRemoteInput,
       live2dResourceMode,
       live2dRemoteInput,
-      embedLocalLive2d,
       includeLocalLive2dPlaceholder,
-      maxEmbeddedLive2dBytes,
       includeCustomModuleSettings,
       includeBgmSettings,
       onProgress: updateProgress,
     });
+    const appendExportNotice = (notice) => {
+      const text = String(notice || '').trim();
+      if (!text) return;
+      if (!config.meta || typeof config.meta !== 'object') {
+        config.meta = {};
+      }
+      if (!Array.isArray(config.meta.warnings)) {
+        config.meta.warnings = [];
+      }
+      if (!config.meta.warnings.includes(text)) {
+        config.meta.warnings.push(text);
+      }
+    };
 
     updateProgress(76, '读取角色卡数据...');
     updateProgress(80, '读取可导入的原始角色卡结构...');
@@ -2523,6 +2790,7 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       : JSON.parse(JSON.stringify(rawResolved.card));
     const ext = ensureCardExtensions(card);
     ext.galgame_ui_plugin = config;
+    ensureCharacterCardImportCompatibility(card);
 
     if (rawResolved?.resolvedName && rawResolved.resolvedName !== 'current') {
       showToast(`已自动改用角色卡: ${rawResolved.resolvedName}`);
@@ -2534,80 +2802,25 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     let filename = '';
 
     if (outputFormat === 'png') {
-      let baseBytes = null;
-      let autoAvatarError = '';
-
-      if (pngAutoUseAvatar) {
-        updateProgress(90, '尝试自动获取当前角色头像...');
-        const avatarResult = await tryResolveCurrentCharacterAvatarPngBytes({
-          resolvedCard: rawResolved?.card,
-          fallbackCharacter: currentCharacter,
-          resolvedName: resolvedCharacter?.resolvedName || preferredCharacterName,
-        });
-        if (avatarResult.ok) {
-          baseBytes = avatarResult.value;
-        } else {
-          autoAvatarError = String(avatarResult.error || '未知错误');
-        }
-      }
-
-      if (!baseBytes && pngBaseFile && typeof pngBaseFile.arrayBuffer === 'function') {
-        baseBytes = new Uint8Array(await pngBaseFile.arrayBuffer());
-      }
-
-      if (!baseBytes && interactive && pngAutoUseAvatar) {
-        const selectedFile = await showPngBaseFallbackSelectorDialog({
-          reason: autoAvatarError,
-        });
-        if (!selectedFile) {
-          throw new Error('自动头像失败，且未选择 PNG 底图文件');
-        }
-        pngBaseFile = selectedFile;
-        baseBytes = new Uint8Array(await selectedFile.arrayBuffer());
-      }
-
-      if (!baseBytes) {
+      if (!pngBaseFile || typeof pngBaseFile.arrayBuffer !== 'function') {
         throw new Error('PNG 导出模式需要提供有效的 PNG 底图文件');
       }
+      const baseBytes = new Uint8Array(await pngBaseFile.arrayBuffer());
       if (!isPngBytes(baseBytes)) {
         throw new Error('底图不是有效 PNG 文件');
       }
       const pngBytes = embedCardIntoPngBytes(baseBytes, card, pngPrettyJsonIndent);
       const bytes = pngBytes.byteLength;
-      if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
-        const msg =
-          `导出失败：PNG 角色卡体积 ${formatSizeMb(bytes)} 超过 Discord 限制 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}。\n请改用远程资源导出。`;
-        if (interactive) {
-          await showInAppAlertDialog({
-            title: '导出失败',
-            message: msg,
-            iconClass: 'fa-solid fa-circle-exclamation',
-            accent: '#dc3545',
-          });
-        }
-        throw new Error(msg);
-      }
+      checkCharacterCardExportSizePolicy(bytes, appendExportNotice);
       filename = `${sanitizeFileName(cardName)}.galgame-packed.${date}.png`;
       updateProgress(94, '生成 PNG 角色卡...');
       downloadBlob(filename, new Blob([pngBytes], { type: 'image/png' }));
     } else {
-      const bytes = estimateCardJsonBytes(card);
-      if (bytes > DISCORD_UPLOAD_LIMIT_BYTES) {
-        const msg =
-          `导出失败：角色卡体积 ${formatSizeMb(bytes)} 超过 Discord 限制 ${formatSizeMb(DISCORD_UPLOAD_LIMIT_BYTES)}。\n请改用远程资源导出。`;
-        if (interactive) {
-          await showInAppAlertDialog({
-            title: '导出失败',
-            message: msg,
-            iconClass: 'fa-solid fa-circle-exclamation',
-            accent: '#dc3545',
-          });
-        }
-        throw new Error(msg);
-      }
       filename = `${sanitizeFileName(cardName)}.galgame-packed.${date}.json`;
       updateProgress(94, '生成导出文件...');
       const outputText = JSON.stringify(card, null, 2);
+      const bytes = new TextEncoder().encode(outputText).length;
+      checkCharacterCardExportSizePolicy(bytes, appendExportNotice);
       downloadTextFile(filename, outputText, 'application/json');
     }
 
@@ -2630,15 +2843,29 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     return true;
   } catch (e) {
     console.error(`[${SCRIPT_NAME}] 导出角色卡失败`, e);
-    const message = `导出角色卡失败: ${e.message || e}`;
+    const reasonText = String(e?.message || e || '未知错误');
+    const message = `导出角色卡失败: ${reasonText}`;
     if (progressController) {
       progressController.update(100, message);
     }
-    showToast(message);
+    const isHardLimitError = reasonText.includes('超过导出上限') && reasonText.includes('20 MB');
+    if (interactive && isHardLimitError) {
+      requireErrorConfirm = true;
+      await showInAppAlertDialog({
+        title: '导出失败',
+        message: '角色卡体积超出上限，已阻止导出。',
+        details: [reasonText],
+        buttonText: '确定',
+        iconClass: 'fa-solid fa-circle-exclamation',
+        accent: '#dc3545',
+      });
+    } else {
+      showToast(message);
+    }
     return false;
   } finally {
     if (progressController) {
-      const closeDelay = exportSucceeded ? 250 : 1200;
+      const closeDelay = exportSucceeded ? 250 : (requireErrorConfirm ? 0 : 1200);
       setTimeout(() => {
         progressController.close();
       }, closeDelay);
@@ -2661,42 +2888,145 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     }
 
     let count = 0;
+    const importedSpriteKeys = new Set();
+    const importedBackgroundKeys = new Set();
     const newExpressions = [];
-    if (json.sprites) {
-      const allExpressions = getAllExpressions();
-      const customs = getCustomExpressions();
+    const allExpressions = getAllExpressions();
+    const customs = getCustomExpressions();
+    const registerExpression = (exprRaw) => {
+      const expr = String(exprRaw || '').trim();
+      if (!expr) return;
+      if (!allExpressions.includes(expr) && !newExpressions.includes(expr) && !customs.find(e => e.name === expr)) {
+        newExpressions.push(expr);
+        customs.push({ name: expr, emotion: null });
+      }
+    };
+
+    const embeddedSprites = Array.isArray(json?.assets?.embedded?.sprites)
+      ? json.assets.embedded.sprites
+      : [];
+    for (const rawSprite of embeddedSprites) {
+      const characterId = String(rawSprite?.characterId || '').trim();
+      const expression = String(rawSprite?.expression || '').trim();
+      if (!characterId || !expression) continue;
+      const key = `${characterId}__${expression}`.toLowerCase();
+      if (importedSpriteKeys.has(key)) continue;
+
+      let imported = false;
+      const source = String(rawSprite?.source || '').trim().toLowerCase();
+      const dataBase64 = String(rawSprite?.dataBase64 || '').trim();
+      if ((source === 'embedded' || dataBase64) && dataBase64) {
+        const bytes = base64ToUint8Array(dataBase64);
+        if (bytes && bytes.byteLength > 0) {
+          const blob = new Blob([bytes], {
+            type: String(rawSprite?.mimeType || 'application/octet-stream').trim() || 'application/octet-stream',
+          });
+          await saveSprite(characterId, expression, blob, null, targetPackId);
+          imported = true;
+        } else {
+          console.warn(`[${SCRIPT_NAME}] 跳过无效立绘 base64: ${characterId}/${expression}`);
+        }
+      }
+      if (!imported) {
+        const remoteUrl = String(rawSprite?.url || rawSprite?.imageUrl || '').trim();
+        if (remoteUrl) {
+          await saveSprite(characterId, expression, null, remoteUrl, targetPackId);
+          imported = true;
+        }
+      }
+      if (imported) {
+        importedSpriteKeys.add(key);
+        registerExpression(expression);
+        count++;
+      }
+    }
+
+    if (Array.isArray(json?.sprites)) {
       for (const s of json.sprites) {
-        if (s.characterId && s.expression && s.url) {
-          await saveSprite(s.characterId, s.expression, null, s.url, targetPackId);
-          count++;
-          const expr = s.expression;
-          if (!allExpressions.includes(expr) && !newExpressions.includes(expr) && !customs.find(e => e.name === expr)) {
-            newExpressions.push(expr);
-            customs.push({ name: expr, emotion: null });
-          }
-        }
-      }
-      if (newExpressions.length > 0) {
-        saveCustomExpressions(customs);
-        console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${newExpressions.join(', ')}`);
+        const characterId = String(s?.characterId || '').trim();
+        const expression = String(s?.expression || '').trim();
+        const remoteUrl = String(s?.url || s?.imageUrl || '').trim();
+        if (!characterId || !expression || !remoteUrl) continue;
+        const key = `${characterId}__${expression}`.toLowerCase();
+        if (importedSpriteKeys.has(key)) continue;
+        await saveSprite(characterId, expression, null, remoteUrl, targetPackId);
+        importedSpriteKeys.add(key);
+        registerExpression(expression);
+        count++;
       }
     }
-    if (json.backgrounds) {
+    if (newExpressions.length > 0) {
+      saveCustomExpressions(customs);
+      console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${newExpressions.join(', ')}`);
+    }
+
+    const embeddedBackgrounds = Array.isArray(json?.assets?.embedded?.backgrounds)
+      ? json.assets.embedded.backgrounds
+      : [];
+    for (const rawBackground of embeddedBackgrounds) {
+      const sceneName = String(rawBackground?.sceneName || '').trim();
+      if (!sceneName) continue;
+      const key = sceneName.toLowerCase();
+      if (importedBackgroundKeys.has(key)) continue;
+
+      let imported = false;
+      const source = String(rawBackground?.source || '').trim().toLowerCase();
+      const dataBase64 = String(rawBackground?.dataBase64 || '').trim();
+      if ((source === 'embedded' || dataBase64) && dataBase64) {
+        const bytes = base64ToUint8Array(dataBase64);
+        if (bytes && bytes.byteLength > 0) {
+          const blob = new Blob([bytes], {
+            type: String(rawBackground?.mimeType || 'application/octet-stream').trim() || 'application/octet-stream',
+          });
+          await saveBackground(sceneName, blob, null, targetPackId);
+          imported = true;
+        } else {
+          console.warn(`[${SCRIPT_NAME}] 跳过无效背景 base64: ${sceneName}`);
+        }
+      }
+      if (!imported) {
+        const remoteUrl = String(rawBackground?.url || rawBackground?.imageUrl || '').trim();
+        if (remoteUrl) {
+          await saveBackground(sceneName, null, remoteUrl, targetPackId);
+          imported = true;
+        }
+      }
+      if (imported) {
+        importedBackgroundKeys.add(key);
+        count++;
+      }
+    }
+
+    if (Array.isArray(json?.backgrounds)) {
       for (const bg of json.backgrounds) {
-        if (bg.sceneName && bg.url) {
-          await saveBackground(bg.sceneName, null, bg.url, targetPackId);
-          count++;
-        }
+        const sceneName = String(bg?.sceneName || '').trim();
+        const remoteUrl = String(bg?.url || bg?.imageUrl || '').trim();
+        if (!sceneName || !remoteUrl) continue;
+        const key = sceneName.toLowerCase();
+        if (importedBackgroundKeys.has(key)) continue;
+        await saveBackground(sceneName, null, remoteUrl, targetPackId);
+        importedBackgroundKeys.add(key);
+        count++;
       }
     }
-    if (Array.isArray(json.maps)) {
+    let mapImported = false;
+    const cardMapPayload = json?.custom?.mapImage || json?.custom?.mapAsset || json?.mapImage || json?.meta?.mapImage || null;
+    if (cardMapPayload) {
+      try {
+        mapImported = await applyImportedCardMapImagePayload(cardMapPayload, targetPackId);
+        if (mapImported) count++;
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 导入角色卡地图图片失败`, e);
+      }
+    }
+    if (!mapImported && Array.isArray(json.maps)) {
       const mapCandidates = json.maps
         .map(rawMap => ({
           regionKey: String(rawMap?.regionKey || '').trim(),
           remoteUrl: String(rawMap?.url || rawMap?.imageUrl || '').trim(),
         }))
         .filter(item => !!item.remoteUrl);
-      const preferredMap = mapCandidates.find(item => item.regionKey === GLOBAL_MAP_REGION_KEY) || mapCandidates[0] || null;
+      const preferredMap = pickPreferredMapRecordFromList(mapCandidates, GLOBAL_MAP_REGION_KEY);
       if (preferredMap) {
         await saveUnifiedMapImage(null, preferredMap.remoteUrl, targetPackId);
         count++;
@@ -2730,8 +3060,8 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     const mapSettingsApplied = applyImportedMapSettings(json.mapSettings || json?.custom?.map || json?.meta?.mapSettings);
     showToast(
       mapSettingsApplied
-        ? `成功导入 ${count} 个远程资源链接，并同步地图设置`
-        : `成功导入 ${count} 个远程资源链接`,
+        ? `成功导入 ${count} 项资源，并同步地图设置`
+        : `成功导入 ${count} 项资源`,
     );
   } catch (e) {
     console.error('JSON瀵煎叆澶辫触', e);
@@ -2818,7 +3148,7 @@ export const AssetIO = {
       }
 
       const allMaps = await getAllMapImages(currentPackId);
-      const preferredMap = allMaps.find(item => String(item?.regionKey || '').trim() === GLOBAL_MAP_REGION_KEY) || allMaps[0] || null;
+      const preferredMap = pickPreferredMapRecordFromList(allMaps, GLOBAL_MAP_REGION_KEY);
       const maps = preferredMap ? [preferredMap] : [];
       const mapManifest = [];
       if (maps.length > 0) {
@@ -3800,5 +4130,3 @@ export function showImportError(messages) {
     if (e.target === this) $dialog.remove();
   });
 }
-
-

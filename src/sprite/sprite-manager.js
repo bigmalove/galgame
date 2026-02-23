@@ -45,6 +45,7 @@ export const SpriteManager = {
   currentSpeaker: null,
   protagonistName: null,
   characterQueue: [],
+  npcReplaceCursor: 0,
   currentScene: null,
   live2dRenderSeq: new Map(),
 
@@ -145,6 +146,9 @@ export const SpriteManager = {
     if (!$charLayer.find('.gal-char-slot.slot-left').length) {
       $charLayer.append('<div class="gal-char-slot slot-left"></div>');
     }
+    if (!$charLayer.find('.gal-char-slot.slot-center').length) {
+      $charLayer.append('<div class="gal-char-slot slot-center"></div>');
+    }
     if (!$charLayer.find('.gal-char-slot.slot-right').length) {
       $charLayer.append('<div class="gal-char-slot slot-right"></div>');
     }
@@ -186,40 +190,83 @@ export const SpriteManager = {
     }
   },
 
+  getNextNpcReplacementSlot() {
+    const slots = ['center', 'right'];
+    const slot = slots[this.npcReplaceCursor % slots.length];
+    this.npcReplaceCursor = (this.npcReplaceCursor + 1) % slots.length;
+    return slot;
+  },
+
   assignSlot(characterId) {
     if (this.isProtagonist(characterId)) {
       return 'left';
     }
+
     const usedSlots = new Set(this.slotOwners.keys());
+    if (!usedSlots.has('center')) return 'center';
     if (!usedSlots.has('right')) return 'right';
-    if (!usedSlots.has('left')) return 'left';
-    return null;
+
+    // 中右都满时，按 center -> right 轮换替换。
+    return this.getNextNpcReplacementSlot();
   },
 
-  removeOldestNonProtagonist() {
-    for (let i = 0; i < this.characterQueue.length; i++) {
-      const charId = this.characterQueue[i];
-      if (!this.isProtagonist(charId) && this.activeCharacters.has(charId)) {
-        const info = this.activeCharacters.get(charId);
-        const exitClass = info.slot === 'left' ? 'exiting-left' : 'exiting-right';
-        if (info.element) {
-          info.element
-            .removeClass('speaking silent entering-left entering-center entering-right')
-            .addClass(exitClass);
-          setTimeout(() => {
-            info.element.remove();
-            Live2DManager.releaseCharacter(charId);
-            SpriteAnimationManager.cleanup(charId);
-            this._clearLive2DRenderSeq(charId);
-          }, 400);
-        }
-        this.activeCharacters.delete(charId);
-        this.slotOwners.delete(info.slot);
-        this.characterQueue.splice(i, 1);
-        return info.slot;
-      }
+  async removeCharacter(characterId, { animate = true } = {}) {
+    const info = this.activeCharacters.get(characterId);
+    if (!info) {
+      Live2DManager.releaseCharacter(characterId);
+      this._clearLive2DRenderSeq(characterId);
+      return false;
     }
-    return 'center';
+
+    let $element = info.element;
+    if (!($element?.length && $element[0]?.isConnected) && info.slot) {
+      $element = $(`#gal-global-overlay .gal-char-slot.slot-${info.slot} .gal-char-container[data-character="${characterId}"]`);
+    }
+
+    const exitClass = info.slot === 'left'
+      ? 'exiting-left'
+      : info.slot === 'center'
+        ? 'exiting-center'
+        : 'exiting-right';
+    if ($element?.length) {
+      if (animate) {
+        $element
+          .removeClass('speaking silent entering-left entering-center entering-right')
+          .addClass(exitClass);
+        await new Promise(resolve => setTimeout(resolve, 400));
+      }
+      $element.remove();
+    }
+
+    Live2DManager.releaseCharacter(characterId);
+    SpriteAnimationManager.cleanup(characterId);
+    this._clearLive2DRenderSeq(characterId);
+    this.activeCharacters.delete(characterId);
+    if (this.slotOwners.get(info.slot) === characterId) {
+      this.slotOwners.delete(info.slot);
+    }
+    this.characterQueue = this.characterQueue.filter(id => id !== characterId);
+    if (this.currentSpeaker === characterId) {
+      this.currentSpeaker = null;
+    }
+    return true;
+  },
+
+  async applySpriteCommands($overlay, commands, renderToken = null) {
+    if (!Array.isArray(commands) || commands.length === 0) return;
+    for (const command of commands) {
+      const action = String(command?.action || '').trim().toLowerCase();
+      if (action !== 'exit') continue;
+
+      const rawCharacter = String(command?.character || '').trim();
+      if (!rawCharacter) continue;
+
+      const normalized = this.normalizeCharacterId(rawCharacter);
+      const targetCharacter = Array.from(this.activeCharacters.keys()).find(
+        id => this.normalizeCharacterId(id) === normalized,
+      ) || rawCharacter;
+      await this.removeCharacter(targetCharacter, { animate: true });
+    }
   },
 
   async updateSprite($overlay, characterId, expression, renderToken = null) {
@@ -244,7 +291,13 @@ export const SpriteManager = {
 
     if (this.activeCharacters.has(characterId)) {
       const info = this.activeCharacters.get(characterId);
-      slot = info.slot;
+      const prevSlot = info.slot;
+      slot = prevSlot;
+      if (this.isProtagonist(characterId) && slot !== 'left') {
+        this.slotOwners.delete(prevSlot);
+        slot = 'left';
+        info.slot = slot;
+      }
       this.slotOwners.set(slot, characterId);
       const isElementValid = this.isCharacterElementValid(info, $overlay);
       const useLive2D = getCharacterUseLive2D(characterId);
@@ -263,9 +316,6 @@ export const SpriteManager = {
     } else {
       isNewCharacter = true;
       slot = this.assignSlot(characterId);
-      if (!slot) {
-        slot = this.removeOldestNonProtagonist();
-      }
       this.characterQueue.push(characterId);
       this.activeCharacters.set(characterId, {
         slot,
@@ -446,7 +496,7 @@ export const SpriteManager = {
       }
       if ($element && $element.length) {
         $element
-          .removeClass('exiting-left exiting-right')
+          .removeClass('exiting-left exiting-center exiting-right')
           .css({ display: '', visibility: 'visible' });
         const isSpeaking = speakerId !== null && charId === speakerId;
         SpriteAnimationManager.setFocus($element, isSpeaking, charId);
@@ -562,12 +612,13 @@ export const SpriteManager = {
     this.live2dRenderSeq.clear();
     this.slotOwners.clear();
     this.characterQueue = [];
+    this.npcReplaceCursor = 0;
     this.currentSpeaker = null;
     this.currentScene = null;
     if ($overlay) {
       $overlay
         .find('.gal-layer-character')
-        .html('<div class="gal-char-slot slot-left"></div><div class="gal-char-slot slot-right"></div>');
+        .html('<div class="gal-char-slot slot-left"></div><div class="gal-char-slot slot-center"></div><div class="gal-char-slot slot-right"></div>');
     }
   },
 

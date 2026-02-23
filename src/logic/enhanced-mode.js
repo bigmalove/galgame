@@ -352,6 +352,76 @@ async function updateStreamingSwipe(messageId, swipeId, text) {
   }
 }
 
+/**
+ * 将原始文本转换为 COT 格式（不修改聊天楼层/swipe）
+ */
+export async function convertTextToCotFormat(sourceText, options = {}) {
+  const normalizedSource = String(sourceText || '').trim();
+  if (!normalizedSource) {
+    throw new Error('待转换文本为空');
+  }
+
+  const onStream = typeof options.onStream === 'function' ? options.onStream : null;
+  const streamState = { latestText: '' };
+  let stopStreamListener = null;
+  const previousSecondGenerationState = enhancedModeState.isSecondGeneration;
+
+  try {
+    enhancedModeState.isSecondGeneration = true;
+
+    if (onStream && typeof eventOn === 'function' && typeof iframe_events !== 'undefined') {
+      const handle = eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, text => {
+        const safeText = typeof text === 'string' ? text : '';
+        streamState.latestText = safeText;
+        onStream(safeText);
+      });
+      if (handle && typeof handle.stop === 'function') {
+        stopStreamListener = () => handle.stop();
+      }
+    }
+
+    const cotTemplate = await generateCOTTemplate();
+    const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}\n\n${cotTemplate}`;
+    const userPrompt = `请将以下内容转换为标准Galgame格式：\n\n${normalizedSource}`;
+
+    enhancedModeState.lastPrompts = {
+      systemPrompt,
+      userPrompt,
+      firstResult: normalizedSource,
+      timestamp: new Date().toLocaleString('zh-CN'),
+    };
+    console.log(`[${SCRIPT_NAME}] 加强模式: 已保存提示词信息`);
+
+    const formattedText = await generate({
+      user_input: userPrompt,
+      injects: [{ role: 'system', content: systemPrompt }],
+      should_silence: true,
+      should_stream: true,
+      max_chat_history: 0,
+    });
+
+    const safeFormattedText = typeof formattedText === 'string' ? formattedText : String(formattedText || '');
+    if (onStream && safeFormattedText && streamState.latestText !== safeFormattedText) {
+      onStream(safeFormattedText);
+    }
+
+    return {
+      formattedText: safeFormattedText,
+      systemPrompt,
+      userPrompt,
+    };
+  } finally {
+    if (stopStreamListener) {
+      try {
+        stopStreamListener();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 移除流式监听失败:`, e);
+      }
+    }
+    enhancedModeState.isSecondGeneration = previousSecondGenerationState;
+  }
+}
+
 // ============================================
 // 第二次生成
 // ============================================
@@ -448,28 +518,8 @@ async function runSecondGeneration(messageId, firstResult) {
         }
       };
 
-      if (typeof eventOn === 'function' && typeof iframe_events !== 'undefined') {
-        eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, streamHandler);
-      }
-
-      const cotTemplate = await generateCOTTemplate();
-      const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}\n\n${cotTemplate}`;
-      const userPrompt = `请将以下内容转换为标准Galgame格式：\n\n${firstResult}`;
-
-      enhancedModeState.lastPrompts = {
-        systemPrompt,
-        userPrompt,
-        firstResult,
-        timestamp: new Date().toLocaleString('zh-CN'),
-      };
-      console.log(`[${SCRIPT_NAME}] 加强模式: 已保存提示词信息`);
-
-      const formattedResult = await generate({
-        user_input: userPrompt,
-        injects: [{ role: 'system', content: systemPrompt }],
-        should_silence: true,
-        should_stream: true,
-        max_chat_history: 0,
+      const { formattedText: formattedResult } = await convertTextToCotFormat(firstResult, {
+        onStream: streamHandler,
       });
 
       if (streamBuffer) {

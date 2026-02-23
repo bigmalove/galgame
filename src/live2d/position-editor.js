@@ -98,7 +98,11 @@ export const Live2DPositionEditor = {
     const $gameContent = _$('#gal-global-overlay .gal-game-content');
     if (!$gameContent.length) return;
 
-    const label = this.currentSlot === 'right' ? '右侧角色调整区域' : '左侧角色调整区域';
+    const label = this.currentSlot === 'right'
+      ? '右侧角色调整区域'
+      : this.currentSlot === 'center'
+        ? '中间角色调整区域'
+        : '左侧角色调整区域';
     const guideHtml = `
       <div id="gal-live2d-position-guide" class="gal-live2d-position-guide">
         <div class="gal-live2d-position-guide-box">
@@ -177,7 +181,7 @@ export const Live2DPositionEditor = {
     }
 
     const existingSlot = Live2DStage.instances.get(characterId)?.slot;
-    this.currentSlot = existingSlot === 'right' ? 'right' : 'left';
+    this.currentSlot = existingSlot === 'right' ? 'right' : existingSlot === 'center' ? 'center' : 'left';
 
     // 复用同一个舞台：挂载到主界面，使用 story 模式保持真实尺寸与位置
     const containerEl = $gameContent.get(0);
@@ -197,7 +201,8 @@ export const Live2DPositionEditor = {
         this.isActive = false;
         return;
       }
-      this.currentSlot = Live2DStage.instances.get(characterId)?.slot === 'right' ? 'right' : 'left';
+      const attachedSlot = Live2DStage.instances.get(characterId)?.slot;
+      this.currentSlot = attachedSlot === 'right' ? 'right' : attachedSlot === 'center' ? 'center' : 'left';
       Live2DStage.updateLayout();
       this._createGuide();
     }

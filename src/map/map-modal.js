@@ -129,6 +129,7 @@ function ensureMapModalStyle() {
       position: absolute;
       inset: 0;
       pointer-events: none;
+      contain: layout paint;
     }
     #${MAP_MODAL_ID} .gal-map-marker {
       position: absolute;
@@ -145,6 +146,7 @@ function ensureMapModalStyle() {
       max-width: 140px;
       text-align: center;
       padding: 0;
+      will-change: left, top;
     }
     #${MAP_MODAL_ID} .gal-map-marker i {
       font-size: 1.2rem;
@@ -166,10 +168,15 @@ function ensureMapModalStyle() {
       color: #22c55e;
     }
     #${MAP_MODAL_ID} .gal-map-marker.editable {
-      cursor: grab;
+      cursor: pointer;
     }
-    #${MAP_MODAL_ID} .gal-map-marker.editing {
-      cursor: grabbing;
+    #${MAP_MODAL_ID} .gal-map-marker.placing i {
+      animation: gal-map-marker-blink 0.8s ease-in-out infinite;
+      color: #f59e0b;
+    }
+    @keyframes gal-map-marker-blink {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(1.15); }
     }
     #${MAP_MODAL_ID} .gal-map-empty {
       text-align: center;
@@ -399,7 +406,8 @@ export async function showMapModal(options = {}) {
   let selectedLocation = String(viewModel.currentDetailedLocation || points[0]?.detailedLocation || '').trim();
   let editMode = false;
   let dirty = false;
-  let draggingLocation = '';
+  let placingLocation = '';
+  let layerSyncFrameId = 0;
 
   const getPointByLocation = (location) => {
     const key = String(location || '').trim();
@@ -557,7 +565,40 @@ export async function showMapModal(options = {}) {
 
   $(mountRoot).append(html);
   const $modal = $(mountRoot).find(`#${MAP_MODAL_ID}`);
-  const $doc = $(topWindow.document);
+  const $win = $(topWindow);
+
+  const getMapCanvasElement = () => $modal.find('#gal-map-canvas')[0] || null;
+  const getMapImageElement = () => $modal.find('.gal-map-image')[0] || null;
+
+  const getDisplayedImageRect = () => {
+    const canvas = getMapCanvasElement();
+    const image = getMapImageElement();
+    if (!canvas || !image) return null;
+    const canvasRect = canvas.getBoundingClientRect();
+    if (canvasRect.width <= 0 || canvasRect.height <= 0) return null;
+    const naturalWidth = Number(image.naturalWidth) || canvasRect.width;
+    const naturalHeight = Number(image.naturalHeight) || canvasRect.height;
+    if (naturalWidth <= 0 || naturalHeight <= 0) return null;
+    const scale = Math.min(canvasRect.width / naturalWidth, canvasRect.height / naturalHeight);
+    const width = naturalWidth * scale;
+    const height = naturalHeight * scale;
+    const left = canvasRect.left + (canvasRect.width - width) / 2;
+    const top = canvasRect.top + (canvasRect.height - height) / 2;
+    return { left, top, width, height };
+  };
+
+  const syncMarkerLayerBounds = () => {
+    if (!mapImageUrl) return;
+    const canvas = getMapCanvasElement();
+    const imageRect = getDisplayedImageRect();
+    const layer = $modal.find('#gal-map-markers')[0];
+    if (!canvas || !layer || !imageRect) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    layer.style.left = `${(imageRect.left - canvasRect.left).toFixed(3)}px`;
+    layer.style.top = `${(imageRect.top - canvasRect.top).toFixed(3)}px`;
+    layer.style.width = `${imageRect.width.toFixed(3)}px`;
+    layer.style.height = `${imageRect.height.toFixed(3)}px`;
+  };
 
   const updateListActiveState = () => {
     $modal.find('.gal-map-point-item').removeClass('active');
@@ -567,11 +608,19 @@ export async function showMapModal(options = {}) {
   const rerenderMarkers = () => {
     if (!mapImageUrl) return;
     $modal.find('#gal-map-markers').html(buildMarkersHtml());
+    syncMarkerLayerBounds();
+    syncPlacingUi();
   };
 
   const rerenderDetail = () => {
     $modal.find('#gal-map-detail-panel').html(buildDetailHtml());
     updateListActiveState();
+  };
+
+  const syncPlacingUi = () => {
+    $modal.find('.gal-map-marker').removeClass('placing');
+    if (!editMode || !placingLocation) return;
+    $modal.find(`.gal-map-marker[data-location="${placingLocation}"]`).addClass('placing');
   };
 
   const syncEditUi = () => {
@@ -583,16 +632,63 @@ export async function showMapModal(options = {}) {
     $modal.find('#gal-map-save-coords').toggle(editMode || dirty);
     $modal.find('#gal-map-reset-layout').toggle(editMode || dirty);
     $modal.find('.gal-map-marker').toggleClass('editable', editMode);
+    syncPlacingUi();
+  };
+
+  const requestFrame = (callback) => {
+    if (typeof topWindow?.requestAnimationFrame === 'function') {
+      return topWindow.requestAnimationFrame(callback);
+    }
+    return topWindow.setTimeout(callback, 16);
+  };
+
+  const cancelFrame = (id) => {
+    if (!id) return;
+    if (typeof topWindow?.cancelAnimationFrame === 'function') {
+      topWindow.cancelAnimationFrame(id);
+      return;
+    }
+    topWindow.clearTimeout(id);
+  };
+
+  const scheduleLayerSync = () => {
+    if (layerSyncFrameId) return;
+    layerSyncFrameId = requestFrame(() => {
+      layerSyncFrameId = 0;
+      syncMarkerLayerBounds();
+    });
+  };
+
+  const placeSelectedMarkerAt = (clientX, clientY) => {
+    if (!editMode || !placingLocation) return false;
+    const rect = getDisplayedImageRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    const x = clamp01((clientX - rect.left) / rect.width);
+    const y = clamp01((clientY - rect.top) / rect.height);
+    const targetLocation = placingLocation;
+    draftCoords[targetLocation] = { x, y, anchor: '' };
+    dirty = true;
+    placingLocation = '';
+    rerenderMarkers();
+    syncEditUi();
+    showToast(`已放置「${targetLocation}」`);
+    return true;
   };
 
   const setEditMode = (nextEditMode) => {
     editMode = !!nextEditMode;
+    if (!editMode) {
+      placingLocation = '';
+    }
     syncEditUi();
-    showToast(editMode ? '已进入点位编辑模式，可拖拽标记' : '已退出点位编辑模式');
+    showToast(editMode ? '已进入点位编辑模式：先点击地点，再点击地图放置' : '已退出点位编辑模式');
   };
 
   const closeModal = () => {
-    $doc.off('.galMapDrag');
+    $win.off('.galMapMap');
+    cancelFrame(layerSyncFrameId);
+    layerSyncFrameId = 0;
+    $modal.find('.gal-map-image').off('.galMapMap');
     if (tempBlobUrl) {
       try { (topWindow.URL || URL).revokeObjectURL(tempBlobUrl); } catch (e) { /* ignore */ }
     }
@@ -600,6 +696,14 @@ export async function showMapModal(options = {}) {
   };
 
   syncEditUi();
+  if (mapImageUrl) {
+    const $mapImage = $modal.find('.gal-map-image');
+    $mapImage.on('load.galMapMap', scheduleLayerSync);
+    if ($mapImage[0]?.complete) {
+      scheduleLayerSync();
+    }
+    $win.on('resize.galMapMap', scheduleLayerSync);
+  }
 
   $modal.on('click', function (e) {
     if (e.target === this) closeModal();
@@ -644,6 +748,7 @@ export async function showMapModal(options = {}) {
     clearMapCoordsByRegion(coordScopeKey);
     Object.keys(draftCoords).forEach(key => delete draftCoords[key]);
     dirty = false;
+    placingLocation = '';
     rerenderMarkers();
     rerenderDetail();
     syncEditUi();
@@ -660,6 +765,7 @@ export async function showMapModal(options = {}) {
       }
     });
     dirty = false;
+    placingLocation = '';
     syncEditUi();
     showToast(changed > 0 ? `已保存 ${changed} 个地点坐标` : '没有可保存的坐标变更');
   });
@@ -668,45 +774,42 @@ export async function showMapModal(options = {}) {
     const location = String($(this).data('location') || '').trim();
     if (!location) return;
     selectedLocation = location;
+    if (editMode) {
+      placingLocation = location;
+    }
     rerenderMarkers();
     rerenderDetail();
+    if (editMode) {
+      showToast(`已选中「${location}」，请点击地图放置`);
+    }
   });
 
   $modal.on('click', '.gal-map-marker', function (e) {
     const location = String($(this).data('location') || '').trim();
     if (!location) return;
+    const shouldNotify = editMode && placingLocation !== location;
     selectedLocation = location;
+    if (editMode) {
+      placingLocation = location;
+    }
     rerenderMarkers();
     rerenderDetail();
-    if (editMode) e.preventDefault();
+    if (editMode) {
+      if (shouldNotify) {
+        showToast(`已选中「${location}」，请点击地图放置`);
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }
   });
 
-  $modal.on('mousedown', '.gal-map-marker', function (e) {
-    if (!editMode || !mapImageUrl) return;
+  $modal.on('click', '#gal-map-canvas', function (e) {
+    if (!editMode || !placingLocation) return;
+    if ($(e.target).closest('.gal-map-marker').length) return;
+    const placed = placeSelectedMarkerAt(e.clientX, e.clientY);
+    if (!placed) return;
     e.preventDefault();
-    draggingLocation = String($(this).data('location') || '').trim();
-    $(this).addClass('editing');
-  });
-
-  $doc.on('mousemove.galMapDrag', function (e) {
-    if (!draggingLocation || !editMode) return;
-    const canvas = $modal.find('#gal-map-canvas')[0];
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-    const x = clamp01((e.clientX - rect.left) / rect.width);
-    const y = clamp01((e.clientY - rect.top) / rect.height);
-    draftCoords[draggingLocation] = { x, y, anchor: '' };
-    dirty = true;
-    syncEditUi();
-    const $marker = $modal.find(`.gal-map-marker[data-location="${draggingLocation}"]`);
-    $marker.css({ left: `${(x * 100).toFixed(4)}%`, top: `${(y * 100).toFixed(4)}%` });
-  });
-
-  $doc.on('mouseup.galMapDrag', function () {
-    if (!draggingLocation) return;
-    $modal.find('.gal-map-marker').removeClass('editing');
-    draggingLocation = '';
+    e.stopPropagation();
   });
 
   $modal.on('click', '.gal-map-op-btn', function () {

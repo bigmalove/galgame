@@ -111,6 +111,7 @@ export function ensureGlobalOverlay() {
             <!-- 立绘层 -->
             <div class="gal-layer-character${settings.speakerGlow ? ' glow-enabled' : ''}${settings.speakerBubble ? ' bubble-enabled' : ''}${getTTSEnabled() ? ' tts-mode-enabled' : ''}">
               <div class="gal-char-slot slot-left"></div>
+              <div class="gal-char-slot slot-center"></div>
               <div class="gal-char-slot slot-right"></div>
             </div>
 

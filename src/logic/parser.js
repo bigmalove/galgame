@@ -1,9 +1,9 @@
+import { getCharacterTTSVoice } from '../audio/tts-config.js';
 import { SCRIPT_NAME } from '../core/constants.js';
-import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
+import { GalgameStore } from '../core/store.js';
 import { getAllExpressions } from '../utils/expressions.js';
-import { getCharacterTTSVoice } from '../audio/tts-config.js';
 
 // ============================================
 // 预编译正则表达式
@@ -27,6 +27,8 @@ const RE_BGM = /<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i;
 const RE_OPTION = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
 const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
 const RE_SPRITE_TAG = /<sprite\b([^>]*)\/?>/gi;
+const RE_POPUP1 = /<弹窗一>([\s\S]*?)<\/弹窗一>/i;
+const RE_POPUP2 = /<弹窗二>([\s\S]*?)<\/弹窗二>/i;
 
 const RE_ILLEGAL_TAGS = [
   /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
@@ -152,6 +154,13 @@ export function parseGalgameContent(html, messageId) {
   const isEnabled = getIsEnabled();
   const parseCache = GalgameStore.cache.parse;
 
+  // 提取弹窗一/弹窗二内容（必须在 preprocessSimplifiedFormat 之前，因为其中的 cleanIllegalTags 会删除 <div> 标签）
+  const popup1Match = html.match(RE_POPUP1);
+  const popup2Match = html.match(RE_POPUP2);
+  // 从 html 中移除弹窗标签，避免干扰后续解析
+  if (popup1Match) html = html.replace(RE_POPUP1, '');
+  if (popup2Match) html = html.replace(RE_POPUP2, '');
+
   // 预处理简化格式
   html = preprocessSimplifiedFormat(html);
 
@@ -179,6 +188,8 @@ export function parseGalgameContent(html, messageId) {
   const result = {
     segments: [],
     currentBackground: null,
+    locationStatusBarHtml: popup1Match ? popup1Match[1].trim() : null,
+    timeStatusBarHtml: popup2Match ? popup2Match[1].trim() : null,
     bgm: null,
     options: [],
     backgroundChanges: [],

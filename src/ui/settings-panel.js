@@ -877,6 +877,7 @@ export async function showSettingsPanel(topTab, subTab) {
     }
     syncPixiEffectsSettings();
     saveSettings();
+    injectCOTToWorldbook().catch(() => {});
   });
   $('#gal-effects-quality').on('change', function () {
     const nextQuality = String($(this).val() || '').trim();

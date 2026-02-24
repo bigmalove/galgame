@@ -215,6 +215,7 @@ export const LipSyncManager = {
   async startSync(characterId) {
     this.stopSync();
     this.currentCharacterId = characterId;
+    Live2DManager._setLipSyncActive(characterId, true);
 
     if (this.audioContext?.state === 'suspended') {
       try {
@@ -254,8 +255,10 @@ export const LipSyncManager = {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
-    if (this.currentCharacterId) {
-      Live2DManager.setMouthOpen(this.currentCharacterId, 0);
+    const activeCharacterId = this.currentCharacterId;
+    if (activeCharacterId) {
+      Live2DManager.setMouthOpen(activeCharacterId, 0);
+      Live2DManager._setLipSyncActive(activeCharacterId, false);
     }
     this.currentCharacterId = null;
     this.lastVolume = 0;

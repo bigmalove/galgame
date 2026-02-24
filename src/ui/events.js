@@ -81,7 +81,7 @@ export function setupGlobalEventListeners() {
     e.stopPropagation();
     const popupHtml = getLocationPopupHtml();
     if (popupHtml) {
-      showCustomPopupPanel('地点详情', popupHtml);
+      showCustomPopupPanel('', popupHtml);
       return;
     }
     showToast('未找到 <弹窗一> 标签内容');
@@ -101,7 +101,7 @@ export function setupGlobalEventListeners() {
     }
     const popupHtml = getLocationPopupHtml();
     if (popupHtml) {
-      showCustomPopupPanel('地点详情', popupHtml);
+      showCustomPopupPanel('', popupHtml);
       return;
     }
     showToast('未找到 <弹窗一> 标签内容');
@@ -111,7 +111,7 @@ export function setupGlobalEventListeners() {
     e.stopPropagation();
     const popupHtml = getTimePopupHtml();
     if (popupHtml) {
-      showCustomPopupPanel('时间详情', popupHtml);
+      showCustomPopupPanel('', popupHtml);
       return;
     }
     showToast('未找到 <弹窗二> 标签内容');

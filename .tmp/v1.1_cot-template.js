@@ -1,10 +1,10 @@
-import { getAllCharacterTTSVoices, getTTSEnabled, getTTSVoiceListAsync } from '../audio/tts-config.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
 import { CUSTOM_LOCATION_HTML_KEY, CUSTOM_TIME_HTML_KEY } from '../core/store.js';
 import { getAllBackgrounds } from '../db/backgrounds.js';
 import { getAllExpressions } from '../utils/expressions.js';
+import { getTTSVoiceListAsync, getAllCharacterTTSVoices, getTTSEnabled } from '../audio/tts-config.js';
 
 // ============================================
 // COT (Chain of Thought) 模板生成
@@ -44,11 +44,11 @@ export async function generateCOTTemplate() {
 
   const locationStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_LOCATION_HTML_KEY) || '').trim();
   const timeStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_TIME_HTML_KEY) || '').trim();
-  const locationStatusTag = locationStatusHtml ? `<弹窗一>${locationStatusHtml}</弹窗一>` : '';
-  const timeStatusTag = timeStatusHtml ? `<弹窗二>${timeStatusHtml}</弹窗二>` : '';
+  const locationStatusTag = locationStatusHtml ? `<地点状态栏>${locationStatusHtml}</地点状态栏>` : '';
+  const timeStatusTag = timeStatusHtml ? `<时间状态栏>${timeStatusHtml}</时间状态栏>` : '';
   const statusTagInstructions = [];
-  if (locationStatusTag) statusTagInstructions.push(`- 弹窗一（必须原样输出）: ${locationStatusTag}`);
-  if (timeStatusTag) statusTagInstructions.push(`- 弹窗二（必须原样输出）: ${timeStatusTag}`);
+  if (locationStatusTag) statusTagInstructions.push(`- 地点状态栏（必须原样输出）: ${locationStatusTag}`);
+  if (timeStatusTag) statusTagInstructions.push(`- 时间状态栏（必须原样输出）: ${timeStatusTag}`);
   const statusTagSection = statusTagInstructions.length > 0
     ? `
 ### 状态栏标签（根据用户配置自动注入）
@@ -229,7 +229,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 
   const pixiEffectNames = ['rain', 'snow', 'heavySnow', 'cherryBlossoms', 'fog', 'fireflies', 'embers', 'screenFlash'];
   const pixiEffectListText = pixiEffectNames.join(', ');
-  const pixiEffectTagSection = settings.effectsEnabled === false ? '' : `
+  const pixiEffectTagSection = `
 ### Pixi 特效标签（可选）
 - 可用特效: ${pixiEffectListText}
 - 叠加特效格式: \`<pixiPerform name="特效名" />\`

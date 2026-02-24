@@ -2588,6 +2588,7 @@
     ]),
     CUBISM2_CORE_URL: "https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js",
     SDK_URL: "https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js",
+    // TODO: 如上游再出现兼容回归，可考虑锁定到已验证版本
     CUBISM5_RUNTIME_URL: "https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.runtime.min.js",
     CUBISM5_RUNTIME_FALLBACK_URLS: Object.freeze([
       "https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.runtime.min.js",
@@ -5604,6 +5605,8 @@ ${lines.join("\n")}`;
     // characterId -> Set<string>
     modelRuntimeInfo: /* @__PURE__ */ new Map(),
     // characterId -> { runtimeType, cubismVersion }
+    lipSyncStates: /* @__PURE__ */ new Map(),
+    // characterId -> lip sync runtime state
     cachedDetachedAt: /* @__PURE__ */ new Map(),
     // characterId -> timestamp (宸查€€鍦虹紦瀛?
     maxDetachedCache: 3,
@@ -5618,6 +5621,51 @@ ${lines.join("\n")}`;
     _debugLog(...args) {
       if (!this.debug) return;
       console.log(...args);
+    },
+    _getLipSyncState(characterId) {
+      const key = String(characterId || "").trim();
+      if (!key) return null;
+      let state = this.lipSyncStates.get(key);
+      if (!state) {
+        state = {
+          mouthParamCore: null,
+          mouthParamIds: [],
+          mouthParamIndexes: [],
+          mouthParamRangeMins: [],
+          mouthParamRangeMaxs: [],
+          mouthParamWarned: false,
+          mouthCurrentValue: 0,
+          lipSyncActive: false,
+          inModelUpdate: false,
+          writeMaskCore: null,
+          writeMaskRestore: null,
+          updateHookModel: null,
+          updateHookRestore: null
+        };
+        this.lipSyncStates.set(key, state);
+      }
+      return state;
+    },
+    _destroyLipSyncState(characterId) {
+      const key = String(characterId || "").trim();
+      if (!key) return;
+      const state = this.lipSyncStates.get(key);
+      if (!state) return;
+      state.lipSyncActive = false;
+      state.inModelUpdate = false;
+      if (state.writeMaskRestore) {
+        try {
+          state.writeMaskRestore();
+        } catch (e) {
+        }
+      }
+      if (state.updateHookRestore) {
+        try {
+          state.updateHookRestore();
+        } catch (e) {
+        }
+      }
+      this.lipSyncStates.delete(key);
     },
     _markModelActive(characterId) {
       this.cachedDetachedAt.delete(characterId);
@@ -6245,6 +6293,7 @@ ${lines.join("\n")}`;
     _destroyModel(characterId, reason = "cleanup") {
       const model = this.models.get(characterId);
       if (!model) {
+        this._destroyLipSyncState(characterId);
         this.cachedDetachedAt.delete(characterId);
         this.containers.delete(characterId);
         this.modelRuntimeInfo.delete(characterId);
@@ -6265,6 +6314,7 @@ ${lines.join("\n")}`;
       this.cachedDetachedAt.delete(characterId);
       this.modelRuntimeInfo.delete(characterId);
       this._revokeModelBlobUrls(characterId);
+      this._destroyLipSyncState(characterId);
       return true;
     },
     _evictDetachedModels() {
@@ -7559,46 +7609,434 @@ ${lines.join("\n")}`;
         }
       }
     },
+    _isMouthParam(characterId, paramIdOrIndex, coreModel) {
+      const preset = [
+        "parammouthopeny",
+        "param_mouth_open_y",
+        "parammouthopen",
+        "parama",
+        "param58",
+        "param61",
+        "param_mouth_open",
+        "mouth_open"
+      ];
+      const state = this._getLipSyncState(characterId);
+      if (typeof paramIdOrIndex === "number") {
+        if (state?.mouthParamIndexes?.includes(paramIdOrIndex)) return true;
+        try {
+          if (typeof coreModel?.getParameterId === "function") {
+            const pid = String(coreModel.getParameterId(paramIdOrIndex) || "").trim();
+            if (pid) return this._isMouthParam(characterId, pid, coreModel);
+          }
+        } catch (e) {
+        }
+        return false;
+      }
+      const id = String(paramIdOrIndex || "").trim().toLowerCase();
+      if (!id) return false;
+      if (preset.includes(id)) return true;
+      return !!state?.mouthParamIds?.some((pid) => String(pid || "").trim().toLowerCase() === id);
+    },
+    _installCoreWriteMask(characterId, coreModel) {
+      const state = this._getLipSyncState(characterId);
+      if (!state || !coreModel) return;
+      if (state.writeMaskCore === coreModel) return;
+      if (state.writeMaskRestore) {
+        try {
+          state.writeMaskRestore();
+        } catch (e) {
+        }
+        state.writeMaskCore = null;
+        state.writeMaskRestore = null;
+      }
+      const restoreEntries = [];
+      const methods = [
+        "setParameterValueById",
+        "addParameterValueById",
+        "setParamFloat",
+        "addParamFloat",
+        "setParameterValueByIndex",
+        "addParameterValueByIndex",
+        "setParameterValue",
+        "addParameterValue"
+      ];
+      const getParamRef = (method, args) => {
+        if (!Array.isArray(args) || args.length === 0) return null;
+        const first = args[0];
+        if (method.includes("ById") || method === "setParamFloat" || method === "addParamFloat") {
+          return typeof first === "string" ? first : null;
+        }
+        if (method.includes("ByIndex")) {
+          return typeof first === "number" ? first : null;
+        }
+        if (method === "setParameterValue" || method === "addParameterValue") {
+          if (typeof first === "number" || typeof first === "string") return first;
+        }
+        return null;
+      };
+      for (const method of methods) {
+        const raw = coreModel?.[method];
+        if (typeof raw !== "function") continue;
+        restoreEntries.push({ method, raw });
+        coreModel[method] = (...args) => {
+          const paramRef = getParamRef(method, args);
+          if (paramRef !== null && state.lipSyncActive && state.inModelUpdate && this._isMouthParam(characterId, paramRef, coreModel)) {
+            return void 0;
+          }
+          return raw.apply(coreModel, args);
+        };
+      }
+      state.writeMaskCore = coreModel;
+      state.writeMaskRestore = () => {
+        for (const entry of restoreEntries) {
+          try {
+            coreModel[entry.method] = entry.raw;
+          } catch (e) {
+          }
+        }
+      };
+    },
+    _ensureLipSyncHooks(characterId, model) {
+      const state = this._getLipSyncState(characterId);
+      if (!state || !model) return;
+      if (state.updateHookModel === model) return;
+      if (state.updateHookRestore) {
+        try {
+          state.updateHookRestore();
+        } catch (e) {
+        }
+        state.updateHookRestore = null;
+        state.updateHookModel = null;
+      }
+      const internal = model?.internalModel;
+      const updater = internal?.update;
+      if (typeof updater !== "function") return;
+      const rawUpdate = updater.bind(internal);
+      const self = this;
+      internal.update = function(...args) {
+        state.inModelUpdate = true;
+        let ret;
+        try {
+          ret = rawUpdate(...args);
+        } finally {
+          state.inModelUpdate = false;
+          if (state.lipSyncActive) {
+            try {
+              self._applyMouthValueToModel(characterId, model);
+            } catch (e) {
+            }
+          }
+        }
+        return ret;
+      };
+      state.updateHookModel = model;
+      state.updateHookRestore = () => {
+        try {
+          internal.update = updater;
+        } catch (e) {
+        }
+      };
+    },
+    _applyMouthValueToModel(characterId, model) {
+      const state = this._getLipSyncState(characterId);
+      if (!state || !model?.internalModel?.coreModel) return false;
+      const targetValue = Math.max(0, Math.min(1, state.mouthCurrentValue || 0));
+      const oldValue = state.mouthCurrentValue;
+      state.mouthCurrentValue = targetValue;
+      const applied = this.setMouthOpen(characterId, targetValue);
+      state.mouthCurrentValue = oldValue;
+      return applied;
+    },
+    _setLipSyncActive(characterId, active) {
+      const key = String(characterId || "").trim();
+      if (!key) return;
+      let state = this.lipSyncStates.get(key);
+      if (!state && active) {
+        state = this._getLipSyncState(key);
+      }
+      if (!state) return;
+      const next = !!active;
+      if (state.lipSyncActive === next) return;
+      state.lipSyncActive = next;
+      if (next) {
+        const model = this.models.get(key);
+        const coreModel = model?.internalModel?.coreModel;
+        if (model) this._ensureLipSyncHooks(key, model);
+        if (coreModel) this._installCoreWriteMask(key, coreModel);
+      }
+      this._debugLog(`[${SCRIPT_NAME}] LipSync active=${next} (${key})`);
+    },
     setMouthOpen(characterId, value) {
-      const model = this.models.get(characterId);
+      const key = String(characterId || "").trim();
+      if (!key) return false;
+      const model = this.models.get(key);
       if (!model?.internalModel?.coreModel) return false;
+      const state = this._getLipSyncState(key);
+      if (!state) return false;
       const coreModel = model.internalModel.coreModel;
-      const clampedValue = Math.max(0, Math.min(1, value));
+      const clampedValue = Math.max(0, Math.min(1, Number(value) || 0));
+      state.mouthCurrentValue = clampedValue;
+      this._ensureLipSyncHooks(key, model);
+      this._installCoreWriteMask(key, coreModel);
+      const getParamRange = (paramId, paramIndex) => {
+        let min = Number.NaN;
+        let max = Number.NaN;
+        const readNumber = (v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : Number.NaN;
+        };
+        if (Number.isFinite(paramIndex) && paramIndex >= 0) {
+          try {
+            if (typeof coreModel.getParameterMinimumValue === "function") {
+              min = readNumber(coreModel.getParameterMinimumValue(paramIndex));
+            }
+          } catch (e) {
+          }
+          try {
+            if (typeof coreModel.getParameterMaximumValue === "function") {
+              max = readNumber(coreModel.getParameterMaximumValue(paramIndex));
+            }
+          } catch (e) {
+          }
+        }
+        if (!Number.isFinite(min)) {
+          try {
+            if (typeof coreModel.getParamMin === "function") {
+              min = readNumber(coreModel.getParamMin(paramId));
+            }
+          } catch (e) {
+          }
+        }
+        if (!Number.isFinite(max)) {
+          try {
+            if (typeof coreModel.getParamMax === "function") {
+              max = readNumber(coreModel.getParamMax(paramId));
+            }
+          } catch (e) {
+          }
+        }
+        if (!Number.isFinite(min)) min = 0;
+        if (!Number.isFinite(max) || max <= min) max = 1;
+        return { min, max };
+      };
+      const mapToParamValue = (paramId, paramIndex) => {
+        const { min, max } = getParamRange(paramId, paramIndex);
+        if (min < 0 && max > 0) {
+          return clampedValue * max;
+        }
+        return min + (max - min) * clampedValue;
+      };
+      const getIndexById = (paramId) => {
+        try {
+          if (typeof coreModel.getParameterIndex === "function") {
+            return coreModel.getParameterIndex(paramId);
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.getParamIndex === "function") {
+            return coreModel.getParamIndex(paramId);
+          }
+        } catch (e) {
+        }
+        return -1;
+      };
+      const applyById = (paramId) => {
+        const paramIndex = getIndexById(paramId);
+        const mappedValue = mapToParamValue(paramId, paramIndex);
+        try {
+          if (typeof coreModel.setParameterValueById === "function") {
+            coreModel.setParameterValueById(paramId, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.addParameterValueById === "function") {
+            coreModel.addParameterValueById(paramId, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.setParamFloat === "function") {
+            coreModel.setParamFloat(paramId, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.addParamFloat === "function") {
+            coreModel.addParamFloat(paramId, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        return false;
+      };
+      const applyByIndex = (paramIndex) => {
+        if (!Number.isFinite(paramIndex) || paramIndex < 0) return false;
+        const paramId = (() => {
+          try {
+            if (typeof coreModel.getParameterId === "function") {
+              return String(coreModel.getParameterId(paramIndex) || "");
+            }
+          } catch (e) {
+          }
+          return "";
+        })();
+        const mappedValue = mapToParamValue(paramId || `__idx_${paramIndex}`, paramIndex);
+        try {
+          if (typeof coreModel.setParameterValueByIndex === "function") {
+            coreModel.setParameterValueByIndex(paramIndex, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.addParameterValueByIndex === "function") {
+            coreModel.addParameterValueByIndex(paramIndex, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.setParameterValue === "function") {
+            coreModel.setParameterValue(paramIndex, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.addParameterValue === "function") {
+            coreModel.addParameterValue(paramIndex, mappedValue, 1);
+            return true;
+          }
+        } catch (e) {
+        }
+        return false;
+      };
       const paramNames = [
         "ParamMouthOpenY",
         "PARAM_MOUTH_OPEN_Y",
         "ParamMouthOpen",
         "ParamA",
+        "Param58",
+        "Param61",
         "Param_Mouth_Open",
         "mouth_open"
       ];
+      let appliedAny = false;
+      const visited = /* @__PURE__ */ new Set();
       for (const paramName of paramNames) {
+        if (visited.has(paramName)) continue;
+        visited.add(paramName);
+        const paramIndex = getIndexById(paramName);
+        if (paramIndex >= 0) {
+          const appliedById = applyById(paramName);
+          const appliedByIndex = !appliedById && applyByIndex(paramIndex);
+          if (appliedById || appliedByIndex) appliedAny = true;
+        }
+      }
+      if (appliedAny) return true;
+      if (state.mouthParamCore !== coreModel) {
+        state.mouthParamCore = coreModel;
+        state.mouthParamIds = [];
+        state.mouthParamIndexes = [];
+        state.mouthParamRangeMins = [];
+        state.mouthParamRangeMaxs = [];
+        state.mouthParamWarned = false;
         try {
-          const paramIndex = coreModel.getParameterIndex(paramName);
-          if (paramIndex >= 0) {
-            coreModel.setParameterValueById(paramName, clampedValue);
-            return true;
+          if (typeof coreModel.getParameterCount === "function" && typeof coreModel.getParameterId === "function") {
+            const count = Number(coreModel.getParameterCount()) || 0;
+            const numericFallback = [];
+            for (let i = 0; i < count; i++) {
+              const pid = String(coreModel.getParameterId(i) || "");
+              const low = pid.toLowerCase();
+              const range = getParamRange(pid, i);
+              if (low.includes("mouth") || low.includes("lip") || pid === "ParamA" || /^Param(?:58|61)$/i.test(pid)) {
+                state.mouthParamIds.push(pid);
+                state.mouthParamIndexes.push(i);
+                state.mouthParamRangeMins.push(range.min);
+                state.mouthParamRangeMaxs.push(range.max);
+                continue;
+              }
+              if (/^param\d+$/i.test(pid) && range.max >= 8 && range.min >= -1) {
+                numericFallback.push({ id: pid, idx: i, min: range.min, max: range.max });
+              }
+            }
+            if (state.mouthParamIds.length === 0 && numericFallback.length > 0) {
+              numericFallback.sort((a, b) => b.max - a.max);
+              const picked = numericFallback.slice(0, 3);
+              for (const item of picked) {
+                state.mouthParamIds.push(item.id);
+                state.mouthParamIndexes.push(item.idx);
+                state.mouthParamRangeMins.push(item.min);
+                state.mouthParamRangeMaxs.push(item.max);
+              }
+              this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 使用数字参数回退`, {
+                characterId: key,
+                picked
+              });
+            }
           }
         } catch (e) {
-          continue;
         }
+      }
+      for (let i = 0; i < state.mouthParamIds.length; i++) {
+        const pid = state.mouthParamIds[i];
+        const pidx = state.mouthParamIndexes[i] ?? -1;
+        const appliedById = applyById(pid);
+        const appliedByIndex = !appliedById && applyByIndex(pidx);
+        if (appliedById || appliedByIndex) appliedAny = true;
+      }
+      if (appliedAny) return true;
+      if (!state.mouthParamWarned) {
+        state.mouthParamWarned = true;
+        console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到可用口型参数`, {
+          characterId: key,
+          presetCandidates: paramNames,
+          scannedIds: state.mouthParamIds
+        });
       }
       return false;
     },
+    getLipSyncDebugInfo(characterId) {
+      const key = String(characterId || "").trim();
+      const state = key ? this.lipSyncStates.get(key) : null;
+      return {
+        lipSyncOverride: state?.lipSyncActive ? "active" : "inactive",
+        mouthParamsSource: "auto",
+        mouthParamsCount: state?.mouthParamIds?.length || 0
+      };
+    },
     getMouthParams(characterId) {
-      const model = this.models.get(characterId);
+      const key = String(characterId || "").trim();
+      const model = this.models.get(key);
       if (!model?.internalModel?.coreModel) return [];
       const coreModel = model.internalModel.coreModel;
+      const state = this._getLipSyncState(key);
       const params = [];
+      const seen = /* @__PURE__ */ new Set();
+      const push = (id) => {
+        const value = String(id || "").trim();
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        params.push(value);
+      };
       try {
         const count = coreModel.getParameterCount();
         for (let i = 0; i < count; i++) {
-          const id = coreModel.getParameterId(i);
-          if (id.toLowerCase().includes("mouth") || id.toLowerCase().includes("lip") || id === "ParamA") {
-            params.push(id);
+          const id = String(coreModel.getParameterId(i) || "");
+          const lower = id.toLowerCase();
+          if (lower.includes("mouth") || lower.includes("lip") || id === "ParamA" || /^Param(?:58|61)$/i.test(id)) {
+            push(id);
           }
         }
       } catch (e) {
+      }
+      for (const id of state?.mouthParamIds || []) {
+        push(id);
       }
       return params;
     },
@@ -8477,6 +8915,7 @@ ${lines.join("\n")}`;
     async startSync(characterId) {
       this.stopSync();
       this.currentCharacterId = characterId;
+      Live2DManager._setLipSyncActive(characterId, true);
       if (this.audioContext?.state === "suspended") {
         try {
           await this.audioContext.resume();
@@ -8507,8 +8946,10 @@ ${lines.join("\n")}`;
         cancelAnimationFrame(this.animationFrameId);
         this.animationFrameId = null;
       }
-      if (this.currentCharacterId) {
-        Live2DManager.setMouthOpen(this.currentCharacterId, 0);
+      const activeCharacterId = this.currentCharacterId;
+      if (activeCharacterId) {
+        Live2DManager.setMouthOpen(activeCharacterId, 0);
+        Live2DManager._setLipSyncActive(activeCharacterId, false);
       }
       this.currentCharacterId = null;
       this.lastVolume = 0;
@@ -10204,10 +10645,10 @@ ${lines.join("\n")}`;
               <button class="gal-sprite-toggle" title="显示/隐藏立绘">
                 <span class="gal-eye-icon">👁</span>
               </button>
-              <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="地点详情">
+              <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="弹窗一">
                 <i class="gal-status-popup-icon ${locationIconClass}"></i>
               </button>
-              <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="时间详情">
+              <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="弹窗二">
                 <i class="gal-status-popup-icon ${timeIconClass}"></i>
               </button>
               <div class="gal-name-badge">
@@ -14363,18 +14804,71 @@ ${lines.join("\n")}`;
       }
     },
     getNextNpcReplacementSlot() {
-      const slots = ["center", "right"];
+      const slots = ["left", "right"];
       const slot = slots[this.npcReplaceCursor % slots.length];
       this.npcReplaceCursor = (this.npcReplaceCursor + 1) % slots.length;
       return slot;
     },
-    assignSlot(characterId) {
+    /**
+     * 将角色从一个槽位迁移到另一个槽位（DOM + 内部状态）
+     */
+    relocateCharacterSlot($overlay, characterId, fromSlot, toSlot) {
+      const $charLayer = this.ensureSlots($overlay);
+      const $fromSlot = $charLayer.find(`.gal-char-slot.slot-${fromSlot}`);
+      const $toSlot = $charLayer.find(`.gal-char-slot.slot-${toSlot}`);
+      if (!$fromSlot.length || !$toSlot.length) return;
+      const $container = $fromSlot.find(`.gal-char-container[data-character="${characterId}"]`);
+      if (!$container.length) return;
+      $toSlot.empty().append($container);
+      const info = this.activeCharacters.get(characterId);
+      if (info) {
+        info.slot = toSlot;
+      }
+      if (this.slotOwners.get(fromSlot) === characterId) {
+        this.slotOwners.delete(fromSlot);
+      }
+      this.slotOwners.set(toSlot, characterId);
+      if ($container.attr("data-live2d") === "true") {
+        const mountEl = $container.find(".gal-live2d-canvas-container")[0];
+        if (mountEl && mountEl.isConnected) {
+          Promise.resolve(Live2DManager.renderTo(characterId, mountEl)).catch((e) => {
+            console.warn(`[${SCRIPT_NAME}] Live2D 槽位迁移同步失败: ${characterId} ${fromSlot} -> ${toSlot}`, e);
+          });
+        }
+      }
+      console.log(`[${SCRIPT_NAME}] 槽位迁移: ${characterId} ${fromSlot} -> ${toSlot}`);
+    },
+    /**
+     * 槽位分配策略:
+     *   立绘=1 → center
+     *   立绘=2 → 中间的迁移到 left，新角色放 right
+     *   立绘=3 → left / center / right
+     */
+    assignSlot(characterId, $overlay) {
+      const usedSlots = new Set(this.slotOwners.keys());
       if (this.isProtagonist(characterId)) {
+        if (usedSlots.size === 1 && usedSlots.has("center")) {
+          const centerCharId = this.slotOwners.get("center");
+          if (centerCharId && $overlay) {
+            this.relocateCharacterSlot($overlay, centerCharId, "center", "right");
+          }
+        }
         return "left";
       }
-      const usedSlots = new Set(this.slotOwners.keys());
+      if (usedSlots.size === 0) return "center";
+      if (usedSlots.size === 1 && usedSlots.has("left")) {
+        return "right";
+      }
+      if (usedSlots.size === 1 && usedSlots.has("center")) {
+        const centerCharId = this.slotOwners.get("center");
+        if (centerCharId && $overlay) {
+          this.relocateCharacterSlot($overlay, centerCharId, "center", "left");
+        }
+        return "right";
+      }
       if (!usedSlots.has("center")) return "center";
       if (!usedSlots.has("right")) return "right";
+      if (!usedSlots.has("left")) return "left";
       return this.getNextNpcReplacementSlot();
     },
     async removeCharacter(characterId, { animate = true } = {}) {
@@ -14406,6 +14900,15 @@ ${lines.join("\n")}`;
       this.characterQueue = this.characterQueue.filter((id) => id !== characterId);
       if (this.currentSpeaker === characterId) {
         this.currentSpeaker = null;
+      }
+      if (this.activeCharacters.size === 1) {
+        const [remainId, remainInfo] = Array.from(this.activeCharacters.entries())[0];
+        if (remainInfo?.slot && remainInfo.slot !== "center" && !this.isProtagonist(remainId)) {
+          const $ov = $("#gal-global-overlay");
+          if ($ov.length) {
+            this.relocateCharacterSlot($ov, remainId, remainInfo.slot, "center");
+          }
+        }
       }
       return true;
     },
@@ -14466,7 +14969,7 @@ ${lines.join("\n")}`;
         }
       } else {
         isNewCharacter = true;
-        slot = this.assignSlot(characterId);
+        slot = this.assignSlot(characterId, $overlay);
         this.characterQueue.push(characterId);
         this.activeCharacters.set(characterId, {
           slot,
@@ -14857,9 +15360,22 @@ ${lines.join("\n")}`;
     if (Object.keys(charVoiceMap).length > 0) {
       charVoiceBindingText = "\n### 角色音色绑定（必须遵守）\n" + Object.entries(charVoiceMap).map(([char, voice]) => `- **${char}**: 必须使用音色 "${voice}"`).join("\n") + "\n**重要**: 以上角色必须使用绑定的指定音色，不可更改！\n";
     }
+    const locationStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_LOCATION_HTML_KEY) || "").trim();
+    const timeStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_TIME_HTML_KEY) || "").trim();
+    const locationStatusTag = locationStatusHtml ? `<弹窗一>${locationStatusHtml}</弹窗一>` : "";
+    const timeStatusTag = timeStatusHtml ? `<弹窗二>${timeStatusHtml}</弹窗二>` : "";
+    const statusTagInstructions = [];
+    if (locationStatusTag) statusTagInstructions.push(`- 弹窗一（必须原样输出）: ${locationStatusTag}`);
+    if (timeStatusTag) statusTagInstructions.push(`- 弹窗二（必须原样输出）: ${timeStatusTag}`);
+    const statusTagSection = statusTagInstructions.length > 0 ? `
+### 状态栏标签（根据用户配置自动注入）
+${statusTagInstructions.join("\n")}
+- 以上标签请放在 <maintext> 内。消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
+` : "";
     let sceneListText = "";
-    const useBananaImageGen = settings.bananaImageGen?.enabled;
-    const useWallhaven = settings.wallhaven?.enabled;
+    const bgSrc = settings.bgImageSource || "none";
+    const useBananaImageGen = bgSrc === "banana";
+    const useWallhaven = bgSrc === "wallhaven";
     if (useBananaImageGen) {
       const bs = settings.bananaImageGen;
       let modeHint = "";
@@ -14877,10 +15393,19 @@ ${lines.join("\n")}`;
 ### 🍌 自定义COT（必须遵守）
 ${customCot}
 ` : "";
+      const localSceneHint = sceneNames.length > 0 ? `
+### 🗂️ 本地背景优先复用（必须遵守）
+- 可用本地场景: ${sceneNames.join(", ")}
+- 当剧情能匹配以上任一场景时，优先输出：\`<background scene="已有场景名" />\`
+- 只有在本地场景都不匹配时，才输出 \`<bnimg>\` 触发大香蕉生图` : `
+### 🗂️ 本地背景提示
+- 当前暂无本地场景，可按需输出 \`<bnimg>\` 生成新场景`;
       sceneListText = `**🍌 大香蕉 AI 生图模式**: 当场景变化时，使用自然语言描述画面，系统将调用 AI 生成对应背景图片。
 
 ${modeHint}
-${customCotText}- **生成格式**: \`<background scene="场景中文名"><bnimg>自然语言画面描述</bnimg>\`
+${customCotText}${localSceneHint}
+- **复用本地格式**: \`<background scene="已有场景名" />\`
+- **新场景生成格式**: \`<background scene="场景中文名"><bnimg>自然语言画面描述</bnimg>\`
 - **描述语言**: 中文或英文均可，建议使用详细的自然语言描述
 
 ### 🍌 大香蕉描述规范（必须遵守）
@@ -14982,7 +15507,17 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 - 温馨卧室 → \`<whimg>bedroom, morning, cozy</whimg>\`
 - 日式庭院 → \`<whimg>garden, temple, asian</whimg>\` (不用 japanese)
 - 现代办公室 → \`<whimg>office, modern, city</whimg>\`${customTagHint}`;
-    } else if (settings.realTimeBackgroundGen) {
+    } else if (bgSrc === "novelai") {
+      sceneListText = sceneNames.length > 0 ? `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。
+- **判断标准**: 如果图库中的场景名称与当前剧情完全匹配，则可复用；否则必须生成新场景。
+- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
+- **场景名要求**: 使用具体、描述性的中文名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）
+- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等
+可用场景列表: ${sceneNames.join(", ")}` : `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。
+- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
+- **场景名要求**: 使用具体、描述性的中文名称
+- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等`;
+    } else if (bgSrc === "comfyui") {
       sceneListText = sceneNames.length > 0 ? `**实时场景生成模式**: 当剧情进入新场景时，根据当前具体情节生成新场景。
 - **判断标准**: 如果图库中的场景名称与当前剧情时间、地点、氛围完全匹配，则可复用；否则必须生成新场景。
 - **生成格式**: \`<background scene="新场景名"><bgimg>visual tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`
@@ -14996,8 +15531,42 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
       sceneListText = sceneNames.length > 0 ? `可用场景列表: ${sceneNames.join(", ")}
 - **严重警告**: 必须严格从上述列表中选择场景，严禁使用列表之外的名称，严禁自创地点。` : `（暂无可用场景，请在插件设置中上传背景图片后使用）`;
     }
-    const exampleScene = settings.realTimeBackgroundGen ? "雨夜中的都市街道" : sceneNames.length > 0 ? sceneNames[0] : "场景名";
-    const extraRule = settings.realTimeBackgroundGen ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。` : `5. **背景场景必须使用已配置的场景名称**`;
+    const isGenerativeEngine = bgSrc === "comfyui" || bgSrc === "banana" || bgSrc === "novelai";
+    const exampleScene = isGenerativeEngine ? "雨夜中的都市街道" : sceneNames.length > 0 ? sceneNames[0] : "场景名";
+    const extraRule = bgSrc === "banana" ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。` : isGenerativeEngine ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。` : `5. **背景场景必须使用已配置的场景名称**`;
+    const pixiEffectNames = ["rain", "snow", "heavySnow", "cherryBlossoms", "fog", "fireflies", "embers", "screenFlash"];
+    const pixiEffectListText = pixiEffectNames.join(", ");
+    const pixiEffectTagSection = settings.effectsEnabled === false ? "" : `
+### Pixi 特效标签（可选）
+- 可用特效: ${pixiEffectListText}
+- 叠加特效格式: \`<pixiPerform name="特效名" />\`
+- 新消息切换时系统会自动清空特效，无需输出 \`<pixiInit />\`
+- 使用规则:
+  - 仅在场景氛围明显变化时使用，避免每句都触发。
+  - 特效层由系统按特效名自动分配（雾固定背景层，其余固定前景层），不要输出 \`layer\`。
+  - 同一场景不要高频重复输出同一个特效。
+  - \`screenFlash\` 用于短暂强调（爆炸、雷电、强光），不要连续刷屏。
+`;
+    const bgmWhitelist = Array.from(
+      new Set(
+        (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
+      )
+    );
+    const bgmWhitelistText = bgmWhitelist.map((name) => `  - ${name}`).join("\n");
+    const bgmRuleSection = bgmWhitelist.length > 0 ? `### 背景音乐 (BGM)
+- **格式**: \`<bgm>歌曲名</bgm>\`
+- **使用规则**:
+  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
+  - **指定歌单（必须遵守）**: 仅允许从以下歌单中选择歌曲，禁止输出列表外曲名。
+${bgmWhitelistText}
+  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
+  - **示例**: \`<bgm>歌曲名</bgm>\`` : `### 背景音乐 (BGM)
+- **格式**: \`<bgm>歌曲名</bgm>\`
+- **使用规则**:
+  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
+  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
+  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
+  - **示例**: \`<bgm>歌曲名</bgm>\``;
     const ttsEnabled = getTTSEnabled();
     if (ttsEnabled) {
       return `# Galgame 输出格式规范
@@ -15006,6 +15575,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 
 ## 输出格式要求
 - 每个<p></p>的字数: 25-70字
+${statusTagSection}
 
 ## 标签系统
 
@@ -15031,13 +15601,7 @@ ${charVoiceBindingText}
 - 格式: \`<p>旁白内容</p>\`
 - 无需表情和音色
 
-### 背景音乐 (BGM)
-- **格式**: \`<bgm>歌曲名</bgm>\`
-- **使用规则**:
-  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
-  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
-  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
-  - **示例**: \`<bgm>歌曲名</bgm>\`
+${bgmRuleSection}
 
 ### 背景标签 (场景环境强制)
 - 格式: \`<background scene="场景名" />\`
@@ -15045,16 +15609,17 @@ ${charVoiceBindingText}
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
 - ${sceneListText}
+${pixiEffectTagSection}
 
 ## 输出结构示例
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
+  <pixiPerform name="rain" />
   <p>夜色深沉，街灯在雨中摇曳。</p>
   <p>少女[微笑,桃夭]: "你终于来了～"</p>
   <bgm>歌曲名</bgm>
   <p>她撑着伞，静静地站在那里。</p>
-  <sprite action="exit" character="路人甲" />
   <p>少女[惊讶|又急又关心地说]: "下这么大的雨，你怎么不带伞？"</p>
   <p>少女[难过|带着心疼的语气]: "会感冒的……"</p>
 
@@ -15066,8 +15631,7 @@ ${charVoiceBindingText}
 2. 语气指导（可选）: \`<p>角色名[表情|语气描述]: "对话"</p>\`
 3. 旁白格式: \`<p>旁白内容</p>\`（无需任何标记）
 4. 新角色首次出现时指定音色，后续自动沿用
-5. 角色离场格式: \`<sprite action="exit" character="角色名" />\`，必须单独一行输出（不可和 \`<p>\` 同行）
-6. maintext标签包裹
+5. maintext标签包裹
 ${extraRule}
 `;
     } else {
@@ -15077,6 +15641,7 @@ ${extraRule}
 
 ## 输出格式要求
 - 每段字数: 不大于70字
+${statusTagSection}
 
 ## 标签系统
 
@@ -15093,13 +15658,7 @@ ${extraRule}
 - 格式: \`<p>旁白内容</p>\`
 - 无需表情标签
 
-### 背景音乐 (BGM)
-- **格式**: \`<bgm>歌曲名</bgm>\`
-- **使用规则**:
-  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
-  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
-  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
-  - **示例**: \`<bgm>歌曲名</bgm>\`
+${bgmRuleSection}
 
 ### 背景标签 (场景环境强制)
 - 格式: \`<background scene="场景名" />\`
@@ -15107,16 +15666,17 @@ ${extraRule}
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
 - ${sceneListText}
+${pixiEffectTagSection}
 
 ## 输出结构示例
 \`\`\`
 <maintext>
   <background scene="${exampleScene}" />
+  <pixiPerform name="fog" />
   <p>第一句旁白描述。</p>
   <p>角色名: "这是角色的对话内容。"<微笑></p>
   <bgm>歌曲名</bgm>
   <p>继续旁白描述。</p>
-  <sprite action="exit" character="路人甲" />
   <p>角色名: "表情变化了！"<惊讶></p>
   <p>角色名: "又说了一句。"<思考></p>
 
@@ -15127,8 +15687,7 @@ ${extraRule}
 1. 角色说话时必须使用格式: \`角色名: "对话内容"<表情名>\`
 2. 表情标签直接跟在对话引号后面，无空格
 3. 旁白不需要表情标签
-4. 角色离场格式: \`<sprite action="exit" character="角色名" />\`，必须单独一行输出（不可和 \`<p>\` 同行）
-5. maintext标签包裹
+4. maintext标签包裹
 ${extraRule}
 `;
     }
@@ -15265,6 +15824,8 @@ ${extraRule}
   var RE_OPTION2 = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
   var RE_P_TAG2 = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
   var RE_SPRITE_TAG = /<sprite\b([^>]*)\/?>/gi;
+  var RE_POPUP1 = /<弹窗一>([\s\S]*?)<\/弹窗一>/i;
+  var RE_POPUP2 = /<弹窗二>([\s\S]*?)<\/弹窗二>/i;
   var RE_ILLEGAL_TAGS = [
     /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
     /<system_ui_display[^>]*>[\s\S]*?<\/system_ui_display>/gi,
@@ -15350,6 +15911,10 @@ ${extraRule}
     const settings = getSettings();
     const isEnabled = getIsEnabled();
     const parseCache2 = GalgameStore.cache.parse;
+    const popup1Match = html.match(RE_POPUP1);
+    const popup2Match = html.match(RE_POPUP2);
+    if (popup1Match) html = html.replace(RE_POPUP1, "");
+    if (popup2Match) html = html.replace(RE_POPUP2, "");
     html = preprocessSimplifiedFormat(html);
     if (isEnabled && settings.enhancedMode?.enabled && messageId) {
       const formatData = _getFormattedContentRef ? _getFormattedContentRef(messageId) : null;
@@ -15369,6 +15934,8 @@ ${extraRule}
     const result = {
       segments: [],
       currentBackground: null,
+      locationStatusBarHtml: popup1Match ? popup1Match[1].trim() : null,
+      timeStatusBarHtml: popup2Match ? popup2Match[1].trim() : null,
       bgm: null,
       options: [],
       backgroundChanges: []
@@ -20976,7 +21543,7 @@ ${normalizedSource}`;
       e.stopPropagation();
       const popupHtml = getLocationPopupHtml();
       if (popupHtml) {
-        showCustomPopupPanel("地点详情", popupHtml);
+        showCustomPopupPanel("", popupHtml);
         return;
       }
       showToast4("未找到 <弹窗一> 标签内容");
@@ -20994,7 +21561,7 @@ ${normalizedSource}`;
       }
       const popupHtml = getLocationPopupHtml();
       if (popupHtml) {
-        showCustomPopupPanel("地点详情", popupHtml);
+        showCustomPopupPanel("", popupHtml);
         return;
       }
       showToast4("未找到 <弹窗一> 标签内容");
@@ -21003,7 +21570,7 @@ ${normalizedSource}`;
       e.stopPropagation();
       const popupHtml = getTimePopupHtml();
       if (popupHtml) {
-        showCustomPopupPanel("时间详情", popupHtml);
+        showCustomPopupPanel("", popupHtml);
         return;
       }
       showToast4("未找到 <弹窗二> 标签内容");
@@ -22794,6 +23361,8 @@ ${normalizedSource}`;
       }
       syncPixiEffectsSettings();
       saveSettings();
+      injectCOTToWorldbook().catch(() => {
+      });
     });
     $("#gal-effects-quality").on("change", function() {
       const nextQuality = String($(this).val() || "").trim();

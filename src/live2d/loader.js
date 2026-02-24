@@ -17,7 +17,7 @@ export const Live2DLoader = {
     'https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/live2dcubismcore.min.js',
   ]),
   CUBISM2_CORE_URL: 'https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js',
-  SDK_URL: 'https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js',
+  SDK_URL: 'https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js', // TODO: 如上游再出现兼容回归，可考虑锁定到已验证版本
   CUBISM5_RUNTIME_URL: 'https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.runtime.min.js',
   CUBISM5_RUNTIME_FALLBACK_URLS: Object.freeze([
     'https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/cubism5.runtime.min.js',
@@ -891,4 +891,3 @@ export const Live2DLoader = {
     });
   }
 };
-

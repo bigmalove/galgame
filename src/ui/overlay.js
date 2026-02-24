@@ -122,10 +122,10 @@ export function ensureGlobalOverlay() {
               <button class="gal-sprite-toggle" title="显示/隐藏立绘">
                 <span class="gal-eye-icon">\u{1F441}</span>
               </button>
-              <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="地点详情">
+              <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="弹窗一">
                 <i class="gal-status-popup-icon ${locationIconClass}"></i>
               </button>
-              <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="时间详情">
+              <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="弹窗二">
                 <i class="gal-status-popup-icon ${timeIconClass}"></i>
               </button>
               <div class="gal-name-badge">

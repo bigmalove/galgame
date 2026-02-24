@@ -24,6 +24,7 @@ export const Live2DManager = {
   renderLocks: new Map(),   // characterId -> Promise<void>
   modelBlobUrls: new Map(), // characterId -> Set<string>
   modelRuntimeInfo: new Map(), // characterId -> { runtimeType, cubismVersion }
+  lipSyncStates: new Map(), // characterId -> lip sync runtime state
   cachedDetachedAt: new Map(), // characterId -> timestamp (宸查€€鍦虹紦瀛?
   maxDetachedCache: 3,
   xhrBlobUrlSupport: null, // null=unknown, boolean=supported
@@ -37,6 +38,53 @@ export const Live2DManager = {
   _debugLog(...args) {
     if (!this.debug) return;
     console.log(...args);
+  },
+
+  _getLipSyncState(characterId) {
+    const key = String(characterId || '').trim();
+    if (!key) return null;
+    let state = this.lipSyncStates.get(key);
+    if (!state) {
+      state = {
+        mouthParamCore: null,
+        mouthParamIds: [],
+        mouthParamIndexes: [],
+        mouthParamRangeMins: [],
+        mouthParamRangeMaxs: [],
+        mouthParamWarned: false,
+        mouthCurrentValue: 0,
+        lipSyncActive: false,
+        inModelUpdate: false,
+        writeMaskCore: null,
+        writeMaskRestore: null,
+        updateHookModel: null,
+        updateHookRestore: null,
+      };
+      this.lipSyncStates.set(key, state);
+    }
+    return state;
+  },
+
+  _destroyLipSyncState(characterId) {
+    const key = String(characterId || '').trim();
+    if (!key) return;
+    const state = this.lipSyncStates.get(key);
+    if (!state) return;
+
+    state.lipSyncActive = false;
+    state.inModelUpdate = false;
+
+    if (state.writeMaskRestore) {
+      try {
+        state.writeMaskRestore();
+      } catch (e) {}
+    }
+    if (state.updateHookRestore) {
+      try {
+        state.updateHookRestore();
+      } catch (e) {}
+    }
+    this.lipSyncStates.delete(key);
   },
 
   _markModelActive(characterId) {
@@ -785,6 +833,7 @@ export const Live2DManager = {
   _destroyModel(characterId, reason = 'cleanup') {
     const model = this.models.get(characterId);
     if (!model) {
+      this._destroyLipSyncState(characterId);
       this.cachedDetachedAt.delete(characterId);
       this.containers.delete(characterId);
       this.modelRuntimeInfo.delete(characterId);
@@ -805,6 +854,7 @@ export const Live2DManager = {
     this.cachedDetachedAt.delete(characterId);
     this.modelRuntimeInfo.delete(characterId);
     this._revokeModelBlobUrls(characterId);
+    this._destroyLipSyncState(characterId);
     return true;
   },
 
@@ -2336,51 +2386,472 @@ export const Live2DManager = {
     }
   },
 
+  _isMouthParam(characterId, paramIdOrIndex, coreModel) {
+    const preset = [
+      'parammouthopeny',
+      'param_mouth_open_y',
+      'parammouthopen',
+      'parama',
+      'param58',
+      'param61',
+      'param_mouth_open',
+      'mouth_open',
+    ];
+
+    const state = this._getLipSyncState(characterId);
+
+    if (typeof paramIdOrIndex === 'number') {
+      if (state?.mouthParamIndexes?.includes(paramIdOrIndex)) return true;
+      try {
+        if (typeof coreModel?.getParameterId === 'function') {
+          const pid = String(coreModel.getParameterId(paramIdOrIndex) || '').trim();
+          if (pid) return this._isMouthParam(characterId, pid, coreModel);
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    const id = String(paramIdOrIndex || '').trim().toLowerCase();
+    if (!id) return false;
+    if (preset.includes(id)) return true;
+    return !!state?.mouthParamIds?.some(pid => String(pid || '').trim().toLowerCase() === id);
+  },
+
+  _installCoreWriteMask(characterId, coreModel) {
+    const state = this._getLipSyncState(characterId);
+    if (!state || !coreModel) return;
+    if (state.writeMaskCore === coreModel) return;
+
+    if (state.writeMaskRestore) {
+      try {
+        state.writeMaskRestore();
+      } catch (e) {}
+      state.writeMaskCore = null;
+      state.writeMaskRestore = null;
+    }
+
+    const restoreEntries = [];
+    const methods = [
+      'setParameterValueById',
+      'addParameterValueById',
+      'setParamFloat',
+      'addParamFloat',
+      'setParameterValueByIndex',
+      'addParameterValueByIndex',
+      'setParameterValue',
+      'addParameterValue',
+    ];
+
+    const getParamRef = (method, args) => {
+      if (!Array.isArray(args) || args.length === 0) return null;
+      const first = args[0];
+      if (method.includes('ById') || method === 'setParamFloat' || method === 'addParamFloat') {
+        return typeof first === 'string' ? first : null;
+      }
+      if (method.includes('ByIndex')) {
+        return typeof first === 'number' ? first : null;
+      }
+      if (method === 'setParameterValue' || method === 'addParameterValue') {
+        if (typeof first === 'number' || typeof first === 'string') return first;
+      }
+      return null;
+    };
+
+    for (const method of methods) {
+      const raw = coreModel?.[method];
+      if (typeof raw !== 'function') continue;
+      restoreEntries.push({ method, raw });
+      coreModel[method] = (...args) => {
+        const paramRef = getParamRef(method, args);
+        if (
+          paramRef !== null &&
+          state.lipSyncActive &&
+          state.inModelUpdate &&
+          this._isMouthParam(characterId, paramRef, coreModel)
+        ) {
+          return undefined;
+        }
+        return raw.apply(coreModel, args);
+      };
+    }
+
+    state.writeMaskCore = coreModel;
+    state.writeMaskRestore = () => {
+      for (const entry of restoreEntries) {
+        try {
+          coreModel[entry.method] = entry.raw;
+        } catch (e) {}
+      }
+    };
+  },
+
+  _ensureLipSyncHooks(characterId, model) {
+    const state = this._getLipSyncState(characterId);
+    if (!state || !model) return;
+    if (state.updateHookModel === model) return;
+
+    if (state.updateHookRestore) {
+      try {
+        state.updateHookRestore();
+      } catch (e) {}
+      state.updateHookRestore = null;
+      state.updateHookModel = null;
+    }
+
+    const internal = model?.internalModel;
+    const updater = internal?.update;
+    if (typeof updater !== 'function') return;
+
+    const rawUpdate = updater.bind(internal);
+    const self = this;
+    internal.update = function (...args) {
+      state.inModelUpdate = true;
+      let ret;
+      try {
+        ret = rawUpdate(...args);
+      } finally {
+        state.inModelUpdate = false;
+        if (state.lipSyncActive) {
+          try {
+            self._applyMouthValueToModel(characterId, model);
+          } catch (e) {}
+        }
+      }
+      return ret;
+    };
+
+    state.updateHookModel = model;
+    state.updateHookRestore = () => {
+      try {
+        internal.update = updater;
+      } catch (e) {}
+    };
+  },
+
+  _applyMouthValueToModel(characterId, model) {
+    const state = this._getLipSyncState(characterId);
+    if (!state || !model?.internalModel?.coreModel) return false;
+    const targetValue = Math.max(0, Math.min(1, state.mouthCurrentValue || 0));
+    const oldValue = state.mouthCurrentValue;
+    state.mouthCurrentValue = targetValue;
+    const applied = this.setMouthOpen(characterId, targetValue);
+    state.mouthCurrentValue = oldValue;
+    return applied;
+  },
+
+  _setLipSyncActive(characterId, active) {
+    const key = String(characterId || '').trim();
+    if (!key) return;
+
+    let state = this.lipSyncStates.get(key);
+    if (!state && active) {
+      state = this._getLipSyncState(key);
+    }
+    if (!state) return;
+
+    const next = !!active;
+    if (state.lipSyncActive === next) return;
+    state.lipSyncActive = next;
+
+    if (next) {
+      const model = this.models.get(key);
+      const coreModel = model?.internalModel?.coreModel;
+      if (model) this._ensureLipSyncHooks(key, model);
+      if (coreModel) this._installCoreWriteMask(key, coreModel);
+    }
+
+    this._debugLog(`[${SCRIPT_NAME}] LipSync active=${next} (${key})`);
+  },
+
   setMouthOpen(characterId, value) {
-    const model = this.models.get(characterId);
+    const key = String(characterId || '').trim();
+    if (!key) return false;
+    const model = this.models.get(key);
     if (!model?.internalModel?.coreModel) return false;
 
+    const state = this._getLipSyncState(key);
+    if (!state) return false;
+
     const coreModel = model.internalModel.coreModel;
-    const clampedValue = Math.max(0, Math.min(1, value));
+    const clampedValue = Math.max(0, Math.min(1, Number(value) || 0));
+    state.mouthCurrentValue = clampedValue;
+    this._ensureLipSyncHooks(key, model);
+    this._installCoreWriteMask(key, coreModel);
+
+    const getParamRange = (paramId, paramIndex) => {
+      let min = Number.NaN;
+      let max = Number.NaN;
+
+      const readNumber = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : Number.NaN;
+      };
+
+      if (Number.isFinite(paramIndex) && paramIndex >= 0) {
+        try {
+          if (typeof coreModel.getParameterMinimumValue === 'function') {
+            min = readNumber(coreModel.getParameterMinimumValue(paramIndex));
+          }
+        } catch (e) {}
+        try {
+          if (typeof coreModel.getParameterMaximumValue === 'function') {
+            max = readNumber(coreModel.getParameterMaximumValue(paramIndex));
+          }
+        } catch (e) {}
+      }
+
+      if (!Number.isFinite(min)) {
+        try {
+          if (typeof coreModel.getParamMin === 'function') {
+            min = readNumber(coreModel.getParamMin(paramId));
+          }
+        } catch (e) {}
+      }
+      if (!Number.isFinite(max)) {
+        try {
+          if (typeof coreModel.getParamMax === 'function') {
+            max = readNumber(coreModel.getParamMax(paramId));
+          }
+        } catch (e) {}
+      }
+
+      if (!Number.isFinite(min)) min = 0;
+      if (!Number.isFinite(max) || max <= min) max = 1;
+      return { min, max };
+    };
+
+    const mapToParamValue = (paramId, paramIndex) => {
+      const { min, max } = getParamRange(paramId, paramIndex);
+      if (min < 0 && max > 0) {
+        return clampedValue * max;
+      }
+      return min + (max - min) * clampedValue;
+    };
+
+    const getIndexById = (paramId) => {
+      try {
+        if (typeof coreModel.getParameterIndex === 'function') {
+          return coreModel.getParameterIndex(paramId);
+        }
+      } catch (e) {}
+      try {
+        if (typeof coreModel.getParamIndex === 'function') {
+          return coreModel.getParamIndex(paramId);
+        }
+      } catch (e) {}
+      return -1;
+    };
+
+    const applyById = (paramId) => {
+      const paramIndex = getIndexById(paramId);
+      const mappedValue = mapToParamValue(paramId, paramIndex);
+      try {
+        if (typeof coreModel.setParameterValueById === 'function') {
+          coreModel.setParameterValueById(paramId, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      try {
+        if (typeof coreModel.addParameterValueById === 'function') {
+          coreModel.addParameterValueById(paramId, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      try {
+        if (typeof coreModel.setParamFloat === 'function') {
+          coreModel.setParamFloat(paramId, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      try {
+        if (typeof coreModel.addParamFloat === 'function') {
+          coreModel.addParamFloat(paramId, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    };
+
+    const applyByIndex = (paramIndex) => {
+      if (!Number.isFinite(paramIndex) || paramIndex < 0) return false;
+      const paramId = (() => {
+        try {
+          if (typeof coreModel.getParameterId === 'function') {
+            return String(coreModel.getParameterId(paramIndex) || '');
+          }
+        } catch (e) {}
+        return '';
+      })();
+      const mappedValue = mapToParamValue(paramId || `__idx_${paramIndex}`, paramIndex);
+      try {
+        if (typeof coreModel.setParameterValueByIndex === 'function') {
+          coreModel.setParameterValueByIndex(paramIndex, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      try {
+        if (typeof coreModel.addParameterValueByIndex === 'function') {
+          coreModel.addParameterValueByIndex(paramIndex, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      try {
+        if (typeof coreModel.setParameterValue === 'function') {
+          coreModel.setParameterValue(paramIndex, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      try {
+        if (typeof coreModel.addParameterValue === 'function') {
+          coreModel.addParameterValue(paramIndex, mappedValue, 1);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    };
 
     const paramNames = [
       'ParamMouthOpenY',
       'PARAM_MOUTH_OPEN_Y',
       'ParamMouthOpen',
       'ParamA',
+      'Param58',
+      'Param61',
       'Param_Mouth_Open',
       'mouth_open',
     ];
 
+    let appliedAny = false;
+    const visited = new Set();
     for (const paramName of paramNames) {
-      try {
-        const paramIndex = coreModel.getParameterIndex(paramName);
-        if (paramIndex >= 0) {
-          coreModel.setParameterValueById(paramName, clampedValue);
-          return true;
-        }
-      } catch (e) { continue; }
+      if (visited.has(paramName)) continue;
+      visited.add(paramName);
+      const paramIndex = getIndexById(paramName);
+      if (paramIndex >= 0) {
+        const appliedById = applyById(paramName);
+        const appliedByIndex = !appliedById && applyByIndex(paramIndex);
+        if (appliedById || appliedByIndex) appliedAny = true;
+      }
     }
+    if (appliedAny) return true;
+
+    if (state.mouthParamCore !== coreModel) {
+      state.mouthParamCore = coreModel;
+      state.mouthParamIds = [];
+      state.mouthParamIndexes = [];
+      state.mouthParamRangeMins = [];
+      state.mouthParamRangeMaxs = [];
+      state.mouthParamWarned = false;
+      try {
+        if (typeof coreModel.getParameterCount === 'function' && typeof coreModel.getParameterId === 'function') {
+          const count = Number(coreModel.getParameterCount()) || 0;
+          const numericFallback = [];
+          for (let i = 0; i < count; i++) {
+            const pid = String(coreModel.getParameterId(i) || '');
+            const low = pid.toLowerCase();
+            const range = getParamRange(pid, i);
+            if (
+              low.includes('mouth') ||
+              low.includes('lip') ||
+              pid === 'ParamA' ||
+              /^Param(?:58|61)$/i.test(pid)
+            ) {
+              state.mouthParamIds.push(pid);
+              state.mouthParamIndexes.push(i);
+              state.mouthParamRangeMins.push(range.min);
+              state.mouthParamRangeMaxs.push(range.max);
+              continue;
+            }
+
+            if (/^param\d+$/i.test(pid) && range.max >= 8 && range.min >= -1) {
+              numericFallback.push({ id: pid, idx: i, min: range.min, max: range.max });
+            }
+          }
+
+          if (state.mouthParamIds.length === 0 && numericFallback.length > 0) {
+            numericFallback.sort((a, b) => b.max - a.max);
+            const picked = numericFallback.slice(0, 3);
+            for (const item of picked) {
+              state.mouthParamIds.push(item.id);
+              state.mouthParamIndexes.push(item.idx);
+              state.mouthParamRangeMins.push(item.min);
+              state.mouthParamRangeMaxs.push(item.max);
+            }
+            this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 使用数字参数回退`, {
+              characterId: key,
+              picked,
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    for (let i = 0; i < state.mouthParamIds.length; i++) {
+      const pid = state.mouthParamIds[i];
+      const pidx = state.mouthParamIndexes[i] ?? -1;
+      const appliedById = applyById(pid);
+      const appliedByIndex = !appliedById && applyByIndex(pidx);
+      if (appliedById || appliedByIndex) appliedAny = true;
+    }
+    if (appliedAny) return true;
+
+    if (!state.mouthParamWarned) {
+      state.mouthParamWarned = true;
+      console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到可用口型参数`, {
+        characterId: key,
+        presetCandidates: paramNames,
+        scannedIds: state.mouthParamIds,
+      });
+    }
+
     return false;
   },
 
+  getLipSyncDebugInfo(characterId) {
+    const key = String(characterId || '').trim();
+    const state = key ? this.lipSyncStates.get(key) : null;
+    return {
+      lipSyncOverride: state?.lipSyncActive ? 'active' : 'inactive',
+      mouthParamsSource: 'auto',
+      mouthParamsCount: state?.mouthParamIds?.length || 0,
+    };
+  },
+
   getMouthParams(characterId) {
-    const model = this.models.get(characterId);
+    const key = String(characterId || '').trim();
+    const model = this.models.get(key);
     if (!model?.internalModel?.coreModel) return [];
 
     const coreModel = model.internalModel.coreModel;
+    const state = this._getLipSyncState(key);
     const params = [];
+    const seen = new Set();
+    const push = (id) => {
+      const value = String(id || '').trim();
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      params.push(value);
+    };
+
     try {
       const count = coreModel.getParameterCount();
       for (let i = 0; i < count; i++) {
-        const id = coreModel.getParameterId(i);
-        if (id.toLowerCase().includes('mouth') ||
-            id.toLowerCase().includes('lip') ||
-            id === 'ParamA') {
-          params.push(id);
+        const id = String(coreModel.getParameterId(i) || '');
+        const lower = id.toLowerCase();
+        if (
+          lower.includes('mouth') ||
+          lower.includes('lip') ||
+          id === 'ParamA' ||
+          /^Param(?:58|61)$/i.test(id)
+        ) {
+          push(id);
         }
       }
     } catch (e) {}
+
+    for (const id of state?.mouthParamIds || []) {
+      push(id);
+    }
     return params;
   },
 

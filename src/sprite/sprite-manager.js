@@ -1,11 +1,11 @@
-import { SCRIPT_NAME } from '../core/constants.js';
-import { topWindow, $ } from '../core/env.js';
 import { SpriteAnimationManager } from '../animation/sprite-animation.js';
-import { Live2DManager } from '../live2d/manager.js';
-import { setLive2DCharacterExpression } from '../live2d/expression-motion.js';
-import { getCharacterUseLive2D } from '../live2d/render-mode.js';
+import { SCRIPT_NAME } from '../core/constants.js';
+import { $, topWindow } from '../core/env.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
+import { setLive2DCharacterExpression } from '../live2d/expression-motion.js';
+import { Live2DManager } from '../live2d/manager.js';
 import { updateCharacterFocus } from '../live2d/preload.js';
+import { getCharacterUseLive2D } from '../live2d/render-mode.js';
 
 // 延迟引用: getSprite, getBackground, saveBackground, sceneBackgrounds,
 //           messageSegmentState, setBackgroundWithTransition, clearBackgroundLayers,
@@ -191,22 +191,94 @@ export const SpriteManager = {
   },
 
   getNextNpcReplacementSlot() {
-    const slots = ['center', 'right'];
+    const slots = ['left', 'right'];
     const slot = slots[this.npcReplaceCursor % slots.length];
     this.npcReplaceCursor = (this.npcReplaceCursor + 1) % slots.length;
     return slot;
   },
 
-  assignSlot(characterId) {
+  /**
+   * 将角色从一个槽位迁移到另一个槽位（DOM + 内部状态）
+   */
+  relocateCharacterSlot($overlay, characterId, fromSlot, toSlot) {
+    const $charLayer = this.ensureSlots($overlay);
+    const $fromSlot = $charLayer.find(`.gal-char-slot.slot-${fromSlot}`);
+    const $toSlot = $charLayer.find(`.gal-char-slot.slot-${toSlot}`);
+    if (!$fromSlot.length || !$toSlot.length) return;
+
+    const $container = $fromSlot.find(`.gal-char-container[data-character="${characterId}"]`);
+    if (!$container.length) return;
+
+    // 移动 DOM 元素
+    $toSlot.empty().append($container);
+
+    // 更新内部状态
+    const info = this.activeCharacters.get(characterId);
+    if (info) {
+      info.slot = toSlot;
+    }
+    if (this.slotOwners.get(fromSlot) === characterId) {
+      this.slotOwners.delete(fromSlot);
+    }
+    this.slotOwners.set(toSlot, characterId);
+
+    // Live2D 使用独立舞台，DOM 迁移后需主动刷新槽位绑定
+    if ($container.attr('data-live2d') === 'true') {
+      const mountEl = $container.find('.gal-live2d-canvas-container')[0];
+      if (mountEl && mountEl.isConnected) {
+        Promise.resolve(Live2DManager.renderTo(characterId, mountEl)).catch((e) => {
+          console.warn(`[${SCRIPT_NAME}] Live2D 槽位迁移同步失败: ${characterId} ${fromSlot} -> ${toSlot}`, e);
+        });
+      }
+    }
+
+    console.log(`[${SCRIPT_NAME}] 槽位迁移: ${characterId} ${fromSlot} -> ${toSlot}`);
+  },
+
+  /**
+   * 槽位分配策略:
+   *   立绘=1 → center
+   *   立绘=2 → 中间的迁移到 left，新角色放 right
+   *   立绘=3 → left / center / right
+   */
+  assignSlot(characterId, $overlay) {
+    const usedSlots = new Set(this.slotOwners.keys());
+
+    // 主角始终绑定 left
     if (this.isProtagonist(characterId)) {
+      // 若当前只有 1 个 NPC 且占据 center，主角入场时将 NPC 挪到 right，形成左右分列
+      if (usedSlots.size === 1 && usedSlots.has('center')) {
+        const centerCharId = this.slotOwners.get('center');
+        if (centerCharId && $overlay) {
+          this.relocateCharacterSlot($overlay, centerCharId, 'center', 'right');
+        }
+      }
       return 'left';
     }
 
-    const usedSlots = new Set(this.slotOwners.keys());
+    // 没有任何槽位被占用 → center
+    if (usedSlots.size === 0) return 'center';
+
+    // 只有 left 被占用（主角在 left）→ NPC 放 right
+    if (usedSlots.size === 1 && usedSlots.has('left')) {
+      return 'right';
+    }
+
+    // 只有 center 被占用（NPC独占中间）→ 把 center 角色迁移到 left，新角色放 right
+    if (usedSlots.size === 1 && usedSlots.has('center')) {
+      const centerCharId = this.slotOwners.get('center');
+      if (centerCharId && $overlay) {
+        this.relocateCharacterSlot($overlay, centerCharId, 'center', 'left');
+      }
+      return 'right';
+    }
+
+    // 有空闲槽位就用
     if (!usedSlots.has('center')) return 'center';
     if (!usedSlots.has('right')) return 'right';
+    if (!usedSlots.has('left')) return 'left';
 
-    // 中右都满时，按 center -> right 轮换替换。
+    // 全满时轮换替换 left / right
     return this.getNextNpcReplacementSlot();
   },
 
@@ -248,6 +320,17 @@ export const SpriteManager = {
     this.characterQueue = this.characterQueue.filter(id => id !== characterId);
     if (this.currentSpeaker === characterId) {
       this.currentSpeaker = null;
+    }
+
+    // 只剩1个角色且不在 center → 迁回 center（主角除外，主角留在 left）
+    if (this.activeCharacters.size === 1) {
+      const [remainId, remainInfo] = Array.from(this.activeCharacters.entries())[0];
+      if (remainInfo?.slot && remainInfo.slot !== 'center' && !this.isProtagonist(remainId)) {
+        const $ov = $('#gal-global-overlay');
+        if ($ov.length) {
+          this.relocateCharacterSlot($ov, remainId, remainInfo.slot, 'center');
+        }
+      }
     }
     return true;
   },
@@ -315,7 +398,7 @@ export const SpriteManager = {
       }
     } else {
       isNewCharacter = true;
-      slot = this.assignSlot(characterId);
+      slot = this.assignSlot(characterId, $overlay);
       this.characterQueue.push(characterId);
       this.activeCharacters.set(characterId, {
         slot,

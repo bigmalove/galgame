@@ -135,7 +135,7 @@ export function setupGlobalEventListeners() {
     if (getIsRewinding()) {
       stopRewinding();
     } else {
-      triggerPrevSegment();
+      void triggerPrevSegment();
     }
   });
 
@@ -575,6 +575,7 @@ export function setupGlobalEventListeners() {
 
   // 立绘占位符上传
   $(doc).on('click', '#gal-global-overlay .gal-char-placeholder', async function (e) {
+    if (!settings.showMissingSpritePlaceholder) return;
     e.stopPropagation();
     const $container = $(this).closest('.gal-char-container');
     const character = $container.data('character') || 'default';

@@ -1,4 +1,4 @@
-﻿import { SCRIPT_NAME, THEME, DEFAULT_PACK_ID } from '../core/constants.js';
+import { SCRIPT_NAME, THEME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
 import { sceneBackgrounds } from '../core/store.js';
 import { getIsEnabled } from '../core/state.js';
@@ -57,7 +57,7 @@ const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
 const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 
 // ============================================
-// 澶ч钑夊瑙傚垪琛ㄦ覆鏌?
+// 大香蕉外观列表渲染
 // ============================================
 
 function renderBananaAppearanceList($modal) {
@@ -961,7 +961,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
 }
 
 // ============================================
-// 鍥惧寘绠＄悊寮圭獥
+// 图包管理弹窗
 // ============================================
 
 export async function showPackManagerModal() {
@@ -1072,7 +1072,7 @@ export async function showPackManagerModal() {
 }
 
 // ============================================
-// 璧勬簮杞Щ瀵硅瘽妗?
+// 资源转移对话框
 // ============================================
 
 export async function showTransferDialog(resourceType, resourceIds, onComplete) {

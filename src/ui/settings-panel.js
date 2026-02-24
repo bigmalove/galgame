@@ -162,6 +162,9 @@ export function applySettingsToUI() {
   } else {
     $('.gal-layer-character').hide();
   }
+  if (!settings.showMissingSpritePlaceholder) {
+    $('#gal-global-overlay .gal-char-placeholder').remove();
+  }
 
   const $charLayer = $('.gal-layer-character');
   $charLayer.css({
@@ -534,6 +537,10 @@ export async function showSettingsPanel(topTab, subTab) {
                 <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings.spriteSpacing}">
                 <span class="gal-range-value" id="gal-sprite-spacing-value">${settings.spriteSpacing}%</span>
               </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">无立绘时显示添加框 <small style="color:#999;">(关闭后不可点击上传)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings.showMissingSpritePlaceholder ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">说话者光晕 <small style="color:#999;">(轮廓发光)</small></span>
@@ -986,6 +993,7 @@ export async function showSettingsPanel(topTab, subTab) {
   $('#gal-sprite-scale').on('input', function () { settings.spriteScale = parseInt($(this).val()); $('#gal-sprite-scale-value').text(settings.spriteScale + '%'); applySettingsToUI(); saveSettings(); });
   $('#gal-sprite-bottom').on('input', function () { settings.spriteBottomOffset = parseInt($(this).val()); $('#gal-sprite-bottom-value').text(settings.spriteBottomOffset + '%'); applySettingsToUI(); saveSettings(); });
   $('#gal-sprite-spacing').on('input', function () { settings.spriteSpacing = parseInt($(this).val()); $('#gal-sprite-spacing-value').text(settings.spriteSpacing + '%'); applySettingsToUI(); saveSettings(); });
+  $('#gal-show-missing-sprite-placeholder').on('change', function () { settings.showMissingSpritePlaceholder = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
   $('#gal-speaker-glow').on('change', function () { settings.speakerGlow = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
   $('#gal-speaker-bubble').on('change', function () { settings.speakerBubble = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
 

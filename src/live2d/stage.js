@@ -1,4 +1,4 @@
-﻿import { SCRIPT_NAME } from '../core/constants.js';
+import { SCRIPT_NAME } from '../core/constants.js';
 import { Live2DManager } from './manager.js';
 import { getLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
 
@@ -9,7 +9,7 @@ export function setLive2DStageRefs({ showToast }) {
 }
 
 // ============================================
-// Live2D 鑸炲彴娓叉煋鍣紙鏂规A锛氬崟 Canvas / 鍗?PIXI.Application锛?
+// Live2D 舞台渲染器（方案A：单 Canvas / 单 PIXI.Application）
 // ============================================
 export const Live2DStage = {
   app: null,
@@ -106,7 +106,7 @@ export const Live2DStage = {
 
     if (!mountEl || !mountEl.isConnected) return false;
     if (!PIXI) {
-      console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI 鏈氨缁紝鏃犳硶鎸傝浇`);
+      console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI 未就绪，无法挂载`);
       return false;
     }
 
@@ -159,9 +159,9 @@ export const Live2DStage = {
         });
 
       if (!glContext) {
-        console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL 涓嶅彲鐢紝鏃犳硶娓叉煋 Live2D`);
+        console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL 不可用，无法渲染 Live2D`);
         try {
-          if (_showToastRef) _showToastRef('WebGL 涓嶅彲鐢紝Live2D 鏃犳硶娓叉煋锛堣寮€鍚‖浠跺姞閫燂級');
+          if (_showToastRef) _showToastRef('WebGL 不可用，Live2D 无法渲染（请开启硬件加速）');
         } catch {}
         return false;
       }
@@ -299,7 +299,7 @@ export const Live2DStage = {
     try {
       this.app.renderer.resize(width, height);
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize 澶辫触`, e);
+      console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize 失败`, e);
     }
 
     this._ensureSlotContainers();

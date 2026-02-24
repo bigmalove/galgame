@@ -1,4 +1,4 @@
-﻿import { SCRIPT_NAME } from '../core/constants.js';
+import { SCRIPT_NAME } from '../core/constants.js';
 import { Live2DLoader } from './loader.js';
 import { getLive2DModel } from '../db/live2d-models.js';
 import { getLive2DConfig, updateLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
@@ -1823,7 +1823,7 @@ export const Live2DManager = {
   async _buildRemoteModelDataUrl(characterId, modelUrl, forceProxyResources = false) {
     const url = this._normalizeRemoteUrl(String(modelUrl || '').trim());
     if (!url) {
-      throw new Error('杩滅▼ Live2D modelUrl 涓虹┖');
+      throw new Error('远程 Live2D modelUrl 为空');
     }
 
     const candidateUrls = this._buildModelJsonCandidates(url);

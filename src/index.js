@@ -143,7 +143,7 @@ setOverlayContentRefs({ renderGalgameChoices });
 setChoicesRefs({ getIsRerolling });
 
 // Phase 8 延迟引用: interaction -> sprite-upload + choices + galgame-mode
-setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews });
+setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews, updateGlobalOverlayContent });
 
 // Phase 8 延迟引用: galgame-mode -> process-message + settings-panel
 setGalgameModeRefs({ processNewMessage, applySettingsToUI });

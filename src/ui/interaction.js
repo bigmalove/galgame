@@ -5,7 +5,10 @@ import { getSettings } from '../core/settings.js';
 import { getIsSkipping, setIsSkipping, getSkipTimer, setSkipTimer, getIsRewinding, setIsRewinding, getIsEnabled, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
 import { TTSManager } from '../audio/tts-manager.js';
 import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
+import { parseGalgameContent } from '../logic/parser.js';
+import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
 import { scheduleOverlaySegmentDisplay, setCurrentDisplayMesId } from './overlay.js';
+import { detectAndCaptureCg } from './overlay-content.js';
 import { showToast } from './toast.js';
 import { getModalMountRoot } from './fullscreen.js';
 
@@ -22,11 +25,158 @@ let rewindTimer = null;
 let _showSpriteUploadDialogRef = null;
 let _hideGalgameChoicesRef = null;
 let _refreshGalgameViewsRef = null;
+let _updateGlobalOverlayContentRef = null;
 
-export function setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews }) {
+export function setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews, updateGlobalOverlayContent }) {
   if (showSpriteUploadDialog) _showSpriteUploadDialogRef = showSpriteUploadDialog;
   if (hideGalgameChoices) _hideGalgameChoicesRef = hideGalgameChoices;
   if (refreshGalgameViews) _refreshGalgameViewsRef = refreshGalgameViews;
+  if (updateGlobalOverlayContent) _updateGlobalOverlayContentRef = updateGlobalOverlayContent;
+}
+
+function findPreviousAiMessage(currentMesId) {
+  const currentMesIdStr = String(currentMesId || '');
+  if (!currentMesIdStr) return null;
+
+  const $currentMes = $(`#chat > .mes[mesid="${currentMesIdStr}"]`);
+  if ($currentMes.length) {
+    const $prev = $currentMes.prevAll('.mes[is_user!="true"]').first();
+    if ($prev.length) return $prev;
+  }
+
+  const currentMesIdNum = Number.parseInt(currentMesIdStr, 10);
+  if (!Number.isFinite(currentMesIdNum)) return null;
+
+  let $best = null;
+  let bestMesId = Number.NEGATIVE_INFINITY;
+  $('#chat > .mes[is_user!="true"]').each(function () {
+    const $mes = $(this);
+    const mesId = Number.parseInt($mes.attr('mesid'), 10);
+    if (!Number.isFinite(mesId) || mesId >= currentMesIdNum || mesId <= bestMesId) return;
+    $best = $mes;
+    bestMesId = mesId;
+  });
+  return $best;
+}
+
+function extractMessageContent($mes, mesId) {
+  let contentToProcess = getFormattedSwipeContent(mesId);
+  if (!contentToProcess) {
+    contentToProcess = getRawMessageContent(mesId);
+  }
+  if (!contentToProcess) {
+    const html = $mes.find('.mes_text').html();
+    if (html) {
+      contentToProcess = decodeHtml(html);
+    }
+  }
+  if (!contentToProcess) {
+    contentToProcess = String($mes.find('.mes_text').text() || '').trim();
+  }
+  return String(contentToProcess || '');
+}
+
+function buildFallbackParsed(fallbackText) {
+  return {
+    segments: [{ type: 'narration', speaker: null, text: fallbackText, expression: null }],
+    currentBackground: null,
+    bgm: null,
+    options: [],
+    backgroundChanges: [],
+    effectEvents: [],
+    hasEffects: false,
+    locationStatusBarHtml: null,
+    timeStatusBarHtml: null,
+  };
+}
+
+function ensureParsedStateForMes($mes, mesId, targetIndex = 'first') {
+  if (!$mes?.length) return null;
+
+  const mesIdStr = String(mesId || '');
+  if (!mesIdStr) return null;
+
+  const contentToProcess = extractMessageContent($mes, mesIdStr);
+  let parsed = contentToProcess ? parseGalgameContent(contentToProcess, mesIdStr) : null;
+
+  if (!parsed || !Array.isArray(parsed.segments) || parsed.segments.length === 0) {
+    const fallbackText = String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）';
+    parsed = buildFallbackParsed(fallbackText);
+  }
+
+  try {
+    detectAndCaptureCg(mesIdStr, $mes[0], parsed);
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] 切换上一楼层时 CG 检测失败`, error);
+  }
+
+  let state = messageSegmentState.get(mesIdStr);
+  if (!state) {
+    state = {
+      currentIndex: 0,
+      segments: parsed.segments,
+      parsedContent: parsed,
+      renderToken: 0,
+      lastAppliedEffectIndex: -1,
+      effectSyncTicket: 0,
+      effectSyncPromise: Promise.resolve(),
+    };
+    messageSegmentState.set(mesIdStr, state);
+  } else {
+    state.segments = parsed.segments;
+    state.parsedContent = parsed;
+    if (!Number.isFinite(state.renderToken)) {
+      state.renderToken = 0;
+    }
+    if (!Number.isFinite(state.lastAppliedEffectIndex)) {
+      state.lastAppliedEffectIndex = -1;
+    }
+    if (!Number.isFinite(state.effectSyncTicket)) {
+      state.effectSyncTicket = 0;
+    }
+    if (!state.effectSyncPromise || typeof state.effectSyncPromise.then !== 'function') {
+      state.effectSyncPromise = Promise.resolve();
+    }
+  }
+
+  let nextIndex = 0;
+  if (targetIndex === 'last') {
+    nextIndex = Math.max(0, parsed.segments.length - 1);
+  } else if (typeof targetIndex === 'number' && Number.isFinite(targetIndex)) {
+    const clampedMax = Math.max(0, parsed.segments.length - 1);
+    nextIndex = Math.max(0, Math.min(targetIndex, clampedMax));
+  }
+  state.currentIndex = nextIndex;
+
+  return { state, parsed, mesId: mesIdStr };
+}
+
+async function switchToPreviousAiFloor(options = {}) {
+  const { suppressTTS = false } = options;
+  const currentMesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
+  if (!currentMesId) return { ok: false };
+
+  const $prevAiMes = findPreviousAiMessage(currentMesId);
+  if (!$prevAiMes || !$prevAiMes.length) return { ok: false };
+
+  const prevMesId = $prevAiMes.attr('mesid');
+  if (!prevMesId) return { ok: false };
+
+  const prepared = ensureParsedStateForMes($prevAiMes, prevMesId, 'last');
+  if (!prepared) return { ok: false };
+
+  TTSManager.stop();
+
+  if (_updateGlobalOverlayContentRef) {
+    await _updateGlobalOverlayContentRef(prepared.mesId, prepared.parsed, { suppressTTS });
+    return { ok: true, state: prepared.state, mesId: prepared.mesId };
+  }
+
+  console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，降级到段落渲染`);
+  $('#gal-global-overlay .gal-game-container').attr('data-mes-id', prepared.mesId);
+  setCurrentDisplayMesId(prepared.mesId);
+  const rendered = await scheduleOverlaySegmentDisplay(prepared.state, 'switch-prev-floor-fallback');
+  return rendered ? { ok: true, state: prepared.state, mesId: prepared.mesId } : { ok: false };
 }
 
 export function showFreeInputModal() {
@@ -199,8 +349,13 @@ export function startRewinding() {
       await scheduleOverlaySegmentDisplay(state, 'rewind');
       rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1000);
     } else {
-      stopRewinding();
-      showToast('已回退到开头');
+      const switched = await switchToPreviousAiFloor({ suppressTTS: true });
+      if (switched.ok) {
+        rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1000);
+      } else {
+        stopRewinding();
+        showToast('已回退到最早AI楼层');
+      }
     }
   };
   void doRewind();
@@ -215,7 +370,7 @@ export function stopRewinding() {
   $('#gal-global-overlay [data-action="prev"]').removeClass('active');
 }
 
-export function triggerPrevSegment() {
+export async function triggerPrevSegment() {
   const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
   const state = messageSegmentState.get(String(mesId));
   if (!state) return;
@@ -223,15 +378,12 @@ export function triggerPrevSegment() {
   if (state.currentIndex > 0) {
     TTSManager.stop();
     state.currentIndex--;
-    scheduleOverlaySegmentDisplay(state, 'trigger-prev');
-    const settings = getSettings();
-    const prevSegment = state.segments[state.currentIndex];
-    if (prevSegment && prevSegment.type === 'dialogue' && settings.ttsEnabled) {
-      const segmentId = `${mesId}_${state.currentIndex}`;
-      TTSManager.speak(prevSegment, segmentId);
-    }
+    await scheduleOverlaySegmentDisplay(state, 'trigger-prev');
   } else {
-    showToast('已是第一段');
+    const switched = await switchToPreviousAiFloor({ suppressTTS: true });
+    if (!switched.ok) {
+      showToast('已是最早AI楼层');
+    }
   }
 }
 

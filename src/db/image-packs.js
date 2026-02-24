@@ -1,11 +1,11 @@
-﻿import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, BG_TRANSITION_MS } from '../core/constants.js';
+import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, BG_TRANSITION_MS } from '../core/constants.js';
 import { $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 
 // ============================================
-// 鍥惧寘绠＄悊鍑芥暟
+// 图包管理函数
 // ============================================
 
 export function getCurrentPackId() {
@@ -63,7 +63,7 @@ export async function createImagePack(name) {
     const store = transaction.objectStore(STORE_IMAGE_PACKS);
     const request = store.add(newPack);
     request.onsuccess = () => {
-      console.log(`[${SCRIPT_NAME}] 鍒涘缓鍥惧寘: ${name}`);
+      console.log(`[${SCRIPT_NAME}] 创建图包: ${name}`);
       resolve(newPack);
     };
     request.onerror = () => reject(request.error);
@@ -102,7 +102,7 @@ export async function deleteImagePack(packId) {
   if (!getDb()) await initDB();
   const db = getDb();
   if (packId === DEFAULT_PACK_ID) {
-    throw new Error('涓嶈兘鍒犻櫎榛樿鍥惧寘');
+    throw new Error('不能删除默认图包');
   }
   await transferAllResourcesToDefaultPack(packId);
   return new Promise((resolve, reject) => {
@@ -110,7 +110,7 @@ export async function deleteImagePack(packId) {
     const store = transaction.objectStore(STORE_IMAGE_PACKS);
     const request = store.delete(packId);
     request.onsuccess = () => {
-      console.log(`[${SCRIPT_NAME}] 鍒犻櫎鍥惧寘: ${packId}`);
+      console.log(`[${SCRIPT_NAME}] 删除图包: ${packId}`);
       if (getCurrentPackId() === packId) {
         setCurrentPack(DEFAULT_PACK_ID);
       }

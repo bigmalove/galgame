@@ -1,4 +1,4 @@
-﻿import { SCRIPT_ID, SCRIPT_NAME } from '../core/constants.js';
+import { SCRIPT_ID, SCRIPT_NAME } from '../core/constants.js';
 
 // ============================================
 // Live2D 娓叉煋妯″紡鍒囨崲鍣?
@@ -79,7 +79,7 @@ export function getLive2DConfig(characterId) {
       motionMapping: charConfig.motionMapping || {}
     };
   } catch (e) {
-    console.error(`[${SCRIPT_NAME}] 璇诲彇 Live2D 閰嶇疆澶辫触:`, e);
+    console.error(`[${SCRIPT_NAME}] 读取 Live2D 配置失败:`, e);
     return getDefaultLive2DConfig();
   }
 }
@@ -89,9 +89,9 @@ export function setLive2DConfig(characterId, config) {
     const allConfigs = JSON.parse(localStorage.getItem(LIVE2D_CONFIG_KEY) || '{}');
     allConfigs[characterId] = config;
     localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
-    console.log(`[${SCRIPT_NAME}] 宸蹭繚瀛樿鑹?${characterId} 鐨?Live2D 閰嶇疆`);
+    console.log(`[${SCRIPT_NAME}] 已保存角色 ${characterId} 的 Live2D 配置`);
   } catch (e) {
-    console.error(`[${SCRIPT_NAME}] 淇濆瓨 Live2D 閰嶇疆澶辫触:`, e);
+    console.error(`[${SCRIPT_NAME}] 保存 Live2D 配置失败:`, e);
   }
 }
 
@@ -119,7 +119,7 @@ export function deleteLive2DConfig(characterId) {
     delete allConfigs[characterId];
     localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
   } catch (e) {
-    console.error(`[${SCRIPT_NAME}] 鍒犻櫎 Live2D 閰嶇疆澶辫触:`, e);
+    console.error(`[${SCRIPT_NAME}] 删除 Live2D 配置失败:`, e);
   }
 }
 
@@ -156,9 +156,9 @@ export function setCharacterUseLive2D(characterId, useLive2D) {
     }
     localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings));
   } catch (e) {
-    console.error(`[${SCRIPT_NAME}] 淇濆瓨 Live2D 璁剧疆澶辫触:`, e);
+    console.error(`[${SCRIPT_NAME}] 保存 Live2D 设置失败:`, e);
   }
 }
-// 鍏煎鍒悕
+// 兼容别名
 export const saveLive2DConfig = setLive2DConfig;
 

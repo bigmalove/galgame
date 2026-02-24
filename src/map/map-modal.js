@@ -26,49 +26,48 @@ function ensureMapModalStyle() {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      padding: 12px;
       box-sizing: border-box;
       pointer-events: auto;
     }
     #${MAP_MODAL_ID} .gal-map-panel {
-      width: min(1240px, 100%);
-      height: min(92vh, 920px);
+      width: min(1360px, 100%);
+      height: min(94vh, 960px);
       background: #fff;
       border-radius: 14px;
       overflow: hidden;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42);
       display: grid;
-      grid-template-rows: auto 1fr minmax(260px, 34vh);
+      grid-template-rows: auto 1fr;
     }
     #${MAP_MODAL_ID} .gal-map-topbar {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
+      justify-content: space-between;
+      gap: 10px;
       padding: 10px 14px;
       border-bottom: 1px solid #e5e7eb;
       background: #f8fafc;
     }
-    #${MAP_MODAL_ID} .gal-map-edit-btn {
-      border: 1px solid #cbd5e1;
-      background: #fff;
-      color: #0f172a;
-      border-radius: 999px;
-      padding: 6px 14px;
-      cursor: pointer;
-      font-size: 0.85rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      min-width: 96px;
+    #${MAP_MODAL_ID} .gal-map-topbar-tip {
+      color: #475569;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      font-weight: 600;
     }
-    #${MAP_MODAL_ID} .gal-map-edit-btn.active {
-      background: #0ea5e9;
-      border-color: #0ea5e9;
-      color: #fff;
+    #${MAP_MODAL_ID} .gal-map-content {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+      overflow: hidden;
+      background: #f8fafc;
     }
     #${MAP_MODAL_ID} .gal-map-map-area {
+      position: relative;
       min-height: 0;
-      background: #0b1220;
+      background: radial-gradient(circle at 20% 10%, #111827 0%, #020617 60%, #02030a 100%);
+      border-right: 1px solid #1e293b;
+      overflow: hidden;
     }
     #${MAP_MODAL_ID} .gal-map-btn {
       border: 1px solid #cbd5e1;
@@ -81,6 +80,7 @@ function ensureMapModalStyle() {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      white-space: nowrap;
     }
     #${MAP_MODAL_ID} .gal-map-btn.primary {
       background: #0ea5e9;
@@ -102,28 +102,51 @@ function ensureMapModalStyle() {
       border-color: #ef4444;
       color: #fff;
     }
+    #${MAP_MODAL_ID} .gal-map-edit-btn {
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #0f172a;
+      border-radius: 999px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      min-width: 96px;
+    }
+    #${MAP_MODAL_ID} .gal-map-edit-btn.active {
+      background: #0ea5e9;
+      border-color: #0ea5e9;
+      color: #fff;
+    }
     #${MAP_MODAL_ID} .gal-map-canvas-wrap {
       position: relative;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #0b1220;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      touch-action: none;
+      cursor: grab;
+    }
+    #${MAP_MODAL_ID} .gal-map-canvas-wrap.dragging {
+      cursor: grabbing;
     }
     #${MAP_MODAL_ID} .gal-map-canvas {
-      position: relative;
-      width: 100%;
-      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+      contain: layout paint;
     }
     #${MAP_MODAL_ID} .gal-map-image {
+      display: block;
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: fill;
       user-select: none;
       pointer-events: none;
       background: #111827;
+      -webkit-user-drag: none;
     }
     #${MAP_MODAL_ID} .gal-map-markers {
       position: absolute;
@@ -147,6 +170,7 @@ function ensureMapModalStyle() {
       text-align: center;
       padding: 0;
       will-change: left, top;
+      touch-action: manipulation;
     }
     #${MAP_MODAL_ID} .gal-map-marker i {
       font-size: 1.2rem;
@@ -155,7 +179,7 @@ function ensureMapModalStyle() {
     }
     #${MAP_MODAL_ID} .gal-map-marker .name {
       font-size: 0.72rem;
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.82);
       border-radius: 4px;
       padding: 2px 6px;
       white-space: nowrap;
@@ -178,6 +202,61 @@ function ensureMapModalStyle() {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.35; transform: scale(1.15); }
     }
+    #${MAP_MODAL_ID} .gal-map-zoom-controls {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(2, 6, 23, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.42);
+      border-radius: 10px;
+      padding: 6px;
+      z-index: 3;
+      backdrop-filter: blur(4px);
+    }
+    #${MAP_MODAL_ID} .gal-map-zoom-btn {
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(148, 163, 184, 0.62);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 1rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #${MAP_MODAL_ID} .gal-map-zoom-btn.gal-map-zoom-reset {
+      width: auto;
+      min-width: 62px;
+      padding: 0 8px;
+      font-size: 0.86rem;
+    }
+    #${MAP_MODAL_ID} .gal-map-zoom-value {
+      min-width: 56px;
+      text-align: center;
+      color: #f8fafc;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      user-select: none;
+    }
+    #${MAP_MODAL_ID} .gal-map-gesture-tip {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      color: #cbd5e1;
+      font-size: 0.74rem;
+      background: rgba(2, 6, 23, 0.66);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 8px;
+      padding: 4px 8px;
+      z-index: 3;
+      pointer-events: none;
+    }
     #${MAP_MODAL_ID} .gal-map-empty {
       text-align: center;
       padding: 24px;
@@ -193,21 +272,21 @@ function ensureMapModalStyle() {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #0b1220;
+      background: transparent;
     }
     #${MAP_MODAL_ID} .gal-map-inline-btn {
       margin-top: 8px;
     }
     #${MAP_MODAL_ID} .gal-map-interaction {
       min-height: 0;
-      border-top: 1px solid #e5e7eb;
       background: #f8fafc;
       display: grid;
       grid-template-rows: auto 1fr;
+      border-left: 1px solid #e2e8f0;
     }
     #${MAP_MODAL_ID} .gal-map-interaction-header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
       padding: 10px 14px;
@@ -232,18 +311,19 @@ function ensureMapModalStyle() {
     #${MAP_MODAL_ID} .gal-map-interaction-body {
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(240px, 320px) 1fr;
+      grid-template-rows: auto 1fr;
       overflow: hidden;
     }
     #${MAP_MODAL_ID} .gal-map-point-list {
       padding: 10px;
       overflow: auto;
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 8px;
       background: #f8fafc;
-      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
       min-height: 0;
+      max-height: 150px;
     }
     #${MAP_MODAL_ID} .gal-map-point-item {
       border: 1px solid #cbd5e1;
@@ -254,6 +334,10 @@ function ensureMapModalStyle() {
       padding: 8px 10px;
       cursor: pointer;
       font-size: 0.84rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 36px;
     }
     #${MAP_MODAL_ID} .gal-map-empty-list {
       font-size: 0.84rem;
@@ -274,16 +358,16 @@ function ensureMapModalStyle() {
       box-sizing: border-box;
     }
     #${MAP_MODAL_ID} .gal-map-detail-title {
-      font-size: 1rem;
+      font-size: 1.25rem;
       font-weight: 800;
       color: #1f2937;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     #${MAP_MODAL_ID} .gal-map-kv {
       display: grid;
       grid-template-columns: 88px 1fr;
       gap: 8px;
-      font-size: 0.86rem;
+      font-size: 0.9rem;
       margin-bottom: 6px;
       color: #334155;
     }
@@ -330,12 +414,36 @@ function ensureMapModalStyle() {
       font-size: 0.78rem;
       cursor: pointer;
     }
+    @media (max-width: 1100px) {
+      #${MAP_MODAL_ID} .gal-map-content {
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+      }
+      #${MAP_MODAL_ID} .gal-map-topbar-tip {
+        display: none;
+      }
+    }
     @media (max-width: 900px) {
-      #${MAP_MODAL_ID} .gal-map-panel {
-        height: min(96vh, 980px);
+      #${MAP_MODAL_ID} {
+        padding: 8px;
       }
       #${MAP_MODAL_ID} .gal-map-panel {
-        grid-template-rows: auto minmax(280px, 1fr) minmax(300px, 46vh);
+        width: 100%;
+        height: min(98vh, 1200px);
+        border-radius: 12px;
+      }
+      #${MAP_MODAL_ID} .gal-map-topbar {
+        flex-wrap: wrap;
+      }
+      #${MAP_MODAL_ID} .gal-map-content {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(260px, 42vh) minmax(0, 1fr);
+      }
+      #${MAP_MODAL_ID} .gal-map-map-area {
+        border-right: none;
+        border-bottom: 1px solid #1f2937;
+      }
+      #${MAP_MODAL_ID} .gal-map-interaction {
+        border-left: none;
       }
       #${MAP_MODAL_ID} .gal-map-interaction-header {
         align-items: flex-start;
@@ -345,18 +453,42 @@ function ensureMapModalStyle() {
         width: 100%;
         justify-content: flex-start;
       }
-      #${MAP_MODAL_ID} .gal-map-interaction-body {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-      }
       #${MAP_MODAL_ID} .gal-map-point-list {
-        border-right: none;
-        border-bottom: 1px solid #e2e8f0;
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(160px, 1fr);
-        overflow-x: auto;
-        overflow-y: hidden;
+        max-height: none;
+        display: flex;
+        flex-wrap: wrap;
+      }
+      #${MAP_MODAL_ID} .gal-map-point-item {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 140px;
+      }
+      #${MAP_MODAL_ID} .gal-map-gesture-tip {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        text-align: center;
+      }
+      #${MAP_MODAL_ID} .gal-map-zoom-controls {
+        right: 8px;
+        top: 8px;
+        bottom: auto;
+      }
+    }
+    @media (max-width: 640px) {
+      #${MAP_MODAL_ID} .gal-map-btn {
+        font-size: 0.8rem;
+        padding: 6px 8px;
+      }
+      #${MAP_MODAL_ID} .gal-map-edit-btn {
+        min-width: 88px;
+        font-size: 0.8rem;
+      }
+      #${MAP_MODAL_ID} .gal-map-detail-title {
+        font-size: 1.12rem;
+      }
+      #${MAP_MODAL_ID} .gal-map-kv {
+        grid-template-columns: 72px 1fr;
+        font-size: 0.85rem;
       }
     }
   `;
@@ -407,7 +539,32 @@ export async function showMapModal(options = {}) {
   let editMode = false;
   let dirty = false;
   let placingLocation = '';
-  let layerSyncFrameId = 0;
+  let layoutFrameId = 0;
+  let layoutKeepView = true;
+  let suppressNextCanvasClick = false;
+  const panzoom = {
+    scale: 1,
+    minScale: 1,
+    maxScale: 6,
+    x: 0,
+    y: 0,
+    fitLeft: 0,
+    fitTop: 0,
+    fitWidth: 0,
+    fitHeight: 0,
+  };
+  const pointerState = {
+    points: new Map(),
+    isPinching: false,
+    pinchStartDistance: 0,
+    pinchStartScale: 1,
+    dragPointerId: null,
+    dragStartClientX: 0,
+    dragStartClientY: 0,
+    dragStartX: 0,
+    dragStartY: 0,
+    moved: false,
+  };
 
   const getPointByLocation = (location) => {
     const key = String(location || '').trim();
@@ -518,45 +675,56 @@ export async function showMapModal(options = {}) {
     <div id="${MAP_MODAL_ID}">
       <div class="gal-map-panel">
         <div class="gal-map-topbar">
+          <div class="gal-map-topbar-tip">滚轮或双指缩放，拖拽移动地图，点击地点查看详情</div>
           <button class="gal-map-edit-btn" id="gal-map-toggle-edit">[ edit ]</button>
         </div>
-        <div class="gal-map-map-area">
-          <div class="gal-map-canvas-wrap">
-            ${mapImageUrl
+        <div class="gal-map-content">
+          <div class="gal-map-map-area">
+            <div class="gal-map-canvas-wrap" id="gal-map-canvas-wrap">
+              ${mapImageUrl
       ? `
-                <div class="gal-map-canvas" id="gal-map-canvas">
-                  <img class="gal-map-image" src="${mapImageUrl}" alt="world-map">
-                  <div class="gal-map-markers" id="gal-map-markers">${buildMarkersHtml()}</div>
-                </div>
-              `
+                  <div class="gal-map-canvas" id="gal-map-canvas">
+                    <img class="gal-map-image" src="${mapImageUrl}" alt="world-map">
+                    <div class="gal-map-markers" id="gal-map-markers">${buildMarkersHtml()}</div>
+                  </div>
+                  <div class="gal-map-zoom-controls">
+                    <button class="gal-map-zoom-btn" id="gal-map-zoom-out" title="缩小">-</button>
+                    <button class="gal-map-zoom-btn gal-map-zoom-reset" id="gal-map-zoom-reset" title="重置缩放">
+                      <span id="gal-map-zoom-value" class="gal-map-zoom-value">100%</span>
+                    </button>
+                    <button class="gal-map-zoom-btn" id="gal-map-zoom-in" title="放大">+</button>
+                  </div>
+                  <div class="gal-map-gesture-tip">滚轮 / 双指缩放，拖拽可平移</div>
+                `
       : `
-                <div class="gal-map-empty">
-                  <div>尚未上传统一世界地图</div>
-                  <div>点击下方“上传/替换地图”或直接使用此按钮</div>
-                  <button class="gal-map-btn primary gal-map-inline-btn gal-map-open-upload-inline">
-                    <i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图
-                  </button>
-                </div>
-              `}
-          </div>
-        </div>
-        <div class="gal-map-interaction">
-          <div class="gal-map-interaction-header">
-            <div class="gal-map-info">
-              <span><i class="fa-solid fa-map-location-dot"></i> 统一世界地图</span>
-              <span>当前区域：${currentRegionKey}</span>
-              <span>${points.length} 个地点</span>
-            </div>
-            <div class="gal-map-toolbar">
-              <button class="gal-map-btn primary" id="gal-map-open-upload"><i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图</button>
-              <button class="gal-map-btn warn" id="gal-map-reset-layout"><i class="fa-solid fa-arrows-rotate"></i>重置自动布局</button>
-              <button class="gal-map-btn success" id="gal-map-save-coords" style="display:none;"><i class="fa-solid fa-floppy-disk"></i>保存坐标</button>
-              <button class="gal-map-btn danger" id="gal-map-close-btn"><i class="fa-solid fa-xmark"></i>关闭</button>
+                  <div class="gal-map-empty">
+                    <div>尚未上传统一世界地图</div>
+                    <div>点击下方“上传/替换地图”或直接使用此按钮</div>
+                    <button class="gal-map-btn primary gal-map-inline-btn gal-map-open-upload-inline">
+                      <i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图
+                    </button>
+                  </div>
+                `}
             </div>
           </div>
-          <div class="gal-map-interaction-body">
-            <div class="gal-map-point-list" id="gal-map-point-list">${buildPointListHtml()}</div>
-            <div class="gal-map-detail" id="gal-map-detail-panel">${buildDetailHtml()}</div>
+          <div class="gal-map-interaction">
+            <div class="gal-map-interaction-header">
+              <div class="gal-map-info">
+                <span><i class="fa-solid fa-map-location-dot"></i> 统一世界地图</span>
+                <span>当前区域：${currentRegionKey}</span>
+                <span>${points.length} 个地点</span>
+              </div>
+              <div class="gal-map-toolbar">
+                <button class="gal-map-btn primary" id="gal-map-open-upload"><i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图</button>
+                <button class="gal-map-btn warn" id="gal-map-reset-layout"><i class="fa-solid fa-arrows-rotate"></i>重置自动布局</button>
+                <button class="gal-map-btn success" id="gal-map-save-coords" style="display:none;"><i class="fa-solid fa-floppy-disk"></i>保存坐标</button>
+                <button class="gal-map-btn danger" id="gal-map-close-btn"><i class="fa-solid fa-xmark"></i>关闭</button>
+              </div>
+            </div>
+            <div class="gal-map-interaction-body">
+              <div class="gal-map-point-list" id="gal-map-point-list">${buildPointListHtml()}</div>
+              <div class="gal-map-detail" id="gal-map-detail-panel">${buildDetailHtml()}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -567,37 +735,19 @@ export async function showMapModal(options = {}) {
   const $modal = $(mountRoot).find(`#${MAP_MODAL_ID}`);
   const $win = $(topWindow);
 
+  const getMapCanvasWrapElement = () => $modal.find('#gal-map-canvas-wrap')[0] || null;
   const getMapCanvasElement = () => $modal.find('#gal-map-canvas')[0] || null;
   const getMapImageElement = () => $modal.find('.gal-map-image')[0] || null;
+  const getZoomValueElement = () => $modal.find('#gal-map-zoom-value')[0] || null;
+
+  const clampValue = (value, min, max) => Math.max(min, Math.min(max, value));
 
   const getDisplayedImageRect = () => {
     const canvas = getMapCanvasElement();
-    const image = getMapImageElement();
-    if (!canvas || !image) return null;
-    const canvasRect = canvas.getBoundingClientRect();
-    if (canvasRect.width <= 0 || canvasRect.height <= 0) return null;
-    const naturalWidth = Number(image.naturalWidth) || canvasRect.width;
-    const naturalHeight = Number(image.naturalHeight) || canvasRect.height;
-    if (naturalWidth <= 0 || naturalHeight <= 0) return null;
-    const scale = Math.min(canvasRect.width / naturalWidth, canvasRect.height / naturalHeight);
-    const width = naturalWidth * scale;
-    const height = naturalHeight * scale;
-    const left = canvasRect.left + (canvasRect.width - width) / 2;
-    const top = canvasRect.top + (canvasRect.height - height) / 2;
-    return { left, top, width, height };
-  };
-
-  const syncMarkerLayerBounds = () => {
-    if (!mapImageUrl) return;
-    const canvas = getMapCanvasElement();
-    const imageRect = getDisplayedImageRect();
-    const layer = $modal.find('#gal-map-markers')[0];
-    if (!canvas || !layer || !imageRect) return;
-    const canvasRect = canvas.getBoundingClientRect();
-    layer.style.left = `${(imageRect.left - canvasRect.left).toFixed(3)}px`;
-    layer.style.top = `${(imageRect.top - canvasRect.top).toFixed(3)}px`;
-    layer.style.width = `${imageRect.width.toFixed(3)}px`;
-    layer.style.height = `${imageRect.height.toFixed(3)}px`;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return rect;
   };
 
   const updateListActiveState = () => {
@@ -608,7 +758,6 @@ export async function showMapModal(options = {}) {
   const rerenderMarkers = () => {
     if (!mapImageUrl) return;
     $modal.find('#gal-map-markers').html(buildMarkersHtml());
-    syncMarkerLayerBounds();
     syncPlacingUi();
   };
 
@@ -651,12 +800,137 @@ export async function showMapModal(options = {}) {
     topWindow.clearTimeout(id);
   };
 
-  const scheduleLayerSync = () => {
-    if (layerSyncFrameId) return;
-    layerSyncFrameId = requestFrame(() => {
-      layerSyncFrameId = 0;
-      syncMarkerLayerBounds();
+  const updateZoomValue = () => {
+    const zoomValueEl = getZoomValueElement();
+    if (!zoomValueEl) return;
+    zoomValueEl.textContent = `${Math.round(panzoom.scale * 100)}%`;
+  };
+
+  const clampPanOffset = () => {
+    const wrap = getMapCanvasWrapElement();
+    if (!wrap) return;
+    const wrapW = wrap.clientWidth;
+    const wrapH = wrap.clientHeight;
+    if (wrapW <= 0 || wrapH <= 0 || panzoom.fitWidth <= 0 || panzoom.fitHeight <= 0) {
+      panzoom.x = 0;
+      panzoom.y = 0;
+      return;
+    }
+
+    const scaledW = panzoom.fitWidth * panzoom.scale;
+    const scaledH = panzoom.fitHeight * panzoom.scale;
+    const minX = wrapW - scaledW - panzoom.fitLeft;
+    const maxX = -panzoom.fitLeft;
+    const minY = wrapH - scaledH - panzoom.fitTop;
+    const maxY = -panzoom.fitTop;
+
+    if (scaledW <= wrapW) {
+      panzoom.x = (wrapW - scaledW) / 2 - panzoom.fitLeft;
+    } else {
+      panzoom.x = clampValue(panzoom.x, minX, maxX);
+    }
+    if (scaledH <= wrapH) {
+      panzoom.y = (wrapH - scaledH) / 2 - panzoom.fitTop;
+    } else {
+      panzoom.y = clampValue(panzoom.y, minY, maxY);
+    }
+  };
+
+  const applyCanvasTransform = () => {
+    const canvas = getMapCanvasElement();
+    if (!canvas) return;
+    clampPanOffset();
+    canvas.style.transform = `translate3d(${panzoom.x.toFixed(3)}px, ${panzoom.y.toFixed(3)}px, 0) scale(${panzoom.scale.toFixed(5)})`;
+    updateZoomValue();
+  };
+
+  const refreshCanvasLayout = (keepView = true) => {
+    if (!mapImageUrl) return;
+    const wrap = getMapCanvasWrapElement();
+    const image = getMapImageElement();
+    const canvas = getMapCanvasElement();
+    if (!wrap || !image || !canvas) return;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const wrapW = wrapRect.width;
+    const wrapH = wrapRect.height;
+    const naturalW = Number(image.naturalWidth);
+    const naturalH = Number(image.naturalHeight);
+    if (wrapW <= 0 || wrapH <= 0 || naturalW <= 0 || naturalH <= 0) return;
+
+    const focusLocalX = wrapW / 2;
+    const focusLocalY = wrapH / 2;
+    let worldX = (focusLocalX - panzoom.fitLeft - panzoom.x) / panzoom.scale;
+    let worldY = (focusLocalY - panzoom.fitTop - panzoom.y) / panzoom.scale;
+    if (!Number.isFinite(worldX)) worldX = 0.5;
+    if (!Number.isFinite(worldY)) worldY = 0.5;
+
+    const fitScale = Math.min(wrapW / naturalW, wrapH / naturalH);
+    panzoom.fitWidth = naturalW * fitScale;
+    panzoom.fitHeight = naturalH * fitScale;
+    panzoom.fitLeft = (wrapW - panzoom.fitWidth) / 2;
+    panzoom.fitTop = (wrapH - panzoom.fitHeight) / 2;
+
+    canvas.style.width = `${panzoom.fitWidth.toFixed(3)}px`;
+    canvas.style.height = `${panzoom.fitHeight.toFixed(3)}px`;
+    canvas.style.left = `${panzoom.fitLeft.toFixed(3)}px`;
+    canvas.style.top = `${panzoom.fitTop.toFixed(3)}px`;
+
+    if (!keepView || panzoom.scale <= panzoom.minScale + 1e-4) {
+      panzoom.scale = panzoom.minScale;
+      panzoom.x = 0;
+      panzoom.y = 0;
+      applyCanvasTransform();
+      return;
+    }
+
+    panzoom.x = focusLocalX - panzoom.fitLeft - worldX * panzoom.scale;
+    panzoom.y = focusLocalY - panzoom.fitTop - worldY * panzoom.scale;
+    applyCanvasTransform();
+  };
+
+  const scheduleCanvasLayout = (keepView = true) => {
+    if (!mapImageUrl) return;
+    layoutKeepView = layoutKeepView && keepView;
+    if (layoutFrameId) return;
+    layoutFrameId = requestFrame(() => {
+      const keep = layoutKeepView;
+      layoutFrameId = 0;
+      layoutKeepView = true;
+      refreshCanvasLayout(keep);
     });
+  };
+
+  const zoomTo = (nextScale, clientX, clientY) => {
+    if (!mapImageUrl) return;
+    const wrap = getMapCanvasWrapElement();
+    if (!wrap) return;
+    const targetScale = clampValue(nextScale, panzoom.minScale, panzoom.maxScale);
+    if (!Number.isFinite(targetScale) || Math.abs(targetScale - panzoom.scale) < 1e-4) return;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const localX = Number.isFinite(clientX) ? clientX - wrapRect.left : wrapRect.width / 2;
+    const localY = Number.isFinite(clientY) ? clientY - wrapRect.top : wrapRect.height / 2;
+    const worldX = (localX - panzoom.fitLeft - panzoom.x) / panzoom.scale;
+    const worldY = (localY - panzoom.fitTop - panzoom.y) / panzoom.scale;
+
+    panzoom.scale = targetScale;
+    panzoom.x = localX - panzoom.fitLeft - worldX * panzoom.scale;
+    panzoom.y = localY - panzoom.fitTop - worldY * panzoom.scale;
+    applyCanvasTransform();
+  };
+
+  const zoomByFactor = (factor, clientX, clientY) => {
+    const safeFactor = Number(factor);
+    if (!Number.isFinite(safeFactor) || safeFactor <= 0) return;
+    zoomTo(panzoom.scale * safeFactor, clientX, clientY);
+  };
+
+  const resetZoom = () => {
+    panzoom.scale = panzoom.minScale;
+    panzoom.x = 0;
+    panzoom.y = 0;
+    applyCanvasTransform();
   };
 
   const placeSelectedMarkerAt = (clientX, clientY) => {
@@ -686,8 +960,14 @@ export async function showMapModal(options = {}) {
 
   const closeModal = () => {
     $win.off('.galMapMap');
-    cancelFrame(layerSyncFrameId);
-    layerSyncFrameId = 0;
+    $modal.off('.galMapMap');
+    cancelFrame(layoutFrameId);
+    layoutFrameId = 0;
+    const wrap = getMapCanvasWrapElement();
+    if (wrap) {
+      $(wrap).removeClass('dragging');
+    }
+    pointerState.points.clear();
     $modal.find('.gal-map-image').off('.galMapMap');
     if (tempBlobUrl) {
       try { (topWindow.URL || URL).revokeObjectURL(tempBlobUrl); } catch (e) { /* ignore */ }
@@ -697,12 +977,143 @@ export async function showMapModal(options = {}) {
 
   syncEditUi();
   if (mapImageUrl) {
+    const getEventPointerId = (event) => {
+      const raw = event?.pointerId ?? event?.originalEvent?.pointerId;
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : -1;
+    };
+
+    const getEventClientXY = (event) => {
+      const rawX = event?.clientX ?? event?.originalEvent?.clientX;
+      const rawY = event?.clientY ?? event?.originalEvent?.clientY;
+      return {
+        x: Number.isFinite(Number(rawX)) ? Number(rawX) : 0,
+        y: Number.isFinite(Number(rawY)) ? Number(rawY) : 0,
+      };
+    };
+
+    const initPinch = () => {
+      const [first, second] = Array.from(pointerState.points.values());
+      if (!first || !second) return false;
+      pointerState.isPinching = true;
+      pointerState.pinchStartDistance = Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+      pointerState.pinchStartScale = panzoom.scale;
+      return true;
+    };
+
+    const endPointer = (event) => {
+      const pointerId = getEventPointerId(event);
+      pointerState.points.delete(pointerId);
+      const wrap = getMapCanvasWrapElement();
+      if (wrap && typeof wrap.releasePointerCapture === 'function') {
+        try { wrap.releasePointerCapture(pointerId); } catch (error) { /* ignore */ }
+      }
+      if (pointerState.points.size < 2) {
+        pointerState.isPinching = false;
+        pointerState.pinchStartDistance = 0;
+      }
+      if (pointerState.dragPointerId === pointerId) {
+        pointerState.dragPointerId = null;
+      }
+      if (pointerState.points.size === 1 && pointerState.dragPointerId === null) {
+        const [remainId, remainPoint] = Array.from(pointerState.points.entries())[0];
+        pointerState.dragPointerId = remainId;
+        pointerState.dragStartClientX = remainPoint.x;
+        pointerState.dragStartClientY = remainPoint.y;
+        pointerState.dragStartX = panzoom.x;
+        pointerState.dragStartY = panzoom.y;
+      }
+      if (pointerState.points.size === 0) {
+        $(wrap).removeClass('dragging');
+        if (pointerState.moved) {
+          suppressNextCanvasClick = true;
+          topWindow.setTimeout(() => {
+            suppressNextCanvasClick = false;
+          }, 0);
+        }
+        pointerState.moved = false;
+      }
+    };
+
     const $mapImage = $modal.find('.gal-map-image');
-    $mapImage.on('load.galMapMap', scheduleLayerSync);
+    $mapImage.on('load.galMapMap', () => scheduleCanvasLayout(false));
     if ($mapImage[0]?.complete) {
-      scheduleLayerSync();
+      scheduleCanvasLayout(false);
     }
-    $win.on('resize.galMapMap', scheduleLayerSync);
+    $win.on('resize.galMapMap', () => scheduleCanvasLayout(true));
+
+    $modal.on('wheel.galMapMap', '#gal-map-canvas-wrap', function (event) {
+      const e = event.originalEvent || event;
+      const deltaY = Number(e.deltaY);
+      if (!Number.isFinite(deltaY)) return;
+      const factor = deltaY < 0 ? 1.12 : 1 / 1.12;
+      zoomByFactor(factor, e.clientX, e.clientY);
+      event.preventDefault();
+    });
+
+    $modal.on('pointerdown.galMapMap', '#gal-map-canvas-wrap', function (event) {
+      if ($(event.target).closest('.gal-map-marker, .gal-map-zoom-controls').length) return;
+      const pointerId = getEventPointerId(event);
+      if (pointerId < 0) return;
+      const { x, y } = getEventClientXY(event);
+      pointerState.points.set(pointerId, { x, y });
+
+      const wrap = getMapCanvasWrapElement();
+      if (wrap && typeof wrap.setPointerCapture === 'function') {
+        try { wrap.setPointerCapture(pointerId); } catch (error) { /* ignore */ }
+      }
+
+      if (pointerState.points.size >= 2) {
+        initPinch();
+      } else {
+        pointerState.dragPointerId = pointerId;
+        pointerState.dragStartClientX = x;
+        pointerState.dragStartClientY = y;
+        pointerState.dragStartX = panzoom.x;
+        pointerState.dragStartY = panzoom.y;
+      }
+
+    });
+
+    $modal.on('pointermove.galMapMap', '#gal-map-canvas-wrap', function (event) {
+      const pointerId = getEventPointerId(event);
+      if (!pointerState.points.has(pointerId)) return;
+      const { x, y } = getEventClientXY(event);
+      pointerState.points.set(pointerId, { x, y });
+
+      if (pointerState.points.size >= 2) {
+        if (!pointerState.isPinching && !initPinch()) return;
+        const [first, second] = Array.from(pointerState.points.values());
+        const currentDistance = Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+        const centerX = (first.x + second.x) / 2;
+        const centerY = (first.y + second.y) / 2;
+        const scaleRatio = currentDistance / Math.max(1, pointerState.pinchStartDistance);
+        zoomTo(pointerState.pinchStartScale * scaleRatio, centerX, centerY);
+        pointerState.moved = true;
+        suppressNextCanvasClick = true;
+        event.preventDefault();
+        return;
+      }
+
+      if (pointerState.dragPointerId !== pointerId) return;
+      if (panzoom.scale <= panzoom.minScale + 1e-4) return;
+
+      const dx = x - pointerState.dragStartClientX;
+      const dy = y - pointerState.dragStartClientY;
+      if (Math.hypot(dx, dy) > 3) {
+        pointerState.moved = true;
+      }
+      panzoom.x = pointerState.dragStartX + dx;
+      panzoom.y = pointerState.dragStartY + dy;
+      applyCanvasTransform();
+      $modal.find('#gal-map-canvas-wrap').addClass('dragging');
+      suppressNextCanvasClick = true;
+      event.preventDefault();
+    });
+
+    $modal.on('pointerup.galMapMap pointercancel.galMapMap pointerleave.galMapMap', '#gal-map-canvas-wrap', function (event) {
+      endPointer(event);
+    });
   }
 
   $modal.on('click', function (e) {
@@ -740,6 +1151,30 @@ export async function showMapModal(options = {}) {
       return;
     }
     setEditMode(!editMode);
+  });
+
+  $modal.on('click', '#gal-map-zoom-in', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const wrap = getMapCanvasWrapElement();
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    zoomByFactor(1.2, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  });
+
+  $modal.on('click', '#gal-map-zoom-out', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const wrap = getMapCanvasWrapElement();
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    zoomByFactor(1 / 1.2, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  });
+
+  $modal.on('click', '#gal-map-zoom-reset', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    resetZoom();
   });
 
   $modal.on('click', '#gal-map-reset-layout', function (e) {
@@ -804,6 +1239,10 @@ export async function showMapModal(options = {}) {
   });
 
   $modal.on('click', '#gal-map-canvas', function (e) {
+    if (suppressNextCanvasClick) {
+      suppressNextCanvasClick = false;
+      return;
+    }
     if (!editMode || !placingLocation) return;
     if ($(e.target).closest('.gal-map-marker').length) return;
     const placed = placeSelectedMarkerAt(e.clientX, e.clientY);

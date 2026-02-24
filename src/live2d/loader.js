@@ -1,7 +1,7 @@
-﻿import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SDK_CACHE } from '../core/constants.js';
+import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SDK_CACHE } from '../core/constants.js';
 
 // ============================================
-// Live2D SDK 缂撳瓨鍔犺浇鍣?
+// Live2D SDK 缓存加载器
 // ============================================
 export const Live2DLoader = {
   PIXI_URL: 'https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js',
@@ -676,13 +676,13 @@ export const Live2DLoader = {
       }
 
       if (!_topWindow.PIXI) {
-        console.log(`[${SCRIPT_NAME}] 鍔犺浇 PIXI.js...`);
+        console.log(`[${SCRIPT_NAME}] 加载 PIXI.js...`);
         const pixiText = await fetch(this.PIXI_URL).then(r => {
-          if (!r.ok) throw new Error(`PIXI.js 鍔犺浇澶辫触: ${r.status}`);
+          if (!r.ok) throw new Error(`PIXI.js 加载失败: ${r.status}`);
           return r.text();
         });
         await this._executeScript(pixiText, _topWindow);
-        console.log(`[${SCRIPT_NAME}] PIXI.js 鍔犺浇瀹屾垚`);
+        console.log(`[${SCRIPT_NAME}] PIXI.js 加载完成`);
       }
 
       if (!_topWindow.window.PIXI) {
@@ -692,10 +692,10 @@ export const Live2DLoader = {
       this._patchPixiUrlResolve(_topWindow);
 
       if (!_topWindow.Live2DCubismCore) {
-        console.log(`[${SCRIPT_NAME}] 鍔犺浇 Cubism 4 Core...`);
+        console.log(`[${SCRIPT_NAME}] 加载 Cubism 4 Core...`);
         try {
           const coreText = await fetch(this.CUBISM4_CORE_URL).then(r => {
-            if (!r.ok) throw new Error(`Cubism 4 Core 鍔犺浇澶辫触: ${r.status}`);
+            if (!r.ok) throw new Error(`Cubism 4 Core 加载失败: ${r.status}`);
             return r.text();
           });
           await this._executeScript(coreText, _topWindow);
@@ -703,9 +703,9 @@ export const Live2DLoader = {
           this.legacyCoreSource = this.CUBISM4_CORE_URL;
           this.legacyCoreObject = _topWindow.Live2DCubismCore || this.legacyCoreObject;
           this.activeCoreType = 'legacy';
-          console.log(`[${SCRIPT_NAME}] Cubism 4 Core 鍔犺浇瀹屾垚`);
+          console.log(`[${SCRIPT_NAME}] Cubism 4 Core 加载完成`);
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Cubism 4 Core 鍔犺浇澶辫触锛屽皾璇曞鐢ㄦ簮...`, e);
+          console.warn(`[${SCRIPT_NAME}] Cubism 4 Core 加载失败，尝试备用源...`, e);
         }
       } else {
         const latestMocVersion = this._getLatestMocVersion(_topWindow);
@@ -723,16 +723,16 @@ export const Live2DLoader = {
       }
 
       if (!_topWindow.Live2D) {
-        console.log(`[${SCRIPT_NAME}] 鍔犺浇 Cubism 2.1 Core...`);
+        console.log(`[${SCRIPT_NAME}] 加载 Cubism 2.1 Core...`);
         try {
           const core2Text = await fetch(this.CUBISM2_CORE_URL).then(r => {
-            if (!r.ok) throw new Error(`Cubism 2.1 Core 鍔犺浇澶辫触: ${r.status}`);
+            if (!r.ok) throw new Error(`Cubism 2.1 Core 加载失败: ${r.status}`);
             return r.text();
           });
           await this._executeScript(core2Text, _topWindow);
-          console.log(`[${SCRIPT_NAME}] Cubism 2.1 Core 鍔犺浇瀹屾垚`);
+          console.log(`[${SCRIPT_NAME}] Cubism 2.1 Core 加载完成`);
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] Cubism 2.1 Core 鍔犺浇澶辫触锛堟棫妯″瀷鍙兘涓嶅彲鐢級:`, e);
+          console.warn(`[${SCRIPT_NAME}] Cubism 2.1 Core 加载失败（旧模型可能不可用）:`, e);
         }
       }
 
@@ -741,9 +741,9 @@ export const Live2DLoader = {
         console.log(`[${SCRIPT_NAME}] 浠庣紦瀛樺姞杞?pixi-live2d-display`);
         await this._executeScript(cached.sdk, _topWindow);
       } else {
-        console.log(`[${SCRIPT_NAME}] 浠?CDN 鍔犺浇 pixi-live2d-display...`);
+        console.log(`[${SCRIPT_NAME}] 从 CDN 加载 pixi-live2d-display...`);
         const sdkText = await fetch(this.SDK_URL).then(r => {
-          if (!r.ok) throw new Error(`pixi-live2d-display 鍔犺浇澶辫触: ${r.status}`);
+          if (!r.ok) throw new Error(`pixi-live2d-display 加载失败: ${r.status}`);
           return r.text();
         });
         await this._saveToCache({ sdk: sdkText });
@@ -760,10 +760,10 @@ export const Live2DLoader = {
       }
 
       this.isLoaded = true;
-      console.log(`[${SCRIPT_NAME}] Live2D SDK 鍔犺浇瀹屾垚`);
+      console.log(`[${SCRIPT_NAME}] Live2D SDK 加载完成`);
       return true;
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] Live2D SDK 鍔犺浇澶辫触:`, e);
+      console.error(`[${SCRIPT_NAME}] Live2D SDK 加载失败:`, e);
       this.loadPromise = null;
       return false;
     }

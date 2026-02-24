@@ -1,8 +1,8 @@
-﻿import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_IMAGE_PACKS, STORE_LIVE2D_MODELS, STORE_SDK_CACHE, STORE_UI_SKINS, DEFAULT_PACK_ID, DEFAULT_PACK_NAME } from '../core/constants.js';
+import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_IMAGE_PACKS, STORE_LIVE2D_MODELS, STORE_SDK_CACHE, STORE_UI_SKINS, DEFAULT_PACK_ID, DEFAULT_PACK_NAME } from '../core/constants.js';
 import { getDb, setDb } from '../core/state.js';
 
 // ============================================
-// IndexedDB 鍒濆鍖?
+// IndexedDB 初始化
 // ============================================
 export function initDB() {
   return new Promise((resolve, reject) => {
@@ -30,7 +30,7 @@ export function initDB() {
         bgStore.createIndex('sceneName', 'sceneName', { unique: true });
       }
 
-      // 鐗堟湰3: 娣诲姞鍥惧寘鏀寔
+      // 版本3: 添加图包支持
       if (oldVersion < 3) {
         if (!database.objectStoreNames.contains(STORE_IMAGE_PACKS)) {
           database.createObjectStore(STORE_IMAGE_PACKS, { keyPath: 'id' });
@@ -93,10 +93,10 @@ export function initDB() {
           };
         }
 
-        console.log(`[${SCRIPT_NAME}] 鏁版嵁搴撳崌绾у埌鐗堟湰3: 宸叉坊鍔犲浘鍖呮敮鎸佸苟杩佺Щ鐜版湁鏁版嵁`);
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本3: 已添加图包支持并迁移现有数据`);
       }
 
-      // 鐗堟湰4: 娣诲姞 Live2D 鏀寔
+      // 版本4: 添加 Live2D 支持
       if (oldVersion < 4) {
         if (!database.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
           const live2dStore = database.createObjectStore(STORE_LIVE2D_MODELS, { keyPath: 'modelId' });
@@ -109,7 +109,7 @@ export function initDB() {
           console.log(`[${SCRIPT_NAME}] 宸插垱寤?SDK 缂撳瓨瀛樺偍`);
         }
 
-        console.log(`[${SCRIPT_NAME}] 鏁版嵁搴撳崌绾у埌鐗堟湰4: 宸叉坊鍔?Live2D 鏀寔`);
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本4: 已添加 Live2D 支持`);
       }
       // 版本5: 新增 UI 皮肤元素存储
       if (oldVersion < 5) {

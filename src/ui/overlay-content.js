@@ -94,12 +94,13 @@ function queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, option
   state.effectSyncPromise = basePromise.then(run, run);
 }
 
-export async function updateGlobalOverlayContent(mesId, parsedContent) {
+export async function updateGlobalOverlayContent(mesId, parsedContent, options = {}) {
   console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
   const $overlay = ensureGlobalOverlay();
   const segments = parsedContent.segments;
   const settings = getSettings();
   const mesIdStr = String(mesId);
+  const suppressTTS = !!options.suppressTTS;
 
   let state = messageSegmentState.get(mesIdStr);
   if (!state) {
@@ -216,7 +217,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent) {
 
   updateLocationTimeDisplay();
 
-  if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
+  if (isNewMessage && !suppressTTS && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
     const segmentId = `${mesIdStr}_${currentIndex}`;
     TTSManager.stop();
     TTSManager.speak(displaySegment, segmentId);

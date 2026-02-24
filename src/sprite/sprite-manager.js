@@ -1,6 +1,7 @@
 import { SpriteAnimationManager } from '../animation/sprite-animation.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
+import { getSettings } from '../core/settings.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { setLive2DCharacterExpression } from '../live2d/expression-motion.js';
 import { Live2DManager } from '../live2d/manager.js';
@@ -485,7 +486,7 @@ export const SpriteManager = {
         <img class="gal-char-img" src="${spriteUrl}" alt="${characterId}">
       </div>
     `;
-    } else {
+    } else if (getSettings().showMissingSpritePlaceholder) {
       spriteHtml = `
       <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}>
         <div class="gal-char-placeholder" title="点击上传立绘">
@@ -493,6 +494,10 @@ export const SpriteManager = {
           <span>添加立绘</span>
         </div>
       </div>
+    `;
+    } else {
+      spriteHtml = `
+      <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}></div>
     `;
     }
     $slot.html(spriteHtml);

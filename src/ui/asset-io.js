@@ -1,4 +1,4 @@
-﻿import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
+import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
 import { getMapSettings, getSettings, updateMapSettings } from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
@@ -20,7 +20,7 @@ import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
 
 // ============================================
-// 璧勬簮瀵煎叆瀵煎嚭绠＄悊鍣?(Asset IO)
+// 资源导入导出管理器 (Asset IO)
 // ============================================
 
 const CARD_EXPORT_WARN_LIMIT_BYTES = 10 * 1024 * 1024;
@@ -1195,7 +1195,7 @@ function estimateLive2DModelSizeBytes(modelData) {
 
 function ensureCardExtensions(card) {
   if (!card || typeof card !== 'object') {
-    throw new Error('褰撳墠瑙掕壊鍗℃暟鎹棤鏁?');
+    throw new Error('当前角色卡数据无效');
   }
   const data = card.data && typeof card.data === 'object' ? card.data : card;
   if (!data.extensions || typeof data.extensions !== 'object') {
@@ -1370,7 +1370,7 @@ async function buildGalgameCardConfig(options = {}) {
 
   const exportedPacks = packList.map(p => {
     const packId = String(p.id || DEFAULT_PACK_ID);
-    const name = String(p.name || '鏈畾涔?');
+    const name = String(p.name || '未定义');
     const out = { packId, name };
     if (packId === activePackId && isUnifiedPackRemote) {
       if (normalizedSpriteRemote.remoteBaseUrl) out.remoteBaseUrl = normalizedSpriteRemote.remoteBaseUrl;
@@ -2882,7 +2882,7 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       const suggestedName = json.packageName || json.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
-        showToast('宸插彇娑堝鍏?');
+        showToast('已取消导入');
         return;
       }
     }
@@ -2957,7 +2957,7 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     }
     if (newExpressions.length > 0) {
       saveCustomExpressions(customs);
-      console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${newExpressions.join(', ')}`);
+      console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(', ')}`);
     }
 
     const embeddedBackgrounds = Array.isArray(json?.assets?.embedded?.backgrounds)
@@ -3064,8 +3064,8 @@ export async function importAssetsFromJson(file, targetPackId = null) {
         : `成功导入 ${count} 项资源`,
     );
   } catch (e) {
-    console.error('JSON瀵煎叆澶辫触', e);
-    showToast('JSON瀵煎叆澶辫触: ' + e.message);
+    console.error('JSON导入失败', e);
+    showToast('JSON导入失败: ' + e.message);
   }
 }
 
@@ -3082,7 +3082,7 @@ export const AssetIO = {
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
       script.onload = () => {
         this.jszip = window.JSZip;
-        console.log(`[${SCRIPT_NAME}] JSZip 鍔犺浇鎴愬姛`);
+        console.log(`[${SCRIPT_NAME}] JSZip 加载成功`);
         resolve(this.jszip);
       };
       script.onerror = () => reject(new Error('JSZip load failed'));
@@ -3091,13 +3091,13 @@ export const AssetIO = {
   },
   async exportAllAssets(remoteBaseUrl = null, packageName = null) {
     try {
-      showToast('姝ｅ湪鍑嗗瀵煎嚭...');
+      showToast('正在准备导出...');
       const zip = new (await this.loadJSZip())();
 
       const currentPackId = getCurrentPackId();
       const allPacks = await getAllImagePacks();
       const currentPack = allPacks.find(p => p.id === currentPackId);
-      const currentPackName = currentPack ? currentPack.name : '鏈懡鍚嶅寘';
+      const currentPackName = currentPack ? currentPack.name : '未命名包';
 
       const remoteConfig = {
         packageName: packageName || currentPackName,
@@ -3265,7 +3265,7 @@ export const AssetIO = {
       if (remoteBaseUrl) {
         zip.file('remote_assets.json', JSON.stringify(remoteConfig, null, 2));
       }
-      showToast('姝ｅ湪鍘嬬缉鎵撳寘...');
+      showToast('正在压缩打包...');
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
       const a = document.createElement('a');
@@ -3279,22 +3279,22 @@ export const AssetIO = {
       URL.revokeObjectURL(url);
       showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${maps.length} 张地图，${uiSkinAssets.length} 个皮肤元素`);
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 瀵煎嚭澶辫触:`, e);
-      showToast('瀵煎嚭澶辫触: ' + e.message);
+      console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
+      showToast('导出失败: ' + e.message);
     }
   },
   async importFiles(fileList, targetPackId = null) {
     if (!targetPackId) {
-      targetPackId = await showImportPackSelector('鏂囦欢澶瑰鍏?');
+      targetPackId = await showImportPackSelector('文件夹导入');
       if (!targetPackId) {
-        showToast('宸插彇娑堝鍏?');
+        showToast('已取消导入');
         return false;
       }
     }
 
     let successCount = 0;
     let failCount = 0;
-    showToast('寮€濮嬪鍏?..');
+    showToast('开始导入...');
     for (const file of fileList) {
       try {
         const path = file.webkitRelativePath || file.name;
@@ -3320,11 +3320,11 @@ export const AssetIO = {
         }
         if (imported) successCount++;
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] 瀵煎叆鏂囦欢 ${file.name} 澶辫触:`, e);
+        console.warn(`[${SCRIPT_NAME}] 导入文件 ${file.name} 失败:`, e);
         failCount++;
       }
     }
-    showToast(`瀵煎叆瀹屾垚: ${successCount} 鎴愬姛, ${failCount} 澶辫触`);
+    showToast(`导入完成: ${successCount} 成功, ${failCount} 失败`);
     return successCount > 0;
   },
   async importAsSprite(file, packId = null) {
@@ -3336,14 +3336,14 @@ export const AssetIO = {
       const characterId = parts.join('_');
       if (characterId && expression) {
         await saveSprite(characterId, expression, file, null, packId);
-        console.log(`[${SCRIPT_NAME}] 瀵煎叆绔嬬粯: ${characterId} - ${expression}`);
+        console.log(`[${SCRIPT_NAME}] 导入立绘: ${characterId} - ${expression}`);
         const allExpressions = getAllExpressions();
         if (!allExpressions.includes(expression)) {
           const customs = getCustomExpressions();
           if (!customs.find(e => e.name === expression)) {
             customs.push({ name: expression, emotion: null });
             saveCustomExpressions(customs);
-            console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${expression}`);
+            console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${expression}`);
           }
         }
         return;
@@ -3356,7 +3356,7 @@ export const AssetIO = {
     const sceneName = fileName.substring(0, fileName.lastIndexOf('.'));
     if (sceneName) {
       await saveBackground(sceneName, file, null, packId);
-      console.log(`[${SCRIPT_NAME}] 瀵煎叆鑳屾櫙: ${sceneName}`);
+      console.log(`[${SCRIPT_NAME}] 导入背景: ${sceneName}`);
     }
   },
   async importAsMap(file, packId = null) {
@@ -3368,9 +3368,9 @@ export const AssetIO = {
   async importFromGitHub(repoUrl, targetPackId = null) {
     try {
       if (!targetPackId) {
-        targetPackId = await showImportPackSelector(`GitHub瀵煎叆`);
+        targetPackId = await showImportPackSelector(`GitHub导入`);
         if (!targetPackId) {
-          showToast('宸插彇娑堝鍏?');
+          showToast('已取消导入');
           return false;
         }
       }
@@ -3399,21 +3399,21 @@ export const AssetIO = {
       if (!owner || !repo) {
         throw new Error('鏃犳晥鐨?GitHub 浠撳簱鍦板潃');
       }
-      showToast(`姝ｅ湪鑾峰彇鏂囦欢鍒楄〃: ${owner}/${repo}...`);
+      showToast(`正在获取文件列表: ${owner}/${repo}...`);
       const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
       const data = await response.json();
-      if (!Array.isArray(data)) throw new Error('璺緞涓嶆槸涓€涓洰褰?');
+      if (!Array.isArray(data)) throw new Error('路径不是一个目录');
       const imageFiles = data.filter(item => item.type === 'file' && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
       if (imageFiles.length === 0) {
-        showToast('璇ョ洰褰曚笅娌℃湁鎵惧埌鍥剧墖鏂囦欢');
+        showToast('该目录下没有找到图片文件');
         return;
       }
-      if (!confirm(`鎵惧埌 ${imageFiles.length} 寮犲浘鐗囷紝鏄惁寮€濮嬪鍏ワ紵`)) return;
+      if (!confirm(`找到 ${imageFiles.length} 张图片，是否开始导入？`)) return;
       let count = 0;
       for (const item of imageFiles) {
-        showToast(`姝ｅ湪涓嬭浇 (${count + 1}/${imageFiles.length}): ${item.name}`);
+        showToast(`正在下载 (${count + 1}/${imageFiles.length}): ${item.name}`);
         try {
           const imgRes = await fetch(item.download_url);
           const blob = await imgRes.blob();
@@ -3428,14 +3428,14 @@ export const AssetIO = {
           }
           count++;
         } catch (e) {
-          console.error(`涓嬭浇/瀵煎叆 ${item.name} 澶辫触:`, e);
+          console.error(`下载/导入 ${item.name} 失败:`, e);
         }
       }
       showToast(`GitHub 导入完成，共 ${count} 张图片`);
       return true;
     } catch (e) {
       console.error('GitHub Import Error:', e);
-      showToast('GitHub 瀵煎叆澶辫触: ' + e.message);
+      showToast('GitHub 导入失败: ' + e.message);
       return false;
     }
   },
@@ -3446,27 +3446,27 @@ export function showRemoteZipImportDialog() {
     <div class="gal-input-modal" id="gal-remote-zip-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
         <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-cloud-arrow-down"></i> 杩滅▼鍘嬬缉鍖呭鍏?/span>
-          <button id="gal-remote-zip-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-cloud-arrow-down"></i> 远程压缩包导入</span>
+          <button id="gal-remote-zip-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
-            <i class="fa-solid fa-link"></i> ZIP 鏂囦欢閾炬帴
+            <i class="fa-solid fa-link"></i> ZIP 文件链接
           </label>
           <input type="text" id="gal-remote-zip-url"
                  placeholder="https://example.com/assets.zip"
                  style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 6px;">
           <small style="color: #888; margin-top: 5px; display: block;">
-            鏀寔鐩存帴涓嬭浇閾炬帴锛屽 GitHub Release銆佷簯鐩樼洿閾剧瓑<br>
-            <strong style="color: #e74c3c;">闄愬埗锛氭渶澶?5GB</strong>
+            支持直接下载链接，如 GitHub Release、云盘直链等<br>
+            <strong style="color: #e74c3c;">限制：最大 5GB</strong>
           </small>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 12px;">
           <button class="gal-action-btn primary" id="gal-remote-zip-confirm" style="flex: 1; min-height: 44px; justify-content: center;">
             <i class="fa-solid fa-download"></i>
-            <span>涓嬭浇骞跺鍏?/span>
+            <span>下载并导入</span>
           </button>
         </div>
       </div>
@@ -3486,11 +3486,11 @@ export function showRemoteZipImportDialog() {
   $dialog.find('#gal-remote-zip-confirm').on('click', async function () {
     const url = $dialog.find('#gal-remote-zip-url').val().trim();
     if (!url) {
-      showToast('璇疯緭鍏IP鏂囦欢閾炬帴');
+      showToast('请输入ZIP文件链接');
       return;
     }
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      showToast('璇疯緭鍏ユ湁鏁堢殑 HTTP/HTTPS 閾炬帴');
+      showToast('请输入有效的 HTTP/HTTPS 链接');
       return;
     }
     $dialog.remove();
@@ -3500,9 +3500,9 @@ export function showRemoteZipImportDialog() {
 
 export async function importFromZipFile(file) {
   let isCancelled = false;
-  const progressController = showImportProgress('姝ｅ湪瑙ｅ帇鏈湴鏂囦欢...', () => {
+  const progressController = showImportProgress('正在解压本地文件...', () => {
     isCancelled = true;
-    showToast('瀵煎叆宸叉墜鍔ㄥ彇娑?');
+    showToast('导入已手动取消');
   });
 
   try {
@@ -3524,15 +3524,15 @@ export async function importFromZipFile(file) {
 
     if (!isCancelled) {
       progressController.close();
-      showToast('ZIP瀵煎叆瀹屾垚锛?');
+      showToast('ZIP 导入完成');
     } else {
       progressController.close();
     }
   } catch (e) {
     progressController.close();
     if (isCancelled) return;
-    console.error('ZIP瀵煎叆澶辫触:', e);
-    showImportError(['ZIP鏂囦欢瑙ｆ瀽澶辫触', e.message || '鏈煡閿欒', '璇风‘淇濇枃浠舵槸鏈夋晥鐨刏IP鏍煎紡']);
+    console.error('ZIP导入失败:', e);
+    showImportError(['ZIP文件解析失败', e.message || '未知错误', '请确保文件是有效的ZIP格式']);
   }
 }
 
@@ -3540,10 +3540,10 @@ export async function importFromRemoteZip(url) {
   const abortController = new AbortController();
   let isCancelled = false;
 
-  const progressController = showImportProgress('姝ｅ湪涓嬭浇杩滅▼鏂囦欢...', () => {
+  const progressController = showImportProgress('正在下载远程文件...', () => {
     isCancelled = true;
     abortController.abort();
-    showToast('涓嬭浇宸插彇娑?');
+    showToast('下载已取消');
   });
 
   try {
@@ -3573,7 +3573,7 @@ export async function importFromRemoteZip(url) {
       receivedLength += value.length;
 
       if (receivedLength > MAX_SIZE) {
-        throw new Error('涓嬭浇鐨勬枃浠跺ぇ灏忚秴杩?5GB 闄愬埗');
+        throw new Error('下载的文件大小超过 5GB 限制');
       }
 
       const now = Date.now();
@@ -3582,13 +3582,13 @@ export async function importFromRemoteZip(url) {
         const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
         const total = (totalLength / 1024 / 1024).toFixed(1);
         if (now - lastProgressUpdate > 200 || percent === 100) {
-          progressController.update(percent, `涓嬭浇涓? ${downloaded} MB / ${total} MB`);
+          progressController.update(percent, `下载中 ${downloaded} MB / ${total} MB`);
           lastProgressUpdate = now;
         }
       } else {
         const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
         if (now - lastProgressUpdate > 200) {
-          progressController.update(-1, `涓嬭浇涓? ${downloaded} MB`);
+          progressController.update(-1, `下载中 ${downloaded} MB`);
           lastProgressUpdate = now;
         }
       }
@@ -3600,7 +3600,7 @@ export async function importFromRemoteZip(url) {
     }
 
     const blob = new Blob(chunks);
-    progressController.update(100, '涓嬭浇瀹屾垚锛屽紑濮嬭В鍘?..');
+    progressController.update(100, '下载完成，开始解压...');
 
     const JSZip = await AssetIO.loadJSZip();
     const zip = await JSZip.loadAsync(blob);
@@ -3609,14 +3609,14 @@ export async function importFromRemoteZip(url) {
 
     if (!isCancelled) {
       progressController.close();
-      showToast('杩滅▼ZIP瀵煎叆瀹屾垚锛?');
+      showToast('远程 ZIP 导入完成');
     } else {
       progressController.close();
     }
   } catch (e) {
     progressController.close();
     if (e.name === 'AbortError' || isCancelled) return;
-    console.error('杩滅▼ZIP瀵煎叆澶辫触:', e);
+    console.error('远程ZIP导入失败:', e);
     showImportError(['远程ZIP下载/导入失败', e.message || '网络错误', '请检查链接是否有效、是否支持跨域']);
   }
 }
@@ -3626,46 +3626,46 @@ export async function showImportPackSelector(suggestedName = null) {
     getAllImagePacks().then(packs => {
       const currentPackId = getCurrentPackId();
       const currentPack = packs.find(p => p.id === currentPackId);
-      const currentPackName = currentPack ? currentPack.name : '褰撳墠鍥惧寘';
+      const currentPackName = currentPack ? currentPack.name : '当前图包';
 
       const packOptions = packs.map(p =>
-        `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (褰撳墠)' : ''}</option>`
+        `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (当前)' : ''}</option>`
       ).join('');
 
-      const defaultNewName = suggestedName || `瀵煎叆鍖卂${new Date().toISOString().slice(0, 10)}`;
+      const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
 
       const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
             <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-              <span><i class="fa-solid fa-box-open"></i> 閫夋嫨瀵煎叆鐩爣鍥惧寘</span>
-              <button id="gal-import-pack-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <span><i class="fa-solid fa-box-open"></i> 选择导入目标图包</span>
+              <button id="gal-import-pack-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
             <div style="margin-bottom: 20px;">
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
                 <input type="radio" name="import-target" value="current" checked style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">瀵煎叆鍒板綋鍓嶅浘鍖?/span>
+                <span style="font-weight: 600; color: #2b2e38;">导入到当前图包</span>
                 <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${currentPackName}</span>
               </label>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="existing" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">瀵煎叆鍒板凡鏈夊浘鍖?/span>
+                <span style="font-weight: 600; color: #2b2e38;">导入到已有图包</span>
               </label>
               <select id="gal-import-existing-pack" disabled style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-bottom: 15px; margin-left: 26px; opacity: 0.6;">
                 ${packOptions}
               </select>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">鍒涘缓鏂板浘鍖?/span>
+                <span style="font-weight: 600; color: #2b2e38;">创建新图包</span>
               </label>
               <input type="text" id="gal-import-new-pack-name" disabled placeholder="杈撳叆鏂板浘鍖呭悕绉? value="${defaultNewName}"
                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
             </div>
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
               <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
-                <i class="fa-solid fa-check"></i> <span>纭瀵煎叆</span>
+                <i class="fa-solid fa-check"></i> <span>确认导入</span>
               </button>
             </div>
           </div>
@@ -3697,14 +3697,14 @@ export async function showImportPackSelector(suggestedName = null) {
         } else if (targetType === 'new') {
           const newName = $dialog.find('#gal-import-new-pack-name').val().trim();
           if (!newName) {
-            showToast('璇疯緭鍏ユ柊鍥惧寘鍚嶇О');
+            showToast('请输入新图包名称');
             return;
           }
           createImagePack(newName).then(newPack => {
             $dialog.remove();
             resolve(newPack.id);
           }).catch(err => {
-            showToast('鍒涘缓鍥惧寘澶辫触: ' + err.message);
+            showToast('创建图包失败: ' + err.message);
           });
           return;
         }
@@ -3725,8 +3725,8 @@ export async function showImportPackSelector(suggestedName = null) {
         }
       });
     }).catch(err => {
-      console.error('鑾峰彇鍥惧寘鍒楄〃澶辫触:', err);
-      showToast('鑾峰彇鍥惧寘鍒楄〃澶辫触');
+      console.error('获取图包列表失败:', err);
+      showToast('获取图包列表失败');
       resolve(null);
     });
   });
@@ -4109,8 +4109,8 @@ export function showImportError(messages) {
     <div class="gal-input-modal" id="gal-import-error-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
         <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-circle-exclamation"></i> 瀵煎叆鍑洪敊</span>
-          <button id="gal-import-error-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-circle-exclamation"></i> 导入出错</span>
+          <button id="gal-import-error-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>

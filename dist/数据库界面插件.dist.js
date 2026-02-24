@@ -262,6 +262,7 @@
     spriteScale: 100,
     spriteBottomOffset: 20,
     spriteSpacing: 20,
+    showMissingSpritePlaceholder: true,
     // 说话者效果
     speakerGlow: true,
     speakerBubble: true,
@@ -1202,7 +1203,7 @@
               }
             };
           }
-          console.log(`[${SCRIPT_NAME}] 鏁版嵁搴撳崌绾у埌鐗堟湰3: 宸叉坊鍔犲浘鍖呮敮鎸佸苟杩佺Щ鐜版湁鏁版嵁`);
+          console.log(`[${SCRIPT_NAME}] 数据库升级到版本3: 已添加图包支持并迁移现有数据`);
         }
         if (oldVersion < 4) {
           if (!database.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
@@ -1214,7 +1215,7 @@
             database.createObjectStore(STORE_SDK_CACHE, { keyPath: "id" });
             console.log(`[${SCRIPT_NAME}] 宸插垱寤?SDK 缂撳瓨瀛樺偍`);
           }
-          console.log(`[${SCRIPT_NAME}] 鏁版嵁搴撳崌绾у埌鐗堟湰4: 宸叉坊鍔?Live2D 鏀寔`);
+          console.log(`[${SCRIPT_NAME}] 数据库升级到版本4: 已添加 Live2D 支持`);
         }
         if (oldVersion < 5) {
           if (!database.objectStoreNames.contains(STORE_UI_SKINS)) {
@@ -1402,7 +1403,7 @@
       const store = transaction.objectStore(STORE_IMAGE_PACKS);
       const request = store.add(newPack);
       request.onsuccess = () => {
-        console.log(`[${SCRIPT_NAME}] 鍒涘缓鍥惧寘: ${name}`);
+        console.log(`[${SCRIPT_NAME}] 创建图包: ${name}`);
         resolve(newPack);
       };
       request.onerror = () => reject(request.error);
@@ -1439,7 +1440,7 @@
     if (!getDb()) await initDB();
     const db = getDb();
     if (packId === DEFAULT_PACK_ID) {
-      throw new Error("涓嶈兘鍒犻櫎榛樿鍥惧寘");
+      throw new Error("不能删除默认图包");
     }
     await transferAllResourcesToDefaultPack(packId);
     return new Promise((resolve, reject) => {
@@ -1447,7 +1448,7 @@
       const store = transaction.objectStore(STORE_IMAGE_PACKS);
       const request = store.delete(packId);
       request.onsuccess = () => {
-        console.log(`[${SCRIPT_NAME}] 鍒犻櫎鍥惧寘: ${packId}`);
+        console.log(`[${SCRIPT_NAME}] 删除图包: ${packId}`);
         if (getCurrentPackId() === packId) {
           setCurrentPack(DEFAULT_PACK_ID);
         }
@@ -2501,7 +2502,7 @@
         motionMapping: charConfig.motionMapping || {}
       };
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 璇诲彇 Live2D 閰嶇疆澶辫触:`, e);
+      console.error(`[${SCRIPT_NAME}] 读取 Live2D 配置失败:`, e);
       return getDefaultLive2DConfig();
     }
   }
@@ -2510,9 +2511,9 @@
       const allConfigs = JSON.parse(localStorage.getItem(LIVE2D_CONFIG_KEY) || "{}");
       allConfigs[characterId] = config;
       localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
-      console.log(`[${SCRIPT_NAME}] 宸蹭繚瀛樿鑹?${characterId} 鐨?Live2D 閰嶇疆`);
+      console.log(`[${SCRIPT_NAME}] 已保存角色 ${characterId} 的 Live2D 配置`);
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 淇濆瓨 Live2D 閰嶇疆澶辫触:`, e);
+      console.error(`[${SCRIPT_NAME}] 保存 Live2D 配置失败:`, e);
     }
   }
   function updateLive2DConfig(characterId, partialConfig) {
@@ -2534,7 +2535,7 @@
       delete allConfigs[characterId];
       localStorage.setItem(LIVE2D_CONFIG_KEY, JSON.stringify(allConfigs));
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 鍒犻櫎 Live2D 閰嶇疆澶辫触:`, e);
+      console.error(`[${SCRIPT_NAME}] 删除 Live2D 配置失败:`, e);
     }
   }
   function getCharacterUseLive2D(characterId) {
@@ -2567,7 +2568,7 @@
       }
       localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings));
     } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 淇濆瓨 Live2D 璁剧疆澶辫触:`, e);
+      console.error(`[${SCRIPT_NAME}] 保存 Live2D 设置失败:`, e);
     }
   }
   var saveLive2DConfig = setLive2DConfig;
@@ -3161,23 +3162,23 @@
           return true;
         }
         if (!_topWindow.PIXI) {
-          console.log(`[${SCRIPT_NAME}] 鍔犺浇 PIXI.js...`);
+          console.log(`[${SCRIPT_NAME}] 加载 PIXI.js...`);
           const pixiText = await fetch(this.PIXI_URL).then((r) => {
-            if (!r.ok) throw new Error(`PIXI.js 鍔犺浇澶辫触: ${r.status}`);
+            if (!r.ok) throw new Error(`PIXI.js 加载失败: ${r.status}`);
             return r.text();
           });
           await this._executeScript(pixiText, _topWindow);
-          console.log(`[${SCRIPT_NAME}] PIXI.js 鍔犺浇瀹屾垚`);
+          console.log(`[${SCRIPT_NAME}] PIXI.js 加载完成`);
         }
         if (!_topWindow.window.PIXI) {
           _topWindow.window.PIXI = _topWindow.PIXI;
         }
         this._patchPixiUrlResolve(_topWindow);
         if (!_topWindow.Live2DCubismCore) {
-          console.log(`[${SCRIPT_NAME}] 鍔犺浇 Cubism 4 Core...`);
+          console.log(`[${SCRIPT_NAME}] 加载 Cubism 4 Core...`);
           try {
             const coreText = await fetch(this.CUBISM4_CORE_URL).then((r) => {
-              if (!r.ok) throw new Error(`Cubism 4 Core 鍔犺浇澶辫触: ${r.status}`);
+              if (!r.ok) throw new Error(`Cubism 4 Core 加载失败: ${r.status}`);
               return r.text();
             });
             await this._executeScript(coreText, _topWindow);
@@ -3185,9 +3186,9 @@
             this.legacyCoreSource = this.CUBISM4_CORE_URL;
             this.legacyCoreObject = _topWindow.Live2DCubismCore || this.legacyCoreObject;
             this.activeCoreType = "legacy";
-            console.log(`[${SCRIPT_NAME}] Cubism 4 Core 鍔犺浇瀹屾垚`);
+            console.log(`[${SCRIPT_NAME}] Cubism 4 Core 加载完成`);
           } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] Cubism 4 Core 鍔犺浇澶辫触锛屽皾璇曞鐢ㄦ簮...`, e);
+            console.warn(`[${SCRIPT_NAME}] Cubism 4 Core 加载失败，尝试备用源...`, e);
           }
         } else {
           const latestMocVersion = this._getLatestMocVersion(_topWindow);
@@ -3204,16 +3205,16 @@
           }
         }
         if (!_topWindow.Live2D) {
-          console.log(`[${SCRIPT_NAME}] 鍔犺浇 Cubism 2.1 Core...`);
+          console.log(`[${SCRIPT_NAME}] 加载 Cubism 2.1 Core...`);
           try {
             const core2Text = await fetch(this.CUBISM2_CORE_URL).then((r) => {
-              if (!r.ok) throw new Error(`Cubism 2.1 Core 鍔犺浇澶辫触: ${r.status}`);
+              if (!r.ok) throw new Error(`Cubism 2.1 Core 加载失败: ${r.status}`);
               return r.text();
             });
             await this._executeScript(core2Text, _topWindow);
-            console.log(`[${SCRIPT_NAME}] Cubism 2.1 Core 鍔犺浇瀹屾垚`);
+            console.log(`[${SCRIPT_NAME}] Cubism 2.1 Core 加载完成`);
           } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] Cubism 2.1 Core 鍔犺浇澶辫触锛堟棫妯″瀷鍙兘涓嶅彲鐢級:`, e);
+            console.warn(`[${SCRIPT_NAME}] Cubism 2.1 Core 加载失败（旧模型可能不可用）:`, e);
           }
         }
         const cached = await this._getFromCache();
@@ -3221,9 +3222,9 @@
           console.log(`[${SCRIPT_NAME}] 浠庣紦瀛樺姞杞?pixi-live2d-display`);
           await this._executeScript(cached.sdk, _topWindow);
         } else {
-          console.log(`[${SCRIPT_NAME}] 浠?CDN 鍔犺浇 pixi-live2d-display...`);
+          console.log(`[${SCRIPT_NAME}] 从 CDN 加载 pixi-live2d-display...`);
           const sdkText = await fetch(this.SDK_URL).then((r) => {
-            if (!r.ok) throw new Error(`pixi-live2d-display 鍔犺浇澶辫触: ${r.status}`);
+            if (!r.ok) throw new Error(`pixi-live2d-display 加载失败: ${r.status}`);
             return r.text();
           });
           await this._saveToCache({ sdk: sdkText });
@@ -3237,10 +3238,10 @@
           this._patchXhrLoader(this.legacyLive2DNamespace, "legacy");
         }
         this.isLoaded = true;
-        console.log(`[${SCRIPT_NAME}] Live2D SDK 鍔犺浇瀹屾垚`);
+        console.log(`[${SCRIPT_NAME}] Live2D SDK 加载完成`);
         return true;
       } catch (e) {
-        console.error(`[${SCRIPT_NAME}] Live2D SDK 鍔犺浇澶辫触:`, e);
+        console.error(`[${SCRIPT_NAME}] Live2D SDK 加载失败:`, e);
         this.loadPromise = null;
         return false;
       }
@@ -7134,7 +7135,7 @@ ${lines.join("\n")}`;
     async _buildRemoteModelDataUrl(characterId, modelUrl, forceProxyResources = false) {
       const url = this._normalizeRemoteUrl(String(modelUrl || "").trim());
       if (!url) {
-        throw new Error("杩滅▼ Live2D modelUrl 涓虹┖");
+        throw new Error("远程 Live2D modelUrl 为空");
       }
       const candidateUrls = this._buildModelJsonCandidates(url);
       let modelJson = null;
@@ -8246,7 +8247,7 @@ ${lines.join("\n")}`;
       const PIXI = this._getPIXI();
       if (!mountEl || !mountEl.isConnected) return false;
       if (!PIXI) {
-        console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI 鏈氨缁紝鏃犳硶鎸傝浇`);
+        console.warn(`[${SCRIPT_NAME}] Live2DStage: PIXI 未就绪，无法挂载`);
         return false;
       }
       if (this.mountEl !== mountEl) {
@@ -8291,9 +8292,9 @@ ${lines.join("\n")}`;
           premultipliedAlpha: true
         });
         if (!glContext) {
-          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL 涓嶅彲鐢紝鏃犳硶娓叉煋 Live2D`);
+          console.error(`[${SCRIPT_NAME}] Live2DStage: WebGL 不可用，无法渲染 Live2D`);
           try {
-            if (_showToastRef3) _showToastRef3("WebGL 涓嶅彲鐢紝Live2D 鏃犳硶娓叉煋锛堣寮€鍚‖浠跺姞閫燂級");
+            if (_showToastRef3) _showToastRef3("WebGL 不可用，Live2D 无法渲染（请开启硬件加速）");
           } catch {
           }
           return false;
@@ -8419,7 +8420,7 @@ ${lines.join("\n")}`;
       try {
         this.app.renderer.resize(width, height);
       } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize 澶辫触`, e);
+        console.warn(`[${SCRIPT_NAME}] Live2DStage: renderer.resize 失败`, e);
       }
       this._ensureSlotContainers();
       if (this.mode === "single") {
@@ -15047,7 +15048,7 @@ ${lines.join("\n")}`;
         <img class="gal-char-img" src="${spriteUrl}" alt="${characterId}">
       </div>
     `;
-      } else {
+      } else if (getSettings().showMissingSpritePlaceholder) {
         spriteHtml = `
       <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}>
         <div class="gal-char-placeholder" title="点击上传立绘">
@@ -15055,6 +15056,10 @@ ${lines.join("\n")}`;
           <span>添加立绘</span>
         </div>
       </div>
+    `;
+      } else {
+        spriteHtml = `
+      <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}></div>
     `;
       }
       $slot.html(spriteHtml);
@@ -18800,12 +18805,13 @@ ${normalizedSource}`;
     const basePromise = state.effectSyncPromise && typeof state.effectSyncPromise.then === "function" ? state.effectSyncPromise : Promise.resolve();
     state.effectSyncPromise = basePromise.then(run, run);
   }
-  async function updateGlobalOverlayContent(mesId, parsedContent) {
+  async function updateGlobalOverlayContent(mesId, parsedContent, options = {}) {
     console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
     const $overlay = ensureGlobalOverlay();
     const segments = parsedContent.segments;
     const settings = getSettings();
     const mesIdStr = String(mesId);
+    const suppressTTS = !!options.suppressTTS;
     let state = messageSegmentState3.get(mesIdStr);
     if (!state) {
       state = {
@@ -18907,7 +18913,7 @@ ${normalizedSource}`;
       $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     }
     updateLocationTimeDisplay();
-    if (isNewMessage && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
+    if (isNewMessage && !suppressTTS && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
       const segmentId = `${mesIdStr}_${currentIndex}`;
       TTSManager.stop();
       TTSManager.speak(displaySegment, segmentId);
@@ -19132,10 +19138,136 @@ ${normalizedSource}`;
   var _showSpriteUploadDialogRef = null;
   var _hideGalgameChoicesRef = null;
   var _refreshGalgameViewsRef = null;
-  function setInteractionRefs({ showSpriteUploadDialog: showSpriteUploadDialog2, hideGalgameChoices: hideGalgameChoices2, refreshGalgameViews: refreshGalgameViews2 }) {
+  var _updateGlobalOverlayContentRef3 = null;
+  function setInteractionRefs({ showSpriteUploadDialog: showSpriteUploadDialog2, hideGalgameChoices: hideGalgameChoices2, refreshGalgameViews: refreshGalgameViews2, updateGlobalOverlayContent: updateGlobalOverlayContent2 }) {
     if (showSpriteUploadDialog2) _showSpriteUploadDialogRef = showSpriteUploadDialog2;
     if (hideGalgameChoices2) _hideGalgameChoicesRef = hideGalgameChoices2;
     if (refreshGalgameViews2) _refreshGalgameViewsRef = refreshGalgameViews2;
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
+  }
+  function findPreviousAiMessage(currentMesId) {
+    const currentMesIdStr = String(currentMesId || "");
+    if (!currentMesIdStr) return null;
+    const $currentMes = $(`#chat > .mes[mesid="${currentMesIdStr}"]`);
+    if ($currentMes.length) {
+      const $prev = $currentMes.prevAll('.mes[is_user!="true"]').first();
+      if ($prev.length) return $prev;
+    }
+    const currentMesIdNum = Number.parseInt(currentMesIdStr, 10);
+    if (!Number.isFinite(currentMesIdNum)) return null;
+    let $best = null;
+    let bestMesId = Number.NEGATIVE_INFINITY;
+    $('#chat > .mes[is_user!="true"]').each(function() {
+      const $mes = $(this);
+      const mesId = Number.parseInt($mes.attr("mesid"), 10);
+      if (!Number.isFinite(mesId) || mesId >= currentMesIdNum || mesId <= bestMesId) return;
+      $best = $mes;
+      bestMesId = mesId;
+    });
+    return $best;
+  }
+  function extractMessageContent($mes, mesId) {
+    let contentToProcess = getFormattedSwipeContent(mesId);
+    if (!contentToProcess) {
+      contentToProcess = getRawMessageContent(mesId);
+    }
+    if (!contentToProcess) {
+      const html = $mes.find(".mes_text").html();
+      if (html) {
+        contentToProcess = decodeHtml(html);
+      }
+    }
+    if (!contentToProcess) {
+      contentToProcess = String($mes.find(".mes_text").text() || "").trim();
+    }
+    return String(contentToProcess || "");
+  }
+  function buildFallbackParsed(fallbackText) {
+    return {
+      segments: [{ type: "narration", speaker: null, text: fallbackText, expression: null }],
+      currentBackground: null,
+      bgm: null,
+      options: [],
+      backgroundChanges: [],
+      effectEvents: [],
+      hasEffects: false,
+      locationStatusBarHtml: null,
+      timeStatusBarHtml: null
+    };
+  }
+  function ensureParsedStateForMes($mes, mesId, targetIndex = "first") {
+    if (!$mes?.length) return null;
+    const mesIdStr = String(mesId || "");
+    if (!mesIdStr) return null;
+    const contentToProcess = extractMessageContent($mes, mesIdStr);
+    let parsed = contentToProcess ? parseGalgameContent(contentToProcess, mesIdStr) : null;
+    if (!parsed || !Array.isArray(parsed.segments) || parsed.segments.length === 0) {
+      const fallbackText = String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
+      parsed = buildFallbackParsed(fallbackText);
+    }
+    try {
+      detectAndCaptureCg(mesIdStr, $mes[0], parsed);
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] 切换上一楼层时 CG 检测失败`, error);
+    }
+    let state = messageSegmentState4.get(mesIdStr);
+    if (!state) {
+      state = {
+        currentIndex: 0,
+        segments: parsed.segments,
+        parsedContent: parsed,
+        renderToken: 0,
+        lastAppliedEffectIndex: -1,
+        effectSyncTicket: 0,
+        effectSyncPromise: Promise.resolve()
+      };
+      messageSegmentState4.set(mesIdStr, state);
+    } else {
+      state.segments = parsed.segments;
+      state.parsedContent = parsed;
+      if (!Number.isFinite(state.renderToken)) {
+        state.renderToken = 0;
+      }
+      if (!Number.isFinite(state.lastAppliedEffectIndex)) {
+        state.lastAppliedEffectIndex = -1;
+      }
+      if (!Number.isFinite(state.effectSyncTicket)) {
+        state.effectSyncTicket = 0;
+      }
+      if (!state.effectSyncPromise || typeof state.effectSyncPromise.then !== "function") {
+        state.effectSyncPromise = Promise.resolve();
+      }
+    }
+    let nextIndex = 0;
+    if (targetIndex === "last") {
+      nextIndex = Math.max(0, parsed.segments.length - 1);
+    } else if (typeof targetIndex === "number" && Number.isFinite(targetIndex)) {
+      const clampedMax = Math.max(0, parsed.segments.length - 1);
+      nextIndex = Math.max(0, Math.min(targetIndex, clampedMax));
+    }
+    state.currentIndex = nextIndex;
+    return { state, parsed, mesId: mesIdStr };
+  }
+  async function switchToPreviousAiFloor(options = {}) {
+    const { suppressTTS = false } = options;
+    const currentMesId = $("#gal-global-overlay .gal-game-container").attr("data-mes-id");
+    if (!currentMesId) return { ok: false };
+    const $prevAiMes = findPreviousAiMessage(currentMesId);
+    if (!$prevAiMes || !$prevAiMes.length) return { ok: false };
+    const prevMesId = $prevAiMes.attr("mesid");
+    if (!prevMesId) return { ok: false };
+    const prepared = ensureParsedStateForMes($prevAiMes, prevMesId, "last");
+    if (!prepared) return { ok: false };
+    TTSManager.stop();
+    if (_updateGlobalOverlayContentRef3) {
+      await _updateGlobalOverlayContentRef3(prepared.mesId, prepared.parsed, { suppressTTS });
+      return { ok: true, state: prepared.state, mesId: prepared.mesId };
+    }
+    console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，降级到段落渲染`);
+    $("#gal-global-overlay .gal-game-container").attr("data-mes-id", prepared.mesId);
+    setCurrentDisplayMesId(prepared.mesId);
+    const rendered = await scheduleOverlaySegmentDisplay(prepared.state, "switch-prev-floor-fallback");
+    return rendered ? { ok: true, state: prepared.state, mesId: prepared.mesId } : { ok: false };
   }
   function showFreeInputModal() {
     const modalHtml = `
@@ -19293,8 +19425,13 @@ ${normalizedSource}`;
         await scheduleOverlaySegmentDisplay(state, "rewind");
         rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
       } else {
-        stopRewinding();
-        showToast4("已回退到开头");
+        const switched = await switchToPreviousAiFloor({ suppressTTS: true });
+        if (switched.ok) {
+          rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
+        } else {
+          stopRewinding();
+          showToast4("已回退到最早AI楼层");
+        }
       }
     };
     void doRewind();
@@ -19307,22 +19444,19 @@ ${normalizedSource}`;
     }
     $('#gal-global-overlay [data-action="prev"]').removeClass("active");
   }
-  function triggerPrevSegment() {
+  async function triggerPrevSegment() {
     const mesId = $("#gal-global-overlay .gal-game-container").attr("data-mes-id");
     const state = messageSegmentState4.get(String(mesId));
     if (!state) return;
     if (state.currentIndex > 0) {
       TTSManager.stop();
       state.currentIndex--;
-      scheduleOverlaySegmentDisplay(state, "trigger-prev");
-      const settings = getSettings();
-      const prevSegment = state.segments[state.currentIndex];
-      if (prevSegment && prevSegment.type === "dialogue" && settings.ttsEnabled) {
-        const segmentId = `${mesId}_${state.currentIndex}`;
-        TTSManager.speak(prevSegment, segmentId);
-      }
+      await scheduleOverlaySegmentDisplay(state, "trigger-prev");
     } else {
-      showToast4("已是第一段");
+      const switched = await switchToPreviousAiFloor({ suppressTTS: true });
+      if (!switched.ok) {
+        showToast4("已是最早AI楼层");
+      }
     }
   }
   function triggerNextSegment() {
@@ -19894,19 +20028,19 @@ ${normalizedSource}`;
   // src/ui/process-message.js
   var messageSegmentState6 = GalgameStore.cache.segments;
   var RE_CLOSED_P3 = /<\/p>/i;
-  var _updateGlobalOverlayContentRef3 = null;
+  var _updateGlobalOverlayContentRef4 = null;
   var _applySettingsToUIRef2 = null;
   var _handleRealTimeBackgroundGenerationRef = null;
   var _handleBananaBackgroundGenerationRef = null;
   var _handleNovelAIBackgroundGenerationRef = null;
   function setProcessMessageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, applySettingsToUI: applySettingsToUI2, handleRealTimeBackgroundGeneration: handleRealTimeBackgroundGeneration2, handleBananaBackgroundGeneration: handleBananaBackgroundGeneration2, handleNovelAIBackgroundGeneration: handleNovelAIBackgroundGeneration2 }) {
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
     if (applySettingsToUI2) _applySettingsToUIRef2 = applySettingsToUI2;
     if (handleRealTimeBackgroundGeneration2) _handleRealTimeBackgroundGenerationRef = handleRealTimeBackgroundGeneration2;
     if (handleBananaBackgroundGeneration2) _handleBananaBackgroundGenerationRef = handleBananaBackgroundGeneration2;
     if (handleNovelAIBackgroundGeneration2) _handleNovelAIBackgroundGenerationRef = handleNovelAIBackgroundGeneration2;
   }
-  function buildFallbackParsed(text) {
+  function buildFallbackParsed2(text) {
     return {
       segments: [{ type: "narration", speaker: null, text: text || "（当前消息无可显示内容）", expression: null }],
       currentBackground: null,
@@ -19968,12 +20102,12 @@ ${normalizedSource}`;
     const hasClosedP = RE_CLOSED_P3.test(contentToProcess);
     if (!hasClosedP && !forceRender) {
       console.log(`[${SCRIPT_NAME}] 流式输出中，等待完整内容...`);
-      const loadingParsed = buildFallbackParsed("生成中...");
+      const loadingParsed = buildFallbackParsed2("生成中...");
       const isLastAi2 = $mes.nextAll('.mes[is_user!="true"]').length === 0;
       if (isLastAi2) {
-        if (_updateGlobalOverlayContentRef3) {
+        if (_updateGlobalOverlayContentRef4) {
           try {
-            await _updateGlobalOverlayContentRef3(mesId, loadingParsed);
+            await _updateGlobalOverlayContentRef4(mesId, loadingParsed);
             showGlobalOverlay();
             syncFloorVisibilityAfterOverlay(mesId);
           } catch (error) {
@@ -19997,7 +20131,7 @@ ${normalizedSource}`;
       parsed = parseGalgameContent(contentToProcess);
     } catch (error) {
       console.error(`[${SCRIPT_NAME}] 解析消息失败，使用纯文本兜底`, error);
-      parsed = buildFallbackParsed(String(contentToProcess || "").trim());
+      parsed = buildFallbackParsed2(String(contentToProcess || "").trim());
     }
     if (parsed && parsed.backgroundChanges) {
       const bgSrc = settings.bgImageSource || "none";
@@ -20031,7 +20165,7 @@ ${normalizedSource}`;
     if (!parsed || parsed.segments.length === 0) {
       if (!settings.smartDetection || forceRender) {
         const fallbackText = contentToProcess && contentToProcess.trim().length > 0 ? contentToProcess : String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
-        parsed = buildFallbackParsed(fallbackText);
+        parsed = buildFallbackParsed2(fallbackText);
       } else {
         return;
       }
@@ -20055,9 +20189,9 @@ ${normalizedSource}`;
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
     if (isLastAi) {
       const fallbackText = String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
-      if (_updateGlobalOverlayContentRef3) {
+      if (_updateGlobalOverlayContentRef4) {
         try {
-          await _updateGlobalOverlayContentRef3(mesId, parsed);
+          await _updateGlobalOverlayContentRef4(mesId, parsed);
           showGlobalOverlay();
           requestAnimationFrame(() => {
             if (_applySettingsToUIRef2) _applySettingsToUIRef2();
@@ -20744,49 +20878,48 @@ ${normalizedSource}`;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      padding: 12px;
       box-sizing: border-box;
       pointer-events: auto;
     }
     #${MAP_MODAL_ID} .gal-map-panel {
-      width: min(1240px, 100%);
-      height: min(92vh, 920px);
+      width: min(1360px, 100%);
+      height: min(94vh, 960px);
       background: #fff;
       border-radius: 14px;
       overflow: hidden;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42);
       display: grid;
-      grid-template-rows: auto 1fr minmax(260px, 34vh);
+      grid-template-rows: auto 1fr;
     }
     #${MAP_MODAL_ID} .gal-map-topbar {
       display: flex;
       align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
+      justify-content: space-between;
+      gap: 10px;
       padding: 10px 14px;
       border-bottom: 1px solid #e5e7eb;
       background: #f8fafc;
     }
-    #${MAP_MODAL_ID} .gal-map-edit-btn {
-      border: 1px solid #cbd5e1;
-      background: #fff;
-      color: #0f172a;
-      border-radius: 999px;
-      padding: 6px 14px;
-      cursor: pointer;
-      font-size: 0.85rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      min-width: 96px;
+    #${MAP_MODAL_ID} .gal-map-topbar-tip {
+      color: #475569;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      font-weight: 600;
     }
-    #${MAP_MODAL_ID} .gal-map-edit-btn.active {
-      background: #0ea5e9;
-      border-color: #0ea5e9;
-      color: #fff;
+    #${MAP_MODAL_ID} .gal-map-content {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+      overflow: hidden;
+      background: #f8fafc;
     }
     #${MAP_MODAL_ID} .gal-map-map-area {
+      position: relative;
       min-height: 0;
-      background: #0b1220;
+      background: radial-gradient(circle at 20% 10%, #111827 0%, #020617 60%, #02030a 100%);
+      border-right: 1px solid #1e293b;
+      overflow: hidden;
     }
     #${MAP_MODAL_ID} .gal-map-btn {
       border: 1px solid #cbd5e1;
@@ -20799,6 +20932,7 @@ ${normalizedSource}`;
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      white-space: nowrap;
     }
     #${MAP_MODAL_ID} .gal-map-btn.primary {
       background: #0ea5e9;
@@ -20820,28 +20954,51 @@ ${normalizedSource}`;
       border-color: #ef4444;
       color: #fff;
     }
+    #${MAP_MODAL_ID} .gal-map-edit-btn {
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #0f172a;
+      border-radius: 999px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      min-width: 96px;
+    }
+    #${MAP_MODAL_ID} .gal-map-edit-btn.active {
+      background: #0ea5e9;
+      border-color: #0ea5e9;
+      color: #fff;
+    }
     #${MAP_MODAL_ID} .gal-map-canvas-wrap {
       position: relative;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #0b1220;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      touch-action: none;
+      cursor: grab;
+    }
+    #${MAP_MODAL_ID} .gal-map-canvas-wrap.dragging {
+      cursor: grabbing;
     }
     #${MAP_MODAL_ID} .gal-map-canvas {
-      position: relative;
-      width: 100%;
-      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+      contain: layout paint;
     }
     #${MAP_MODAL_ID} .gal-map-image {
+      display: block;
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: fill;
       user-select: none;
       pointer-events: none;
       background: #111827;
+      -webkit-user-drag: none;
     }
     #${MAP_MODAL_ID} .gal-map-markers {
       position: absolute;
@@ -20865,6 +21022,7 @@ ${normalizedSource}`;
       text-align: center;
       padding: 0;
       will-change: left, top;
+      touch-action: manipulation;
     }
     #${MAP_MODAL_ID} .gal-map-marker i {
       font-size: 1.2rem;
@@ -20873,7 +21031,7 @@ ${normalizedSource}`;
     }
     #${MAP_MODAL_ID} .gal-map-marker .name {
       font-size: 0.72rem;
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.82);
       border-radius: 4px;
       padding: 2px 6px;
       white-space: nowrap;
@@ -20896,6 +21054,61 @@ ${normalizedSource}`;
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.35; transform: scale(1.15); }
     }
+    #${MAP_MODAL_ID} .gal-map-zoom-controls {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(2, 6, 23, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.42);
+      border-radius: 10px;
+      padding: 6px;
+      z-index: 3;
+      backdrop-filter: blur(4px);
+    }
+    #${MAP_MODAL_ID} .gal-map-zoom-btn {
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(148, 163, 184, 0.62);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 1rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #${MAP_MODAL_ID} .gal-map-zoom-btn.gal-map-zoom-reset {
+      width: auto;
+      min-width: 62px;
+      padding: 0 8px;
+      font-size: 0.86rem;
+    }
+    #${MAP_MODAL_ID} .gal-map-zoom-value {
+      min-width: 56px;
+      text-align: center;
+      color: #f8fafc;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      user-select: none;
+    }
+    #${MAP_MODAL_ID} .gal-map-gesture-tip {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      color: #cbd5e1;
+      font-size: 0.74rem;
+      background: rgba(2, 6, 23, 0.66);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 8px;
+      padding: 4px 8px;
+      z-index: 3;
+      pointer-events: none;
+    }
     #${MAP_MODAL_ID} .gal-map-empty {
       text-align: center;
       padding: 24px;
@@ -20911,21 +21124,21 @@ ${normalizedSource}`;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #0b1220;
+      background: transparent;
     }
     #${MAP_MODAL_ID} .gal-map-inline-btn {
       margin-top: 8px;
     }
     #${MAP_MODAL_ID} .gal-map-interaction {
       min-height: 0;
-      border-top: 1px solid #e5e7eb;
       background: #f8fafc;
       display: grid;
       grid-template-rows: auto 1fr;
+      border-left: 1px solid #e2e8f0;
     }
     #${MAP_MODAL_ID} .gal-map-interaction-header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
       padding: 10px 14px;
@@ -20950,18 +21163,19 @@ ${normalizedSource}`;
     #${MAP_MODAL_ID} .gal-map-interaction-body {
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(240px, 320px) 1fr;
+      grid-template-rows: auto 1fr;
       overflow: hidden;
     }
     #${MAP_MODAL_ID} .gal-map-point-list {
       padding: 10px;
       overflow: auto;
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 8px;
       background: #f8fafc;
-      border-right: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
       min-height: 0;
+      max-height: 150px;
     }
     #${MAP_MODAL_ID} .gal-map-point-item {
       border: 1px solid #cbd5e1;
@@ -20972,6 +21186,10 @@ ${normalizedSource}`;
       padding: 8px 10px;
       cursor: pointer;
       font-size: 0.84rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 36px;
     }
     #${MAP_MODAL_ID} .gal-map-empty-list {
       font-size: 0.84rem;
@@ -20992,16 +21210,16 @@ ${normalizedSource}`;
       box-sizing: border-box;
     }
     #${MAP_MODAL_ID} .gal-map-detail-title {
-      font-size: 1rem;
+      font-size: 1.25rem;
       font-weight: 800;
       color: #1f2937;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     #${MAP_MODAL_ID} .gal-map-kv {
       display: grid;
       grid-template-columns: 88px 1fr;
       gap: 8px;
-      font-size: 0.86rem;
+      font-size: 0.9rem;
       margin-bottom: 6px;
       color: #334155;
     }
@@ -21048,12 +21266,36 @@ ${normalizedSource}`;
       font-size: 0.78rem;
       cursor: pointer;
     }
+    @media (max-width: 1100px) {
+      #${MAP_MODAL_ID} .gal-map-content {
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+      }
+      #${MAP_MODAL_ID} .gal-map-topbar-tip {
+        display: none;
+      }
+    }
     @media (max-width: 900px) {
-      #${MAP_MODAL_ID} .gal-map-panel {
-        height: min(96vh, 980px);
+      #${MAP_MODAL_ID} {
+        padding: 8px;
       }
       #${MAP_MODAL_ID} .gal-map-panel {
-        grid-template-rows: auto minmax(280px, 1fr) minmax(300px, 46vh);
+        width: 100%;
+        height: min(98vh, 1200px);
+        border-radius: 12px;
+      }
+      #${MAP_MODAL_ID} .gal-map-topbar {
+        flex-wrap: wrap;
+      }
+      #${MAP_MODAL_ID} .gal-map-content {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(260px, 42vh) minmax(0, 1fr);
+      }
+      #${MAP_MODAL_ID} .gal-map-map-area {
+        border-right: none;
+        border-bottom: 1px solid #1f2937;
+      }
+      #${MAP_MODAL_ID} .gal-map-interaction {
+        border-left: none;
       }
       #${MAP_MODAL_ID} .gal-map-interaction-header {
         align-items: flex-start;
@@ -21063,18 +21305,42 @@ ${normalizedSource}`;
         width: 100%;
         justify-content: flex-start;
       }
-      #${MAP_MODAL_ID} .gal-map-interaction-body {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr;
-      }
       #${MAP_MODAL_ID} .gal-map-point-list {
-        border-right: none;
-        border-bottom: 1px solid #e2e8f0;
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: minmax(160px, 1fr);
-        overflow-x: auto;
-        overflow-y: hidden;
+        max-height: none;
+        display: flex;
+        flex-wrap: wrap;
+      }
+      #${MAP_MODAL_ID} .gal-map-point-item {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 140px;
+      }
+      #${MAP_MODAL_ID} .gal-map-gesture-tip {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        text-align: center;
+      }
+      #${MAP_MODAL_ID} .gal-map-zoom-controls {
+        right: 8px;
+        top: 8px;
+        bottom: auto;
+      }
+    }
+    @media (max-width: 640px) {
+      #${MAP_MODAL_ID} .gal-map-btn {
+        font-size: 0.8rem;
+        padding: 6px 8px;
+      }
+      #${MAP_MODAL_ID} .gal-map-edit-btn {
+        min-width: 88px;
+        font-size: 0.8rem;
+      }
+      #${MAP_MODAL_ID} .gal-map-detail-title {
+        font-size: 1.12rem;
+      }
+      #${MAP_MODAL_ID} .gal-map-kv {
+        grid-template-columns: 72px 1fr;
+        font-size: 0.85rem;
       }
     }
   `;
@@ -21118,7 +21384,32 @@ ${normalizedSource}`;
     let editMode = false;
     let dirty = false;
     let placingLocation = "";
-    let layerSyncFrameId = 0;
+    let layoutFrameId = 0;
+    let layoutKeepView = true;
+    let suppressNextCanvasClick = false;
+    const panzoom = {
+      scale: 1,
+      minScale: 1,
+      maxScale: 6,
+      x: 0,
+      y: 0,
+      fitLeft: 0,
+      fitTop: 0,
+      fitWidth: 0,
+      fitHeight: 0
+    };
+    const pointerState = {
+      points: /* @__PURE__ */ new Map(),
+      isPinching: false,
+      pinchStartDistance: 0,
+      pinchStartScale: 1,
+      dragPointerId: null,
+      dragStartClientX: 0,
+      dragStartClientY: 0,
+      dragStartX: 0,
+      dragStartY: 0,
+      moved: false
+    };
     const getPointByLocation = (location) => {
       const key = String(location || "").trim();
       return points.find((p) => String(p.detailedLocation || "").trim() === key) || null;
@@ -21217,43 +21508,54 @@ ${normalizedSource}`;
     <div id="${MAP_MODAL_ID}">
       <div class="gal-map-panel">
         <div class="gal-map-topbar">
+          <div class="gal-map-topbar-tip">滚轮或双指缩放，拖拽移动地图，点击地点查看详情</div>
           <button class="gal-map-edit-btn" id="gal-map-toggle-edit">[ edit ]</button>
         </div>
-        <div class="gal-map-map-area">
-          <div class="gal-map-canvas-wrap">
-            ${mapImageUrl ? `
-                <div class="gal-map-canvas" id="gal-map-canvas">
-                  <img class="gal-map-image" src="${mapImageUrl}" alt="world-map">
-                  <div class="gal-map-markers" id="gal-map-markers">${buildMarkersHtml()}</div>
-                </div>
-              ` : `
-                <div class="gal-map-empty">
-                  <div>尚未上传统一世界地图</div>
-                  <div>点击下方“上传/替换地图”或直接使用此按钮</div>
-                  <button class="gal-map-btn primary gal-map-inline-btn gal-map-open-upload-inline">
-                    <i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图
-                  </button>
-                </div>
-              `}
-          </div>
-        </div>
-        <div class="gal-map-interaction">
-          <div class="gal-map-interaction-header">
-            <div class="gal-map-info">
-              <span><i class="fa-solid fa-map-location-dot"></i> 统一世界地图</span>
-              <span>当前区域：${currentRegionKey}</span>
-              <span>${points.length} 个地点</span>
-            </div>
-            <div class="gal-map-toolbar">
-              <button class="gal-map-btn primary" id="gal-map-open-upload"><i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图</button>
-              <button class="gal-map-btn warn" id="gal-map-reset-layout"><i class="fa-solid fa-arrows-rotate"></i>重置自动布局</button>
-              <button class="gal-map-btn success" id="gal-map-save-coords" style="display:none;"><i class="fa-solid fa-floppy-disk"></i>保存坐标</button>
-              <button class="gal-map-btn danger" id="gal-map-close-btn"><i class="fa-solid fa-xmark"></i>关闭</button>
+        <div class="gal-map-content">
+          <div class="gal-map-map-area">
+            <div class="gal-map-canvas-wrap" id="gal-map-canvas-wrap">
+              ${mapImageUrl ? `
+                  <div class="gal-map-canvas" id="gal-map-canvas">
+                    <img class="gal-map-image" src="${mapImageUrl}" alt="world-map">
+                    <div class="gal-map-markers" id="gal-map-markers">${buildMarkersHtml()}</div>
+                  </div>
+                  <div class="gal-map-zoom-controls">
+                    <button class="gal-map-zoom-btn" id="gal-map-zoom-out" title="缩小">-</button>
+                    <button class="gal-map-zoom-btn gal-map-zoom-reset" id="gal-map-zoom-reset" title="重置缩放">
+                      <span id="gal-map-zoom-value" class="gal-map-zoom-value">100%</span>
+                    </button>
+                    <button class="gal-map-zoom-btn" id="gal-map-zoom-in" title="放大">+</button>
+                  </div>
+                  <div class="gal-map-gesture-tip">滚轮 / 双指缩放，拖拽可平移</div>
+                ` : `
+                  <div class="gal-map-empty">
+                    <div>尚未上传统一世界地图</div>
+                    <div>点击下方“上传/替换地图”或直接使用此按钮</div>
+                    <button class="gal-map-btn primary gal-map-inline-btn gal-map-open-upload-inline">
+                      <i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图
+                    </button>
+                  </div>
+                `}
             </div>
           </div>
-          <div class="gal-map-interaction-body">
-            <div class="gal-map-point-list" id="gal-map-point-list">${buildPointListHtml()}</div>
-            <div class="gal-map-detail" id="gal-map-detail-panel">${buildDetailHtml()}</div>
+          <div class="gal-map-interaction">
+            <div class="gal-map-interaction-header">
+              <div class="gal-map-info">
+                <span><i class="fa-solid fa-map-location-dot"></i> 统一世界地图</span>
+                <span>当前区域：${currentRegionKey}</span>
+                <span>${points.length} 个地点</span>
+              </div>
+              <div class="gal-map-toolbar">
+                <button class="gal-map-btn primary" id="gal-map-open-upload"><i class="fa-solid fa-cloud-arrow-up"></i>上传/替换地图</button>
+                <button class="gal-map-btn warn" id="gal-map-reset-layout"><i class="fa-solid fa-arrows-rotate"></i>重置自动布局</button>
+                <button class="gal-map-btn success" id="gal-map-save-coords" style="display:none;"><i class="fa-solid fa-floppy-disk"></i>保存坐标</button>
+                <button class="gal-map-btn danger" id="gal-map-close-btn"><i class="fa-solid fa-xmark"></i>关闭</button>
+              </div>
+            </div>
+            <div class="gal-map-interaction-body">
+              <div class="gal-map-point-list" id="gal-map-point-list">${buildPointListHtml()}</div>
+              <div class="gal-map-detail" id="gal-map-detail-panel">${buildDetailHtml()}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -21262,35 +21564,17 @@ ${normalizedSource}`;
     $(mountRoot).append(html);
     const $modal = $(mountRoot).find(`#${MAP_MODAL_ID}`);
     const $win = $(topWindow);
+    const getMapCanvasWrapElement = () => $modal.find("#gal-map-canvas-wrap")[0] || null;
     const getMapCanvasElement = () => $modal.find("#gal-map-canvas")[0] || null;
     const getMapImageElement = () => $modal.find(".gal-map-image")[0] || null;
+    const getZoomValueElement = () => $modal.find("#gal-map-zoom-value")[0] || null;
+    const clampValue = (value, min, max) => Math.max(min, Math.min(max, value));
     const getDisplayedImageRect = () => {
       const canvas = getMapCanvasElement();
-      const image = getMapImageElement();
-      if (!canvas || !image) return null;
-      const canvasRect = canvas.getBoundingClientRect();
-      if (canvasRect.width <= 0 || canvasRect.height <= 0) return null;
-      const naturalWidth = Number(image.naturalWidth) || canvasRect.width;
-      const naturalHeight = Number(image.naturalHeight) || canvasRect.height;
-      if (naturalWidth <= 0 || naturalHeight <= 0) return null;
-      const scale = Math.min(canvasRect.width / naturalWidth, canvasRect.height / naturalHeight);
-      const width = naturalWidth * scale;
-      const height = naturalHeight * scale;
-      const left = canvasRect.left + (canvasRect.width - width) / 2;
-      const top = canvasRect.top + (canvasRect.height - height) / 2;
-      return { left, top, width, height };
-    };
-    const syncMarkerLayerBounds = () => {
-      if (!mapImageUrl) return;
-      const canvas = getMapCanvasElement();
-      const imageRect = getDisplayedImageRect();
-      const layer = $modal.find("#gal-map-markers")[0];
-      if (!canvas || !layer || !imageRect) return;
-      const canvasRect = canvas.getBoundingClientRect();
-      layer.style.left = `${(imageRect.left - canvasRect.left).toFixed(3)}px`;
-      layer.style.top = `${(imageRect.top - canvasRect.top).toFixed(3)}px`;
-      layer.style.width = `${imageRect.width.toFixed(3)}px`;
-      layer.style.height = `${imageRect.height.toFixed(3)}px`;
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+      return rect;
     };
     const updateListActiveState = () => {
       $modal.find(".gal-map-point-item").removeClass("active");
@@ -21299,7 +21583,6 @@ ${normalizedSource}`;
     const rerenderMarkers = () => {
       if (!mapImageUrl) return;
       $modal.find("#gal-map-markers").html(buildMarkersHtml());
-      syncMarkerLayerBounds();
       syncPlacingUi();
     };
     const rerenderDetail = () => {
@@ -21334,12 +21617,120 @@ ${normalizedSource}`;
       }
       topWindow.clearTimeout(id);
     };
-    const scheduleLayerSync = () => {
-      if (layerSyncFrameId) return;
-      layerSyncFrameId = requestFrame(() => {
-        layerSyncFrameId = 0;
-        syncMarkerLayerBounds();
+    const updateZoomValue = () => {
+      const zoomValueEl = getZoomValueElement();
+      if (!zoomValueEl) return;
+      zoomValueEl.textContent = `${Math.round(panzoom.scale * 100)}%`;
+    };
+    const clampPanOffset = () => {
+      const wrap = getMapCanvasWrapElement();
+      if (!wrap) return;
+      const wrapW = wrap.clientWidth;
+      const wrapH = wrap.clientHeight;
+      if (wrapW <= 0 || wrapH <= 0 || panzoom.fitWidth <= 0 || panzoom.fitHeight <= 0) {
+        panzoom.x = 0;
+        panzoom.y = 0;
+        return;
+      }
+      const scaledW = panzoom.fitWidth * panzoom.scale;
+      const scaledH = panzoom.fitHeight * panzoom.scale;
+      const minX = wrapW - scaledW - panzoom.fitLeft;
+      const maxX = -panzoom.fitLeft;
+      const minY = wrapH - scaledH - panzoom.fitTop;
+      const maxY = -panzoom.fitTop;
+      if (scaledW <= wrapW) {
+        panzoom.x = (wrapW - scaledW) / 2 - panzoom.fitLeft;
+      } else {
+        panzoom.x = clampValue(panzoom.x, minX, maxX);
+      }
+      if (scaledH <= wrapH) {
+        panzoom.y = (wrapH - scaledH) / 2 - panzoom.fitTop;
+      } else {
+        panzoom.y = clampValue(panzoom.y, minY, maxY);
+      }
+    };
+    const applyCanvasTransform = () => {
+      const canvas = getMapCanvasElement();
+      if (!canvas) return;
+      clampPanOffset();
+      canvas.style.transform = `translate3d(${panzoom.x.toFixed(3)}px, ${panzoom.y.toFixed(3)}px, 0) scale(${panzoom.scale.toFixed(5)})`;
+      updateZoomValue();
+    };
+    const refreshCanvasLayout = (keepView = true) => {
+      if (!mapImageUrl) return;
+      const wrap = getMapCanvasWrapElement();
+      const image = getMapImageElement();
+      const canvas = getMapCanvasElement();
+      if (!wrap || !image || !canvas) return;
+      const wrapRect = wrap.getBoundingClientRect();
+      const wrapW = wrapRect.width;
+      const wrapH = wrapRect.height;
+      const naturalW = Number(image.naturalWidth);
+      const naturalH = Number(image.naturalHeight);
+      if (wrapW <= 0 || wrapH <= 0 || naturalW <= 0 || naturalH <= 0) return;
+      const focusLocalX = wrapW / 2;
+      const focusLocalY = wrapH / 2;
+      let worldX = (focusLocalX - panzoom.fitLeft - panzoom.x) / panzoom.scale;
+      let worldY = (focusLocalY - panzoom.fitTop - panzoom.y) / panzoom.scale;
+      if (!Number.isFinite(worldX)) worldX = 0.5;
+      if (!Number.isFinite(worldY)) worldY = 0.5;
+      const fitScale = Math.min(wrapW / naturalW, wrapH / naturalH);
+      panzoom.fitWidth = naturalW * fitScale;
+      panzoom.fitHeight = naturalH * fitScale;
+      panzoom.fitLeft = (wrapW - panzoom.fitWidth) / 2;
+      panzoom.fitTop = (wrapH - panzoom.fitHeight) / 2;
+      canvas.style.width = `${panzoom.fitWidth.toFixed(3)}px`;
+      canvas.style.height = `${panzoom.fitHeight.toFixed(3)}px`;
+      canvas.style.left = `${panzoom.fitLeft.toFixed(3)}px`;
+      canvas.style.top = `${panzoom.fitTop.toFixed(3)}px`;
+      if (!keepView || panzoom.scale <= panzoom.minScale + 1e-4) {
+        panzoom.scale = panzoom.minScale;
+        panzoom.x = 0;
+        panzoom.y = 0;
+        applyCanvasTransform();
+        return;
+      }
+      panzoom.x = focusLocalX - panzoom.fitLeft - worldX * panzoom.scale;
+      panzoom.y = focusLocalY - panzoom.fitTop - worldY * panzoom.scale;
+      applyCanvasTransform();
+    };
+    const scheduleCanvasLayout = (keepView = true) => {
+      if (!mapImageUrl) return;
+      layoutKeepView = layoutKeepView && keepView;
+      if (layoutFrameId) return;
+      layoutFrameId = requestFrame(() => {
+        const keep = layoutKeepView;
+        layoutFrameId = 0;
+        layoutKeepView = true;
+        refreshCanvasLayout(keep);
       });
+    };
+    const zoomTo = (nextScale, clientX, clientY) => {
+      if (!mapImageUrl) return;
+      const wrap = getMapCanvasWrapElement();
+      if (!wrap) return;
+      const targetScale = clampValue(nextScale, panzoom.minScale, panzoom.maxScale);
+      if (!Number.isFinite(targetScale) || Math.abs(targetScale - panzoom.scale) < 1e-4) return;
+      const wrapRect = wrap.getBoundingClientRect();
+      const localX = Number.isFinite(clientX) ? clientX - wrapRect.left : wrapRect.width / 2;
+      const localY = Number.isFinite(clientY) ? clientY - wrapRect.top : wrapRect.height / 2;
+      const worldX = (localX - panzoom.fitLeft - panzoom.x) / panzoom.scale;
+      const worldY = (localY - panzoom.fitTop - panzoom.y) / panzoom.scale;
+      panzoom.scale = targetScale;
+      panzoom.x = localX - panzoom.fitLeft - worldX * panzoom.scale;
+      panzoom.y = localY - panzoom.fitTop - worldY * panzoom.scale;
+      applyCanvasTransform();
+    };
+    const zoomByFactor = (factor, clientX, clientY) => {
+      const safeFactor = Number(factor);
+      if (!Number.isFinite(safeFactor) || safeFactor <= 0) return;
+      zoomTo(panzoom.scale * safeFactor, clientX, clientY);
+    };
+    const resetZoom = () => {
+      panzoom.scale = panzoom.minScale;
+      panzoom.x = 0;
+      panzoom.y = 0;
+      applyCanvasTransform();
     };
     const placeSelectedMarkerAt = (clientX, clientY) => {
       if (!editMode || !placingLocation) return false;
@@ -21366,8 +21757,14 @@ ${normalizedSource}`;
     };
     const closeModal = () => {
       $win.off(".galMapMap");
-      cancelFrame(layerSyncFrameId);
-      layerSyncFrameId = 0;
+      $modal.off(".galMapMap");
+      cancelFrame(layoutFrameId);
+      layoutFrameId = 0;
+      const wrap = getMapCanvasWrapElement();
+      if (wrap) {
+        $(wrap).removeClass("dragging");
+      }
+      pointerState.points.clear();
       $modal.find(".gal-map-image").off(".galMapMap");
       if (tempBlobUrl) {
         try {
@@ -21379,12 +21776,135 @@ ${normalizedSource}`;
     };
     syncEditUi();
     if (mapImageUrl) {
+      const getEventPointerId = (event) => {
+        const raw = event?.pointerId ?? event?.originalEvent?.pointerId;
+        const num = Number(raw);
+        return Number.isFinite(num) ? num : -1;
+      };
+      const getEventClientXY = (event) => {
+        const rawX = event?.clientX ?? event?.originalEvent?.clientX;
+        const rawY = event?.clientY ?? event?.originalEvent?.clientY;
+        return {
+          x: Number.isFinite(Number(rawX)) ? Number(rawX) : 0,
+          y: Number.isFinite(Number(rawY)) ? Number(rawY) : 0
+        };
+      };
+      const initPinch = () => {
+        const [first, second] = Array.from(pointerState.points.values());
+        if (!first || !second) return false;
+        pointerState.isPinching = true;
+        pointerState.pinchStartDistance = Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+        pointerState.pinchStartScale = panzoom.scale;
+        return true;
+      };
+      const endPointer = (event) => {
+        const pointerId = getEventPointerId(event);
+        pointerState.points.delete(pointerId);
+        const wrap = getMapCanvasWrapElement();
+        if (wrap && typeof wrap.releasePointerCapture === "function") {
+          try {
+            wrap.releasePointerCapture(pointerId);
+          } catch (error) {
+          }
+        }
+        if (pointerState.points.size < 2) {
+          pointerState.isPinching = false;
+          pointerState.pinchStartDistance = 0;
+        }
+        if (pointerState.dragPointerId === pointerId) {
+          pointerState.dragPointerId = null;
+        }
+        if (pointerState.points.size === 1 && pointerState.dragPointerId === null) {
+          const [remainId, remainPoint] = Array.from(pointerState.points.entries())[0];
+          pointerState.dragPointerId = remainId;
+          pointerState.dragStartClientX = remainPoint.x;
+          pointerState.dragStartClientY = remainPoint.y;
+          pointerState.dragStartX = panzoom.x;
+          pointerState.dragStartY = panzoom.y;
+        }
+        if (pointerState.points.size === 0) {
+          $(wrap).removeClass("dragging");
+          if (pointerState.moved) {
+            suppressNextCanvasClick = true;
+            topWindow.setTimeout(() => {
+              suppressNextCanvasClick = false;
+            }, 0);
+          }
+          pointerState.moved = false;
+        }
+      };
       const $mapImage = $modal.find(".gal-map-image");
-      $mapImage.on("load.galMapMap", scheduleLayerSync);
+      $mapImage.on("load.galMapMap", () => scheduleCanvasLayout(false));
       if ($mapImage[0]?.complete) {
-        scheduleLayerSync();
+        scheduleCanvasLayout(false);
       }
-      $win.on("resize.galMapMap", scheduleLayerSync);
+      $win.on("resize.galMapMap", () => scheduleCanvasLayout(true));
+      $modal.on("wheel.galMapMap", "#gal-map-canvas-wrap", function(event) {
+        const e = event.originalEvent || event;
+        const deltaY = Number(e.deltaY);
+        if (!Number.isFinite(deltaY)) return;
+        const factor = deltaY < 0 ? 1.12 : 1 / 1.12;
+        zoomByFactor(factor, e.clientX, e.clientY);
+        event.preventDefault();
+      });
+      $modal.on("pointerdown.galMapMap", "#gal-map-canvas-wrap", function(event) {
+        if ($(event.target).closest(".gal-map-marker, .gal-map-zoom-controls").length) return;
+        const pointerId = getEventPointerId(event);
+        if (pointerId < 0) return;
+        const { x, y } = getEventClientXY(event);
+        pointerState.points.set(pointerId, { x, y });
+        const wrap = getMapCanvasWrapElement();
+        if (wrap && typeof wrap.setPointerCapture === "function") {
+          try {
+            wrap.setPointerCapture(pointerId);
+          } catch (error) {
+          }
+        }
+        if (pointerState.points.size >= 2) {
+          initPinch();
+        } else {
+          pointerState.dragPointerId = pointerId;
+          pointerState.dragStartClientX = x;
+          pointerState.dragStartClientY = y;
+          pointerState.dragStartX = panzoom.x;
+          pointerState.dragStartY = panzoom.y;
+        }
+      });
+      $modal.on("pointermove.galMapMap", "#gal-map-canvas-wrap", function(event) {
+        const pointerId = getEventPointerId(event);
+        if (!pointerState.points.has(pointerId)) return;
+        const { x, y } = getEventClientXY(event);
+        pointerState.points.set(pointerId, { x, y });
+        if (pointerState.points.size >= 2) {
+          if (!pointerState.isPinching && !initPinch()) return;
+          const [first, second] = Array.from(pointerState.points.values());
+          const currentDistance = Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+          const centerX = (first.x + second.x) / 2;
+          const centerY = (first.y + second.y) / 2;
+          const scaleRatio = currentDistance / Math.max(1, pointerState.pinchStartDistance);
+          zoomTo(pointerState.pinchStartScale * scaleRatio, centerX, centerY);
+          pointerState.moved = true;
+          suppressNextCanvasClick = true;
+          event.preventDefault();
+          return;
+        }
+        if (pointerState.dragPointerId !== pointerId) return;
+        if (panzoom.scale <= panzoom.minScale + 1e-4) return;
+        const dx = x - pointerState.dragStartClientX;
+        const dy = y - pointerState.dragStartClientY;
+        if (Math.hypot(dx, dy) > 3) {
+          pointerState.moved = true;
+        }
+        panzoom.x = pointerState.dragStartX + dx;
+        panzoom.y = pointerState.dragStartY + dy;
+        applyCanvasTransform();
+        $modal.find("#gal-map-canvas-wrap").addClass("dragging");
+        suppressNextCanvasClick = true;
+        event.preventDefault();
+      });
+      $modal.on("pointerup.galMapMap pointercancel.galMapMap pointerleave.galMapMap", "#gal-map-canvas-wrap", function(event) {
+        endPointer(event);
+      });
     }
     $modal.on("click", function(e) {
       if (e.target === this) closeModal();
@@ -21418,6 +21938,27 @@ ${normalizedSource}`;
         return;
       }
       setEditMode(!editMode);
+    });
+    $modal.on("click", "#gal-map-zoom-in", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const wrap = getMapCanvasWrapElement();
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      zoomByFactor(1.2, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+    $modal.on("click", "#gal-map-zoom-out", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const wrap = getMapCanvasWrapElement();
+      if (!wrap) return;
+      const rect = wrap.getBoundingClientRect();
+      zoomByFactor(1 / 1.2, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+    $modal.on("click", "#gal-map-zoom-reset", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      resetZoom();
     });
     $modal.on("click", "#gal-map-reset-layout", function(e) {
       e.preventDefault();
@@ -21477,6 +22018,10 @@ ${normalizedSource}`;
       }
     });
     $modal.on("click", "#gal-map-canvas", function(e) {
+      if (suppressNextCanvasClick) {
+        suppressNextCanvasClick = false;
+        return;
+      }
       if (!editMode || !placingLocation) return;
       if ($(e.target).closest(".gal-map-marker").length) return;
       const placed = placeSelectedMarkerAt(e.clientX, e.clientY);
@@ -21509,11 +22054,11 @@ ${normalizedSource}`;
   var messageSegmentState7 = GalgameStore.cache.segments;
   var _showSettingsPanelRef2 = null;
   var _showSpriteUploadDialogRef2 = null;
-  var _updateGlobalOverlayContentRef4 = null;
+  var _updateGlobalOverlayContentRef5 = null;
   function setEventsRefs({ showSettingsPanel: showSettingsPanel2, showSpriteUploadDialog: showSpriteUploadDialog2, updateGlobalOverlayContent: updateGlobalOverlayContent2 }) {
     if (showSettingsPanel2) _showSettingsPanelRef2 = showSettingsPanel2;
     if (showSpriteUploadDialog2) _showSpriteUploadDialogRef2 = showSpriteUploadDialog2;
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef5 = updateGlobalOverlayContent2;
   }
   function setupGlobalEventListeners() {
     console.log(`[${SCRIPT_NAME}] 设置全局事件委托...`);
@@ -21591,7 +22136,7 @@ ${normalizedSource}`;
       if (getIsRewinding()) {
         stopRewinding();
       } else {
-        triggerPrevSegment();
+        void triggerPrevSegment();
       }
     });
     $(doc).on("mouseleave", '#gal-global-overlay [data-action="prev"]', function(e) {
@@ -21657,7 +22202,7 @@ ${normalizedSource}`;
         const $mesText = $mes.find(".mes_text");
         contentToProcess = decodeHtml($mesText.html());
       }
-      const buildFallbackParsed2 = () => {
+      const buildFallbackParsed3 = () => {
         const fallbackText = String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
         return {
           segments: [{ type: "narration", speaker: null, text: fallbackText, expression: null }],
@@ -21678,14 +22223,14 @@ ${normalizedSource}`;
       }
       if (!parsed || parsed.segments.length === 0) {
         console.warn(`[${SCRIPT_NAME}] 点击进入时未解析到可显示段落，使用纯文本兜底显示`);
-        parsed = buildFallbackParsed2();
+        parsed = buildFallbackParsed3();
       }
-      if (!_updateGlobalOverlayContentRef4) {
+      if (!_updateGlobalOverlayContentRef5) {
         console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，无法显示主界面`);
         showToast4("主界面初始化失败，请刷新页面后重试");
         return;
       }
-      await _updateGlobalOverlayContentRef4(mesId, parsed);
+      await _updateGlobalOverlayContentRef5(mesId, parsed);
       showGlobalOverlay();
       if (getSettings().hideOtherFloors) setTimeout(hideNonLastFloors, 80);
       showToast4("Galgame 模式已开启");
@@ -21948,6 +22493,7 @@ ${normalizedSource}`;
       }
     });
     $(doc).on("click", "#gal-global-overlay .gal-char-placeholder", async function(e) {
+      if (!settings.showMissingSpritePlaceholder) return;
       e.stopPropagation();
       const $container = $(this).closest(".gal-char-container");
       const character = $container.data("character") || "default";
@@ -22639,6 +23185,9 @@ ${normalizedSource}`;
     } else {
       $(".gal-layer-character").hide();
     }
+    if (!settings.showMissingSpritePlaceholder) {
+      $("#gal-global-overlay .gal-char-placeholder").remove();
+    }
     const $charLayer = $(".gal-layer-character");
     $charLayer.css({
       bottom: settings.spriteBottomOffset + "%",
@@ -22982,6 +23531,10 @@ ${normalizedSource}`;
                 <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings.spriteSpacing}">
                 <span class="gal-range-value" id="gal-sprite-spacing-value">${settings.spriteSpacing}%</span>
               </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">无立绘时显示添加框 <small style="color:#999;">(关闭后不可点击上传)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings.showMissingSpritePlaceholder ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">说话者光晕 <small style="color:#999;">(轮廓发光)</small></span>
@@ -23543,6 +24096,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $("#gal-sprite-spacing").on("input", function() {
       settings.spriteSpacing = parseInt($(this).val());
       $("#gal-sprite-spacing-value").text(settings.spriteSpacing + "%");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $("#gal-show-missing-sprite-placeholder").on("change", function() {
+      settings.showMissingSpritePlaceholder = $(this).is(":checked");
       applySettingsToUI();
       saveSettings();
     });
@@ -28556,7 +29114,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function ensureCardExtensions(card) {
     if (!card || typeof card !== "object") {
-      throw new Error("褰撳墠瑙掕壊鍗℃暟鎹棤鏁?");
+      throw new Error("当前角色卡数据无效");
     }
     const data = card.data && typeof card.data === "object" ? card.data : card;
     if (!data.extensions || typeof data.extensions !== "object") {
@@ -28690,7 +29248,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const packList = includeAllPacks ? packs : packs.filter((p) => p && String(p.id) === String(activePackId));
     const exportedPacks = packList.map((p) => {
       const packId = String(p.id || DEFAULT_PACK_ID);
-      const name = String(p.name || "鏈畾涔?");
+      const name = String(p.name || "未定义");
       const out2 = { packId, name };
       if (packId === activePackId && isUnifiedPackRemote) {
         if (normalizedSpriteRemote.remoteBaseUrl) out2.remoteBaseUrl = normalizedSpriteRemote.remoteBaseUrl;
@@ -30043,7 +30601,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         const suggestedName = json.packageName || json.name;
         targetPackId = await showImportPackSelector(suggestedName);
         if (!targetPackId) {
-          showToast4("宸插彇娑堝鍏?");
+          showToast4("已取消导入");
           return;
         }
       }
@@ -30112,7 +30670,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       }
       if (newExpressions.length > 0) {
         saveCustomExpressions(customs);
-        console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${newExpressions.join(", ")}`);
+        console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(", ")}`);
       }
       const embeddedBackgrounds = Array.isArray(json?.assets?.embedded?.backgrounds) ? json.assets.embedded.backgrounds : [];
       for (const rawBackground of embeddedBackgrounds) {
@@ -30210,8 +30768,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         mapSettingsApplied ? `成功导入 ${count} 项资源，并同步地图设置` : `成功导入 ${count} 项资源`
       );
     } catch (e) {
-      console.error("JSON瀵煎叆澶辫触", e);
-      showToast4("JSON瀵煎叆澶辫触: " + e.message);
+      console.error("JSON导入失败", e);
+      showToast4("JSON导入失败: " + e.message);
     }
   }
   var AssetIO = {
@@ -30227,7 +30785,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         script.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
         script.onload = () => {
           this.jszip = window.JSZip;
-          console.log(`[${SCRIPT_NAME}] JSZip 鍔犺浇鎴愬姛`);
+          console.log(`[${SCRIPT_NAME}] JSZip 加载成功`);
           resolve(this.jszip);
         };
         script.onerror = () => reject(new Error("JSZip load failed"));
@@ -30236,12 +30794,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     },
     async exportAllAssets(remoteBaseUrl = null, packageName = null) {
       try {
-        showToast4("姝ｅ湪鍑嗗瀵煎嚭...");
+        showToast4("正在准备导出...");
         const zip = new (await this.loadJSZip())();
         const currentPackId = getCurrentPackId();
         const allPacks = await getAllImagePacks();
         const currentPack = allPacks.find((p) => p.id === currentPackId);
-        const currentPackName = currentPack ? currentPack.name : "鏈懡鍚嶅寘";
+        const currentPackName = currentPack ? currentPack.name : "未命名包";
         const remoteConfig = {
           packageName: packageName || currentPackName,
           exportDate: (/* @__PURE__ */ new Date()).toISOString(),
@@ -30405,7 +30963,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         if (remoteBaseUrl) {
           zip.file("remote_assets.json", JSON.stringify(remoteConfig, null, 2));
         }
-        showToast4("姝ｅ湪鍘嬬缉鎵撳寘...");
+        showToast4("正在压缩打包...");
         const content = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(content);
         const a = document.createElement("a");
@@ -30419,21 +30977,21 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         URL.revokeObjectURL(url);
         showToast4(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${maps.length} 张地图，${uiSkinAssets.length} 个皮肤元素`);
       } catch (e) {
-        console.error(`[${SCRIPT_NAME}] 瀵煎嚭澶辫触:`, e);
-        showToast4("瀵煎嚭澶辫触: " + e.message);
+        console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
+        showToast4("导出失败: " + e.message);
       }
     },
     async importFiles(fileList, targetPackId = null) {
       if (!targetPackId) {
-        targetPackId = await showImportPackSelector("鏂囦欢澶瑰鍏?");
+        targetPackId = await showImportPackSelector("文件夹导入");
         if (!targetPackId) {
-          showToast4("宸插彇娑堝鍏?");
+          showToast4("已取消导入");
           return false;
         }
       }
       let successCount = 0;
       let failCount = 0;
-      showToast4("寮€濮嬪鍏?..");
+      showToast4("开始导入...");
       for (const file of fileList) {
         try {
           const path = file.webkitRelativePath || file.name;
@@ -30459,11 +31017,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           }
           if (imported) successCount++;
         } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] 瀵煎叆鏂囦欢 ${file.name} 澶辫触:`, e);
+          console.warn(`[${SCRIPT_NAME}] 导入文件 ${file.name} 失败:`, e);
           failCount++;
         }
       }
-      showToast4(`瀵煎叆瀹屾垚: ${successCount} 鎴愬姛, ${failCount} 澶辫触`);
+      showToast4(`导入完成: ${successCount} 成功, ${failCount} 失败`);
       return successCount > 0;
     },
     async importAsSprite(file, packId = null) {
@@ -30475,14 +31033,14 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         const characterId = parts.join("_");
         if (characterId && expression) {
           await saveSprite(characterId, expression, file, null, packId);
-          console.log(`[${SCRIPT_NAME}] 瀵煎叆绔嬬粯: ${characterId} - ${expression}`);
+          console.log(`[${SCRIPT_NAME}] 导入立绘: ${characterId} - ${expression}`);
           const allExpressions = getAllExpressions();
           if (!allExpressions.includes(expression)) {
             const customs = getCustomExpressions();
             if (!customs.find((e) => e.name === expression)) {
               customs.push({ name: expression, emotion: null });
               saveCustomExpressions(customs);
-              console.log(`[${SCRIPT_NAME}] 鑷姩娉ㄥ唽琛ㄦ儏鏍囩: ${expression}`);
+              console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${expression}`);
             }
           }
           return;
@@ -30495,7 +31053,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const sceneName = fileName.substring(0, fileName.lastIndexOf("."));
       if (sceneName) {
         await saveBackground(sceneName, file, null, packId);
-        console.log(`[${SCRIPT_NAME}] 瀵煎叆鑳屾櫙: ${sceneName}`);
+        console.log(`[${SCRIPT_NAME}] 导入背景: ${sceneName}`);
       }
     },
     async importAsMap(file, packId = null) {
@@ -30507,9 +31065,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     async importFromGitHub(repoUrl, targetPackId = null) {
       try {
         if (!targetPackId) {
-          targetPackId = await showImportPackSelector(`GitHub瀵煎叆`);
+          targetPackId = await showImportPackSelector(`GitHub导入`);
           if (!targetPackId) {
-            showToast4("宸插彇娑堝鍏?");
+            showToast4("已取消导入");
             return false;
           }
         }
@@ -30537,21 +31095,21 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         if (!owner || !repo) {
           throw new Error("鏃犳晥鐨?GitHub 浠撳簱鍦板潃");
         }
-        showToast4(`姝ｅ湪鑾峰彇鏂囦欢鍒楄〃: ${owner}/${repo}...`);
+        showToast4(`正在获取文件列表: ${owner}/${repo}...`);
         const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
         const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`GitHub API Error: ${response.statusText}`);
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error("璺緞涓嶆槸涓€涓洰褰?");
+        if (!Array.isArray(data)) throw new Error("路径不是一个目录");
         const imageFiles = data.filter((item) => item.type === "file" && /\.(png|jpg|jpeg|gif|webp)$/i.test(item.name));
         if (imageFiles.length === 0) {
-          showToast4("璇ョ洰褰曚笅娌℃湁鎵惧埌鍥剧墖鏂囦欢");
+          showToast4("该目录下没有找到图片文件");
           return;
         }
-        if (!confirm(`鎵惧埌 ${imageFiles.length} 寮犲浘鐗囷紝鏄惁寮€濮嬪鍏ワ紵`)) return;
+        if (!confirm(`找到 ${imageFiles.length} 张图片，是否开始导入？`)) return;
         let count = 0;
         for (const item of imageFiles) {
-          showToast4(`姝ｅ湪涓嬭浇 (${count + 1}/${imageFiles.length}): ${item.name}`);
+          showToast4(`正在下载 (${count + 1}/${imageFiles.length}): ${item.name}`);
           try {
             const imgRes = await fetch(item.download_url);
             const blob = await imgRes.blob();
@@ -30566,14 +31124,14 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
             }
             count++;
           } catch (e) {
-            console.error(`涓嬭浇/瀵煎叆 ${item.name} 澶辫触:`, e);
+            console.error(`下载/导入 ${item.name} 失败:`, e);
           }
         }
         showToast4(`GitHub 导入完成，共 ${count} 张图片`);
         return true;
       } catch (e) {
         console.error("GitHub Import Error:", e);
-        showToast4("GitHub 瀵煎叆澶辫触: " + e.message);
+        showToast4("GitHub 导入失败: " + e.message);
         return false;
       }
     }
@@ -30583,27 +31141,27 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     <div class="gal-input-modal" id="gal-remote-zip-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px;">
         <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-cloud-arrow-down"></i> 杩滅▼鍘嬬缉鍖呭鍏?/span>
-          <button id="gal-remote-zip-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-cloud-arrow-down"></i> 远程压缩包导入</span>
+          <button id="gal-remote-zip-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: #2b2e38;">
-            <i class="fa-solid fa-link"></i> ZIP 鏂囦欢閾炬帴
+            <i class="fa-solid fa-link"></i> ZIP 文件链接
           </label>
           <input type="text" id="gal-remote-zip-url"
                  placeholder="https://example.com/assets.zip"
                  style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 6px;">
           <small style="color: #888; margin-top: 5px; display: block;">
-            鏀寔鐩存帴涓嬭浇閾炬帴锛屽 GitHub Release銆佷簯鐩樼洿閾剧瓑<br>
-            <strong style="color: #e74c3c;">闄愬埗锛氭渶澶?5GB</strong>
+            支持直接下载链接，如 GitHub Release、云盘直链等<br>
+            <strong style="color: #e74c3c;">限制：最大 5GB</strong>
           </small>
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 12px;">
           <button class="gal-action-btn primary" id="gal-remote-zip-confirm" style="flex: 1; min-height: 44px; justify-content: center;">
             <i class="fa-solid fa-download"></i>
-            <span>涓嬭浇骞跺鍏?/span>
+            <span>下载并导入</span>
           </button>
         </div>
       </div>
@@ -30620,11 +31178,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $dialog.find("#gal-remote-zip-confirm").on("click", async function() {
       const url = $dialog.find("#gal-remote-zip-url").val().trim();
       if (!url) {
-        showToast4("璇疯緭鍏IP鏂囦欢閾炬帴");
+        showToast4("请输入ZIP文件链接");
         return;
       }
       if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        showToast4("璇疯緭鍏ユ湁鏁堢殑 HTTP/HTTPS 閾炬帴");
+        showToast4("请输入有效的 HTTP/HTTPS 链接");
         return;
       }
       $dialog.remove();
@@ -30633,9 +31191,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   async function importFromZipFile(file) {
     let isCancelled = false;
-    const progressController = showImportProgress("姝ｅ湪瑙ｅ帇鏈湴鏂囦欢...", () => {
+    const progressController = showImportProgress("正在解压本地文件...", () => {
       isCancelled = true;
-      showToast4("瀵煎叆宸叉墜鍔ㄥ彇娑?");
+      showToast4("导入已手动取消");
     });
     try {
       const JSZip = await AssetIO.loadJSZip();
@@ -30653,24 +31211,24 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast4("ZIP瀵煎叆瀹屾垚锛?");
+        showToast4("ZIP 导入完成");
       } else {
         progressController.close();
       }
     } catch (e) {
       progressController.close();
       if (isCancelled) return;
-      console.error("ZIP瀵煎叆澶辫触:", e);
-      showImportError(["ZIP鏂囦欢瑙ｆ瀽澶辫触", e.message || "鏈煡閿欒", "璇风‘淇濇枃浠舵槸鏈夋晥鐨刏IP鏍煎紡"]);
+      console.error("ZIP导入失败:", e);
+      showImportError(["ZIP文件解析失败", e.message || "未知错误", "请确保文件是有效的ZIP格式"]);
     }
   }
   async function importFromRemoteZip(url) {
     const abortController = new AbortController();
     let isCancelled = false;
-    const progressController = showImportProgress("姝ｅ湪涓嬭浇杩滅▼鏂囦欢...", () => {
+    const progressController = showImportProgress("正在下载远程文件...", () => {
       isCancelled = true;
       abortController.abort();
-      showToast4("涓嬭浇宸插彇娑?");
+      showToast4("下载已取消");
     });
     try {
       const response = await fetch(url, { signal: abortController.signal });
@@ -30693,7 +31251,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         chunks.push(value);
         receivedLength += value.length;
         if (receivedLength > MAX_SIZE) {
-          throw new Error("涓嬭浇鐨勬枃浠跺ぇ灏忚秴杩?5GB 闄愬埗");
+          throw new Error("下载的文件大小超过 5GB 限制");
         }
         const now = Date.now();
         if (totalLength > 0) {
@@ -30701,13 +31259,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
           const total = (totalLength / 1024 / 1024).toFixed(1);
           if (now - lastProgressUpdate > 200 || percent === 100) {
-            progressController.update(percent, `涓嬭浇涓? ${downloaded} MB / ${total} MB`);
+            progressController.update(percent, `下载中 ${downloaded} MB / ${total} MB`);
             lastProgressUpdate = now;
           }
         } else {
           const downloaded = (receivedLength / 1024 / 1024).toFixed(1);
           if (now - lastProgressUpdate > 200) {
-            progressController.update(-1, `涓嬭浇涓? ${downloaded} MB`);
+            progressController.update(-1, `下载中 ${downloaded} MB`);
             lastProgressUpdate = now;
           }
         }
@@ -30717,20 +31275,20 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         return;
       }
       const blob = new Blob(chunks);
-      progressController.update(100, "涓嬭浇瀹屾垚锛屽紑濮嬭В鍘?..");
+      progressController.update(100, "下载完成，开始解压...");
       const JSZip = await AssetIO.loadJSZip();
       const zip = await JSZip.loadAsync(blob);
       await processZipContents(zip, progressController, () => isCancelled);
       if (!isCancelled) {
         progressController.close();
-        showToast4("杩滅▼ZIP瀵煎叆瀹屾垚锛?");
+        showToast4("远程 ZIP 导入完成");
       } else {
         progressController.close();
       }
     } catch (e) {
       progressController.close();
       if (e.name === "AbortError" || isCancelled) return;
-      console.error("杩滅▼ZIP瀵煎叆澶辫触:", e);
+      console.error("远程ZIP导入失败:", e);
       showImportError(["远程ZIP下载/导入失败", e.message || "网络错误", "请检查链接是否有效、是否支持跨域"]);
     }
   }
@@ -30739,43 +31297,43 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       getAllImagePacks().then((packs) => {
         const currentPackId = getCurrentPackId();
         const currentPack = packs.find((p) => p.id === currentPackId);
-        const currentPackName = currentPack ? currentPack.name : "褰撳墠鍥惧寘";
+        const currentPackName = currentPack ? currentPack.name : "当前图包";
         const packOptions = packs.map(
-          (p) => `<option value="${p.id}">${p.name}${p.id === currentPackId ? " (褰撳墠)" : ""}</option>`
+          (p) => `<option value="${p.id}">${p.name}${p.id === currentPackId ? " (当前)" : ""}</option>`
         ).join("");
-        const defaultNewName = suggestedName || `瀵煎叆鍖卂${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
+        const defaultNewName = suggestedName || `导入包_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
         const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
             <div class="gal-input-title" style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-              <span><i class="fa-solid fa-box-open"></i> 閫夋嫨瀵煎叆鐩爣鍥惧寘</span>
-              <button id="gal-import-pack-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+              <span><i class="fa-solid fa-box-open"></i> 选择导入目标图包</span>
+              <button id="gal-import-pack-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
                 <i class="fa-solid fa-xmark"></i>
               </button>
             </div>
             <div style="margin-bottom: 20px;">
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
                 <input type="radio" name="import-target" value="current" checked style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">瀵煎叆鍒板綋鍓嶅浘鍖?/span>
+                <span style="font-weight: 600; color: #2b2e38;">导入到当前图包</span>
                 <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${currentPackName}</span>
               </label>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="existing" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">瀵煎叆鍒板凡鏈夊浘鍖?/span>
+                <span style="font-weight: 600; color: #2b2e38;">导入到已有图包</span>
               </label>
               <select id="gal-import-existing-pack" disabled style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-bottom: 15px; margin-left: 26px; opacity: 0.6;">
                 ${packOptions}
               </select>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
-                <span style="font-weight: 600; color: #2b2e38;">鍒涘缓鏂板浘鍖?/span>
+                <span style="font-weight: 600; color: #2b2e38;">创建新图包</span>
               </label>
               <input type="text" id="gal-import-new-pack-name" disabled placeholder="杈撳叆鏂板浘鍖呭悕绉? value="${defaultNewName}"
                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
             </div>
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
               <button class="gal-action-btn" id="gal-import-pack-confirm" style="flex: 1; min-height: 44px; justify-content: center; background: #28a745; color: #fff; border-color: #28a745;">
-                <i class="fa-solid fa-check"></i> <span>纭瀵煎叆</span>
+                <i class="fa-solid fa-check"></i> <span>确认导入</span>
               </button>
             </div>
           </div>
@@ -30803,14 +31361,14 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           } else if (targetType === "new") {
             const newName = $dialog.find("#gal-import-new-pack-name").val().trim();
             if (!newName) {
-              showToast4("璇疯緭鍏ユ柊鍥惧寘鍚嶇О");
+              showToast4("请输入新图包名称");
               return;
             }
             createImagePack(newName).then((newPack) => {
               $dialog.remove();
               resolve(newPack.id);
             }).catch((err) => {
-              showToast4("鍒涘缓鍥惧寘澶辫触: " + err.message);
+              showToast4("创建图包失败: " + err.message);
             });
             return;
           }
@@ -30828,8 +31386,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           }
         });
       }).catch((err) => {
-        console.error("鑾峰彇鍥惧寘鍒楄〃澶辫触:", err);
-        showToast4("鑾峰彇鍥惧寘鍒楄〃澶辫触");
+        console.error("获取图包列表失败:", err);
+        showToast4("获取图包列表失败");
         resolve(null);
       });
     });
@@ -31176,8 +31734,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     <div class="gal-input-modal" id="gal-import-error-dialog">
       <div class="gal-input-box" style="max-width: 500px; width: 90%; padding: 25px; border-color: #e74c3c;">
         <div class="gal-input-title" style="margin-bottom: 20px; color: #e74c3c; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="fa-solid fa-circle-exclamation"></i> 瀵煎叆鍑洪敊</span>
-          <button id="gal-import-error-close-x" title="鍏抽棴" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
+          <span><i class="fa-solid fa-circle-exclamation"></i> 导入出错</span>
+          <button id="gal-import-error-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -34791,7 +35349,7 @@ ${baseUrl}`,
   setOverlayRefs({ updateOverlaySegmentDisplay });
   setOverlayContentRefs({ renderGalgameChoices });
   setChoicesRefs({ getIsRerolling });
-  setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews });
+  setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews, updateGlobalOverlayContent });
   setGalgameModeRefs({ processNewMessage, applySettingsToUI });
   setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration, handleNovelAIBackgroundGeneration });
   setMessageObserverRefs({ processNewMessage, injectGalgameButton });

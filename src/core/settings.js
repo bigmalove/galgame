@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS = {
   spriteScale: 100,
   spriteBottomOffset: 20,
   spriteSpacing: 20,
+  showMissingSpritePlaceholder: true,
   // 说话者效果
   speakerGlow: true,
   speakerBubble: true,

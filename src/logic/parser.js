@@ -3,6 +3,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
+import { splitZhJaForDisplayAndTts } from '../utils/bilingual-text.js';
 import { getAllExpressions } from '../utils/expressions.js';
 
 // ============================================
@@ -388,6 +389,7 @@ export function parseGalgameContent(html, messageId) {
     if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
       const speaker = dialogueMatch[1].trim();
       const dialogue = dialogueMatch[2].trim();
+      const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
 
       if (speaker === '旁白') {
         return {
@@ -402,9 +404,12 @@ export function parseGalgameContent(html, messageId) {
         const segResult = {
           type: 'dialogue',
           speaker: speaker,
-          text: dialogue,
+          text: splitResult.displayText,
           expression: expression || '默认',
         };
+        if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+          segResult.ttsText = splitResult.ttsText;
+        }
         if (ttsConfigString) {
           segResult.tts = parseTTSConfig(ttsConfigString, speaker);
         }
@@ -505,6 +510,14 @@ export function parseGalgameContent(html, messageId) {
   const MAX_SEG_LENGTH = 120;
   const finalSegments = [];
   result.segments.forEach(seg => {
+    const hasDedicatedTtsText =
+      typeof seg.ttsText === 'string' &&
+      seg.ttsText.trim().length > 0 &&
+      seg.ttsText !== seg.text;
+    if (hasDedicatedTtsText) {
+      finalSegments.push(seg);
+      return;
+    }
     if (!seg.text || seg.text.length <= MAX_SEG_LENGTH) {
       finalSegments.push(seg);
       return;

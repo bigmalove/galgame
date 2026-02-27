@@ -370,6 +370,17 @@ export const SpriteManager = {
     }
     await this.rehydrateDisconnectedCharacters($overlay, characterId, renderToken);
     const spriteUrl = _getSpriteRef ? await _getSpriteRef(characterId, expression) : null;
+    const useLive2DForCurrent = getCharacterUseLive2D(characterId);
+    const hasLive2DForCurrent = useLive2DForCurrent ? await hasLive2DModel(characterId) : false;
+    const canRenderVisualForCurrent = !!(hasLive2DForCurrent || spriteUrl);
+    const shouldShowMissingPlaceholder = !!getSettings().showMissingSpritePlaceholder;
+    if (!canRenderVisualForCurrent && !shouldShowMissingPlaceholder) {
+      if (this.activeCharacters.has(characterId)) {
+        await this.removeCharacter(characterId, { animate: false });
+      }
+      this.setSpeaker(null);
+      return;
+    }
     let slot = null;
     let isNewCharacter = false;
 

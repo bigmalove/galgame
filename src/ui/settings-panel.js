@@ -574,6 +574,11 @@ export async function showSettingsPanel(topTab, subTab) {
               <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings.ttsAutoPlay ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
+              <span class="gal-settings-label">中日双语模式 <small style="color:#999;">(显示中文，TTS发送日文)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings.ttsBilingualZhJaEnabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">按“中文文本[JP]日文文本”输出（兼容【JP】）；未命中时自动回退原文朗读。</p>
+            <div class="gal-settings-row">
               <span class="gal-settings-label">默认音色</span>
               <select id="gal-tts-default-speaker" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
                 <option value="">（不指定）</option>
@@ -1014,6 +1019,13 @@ export async function showSettingsPanel(topTab, subTab) {
     injectCOTToWorldbook().then(() => showToast('TTS引擎已切换，COT已更新')).catch(() => showToast('TTS引擎已切换'));
   });
   $('#gal-tts-autoplay').on('change', function () { settings.ttsAutoPlay = $(this).is(':checked'); saveSettings(); });
+  $('#gal-tts-bilingual-zh-ja-enabled').on('change', function () {
+    settings.ttsBilingualZhJaEnabled = $(this).is(':checked');
+    saveSettings();
+    injectCOTToWorldbook()
+      .then(() => showToast(settings.ttsBilingualZhJaEnabled ? '中日双语模式已开启，COT已更新' : '中日双语模式已关闭，COT已更新'))
+      .catch(() => showToast(settings.ttsBilingualZhJaEnabled ? '中日双语模式已开启' : '中日双语模式已关闭'));
+  });
   $('#gal-tts-default-speaker').on('change', function () { settings.ttsDefaultSpeaker = $(this).val(); saveSettings(); });
 
   // GPT-SoVITS

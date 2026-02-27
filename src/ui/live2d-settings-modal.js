@@ -4,7 +4,14 @@ import { getLive2DConfig, setLive2DConfig, normalizeLive2DScaleBase } from '../l
 import { Live2DManager } from '../live2d/manager.js';
 import { Live2DStage } from '../live2d/stage.js';
 import { Live2DPositionEditor } from '../live2d/position-editor.js';
-import { EXPRESSION_LIVE2D_MAP, matchLive2DExpression, matchLive2DMotion, getLive2DExpressionList, getLive2DMotionGroups } from '../live2d/expression-motion.js';
+import { EXPRESSION_LIVE2D_MAP, resolveLive2DExpression, resolveLive2DMotion, getLive2DExpressionList, getLive2DMotionGroups } from '../live2d/expression-motion.js';
+import {
+  getBuiltinExpressionOptions,
+  getBuiltinMotionOptions,
+  getBuiltinExpressionForTag,
+  parseBuiltinExpressionToken,
+  parseBuiltinMotionToken,
+} from '../live2d/builtin-expression-motion.js';
 import { getAllExpressions } from '../utils/expressions.js';
 import { getModalMountRoot } from './fullscreen.js';
 
@@ -23,6 +30,12 @@ export async function showLive2DSettingsModal(characterId) {
   const motionMapping = config.motionMapping || {};
   const EMPTY_MOTION_GROUP_VALUE = '__gal_empty_motion_group__';
   const EMPTY_TAG_FALLBACK = '(空标签)';
+  const builtinExpressionOptions = getBuiltinExpressionOptions();
+  const builtinMotionOptions = getBuiltinMotionOptions();
+  const builtinExpressionTokenByKey = new Map(builtinExpressionOptions.map(item => [item.key, item.token]));
+  const builtinExpressionLabelByKey = new Map(builtinExpressionOptions.map(item => [item.key, item.label]));
+  const builtinMotionTokenByKey = new Map(builtinMotionOptions.map(item => [item.key, item.token]));
+  const builtinMotionLabelByKey = new Map(builtinMotionOptions.map(item => [item.key, item.label]));
 
   let expressionList = [];
   let motionGroups = [];
@@ -148,13 +161,23 @@ export async function showLive2DSettingsModal(characterId) {
 
     const allTags = buildMappingTagList();
 
-    const exprOptionsHtml = expressionList.length > 0
+    const nativeExprOptionsHtml = expressionList.length > 0
       ? expressionList.map((name) => {
         const normalized = String(name ?? '');
         return `<option value="${escapeHtml(normalized)}">${escapeHtml(normalized)}</option>`;
       }).join('')
       : '';
-    const motionOptionsHtml = motionGroups.length > 0
+    const builtinExprOptionsHtml = builtinExpressionOptions.length > 0
+      ? builtinExpressionOptions.map((item) => {
+        return `<option value="${escapeHtml(item.token)}">${escapeHtml(item.label)}</option>`;
+      }).join('')
+      : '';
+    const exprOptionsHtml = [
+      nativeExprOptionsHtml ? `<optgroup label="模型表情">${nativeExprOptionsHtml}</optgroup>` : '',
+      builtinExprOptionsHtml ? `<optgroup label="内置表情">${builtinExprOptionsHtml}</optgroup>` : '',
+    ].join('');
+
+    const nativeMotionOptionsHtml = motionGroups.length > 0
       ? motionGroups.map(groupName => {
         const rawGroup = String(groupName ?? '');
         const value = rawGroup === '' ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
@@ -162,6 +185,15 @@ export async function showLive2DSettingsModal(characterId) {
         return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
       }).join('')
       : '';
+    const builtinMotionOptionsHtml = builtinMotionOptions.length > 0
+      ? builtinMotionOptions.map((item) => {
+        return `<option value="${escapeHtml(item.token)}">${escapeHtml(item.label)}</option>`;
+      }).join('')
+      : '';
+    const motionOptionsHtml = [
+      nativeMotionOptionsHtml ? `<optgroup label="模型动作组">${nativeMotionOptionsHtml}</optgroup>` : '',
+      builtinMotionOptionsHtml ? `<optgroup label="内置动作">${builtinMotionOptionsHtml}</optgroup>` : '',
+    ].join('');
 
     for (const tag of allTags) {
       const currentExpr = existingMappings[tag] || '';
@@ -659,6 +691,7 @@ export async function showLive2DSettingsModal(characterId) {
     if (!previewMounted) return;
     previewIsDragging = false;
     previewRequestToken++;
+    Live2DManager.stopBuiltinMotion(characterId);
     $modal.find('#gal-live2d-preview-canvas').css('cursor', 'grab');
     try {
       Live2DStage.popMount();
@@ -800,10 +833,26 @@ export async function showLive2DSettingsModal(characterId) {
     let playedMotion = '';
 
     try {
-      const exprName = exprValue || matchLive2DExpression(model, tag, null) || '';
-      if (exprName) {
-        model.expression(exprName);
-        playedExpr = exprName;
+      let resolvedExpr = null;
+      if (exprValue) {
+        const builtinKey = parseBuiltinExpressionToken(exprValue);
+        if (builtinKey) {
+          resolvedExpr = { type: 'builtin', key: builtinKey };
+        } else {
+          resolvedExpr = { type: 'native', name: exprValue };
+        }
+      } else {
+        resolvedExpr = resolveLive2DExpression(model, tag, null);
+      }
+
+      if (resolvedExpr?.type === 'native' && resolvedExpr.name) {
+        model.expression(resolvedExpr.name);
+        playedExpr = resolvedExpr.name;
+      } else if (resolvedExpr?.type === 'builtin' && resolvedExpr.key) {
+        const applied = Live2DManager.applyBuiltinExpression(characterId, resolvedExpr.key);
+        if (applied) {
+          playedExpr = builtinExpressionLabelByKey.get(resolvedExpr.key) || `内置:${resolvedExpr.key}`;
+        }
       }
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] 预览表情失败:`, e);
@@ -811,19 +860,36 @@ export async function showLive2DSettingsModal(characterId) {
 
     try {
       stopPreviewMotion(model);
+      Live2DManager.stopBuiltinMotion(characterId);
       if (motionValue === '__disabled__') {
         playedMotion = '(动作已禁用)';
       } else {
-        let motion = null;
+        let resolvedMotion = null;
         if (motionValue) {
-          motion = { group: motionValue === EMPTY_MOTION_GROUP_VALUE ? '' : motionValue, index: 0 };
+          const builtinKey = parseBuiltinMotionToken(motionValue);
+          if (builtinKey) {
+            resolvedMotion = { type: 'builtin', key: builtinKey };
+          } else {
+            resolvedMotion = {
+              type: 'native',
+              group: motionValue === EMPTY_MOTION_GROUP_VALUE ? '' : motionValue,
+              index: 0,
+            };
+          }
         } else {
-          motion = matchLive2DMotion(model, tag, null);
+          resolvedMotion = resolveLive2DMotion(model, tag, null);
         }
 
-        if (motion) {
-          model.motion(motion.group, motion.index || 0, 'FORCE');
-          playedMotion = motion.group === '' ? '(空动作组)' : String(motion.group || '');
+        if (resolvedMotion?.type === 'native') {
+          model.motion(resolvedMotion.group, resolvedMotion.index || 0, 'FORCE');
+          playedMotion = resolvedMotion.group === '' ? '(空动作组)' : String(resolvedMotion.group || '');
+        } else if (resolvedMotion?.type === 'builtin' && resolvedMotion.key) {
+          const played = Live2DManager.playBuiltinMotion(characterId, resolvedMotion.key);
+          if (played) {
+            playedMotion = builtinMotionLabelByKey.get(resolvedMotion.key) || `内置:${resolvedMotion.key}`;
+          }
+        } else if (resolvedMotion?.type === 'disabled') {
+          playedMotion = '(动作已禁用)';
         }
       }
     } catch (e) {
@@ -913,17 +979,22 @@ export async function showLive2DSettingsModal(characterId) {
     if (!model) return;
     $modal.find('.gal-expr-mapping-select').each(function() {
       const tag = _$(this).data('tag');
-      const matched = matchLive2DExpression(model, tag, null);
-      if (matched) {
-        _$(this).val(matched);
-      }
+      const normalizedTag = String(tag || '').trim();
+      const builtinExpr = getBuiltinExpressionForTag(normalizedTag);
+      const token = builtinExpr?.key ? builtinExpressionTokenByKey.get(builtinExpr.key) : '';
+      if (token) _$(this).val(token);
     });
     $modal.find('.gal-motion-mapping-select').each(function() {
       const tag = _$(this).data('tag');
-      const matched = matchLive2DMotion(model, tag, null);
-      if (matched) {
-        const value = String(matched.group ?? '') === '' ? EMPTY_MOTION_GROUP_VALUE : matched.group;
+      const resolved = resolveLive2DMotion(model, tag, null);
+      if (resolved?.type === 'native') {
+        const value = String(resolved.group ?? '') === '' ? EMPTY_MOTION_GROUP_VALUE : resolved.group;
         _$(this).val(value);
+      } else if (resolved?.type === 'builtin' && resolved.key) {
+        const token = builtinMotionTokenByKey.get(resolved.key);
+        if (token) {
+          _$(this).val(token);
+        }
       }
     });
 

@@ -12,6 +12,7 @@ import {
 } from './tts-config.js';
 import { Live2DManager } from '../live2d/manager.js';
 import { LipSyncManager } from '../live2d/lip-sync.js';
+import { hasLive2DModel } from '../db/live2d-models.js';
 import { synthesizeToBlob } from './edge-tts-direct.js';
 
 // 延迟引用: showToast (来自 UI 层)
@@ -28,6 +29,13 @@ function clipText(text, max = 160) {
   const value = String(text || '');
   if (value.length <= max) return value;
   return `${value.slice(0, max)}...`;
+}
+
+function getSegmentSpeakText(segment) {
+  if (!segment || typeof segment !== 'object') return '';
+  const ttsText = String(segment.ttsText ?? '').trim();
+  if (ttsText) return ttsText;
+  return String(segment.text ?? '').trim();
 }
 
 function isProxyNotFound(status, bodyText = '') {
@@ -1629,7 +1637,7 @@ export const TTSManager = {
     await this._ensureGptSoVitsWeights(resolvedVoice, playbackSessionId);
     if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
 
-    const requestText = String(segment.text || '');
+    const requestText = getSegmentSpeakText(segment);
     const refAudioPathCandidates = this._buildGptSoVitsRefAudioPathCandidates(refAudioPath, {
       cfg,
       modelCfg,
@@ -1754,7 +1762,8 @@ export const TTSManager = {
 
     let blob = null;
     try {
-      blob = await synthesizeToBlob(segment.text, resolvedVoice, {
+      const requestText = getSegmentSpeakText(segment);
+      blob = await synthesizeToBlob(requestText, resolvedVoice, {
         signal: controller.signal,
         onSocket: socket => {
           this._edgeDirectSocket = socket;
@@ -1841,44 +1850,73 @@ export const TTSManager = {
     return true;
   },
 
+  async _hasAvailableLive2DModel(characterId) {
+    const safeCharacterId = String(characterId || '').trim();
+    if (!safeCharacterId) return false;
+    if (Live2DManager.models.has(safeCharacterId)) return true;
+    try {
+      return await hasLive2DModel(safeCharacterId);
+    } catch (e) {
+      return false;
+    }
+  },
+
   _startLipSyncWhenModelReady(characterId, maxWait = 5000) {
+    const safeCharacterId = String(characterId || '').trim();
+    if (!safeCharacterId) return;
     const startTime = Date.now();
+    let hasCheckedModelExists = false;
     const tryLoad = async () => {
-      if (Live2DManager.models.has(characterId)) {
-        this._startLipSyncOnPlay(characterId, maxWait);
+      if (Live2DManager.models.has(safeCharacterId)) {
+        this._startLipSyncOnPlay(safeCharacterId, maxWait);
         return;
       }
+
+      if (!hasCheckedModelExists) {
+        hasCheckedModelExists = true;
+        const modelExists = await this._hasAvailableLive2DModel(safeCharacterId);
+        if (!modelExists) {
+          return;
+        }
+      }
+
       try {
-        await Live2DManager.loadModel(characterId);
+        await Live2DManager.loadModel(safeCharacterId);
       } catch (e) {}
-      if (Live2DManager.models.has(characterId)) {
-        this._startLipSyncOnPlay(characterId, maxWait);
+      if (Live2DManager.models.has(safeCharacterId)) {
+        this._startLipSyncOnPlay(safeCharacterId, maxWait);
         return;
       }
       if (Date.now() - startTime < maxWait) {
-        setTimeout(tryLoad, 120);
+        setTimeout(() => {
+          void tryLoad();
+        }, 120);
       } else {
-        console.warn(`[${SCRIPT_NAME}] LipSync: 模型加载超时，放弃口型同步 - characterId=${characterId}`);
+        console.warn(`[${SCRIPT_NAME}] LipSync: 模型加载超时，放弃口型同步 - characterId=${safeCharacterId}`);
       }
     };
-    tryLoad();
+    void tryLoad();
   },
 
   async _waitForModelReadyBeforeTTS(characterId, maxWait = 5000) {
-    if (!characterId) return false;
-    if (Live2DManager.models.has(characterId)) return true;
+    const safeCharacterId = String(characterId || '').trim();
+    if (!safeCharacterId) return false;
+    if (Live2DManager.models.has(safeCharacterId)) return true;
+
+    const modelExists = await this._hasAvailableLive2DModel(safeCharacterId);
+    if (!modelExists) return false;
 
     const startTime = Date.now();
     while (Date.now() - startTime < maxWait) {
       try {
-        await Live2DManager.loadModel(characterId);
+        await Live2DManager.loadModel(safeCharacterId);
       } catch (e) {}
-      if (Live2DManager.models.has(characterId)) {
+      if (Live2DManager.models.has(safeCharacterId)) {
         return true;
       }
       await new Promise(r => setTimeout(r, 120));
     }
-    console.warn(`[${SCRIPT_NAME}] TTS: 等待模型就绪超时，仍继续请求TTS - characterId=${characterId}`);
+    console.warn(`[${SCRIPT_NAME}] TTS: 等待模型就绪超时，仍继续请求TTS - characterId=${safeCharacterId}`);
     return false;
   },
 
@@ -1980,7 +2018,8 @@ export const TTSManager = {
       }
       return;
     }
-    if (!segment.text) return;
+    const speakText = getSegmentSpeakText(segment);
+    if (!speakText) return;
 
     const normalizedSegmentId = String(segmentId || '');
     if ((this.isLoading || this.isPlaying) && normalizedSegmentId && this.currentSegmentId === normalizedSegmentId) {
@@ -2018,7 +2057,7 @@ export const TTSManager = {
     }
 
     console.log(
-      `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, context=${context || '无'}, text=${segment.text.substring(0, 30)}...`,
+      `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, context=${context || '无'}, text=${speakText.substring(0, 30)}...`,
     );
 
     this.isLoading = true;
@@ -2042,7 +2081,7 @@ export const TTSManager = {
       const hasLive2D = Live2DManager.models.has(segment.speaker);
 
       if (this.xiaobaixTts && typeof this.xiaobaixTts.speak === 'function') {
-        await this.xiaobaixTts.speak(segment.text, {
+        await this.xiaobaixTts.speak(speakText, {
           speaker: speakerValue,
           resourceId: resourceId,
           contextTexts: context ? [context] : [],
@@ -2060,7 +2099,7 @@ export const TTSManager = {
 
       if (this.littleWhiteBox && typeof this.littleWhiteBox.callGenerate === 'function') {
         await this.littleWhiteBox.callGenerate({
-          message: segment.text,
+          message: speakText,
           speaker: speakerValue,
           resourceId: resourceId,
           contextTexts: context ? [context] : [],

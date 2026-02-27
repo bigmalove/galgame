@@ -5,7 +5,7 @@
   var SCRIPT_NAME = "Galgame界面插件";
   var VERSION = "2.2.1";
   var DB_NAME = "GalgameUIPluginDB";
-  var DB_VERSION = 6;
+  var DB_VERSION = 7;
   var STORE_SPRITES = "sprites";
   var STORE_BACKGROUNDS = "backgrounds";
   var STORE_MAP_IMAGES = "mapImages";
@@ -75,7 +75,7 @@
     // ===== 缓存层 =====
     cache: {
       sprites: /* @__PURE__ */ new Map(),
-      // characterId_expression -> blobUrl
+      // packId::characterId::expression -> blobUrl
       backgrounds: /* @__PURE__ */ new Map(),
       // sceneName -> blobUrl
       segments: /* @__PURE__ */ new Map(),
@@ -291,6 +291,7 @@
     // TTS 设置
     ttsEnabled: true,
     ttsAutoPlay: true,
+    ttsBilingualZhJaEnabled: false,
     ttsDefaultSpeaker: "",
     // TTS 引擎选择
     ttsProvider: "littlewhitebox",
@@ -625,6 +626,7 @@
         } else {
           _settings.effectsMaxActive = DEFAULT_SETTINGS.effectsMaxActive;
         }
+        _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
         if (_settings.bananaImageGen) {
           if (_settings.bananaImageGen.cgMode === void 0 && _settings.bananaImageGen.sceneMode !== void 0) {
             _settings.bananaImageGen.cgMode = !_settings.bananaImageGen.sceneMode;
@@ -1242,6 +1244,46 @@
           }
           console.log(`[${SCRIPT_NAME}] 数据库升级到版本6: 已添加地图图片存储`);
         }
+        if (oldVersion < 7) {
+          if (database.objectStoreNames.contains(STORE_SPRITES)) {
+            const spriteStore = transaction.objectStore(STORE_SPRITES);
+            const normalize = (value) => {
+              const text = String(value ?? "").trim();
+              return text || DEFAULT_PACK_ID;
+            };
+            const spriteRequest = spriteStore.openCursor();
+            spriteRequest.onsuccess = (event2) => {
+              const cursor = event2.target.result;
+              if (!cursor) return;
+              const sprite = cursor.value || {};
+              const oldId = String(sprite.id || "").trim();
+              const characterId = String(sprite.characterId || "").trim();
+              const expression = String(sprite.expression || "").trim();
+              const packId = normalize(sprite.packId);
+              const nextId = `${packId}::${characterId}::${expression}`;
+              if (!characterId || !expression) {
+                if (sprite.packId !== packId) {
+                  sprite.packId = packId;
+                  cursor.update(sprite);
+                }
+                cursor.continue();
+                return;
+              }
+              if (oldId !== nextId) {
+                const nextSprite = { ...sprite, id: nextId, packId };
+                spriteStore.put(nextSprite);
+                if (oldId && oldId !== nextId) {
+                  spriteStore.delete(oldId);
+                }
+              } else if (sprite.packId !== packId) {
+                sprite.packId = packId;
+                cursor.update(sprite);
+              }
+              cursor.continue();
+            };
+          }
+          console.log(`[${SCRIPT_NAME}] 数据库升级到版本7: 立绘主键已升级为图包隔离格式`);
+        }
       };
     });
   }
@@ -1354,6 +1396,12 @@
   }
 
   // src/db/image-packs.js
+  function buildSpritePackScopedId(characterId, expression, packId) {
+    const safeCharacterId = String(characterId || "").trim();
+    const safeExpression = String(expression || "").trim();
+    const safePackId = String(packId || "").trim() || DEFAULT_PACK_ID;
+    return `${safePackId}::${safeCharacterId}::${safeExpression}`;
+  }
   function getCurrentPackId() {
     const saved = localStorage.getItem(GalgameStore.STORAGE_KEYS.CURRENT_PACK);
     return saved || DEFAULT_PACK_ID;
@@ -1460,6 +1508,7 @@
   async function transferSpritesToPack(spriteKeys, targetPackId) {
     if (!getDb()) await initDB();
     const db = getDb();
+    const safeTargetPackId = String(targetPackId || "").trim() || DEFAULT_PACK_ID;
     let count = 0;
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_SPRITES], "readwrite");
@@ -1470,8 +1519,14 @@
         getRequest.onsuccess = () => {
           const sprite = getRequest.result;
           if (sprite) {
-            sprite.packId = targetPackId;
+            const oldId = sprite.id;
+            const newId = buildSpritePackScopedId(sprite.characterId, sprite.expression, safeTargetPackId);
+            sprite.packId = safeTargetPackId;
+            sprite.id = newId;
             store.put(sprite);
+            if (oldId && oldId !== newId) {
+              store.delete(oldId);
+            }
             count++;
           }
           processed++;
@@ -1536,8 +1591,16 @@
         if (cursor) {
           const sprite = cursor.value;
           if (sprite.packId === packId) {
+            const oldId = sprite.id;
+            const newId = buildSpritePackScopedId(sprite.characterId, sprite.expression, DEFAULT_PACK_ID);
             sprite.packId = DEFAULT_PACK_ID;
-            cursor.update(sprite);
+            sprite.id = newId;
+            if (oldId && oldId !== newId) {
+              store.put(sprite);
+              store.delete(oldId);
+            } else {
+              cursor.update(sprite);
+            }
             spriteCount++;
           }
           cursor.continue();
@@ -1667,22 +1730,82 @@
   }
 
   // src/db/sprites.js
+  var SPRITE_ID_SEPARATOR = "::";
+  function normalizePackId(packId, fallbackPackId = DEFAULT_PACK_ID) {
+    const normalized = String(packId ?? "").trim();
+    return normalized || fallbackPackId;
+  }
+  function getTargetPackId(packId = null) {
+    const currentPackId = normalizePackId(getCurrentPackId(), DEFAULT_PACK_ID);
+    return normalizePackId(packId, currentPackId);
+  }
+  function buildLegacySpriteId(characterId, expression) {
+    return `${String(characterId || "").trim()}_${String(expression || "").trim()}`;
+  }
+  function buildSpriteId(characterId, expression, packId = null) {
+    const targetPackId = getTargetPackId(packId);
+    const safeCharacterId = String(characterId || "").trim();
+    const safeExpression = String(expression || "").trim();
+    return `${targetPackId}${SPRITE_ID_SEPARATOR}${safeCharacterId}${SPRITE_ID_SEPARATOR}${safeExpression}`;
+  }
+  function revokeCachedSprite(cacheKey) {
+    if (!cacheKey || !characterSprites.has(cacheKey)) return;
+    const cacheUrl = characterSprites.get(cacheKey);
+    if (typeof cacheUrl === "string" && cacheUrl.startsWith("blob:")) {
+      try {
+        (topWindow.URL || URL).revokeObjectURL(cacheUrl);
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
+      }
+    }
+    characterSprites.delete(cacheKey);
+  }
+  function getSpriteUrlFromRecord(spriteRecord) {
+    if (!spriteRecord) return null;
+    if (spriteRecord.imageUrl) return spriteRecord.imageUrl;
+    if (spriteRecord.imageBlob) return (topWindow.URL || URL).createObjectURL(spriteRecord.imageBlob);
+    return null;
+  }
+  function querySpriteRecord(store, characterId, expression, targetPackId, scope) {
+    return new Promise((resolve) => {
+      const characterIndex = store.index("characterId");
+      const request = characterIndex.getAll(characterId);
+      request.onsuccess = () => {
+        const allRecords = request.result || [];
+        const recordsByExpression = allRecords.filter(
+          (record) => String(record?.expression || "").trim() === expression
+        );
+        if (recordsByExpression.length === 0) {
+          resolve(null);
+          return;
+        }
+        const normalizedRecords = recordsByExpression.map((record) => ({
+          ...record,
+          packId: normalizePackId(record?.packId, DEFAULT_PACK_ID)
+        })).sort((a, b) => {
+          const timeA = Date.parse(a?.lastModified || "") || 0;
+          const timeB = Date.parse(b?.lastModified || "") || 0;
+          return timeB - timeA;
+        });
+        const currentPackRecord = normalizedRecords.find((record) => record.packId === targetPackId) || null;
+        if (scope === "current") {
+          resolve(currentPackRecord);
+          return;
+        }
+        resolve(currentPackRecord || normalizedRecords[0] || null);
+      };
+      request.onerror = () => resolve(null);
+    });
+  }
   async function saveSprite(characterId, expression, imageBlob, imageUrl = null, packId = null) {
     if (!getDb()) await initDB();
     const db = getDb();
-    const targetPackId = packId || getCurrentPackId();
+    const targetPackId = getTargetPackId(packId);
+    const id = buildSpriteId(characterId, expression, targetPackId);
+    const legacyId = buildLegacySpriteId(characterId, expression);
     return new Promise((resolve, reject) => {
-      const id = `${characterId}_${expression}`;
-      const oldBlobUrl = characterSprites.get(id);
-      if (oldBlobUrl && oldBlobUrl.startsWith("blob:")) {
-        try {
-          (topWindow.URL || URL).revokeObjectURL(oldBlobUrl);
-          console.log(`[${SCRIPT_NAME}] 已撤销旧的 blob URL: ${id}`);
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
-        }
-      }
-      characterSprites.delete(id);
+      revokeCachedSprite(id);
+      if (legacyId !== id) revokeCachedSprite(legacyId);
       const transaction = db.transaction([STORE_SPRITES], "readwrite");
       const store = transaction.objectStore(STORE_SPRITES);
       const data = {
@@ -1694,14 +1817,12 @@
         packId: targetPackId,
         lastModified: (/* @__PURE__ */ new Date()).toISOString()
       };
+      if (legacyId !== id) {
+        store.delete(legacyId);
+      }
       const request = store.put(data);
       request.onsuccess = () => {
-        let blobUrl;
-        if (imageUrl) {
-          blobUrl = imageUrl;
-        } else if (imageBlob) {
-          blobUrl = (topWindow.URL || URL).createObjectURL(imageBlob);
-        }
+        const blobUrl = getSpriteUrlFromRecord(data);
         if (blobUrl) {
           characterSprites.set(id, blobUrl);
         }
@@ -1715,7 +1836,7 @@
     if (!spritesList || spritesList.length === 0) return;
     if (!getDb()) await initDB();
     const db = getDb();
-    const targetPackId = packId || getCurrentPackId();
+    const targetPackId = getTargetPackId(packId);
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_SPRITES], "readwrite");
       const store = transaction.objectStore(STORE_SPRITES);
@@ -1728,16 +1849,13 @@
         reject(event.target.error);
       };
       spritesList.forEach((item) => {
-        const id = `${item.characterId}_${item.expression}`;
-        const oldBlobUrl = characterSprites.get(id);
-        if (oldBlobUrl && oldBlobUrl.startsWith("blob:")) {
-          try {
-            (topWindow.URL || URL).revokeObjectURL(oldBlobUrl);
-          } catch (e) {
-            console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
-          }
+        const id = buildSpriteId(item.characterId, item.expression, targetPackId);
+        const legacyId = buildLegacySpriteId(item.characterId, item.expression);
+        revokeCachedSprite(id);
+        if (legacyId !== id) {
+          revokeCachedSprite(legacyId);
+          store.delete(legacyId);
         }
-        characterSprites.delete(id);
         const data = {
           id,
           characterId: item.characterId,
@@ -1748,135 +1866,136 @@
           lastModified: (/* @__PURE__ */ new Date()).toISOString()
         };
         store.put(data);
-        let blobUrl;
-        if (item.imageUrl) {
-          blobUrl = item.imageUrl;
-        } else if (item.imageBlob) {
-          blobUrl = (topWindow.URL || URL).createObjectURL(item.imageBlob);
-        }
+        const blobUrl = getSpriteUrlFromRecord(data);
         if (blobUrl) {
           characterSprites.set(id, blobUrl);
         }
       });
     });
   }
-  async function getSprite(characterId, expression) {
-    if (!characterId) {
+  async function getSprite(characterId, expression, packId = null) {
+    const safeCharacterId = String(characterId || "").trim();
+    const safeExpression = String(expression || "默认").trim() || "默认";
+    if (!safeCharacterId) {
       console.log(`[${SCRIPT_NAME}] getSprite: 角色名为空`);
       return null;
     }
-    const id = `${characterId}_${expression}`;
-    console.log(`[${SCRIPT_NAME}] getSprite 查询: ${id}`);
-    if (characterSprites.has(id)) {
-      console.log(`[${SCRIPT_NAME}] getSprite 缓存命中: ${id}`);
-      return characterSprites.get(id);
+    const targetPackId = getTargetPackId(packId);
+    const scope = getRenderScope() === "all" ? "all" : "current";
+    const scopedSpriteId = buildSpriteId(safeCharacterId, safeExpression, targetPackId);
+    console.log(`[${SCRIPT_NAME}] getSprite 查询: ${scopedSpriteId} (scope: ${scope})`);
+    if (characterSprites.has(scopedSpriteId)) {
+      console.log(`[${SCRIPT_NAME}] getSprite 缓存命中: ${scopedSpriteId}`);
+      return characterSprites.get(scopedSpriteId);
+    }
+    const legacySpriteId = buildLegacySpriteId(safeCharacterId, safeExpression);
+    if (scope === "all" && characterSprites.has(legacySpriteId)) {
+      console.log(`[${SCRIPT_NAME}] getSprite 旧缓存命中: ${legacySpriteId}`);
+      return characterSprites.get(legacySpriteId);
     }
     if (!getDb()) await initDB();
     const db = getDb();
     const result = await new Promise((resolve) => {
       const transaction = db.transaction([STORE_SPRITES], "readonly");
       const store = transaction.objectStore(STORE_SPRITES);
-      const request = store.get(id);
-      request.onsuccess = () => {
-        if (request.result) {
-          let blobUrl;
-          if (request.result.imageUrl) {
-            blobUrl = request.result.imageUrl;
-          } else if (request.result.imageBlob) {
-            blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
-          }
-          if (blobUrl) {
-            characterSprites.set(id, blobUrl);
-            console.log(`[${SCRIPT_NAME}] getSprite 找到: ${id}`);
-            resolve(blobUrl);
-            return;
-          }
-        }
-        console.log(`[${SCRIPT_NAME}] getSprite 未找到: ${id}`);
-        resolve(null);
-      };
-      request.onerror = () => {
-        console.log(`[${SCRIPT_NAME}] getSprite 查询错误: ${id}`);
-        resolve(null);
-      };
+      querySpriteRecord(store, safeCharacterId, safeExpression, targetPackId, scope).then(resolve);
     });
-    if (result) return result;
-    if (expression !== "默认") {
-      const fallbackId = `${characterId}_默认`;
-      console.log(`[${SCRIPT_NAME}] getSprite 尝试回退: ${fallbackId}`);
-      if (characterSprites.has(fallbackId)) {
-        console.log(`[${SCRIPT_NAME}] getSprite 回退缓存命中: ${fallbackId}`);
-        return characterSprites.get(fallbackId);
+    if (result) {
+      const resolvedPackId = normalizePackId(result.packId, DEFAULT_PACK_ID);
+      const cacheId = buildSpriteId(safeCharacterId, safeExpression, resolvedPackId);
+      const blobUrl = getSpriteUrlFromRecord(result);
+      if (blobUrl) {
+        characterSprites.set(cacheId, blobUrl);
+        if (result.id && result.id !== cacheId) {
+          characterSprites.set(result.id, blobUrl);
+        }
+        console.log(`[${SCRIPT_NAME}] getSprite 找到: ${cacheId}`);
+        return blobUrl;
       }
-      return new Promise((resolve) => {
-        const transaction = db.transaction([STORE_SPRITES], "readonly");
-        const store = transaction.objectStore(STORE_SPRITES);
-        const request = store.get(fallbackId);
-        request.onsuccess = () => {
-          if (request.result) {
-            let blobUrl;
-            if (request.result.imageUrl) {
-              blobUrl = request.result.imageUrl;
-            } else if (request.result.imageBlob) {
-              blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
-            }
-            if (blobUrl) {
-              characterSprites.set(fallbackId, blobUrl);
-              console.log(`[${SCRIPT_NAME}] getSprite 回退找到: ${fallbackId}`);
-              resolve(blobUrl);
-              return;
-            }
-          }
-          console.log(`[${SCRIPT_NAME}] getSprite 回退也未找到: ${fallbackId}`);
-          resolve(null);
-        };
-        request.onerror = () => resolve(null);
-      });
     }
+    if (safeExpression !== "默认") {
+      console.log(`[${SCRIPT_NAME}] getSprite 尝试回退: ${safeCharacterId}_默认 (scope: ${scope})`);
+      return getSprite(safeCharacterId, "默认", targetPackId);
+    }
+    console.log(`[${SCRIPT_NAME}] getSprite 未找到: ${scopedSpriteId}`);
     return null;
   }
-  async function getCharacterSprites(characterId) {
+  async function getCharacterSprites(characterId, packId = null, ignorePackFilter = false) {
     if (!getDb()) await initDB();
     const db = getDb();
+    const targetPackId = getTargetPackId(packId);
+    const scope = getRenderScope() === "all" ? "all" : "current";
     return new Promise((resolve) => {
       const transaction = db.transaction([STORE_SPRITES], "readonly");
       const store = transaction.objectStore(STORE_SPRITES);
       const index = store.index("characterId");
       const request = index.getAll(characterId);
-      request.onsuccess = () => resolve(request.result || []);
+      request.onsuccess = () => {
+        let sprites = request.result || [];
+        sprites = sprites.map((sprite) => ({
+          ...sprite,
+          packId: normalizePackId(sprite?.packId, DEFAULT_PACK_ID)
+        }));
+        if (!ignorePackFilter) {
+          if (scope === "current") {
+            sprites = sprites.filter((sprite) => sprite.packId === targetPackId);
+          } else {
+            sprites.sort((a, b) => {
+              if (a.packId === targetPackId && b.packId !== targetPackId) return -1;
+              if (a.packId !== targetPackId && b.packId === targetPackId) return 1;
+              return 0;
+            });
+          }
+        }
+        resolve(sprites);
+      };
       request.onerror = () => resolve([]);
     });
   }
-  async function deleteSprite(characterId, expression) {
+  async function deleteSprite(characterId, expression, packId = null, spriteId = null) {
     if (!getDb()) await initDB();
     const db = getDb();
-    const id = `${characterId}_${expression}`;
+    const idsToDelete = /* @__PURE__ */ new Set();
+    if (spriteId) idsToDelete.add(String(spriteId));
+    if (characterId && expression) {
+      idsToDelete.add(buildLegacySpriteId(characterId, expression));
+      idsToDelete.add(buildSpriteId(characterId, expression, getTargetPackId(packId)));
+    }
+    if (idsToDelete.size === 0) return;
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([STORE_SPRITES], "readwrite");
       const store = transaction.objectStore(STORE_SPRITES);
-      const request = store.delete(id);
-      request.onsuccess = () => {
-        if (characterSprites.has(id)) {
-          (topWindow.URL || URL).revokeObjectURL(characterSprites.get(id));
-          characterSprites.delete(id);
+      let finished = 0;
+      const done = () => {
+        finished++;
+        if (finished === idsToDelete.size) {
+          idsToDelete.forEach((id) => revokeCachedSprite(id));
+          resolve();
         }
-        resolve();
       };
-      request.onerror = () => reject(request.error);
+      idsToDelete.forEach((id) => {
+        const request = store.delete(id);
+        request.onsuccess = done;
+        request.onerror = () => done();
+      });
+      transaction.onerror = () => reject(transaction.error || new Error("删除立绘失败"));
     });
   }
   async function getAllSprites(packId = null, ignorePackFilter = false) {
     if (!getDb()) await initDB();
     const db = getDb();
+    const targetPackId = getTargetPackId(packId);
+    const scope = getRenderScope() === "all" ? "all" : "current";
     return new Promise((resolve) => {
       const transaction = db.transaction([STORE_SPRITES], "readonly");
       const store = transaction.objectStore(STORE_SPRITES);
       const request = store.getAll();
       request.onsuccess = () => {
-        let sprites = request.result || [];
+        let sprites = (request.result || []).map((sprite) => ({
+          ...sprite,
+          packId: normalizePackId(sprite?.packId, DEFAULT_PACK_ID)
+        }));
         if (!ignorePackFilter) {
-          const targetPackId = packId || getCurrentPackId();
-          const scope = getRenderScope();
           if (scope === "current") {
             sprites = sprites.filter((s) => s.packId === targetPackId);
           } else {
@@ -1902,10 +2021,15 @@
       request.onsuccess = () => {
         const sprites = request.result || [];
         sprites.forEach((sprite) => {
-          if (sprite.imageUrl) {
-            characterSprites.set(sprite.id, sprite.imageUrl);
-          } else if (sprite.imageBlob) {
-            const blobUrl = (topWindow.URL || URL).createObjectURL(sprite.imageBlob);
+          const cacheId = buildSpriteId(
+            sprite.characterId,
+            sprite.expression,
+            normalizePackId(sprite?.packId, DEFAULT_PACK_ID)
+          );
+          const blobUrl = getSpriteUrlFromRecord(sprite);
+          if (!blobUrl) return;
+          characterSprites.set(cacheId, blobUrl);
+          if (sprite.id && sprite.id !== cacheId) {
             characterSprites.set(sprite.id, blobUrl);
           }
         });
@@ -5585,6 +5709,356 @@ ${lines.join("\n")}`;
     };
   }
 
+  // src/live2d/builtin-expression-motion.js
+  var BUILTIN_EXPR_TOKEN_PREFIX = "__builtin_expr__:";
+  var BUILTIN_MOTION_TOKEN_PREFIX = "__builtin_motion__:";
+  var BUILTIN_EXPRESSION_DEFS = [
+    {
+      key: "default",
+      label: "内置·默认",
+      fadeIn: 0.24,
+      fadeOut: 0.24,
+      parameters: {
+        ParamAngleX: 0,
+        ParamAngleY: 0,
+        ParamAngleZ: 0,
+        ParamEyeLOpen: 1,
+        ParamEyeROpen: 1,
+        ParamEyeLSmile: 0,
+        ParamEyeRSmile: 0,
+        ParamEyeBallX: 0,
+        ParamEyeBallY: 0,
+        ParamBrowLY: 0,
+        ParamBrowRY: 0,
+        ParamBrowLX: 0,
+        ParamBrowRX: 0,
+        ParamBrowLAngle: 0,
+        ParamBrowRAngle: 0,
+        ParamBrowLForm: 0,
+        ParamBrowRForm: 0,
+        ParamMouthForm: 0,
+        ParamMouthOpenY: 0,
+        ParamCheek: 0,
+        ParamBodyAngleX: 0,
+        ParamBodyAngleY: 0,
+        ParamBodyAngleZ: 0
+      }
+    },
+    {
+      key: "smile",
+      label: "内置·微笑",
+      fadeIn: 0.22,
+      fadeOut: 0.2,
+      parameters: {
+        ParamEyeLOpen: 0.88,
+        ParamEyeROpen: 0.88,
+        ParamEyeLSmile: 0.72,
+        ParamEyeRSmile: 0.72,
+        ParamBrowLY: 0.22,
+        ParamBrowRY: 0.22,
+        ParamMouthForm: 0.62,
+        ParamMouthOpenY: 0.22,
+        ParamCheek: 0.35
+      }
+    },
+    {
+      key: "angry",
+      label: "内置·生气",
+      fadeIn: 0.18,
+      fadeOut: 0.16,
+      parameters: {
+        ParamEyeLOpen: 0.72,
+        ParamEyeROpen: 0.72,
+        ParamBrowLY: -0.24,
+        ParamBrowRY: -0.24,
+        ParamBrowLX: 0.52,
+        ParamBrowRX: -0.52,
+        ParamBrowLAngle: -0.84,
+        ParamBrowRAngle: -0.84,
+        ParamMouthForm: -0.72,
+        ParamMouthOpenY: 0.34,
+        ParamAngleZ: 0.1
+      }
+    },
+    {
+      key: "sad",
+      label: "内置·难过",
+      fadeIn: 0.2,
+      fadeOut: 0.2,
+      parameters: {
+        ParamEyeLOpen: 0.56,
+        ParamEyeROpen: 0.56,
+        ParamBrowLY: -0.12,
+        ParamBrowRY: -0.12,
+        ParamBrowLAngle: 0.35,
+        ParamBrowRAngle: 0.35,
+        ParamMouthForm: -0.44,
+        ParamMouthOpenY: 0.08,
+        ParamBodyAngleX: -0.12
+      }
+    },
+    {
+      key: "surprised",
+      label: "内置·惊讶",
+      fadeIn: 0.12,
+      fadeOut: 0.16,
+      parameters: {
+        ParamEyeLOpen: 1,
+        ParamEyeROpen: 1,
+        ParamEyeBallY: 0.25,
+        ParamBrowLY: 0.66,
+        ParamBrowRY: 0.66,
+        ParamMouthForm: 0.2,
+        ParamMouthOpenY: 0.92,
+        ParamBodyAngleY: 0.12
+      }
+    },
+    {
+      key: "smirk",
+      label: "内置·嘲讽",
+      fadeIn: 0.18,
+      fadeOut: 0.16,
+      parameters: {
+        ParamEyeLOpen: 0.82,
+        ParamEyeROpen: 0.72,
+        ParamEyeLSmile: 0.4,
+        ParamEyeRSmile: 0.08,
+        ParamBrowLY: 0.18,
+        ParamBrowRY: 0.04,
+        ParamMouthForm: 0.44,
+        ParamMouthOpenY: 0.12,
+        ParamAngleZ: 0.14
+      }
+    },
+    {
+      key: "shy",
+      label: "内置·害羞",
+      fadeIn: 0.2,
+      fadeOut: 0.22,
+      parameters: {
+        ParamEyeLOpen: 0.66,
+        ParamEyeROpen: 0.66,
+        ParamEyeLSmile: 0.45,
+        ParamEyeRSmile: 0.45,
+        ParamBrowLY: 0.18,
+        ParamBrowRY: 0.18,
+        ParamMouthForm: 0.22,
+        ParamMouthOpenY: 0.14,
+        ParamCheek: 0.86,
+        ParamAngleY: -0.14,
+        ParamBodyAngleZ: -0.18
+      }
+    },
+    {
+      key: "thinking",
+      label: "内置·思考",
+      fadeIn: 0.2,
+      fadeOut: 0.2,
+      parameters: {
+        ParamEyeLOpen: 0.84,
+        ParamEyeROpen: 0.84,
+        ParamEyeBallX: -0.32,
+        ParamEyeBallY: 0.28,
+        ParamBrowLY: 0.32,
+        ParamBrowRY: 0.32,
+        ParamMouthForm: -0.08,
+        ParamMouthOpenY: 0,
+        ParamAngleY: -0.12
+      }
+    },
+    {
+      key: "laugh",
+      label: "内置·大笑",
+      fadeIn: 0.14,
+      fadeOut: 0.18,
+      parameters: {
+        ParamEyeLOpen: 0.2,
+        ParamEyeROpen: 0.2,
+        ParamEyeLSmile: 1,
+        ParamEyeRSmile: 1,
+        ParamBrowLY: 0.36,
+        ParamBrowRY: 0.36,
+        ParamMouthForm: 0.85,
+        ParamMouthOpenY: 0.95,
+        ParamCheek: 0.4,
+        ParamAngleY: 0.08
+      }
+    },
+    {
+      key: "playful",
+      label: "内置·搞怪",
+      fadeIn: 0.16,
+      fadeOut: 0.16,
+      parameters: {
+        ParamEyeLOpen: 0.24,
+        ParamEyeROpen: 1,
+        ParamEyeLSmile: 0.65,
+        ParamEyeBallX: 0.42,
+        ParamMouthForm: 0.7,
+        ParamMouthOpenY: 0.42,
+        ParamBrowLY: 0.24,
+        ParamBrowRY: 0.08,
+        ParamAngleZ: 0.26
+      }
+    }
+  ];
+  var BUILTIN_MOTION_DEFS = [
+    {
+      key: "idle_breath",
+      label: "内置·呼吸",
+      durationMs: 2200,
+      loop: true,
+      easing: "easeInOut",
+      keyframes: [
+        { t: 0, params: { ParamBodyAngleY: 0, ParamBodyAngleX: 0, ParamAngleX: 0, ParamMouthOpenY: 0 } },
+        { t: 0.25, params: { ParamBodyAngleY: 0.08, ParamBodyAngleX: -0.04, ParamAngleX: -0.05, ParamMouthOpenY: 0.04 } },
+        { t: 0.5, params: { ParamBodyAngleY: 0, ParamBodyAngleX: 0, ParamAngleX: 0, ParamMouthOpenY: 0 } },
+        { t: 0.75, params: { ParamBodyAngleY: -0.06, ParamBodyAngleX: 0.03, ParamAngleX: 0.04, ParamMouthOpenY: 0.02 } },
+        { t: 1, params: { ParamBodyAngleY: 0, ParamBodyAngleX: 0, ParamAngleX: 0, ParamMouthOpenY: 0 } }
+      ]
+    },
+    {
+      key: "nod",
+      label: "内置·点头",
+      durationMs: 760,
+      loop: false,
+      easing: "easeOut",
+      keyframes: [
+        { t: 0, params: { ParamAngleY: 0, ParamBodyAngleY: 0, ParamAngleZ: 0 } },
+        { t: 0.35, params: { ParamAngleY: -0.46, ParamBodyAngleY: -0.24, ParamAngleZ: 0.02 } },
+        { t: 0.65, params: { ParamAngleY: 0.28, ParamBodyAngleY: 0.1, ParamAngleZ: -0.02 } },
+        { t: 1, params: { ParamAngleY: 0, ParamBodyAngleY: 0, ParamAngleZ: 0 } }
+      ]
+    },
+    {
+      key: "shake_head",
+      label: "内置·摇头",
+      durationMs: 940,
+      loop: false,
+      easing: "easeInOut",
+      keyframes: [
+        { t: 0, params: { ParamAngleX: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+        { t: 0.2, params: { ParamAngleX: 0.5, ParamAngleZ: 0.1, ParamBodyAngleX: 0.16 } },
+        { t: 0.45, params: { ParamAngleX: -0.56, ParamAngleZ: -0.12, ParamBodyAngleX: -0.2 } },
+        { t: 0.7, params: { ParamAngleX: 0.34, ParamAngleZ: 0.08, ParamBodyAngleX: 0.12 } },
+        { t: 1, params: { ParamAngleX: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } }
+      ]
+    },
+    {
+      key: "tilt_body",
+      label: "内置·侧倾",
+      durationMs: 980,
+      loop: false,
+      easing: "easeInOut",
+      keyframes: [
+        { t: 0, params: { ParamBodyAngleZ: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } },
+        { t: 0.35, params: { ParamBodyAngleZ: 0.36, ParamAngleZ: 0.2, ParamBodyAngleX: -0.08 } },
+        { t: 0.7, params: { ParamBodyAngleZ: -0.14, ParamAngleZ: -0.08, ParamBodyAngleX: 0.04 } },
+        { t: 1, params: { ParamBodyAngleZ: 0, ParamAngleZ: 0, ParamBodyAngleX: 0 } }
+      ]
+    },
+    {
+      key: "surprised_back",
+      label: "内置·后仰惊讶",
+      durationMs: 820,
+      loop: false,
+      easing: "easeOut",
+      keyframes: [
+        { t: 0, params: { ParamBodyAngleY: 0, ParamAngleX: 0, ParamMouthOpenY: 0.1 } },
+        { t: 0.28, params: { ParamBodyAngleY: 0.4, ParamAngleX: 0.24, ParamMouthOpenY: 0.88 } },
+        { t: 0.68, params: { ParamBodyAngleY: 0.12, ParamAngleX: 0.08, ParamMouthOpenY: 0.42 } },
+        { t: 1, params: { ParamBodyAngleY: 0, ParamAngleX: 0, ParamMouthOpenY: 0.16 } }
+      ]
+    }
+  ];
+  var BUILTIN_EXPRESSION_TAG_MAP = {
+    默认: "default",
+    微笑: "smile",
+    生气: "angry",
+    难过: "sad",
+    惊讶: "surprised",
+    嘲讽: "smirk",
+    害羞: "shy",
+    思考: "thinking",
+    大笑: "laugh",
+    搞怪: "playful"
+  };
+  var BUILTIN_MOTION_TAG_MAP = {
+    默认: "idle_breath",
+    微笑: "nod",
+    生气: "shake_head",
+    难过: "tilt_body",
+    惊讶: "surprised_back",
+    嘲讽: "shake_head",
+    害羞: "tilt_body",
+    思考: "nod",
+    大笑: "nod",
+    搞怪: "shake_head"
+  };
+  var BUILTIN_EXPRESSIONS_BY_KEY = new Map(BUILTIN_EXPRESSION_DEFS.map((item) => [item.key, item]));
+  var BUILTIN_MOTIONS_BY_KEY = new Map(BUILTIN_MOTION_DEFS.map((item) => [item.key, item]));
+  function normalizeTokenValue(raw, prefix) {
+    const text = String(raw || "").trim();
+    if (!text.toLowerCase().startsWith(prefix.toLowerCase())) return "";
+    return text.slice(prefix.length).trim();
+  }
+  function makeBuiltinExpressionToken(key) {
+    const normalized = String(key || "").trim();
+    if (!normalized) return "";
+    return `${BUILTIN_EXPR_TOKEN_PREFIX}${normalized}`;
+  }
+  function makeBuiltinMotionToken(key) {
+    const normalized = String(key || "").trim();
+    if (!normalized) return "";
+    return `${BUILTIN_MOTION_TOKEN_PREFIX}${normalized}`;
+  }
+  function parseBuiltinExpressionToken(value) {
+    const key = normalizeTokenValue(value, BUILTIN_EXPR_TOKEN_PREFIX);
+    return BUILTIN_EXPRESSIONS_BY_KEY.has(key) ? key : "";
+  }
+  function parseBuiltinMotionToken(value) {
+    const key = normalizeTokenValue(value, BUILTIN_MOTION_TOKEN_PREFIX);
+    return BUILTIN_MOTIONS_BY_KEY.has(key) ? key : "";
+  }
+  function isBuiltinExpressionToken(value) {
+    return !!parseBuiltinExpressionToken(value);
+  }
+  function isBuiltinMotionToken(value) {
+    return !!parseBuiltinMotionToken(value);
+  }
+  function getBuiltinExpressionByKey(key) {
+    const normalized = String(key || "").trim();
+    if (!normalized) return null;
+    return BUILTIN_EXPRESSIONS_BY_KEY.get(normalized) || null;
+  }
+  function getBuiltinMotionByKey(key) {
+    const normalized = String(key || "").trim();
+    if (!normalized) return null;
+    return BUILTIN_MOTIONS_BY_KEY.get(normalized) || null;
+  }
+  function getBuiltinExpressionForTag(tag) {
+    const key = BUILTIN_EXPRESSION_TAG_MAP[String(tag || "").trim()] || BUILTIN_EXPRESSION_TAG_MAP.默认;
+    return getBuiltinExpressionByKey(key);
+  }
+  function getBuiltinMotionForTag(tag) {
+    const key = BUILTIN_MOTION_TAG_MAP[String(tag || "").trim()] || BUILTIN_MOTION_TAG_MAP.默认;
+    return getBuiltinMotionByKey(key);
+  }
+  function getBuiltinExpressionOptions() {
+    return BUILTIN_EXPRESSION_DEFS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      token: makeBuiltinExpressionToken(item.key)
+    }));
+  }
+  function getBuiltinMotionOptions() {
+    return BUILTIN_MOTION_DEFS.map((item) => ({
+      key: item.key,
+      label: item.label,
+      token: makeBuiltinMotionToken(item.key)
+    }));
+  }
+
   // src/live2d/manager.js
   var LIVE2D_TICKER_GUARD_KEY = "__galgameLive2dTickerRef__";
   var _Live2DStageRef = null;
@@ -5606,10 +6080,20 @@ ${lines.join("\n")}`;
     // characterId -> Set<string>
     modelRuntimeInfo: /* @__PURE__ */ new Map(),
     // characterId -> { runtimeType, cubismVersion }
+    modelSourceData: /* @__PURE__ */ new Map(),
+    // characterId -> stored model payload from DB
     lipSyncStates: /* @__PURE__ */ new Map(),
     // characterId -> lip sync runtime state
+    builtinMotionPlayers: /* @__PURE__ */ new Map(),
+    // characterId -> { rafId, stopped }
+    builtinMotionFrameStates: /* @__PURE__ */ new Map(),
+    // characterId -> { params, weight }
+    storedModelParamIds: /* @__PURE__ */ new Map(),
+    // characterId -> string[]
     cachedDetachedAt: /* @__PURE__ */ new Map(),
     // characterId -> timestamp (宸查€€鍦虹紦瀛?
+    coreParamIndexCache: /* @__PURE__ */ new WeakMap(),
+    // coreModel -> Map<normalizedParamId, index>
     maxDetachedCache: 3,
     xhrBlobUrlSupport: null,
     // null=unknown, boolean=supported
@@ -6294,10 +6778,14 @@ ${lines.join("\n")}`;
     _destroyModel(characterId, reason = "cleanup") {
       const model = this.models.get(characterId);
       if (!model) {
+        this.stopBuiltinMotion(characterId);
+        this.builtinMotionFrameStates.delete(characterId);
         this._destroyLipSyncState(characterId);
         this.cachedDetachedAt.delete(characterId);
         this.containers.delete(characterId);
         this.modelRuntimeInfo.delete(characterId);
+        this.modelSourceData.delete(characterId);
+        this.storedModelParamIds.delete(characterId);
         this._revokeModelBlobUrls(characterId);
         return false;
       }
@@ -6314,6 +6802,10 @@ ${lines.join("\n")}`;
       this.loadingModels.delete(characterId);
       this.cachedDetachedAt.delete(characterId);
       this.modelRuntimeInfo.delete(characterId);
+      this.stopBuiltinMotion(characterId);
+      this.builtinMotionFrameStates.delete(characterId);
+      this.modelSourceData.delete(characterId);
+      this.storedModelParamIds.delete(characterId);
       this._revokeModelBlobUrls(characterId);
       this._destroyLipSyncState(characterId);
       return true;
@@ -6329,6 +6821,8 @@ ${lines.join("\n")}`;
     },
     releaseCharacter(characterId) {
       this._cleanupContainer(characterId);
+      this.stopBuiltinMotion(characterId);
+      this.builtinMotionFrameStates.delete(characterId);
       if (!this.models.has(characterId)) return false;
       this.cachedDetachedAt.set(characterId, Date.now());
       this._evictDetachedModels();
@@ -6432,6 +6926,8 @@ ${lines.join("\n")}`;
         console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到角色 ${characterId} 的 Live2D 模型`);
         return null;
       }
+      this.modelSourceData.set(characterId, modelData);
+      this.storedModelParamIds.delete(characterId);
       let modelRuntime = this._resolveCharacterRuntime(characterId, modelData);
       if (modelData?.moc3) {
         modelRuntime = await this._detectRuntimeFromMoc3(characterId, modelData.moc3, modelRuntime);
@@ -6623,6 +7119,34 @@ ${lines.join("\n")}`;
           const model = await loadFromUrl(modelUrl);
           this.models.set(characterId, model);
           this._markModelActive(characterId);
+          if (resolvedRuntime.runtimeType === LIVE2D_RUNTIME_TYPES.LEGACY) {
+            try {
+              const coreModel = model?.internalModel?.coreModel;
+              const apiProbe = {
+                getParamIndex: typeof coreModel?.getParamIndex === "function",
+                getParamCount: typeof coreModel?.getParamCount === "function",
+                getParamId: typeof coreModel?.getParamId === "function",
+                getParamFloat: typeof coreModel?.getParamFloat === "function",
+                setParamFloat: typeof coreModel?.setParamFloat === "function",
+                addParamFloat: typeof coreModel?.addParamFloat === "function",
+                getParameterIndex: typeof coreModel?.getParameterIndex === "function",
+                getParameterCount: typeof coreModel?.getParameterCount === "function",
+                getParameterId: typeof coreModel?.getParameterId === "function",
+                setParameterValueByIndex: typeof coreModel?.setParameterValueByIndex === "function",
+                setParameterValueById: typeof coreModel?.setParameterValueById === "function"
+              };
+              const paramIds = this.getCoreParamIds(characterId);
+              const storedParamIds = this._getStoredModelParamIds(characterId);
+              console.log(`[${SCRIPT_NAME}] Live2DManager: legacy core API probe ${characterId}`, {
+                ...apiProbe,
+                paramCount: paramIds.length,
+                sampleParams: paramIds.slice(0, 20),
+                storedParamCount: storedParamIds.length,
+                storedSampleParams: storedParamIds.slice(0, 20)
+              });
+            } catch (e) {
+            }
+          }
           this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 模型 ${characterId} 加载成功 (runtime=${resolvedRuntime.runtimeType})`);
           return model;
         } catch (e) {
@@ -7569,6 +8093,576 @@ ${lines.join("\n")}`;
         container.app.renderer.render(container.app.stage);
       }
     },
+    _getCoreModelForCharacter(characterId) {
+      const model = this.models.get(characterId);
+      if (!model?.internalModel?.coreModel) return null;
+      return model.internalModel.coreModel;
+    },
+    _normalizeCoreParamKey(input) {
+      return String(input || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    },
+    _buildCoreParamIndexCache(coreModel) {
+      if (!coreModel || this.coreParamIndexCache.has(coreModel)) {
+        return this.coreParamIndexCache.get(coreModel) || null;
+      }
+      const cache = /* @__PURE__ */ new Map();
+      try {
+        if (typeof coreModel.getParameterCount === "function" && typeof coreModel.getParameterId === "function") {
+          const count = Number(coreModel.getParameterCount()) || 0;
+          for (let i = 0; i < count; i++) {
+            const rawId = String(coreModel.getParameterId(i) || "").trim();
+            const normalized = this._normalizeCoreParamKey(rawId);
+            if (!normalized || cache.has(normalized)) continue;
+            cache.set(normalized, i);
+          }
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.getParamCount === "function" && typeof coreModel.getParamId === "function") {
+          const count = Number(coreModel.getParamCount()) || 0;
+          for (let i = 0; i < count; i++) {
+            const rawId = String(coreModel.getParamId(i) || "").trim();
+            const normalized = this._normalizeCoreParamKey(rawId);
+            if (!normalized || cache.has(normalized)) continue;
+            cache.set(normalized, i);
+          }
+        }
+      } catch (e) {
+      }
+      this.coreParamIndexCache.set(coreModel, cache);
+      return cache;
+    },
+    _getCoreParameterIndex(coreModel, paramId) {
+      const pid = String(paramId || "").trim();
+      if (!pid || !coreModel) return -1;
+      try {
+        if (typeof coreModel.getParameterIndex === "function") {
+          const idx = Number(coreModel.getParameterIndex(pid));
+          if (Number.isFinite(idx)) return idx;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.getParamIndex === "function") {
+          const idx = Number(coreModel.getParamIndex(pid));
+          if (Number.isFinite(idx)) return idx;
+        }
+      } catch (e) {
+      }
+      return -1;
+    },
+    _getCoreParameterIndexWithAlias(coreModel, paramId) {
+      const directIndex = this._getCoreParameterIndex(coreModel, paramId);
+      if (directIndex >= 0) return directIndex;
+      const normalized = this._normalizeCoreParamKey(paramId);
+      if (!normalized) return -1;
+      const cache = this._buildCoreParamIndexCache(coreModel);
+      if (!cache || !cache.size) return -1;
+      const fromCache = Number(cache.get(normalized));
+      return Number.isFinite(fromCache) ? fromCache : -1;
+    },
+    _getBuiltinParamFallbackRange(paramId) {
+      const key = this._normalizeCoreParamKey(paramId);
+      if (!key) return null;
+      if (key.includes("bodyanglex") || key.includes("bodyangley") || key.includes("bodyanglez")) {
+        return { min: -10, max: 10 };
+      }
+      if (key.includes("anglex") || key.includes("angley") || key.includes("anglez")) {
+        return { min: -30, max: 30 };
+      }
+      if (key.includes("eyeballx") || key.includes("eyebally")) {
+        return { min: -1, max: 1 };
+      }
+      if (key.includes("eyeopen") || key.includes("eyesmile") || key.includes("mouthopen") || key.includes("cheek") || key === "parama") {
+        return { min: 0, max: 1 };
+      }
+      if (key.includes("mouthform") || key.includes("brow")) {
+        return { min: -1, max: 1 };
+      }
+      return null;
+    },
+    _getCoreParameterRange(coreModel, paramId, paramIndex = -1) {
+      let min = Number.NaN;
+      let max = Number.NaN;
+      const pid = String(paramId || "").trim();
+      const idx = Number.isFinite(paramIndex) ? paramIndex : -1;
+      const asNumber = (value) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : Number.NaN;
+      };
+      if (idx >= 0) {
+        try {
+          if (typeof coreModel.getParameterMinimumValue === "function") {
+            min = asNumber(coreModel.getParameterMinimumValue(idx));
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.getParameterMaximumValue === "function") {
+            max = asNumber(coreModel.getParameterMaximumValue(idx));
+          }
+        } catch (e) {
+        }
+      }
+      if (!Number.isFinite(min)) {
+        try {
+          if (typeof coreModel.getParamMin === "function") {
+            min = asNumber(coreModel.getParamMin(pid));
+          }
+        } catch (e) {
+        }
+        try {
+          if (!Number.isFinite(min) && Number.isFinite(idx) && idx >= 0 && typeof coreModel.getParamMin === "function") {
+            min = asNumber(coreModel.getParamMin(idx));
+          }
+        } catch (e) {
+        }
+      }
+      if (!Number.isFinite(max)) {
+        try {
+          if (typeof coreModel.getParamMax === "function") {
+            max = asNumber(coreModel.getParamMax(pid));
+          }
+        } catch (e) {
+        }
+        try {
+          if (!Number.isFinite(max) && Number.isFinite(idx) && idx >= 0 && typeof coreModel.getParamMax === "function") {
+            max = asNumber(coreModel.getParamMax(idx));
+          }
+        } catch (e) {
+        }
+      }
+      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+        const fallbackRange = this._getBuiltinParamFallbackRange(pid);
+        if (fallbackRange) {
+          if (!Number.isFinite(min)) min = fallbackRange.min;
+          if (!Number.isFinite(max) || max <= min) max = fallbackRange.max;
+        }
+      }
+      if (!Number.isFinite(min)) min = 0;
+      if (!Number.isFinite(max) || max <= min) max = min + 1;
+      return { min, max };
+    },
+    _readCoreParameterByIndex(coreModel, paramIndex) {
+      if (!coreModel || !Number.isFinite(paramIndex) || paramIndex < 0) return Number.NaN;
+      const readNumber = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : Number.NaN;
+      };
+      try {
+        if (typeof coreModel.getParameterValueByIndex === "function") {
+          const value = readNumber(coreModel.getParameterValueByIndex(paramIndex));
+          if (Number.isFinite(value)) return value;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.getParameterValue === "function") {
+          const value = readNumber(coreModel.getParameterValue(paramIndex));
+          if (Number.isFinite(value)) return value;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.getParamFloat === "function") {
+          const value = readNumber(coreModel.getParamFloat(paramIndex));
+          if (Number.isFinite(value)) return value;
+        }
+      } catch (e) {
+      }
+      return Number.NaN;
+    },
+    _readCoreParameterById(coreModel, paramId) {
+      const pid = String(paramId || "").trim();
+      if (!coreModel || !pid) return Number.NaN;
+      const readNumber = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : Number.NaN;
+      };
+      try {
+        if (typeof coreModel.getParameterValueById === "function") {
+          const value = readNumber(coreModel.getParameterValueById(pid));
+          if (Number.isFinite(value)) return value;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.getParamFloat === "function") {
+          const value = readNumber(coreModel.getParamFloat(pid));
+          if (Number.isFinite(value)) return value;
+        }
+      } catch (e) {
+      }
+      return Number.NaN;
+    },
+    _readCoreParameterValue(coreModel, paramIndex, paramId) {
+      const byIndex = this._readCoreParameterByIndex(coreModel, paramIndex);
+      if (Number.isFinite(byIndex)) return byIndex;
+      return this._readCoreParameterById(coreModel, paramId);
+    },
+    _writeCoreParameterById(coreModel, paramId, value, weight = 1) {
+      const pid = String(paramId || "").trim();
+      if (!pid || !coreModel) return false;
+      const safeWeight = Number.isFinite(weight) ? Math.max(0, Math.min(1, Number(weight))) : 1;
+      const targetValue = Number(value);
+      if (!Number.isFinite(targetValue)) return false;
+      const paramIndex = this._getCoreParameterIndexWithAlias(coreModel, pid);
+      const beforeValue = this._readCoreParameterValue(coreModel, paramIndex, pid);
+      const isWriteEffective = () => {
+        const afterValue = this._readCoreParameterValue(coreModel, paramIndex, pid);
+        if (!Number.isFinite(afterValue)) return false;
+        if (Math.abs(afterValue - targetValue) <= 1e-4) return true;
+        if (Number.isFinite(beforeValue) && Math.abs(afterValue - beforeValue) <= 1e-6) return false;
+        return true;
+      };
+      if (paramIndex >= 0) {
+        try {
+          if (typeof coreModel.setParameterValueByIndex === "function") {
+            coreModel.setParameterValueByIndex(paramIndex, targetValue, safeWeight);
+            if (isWriteEffective()) return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.addParameterValueByIndex === "function") {
+            coreModel.addParameterValueByIndex(paramIndex, targetValue, safeWeight);
+            if (isWriteEffective()) return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.setParameterValue === "function") {
+            coreModel.setParameterValue(paramIndex, targetValue, safeWeight);
+            if (isWriteEffective()) return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.addParameterValue === "function") {
+            coreModel.addParameterValue(paramIndex, targetValue, safeWeight);
+            if (isWriteEffective()) return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.setParamFloat === "function") {
+            coreModel.setParamFloat(paramIndex, targetValue, safeWeight);
+            if (isWriteEffective()) return true;
+          }
+        } catch (e) {
+        }
+        try {
+          if (typeof coreModel.addParamFloat === "function") {
+            coreModel.addParamFloat(paramIndex, targetValue, safeWeight);
+            if (isWriteEffective()) return true;
+          }
+        } catch (e) {
+        }
+      }
+      try {
+        if (typeof coreModel.setParameterValueById === "function") {
+          coreModel.setParameterValueById(pid, targetValue, safeWeight);
+          if (isWriteEffective()) return true;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.addParameterValueById === "function") {
+          coreModel.addParameterValueById(pid, targetValue, safeWeight);
+          if (isWriteEffective()) return true;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.setParamFloat === "function") {
+          coreModel.setParamFloat(pid, targetValue, safeWeight);
+          if (isWriteEffective()) return true;
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.addParamFloat === "function") {
+          coreModel.addParamFloat(pid, targetValue, safeWeight);
+          if (isWriteEffective()) return true;
+        }
+      } catch (e) {
+      }
+      return false;
+    },
+    _mapBuiltinNormalizedValue(normalizedValue, min, max) {
+      const normalized = Number(normalizedValue);
+      if (!Number.isFinite(normalized)) return null;
+      if (min < 0 && max > 0) {
+        const clamped = Math.max(-1, Math.min(1, normalized));
+        return clamped >= 0 ? clamped * max : clamped * Math.abs(min);
+      }
+      const clampedUnit = Math.max(0, Math.min(1, normalized));
+      return min + (max - min) * clampedUnit;
+    },
+    _applyBuiltinNormalizedParam(coreModel, paramId, normalizedValue, weight = 1) {
+      const pid = String(paramId || "").trim();
+      if (!pid || !coreModel) return false;
+      const paramIndex = this._getCoreParameterIndexWithAlias(coreModel, pid);
+      const range = this._getCoreParameterRange(coreModel, pid, paramIndex);
+      const mappedValue = this._mapBuiltinNormalizedValue(normalizedValue, range.min, range.max);
+      if (!Number.isFinite(mappedValue)) return false;
+      return this._writeCoreParameterById(coreModel, pid, mappedValue, weight);
+    },
+    _getBuiltinParameterAliases(paramId) {
+      const pid = String(paramId || "").trim();
+      if (!pid) return [];
+      const aliasMap = {
+        ParamAngleX: ["ParamAngleX", "PARAM_ANGLE_X", "PARAM_HEAD_X"],
+        ParamAngleY: ["ParamAngleY", "PARAM_ANGLE_Y", "PARAM_HEAD_Y"],
+        ParamAngleZ: ["ParamAngleZ", "PARAM_ANGLE_Z", "PARAM_HEAD_Z"],
+        ParamEyeLOpen: ["ParamEyeLOpen", "PARAM_EYE_L_OPEN", "PARAM_EYE_OPEN", "ParamEyeOpen"],
+        ParamEyeROpen: ["ParamEyeROpen", "PARAM_EYE_R_OPEN", "PARAM_EYE_OPEN", "ParamEyeOpen"],
+        ParamEyeLSmile: ["ParamEyeLSmile", "PARAM_EYE_L_SMILE", "PARAM_EYE_SMILE"],
+        ParamEyeRSmile: ["ParamEyeRSmile", "PARAM_EYE_R_SMILE", "PARAM_EYE_SMILE"],
+        ParamEyeBallX: ["ParamEyeBallX", "PARAM_EYE_BALL_X"],
+        ParamEyeBallY: ["ParamEyeBallY", "PARAM_EYE_BALL_Y"],
+        ParamBrowLY: ["ParamBrowLY", "PARAM_BROW_L_Y", "PARAM_BROW_Y"],
+        ParamBrowRY: ["ParamBrowRY", "PARAM_BROW_R_Y", "PARAM_BROW_Y"],
+        ParamBrowLX: ["ParamBrowLX", "PARAM_BROW_L_X", "PARAM_BROW_X"],
+        ParamBrowRX: ["ParamBrowRX", "PARAM_BROW_R_X", "PARAM_BROW_X"],
+        ParamBrowLAngle: ["ParamBrowLAngle", "PARAM_BROW_L_ANGLE", "PARAM_BROW_ANGLE"],
+        ParamBrowRAngle: ["ParamBrowRAngle", "PARAM_BROW_R_ANGLE", "PARAM_BROW_ANGLE"],
+        ParamBrowLForm: ["ParamBrowLForm", "PARAM_BROW_L_FORM", "PARAM_BROW_FORM"],
+        ParamBrowRForm: ["ParamBrowRForm", "PARAM_BROW_R_FORM", "PARAM_BROW_FORM"],
+        ParamMouthForm: ["ParamMouthForm", "PARAM_MOUTH_FORM", "PARAM_MOUTH_SHAPE"],
+        ParamMouthOpenY: ["ParamMouthOpenY", "PARAM_MOUTH_OPEN_Y", "ParamMouthOpen", "PARAM_MOUTH_OPEN"],
+        ParamCheek: ["ParamCheek", "PARAM_CHEEK", "PARAM_BLUSH"],
+        ParamBodyAngleX: ["ParamBodyAngleX", "PARAM_BODY_ANGLE_X"],
+        ParamBodyAngleY: ["ParamBodyAngleY", "PARAM_BODY_ANGLE_Y"],
+        ParamBodyAngleZ: ["ParamBodyAngleZ", "PARAM_BODY_ANGLE_Z"]
+      };
+      const mapped = aliasMap[pid] || [pid];
+      const deduped = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const candidate of mapped) {
+        const value = String(candidate || "").trim();
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+        deduped.push(value);
+      }
+      return deduped;
+    },
+    _applyBuiltinParamWithAliases(coreModel, paramId, normalizedValue, weight = 1, characterId = null) {
+      const key = String(characterId || "").trim();
+      const baseAliases = this._getBuiltinParameterAliases(paramId);
+      const dynamicAliases = key ? this._getStoredModelAliasCandidates(key, paramId) : [];
+      const runtimeInfo = key ? this._getCharacterRuntime(key) : null;
+      const isCubism2Legacy = String(runtimeInfo?.runtimeType || "") === "legacy" && Number(runtimeInfo?.cubismVersion || 0) > 0 && Number(runtimeInfo?.cubismVersion || 0) <= 2;
+      const seen = /* @__PURE__ */ new Set();
+      const pushAlias = (list, value) => {
+        const text = String(value || "").trim();
+        if (!text || seen.has(text)) return;
+        seen.add(text);
+        list.push(text);
+      };
+      const firstPassAliases = [];
+      const secondPassAliases = [];
+      if (isCubism2Legacy) {
+        for (const alias of dynamicAliases) pushAlias(firstPassAliases, alias);
+        for (const alias of baseAliases) pushAlias(secondPassAliases, alias);
+      } else {
+        for (const alias of baseAliases) pushAlias(firstPassAliases, alias);
+        for (const alias of dynamicAliases) pushAlias(secondPassAliases, alias);
+      }
+      for (const alias of firstPassAliases) {
+        if (this._applyBuiltinNormalizedParam(coreModel, alias, normalizedValue, weight)) {
+          return true;
+        }
+      }
+      for (const alias of secondPassAliases) {
+        if (this._applyBuiltinNormalizedParam(coreModel, alias, normalizedValue, weight)) {
+          return true;
+        }
+      }
+      return false;
+    },
+    _ensureBuiltinUpdateHook(characterId) {
+      const key = String(characterId || "").trim();
+      if (!key) return;
+      const model = this.models.get(key);
+      if (!model) return;
+      this._getLipSyncState(key);
+      this._ensureLipSyncHooks(key, model);
+    },
+    _setBuiltinMotionFrameState(characterId, params, weight = 1) {
+      const key = String(characterId || "").trim();
+      if (!key) return;
+      const nextParams = params && typeof params === "object" ? { ...params } : null;
+      if (!nextParams || !Object.keys(nextParams).length) {
+        this.builtinMotionFrameStates.delete(key);
+        return;
+      }
+      this.builtinMotionFrameStates.set(key, {
+        params: nextParams,
+        weight: Number.isFinite(weight) ? Number(weight) : 1
+      });
+    },
+    _applyBuiltinPostUpdate(characterId, model) {
+      const key = String(characterId || "").trim();
+      if (!key || !model?.internalModel?.coreModel) return false;
+      const coreModel = model.internalModel.coreModel;
+      let applied = false;
+      const motionState = this.builtinMotionFrameStates.get(key);
+      if (motionState) {
+        const params = motionState.params && typeof motionState.params === "object" ? motionState.params : {};
+        const weight = Number.isFinite(motionState.weight) ? motionState.weight : 1;
+        for (const [paramId, normalizedValue] of Object.entries(params)) {
+          if (this._applyBuiltinParamWithAliases(coreModel, paramId, normalizedValue, weight, key)) {
+            applied = true;
+          }
+        }
+      }
+      return applied;
+    },
+    applyBuiltinExpression(characterId, builtinExpressionKey, options = {}) {
+      const expressionDef = getBuiltinExpressionByKey(builtinExpressionKey);
+      if (!expressionDef) return false;
+      const coreModel = this._getCoreModelForCharacter(characterId);
+      if (!coreModel) return false;
+      const params = expressionDef.parameters && typeof expressionDef.parameters === "object" ? expressionDef.parameters : {};
+      const weight = Number.isFinite(options.weight) ? Number(options.weight) : 1;
+      let appliedCount = 0;
+      for (const [paramId, normalizedValue] of Object.entries(params)) {
+        if (this._applyBuiltinParamWithAliases(coreModel, paramId, normalizedValue, weight, characterId)) {
+          appliedCount += 1;
+        }
+      }
+      if (appliedCount <= 0) {
+        try {
+          console.warn(`[${SCRIPT_NAME}] BuiltinExpression 未命中参数`, {
+            characterId,
+            builtinExpressionKey,
+            expectedParams: Object.keys(params || {}),
+            modelParams: this.getCoreParamIds(characterId),
+            storedParams: this._getStoredModelParamIds(characterId)
+          });
+        } catch (e) {
+        }
+      }
+      return appliedCount > 0;
+    },
+    stopBuiltinMotion(characterId) {
+      const key = String(characterId || "").trim();
+      if (!key) return false;
+      const state = this.builtinMotionPlayers.get(key);
+      if (!state) {
+        this._setBuiltinMotionFrameState(key, null);
+        return false;
+      }
+      state.stopped = true;
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      try {
+        if (Number.isFinite(state.rafId)) {
+          (_topWindow.cancelAnimationFrame || window.cancelAnimationFrame)?.call(_topWindow, state.rafId);
+        }
+      } catch (e) {
+      }
+      try {
+        const coreModel = this._getCoreModelForCharacter(key);
+        const resetParams = state.resetParams && typeof state.resetParams === "object" ? state.resetParams : null;
+        const resetWeight = Number.isFinite(state.weight) ? Number(state.weight) : 1;
+        if (coreModel && resetParams) {
+          for (const [paramId, normalizedValue] of Object.entries(resetParams)) {
+            this._applyBuiltinParamWithAliases(coreModel, paramId, normalizedValue, resetWeight, key);
+          }
+        }
+      } catch (e) {
+      }
+      this._setBuiltinMotionFrameState(key, null);
+      this.builtinMotionPlayers.delete(key);
+      return true;
+    },
+    playBuiltinMotion(characterId, builtinMotionKey, options = {}) {
+      const motionDef = getBuiltinMotionByKey(builtinMotionKey);
+      if (!motionDef) return false;
+      const model = this.models.get(characterId);
+      const coreModel = this._getCoreModelForCharacter(characterId);
+      if (!model || !coreModel) return false;
+      const key = String(characterId || "").trim();
+      if (!key) return false;
+      const keyframes = Array.isArray(motionDef.keyframes) ? motionDef.keyframes.map((frame) => ({
+        t: Number(frame?.t),
+        params: frame?.params && typeof frame.params === "object" ? frame.params : {}
+      })).filter((frame) => Number.isFinite(frame.t) && frame.t >= 0 && frame.t <= 1).sort((a, b) => a.t - b.t) : [];
+      if (keyframes.length === 0) return false;
+      this.stopBuiltinMotion(key);
+      this._ensureBuiltinUpdateHook(key);
+      const durationMs = Math.max(120, Number(motionDef.durationMs) || 600);
+      const loop = motionDef.loop === true;
+      const easing = String(options.easing || motionDef.easing || "linear").trim().toLowerCase();
+      const weight = Number.isFinite(options.weight) ? Number(options.weight) : 1;
+      const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
+      const requestFrame = _topWindow.requestAnimationFrame || window.requestAnimationFrame;
+      if (typeof requestFrame !== "function") return false;
+      const perfNow = () => _topWindow.performance?.now?.() ?? Date.now();
+      const applyEasing = (value) => {
+        const t = Math.max(0, Math.min(1, Number(value) || 0));
+        if (easing === "easeout") return 1 - Math.pow(1 - t, 2);
+        if (easing === "easeinout") {
+          return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        }
+        return t;
+      };
+      const resetParams = keyframes[0]?.params && typeof keyframes[0].params === "object" ? { ...keyframes[0].params } : null;
+      const state = { rafId: 0, stopped: false, startedAt: perfNow(), resetParams, weight };
+      this.builtinMotionPlayers.set(key, state);
+      const step = () => {
+        const currentState = this.builtinMotionPlayers.get(key);
+        if (!currentState || currentState !== state || state.stopped) return;
+        if (!this.models.has(key) || this.models.get(key) !== model) {
+          this.stopBuiltinMotion(key);
+          return;
+        }
+        const elapsed = perfNow() - state.startedAt;
+        let progress = elapsed / durationMs;
+        if (loop) {
+          progress = progress % 1;
+        } else {
+          progress = Math.max(0, Math.min(1, progress));
+        }
+        const easedProgress = applyEasing(progress);
+        let prevFrame = keyframes[0];
+        let nextFrame = keyframes[keyframes.length - 1];
+        for (let i = 0; i < keyframes.length; i++) {
+          const frame = keyframes[i];
+          if (frame.t <= easedProgress) prevFrame = frame;
+          if (frame.t >= easedProgress) {
+            nextFrame = frame;
+            break;
+          }
+        }
+        const frameSpan = Math.max(1e-6, nextFrame.t - prevFrame.t || 0);
+        const localAlpha = nextFrame.t === prevFrame.t ? 0 : Math.max(0, Math.min(1, (easedProgress - prevFrame.t) / frameSpan));
+        const paramNames = /* @__PURE__ */ new Set([
+          ...Object.keys(prevFrame.params || {}),
+          ...Object.keys(nextFrame.params || {})
+        ]);
+        for (const paramId of paramNames) {
+          const prevValue = Number(prevFrame.params?.[paramId]);
+          const nextValue = Number(nextFrame.params?.[paramId]);
+          const a = Number.isFinite(prevValue) ? prevValue : Number.isFinite(nextValue) ? nextValue : 0;
+          const b = Number.isFinite(nextValue) ? nextValue : a;
+          const blended = a + (b - a) * localAlpha;
+          this._applyBuiltinParamWithAliases(coreModel, paramId, blended, weight, key);
+          state.currentParams = state.currentParams && typeof state.currentParams === "object" ? state.currentParams : {};
+          state.currentParams[paramId] = blended;
+        }
+        this._setBuiltinMotionFrameState(key, state.currentParams || null, weight);
+        if (!loop && elapsed >= durationMs) {
+          this.stopBuiltinMotion(key);
+          return;
+        }
+        state.rafId = requestFrame.call(_topWindow, step);
+      };
+      state.rafId = requestFrame.call(_topWindow, step);
+      return true;
+    },
     setExpression(characterId, expressionName) {
       const model = this.models.get(characterId);
       if (!model) return;
@@ -7726,6 +8820,10 @@ ${lines.join("\n")}`;
               self._applyMouthValueToModel(characterId, model);
             } catch (e) {
             }
+          }
+          try {
+            self._applyBuiltinPostUpdate(characterId, model);
+          } catch (e) {
           }
         }
         return ret;
@@ -8040,6 +9138,175 @@ ${lines.join("\n")}`;
         push(id);
       }
       return params;
+    },
+    getCoreParamIds(characterId) {
+      const key = String(characterId || "").trim();
+      const model = this.models.get(key);
+      if (!model?.internalModel?.coreModel) return [];
+      const coreModel = model.internalModel.coreModel;
+      const ids = [];
+      const seen = /* @__PURE__ */ new Set();
+      const push = (id) => {
+        const value = String(id || "").trim();
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        ids.push(value);
+      };
+      try {
+        if (typeof coreModel.getParameterCount === "function" && typeof coreModel.getParameterId === "function") {
+          const count = Number(coreModel.getParameterCount()) || 0;
+          for (let i = 0; i < count; i++) {
+            push(coreModel.getParameterId(i));
+          }
+        }
+      } catch (e) {
+      }
+      try {
+        if (typeof coreModel.getParamCount === "function" && typeof coreModel.getParamId === "function") {
+          const count = Number(coreModel.getParamCount()) || 0;
+          for (let i = 0; i < count; i++) {
+            push(coreModel.getParamId(i));
+          }
+        }
+      } catch (e) {
+      }
+      return ids;
+    },
+    _decodeStoredBinaryToText(raw) {
+      if (typeof raw === "string") return raw;
+      let buffer = null;
+      if (raw instanceof ArrayBuffer) {
+        buffer = raw;
+      } else if (ArrayBuffer.isView(raw)) {
+        buffer = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+      }
+      if (!buffer) return "";
+      try {
+        return new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+      } catch (e) {
+      }
+      try {
+        return String.fromCharCode(...new Uint8Array(buffer));
+      } catch (e) {
+      }
+      return "";
+    },
+    _collectParamIdsFromPayload(raw) {
+      const result = /* @__PURE__ */ new Set();
+      const push = (value) => {
+        const id = String(value || "").trim();
+        if (!id) return;
+        if (!/[A-Za-z]/.test(id)) return;
+        result.add(id);
+      };
+      const text = this._decodeStoredBinaryToText(raw);
+      if (!text) return [];
+      try {
+        const parsed = JSON.parse(text);
+        const visit = (node) => {
+          if (node == null) return;
+          if (Array.isArray(node)) {
+            for (const item of node) visit(item);
+            return;
+          }
+          if (typeof node !== "object") return;
+          for (const [key, value] of Object.entries(node)) {
+            const lower = String(key || "").toLowerCase();
+            if (lower === "id" || lower === "paramid" || lower === "parameterid") {
+              push(value);
+            }
+            visit(value);
+          }
+        };
+        visit(parsed);
+      } catch (e) {
+      }
+      const regex = /\b(?:PARAM_[A-Z0-9_]+|Param[A-Za-z0-9_]+)\b/g;
+      let match = null;
+      while ((match = regex.exec(text)) !== null) {
+        push(match[0]);
+      }
+      return Array.from(result);
+    },
+    _getStoredModelParamIds(characterId) {
+      const key = String(characterId || "").trim();
+      if (!key) return [];
+      if (this.storedModelParamIds.has(key)) {
+        return this.storedModelParamIds.get(key) || [];
+      }
+      const modelData = this.modelSourceData.get(key);
+      const ids = [];
+      const seen = /* @__PURE__ */ new Set();
+      const add = (id) => {
+        const value = String(id || "").trim();
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        ids.push(value);
+      };
+      const exprList = Array.isArray(modelData?.expressions) ? modelData.expressions : [];
+      for (const expr of exprList) {
+        const parsedIds = this._collectParamIdsFromPayload(expr?.data);
+        for (const pid of parsedIds) add(pid);
+      }
+      const motionGroups = modelData?.motions && typeof modelData.motions === "object" ? modelData.motions : {};
+      for (const motionList of Object.values(motionGroups)) {
+        if (!Array.isArray(motionList)) continue;
+        for (const motion of motionList) {
+          const parsedIds = this._collectParamIdsFromPayload(motion?.data);
+          for (const pid of parsedIds) add(pid);
+        }
+      }
+      for (const source of [modelData?.modelJson, modelData?.model3Json, modelData?.modelRawJson]) {
+        const parsedIds = this._collectParamIdsFromPayload(source);
+        for (const pid of parsedIds) add(pid);
+      }
+      this.storedModelParamIds.set(key, ids);
+      return ids;
+    },
+    _getBuiltinParamMatchPatterns(paramId) {
+      const pid = String(paramId || "").trim();
+      const map = {
+        ParamAngleX: [/angle[_-]*x/i],
+        ParamAngleY: [/angle[_-]*y/i],
+        ParamAngleZ: [/angle[_-]*z/i],
+        ParamEyeLOpen: [/eye[_-]*l[_-]*open/i, /left[_-]*eye[_-]*open/i],
+        ParamEyeROpen: [/eye[_-]*r[_-]*open/i, /right[_-]*eye[_-]*open/i],
+        ParamEyeLSmile: [/eye[_-]*l[_-]*smile/i, /left[_-]*eye[_-]*smile/i],
+        ParamEyeRSmile: [/eye[_-]*r[_-]*smile/i, /right[_-]*eye[_-]*smile/i],
+        ParamEyeBallX: [/eye[_-]*ball[_-]*x/i, /pupil[_-]*x/i],
+        ParamEyeBallY: [/eye[_-]*ball[_-]*y/i, /pupil[_-]*y/i],
+        ParamBrowLY: [/brow[_-]*l[_-]*y/i, /left[_-]*brow[_-]*y/i],
+        ParamBrowRY: [/brow[_-]*r[_-]*y/i, /right[_-]*brow[_-]*y/i],
+        ParamBrowLX: [/brow[_-]*l[_-]*x/i, /left[_-]*brow[_-]*x/i],
+        ParamBrowRX: [/brow[_-]*r[_-]*x/i, /right[_-]*brow[_-]*x/i],
+        ParamBrowLAngle: [/brow[_-]*l.*angle/i, /left[_-]*brow.*angle/i],
+        ParamBrowRAngle: [/brow[_-]*r.*angle/i, /right[_-]*brow.*angle/i],
+        ParamBrowLForm: [/brow[_-]*l.*form/i, /left[_-]*brow.*form/i],
+        ParamBrowRForm: [/brow[_-]*r.*form/i, /right[_-]*brow.*form/i],
+        ParamMouthForm: [/mouth.*form/i],
+        ParamMouthOpenY: [/mouth.*open/i, /^parama$/i],
+        ParamCheek: [/cheek/i, /blush/i],
+        ParamBodyAngleX: [/body.*angle[_-]*x/i],
+        ParamBodyAngleY: [/body.*angle[_-]*y/i],
+        ParamBodyAngleZ: [/body.*angle[_-]*z/i]
+      };
+      return map[pid] || [];
+    },
+    _getStoredModelAliasCandidates(characterId, paramId) {
+      const patterns = this._getBuiltinParamMatchPatterns(paramId);
+      if (!patterns.length) return [];
+      const ids = this._getStoredModelParamIds(characterId);
+      if (!ids.length) return [];
+      const matched = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (const id of ids) {
+        const raw = String(id || "").trim();
+        if (!raw || seen.has(raw)) continue;
+        if (!patterns.some((pattern) => pattern.test(raw))) continue;
+        seen.add(raw);
+        matched.push(raw);
+      }
+      return matched;
     },
     _matchExpression(model, targetExpression) {
       const expressionMap = {
@@ -11829,6 +13096,7 @@ ${lines.join("\n")}`;
       motions: ["playful", "wink", "fun"]
     }
   };
+  var _lastExpressionApplyState = /* @__PURE__ */ new Map();
   function uniquePush(list, seen, value) {
     const normalized = String(value ?? "").trim();
     if (!normalized || seen.has(normalized)) return;
@@ -11993,16 +13261,80 @@ ${lines.join("\n")}`;
     }
     return groupNames;
   }
-  function matchLive2DExpression(model, targetExpression, characterId = null) {
-    if (characterId) {
-      const config = getLive2DConfig(characterId);
-      const userMapping = config.expressionMapping || {};
-      if (userMapping[targetExpression]) {
-        return userMapping[targetExpression];
+  function normalizeMotionIndex(value, fallback = 0) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, Math.floor(parsed));
+  }
+  function resolveUserExpressionMapping(characterId, targetExpression) {
+    if (characterId === null || characterId === void 0) return null;
+    const tag = String(targetExpression ?? "").trim();
+    if (!tag) return null;
+    const config = getLive2DConfig(characterId);
+    const userMapping = config.expressionMapping || {};
+    if (!Object.prototype.hasOwnProperty.call(userMapping, tag)) return null;
+    const mapped = String(userMapping[tag] ?? "").trim();
+    if (!mapped) return null;
+    const builtinKey = parseBuiltinExpressionToken(mapped);
+    if (builtinKey) {
+      return { type: "builtin", key: builtinKey, source: "user" };
+    }
+    return { type: "native", name: mapped, source: "user" };
+  }
+  function resolveUserMotionMapping(characterId, targetExpression) {
+    if (characterId === null || characterId === void 0) return null;
+    const tag = String(targetExpression ?? "").trim();
+    if (!tag) return null;
+    const config = getLive2DConfig(characterId);
+    const userMotionMapping = config.motionMapping || {};
+    if (!Object.prototype.hasOwnProperty.call(userMotionMapping, tag)) return null;
+    const motionConfig = userMotionMapping[tag];
+    if (motionConfig && typeof motionConfig === "object" && !Array.isArray(motionConfig)) {
+      if (motionConfig.enabled === false) {
+        return { type: "disabled", source: "user" };
+      }
+      const builtinField = String(motionConfig.builtin ?? "").trim();
+      if (builtinField) {
+        const builtinKey2 = parseBuiltinMotionToken(builtinField);
+        if (builtinKey2) {
+          return { type: "builtin", key: builtinKey2, source: "user" };
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(motionConfig, "group")) {
+        const rawGroup = String(motionConfig.group ?? "").trim();
+        if (rawGroup) {
+          const builtinKey2 = parseBuiltinMotionToken(rawGroup);
+          if (builtinKey2) {
+            return { type: "builtin", key: builtinKey2, source: "user" };
+          }
+        }
+        return {
+          type: "native",
+          group: rawGroup,
+          index: normalizeMotionIndex(motionConfig.index, 0),
+          source: "user"
+        };
       }
     }
-    const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
-    const candidates = mapping?.expressions || [targetExpression.toLowerCase()];
+    const rawValue = String(motionConfig ?? "").trim();
+    if (!rawValue) return null;
+    const builtinKey = parseBuiltinMotionToken(rawValue);
+    if (builtinKey) {
+      return { type: "builtin", key: builtinKey, source: "user" };
+    }
+    return { type: "native", group: rawValue, index: 0, source: "user" };
+  }
+  function matchLive2DExpression(model, targetExpression, characterId = null) {
+    const normalizedTarget = String(targetExpression ?? "").trim();
+    if (!normalizedTarget) return null;
+    if (characterId) {
+      const userResolved = resolveUserExpressionMapping(characterId, normalizedTarget);
+      if (userResolved?.type === "native") {
+        return userResolved.name;
+      }
+    }
+    const mapping = EXPRESSION_LIVE2D_MAP[normalizedTarget];
+    const candidates = mapping?.expressions || [normalizedTarget.toLowerCase()];
     try {
       const definitions = collectExpressionNames(model);
       if (!definitions.length) return null;
@@ -12029,20 +13361,15 @@ ${lines.join("\n")}`;
     }
   }
   function matchLive2DMotion(model, targetExpression, characterId = null) {
+    const normalizedTarget = String(targetExpression ?? "").trim();
+    if (!normalizedTarget) return null;
     if (characterId) {
-      const config = getLive2DConfig(characterId);
-      const userMotionMapping = config.motionMapping || {};
-      if (userMotionMapping[targetExpression]) {
-        const motionConfig = userMotionMapping[targetExpression];
-        if (motionConfig.enabled !== false && Object.prototype.hasOwnProperty.call(motionConfig, "group")) {
-          return { group: String(motionConfig.group ?? ""), index: motionConfig.index || 0 };
-        }
-        if (motionConfig.enabled === false) {
-          return null;
-        }
+      const userResolved = resolveUserMotionMapping(characterId, normalizedTarget);
+      if (userResolved?.type === "native") {
+        return { group: userResolved.group, index: userResolved.index || 0 };
       }
     }
-    const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
+    const mapping = EXPRESSION_LIVE2D_MAP[normalizedTarget];
     if (!mapping?.motions?.length) return null;
     try {
       const groupNames = collectMotionGroupNames(model);
@@ -12065,25 +13392,82 @@ ${lines.join("\n")}`;
       return null;
     }
   }
+  function resolveLive2DExpression(model, targetExpression, characterId = null) {
+    const normalizedTarget = String(targetExpression ?? "").trim();
+    if (!normalizedTarget) return null;
+    const userResolved = resolveUserExpressionMapping(characterId, normalizedTarget);
+    if (userResolved) return userResolved;
+    const matched = matchLive2DExpression(model, normalizedTarget, null);
+    if (matched) {
+      return { type: "native", name: matched, source: "auto-native" };
+    }
+    const builtinDef = getBuiltinExpressionForTag(normalizedTarget);
+    if (builtinDef?.key) {
+      return { type: "builtin", key: builtinDef.key, source: "auto-builtin" };
+    }
+    return null;
+  }
+  function resolveLive2DMotion(model, targetExpression, characterId = null) {
+    const normalizedTarget = String(targetExpression ?? "").trim();
+    if (!normalizedTarget) return null;
+    const userResolved = resolveUserMotionMapping(characterId, normalizedTarget);
+    if (userResolved) return userResolved;
+    const matched = matchLive2DMotion(model, normalizedTarget, null);
+    if (matched) {
+      return {
+        type: "native",
+        group: String(matched.group ?? ""),
+        index: normalizeMotionIndex(matched.index, 0),
+        source: "auto-native"
+      };
+    }
+    const builtinDef = getBuiltinMotionForTag(normalizedTarget);
+    if (builtinDef?.key) {
+      return { type: "builtin", key: builtinDef.key, source: "auto-builtin" };
+    }
+    return null;
+  }
   function setLive2DCharacterExpression(characterId, expressionName, playMotion = true) {
+    const key = String(characterId || "").trim();
     const model = Live2DManager.models.get(characterId);
     if (!model) return false;
-    const expr = matchLive2DExpression(model, expressionName, characterId);
-    if (expr) {
+    const normalizedExpression = String(expressionName ?? "").trim();
+    const lastState = _lastExpressionApplyState.get(key);
+    const isSameModelAndExpression = !!lastState && lastState.model === model && String(lastState.expression || "") === normalizedExpression;
+    const resolvedExpr = resolveLive2DExpression(model, expressionName, characterId);
+    if (resolvedExpr?.type === "native" && resolvedExpr.name) {
       try {
-        model.expression(expr);
+        model.expression(resolvedExpr.name);
+      } catch (e) {
+      }
+    } else if (resolvedExpr?.type === "builtin" && resolvedExpr.key) {
+      try {
+        Live2DManager.applyBuiltinExpression(characterId, resolvedExpr.key);
       } catch (e) {
       }
     }
-    if (playMotion) {
-      const motion = matchLive2DMotion(model, expressionName, characterId);
-      if (motion) {
+    if (playMotion && !isSameModelAndExpression) {
+      try {
+        Live2DManager.stopBuiltinMotion(characterId);
+      } catch (e) {
+      }
+      const resolvedMotion = resolveLive2DMotion(model, expressionName, characterId);
+      if (resolvedMotion?.type === "native") {
         try {
-          model.motion(motion.group, motion.index, "NORMAL");
+          model.motion(resolvedMotion.group, normalizeMotionIndex(resolvedMotion.index, 0), "NORMAL");
+        } catch (e) {
+        }
+      } else if (resolvedMotion?.type === "builtin" && resolvedMotion.key) {
+        try {
+          Live2DManager.playBuiltinMotion(characterId, resolvedMotion.key);
         } catch (e) {
         }
       }
     }
+    _lastExpressionApplyState.set(key, {
+      model,
+      expression: normalizedExpression
+    });
     return true;
   }
   function getLive2DExpressionList(characterId) {
@@ -12414,6 +13798,12 @@ ${lines.join("\n")}`;
     const value = String(text || "");
     if (value.length <= max) return value;
     return `${value.slice(0, max)}...`;
+  }
+  function getSegmentSpeakText(segment) {
+    if (!segment || typeof segment !== "object") return "";
+    const ttsText = String(segment.ttsText ?? "").trim();
+    if (ttsText) return ttsText;
+    return String(segment.text ?? "").trim();
   }
   function isProxyNotFound(status, bodyText = "") {
     if (status !== 404) return false;
@@ -13814,7 +15204,7 @@ ${lines.join("\n")}`;
       }
       await this._ensureGptSoVitsWeights(resolvedVoice, playbackSessionId);
       if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
-      const requestText = String(segment.text || "");
+      const requestText = getSegmentSpeakText(segment);
       const refAudioPathCandidates = this._buildGptSoVitsRefAudioPathCandidates(refAudioPath, {
         cfg,
         modelCfg,
@@ -13926,7 +15316,8 @@ ${lines.join("\n")}`;
       this._edgeDirectFetchController = controller;
       let blob = null;
       try {
-        blob = await synthesizeToBlob(segment.text, resolvedVoice, {
+        const requestText = getSegmentSpeakText(segment);
+        blob = await synthesizeToBlob(requestText, resolvedVoice, {
           signal: controller.signal,
           onSocket: (socket) => {
             this._edgeDirectSocket = socket;
@@ -14002,44 +15393,69 @@ ${lines.join("\n")}`;
       }
       return true;
     },
+    async _hasAvailableLive2DModel(characterId) {
+      const safeCharacterId = String(characterId || "").trim();
+      if (!safeCharacterId) return false;
+      if (Live2DManager.models.has(safeCharacterId)) return true;
+      try {
+        return await hasLive2DModel(safeCharacterId);
+      } catch (e) {
+        return false;
+      }
+    },
     _startLipSyncWhenModelReady(characterId, maxWait = 5e3) {
+      const safeCharacterId = String(characterId || "").trim();
+      if (!safeCharacterId) return;
       const startTime = Date.now();
+      let hasCheckedModelExists = false;
       const tryLoad = async () => {
-        if (Live2DManager.models.has(characterId)) {
-          this._startLipSyncOnPlay(characterId, maxWait);
+        if (Live2DManager.models.has(safeCharacterId)) {
+          this._startLipSyncOnPlay(safeCharacterId, maxWait);
           return;
         }
+        if (!hasCheckedModelExists) {
+          hasCheckedModelExists = true;
+          const modelExists = await this._hasAvailableLive2DModel(safeCharacterId);
+          if (!modelExists) {
+            return;
+          }
+        }
         try {
-          await Live2DManager.loadModel(characterId);
+          await Live2DManager.loadModel(safeCharacterId);
         } catch (e) {
         }
-        if (Live2DManager.models.has(characterId)) {
-          this._startLipSyncOnPlay(characterId, maxWait);
+        if (Live2DManager.models.has(safeCharacterId)) {
+          this._startLipSyncOnPlay(safeCharacterId, maxWait);
           return;
         }
         if (Date.now() - startTime < maxWait) {
-          setTimeout(tryLoad, 120);
+          setTimeout(() => {
+            void tryLoad();
+          }, 120);
         } else {
-          console.warn(`[${SCRIPT_NAME}] LipSync: 模型加载超时，放弃口型同步 - characterId=${characterId}`);
+          console.warn(`[${SCRIPT_NAME}] LipSync: 模型加载超时，放弃口型同步 - characterId=${safeCharacterId}`);
         }
       };
-      tryLoad();
+      void tryLoad();
     },
     async _waitForModelReadyBeforeTTS(characterId, maxWait = 5e3) {
-      if (!characterId) return false;
-      if (Live2DManager.models.has(characterId)) return true;
+      const safeCharacterId = String(characterId || "").trim();
+      if (!safeCharacterId) return false;
+      if (Live2DManager.models.has(safeCharacterId)) return true;
+      const modelExists = await this._hasAvailableLive2DModel(safeCharacterId);
+      if (!modelExists) return false;
       const startTime = Date.now();
       while (Date.now() - startTime < maxWait) {
         try {
-          await Live2DManager.loadModel(characterId);
+          await Live2DManager.loadModel(safeCharacterId);
         } catch (e) {
         }
-        if (Live2DManager.models.has(characterId)) {
+        if (Live2DManager.models.has(safeCharacterId)) {
           return true;
         }
         await new Promise((r) => setTimeout(r, 120));
       }
-      console.warn(`[${SCRIPT_NAME}] TTS: 等待模型就绪超时，仍继续请求TTS - characterId=${characterId}`);
+      console.warn(`[${SCRIPT_NAME}] TTS: 等待模型就绪超时，仍继续请求TTS - characterId=${safeCharacterId}`);
       return false;
     },
     _startLipSyncOnPlay(characterId, maxWait = 5e3) {
@@ -14126,7 +15542,8 @@ ${lines.join("\n")}`;
         }
         return;
       }
-      if (!segment.text) return;
+      const speakText = getSegmentSpeakText(segment);
+      if (!speakText) return;
       const normalizedSegmentId = String(segmentId || "");
       if ((this.isLoading || this.isPlaying) && normalizedSegmentId && this.currentSegmentId === normalizedSegmentId) {
         return;
@@ -14158,7 +15575,7 @@ ${lines.join("\n")}`;
         return;
       }
       console.log(
-        `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, context=${context || "无"}, text=${segment.text.substring(0, 30)}...`
+        `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, context=${context || "无"}, text=${speakText.substring(0, 30)}...`
       );
       this.isLoading = true;
       if (normalizedSegmentId) this.currentSegmentId = normalizedSegmentId;
@@ -14177,7 +15594,7 @@ ${lines.join("\n")}`;
         const resourceId = inferResourceId(speakerValue);
         const hasLive2D = Live2DManager.models.has(segment.speaker);
         if (this.xiaobaixTts && typeof this.xiaobaixTts.speak === "function") {
-          await this.xiaobaixTts.speak(segment.text, {
+          await this.xiaobaixTts.speak(speakText, {
             speaker: speakerValue,
             resourceId,
             contextTexts: context ? [context] : []
@@ -14194,7 +15611,7 @@ ${lines.join("\n")}`;
         }
         if (this.littleWhiteBox && typeof this.littleWhiteBox.callGenerate === "function") {
           await this.littleWhiteBox.callGenerate({
-            message: segment.text,
+            message: speakText,
             speaker: speakerValue,
             resourceId,
             contextTexts: context ? [context] : []
@@ -14943,6 +16360,17 @@ ${lines.join("\n")}`;
       }
       await this.rehydrateDisconnectedCharacters($overlay, characterId, renderToken);
       const spriteUrl = _getSpriteRef2 ? await _getSpriteRef2(characterId, expression) : null;
+      const useLive2DForCurrent = getCharacterUseLive2D(characterId);
+      const hasLive2DForCurrent = useLive2DForCurrent ? await hasLive2DModel(characterId) : false;
+      const canRenderVisualForCurrent = !!(hasLive2DForCurrent || spriteUrl);
+      const shouldShowMissingPlaceholder = !!getSettings().showMissingSpritePlaceholder;
+      if (!canRenderVisualForCurrent && !shouldShowMissingPlaceholder) {
+        if (this.activeCharacters.has(characterId)) {
+          await this.removeCharacter(characterId, { animate: false });
+        }
+        this.setSpeaker(null);
+        return;
+      }
       let slot = null;
       let isNewCharacter = false;
       if (this.activeCharacters.has(characterId)) {
@@ -15573,6 +17001,23 @@ ${bgmWhitelistText}
   - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
   - **示例**: \`<bgm>歌曲名</bgm>\``;
     const ttsEnabled = getTTSEnabled();
+    const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
+    const ttsDialogueFormatLine = ttsBilingualZhJaEnabled ? '- **格式**: `<p>角色名[表情]: "中文文本[JP]日文文本"</p>`' : '- **格式**: `<p>角色名[表情]: "对话内容"</p>`';
+    const ttsBilingualHintSection = ttsBilingualZhJaEnabled ? `
+### 中日双语输出（必须严格遵守）
+- 正文必须使用：\`中文文本[JP]日文文本\`
+- 只能使用 \`[JP]\` 作为唯一分隔符，不要使用其他变体
+- \`[JP]\` 前必须是中文显示文本
+- \`[JP]\` 后必须是日文朗读文本
+- 不要输出额外解释、注释或替代格式
+` : "";
+    const ttsExampleLine1 = ttsBilingualZhJaEnabled ? '`<p>少女[微笑]: "你好呀～[JP]こんにちは～"</p>` （已绑定音色或后续对话）' : '`<p>少女[微笑]: "你好呀～"</p>` （已绑定音色或后续对话）';
+    const ttsExampleLine2 = ttsBilingualZhJaEnabled ? '`<p>将军[生气,夜枭|低沉威严地命令]: "退下！[JP]下がれ！"</p>` （新角色首次出现，指定音色+语气）' : '`<p>将军[生气,夜枭|低沉威严地命令]: "退下！"</p>` （新角色首次出现，指定音色+语气）';
+    const ttsExampleLine3 = ttsBilingualZhJaEnabled ? '`<p>姐姐[害羞|带着娇嗔撒娇]: "来嘛……陪我喝一杯～[JP]ねえ……一緒に飲もう？"</p>`' : '`<p>姐姐[害羞|带着娇嗔撒娇]: "来嘛……陪我喝一杯～"</p>`';
+    const ttsReminderLine1 = ttsBilingualZhJaEnabled ? '1. 对话格式: `<p>角色名[表情]: "中文[JP]日文"</p>` 或 `<p>角色名[表情,音色]: "中文[JP]日文"</p>`' : '1. 对话格式: `<p>角色名[表情]: "对话"</p>` 或 `<p>角色名[表情,音色]: "对话"</p>`';
+    const ttsStructureDialogueLine1 = ttsBilingualZhJaEnabled ? '  <p>少女[微笑,桃夭]: "你终于来了～[JP]やっと来たね～"</p>' : '  <p>少女[微笑,桃夭]: "你终于来了～"</p>';
+    const ttsStructureDialogueLine2 = ttsBilingualZhJaEnabled ? '  <p>少女[惊讶|又急又关心地说]: "下这么大的雨，你怎么不带伞？[JP]こんな大雨なのに、どうして傘を持ってこなかったの？"</p>' : '  <p>少女[惊讶|又急又关心地说]: "下这么大的雨，你怎么不带伞？"</p>';
+    const ttsStructureDialogueLine3 = ttsBilingualZhJaEnabled ? '  <p>少女[难过|带着心疼的语气]: "会感冒的……[JP]風邪ひいちゃうよ……"</p>' : '  <p>少女[难过|带着心疼的语气]: "会感冒的……"</p>';
     if (ttsEnabled) {
       return `# Galgame 输出格式规范
 
@@ -15585,7 +17030,7 @@ ${statusTagSection}
 ## 标签系统
 
 ### 对话格式（含配音）
-- **格式**: \`<p>角色名[表情]: "对话内容"</p>\`
+${ttsDialogueFormatLine}
 - **表情列表**: ${expressionListText}
 - **可用音色**: ${ttsVoiceListText}
 - **音色规则**:
@@ -15598,9 +17043,10 @@ ${charVoiceBindingText}
   - 需要结合当前语境和角色情感发挥，例如：'用撒娇的语气说'、'用反问的语气质问'、'带着哭腔委屈地说'、'压低声音神秘地说'
   - 不需要每句都加，在情感表达强烈或语气特殊的台词上使用效果最佳
 - **示例**:
-  - \`<p>少女[微笑]: "你好呀～"</p>\` （已绑定音色或后续对话）
-  - \`<p>将军[生气,夜枭|低沉威严地命令]: "退下！"</p>\` （新角色首次出现，指定音色+语气）
-  - \`<p>姐姐[害羞|带着娇嗔撒娇]: "来嘛……陪我喝一杯～"</p>\`
+  - ${ttsExampleLine1}
+  - ${ttsExampleLine2}
+  - ${ttsExampleLine3}
+${ttsBilingualHintSection}
 
 ### 旁白格式
 - 格式: \`<p>旁白内容</p>\`
@@ -15622,17 +17068,17 @@ ${pixiEffectTagSection}
   <background scene="${exampleScene}" />
   <pixiPerform name="rain" />
   <p>夜色深沉，街灯在雨中摇曳。</p>
-  <p>少女[微笑,桃夭]: "你终于来了～"</p>
+${ttsStructureDialogueLine1}
   <bgm>歌曲名</bgm>
   <p>她撑着伞，静静地站在那里。</p>
-  <p>少女[惊讶|又急又关心地说]: "下这么大的雨，你怎么不带伞？"</p>
-  <p>少女[难过|带着心疼的语气]: "会感冒的……"</p>
+${ttsStructureDialogueLine2}
+${ttsStructureDialogueLine3}
 
 </maintext>
 \`\`\`
 
 ## 重要提醒
-1. 对话格式: \`<p>角色名[表情]: "对话"</p>\` 或 \`<p>角色名[表情,音色]: "对话"</p>\`
+${ttsReminderLine1}
 2. 语气指导（可选）: \`<p>角色名[表情|语气描述]: "对话"</p>\`
 3. 旁白格式: \`<p>旁白内容</p>\`（无需任何标记）
 4. 新角色首次出现时指定音色，后续自动沿用
@@ -15807,6 +17253,61 @@ ${extraRule}
       generationState.verificationTimer = null;
     }
     generationState.isGenerating = false;
+  }
+
+  // src/utils/bilingual-text.js
+  var JP_TOKEN_RE = "(?:J|Ｊ)\\s*(?:P|Ｐ)";
+  var JP_SPLIT_MARKER_PATTERNS = [
+    new RegExp(`【\\s*${JP_TOKEN_RE}\\s*】`, "i"),
+    new RegExp(`\\[\\s*${JP_TOKEN_RE}\\s*\\]`, "i"),
+    new RegExp(`（\\s*${JP_TOKEN_RE}\\s*）`, "i"),
+    new RegExp(`\\(\\s*${JP_TOKEN_RE}\\s*\\)`, "i"),
+    new RegExp(`＜\\s*${JP_TOKEN_RE}\\s*＞`, "i"),
+    new RegExp(`<\\s*${JP_TOKEN_RE}\\s*>`, "i"),
+    new RegExp(`「\\s*${JP_TOKEN_RE}\\s*」`, "i"),
+    new RegExp(`『\\s*${JP_TOKEN_RE}\\s*』`, "i")
+  ];
+  function findFirstSplitMarker(raw) {
+    let bestMatch = null;
+    for (const pattern of JP_SPLIT_MARKER_PATTERNS) {
+      const matched = raw.match(pattern);
+      if (!matched || matched.index === void 0) continue;
+      if (!bestMatch || matched.index < bestMatch.index) {
+        bestMatch = {
+          index: matched.index,
+          length: matched[0].length
+        };
+      }
+    }
+    return bestMatch;
+  }
+  function splitZhJaForDisplayAndTts(input, enabled) {
+    const raw = String(input ?? "");
+    if (!enabled) {
+      return {
+        displayText: raw,
+        ttsText: raw,
+        hasJa: false
+      };
+    }
+    const marker = findFirstSplitMarker(raw);
+    if (!marker) {
+      return {
+        displayText: raw,
+        ttsText: raw,
+        hasJa: false
+      };
+    }
+    const markerStart = marker.index;
+    const markerEnd = markerStart + marker.length;
+    const zhPart = raw.slice(0, markerStart).trim();
+    const jaPart = raw.slice(markerEnd).trim();
+    const fallback = raw.trim();
+    return {
+      displayText: zhPart || fallback,
+      ttsText: jaPart || zhPart || fallback,
+      hasJa: !!jaPart
+    };
   }
 
   // src/logic/parser.js
@@ -16101,6 +17602,7 @@ ${extraRule}
       if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
         const speaker = dialogueMatch[1].trim();
         const dialogue = dialogueMatch[2].trim();
+        const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
         if (speaker === "旁白") {
           return {
             type: "narration",
@@ -16113,9 +17615,12 @@ ${extraRule}
           const segResult = {
             type: "dialogue",
             speaker,
-            text: dialogue,
+            text: splitResult.displayText,
             expression: expression || "默认"
           };
+          if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+            segResult.ttsText = splitResult.ttsText;
+          }
           if (ttsConfigString) {
             segResult.tts = parseTTSConfig(ttsConfigString, speaker);
           }
@@ -16206,6 +17711,11 @@ ${extraRule}
     const MAX_SEG_LENGTH = 120;
     const finalSegments = [];
     result.segments.forEach((seg) => {
+      const hasDedicatedTtsText = typeof seg.ttsText === "string" && seg.ttsText.trim().length > 0 && seg.ttsText !== seg.text;
+      if (hasDedicatedTtsText) {
+        finalSegments.push(seg);
+        return;
+      }
       if (!seg.text || seg.text.length <= MAX_SEG_LENGTH) {
         finalSegments.push(seg);
         return;
@@ -23568,6 +25078,11 @@ ${normalizedSource}`;
               <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings.ttsAutoPlay ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
+              <span class="gal-settings-label">中日双语模式 <small style="color:#999;">(显示中文，TTS发送日文)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings.ttsBilingualZhJaEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">按“中文文本[JP]日文文本”输出（兼容【JP】）；未命中时自动回退原文朗读。</p>
+            <div class="gal-settings-row">
               <span class="gal-settings-label">默认音色</span>
               <select id="gal-tts-default-speaker" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
                 <option value="">（不指定）</option>
@@ -24137,6 +25652,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       settings.ttsAutoPlay = $(this).is(":checked");
       saveSettings();
     });
+    $("#gal-tts-bilingual-zh-ja-enabled").on("change", function() {
+      settings.ttsBilingualZhJaEnabled = $(this).is(":checked");
+      saveSettings();
+      injectCOTToWorldbook().then(() => showToast4(settings.ttsBilingualZhJaEnabled ? "中日双语模式已开启，COT已更新" : "中日双语模式已关闭，COT已更新")).catch(() => showToast4(settings.ttsBilingualZhJaEnabled ? "中日双语模式已开启" : "中日双语模式已关闭"));
+    });
     $("#gal-tts-default-speaker").on("change", function() {
       settings.ttsDefaultSpeaker = $(this).val();
       saveSettings();
@@ -24259,6 +25779,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const motionMapping = config.motionMapping || {};
     const EMPTY_MOTION_GROUP_VALUE = "__gal_empty_motion_group__";
     const EMPTY_TAG_FALLBACK = "(空标签)";
+    const builtinExpressionOptions = getBuiltinExpressionOptions();
+    const builtinMotionOptions = getBuiltinMotionOptions();
+    const builtinExpressionTokenByKey = new Map(builtinExpressionOptions.map((item) => [item.key, item.token]));
+    const builtinExpressionLabelByKey = new Map(builtinExpressionOptions.map((item) => [item.key, item.label]));
+    const builtinMotionTokenByKey = new Map(builtinMotionOptions.map((item) => [item.key, item.token]));
+    const builtinMotionLabelByKey = new Map(builtinMotionOptions.map((item) => [item.key, item.label]));
     let expressionList = [];
     let motionGroups = [];
     let draftExpressionMapping = { ...expressionMapping };
@@ -24367,16 +25893,30 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const existingMotionMappings = { ...draftMotionMapping };
       let rows = "";
       const allTags = buildMappingTagList();
-      const exprOptionsHtml = expressionList.length > 0 ? expressionList.map((name) => {
+      const nativeExprOptionsHtml = expressionList.length > 0 ? expressionList.map((name) => {
         const normalized = String(name ?? "");
         return `<option value="${escapeHtml3(normalized)}">${escapeHtml3(normalized)}</option>`;
       }).join("") : "";
-      const motionOptionsHtml = motionGroups.length > 0 ? motionGroups.map((groupName) => {
+      const builtinExprOptionsHtml = builtinExpressionOptions.length > 0 ? builtinExpressionOptions.map((item) => {
+        return `<option value="${escapeHtml3(item.token)}">${escapeHtml3(item.label)}</option>`;
+      }).join("") : "";
+      const exprOptionsHtml = [
+        nativeExprOptionsHtml ? `<optgroup label="模型表情">${nativeExprOptionsHtml}</optgroup>` : "",
+        builtinExprOptionsHtml ? `<optgroup label="内置表情">${builtinExprOptionsHtml}</optgroup>` : ""
+      ].join("");
+      const nativeMotionOptionsHtml = motionGroups.length > 0 ? motionGroups.map((groupName) => {
         const rawGroup = String(groupName ?? "");
         const value = rawGroup === "" ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
         const label = rawGroup === "" ? "(空动作组)" : rawGroup;
         return `<option value="${escapeHtml3(value)}">${escapeHtml3(label)}</option>`;
       }).join("") : "";
+      const builtinMotionOptionsHtml = builtinMotionOptions.length > 0 ? builtinMotionOptions.map((item) => {
+        return `<option value="${escapeHtml3(item.token)}">${escapeHtml3(item.label)}</option>`;
+      }).join("") : "";
+      const motionOptionsHtml = [
+        nativeMotionOptionsHtml ? `<optgroup label="模型动作组">${nativeMotionOptionsHtml}</optgroup>` : "",
+        builtinMotionOptionsHtml ? `<optgroup label="内置动作">${builtinMotionOptionsHtml}</optgroup>` : ""
+      ].join("");
       for (const tag of allTags) {
         const currentExpr = existingMappings[tag] || "";
         const currentMotion = existingMotionMappings[tag] || {};
@@ -24841,6 +26381,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       if (!previewMounted) return;
       previewIsDragging = false;
       previewRequestToken++;
+      Live2DManager.stopBuiltinMotion(characterId);
       $modal.find("#gal-live2d-preview-canvas").css("cursor", "grab");
       try {
         Live2DStage.popMount();
@@ -24966,28 +26507,60 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       let playedExpr = "";
       let playedMotion = "";
       try {
-        const exprName = exprValue || matchLive2DExpression(model, tag, null) || "";
-        if (exprName) {
-          model.expression(exprName);
-          playedExpr = exprName;
+        let resolvedExpr = null;
+        if (exprValue) {
+          const builtinKey = parseBuiltinExpressionToken(exprValue);
+          if (builtinKey) {
+            resolvedExpr = { type: "builtin", key: builtinKey };
+          } else {
+            resolvedExpr = { type: "native", name: exprValue };
+          }
+        } else {
+          resolvedExpr = resolveLive2DExpression(model, tag, null);
+        }
+        if (resolvedExpr?.type === "native" && resolvedExpr.name) {
+          model.expression(resolvedExpr.name);
+          playedExpr = resolvedExpr.name;
+        } else if (resolvedExpr?.type === "builtin" && resolvedExpr.key) {
+          const applied = Live2DManager.applyBuiltinExpression(characterId, resolvedExpr.key);
+          if (applied) {
+            playedExpr = builtinExpressionLabelByKey.get(resolvedExpr.key) || `内置:${resolvedExpr.key}`;
+          }
         }
       } catch (e) {
         console.warn(`[${SCRIPT_NAME}] 预览表情失败:`, e);
       }
       try {
         stopPreviewMotion(model);
+        Live2DManager.stopBuiltinMotion(characterId);
         if (motionValue === "__disabled__") {
           playedMotion = "(动作已禁用)";
         } else {
-          let motion = null;
+          let resolvedMotion = null;
           if (motionValue) {
-            motion = { group: motionValue === EMPTY_MOTION_GROUP_VALUE ? "" : motionValue, index: 0 };
+            const builtinKey = parseBuiltinMotionToken(motionValue);
+            if (builtinKey) {
+              resolvedMotion = { type: "builtin", key: builtinKey };
+            } else {
+              resolvedMotion = {
+                type: "native",
+                group: motionValue === EMPTY_MOTION_GROUP_VALUE ? "" : motionValue,
+                index: 0
+              };
+            }
           } else {
-            motion = matchLive2DMotion(model, tag, null);
+            resolvedMotion = resolveLive2DMotion(model, tag, null);
           }
-          if (motion) {
-            model.motion(motion.group, motion.index || 0, "FORCE");
-            playedMotion = motion.group === "" ? "(空动作组)" : String(motion.group || "");
+          if (resolvedMotion?.type === "native") {
+            model.motion(resolvedMotion.group, resolvedMotion.index || 0, "FORCE");
+            playedMotion = resolvedMotion.group === "" ? "(空动作组)" : String(resolvedMotion.group || "");
+          } else if (resolvedMotion?.type === "builtin" && resolvedMotion.key) {
+            const played = Live2DManager.playBuiltinMotion(characterId, resolvedMotion.key);
+            if (played) {
+              playedMotion = builtinMotionLabelByKey.get(resolvedMotion.key) || `内置:${resolvedMotion.key}`;
+            }
+          } else if (resolvedMotion?.type === "disabled") {
+            playedMotion = "(动作已禁用)";
           }
         }
       } catch (e) {
@@ -25061,17 +26634,22 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       if (!model) return;
       $modal.find(".gal-expr-mapping-select").each(function() {
         const tag = _$(this).data("tag");
-        const matched = matchLive2DExpression(model, tag, null);
-        if (matched) {
-          _$(this).val(matched);
-        }
+        const normalizedTag = String(tag || "").trim();
+        const builtinExpr = getBuiltinExpressionForTag(normalizedTag);
+        const token = builtinExpr?.key ? builtinExpressionTokenByKey.get(builtinExpr.key) : "";
+        if (token) _$(this).val(token);
       });
       $modal.find(".gal-motion-mapping-select").each(function() {
         const tag = _$(this).data("tag");
-        const matched = matchLive2DMotion(model, tag, null);
-        if (matched) {
-          const value = String(matched.group ?? "") === "" ? EMPTY_MOTION_GROUP_VALUE : matched.group;
+        const resolved = resolveLive2DMotion(model, tag, null);
+        if (resolved?.type === "native") {
+          const value = String(resolved.group ?? "") === "" ? EMPTY_MOTION_GROUP_VALUE : resolved.group;
           _$(this).val(value);
+        } else if (resolved?.type === "builtin" && resolved.key) {
+          const token = builtinMotionTokenByKey.get(resolved.key);
+          if (token) {
+            _$(this).val(token);
+          }
         }
       });
       syncDraftMappingsFromDom();
@@ -25187,9 +26765,16 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
             </h4>
             <div class="gal-sprite-grid">
               ${dbCharacters.map((char) => {
-          const spriteKey = `${char.name}_默认`;
-          const hasSprite = characterSprites.has(spriteKey);
-          const blobUrl = characterSprites.get(spriteKey) || "";
+          const defaultSprite = sprites.find((s) => s.characterId === char.name && s.expression === "默认") || sprites.find((s) => s.characterId === char.name);
+          const hasSprite = !!defaultSprite;
+          let blobUrl = "";
+          if (defaultSprite) {
+            blobUrl = defaultSprite.imageUrl || characterSprites.get(defaultSprite.id) || "";
+            if (!blobUrl && defaultSprite.imageBlob) {
+              blobUrl = URL.createObjectURL(defaultSprite.imageBlob);
+              characterSprites.set(defaultSprite.id, blobUrl);
+            }
+          }
           return `
                   <div class="gal-sprite-card ${hasSprite ? "" : "no-sprite"}"
                        data-character="${char.name}"
@@ -32449,13 +34034,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                 <p>该角色暂无立绘，点击上方按钮添加</p>
               </div>` : `<div class="gal-sprite-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px;">
                 ${characterSpritesData.map((s) => `
-                  <div class="gal-sprite-card" data-char="${s.characterId}" data-expr="${s.expression}" style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer;">
+                  <div class="gal-sprite-card" data-char="${s.characterId}" data-expr="${s.expression}" data-pack-id="${s.packId || ""}" data-sprite-id="${s.id || ""}" style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer;">
                     <div class="gal-sprite-preview" style="aspect-ratio: 2 / 3; background: #eee; overflow: hidden;">
                       ${s.imageUrl ? `<img src="${s.imageUrl}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">` : s.imageBlob ? `<img src="${URL.createObjectURL(s.imageBlob)}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">` : ""}
                     </div>
                     <div class="gal-sprite-label" style="padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.expression}</div>
                     <div class="gal-sprite-actions" style="position: absolute; top: 4px; right: 4px; display: flex; gap: 3px;">
-                      <button class="gal-sprite-delete" data-char="${s.characterId}" data-expr="${s.expression}" title="删除" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                      <button class="gal-sprite-delete" data-char="${s.characterId}" data-expr="${s.expression}" data-pack-id="${s.packId || ""}" data-sprite-id="${s.id || ""}" title="删除" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                         <i class="fa-solid fa-trash"></i>
                       </button>
                     </div>
@@ -32729,8 +34314,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const $btn = $(this);
       const charId = $btn.attr("data-char");
       const expr = $btn.attr("data-expr");
+      const packId = $btn.attr("data-pack-id") || null;
+      const spriteId = $btn.attr("data-sprite-id") || null;
       if (confirm(`确定删除 ${charId} 的表情「${expr}」吗？`)) {
-        await deleteSprite(charId, expr);
+        await deleteSprite(charId, expr, packId, spriteId);
         showToast4(`已删除：${charId} - ${expr}`);
         removeModal();
         showCharacterSpritesModal(charId);
@@ -34784,7 +36371,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         showToast4("该角色没有立绘可转移", "warning");
         return;
       }
-      const spriteKeys = charSprites.map((s) => `${s.characterId}_${s.expression}`);
+      const spriteKeys = charSprites.map((s) => s.id || `${s.characterId}_${s.expression}`).filter(Boolean);
       showTransferDialog("sprite", spriteKeys, () => {
         $modal.remove();
         showAssetManagerModal2("sprites");
@@ -34800,7 +36387,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         return;
       }
       if (confirm(`确定删除角色「${charId}」的所有 ${charSprites.length} 个立绘吗？此操作不可恢复！`)) {
-        for (const sprite of charSprites) await deleteSprite(sprite.characterId, sprite.expression);
+        for (const sprite of charSprites) {
+          await deleteSprite(sprite.characterId, sprite.expression, sprite.packId, sprite.id);
+        }
         showToast4(`已删除角色「${charId}」的 ${charSprites.length} 个立绘`);
         if (getIsEnabled()) injectCOTToWorldbook().catch((e2) => console.warn(`[${SCRIPT_NAME}] 更新世界书失败:`, e2));
         $modal.remove();

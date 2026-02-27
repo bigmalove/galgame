@@ -267,6 +267,41 @@ ${bgmWhitelistText}
   - **示例**: \`<bgm>歌曲名</bgm>\``;
 
   const ttsEnabled = getTTSEnabled();
+  const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
+  const ttsDialogueFormatLine = ttsBilingualZhJaEnabled
+    ? '- **格式**: `<p>角色名[表情]: "中文文本[JP]日文文本"</p>`'
+    : '- **格式**: `<p>角色名[表情]: "对话内容"</p>`';
+  const ttsBilingualHintSection = ttsBilingualZhJaEnabled
+    ? `
+### 中日双语输出（必须严格遵守）
+- 正文必须使用：\`中文文本[JP]日文文本\`
+- 只能使用 \`[JP]\` 作为唯一分隔符，不要使用其他变体
+- \`[JP]\` 前必须是中文显示文本
+- \`[JP]\` 后必须是日文朗读文本
+- 不要输出额外解释、注释或替代格式
+`
+    : '';
+  const ttsExampleLine1 = ttsBilingualZhJaEnabled
+    ? '`<p>少女[微笑]: "你好呀～[JP]こんにちは～"</p>` （已绑定音色或后续对话）'
+    : '`<p>少女[微笑]: "你好呀～"</p>` （已绑定音色或后续对话）';
+  const ttsExampleLine2 = ttsBilingualZhJaEnabled
+    ? '`<p>将军[生气,夜枭|低沉威严地命令]: "退下！[JP]下がれ！"</p>` （新角色首次出现，指定音色+语气）'
+    : '`<p>将军[生气,夜枭|低沉威严地命令]: "退下！"</p>` （新角色首次出现，指定音色+语气）';
+  const ttsExampleLine3 = ttsBilingualZhJaEnabled
+    ? '`<p>姐姐[害羞|带着娇嗔撒娇]: "来嘛……陪我喝一杯～[JP]ねえ……一緒に飲もう？"</p>`'
+    : '`<p>姐姐[害羞|带着娇嗔撒娇]: "来嘛……陪我喝一杯～"</p>`';
+  const ttsReminderLine1 = ttsBilingualZhJaEnabled
+    ? '1. 对话格式: `<p>角色名[表情]: "中文[JP]日文"</p>` 或 `<p>角色名[表情,音色]: "中文[JP]日文"</p>`'
+    : '1. 对话格式: `<p>角色名[表情]: "对话"</p>` 或 `<p>角色名[表情,音色]: "对话"</p>`';
+  const ttsStructureDialogueLine1 = ttsBilingualZhJaEnabled
+    ? '  <p>少女[微笑,桃夭]: "你终于来了～[JP]やっと来たね～"</p>'
+    : '  <p>少女[微笑,桃夭]: "你终于来了～"</p>';
+  const ttsStructureDialogueLine2 = ttsBilingualZhJaEnabled
+    ? '  <p>少女[惊讶|又急又关心地说]: "下这么大的雨，你怎么不带伞？[JP]こんな大雨なのに、どうして傘を持ってこなかったの？"</p>'
+    : '  <p>少女[惊讶|又急又关心地说]: "下这么大的雨，你怎么不带伞？"</p>';
+  const ttsStructureDialogueLine3 = ttsBilingualZhJaEnabled
+    ? '  <p>少女[难过|带着心疼的语气]: "会感冒的……[JP]風邪ひいちゃうよ……"</p>'
+    : '  <p>少女[难过|带着心疼的语气]: "会感冒的……"</p>';
 
   if (ttsEnabled) {
     return `# Galgame 输出格式规范
@@ -280,7 +315,7 @@ ${statusTagSection}
 ## 标签系统
 
 ### 对话格式（含配音）
-- **格式**: \`<p>角色名[表情]: "对话内容"</p>\`
+${ttsDialogueFormatLine}
 - **表情列表**: ${expressionListText}
 - **可用音色**: ${ttsVoiceListText}
 - **音色规则**:
@@ -293,9 +328,10 @@ ${charVoiceBindingText}
   - 需要结合当前语境和角色情感发挥，例如：'用撒娇的语气说'、'用反问的语气质问'、'带着哭腔委屈地说'、'压低声音神秘地说'
   - 不需要每句都加，在情感表达强烈或语气特殊的台词上使用效果最佳
 - **示例**:
-  - \`<p>少女[微笑]: "你好呀～"</p>\` （已绑定音色或后续对话）
-  - \`<p>将军[生气,夜枭|低沉威严地命令]: "退下！"</p>\` （新角色首次出现，指定音色+语气）
-  - \`<p>姐姐[害羞|带着娇嗔撒娇]: "来嘛……陪我喝一杯～"</p>\`
+  - ${ttsExampleLine1}
+  - ${ttsExampleLine2}
+  - ${ttsExampleLine3}
+${ttsBilingualHintSection}
 
 ### 旁白格式
 - 格式: \`<p>旁白内容</p>\`
@@ -317,17 +353,17 @@ ${pixiEffectTagSection}
   <background scene="${exampleScene}" />
   <pixiPerform name="rain" />
   <p>夜色深沉，街灯在雨中摇曳。</p>
-  <p>少女[微笑,桃夭]: "你终于来了～"</p>
+${ttsStructureDialogueLine1}
   <bgm>歌曲名</bgm>
   <p>她撑着伞，静静地站在那里。</p>
-  <p>少女[惊讶|又急又关心地说]: "下这么大的雨，你怎么不带伞？"</p>
-  <p>少女[难过|带着心疼的语气]: "会感冒的……"</p>
+${ttsStructureDialogueLine2}
+${ttsStructureDialogueLine3}
 
 </maintext>
 \`\`\`
 
 ## 重要提醒
-1. 对话格式: \`<p>角色名[表情]: "对话"</p>\` 或 \`<p>角色名[表情,音色]: "对话"</p>\`
+${ttsReminderLine1}
 2. 语气指导（可选）: \`<p>角色名[表情|语气描述]: "对话"</p>\`
 3. 旁白格式: \`<p>旁白内容</p>\`（无需任何标记）
 4. 新角色首次出现时指定音色，后续自动沿用

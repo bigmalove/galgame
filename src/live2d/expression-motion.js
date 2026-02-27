@@ -1,6 +1,12 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { Live2DManager } from './manager.js';
 import { getLive2DConfig } from './render-mode.js';
+import {
+  getBuiltinExpressionForTag,
+  getBuiltinMotionForTag,
+  parseBuiltinExpressionToken,
+  parseBuiltinMotionToken,
+} from './builtin-expression-motion.js';
 
 // ============================================
 // Live2D 表情动画映射增强
@@ -47,6 +53,8 @@ export const EXPRESSION_LIVE2D_MAP = {
     motions: ['playful', 'wink', 'fun']
   },
 };
+
+const _lastExpressionApplyState = new Map(); // characterId -> { model, expression }
 
 function uniquePush(list, seen, value) {
   const normalized = String(value ?? '').trim();
@@ -238,18 +246,99 @@ function collectMotionGroupNames(model) {
   return groupNames;
 }
 
-// 智能匹配 Live2D 表情 (支持用户自定义映射)
-export function matchLive2DExpression(model, targetExpression, characterId = null) {
-  if (characterId) {
-    const config = getLive2DConfig(characterId);
-    const userMapping = config.expressionMapping || {};
-    if (userMapping[targetExpression]) {
-      return userMapping[targetExpression];
+function normalizeMotionIndex(value, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.floor(parsed));
+}
+
+function resolveUserExpressionMapping(characterId, targetExpression) {
+  if (characterId === null || characterId === undefined) return null;
+  const tag = String(targetExpression ?? '').trim();
+  if (!tag) return null;
+
+  const config = getLive2DConfig(characterId);
+  const userMapping = config.expressionMapping || {};
+  if (!Object.prototype.hasOwnProperty.call(userMapping, tag)) return null;
+
+  const mapped = String(userMapping[tag] ?? '').trim();
+  if (!mapped) return null;
+
+  const builtinKey = parseBuiltinExpressionToken(mapped);
+  if (builtinKey) {
+    return { type: 'builtin', key: builtinKey, source: 'user' };
+  }
+
+  return { type: 'native', name: mapped, source: 'user' };
+}
+
+function resolveUserMotionMapping(characterId, targetExpression) {
+  if (characterId === null || characterId === undefined) return null;
+  const tag = String(targetExpression ?? '').trim();
+  if (!tag) return null;
+
+  const config = getLive2DConfig(characterId);
+  const userMotionMapping = config.motionMapping || {};
+  if (!Object.prototype.hasOwnProperty.call(userMotionMapping, tag)) return null;
+
+  const motionConfig = userMotionMapping[tag];
+
+  if (motionConfig && typeof motionConfig === 'object' && !Array.isArray(motionConfig)) {
+    if (motionConfig.enabled === false) {
+      return { type: 'disabled', source: 'user' };
+    }
+
+    const builtinField = String(motionConfig.builtin ?? '').trim();
+    if (builtinField) {
+      const builtinKey = parseBuiltinMotionToken(builtinField);
+      if (builtinKey) {
+        return { type: 'builtin', key: builtinKey, source: 'user' };
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(motionConfig, 'group')) {
+      const rawGroup = String(motionConfig.group ?? '').trim();
+      if (rawGroup) {
+        const builtinKey = parseBuiltinMotionToken(rawGroup);
+        if (builtinKey) {
+          return { type: 'builtin', key: builtinKey, source: 'user' };
+        }
+      }
+
+      return {
+        type: 'native',
+        group: rawGroup,
+        index: normalizeMotionIndex(motionConfig.index, 0),
+        source: 'user',
+      };
     }
   }
 
-  const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
-  const candidates = mapping?.expressions || [targetExpression.toLowerCase()];
+  const rawValue = String(motionConfig ?? '').trim();
+  if (!rawValue) return null;
+
+  const builtinKey = parseBuiltinMotionToken(rawValue);
+  if (builtinKey) {
+    return { type: 'builtin', key: builtinKey, source: 'user' };
+  }
+
+  return { type: 'native', group: rawValue, index: 0, source: 'user' };
+}
+
+// 智能匹配 Live2D 表情 (支持用户自定义映射)
+export function matchLive2DExpression(model, targetExpression, characterId = null) {
+  const normalizedTarget = String(targetExpression ?? '').trim();
+  if (!normalizedTarget) return null;
+
+  if (characterId) {
+    const userResolved = resolveUserExpressionMapping(characterId, normalizedTarget);
+    if (userResolved?.type === 'native') {
+      return userResolved.name;
+    }
+  }
+
+  const mapping = EXPRESSION_LIVE2D_MAP[normalizedTarget];
+  const candidates = mapping?.expressions || [normalizedTarget.toLowerCase()];
 
   try {
     const definitions = collectExpressionNames(model);
@@ -282,21 +371,17 @@ export function matchLive2DExpression(model, targetExpression, characterId = nul
 
 // 智能匹配 Live2D 动作 (支持用户自定义映射)
 export function matchLive2DMotion(model, targetExpression, characterId = null) {
+  const normalizedTarget = String(targetExpression ?? '').trim();
+  if (!normalizedTarget) return null;
+
   if (characterId) {
-    const config = getLive2DConfig(characterId);
-    const userMotionMapping = config.motionMapping || {};
-    if (userMotionMapping[targetExpression]) {
-      const motionConfig = userMotionMapping[targetExpression];
-      if (motionConfig.enabled !== false && Object.prototype.hasOwnProperty.call(motionConfig, 'group')) {
-        return { group: String(motionConfig.group ?? ''), index: motionConfig.index || 0 };
-      }
-      if (motionConfig.enabled === false) {
-        return null;
-      }
+    const userResolved = resolveUserMotionMapping(characterId, normalizedTarget);
+    if (userResolved?.type === 'native') {
+      return { group: userResolved.group, index: userResolved.index || 0 };
     }
   }
 
-  const mapping = EXPRESSION_LIVE2D_MAP[targetExpression];
+  const mapping = EXPRESSION_LIVE2D_MAP[normalizedTarget];
   if (!mapping?.motions?.length) return null;
 
   try {
@@ -324,27 +409,95 @@ export function matchLive2DMotion(model, targetExpression, characterId = null) {
   }
 }
 
+export function resolveLive2DExpression(model, targetExpression, characterId = null) {
+  const normalizedTarget = String(targetExpression ?? '').trim();
+  if (!normalizedTarget) return null;
+
+  const userResolved = resolveUserExpressionMapping(characterId, normalizedTarget);
+  if (userResolved) return userResolved;
+
+  const matched = matchLive2DExpression(model, normalizedTarget, null);
+  if (matched) {
+    return { type: 'native', name: matched, source: 'auto-native' };
+  }
+
+  const builtinDef = getBuiltinExpressionForTag(normalizedTarget);
+  if (builtinDef?.key) {
+    return { type: 'builtin', key: builtinDef.key, source: 'auto-builtin' };
+  }
+
+  return null;
+}
+
+export function resolveLive2DMotion(model, targetExpression, characterId = null) {
+  const normalizedTarget = String(targetExpression ?? '').trim();
+  if (!normalizedTarget) return null;
+
+  const userResolved = resolveUserMotionMapping(characterId, normalizedTarget);
+  if (userResolved) return userResolved;
+
+  const matched = matchLive2DMotion(model, normalizedTarget, null);
+  if (matched) {
+    return {
+      type: 'native',
+      group: String(matched.group ?? ''),
+      index: normalizeMotionIndex(matched.index, 0),
+      source: 'auto-native',
+    };
+  }
+
+  const builtinDef = getBuiltinMotionForTag(normalizedTarget);
+  if (builtinDef?.key) {
+    return { type: 'builtin', key: builtinDef.key, source: 'auto-builtin' };
+  }
+
+  return null;
+}
+
 // 设置角色表情（表情 + 动作联动）
 export function setLive2DCharacterExpression(characterId, expressionName, playMotion = true) {
+  const key = String(characterId || '').trim();
   const model = Live2DManager.models.get(characterId);
   if (!model) return false;
+  const normalizedExpression = String(expressionName ?? '').trim();
+  const lastState = _lastExpressionApplyState.get(key);
+  const isSameModelAndExpression =
+    !!lastState &&
+    lastState.model === model &&
+    String(lastState.expression || '') === normalizedExpression;
 
-  const expr = matchLive2DExpression(model, expressionName, characterId);
-  if (expr) {
+  const resolvedExpr = resolveLive2DExpression(model, expressionName, characterId);
+  if (resolvedExpr?.type === 'native' && resolvedExpr.name) {
     try {
-      model.expression(expr);
+      model.expression(resolvedExpr.name);
+    } catch (e) {}
+  } else if (resolvedExpr?.type === 'builtin' && resolvedExpr.key) {
+    try {
+      Live2DManager.applyBuiltinExpression(characterId, resolvedExpr.key);
     } catch (e) {}
   }
 
-  if (playMotion) {
-    const motion = matchLive2DMotion(model, expressionName, characterId);
-    if (motion) {
+  if (playMotion && !isSameModelAndExpression) {
+    try {
+      Live2DManager.stopBuiltinMotion(characterId);
+    } catch (e) {}
+
+    const resolvedMotion = resolveLive2DMotion(model, expressionName, characterId);
+    if (resolvedMotion?.type === 'native') {
       try {
-        model.motion(motion.group, motion.index, 'NORMAL');
+        model.motion(resolvedMotion.group, normalizeMotionIndex(resolvedMotion.index, 0), 'NORMAL');
+      } catch (e) {}
+    } else if (resolvedMotion?.type === 'builtin' && resolvedMotion.key) {
+      try {
+        Live2DManager.playBuiltinMotion(characterId, resolvedMotion.key);
       } catch (e) {}
     }
   }
 
+  _lastExpressionApplyState.set(key, {
+    model,
+    expression: normalizedExpression,
+  });
   return true;
 }
 

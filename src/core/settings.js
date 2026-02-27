@@ -70,6 +70,7 @@ export const DEFAULT_SETTINGS = {
   // TTS 设置
   ttsEnabled: true,
   ttsAutoPlay: true,
+  ttsBilingualZhJaEnabled: false,
   ttsDefaultSpeaker: '',
   // TTS 引擎选择
   ttsProvider: 'littlewhitebox',
@@ -437,6 +438,7 @@ export function loadSettings() {
       } else {
         _settings.effectsMaxActive = DEFAULT_SETTINGS.effectsMaxActive;
       }
+      _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
       // 兼容旧版 sceneMode -> cgMode
       if (_settings.bananaImageGen) {
         if (_settings.bananaImageGen.cgMode === undefined && _settings.bananaImageGen.sceneMode !== undefined) {

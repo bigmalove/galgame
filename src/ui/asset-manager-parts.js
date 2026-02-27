@@ -644,7 +644,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
               </div>`
             : `<div class="gal-sprite-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px;">
                 ${characterSpritesData.map(s => `
-                  <div class="gal-sprite-card" data-char="${s.characterId}" data-expr="${s.expression}" style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer;">
+                  <div class="gal-sprite-card" data-char="${s.characterId}" data-expr="${s.expression}" data-pack-id="${s.packId || ''}" data-sprite-id="${s.id || ''}" style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer;">
                     <div class="gal-sprite-preview" style="aspect-ratio: 2 / 3; background: #eee; overflow: hidden;">
                       ${s.imageUrl
                         ? `<img src="${s.imageUrl}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">`
@@ -654,7 +654,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
                     </div>
                     <div class="gal-sprite-label" style="padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.expression}</div>
                     <div class="gal-sprite-actions" style="position: absolute; top: 4px; right: 4px; display: flex; gap: 3px;">
-                      <button class="gal-sprite-delete" data-char="${s.characterId}" data-expr="${s.expression}" title="删除" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                      <button class="gal-sprite-delete" data-char="${s.characterId}" data-expr="${s.expression}" data-pack-id="${s.packId || ''}" data-sprite-id="${s.id || ''}" title="删除" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                         <i class="fa-solid fa-trash"></i>
                       </button>
                     </div>
@@ -951,8 +951,10 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     const $btn = $(this);
     const charId = $btn.attr('data-char');
     const expr = $btn.attr('data-expr');
+    const packId = $btn.attr('data-pack-id') || null;
+    const spriteId = $btn.attr('data-sprite-id') || null;
     if (confirm(`确定删除 ${charId} 的表情「${expr}」吗？`)) {
-      await deleteSprite(charId, expr);
+      await deleteSprite(charId, expr, packId, spriteId);
       showToast(`已删除：${charId} - ${expr}`);
       removeModal();
       showCharacterSpritesModal(charId);

@@ -139,6 +139,52 @@ export function initDB() {
         }
         console.log(`[${SCRIPT_NAME}] 数据库升级到版本6: 已添加地图图片存储`);
       }
+
+      // 版本7: 立绘主键改为 packId::characterId::expression，避免跨图包同名立绘互相覆盖
+      if (oldVersion < 7) {
+        if (database.objectStoreNames.contains(STORE_SPRITES)) {
+          const spriteStore = transaction.objectStore(STORE_SPRITES);
+          const normalize = value => {
+            const text = String(value ?? '').trim();
+            return text || DEFAULT_PACK_ID;
+          };
+          const spriteRequest = spriteStore.openCursor();
+          spriteRequest.onsuccess = event => {
+            const cursor = event.target.result;
+            if (!cursor) return;
+
+            const sprite = cursor.value || {};
+            const oldId = String(sprite.id || '').trim();
+            const characterId = String(sprite.characterId || '').trim();
+            const expression = String(sprite.expression || '').trim();
+            const packId = normalize(sprite.packId);
+            const nextId = `${packId}::${characterId}::${expression}`;
+
+            if (!characterId || !expression) {
+              if (sprite.packId !== packId) {
+                sprite.packId = packId;
+                cursor.update(sprite);
+              }
+              cursor.continue();
+              return;
+            }
+
+            if (oldId !== nextId) {
+              const nextSprite = { ...sprite, id: nextId, packId };
+              spriteStore.put(nextSprite);
+              if (oldId && oldId !== nextId) {
+                spriteStore.delete(oldId);
+              }
+            } else if (sprite.packId !== packId) {
+              sprite.packId = packId;
+              cursor.update(sprite);
+            }
+
+            cursor.continue();
+          };
+        }
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本7: 立绘主键已升级为图包隔离格式`);
+      }
     };
   });
 }

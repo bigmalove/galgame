@@ -47,9 +47,17 @@ export async function showSpriteConfigModal() {
               ${dbCharacters
                 .map(char => {
                   // 查找该角色是否有立绘（优先检查默认表情）
-                  const spriteKey = `${char.name}_默认`;
-                  const hasSprite = characterSprites.has(spriteKey);
-                  const blobUrl = characterSprites.get(spriteKey) || '';
+                  const defaultSprite = sprites.find(s => s.characterId === char.name && s.expression === '默认')
+                    || sprites.find(s => s.characterId === char.name);
+                  const hasSprite = !!defaultSprite;
+                  let blobUrl = '';
+                  if (defaultSprite) {
+                    blobUrl = defaultSprite.imageUrl || characterSprites.get(defaultSprite.id) || '';
+                    if (!blobUrl && defaultSprite.imageBlob) {
+                      blobUrl = URL.createObjectURL(defaultSprite.imageBlob);
+                      characterSprites.set(defaultSprite.id, blobUrl);
+                    }
+                  }
                   return `
                   <div class="gal-sprite-card ${hasSprite ? '' : 'no-sprite'}"
                        data-character="${char.name}"

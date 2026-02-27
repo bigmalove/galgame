@@ -4,6 +4,13 @@ import { GalgameStore } from '../core/store.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 
+function buildSpritePackScopedId(characterId, expression, packId) {
+  const safeCharacterId = String(characterId || '').trim();
+  const safeExpression = String(expression || '').trim();
+  const safePackId = String(packId || '').trim() || DEFAULT_PACK_ID;
+  return `${safePackId}::${safeCharacterId}::${safeExpression}`;
+}
+
 // ============================================
 // 图包管理函数
 // ============================================
@@ -123,6 +130,7 @@ export async function deleteImagePack(packId) {
 export async function transferSpritesToPack(spriteKeys, targetPackId) {
   if (!getDb()) await initDB();
   const db = getDb();
+  const safeTargetPackId = String(targetPackId || '').trim() || DEFAULT_PACK_ID;
   let count = 0;
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_SPRITES], 'readwrite');
@@ -133,8 +141,14 @@ export async function transferSpritesToPack(spriteKeys, targetPackId) {
       getRequest.onsuccess = () => {
         const sprite = getRequest.result;
         if (sprite) {
-          sprite.packId = targetPackId;
+          const oldId = sprite.id;
+          const newId = buildSpritePackScopedId(sprite.characterId, sprite.expression, safeTargetPackId);
+          sprite.packId = safeTargetPackId;
+          sprite.id = newId;
           store.put(sprite);
+          if (oldId && oldId !== newId) {
+            store.delete(oldId);
+          }
           count++;
         }
         processed++;
@@ -202,8 +216,16 @@ async function transferAllResourcesToDefaultPack(packId) {
       if (cursor) {
         const sprite = cursor.value;
         if (sprite.packId === packId) {
+          const oldId = sprite.id;
+          const newId = buildSpritePackScopedId(sprite.characterId, sprite.expression, DEFAULT_PACK_ID);
           sprite.packId = DEFAULT_PACK_ID;
-          cursor.update(sprite);
+          sprite.id = newId;
+          if (oldId && oldId !== newId) {
+            store.put(sprite);
+            store.delete(oldId);
+          } else {
+            cursor.update(sprite);
+          }
           spriteCount++;
         }
         cursor.continue();

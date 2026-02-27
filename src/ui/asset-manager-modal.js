@@ -965,7 +965,7 @@ function bindSpriteEvents($modal, activeTab) {
       showToast('该角色没有立绘可转移', 'warning');
       return;
     }
-    const spriteKeys = charSprites.map(s => `${s.characterId}_${s.expression}`);
+    const spriteKeys = charSprites.map(s => s.id || `${s.characterId}_${s.expression}`).filter(Boolean);
     showTransferDialog('sprite', spriteKeys, () => {
       $modal.remove();
       showAssetManagerModal('sprites');
@@ -981,7 +981,9 @@ function bindSpriteEvents($modal, activeTab) {
       return;
     }
     if (confirm(`确定删除角色「${charId}」的所有 ${charSprites.length} 个立绘吗？此操作不可恢复！`)) {
-      for (const sprite of charSprites) await deleteSprite(sprite.characterId, sprite.expression);
+      for (const sprite of charSprites) {
+        await deleteSprite(sprite.characterId, sprite.expression, sprite.packId, sprite.id);
+      }
       showToast(`已删除角色「${charId}」的 ${charSprites.length} 个立绘`);
       if (getIsEnabled()) injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 更新世界书失败:`, e));
       $modal.remove();

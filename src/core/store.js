@@ -13,7 +13,7 @@ export const GalgameStore = {
 
   // ===== 缓存层 =====
   cache: {
-    sprites: new Map(),      // characterId_expression -> blobUrl
+    sprites: new Map(),      // packId::characterId::expression -> blobUrl
     backgrounds: new Map(),  // sceneName -> blobUrl
     segments: new Map(),     // mesId -> { currentIndex, segments }
     voices: new Map(),       // 角色名 -> 音色名 (会话级)

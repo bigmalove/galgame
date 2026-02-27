@@ -1,4 +1,4 @@
-import { SCRIPT_NAME, STORE_SPRITES } from '../core/constants.js';
+import { DEFAULT_PACK_ID, SCRIPT_NAME, STORE_SPRITES } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
 import { characterSprites } from '../core/store.js';
 import { getDb } from '../core/state.js';
@@ -9,24 +9,95 @@ import { getCurrentPackId, getRenderScope } from './image-packs.js';
 // 立绘存储函数
 // ============================================
 
+const SPRITE_ID_SEPARATOR = '::';
+
+function normalizePackId(packId, fallbackPackId = DEFAULT_PACK_ID) {
+  const normalized = String(packId ?? '').trim();
+  return normalized || fallbackPackId;
+}
+
+function getTargetPackId(packId = null) {
+  const currentPackId = normalizePackId(getCurrentPackId(), DEFAULT_PACK_ID);
+  return normalizePackId(packId, currentPackId);
+}
+
+export function buildLegacySpriteId(characterId, expression) {
+  return `${String(characterId || '').trim()}_${String(expression || '').trim()}`;
+}
+
+export function buildSpriteId(characterId, expression, packId = null) {
+  const targetPackId = getTargetPackId(packId);
+  const safeCharacterId = String(characterId || '').trim();
+  const safeExpression = String(expression || '').trim();
+  return `${targetPackId}${SPRITE_ID_SEPARATOR}${safeCharacterId}${SPRITE_ID_SEPARATOR}${safeExpression}`;
+}
+
+function revokeCachedSprite(cacheKey) {
+  if (!cacheKey || !characterSprites.has(cacheKey)) return;
+  const cacheUrl = characterSprites.get(cacheKey);
+  if (typeof cacheUrl === 'string' && cacheUrl.startsWith('blob:')) {
+    try {
+      (topWindow.URL || URL).revokeObjectURL(cacheUrl);
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
+    }
+  }
+  characterSprites.delete(cacheKey);
+}
+
+function getSpriteUrlFromRecord(spriteRecord) {
+  if (!spriteRecord) return null;
+  if (spriteRecord.imageUrl) return spriteRecord.imageUrl;
+  if (spriteRecord.imageBlob) return (topWindow.URL || URL).createObjectURL(spriteRecord.imageBlob);
+  return null;
+}
+
+function querySpriteRecord(store, characterId, expression, targetPackId, scope) {
+  return new Promise(resolve => {
+    const characterIndex = store.index('characterId');
+    const request = characterIndex.getAll(characterId);
+    request.onsuccess = () => {
+      const allRecords = request.result || [];
+      const recordsByExpression = allRecords.filter(
+        record => String(record?.expression || '').trim() === expression,
+      );
+      if (recordsByExpression.length === 0) {
+        resolve(null);
+        return;
+      }
+
+      const normalizedRecords = recordsByExpression
+        .map(record => ({
+          ...record,
+          packId: normalizePackId(record?.packId, DEFAULT_PACK_ID),
+        }))
+        .sort((a, b) => {
+          const timeA = Date.parse(a?.lastModified || '') || 0;
+          const timeB = Date.parse(b?.lastModified || '') || 0;
+          return timeB - timeA;
+        });
+
+      const currentPackRecord = normalizedRecords.find(record => record.packId === targetPackId) || null;
+      if (scope === 'current') {
+        resolve(currentPackRecord);
+        return;
+      }
+      resolve(currentPackRecord || normalizedRecords[0] || null);
+    };
+    request.onerror = () => resolve(null);
+  });
+}
+
 export async function saveSprite(characterId, expression, imageBlob, imageUrl = null, packId = null) {
   if (!getDb()) await initDB();
   const db = getDb();
-  const targetPackId = packId || getCurrentPackId();
-  return new Promise((resolve, reject) => {
-    const id = `${characterId}_${expression}`;
+  const targetPackId = getTargetPackId(packId);
+  const id = buildSpriteId(characterId, expression, targetPackId);
+  const legacyId = buildLegacySpriteId(characterId, expression);
 
-    // 撤销旧的 blob URL
-    const oldBlobUrl = characterSprites.get(id);
-    if (oldBlobUrl && oldBlobUrl.startsWith('blob:')) {
-      try {
-        (topWindow.URL || URL).revokeObjectURL(oldBlobUrl);
-        console.log(`[${SCRIPT_NAME}] 已撤销旧的 blob URL: ${id}`);
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
-      }
-    }
-    characterSprites.delete(id);
+  return new Promise((resolve, reject) => {
+    revokeCachedSprite(id);
+    if (legacyId !== id) revokeCachedSprite(legacyId);
 
     const transaction = db.transaction([STORE_SPRITES], 'readwrite');
     const store = transaction.objectStore(STORE_SPRITES);
@@ -39,14 +110,12 @@ export async function saveSprite(characterId, expression, imageBlob, imageUrl = 
       packId: targetPackId,
       lastModified: new Date().toISOString(),
     };
+    if (legacyId !== id) {
+      store.delete(legacyId);
+    }
     const request = store.put(data);
     request.onsuccess = () => {
-      let blobUrl;
-      if (imageUrl) {
-        blobUrl = imageUrl;
-      } else if (imageBlob) {
-        blobUrl = (topWindow.URL || URL).createObjectURL(imageBlob);
-      }
+      const blobUrl = getSpriteUrlFromRecord(data);
       if (blobUrl) {
         characterSprites.set(id, blobUrl);
       }
@@ -61,7 +130,7 @@ export async function saveSpritesBatch(spritesList, packId = null) {
   if (!spritesList || spritesList.length === 0) return;
   if (!getDb()) await initDB();
   const db = getDb();
-  const targetPackId = packId || getCurrentPackId();
+  const targetPackId = getTargetPackId(packId);
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_SPRITES], 'readwrite');
@@ -78,17 +147,14 @@ export async function saveSpritesBatch(spritesList, packId = null) {
     };
 
     spritesList.forEach(item => {
-      const id = `${item.characterId}_${item.expression}`;
+      const id = buildSpriteId(item.characterId, item.expression, targetPackId);
+      const legacyId = buildLegacySpriteId(item.characterId, item.expression);
 
-      const oldBlobUrl = characterSprites.get(id);
-      if (oldBlobUrl && oldBlobUrl.startsWith('blob:')) {
-        try {
-          (topWindow.URL || URL).revokeObjectURL(oldBlobUrl);
-        } catch (e) {
-          console.warn(`[${SCRIPT_NAME}] 撤销旧 blob URL 失败:`, e);
-        }
+      revokeCachedSprite(id);
+      if (legacyId !== id) {
+        revokeCachedSprite(legacyId);
+        store.delete(legacyId);
       }
-      characterSprites.delete(id);
 
       const data = {
         id,
@@ -101,12 +167,7 @@ export async function saveSpritesBatch(spritesList, packId = null) {
       };
       store.put(data);
 
-      let blobUrl;
-      if (item.imageUrl) {
-        blobUrl = item.imageUrl;
-      } else if (item.imageBlob) {
-        blobUrl = (topWindow.URL || URL).createObjectURL(item.imageBlob);
-      }
+      const blobUrl = getSpriteUrlFromRecord(data);
       if (blobUrl) {
         characterSprites.set(id, blobUrl);
       }
@@ -114,17 +175,26 @@ export async function saveSpritesBatch(spritesList, packId = null) {
   });
 }
 
-export async function getSprite(characterId, expression) {
-  if (!characterId) {
+export async function getSprite(characterId, expression, packId = null) {
+  const safeCharacterId = String(characterId || '').trim();
+  const safeExpression = String(expression || '默认').trim() || '默认';
+  if (!safeCharacterId) {
     console.log(`[${SCRIPT_NAME}] getSprite: 角色名为空`);
     return null;
   }
-  const id = `${characterId}_${expression}`;
-  console.log(`[${SCRIPT_NAME}] getSprite 查询: ${id}`);
+  const targetPackId = getTargetPackId(packId);
+  const scope = getRenderScope() === 'all' ? 'all' : 'current';
+  const scopedSpriteId = buildSpriteId(safeCharacterId, safeExpression, targetPackId);
+  console.log(`[${SCRIPT_NAME}] getSprite 查询: ${scopedSpriteId} (scope: ${scope})`);
 
-  if (characterSprites.has(id)) {
-    console.log(`[${SCRIPT_NAME}] getSprite 缓存命中: ${id}`);
-    return characterSprites.get(id);
+  if (characterSprites.has(scopedSpriteId)) {
+    console.log(`[${SCRIPT_NAME}] getSprite 缓存命中: ${scopedSpriteId}`);
+    return characterSprites.get(scopedSpriteId);
+  }
+  const legacySpriteId = buildLegacySpriteId(safeCharacterId, safeExpression);
+  if (scope === 'all' && characterSprites.has(legacySpriteId)) {
+    console.log(`[${SCRIPT_NAME}] getSprite 旧缓存命中: ${legacySpriteId}`);
+    return characterSprites.get(legacySpriteId);
   }
   if (!getDb()) await initDB();
   const db = getDb();
@@ -132,112 +202,112 @@ export async function getSprite(characterId, expression) {
   const result = await new Promise(resolve => {
     const transaction = db.transaction([STORE_SPRITES], 'readonly');
     const store = transaction.objectStore(STORE_SPRITES);
-    const request = store.get(id);
-    request.onsuccess = () => {
-      if (request.result) {
-        let blobUrl;
-        if (request.result.imageUrl) {
-          blobUrl = request.result.imageUrl;
-        } else if (request.result.imageBlob) {
-          blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
-        }
-        if (blobUrl) {
-          characterSprites.set(id, blobUrl);
-          console.log(`[${SCRIPT_NAME}] getSprite 找到: ${id}`);
-          resolve(blobUrl);
-          return;
-        }
-      }
-      console.log(`[${SCRIPT_NAME}] getSprite 未找到: ${id}`);
-      resolve(null);
-    };
-    request.onerror = () => {
-      console.log(`[${SCRIPT_NAME}] getSprite 查询错误: ${id}`);
-      resolve(null);
-    };
+    querySpriteRecord(store, safeCharacterId, safeExpression, targetPackId, scope).then(resolve);
   });
-  if (result) return result;
+  if (result) {
+    const resolvedPackId = normalizePackId(result.packId, DEFAULT_PACK_ID);
+    const cacheId = buildSpriteId(safeCharacterId, safeExpression, resolvedPackId);
+    const blobUrl = getSpriteUrlFromRecord(result);
+    if (blobUrl) {
+      characterSprites.set(cacheId, blobUrl);
+      if (result.id && result.id !== cacheId) {
+        characterSprites.set(result.id, blobUrl);
+      }
+      console.log(`[${SCRIPT_NAME}] getSprite 找到: ${cacheId}`);
+      return blobUrl;
+    }
+  }
 
   // 回退到默认表情
-  if (expression !== '默认') {
-    const fallbackId = `${characterId}_默认`;
-    console.log(`[${SCRIPT_NAME}] getSprite 尝试回退: ${fallbackId}`);
-    if (characterSprites.has(fallbackId)) {
-      console.log(`[${SCRIPT_NAME}] getSprite 回退缓存命中: ${fallbackId}`);
-      return characterSprites.get(fallbackId);
-    }
-    return new Promise(resolve => {
-      const transaction = db.transaction([STORE_SPRITES], 'readonly');
-      const store = transaction.objectStore(STORE_SPRITES);
-      const request = store.get(fallbackId);
-      request.onsuccess = () => {
-        if (request.result) {
-          let blobUrl;
-          if (request.result.imageUrl) {
-            blobUrl = request.result.imageUrl;
-          } else if (request.result.imageBlob) {
-            blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
-          }
-          if (blobUrl) {
-            characterSprites.set(fallbackId, blobUrl);
-            console.log(`[${SCRIPT_NAME}] getSprite 回退找到: ${fallbackId}`);
-            resolve(blobUrl);
-            return;
-          }
-        }
-        console.log(`[${SCRIPT_NAME}] getSprite 回退也未找到: ${fallbackId}`);
-        resolve(null);
-      };
-      request.onerror = () => resolve(null);
-    });
+  if (safeExpression !== '默认') {
+    console.log(`[${SCRIPT_NAME}] getSprite 尝试回退: ${safeCharacterId}_默认 (scope: ${scope})`);
+    return getSprite(safeCharacterId, '默认', targetPackId);
   }
+
+  console.log(`[${SCRIPT_NAME}] getSprite 未找到: ${scopedSpriteId}`);
   return null;
 }
 
-export async function getCharacterSprites(characterId) {
+export async function getCharacterSprites(characterId, packId = null, ignorePackFilter = false) {
   if (!getDb()) await initDB();
   const db = getDb();
+  const targetPackId = getTargetPackId(packId);
+  const scope = getRenderScope() === 'all' ? 'all' : 'current';
   return new Promise(resolve => {
     const transaction = db.transaction([STORE_SPRITES], 'readonly');
     const store = transaction.objectStore(STORE_SPRITES);
     const index = store.index('characterId');
     const request = index.getAll(characterId);
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => {
+      let sprites = request.result || [];
+      sprites = sprites.map(sprite => ({
+        ...sprite,
+        packId: normalizePackId(sprite?.packId, DEFAULT_PACK_ID),
+      }));
+      if (!ignorePackFilter) {
+        if (scope === 'current') {
+          sprites = sprites.filter(sprite => sprite.packId === targetPackId);
+        } else {
+          sprites.sort((a, b) => {
+            if (a.packId === targetPackId && b.packId !== targetPackId) return -1;
+            if (a.packId !== targetPackId && b.packId === targetPackId) return 1;
+            return 0;
+          });
+        }
+      }
+      resolve(sprites);
+    };
     request.onerror = () => resolve([]);
   });
 }
 
-export async function deleteSprite(characterId, expression) {
+export async function deleteSprite(characterId, expression, packId = null, spriteId = null) {
   if (!getDb()) await initDB();
   const db = getDb();
-  const id = `${characterId}_${expression}`;
+
+  const idsToDelete = new Set();
+  if (spriteId) idsToDelete.add(String(spriteId));
+  if (characterId && expression) {
+    idsToDelete.add(buildLegacySpriteId(characterId, expression));
+    idsToDelete.add(buildSpriteId(characterId, expression, getTargetPackId(packId)));
+  }
+  if (idsToDelete.size === 0) return;
+
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_SPRITES], 'readwrite');
     const store = transaction.objectStore(STORE_SPRITES);
-    const request = store.delete(id);
-    request.onsuccess = () => {
-      if (characterSprites.has(id)) {
-        (topWindow.URL || URL).revokeObjectURL(characterSprites.get(id));
-        characterSprites.delete(id);
+    let finished = 0;
+    const done = () => {
+      finished++;
+      if (finished === idsToDelete.size) {
+        idsToDelete.forEach(id => revokeCachedSprite(id));
+        resolve();
       }
-      resolve();
     };
-    request.onerror = () => reject(request.error);
+    idsToDelete.forEach(id => {
+      const request = store.delete(id);
+      request.onsuccess = done;
+      request.onerror = () => done();
+    });
+    transaction.onerror = () => reject(transaction.error || new Error('删除立绘失败'));
   });
 }
 
 export async function getAllSprites(packId = null, ignorePackFilter = false) {
   if (!getDb()) await initDB();
   const db = getDb();
+  const targetPackId = getTargetPackId(packId);
+  const scope = getRenderScope() === 'all' ? 'all' : 'current';
   return new Promise(resolve => {
     const transaction = db.transaction([STORE_SPRITES], 'readonly');
     const store = transaction.objectStore(STORE_SPRITES);
     const request = store.getAll();
     request.onsuccess = () => {
-      let sprites = request.result || [];
+      let sprites = (request.result || []).map(sprite => ({
+        ...sprite,
+        packId: normalizePackId(sprite?.packId, DEFAULT_PACK_ID),
+      }));
       if (!ignorePackFilter) {
-        const targetPackId = packId || getCurrentPackId();
-        const scope = getRenderScope();
         if (scope === 'current') {
           sprites = sprites.filter(s => s.packId === targetPackId);
         } else {
@@ -264,10 +334,15 @@ export async function loadAllSpritesToCache() {
     request.onsuccess = () => {
       const sprites = request.result || [];
       sprites.forEach(sprite => {
-        if (sprite.imageUrl) {
-          characterSprites.set(sprite.id, sprite.imageUrl);
-        } else if (sprite.imageBlob) {
-          const blobUrl = (topWindow.URL || URL).createObjectURL(sprite.imageBlob);
+        const cacheId = buildSpriteId(
+          sprite.characterId,
+          sprite.expression,
+          normalizePackId(sprite?.packId, DEFAULT_PACK_ID),
+        );
+        const blobUrl = getSpriteUrlFromRecord(sprite);
+        if (!blobUrl) return;
+        characterSprites.set(cacheId, blobUrl);
+        if (sprite.id && sprite.id !== cacheId) {
           characterSprites.set(sprite.id, blobUrl);
         }
       });

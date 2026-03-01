@@ -45,6 +45,7 @@ export const SpriteManager = {
   slotOwners: new Map(),
   currentSpeaker: null,
   protagonistName: null,
+  speakTick: 0,
   characterQueue: [],
   npcReplaceCursor: 0,
   currentScene: null,
@@ -240,6 +241,56 @@ export const SpriteManager = {
     return slot;
   },
 
+  nextSpeakTick() {
+    const currentTick = Number.isFinite(this.speakTick) ? this.speakTick : 0;
+    this.speakTick = currentTick + 1;
+    return this.speakTick;
+  },
+
+  getSlotReplacementCandidate(slot, characterId) {
+    const ownerId = this.slotOwners.get(slot);
+    if (!ownerId || ownerId === characterId) return null;
+    const info = this.activeCharacters.get(ownerId);
+    return {
+      slot,
+      ownerId,
+      lastSpokenTick: Number.isFinite(info?.lastSpokenTick) ? info.lastSpokenTick : 0,
+      joinedTick: Number.isFinite(info?.joinedTick) ? info.joinedTick : 0,
+      isProtagonist: this.isProtagonist(ownerId),
+      isCurrentSpeaker: ownerId === this.currentSpeaker,
+    };
+  },
+
+  pickLeastRecentlySpokenSlot(characterId) {
+    const allCandidates = ['left', 'center', 'right']
+      .map(slot => this.getSlotReplacementCandidate(slot, characterId))
+      .filter(Boolean);
+
+    if (allCandidates.length === 0) {
+      return 'right';
+    }
+
+    // 只固定主角，不参与满槽位替换。
+    let candidates = allCandidates.filter(item => !item.isProtagonist);
+    if (candidates.length === 0) {
+      candidates = allCandidates;
+    }
+
+    // 优先不替换当前说话者，避免镜头跳变。
+    const nonCurrentSpeaker = candidates.filter(item => !item.isCurrentSpeaker);
+    if (nonCurrentSpeaker.length > 0) {
+      candidates = nonCurrentSpeaker;
+    }
+
+    candidates.sort((a, b) => {
+      if (a.lastSpokenTick !== b.lastSpokenTick) return a.lastSpokenTick - b.lastSpokenTick;
+      if (a.joinedTick !== b.joinedTick) return a.joinedTick - b.joinedTick;
+      return a.slot.localeCompare(b.slot);
+    });
+
+    return candidates[0].slot;
+  },
+
   /**
    * 将角色从一个槽位迁移到另一个槽位（DOM + 内部状态）
    */
@@ -283,6 +334,7 @@ export const SpriteManager = {
    *   立绘=1 → center
    *   立绘=2 → 中间的迁移到 left，新角色放 right
    *   立绘=3 → left / center / right
+   *   超过3人 → 替换最久未发言的非主角角色
    */
   assignSlot(characterId, $overlay) {
     const usedSlots = new Set(this.slotOwners.keys());
@@ -321,8 +373,8 @@ export const SpriteManager = {
     if (!usedSlots.has('right')) return 'right';
     if (!usedSlots.has('left')) return 'left';
 
-    // 全满时轮换替换 left / right
-    return this.getNextNpcReplacementSlot();
+    // 全满时按“最久未发言”替换，主角固定不替换
+    return this.pickLeastRecentlySpokenSlot(characterId);
   },
 
   async removeCharacter(characterId, { animate = true } = {}) {
@@ -438,6 +490,12 @@ export const SpriteManager = {
 
     if (this.activeCharacters.has(characterId)) {
       const info = this.activeCharacters.get(characterId);
+      if (!Number.isFinite(info.joinedTick)) {
+        info.joinedTick = Number.isFinite(this.speakTick) ? this.speakTick : 0;
+      }
+      if (!Number.isFinite(info.lastSpokenTick)) {
+        info.lastSpokenTick = 0;
+      }
       const prevSlot = info.slot;
       slot = prevSlot;
       if (this.isProtagonist(characterId) && slot !== 'left') {
@@ -463,11 +521,14 @@ export const SpriteManager = {
     } else {
       isNewCharacter = true;
       slot = this.assignSlot(characterId, $overlay);
+      const joinedTick = this.nextSpeakTick();
       this.characterQueue.push(characterId);
       this.activeCharacters.set(characterId, {
         slot,
         expression,
         element: null,
+        joinedTick,
+        lastSpokenTick: 0,
       });
       this.slotOwners.set(slot, characterId);
       await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, true, renderToken);
@@ -633,7 +694,20 @@ export const SpriteManager = {
   },
 
   setSpeaker(speakerId) {
-    this.currentSpeaker = speakerId;
+    let resolvedSpeakerId = speakerId;
+    if (speakerId !== null) {
+      resolvedSpeakerId = this.resolveCharacterId(speakerId) || speakerId;
+      const speakerInfo = this.activeCharacters.get(resolvedSpeakerId);
+      if (speakerInfo) {
+        const tick = this.nextSpeakTick();
+        speakerInfo.lastSpokenTick = tick;
+        if (!Number.isFinite(speakerInfo.joinedTick)) {
+          speakerInfo.joinedTick = tick;
+        }
+      }
+    }
+
+    this.currentSpeaker = resolvedSpeakerId;
     this.activeCharacters.forEach((info, charId) => {
       let $element = info.element;
       const isConnected = !!($element && $element.length && $element[0] && $element[0].isConnected);
@@ -650,12 +724,12 @@ export const SpriteManager = {
         $element
           .removeClass('exiting-left exiting-center exiting-right')
           .css({ display: '', visibility: 'visible' });
-        const isSpeaking = speakerId !== null && charId === speakerId;
+        const isSpeaking = resolvedSpeakerId !== null && charId === resolvedSpeakerId;
         SpriteAnimationManager.setFocus($element, isSpeaking, charId);
         updateCharacterFocus(charId, isSpeaking);
-        if (speakerId === null) {
+        if (resolvedSpeakerId === null) {
           $element.removeClass('speaking').addClass('silent');
-        } else if (charId === speakerId) {
+        } else if (charId === resolvedSpeakerId) {
           $element.removeClass('silent').addClass('speaking');
         } else {
           $element.removeClass('speaking').addClass('silent');
@@ -765,6 +839,7 @@ export const SpriteManager = {
     this.slotOwners.clear();
     this.characterQueue = [];
     this.npcReplaceCursor = 0;
+    this.speakTick = 0;
     this.currentSpeaker = null;
     this.currentScene = null;
     if ($overlay) {

@@ -6,7 +6,7 @@ import { getCharacterListFromDatabase } from '../utils/chat.js';
 import { getAllExpressions } from '../utils/expressions.js';
 import { getCharAppearancePrompt, setCharAppearancePrompt, getComfyUISettings, getComfyWorkflows } from '../image-gen/comfyui-helpers.js';
 import { ComfyUIAPI } from '../image-gen/comfyui-api.js';
-import { DEFAULT_COMFYUI_SETTINGS } from '../core/settings.js';
+import { DEFAULT_COMFYUI_SETTINGS, SPRITE_UPLOAD_RATIO_OPTIONS, getSettings, normalizeSpriteUploadAspectRatio, saveSettings } from '../core/settings.js';
 import { getTTSVoiceListAsync, getCharacterTTSVoice, setCharacterTTSVoice } from '../audio/tts-config.js';
 import { getCustomExpressions, addCustomExpression, removeCustomExpression } from '../utils/expressions.js';
 import { EXPRESSION_LIST, getExpressionTag } from '../logic/parser.js';
@@ -19,14 +19,47 @@ import { refreshGalgameViews } from './galgame-mode.js';
 // 立绘上传相关模块
 // ============================================
 
-const SPRITE_ASPECT_RATIO = 2 / 3;
+const DEFAULT_SPRITE_ASPECT_RATIO = 2 / 3;
+const DEFAULT_SPRITE_UPLOAD_RATIO_LABEL = '2:3';
 const CROPPER_MIN_SCALE = 0.01;
+
+function parseAspectRatioLabel(ratioLabel) {
+  const [widthRaw, heightRaw] = String(ratioLabel || '').split(':');
+  const width = Number(widthRaw);
+  const height = Number(heightRaw);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return DEFAULT_SPRITE_ASPECT_RATIO;
+  }
+  return width / height;
+}
+
+function formatAspectRatioCss(ratioLabel) {
+  const [widthRaw, heightRaw] = String(ratioLabel || '').split(':');
+  const width = Number(widthRaw);
+  const height = Number(heightRaw);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return '2 / 3';
+  }
+  return `${width} / ${height}`;
+}
+
+function resolveSpriteUploadAspectRatio() {
+  const settings = getSettings();
+  const ratioLabel = normalizeSpriteUploadAspectRatio(
+    settings?.spriteUploadAspectRatio || DEFAULT_SPRITE_UPLOAD_RATIO_LABEL,
+  );
+  return {
+    ratioLabel,
+    aspectRatio: parseAspectRatioLabel(ratioLabel),
+    cssAspectRatio: formatAspectRatioCss(ratioLabel),
+  };
+}
 
 // ============================================
 // ImageCropper 类
 // ============================================
 export class ImageCropper {
-  constructor(aspectRatio = SPRITE_ASPECT_RATIO) {
+  constructor(aspectRatio = DEFAULT_SPRITE_ASPECT_RATIO) {
     this.aspectRatio = aspectRatio;
     this.image = null;
     this.imageLoaded = false;
@@ -423,6 +456,11 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
     )
     .join('');
   const ttsVoiceList = await getTTSVoiceListAsync();
+  const settings = getSettings();
+  let { ratioLabel: spriteUploadRatioLabel, aspectRatio: spriteAspectRatio } = resolveSpriteUploadAspectRatio();
+  const cropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS
+    .map(item => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? 'selected' : ''}>${item.label}</option>`)
+    .join('');
   const ttsVoiceOptions = ttsVoiceList
     .map(v => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`)
     .join('');
@@ -453,6 +491,16 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
                 ${expressionOptions}
               </select>
             </div>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
+              <i class="fa-solid fa-crop-simple"></i> 立绘裁剪比例
+            </label>
+            <select id="gal-sprite-upload-ratio"
+                    title="立绘裁剪比例"
+                    style="width: 100%; padding: 10px 14px; border: 2px solid #ddd; border-radius: 6px; font-size: 1rem; color: #333; background: #fff;">
+              ${cropRatioOptions}
+            </select>
           </div>
           <!-- TTS音色选择 -->
           <div style="margin-bottom: 15px; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
@@ -487,7 +535,7 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
               <i class="fa-solid fa-cloud-arrow-up" style="font-size: 3.5rem;"></i>
               <span style="font-size: 1.2rem; margin-top: 10px;">点击选择立绘图片</span>
               <small style="color: #999; margin-top: 8px; font-size: 0.9rem;">支持 PNG / JPG / GIF / WebP</small>
-              <small style="color: ${THEME.accent}; margin-top: 4px; font-size: 0.9rem;">立绘将自动裁剪为 2:3 比例</small>
+              <small style="color: ${THEME.accent}; margin-top: 4px; font-size: 0.9rem;">立绘将自动裁剪为 <span id="gal-sprite-ratio-label">${spriteUploadRatioLabel}</span> 比例</small>
             </div>
           </div>
           <div id="gal-upload-remote" class="gal-upload-pane" style="display: none;">
@@ -633,6 +681,23 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
       $('#gal-tts-voice-select').val(boundVoice || '');
     }
   });
+  const applySpriteCropRatio = (nextRatioLabel, persist = true) => {
+    spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio(nextRatioLabel);
+    spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
+    if (persist) {
+      settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
+      saveSettings();
+    }
+    $('#gal-sprite-ratio-label').text(spriteUploadRatioLabel);
+    $modal.find('#gal-sprite-upload-ratio, #gal-sprite-crop-ratio').val(spriteUploadRatioLabel);
+    if (cropper && typeof cropper.applyAspectRatio === 'function') {
+      cropper.applyAspectRatio(spriteAspectRatio);
+    }
+  };
+  applySpriteCropRatio(spriteUploadRatioLabel, false);
+  $modal.on('change', '#gal-sprite-upload-ratio, #gal-sprite-crop-ratio', function () {
+    applySpriteCropRatio($(this).val(), true);
+  });
   // 批量上传按钮
   $('#gal-batch-upload-btn').on('click', () => {
     const charName = $('#gal-sprite-character').val().trim();
@@ -765,17 +830,46 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
     reader.readAsDataURL(file);
     try { await imageLoadPromise; } catch (e) { showToast('图片加载失败，请重试'); return; }
     const ctx = canvas.getContext('2d');
-    const cropHeight = CANVAS_HEIGHT * 0.85;
-    const cropWidth = cropHeight * SPRITE_ASPECT_RATIO;
-    const cropX = (CANVAS_WIDTH - cropWidth) / 2;
-    const cropY = (CANVAS_HEIGHT - cropHeight) / 2;
-    const scaleToFitWidth = cropWidth / img.width;
-    const scaleToFitHeight = cropHeight / img.height;
-    const coverScale = Math.max(scaleToFitWidth, scaleToFitHeight);
-    const containScale = Math.min(scaleToFitWidth, scaleToFitHeight);
-    let scale = Math.max(containScale, coverScale * 1.1);
+    let cropHeight = 0;
+    let cropWidth = 0;
+    let cropX = 0;
+    let cropY = 0;
+    let containScale = 1;
+    let coverScale = 1;
+    let minScale = CROPPER_MIN_SCALE;
+    let maxScale = 3;
+    let scale = 1;
     let offsetX = 0;
     let offsetY = 0;
+    const recalcCropRect = () => {
+      cropHeight = CANVAS_HEIGHT * 0.85;
+      cropWidth = cropHeight * spriteAspectRatio;
+      if (cropWidth > CANVAS_WIDTH * 0.85) {
+        cropWidth = CANVAS_WIDTH * 0.85;
+        cropHeight = cropWidth / spriteAspectRatio;
+      }
+      cropX = (CANVAS_WIDTH - cropWidth) / 2;
+      cropY = (CANVAS_HEIGHT - cropHeight) / 2;
+    };
+    const recalcScaleBounds = (preserveScale = true) => {
+      const scaleToFitWidth = cropWidth / img.width;
+      const scaleToFitHeight = cropHeight / img.height;
+      coverScale = Math.max(scaleToFitWidth, scaleToFitHeight);
+      containScale = Math.min(scaleToFitWidth, scaleToFitHeight);
+      minScale = CROPPER_MIN_SCALE;
+      maxScale = Math.max(coverScale * 5, 3);
+      if (preserveScale) {
+        scale = Math.max(minScale, Math.min(maxScale, scale));
+      } else {
+        scale = Math.max(containScale, coverScale * 1.1);
+      }
+    };
+    const syncZoomSlider = () => {
+      $zoomSlider.attr('min', Math.round(minScale * 100));
+      $zoomSlider.attr('max', Math.round(maxScale * 100));
+      $zoomSlider.val(Math.round(scale * 100));
+      $zoomValue.text(Math.round(scale * 100) + '%');
+    };
     const clampOffsets = () => {
       const scaledWidth = img.width * scale;
       const scaledHeight = img.height * scale;
@@ -809,6 +903,9 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
       ctx.lineWidth = 3;
       ctx.strokeRect(cropX, cropY, cropWidth, cropHeight);
     }
+    recalcCropRect();
+    recalcScaleBounds(false);
+    clampOffsets();
     renderCrop();
     let isDragging = false;
     let lastX = 0, lastY = 0;
@@ -822,12 +919,7 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
     };
     canvas.onmouseup = () => { isDragging = false; canvas.style.cursor = 'move'; };
     canvas.onmouseleave = () => { isDragging = false; canvas.style.cursor = 'move'; };
-    const minScale = CROPPER_MIN_SCALE;
-    const maxScale = Math.max(coverScale * 5, 3);
-    $zoomSlider.attr('min', Math.round(minScale * 100));
-    $zoomSlider.attr('max', Math.round(maxScale * 100));
-    $zoomSlider.val(Math.round(scale * 100));
-    $zoomValue.text(Math.round(scale * 100) + '%');
+    syncZoomSlider();
     $zoomSlider.off('input').on('input', function () {
       scale = parseInt($(this).val()) / 100;
       scale = Math.max(minScale, Math.min(maxScale, scale));
@@ -845,7 +937,7 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
     cropper = {
       getCroppedBlob: (outputWidth = 400) => {
         return new Promise(resolve => {
-          const outputHeight = outputWidth / SPRITE_ASPECT_RATIO;
+          const outputHeight = outputWidth / spriteAspectRatio;
           const outputCanvas = document.createElement('canvas');
           outputCanvas.width = outputWidth; outputCanvas.height = outputHeight;
           const outputCtx = outputCanvas.getContext('2d');
@@ -857,6 +949,15 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
           outputCtx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, outputWidth, outputHeight);
           outputCanvas.toBlob(blob => resolve(blob), 'image/png', 1);
         });
+      },
+      applyAspectRatio: (nextAspectRatio) => {
+        if (!Number.isFinite(nextAspectRatio) || nextAspectRatio <= 0) return;
+        spriteAspectRatio = nextAspectRatio;
+        recalcCropRect();
+        recalcScaleBounds(true);
+        clampOffsets();
+        syncZoomSlider();
+        renderCrop();
       },
     };
   }
@@ -908,6 +1009,15 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
 // ============================================
 export function showBatchUploadDialog(characterId, onCloseCallback) {
   const allExpressions = getAllExpressions();
+  const settings = getSettings();
+  let {
+    ratioLabel: spriteUploadRatioLabel,
+    aspectRatio: spriteAspectRatio,
+    cssAspectRatio: spriteUploadCssAspectRatio,
+  } = resolveSpriteUploadAspectRatio();
+  const batchCropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS
+    .map(item => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? 'selected' : ''}>${item.label}</option>`)
+    .join('');
   const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;">
@@ -935,6 +1045,18 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
                       <input type="text" id="gal-batch-character" value="${characterId || ''}"
                              placeholder="请在左侧选择或添加角色" readonly
                              style="width: 100%; padding: 10px 15px; border: 2px solid #eee; background: #f9f9f9; font-size: 1rem; box-sizing: border-box; border-radius: 4px; color: #555;">
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                      <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+                        <i class="fa-solid fa-crop-simple"></i> 立绘裁剪比例
+                      </label>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="gal-batch-crop-ratio"
+                                style="flex: 0 0 220px; max-width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; color: #333; background: #fff;">
+                          ${batchCropRatioOptions}
+                        </select>
+                        <small id="gal-batch-ratio-hint" style="color: #666;">当前：${spriteUploadRatioLabel}</small>
+                      </div>
                     </div>
                     <div class="gal-upload-tabs" style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
                         <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
@@ -993,7 +1115,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
                               <span style="font-weight: 700; color: ${THEME.dark};">
                                 <i class="fa-solid fa-tags"></i> 表情映射
                               </span>
-                              <small style="color: #888;">点击格子可修改表情名称，留空表示跳过</small>
+                              <small id="gal-batch-ratio-text" style="color: #888;">点击格子可修改表情名称，留空表示跳过（保存按 ${spriteUploadRatioLabel} 裁剪）</small>
                             </div>
                             <div id="gal-grid-mapping" class="gal-grid-mapping-container"></div>
                           </div>
@@ -1016,7 +1138,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
         .gal-grid-cell:hover { border-color: ${THEME.accent}; background: rgba(0, 210, 255, 0.1); }
         .gal-grid-cell.active { border-color: ${THEME.accent}; background: rgba(0, 210, 255, 0.15); }
         .gal-grid-cell.skipped { opacity: 0.5; background: #eee; }
-        .gal-grid-cell-preview { width: 100%; aspect-ratio: 2 / 3; background: #ddd; border-radius: 4px; margin-bottom: 5px; overflow: hidden; }
+        .gal-grid-cell-preview { width: 100%; aspect-ratio: var(--gal-sprite-crop-ratio, ${spriteUploadCssAspectRatio}); background: #ddd; border-radius: 4px; margin-bottom: 5px; overflow: hidden; }
         .gal-grid-cell-preview img { width: 100%; height: 100%; object-fit: cover; }
         .gal-grid-cell-label { font-size: 0.75rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .gal-grid-cell-select { width: 100%; border: 1px solid #ccc; border-radius: 3px; padding: 3px 5px; font-size: 0.75rem; box-sizing: border-box; }
@@ -1041,6 +1163,21 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
   let gridCols = 3;
   let cellMappings = [];
   let existingChars = new Set();
+  const applyBatchCropRatioUI = () => {
+    spriteUploadCssAspectRatio = formatAspectRatioCss(spriteUploadRatioLabel);
+    $modal[0]?.style?.setProperty('--gal-sprite-crop-ratio', spriteUploadCssAspectRatio);
+    $modal.find('#gal-batch-ratio-hint').text(`当前：${spriteUploadRatioLabel}`);
+    $modal.find('#gal-batch-ratio-text').text(`点击格子可修改表情名称，留空表示跳过（保存按 ${spriteUploadRatioLabel} 裁剪）`);
+    $modal.find('#gal-batch-crop-ratio').val(spriteUploadRatioLabel);
+  };
+  $modal.find('#gal-batch-crop-ratio').on('change', function () {
+    spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio($(this).val());
+    spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
+    settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
+    saveSettings();
+    applyBatchCropRatioUI();
+  });
+  applyBatchCropRatioUI();
   getAllSprites().then(sprites => {
     existingChars = new Set(sprites.map(s => s.characterId));
     if ($modal.find('#gal-batch-char-list').length > 0) {
@@ -1281,11 +1418,11 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
         const tempCtx = tempCanvas.getContext('2d');
         const sx = mapping.col * cellWidth; const sy = mapping.row * cellHeight;
         tempCtx.drawImage(loadedImage, sx, sy, cellWidth, cellHeight, 0, 0, cellWidth, cellHeight);
-        const outputWidth = 400; const outputHeight = 600;
+        const outputWidth = 400; const outputHeight = Math.max(1, Math.round(outputWidth / spriteAspectRatio));
         const outputCanvas = document.createElement('canvas');
         outputCanvas.width = outputWidth; outputCanvas.height = outputHeight;
         const outputCtx = outputCanvas.getContext('2d');
-        const srcAspect = cellWidth / cellHeight; const dstAspect = 2 / 3;
+        const srcAspect = cellWidth / cellHeight; const dstAspect = spriteAspectRatio;
         let cropWidth, cropHeight, cropX, cropY;
         if (srcAspect > dstAspect) {
           cropHeight = cellHeight; cropWidth = cellHeight * dstAspect;

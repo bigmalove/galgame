@@ -18,6 +18,17 @@ export const DEFAULT_COMFYUI_SETTINGS = {
   negativePrompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers',
 };
 
+export const DEFAULT_SPRITE_UPLOAD_RATIO = '2:3';
+export const SPRITE_UPLOAD_RATIO_OPTIONS = [
+  { value: '2:3', label: '2:3（默认竖版）' },
+  { value: '3:4', label: '3:4（常用竖版）' },
+  { value: '4:5', label: '4:5（偏方竖版）' },
+  { value: '1:1', label: '1:1（正方形）' },
+  { value: '9:16', label: '9:16（长竖版）' },
+];
+
+const SPRITE_UPLOAD_RATIO_VALUE_SET = new Set(SPRITE_UPLOAD_RATIO_OPTIONS.map(item => item.value));
+
 // 默认设置 (全局)
 export const DEFAULT_SETTINGS = {
   // 文本显示
@@ -41,6 +52,7 @@ export const DEFAULT_SETTINGS = {
   spriteScale: 100,
   spriteBottomOffset: 20,
   spriteSpacing: 20,
+  spriteUploadAspectRatio: DEFAULT_SPRITE_UPLOAD_RATIO,
   showMissingSpritePlaceholder: true,
   // 说话者效果
   speakerGlow: true,
@@ -187,6 +199,11 @@ function normalizeDialogFontFamily(rawValue) {
   const allowed = ['sans', 'serif', 'wenkai', 'kaiti', 'mono'];
   const normalized = String(rawValue || '').trim().toLowerCase();
   return allowed.includes(normalized) ? normalized : DEFAULT_SETTINGS.dialogFontFamily;
+}
+
+export function normalizeSpriteUploadAspectRatio(rawValue) {
+  const normalized = String(rawValue || '').trim();
+  return SPRITE_UPLOAD_RATIO_VALUE_SET.has(normalized) ? normalized : DEFAULT_SPRITE_UPLOAD_RATIO;
 }
 
 function normalizeMapMarkerStyle(rawStyle) {
@@ -411,6 +428,7 @@ export function loadSettings() {
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
       _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
+      _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
       if (!_settings.gptSoVits || typeof _settings.gptSoVits !== 'object') {
         _settings.gptSoVits = Object.assign({}, DEFAULT_SETTINGS.gptSoVits);
       }
@@ -495,6 +513,7 @@ export function saveSettings() {
     _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
     _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
     _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
+    _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
     ensureMapSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
   } catch (e) {

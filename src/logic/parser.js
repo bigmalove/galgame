@@ -9,7 +9,7 @@ import { getAllExpressions } from '../utils/expressions.js';
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background)[^>]*>/i;
+export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit)[^>]*>/i;
 const RE_CLOSED_P = /<\/p>/i;
 const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;
@@ -261,7 +261,7 @@ export function parseGalgameContent(html, messageId) {
   }
 
   // 找到 <maintext> 内第一个 Galgame 标签
-  const firstGalMatch = content.match(/<(background|p)[\s>]/i);
+  const firstGalMatch = content.match(/<(background|p|pixiperform|pixiinit|bgm|sprite|option|bgimg|whimg|bnimg)\b/i);
   if (firstGalMatch && firstGalMatch.index > 0) {
     console.log(`[${SCRIPT_NAME}] [DEBUG] 清理 <maintext> 前 ${firstGalMatch.index} 字符的污染内容`);
     content = content.substring(firstGalMatch.index);
@@ -360,6 +360,34 @@ export function parseGalgameContent(html, messageId) {
   }
   RE_SPRITE_TAG.lastIndex = 0;
 
+  const pixiCommands = [];
+  const pixiInitRegex = /<pixiInit\b[^>]*\/?>/gi;
+  const pixiPerformRegex = /<pixiPerform\b([^>]*)\/?>/gi;
+
+  let pixiInitMatch;
+  while ((pixiInitMatch = pixiInitRegex.exec(content)) !== null) {
+    pixiCommands.push({
+      position: pixiInitMatch.index,
+      action: 'init',
+    });
+  }
+
+  let pixiPerformMatch;
+  while ((pixiPerformMatch = pixiPerformRegex.exec(content)) !== null) {
+    const attrs = parseTagAttributes(pixiPerformMatch[1] || '');
+    const effectName = String(attrs.name || attrs.effect || '').trim();
+    if (!effectName) continue;
+    pixiCommands.push({
+      position: pixiPerformMatch.index,
+      action: 'perform',
+      name: effectName,
+    });
+  }
+
+  if (pixiCommands.length > 1) {
+    pixiCommands.sort((a, b) => a.position - b.position);
+  }
+
   // 解析 BGM 标签
   const bgmMatch = content.match(RE_BGM);
   if (bgmMatch) {
@@ -415,6 +443,8 @@ export function parseGalgameContent(html, messageId) {
     text = text.replace(/<q>([^<]*)<\/q>/gi, '$1');
     text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, '$1');
     text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, '$1');
+    text = text.replace(/<pixiInit\b[^>]*\/?>/gi, '');
+    text = text.replace(/<pixiPerform\b[^>]*\/?>/gi, '');
     text = text.replace(RE_IMAGE_PLACEHOLDER_INLINE, '');
     text = removeImagePlaceholderLines(text).trim();
     text = stripOuterQuotes(text);
@@ -588,6 +618,53 @@ export function parseGalgameContent(html, messageId) {
     }
   }
 
+  if (backgroundChanges.length > 0 && result.segments.length > 0) {
+    for (const bg of backgroundChanges) {
+      let targetSegment = null;
+      for (const seg of result.segments) {
+        if ((Number(seg._sourcePos) || 0) >= bg.position) {
+          targetSegment = seg;
+          break;
+        }
+      }
+      if (!targetSegment) {
+        targetSegment = result.segments[result.segments.length - 1];
+      }
+      if (!targetSegment.backgroundCommands) {
+        targetSegment.backgroundCommands = [];
+      }
+      targetSegment.backgroundCommands.push({
+        scene: bg.scene,
+      });
+    }
+  }
+
+  if (pixiCommands.length > 0 && result.segments.length > 0) {
+    for (const cmd of pixiCommands) {
+      let targetSegment = null;
+      for (const seg of result.segments) {
+        if ((Number(seg._sourcePos) || 0) >= cmd.position) {
+          targetSegment = seg;
+          break;
+        }
+      }
+      if (!targetSegment) {
+        targetSegment = result.segments[result.segments.length - 1];
+      }
+      if (!targetSegment.effectOps) {
+        targetSegment.effectOps = [];
+      }
+      if (cmd.action === 'init') {
+        targetSegment.effectOps.push({ action: 'init' });
+      } else if (cmd.action === 'perform' && cmd.name) {
+        targetSegment.effectOps.push({
+          action: 'perform',
+          name: cmd.name,
+        });
+      }
+    }
+  }
+
   // 切分过长段落
   const MAX_SEG_LENGTH = 120;
   const finalSegments = [];
@@ -625,6 +702,8 @@ export function parseGalgameContent(html, messageId) {
       const nextSeg = Object.assign({}, seg, { text: text.substring(0, splitIdx).trim() });
       if (!isFirstChunk) {
         delete nextSeg.spriteCommands;
+        delete nextSeg.backgroundCommands;
+        delete nextSeg.effectOps;
       }
       finalSegments.push(nextSeg);
       text = text.substring(splitIdx).trim();
@@ -634,6 +713,8 @@ export function parseGalgameContent(html, messageId) {
       const nextSeg = Object.assign({}, seg, { text: text });
       if (!isFirstChunk) {
         delete nextSeg.spriteCommands;
+        delete nextSeg.backgroundCommands;
+        delete nextSeg.effectOps;
       }
       finalSegments.push(nextSeg);
     }

@@ -133,6 +133,11 @@ async function init() {
 
         topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, async () => {
           resetGenerationState('切换聊天');
+          // 清理上一聊天的立绘状态，避免新聊天首段错误复用旧槽位
+          const $overlay = $('#gal-global-overlay');
+          SpriteManager.reset($overlay.length ? $overlay : null);
+          console.log(`[${SCRIPT_NAME}] 聊天切换：已重置立绘状态`);
+
           const newEnabled = isCurrentCharEnabled();
           const wasEnabled = getIsEnabled();
 

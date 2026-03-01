@@ -240,6 +240,15 @@
     height: 768,
     negativePrompt: "lowres, bad anatomy, bad hands, text, error, missing fingers"
   };
+  var DEFAULT_SPRITE_UPLOAD_RATIO = "2:3";
+  var SPRITE_UPLOAD_RATIO_OPTIONS = [
+    { value: "2:3", label: "2:3（默认竖版）" },
+    { value: "3:4", label: "3:4（常用竖版）" },
+    { value: "4:5", label: "4:5（偏方竖版）" },
+    { value: "1:1", label: "1:1（正方形）" },
+    { value: "9:16", label: "9:16（长竖版）" }
+  ];
+  var SPRITE_UPLOAD_RATIO_VALUE_SET = new Set(SPRITE_UPLOAD_RATIO_OPTIONS.map((item) => item.value));
   var DEFAULT_SETTINGS = {
     // 文本显示
     fontSize: 15,
@@ -262,6 +271,7 @@
     spriteScale: 100,
     spriteBottomOffset: 20,
     spriteSpacing: 20,
+    spriteUploadAspectRatio: DEFAULT_SPRITE_UPLOAD_RATIO,
     showMissingSpritePlaceholder: true,
     // 说话者效果
     speakerGlow: true,
@@ -397,6 +407,10 @@
     const allowed = ["sans", "serif", "wenkai", "kaiti", "mono"];
     const normalized = String(rawValue || "").trim().toLowerCase();
     return allowed.includes(normalized) ? normalized : DEFAULT_SETTINGS.dialogFontFamily;
+  }
+  function normalizeSpriteUploadAspectRatio(rawValue) {
+    const normalized = String(rawValue || "").trim();
+    return SPRITE_UPLOAD_RATIO_VALUE_SET.has(normalized) ? normalized : DEFAULT_SPRITE_UPLOAD_RATIO;
   }
   function normalizeMapMarkerStyle(rawStyle) {
     const style = String(rawStyle || "").trim().toLowerCase();
@@ -599,6 +613,7 @@
         _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
         _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
         _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
+        _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
         if (!_settings.gptSoVits || typeof _settings.gptSoVits !== "object") {
           _settings.gptSoVits = Object.assign({}, DEFAULT_SETTINGS.gptSoVits);
         }
@@ -687,6 +702,7 @@
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
       _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
+      _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
       ensureMapSettings();
       topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY2, JSON.stringify(_settings));
     } catch (e) {
@@ -16095,6 +16111,7 @@ ${lines.join("\n")}`;
     slotOwners: /* @__PURE__ */ new Map(),
     currentSpeaker: null,
     protagonistName: null,
+    speakTick: 0,
     characterQueue: [],
     npcReplaceCursor: 0,
     currentScene: null,
@@ -16262,6 +16279,44 @@ ${lines.join("\n")}`;
       this.npcReplaceCursor = (this.npcReplaceCursor + 1) % slots.length;
       return slot;
     },
+    nextSpeakTick() {
+      const currentTick = Number.isFinite(this.speakTick) ? this.speakTick : 0;
+      this.speakTick = currentTick + 1;
+      return this.speakTick;
+    },
+    getSlotReplacementCandidate(slot, characterId) {
+      const ownerId = this.slotOwners.get(slot);
+      if (!ownerId || ownerId === characterId) return null;
+      const info = this.activeCharacters.get(ownerId);
+      return {
+        slot,
+        ownerId,
+        lastSpokenTick: Number.isFinite(info?.lastSpokenTick) ? info.lastSpokenTick : 0,
+        joinedTick: Number.isFinite(info?.joinedTick) ? info.joinedTick : 0,
+        isProtagonist: this.isProtagonist(ownerId),
+        isCurrentSpeaker: ownerId === this.currentSpeaker
+      };
+    },
+    pickLeastRecentlySpokenSlot(characterId) {
+      const allCandidates = ["left", "center", "right"].map((slot) => this.getSlotReplacementCandidate(slot, characterId)).filter(Boolean);
+      if (allCandidates.length === 0) {
+        return "right";
+      }
+      let candidates = allCandidates.filter((item) => !item.isProtagonist);
+      if (candidates.length === 0) {
+        candidates = allCandidates;
+      }
+      const nonCurrentSpeaker = candidates.filter((item) => !item.isCurrentSpeaker);
+      if (nonCurrentSpeaker.length > 0) {
+        candidates = nonCurrentSpeaker;
+      }
+      candidates.sort((a, b) => {
+        if (a.lastSpokenTick !== b.lastSpokenTick) return a.lastSpokenTick - b.lastSpokenTick;
+        if (a.joinedTick !== b.joinedTick) return a.joinedTick - b.joinedTick;
+        return a.slot.localeCompare(b.slot);
+      });
+      return candidates[0].slot;
+    },
     /**
      * 将角色从一个槽位迁移到另一个槽位（DOM + 内部状态）
      */
@@ -16296,6 +16351,7 @@ ${lines.join("\n")}`;
      *   立绘=1 → center
      *   立绘=2 → 中间的迁移到 left，新角色放 right
      *   立绘=3 → left / center / right
+     *   超过3人 → 替换最久未发言的非主角角色
      */
     assignSlot(characterId, $overlay) {
       const usedSlots = new Set(this.slotOwners.keys());
@@ -16322,7 +16378,7 @@ ${lines.join("\n")}`;
       if (!usedSlots.has("center")) return "center";
       if (!usedSlots.has("right")) return "right";
       if (!usedSlots.has("left")) return "left";
-      return this.getNextNpcReplacementSlot();
+      return this.pickLeastRecentlySpokenSlot(characterId);
     },
     async removeCharacter(characterId, { animate = true } = {}) {
       const resolvedCharacterId = this.resolveCharacterId(characterId) || characterId;
@@ -16420,6 +16476,12 @@ ${lines.join("\n")}`;
       let isNewCharacter = false;
       if (this.activeCharacters.has(characterId)) {
         const info = this.activeCharacters.get(characterId);
+        if (!Number.isFinite(info.joinedTick)) {
+          info.joinedTick = Number.isFinite(this.speakTick) ? this.speakTick : 0;
+        }
+        if (!Number.isFinite(info.lastSpokenTick)) {
+          info.lastSpokenTick = 0;
+        }
         const prevSlot = info.slot;
         slot = prevSlot;
         if (this.isProtagonist(characterId) && slot !== "left") {
@@ -16444,11 +16506,14 @@ ${lines.join("\n")}`;
       } else {
         isNewCharacter = true;
         slot = this.assignSlot(characterId, $overlay);
+        const joinedTick = this.nextSpeakTick();
         this.characterQueue.push(characterId);
         this.activeCharacters.set(characterId, {
           slot,
           expression,
-          element: null
+          element: null,
+          joinedTick,
+          lastSpokenTick: 0
         });
         this.slotOwners.set(slot, characterId);
         await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, true, renderToken);
@@ -16601,7 +16666,19 @@ ${lines.join("\n")}`;
       }
     },
     setSpeaker(speakerId) {
-      this.currentSpeaker = speakerId;
+      let resolvedSpeakerId = speakerId;
+      if (speakerId !== null) {
+        resolvedSpeakerId = this.resolveCharacterId(speakerId) || speakerId;
+        const speakerInfo = this.activeCharacters.get(resolvedSpeakerId);
+        if (speakerInfo) {
+          const tick = this.nextSpeakTick();
+          speakerInfo.lastSpokenTick = tick;
+          if (!Number.isFinite(speakerInfo.joinedTick)) {
+            speakerInfo.joinedTick = tick;
+          }
+        }
+      }
+      this.currentSpeaker = resolvedSpeakerId;
       this.activeCharacters.forEach((info, charId) => {
         let $element = info.element;
         const isConnected = !!($element && $element.length && $element[0] && $element[0].isConnected);
@@ -16616,12 +16693,12 @@ ${lines.join("\n")}`;
         }
         if ($element && $element.length) {
           $element.removeClass("exiting-left exiting-center exiting-right").css({ display: "", visibility: "visible" });
-          const isSpeaking = speakerId !== null && charId === speakerId;
+          const isSpeaking = resolvedSpeakerId !== null && charId === resolvedSpeakerId;
           SpriteAnimationManager.setFocus($element, isSpeaking, charId);
           updateCharacterFocus(charId, isSpeaking);
-          if (speakerId === null) {
+          if (resolvedSpeakerId === null) {
             $element.removeClass("speaking").addClass("silent");
-          } else if (charId === speakerId) {
+          } else if (charId === resolvedSpeakerId) {
             $element.removeClass("silent").addClass("speaking");
           } else {
             $element.removeClass("speaking").addClass("silent");
@@ -16717,6 +16794,7 @@ ${lines.join("\n")}`;
       this.slotOwners.clear();
       this.characterQueue = [];
       this.npcReplaceCursor = 0;
+      this.speakTick = 0;
       this.currentSpeaker = null;
       this.currentScene = null;
       if ($overlay) {
@@ -17358,7 +17436,7 @@ ${extraRule}
   }
 
   // src/logic/parser.js
-  var RE_GAL_TAGS2 = /<(p|sprite|maintext|background)[^>]*>/i;
+  var RE_GAL_TAGS2 = /<(p|sprite|maintext|background|pixiPerform|pixiInit)[^>]*>/i;
   var RE_CLOSED_P2 = /<\/p>/i;
   var RE_THINK_CLOSED2 = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
   var RE_THINK_UNCLOSED2 = /<(think|thinking)>[\s\S]*$/gi;
@@ -17539,7 +17617,7 @@ ${extraRule}
         content = maintextStart[1];
       }
     }
-    const firstGalMatch = content.match(/<(background|p)[\s>]/i);
+    const firstGalMatch = content.match(/<(background|p|pixiperform|pixiinit|bgm|sprite|option|bgimg|whimg|bnimg)\b/i);
     if (firstGalMatch && firstGalMatch.index > 0) {
       console.log(`[${SCRIPT_NAME}] [DEBUG] 清理 <maintext> 前 ${firstGalMatch.index} 字符的污染内容`);
       content = content.substring(firstGalMatch.index);
@@ -17626,6 +17704,30 @@ ${extraRule}
       });
     }
     RE_SPRITE_TAG.lastIndex = 0;
+    const pixiCommands = [];
+    const pixiInitRegex = /<pixiInit\b[^>]*\/?>/gi;
+    const pixiPerformRegex = /<pixiPerform\b([^>]*)\/?>/gi;
+    let pixiInitMatch;
+    while ((pixiInitMatch = pixiInitRegex.exec(content)) !== null) {
+      pixiCommands.push({
+        position: pixiInitMatch.index,
+        action: "init"
+      });
+    }
+    let pixiPerformMatch;
+    while ((pixiPerformMatch = pixiPerformRegex.exec(content)) !== null) {
+      const attrs = parseTagAttributes(pixiPerformMatch[1] || "");
+      const effectName = String(attrs.name || attrs.effect || "").trim();
+      if (!effectName) continue;
+      pixiCommands.push({
+        position: pixiPerformMatch.index,
+        action: "perform",
+        name: effectName
+      });
+    }
+    if (pixiCommands.length > 1) {
+      pixiCommands.sort((a, b) => a.position - b.position);
+    }
     const bgmMatch = content.match(RE_BGM2);
     if (bgmMatch) {
       result.bgm = {
@@ -17669,6 +17771,8 @@ ${extraRule}
       text = text.replace(/<q>([^<]*)<\/q>/gi, "$1");
       text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, "$1");
       text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, "$1");
+      text = text.replace(/<pixiInit\b[^>]*\/?>/gi, "");
+      text = text.replace(/<pixiPerform\b[^>]*\/?>/gi, "");
       text = text.replace(RE_IMAGE_PLACEHOLDER_INLINE, "");
       text = removeImagePlaceholderLines(text).trim();
       text = stripOuterQuotes(text);
@@ -17816,6 +17920,51 @@ ${extraRule}
         });
       }
     }
+    if (backgroundChanges.length > 0 && result.segments.length > 0) {
+      for (const bg of backgroundChanges) {
+        let targetSegment = null;
+        for (const seg of result.segments) {
+          if ((Number(seg._sourcePos) || 0) >= bg.position) {
+            targetSegment = seg;
+            break;
+          }
+        }
+        if (!targetSegment) {
+          targetSegment = result.segments[result.segments.length - 1];
+        }
+        if (!targetSegment.backgroundCommands) {
+          targetSegment.backgroundCommands = [];
+        }
+        targetSegment.backgroundCommands.push({
+          scene: bg.scene
+        });
+      }
+    }
+    if (pixiCommands.length > 0 && result.segments.length > 0) {
+      for (const cmd of pixiCommands) {
+        let targetSegment = null;
+        for (const seg of result.segments) {
+          if ((Number(seg._sourcePos) || 0) >= cmd.position) {
+            targetSegment = seg;
+            break;
+          }
+        }
+        if (!targetSegment) {
+          targetSegment = result.segments[result.segments.length - 1];
+        }
+        if (!targetSegment.effectOps) {
+          targetSegment.effectOps = [];
+        }
+        if (cmd.action === "init") {
+          targetSegment.effectOps.push({ action: "init" });
+        } else if (cmd.action === "perform" && cmd.name) {
+          targetSegment.effectOps.push({
+            action: "perform",
+            name: cmd.name
+          });
+        }
+      }
+    }
     const MAX_SEG_LENGTH = 120;
     const finalSegments = [];
     result.segments.forEach((seg) => {
@@ -17849,6 +17998,8 @@ ${extraRule}
         const nextSeg = Object.assign({}, seg, { text: text.substring(0, splitIdx).trim() });
         if (!isFirstChunk) {
           delete nextSeg.spriteCommands;
+          delete nextSeg.backgroundCommands;
+          delete nextSeg.effectOps;
         }
         finalSegments.push(nextSeg);
         text = text.substring(splitIdx).trim();
@@ -17858,6 +18009,8 @@ ${extraRule}
         const nextSeg = Object.assign({}, seg, { text });
         if (!isFirstChunk) {
           delete nextSeg.spriteCommands;
+          delete nextSeg.backgroundCommands;
+          delete nextSeg.effectOps;
         }
         finalSegments.push(nextSeg);
       }
@@ -20423,6 +20576,13 @@ ${normalizedSource}`;
     const basePromise = state.effectSyncPromise && typeof state.effectSyncPromise.then === "function" ? state.effectSyncPromise : Promise.resolve();
     state.effectSyncPromise = basePromise.then(run, run);
   }
+  function clearSpritesOnBackgroundCommand($overlay, segment) {
+    if (!segment || !Array.isArray(segment.backgroundCommands) || segment.backgroundCommands.length === 0) {
+      return false;
+    }
+    SpriteManager.reset($overlay);
+    return true;
+  }
   async function updateGlobalOverlayContent(mesId, parsedContent, options = {}) {
     console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
     const $overlay = ensureGlobalOverlay();
@@ -20505,6 +20665,7 @@ ${normalizedSource}`;
     const progressPercent = total > 0 ? (currentIndex + 1) / total * 100 : 0;
     $overlay.find(".gal-progress-bar").css("width", `${progressPercent}%`);
     await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
+    clearSpritesOnBackgroundCommand($overlay, displaySegment);
     const expression = displaySegment.expression || "默认";
     await SpriteManager.updateSprite($overlay, speaker, expression, renderToken);
     const sceneToApply = displaySegment.backgroundScene || parsedContent.currentBackground?.scene;
@@ -20608,6 +20769,7 @@ ${normalizedSource}`;
     }
     await SpriteManager.applySpriteCommands($overlay, segment.spriteCommands, expectedRenderToken);
     if (isRenderTokenStale()) return false;
+    clearSpritesOnBackgroundCommand($overlay, segment);
     const expression = segment.expression || "默认";
     await SpriteManager.updateSprite($overlay, speaker, expression, expectedRenderToken);
     if (isRenderTokenStale()) return false;
@@ -27697,10 +27859,40 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
 
   // src/ui/sprite-upload.js
-  var SPRITE_ASPECT_RATIO = 2 / 3;
+  var DEFAULT_SPRITE_ASPECT_RATIO = 2 / 3;
+  var DEFAULT_SPRITE_UPLOAD_RATIO_LABEL = "2:3";
   var CROPPER_MIN_SCALE = 0.01;
+  function parseAspectRatioLabel(ratioLabel) {
+    const [widthRaw, heightRaw] = String(ratioLabel || "").split(":");
+    const width = Number(widthRaw);
+    const height = Number(heightRaw);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return DEFAULT_SPRITE_ASPECT_RATIO;
+    }
+    return width / height;
+  }
+  function formatAspectRatioCss(ratioLabel) {
+    const [widthRaw, heightRaw] = String(ratioLabel || "").split(":");
+    const width = Number(widthRaw);
+    const height = Number(heightRaw);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return "2 / 3";
+    }
+    return `${width} / ${height}`;
+  }
+  function resolveSpriteUploadAspectRatio() {
+    const settings = getSettings();
+    const ratioLabel = normalizeSpriteUploadAspectRatio(
+      settings?.spriteUploadAspectRatio || DEFAULT_SPRITE_UPLOAD_RATIO_LABEL
+    );
+    return {
+      ratioLabel,
+      aspectRatio: parseAspectRatioLabel(ratioLabel),
+      cssAspectRatio: formatAspectRatioCss(ratioLabel)
+    };
+  }
   var ImageCropper = class {
-    constructor(aspectRatio = SPRITE_ASPECT_RATIO) {
+    constructor(aspectRatio = DEFAULT_SPRITE_ASPECT_RATIO) {
       this.aspectRatio = aspectRatio;
       this.image = null;
       this.imageLoaded = false;
@@ -28074,6 +28266,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       (e) => `<option value="${e}" ${e === expression || expression === "neutral" && e === "默认" ? "selected" : ""}>${e}</option>`
     ).join("");
     const ttsVoiceList = await getTTSVoiceListAsync();
+    const settings = getSettings();
+    let { ratioLabel: spriteUploadRatioLabel, aspectRatio: spriteAspectRatio } = resolveSpriteUploadAspectRatio();
+    const cropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS.map((item) => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? "selected" : ""}>${item.label}</option>`).join("");
     const ttsVoiceOptions = ttsVoiceList.map((v) => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? "selected" : ""}>${v.name} (${v.desc})</option>`).join("");
     const modalHtml = `
       <div class="gal-input-modal" id="gal-sprite-upload-modal">
@@ -28102,6 +28297,16 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                 ${expressionOptions}
               </select>
             </div>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
+              <i class="fa-solid fa-crop-simple"></i> 立绘裁剪比例
+            </label>
+            <select id="gal-sprite-upload-ratio"
+                    title="立绘裁剪比例"
+                    style="width: 100%; padding: 10px 14px; border: 2px solid #ddd; border-radius: 6px; font-size: 1rem; color: #333; background: #fff;">
+              ${cropRatioOptions}
+            </select>
           </div>
           <!-- TTS音色选择 -->
           <div style="margin-bottom: 15px; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
@@ -28136,7 +28341,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
               <i class="fa-solid fa-cloud-arrow-up" style="font-size: 3.5rem;"></i>
               <span style="font-size: 1.2rem; margin-top: 10px;">点击选择立绘图片</span>
               <small style="color: #999; margin-top: 8px; font-size: 0.9rem;">支持 PNG / JPG / GIF / WebP</small>
-              <small style="color: ${THEME.accent}; margin-top: 4px; font-size: 0.9rem;">立绘将自动裁剪为 2:3 比例</small>
+              <small style="color: ${THEME.accent}; margin-top: 4px; font-size: 0.9rem;">立绘将自动裁剪为 <span id="gal-sprite-ratio-label">${spriteUploadRatioLabel}</span> 比例</small>
             </div>
           </div>
           <div id="gal-upload-remote" class="gal-upload-pane" style="display: none;">
@@ -28290,6 +28495,23 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         const boundVoice = getCharacterTTSVoice(newCharName);
         $("#gal-tts-voice-select").val(boundVoice || "");
       }
+    });
+    const applySpriteCropRatio = (nextRatioLabel, persist = true) => {
+      spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio(nextRatioLabel);
+      spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
+      if (persist) {
+        settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
+        saveSettings();
+      }
+      $("#gal-sprite-ratio-label").text(spriteUploadRatioLabel);
+      $modal.find("#gal-sprite-upload-ratio, #gal-sprite-crop-ratio").val(spriteUploadRatioLabel);
+      if (cropper && typeof cropper.applyAspectRatio === "function") {
+        cropper.applyAspectRatio(spriteAspectRatio);
+      }
+    };
+    applySpriteCropRatio(spriteUploadRatioLabel, false);
+    $modal.on("change", "#gal-sprite-upload-ratio, #gal-sprite-crop-ratio", function() {
+      applySpriteCropRatio($(this).val(), true);
     });
     $("#gal-batch-upload-btn").on("click", () => {
       const charName = $("#gal-sprite-character").val().trim();
@@ -28446,17 +28668,46 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         return;
       }
       const ctx = canvas.getContext("2d");
-      const cropHeight = CANVAS_HEIGHT * 0.85;
-      const cropWidth = cropHeight * SPRITE_ASPECT_RATIO;
-      const cropX = (CANVAS_WIDTH - cropWidth) / 2;
-      const cropY = (CANVAS_HEIGHT - cropHeight) / 2;
-      const scaleToFitWidth = cropWidth / img.width;
-      const scaleToFitHeight = cropHeight / img.height;
-      const coverScale = Math.max(scaleToFitWidth, scaleToFitHeight);
-      const containScale = Math.min(scaleToFitWidth, scaleToFitHeight);
-      let scale = Math.max(containScale, coverScale * 1.1);
+      let cropHeight = 0;
+      let cropWidth = 0;
+      let cropX = 0;
+      let cropY = 0;
+      let containScale = 1;
+      let coverScale = 1;
+      let minScale = CROPPER_MIN_SCALE;
+      let maxScale = 3;
+      let scale = 1;
       let offsetX = 0;
       let offsetY = 0;
+      const recalcCropRect = () => {
+        cropHeight = CANVAS_HEIGHT * 0.85;
+        cropWidth = cropHeight * spriteAspectRatio;
+        if (cropWidth > CANVAS_WIDTH * 0.85) {
+          cropWidth = CANVAS_WIDTH * 0.85;
+          cropHeight = cropWidth / spriteAspectRatio;
+        }
+        cropX = (CANVAS_WIDTH - cropWidth) / 2;
+        cropY = (CANVAS_HEIGHT - cropHeight) / 2;
+      };
+      const recalcScaleBounds = (preserveScale = true) => {
+        const scaleToFitWidth = cropWidth / img.width;
+        const scaleToFitHeight = cropHeight / img.height;
+        coverScale = Math.max(scaleToFitWidth, scaleToFitHeight);
+        containScale = Math.min(scaleToFitWidth, scaleToFitHeight);
+        minScale = CROPPER_MIN_SCALE;
+        maxScale = Math.max(coverScale * 5, 3);
+        if (preserveScale) {
+          scale = Math.max(minScale, Math.min(maxScale, scale));
+        } else {
+          scale = Math.max(containScale, coverScale * 1.1);
+        }
+      };
+      const syncZoomSlider = () => {
+        $zoomSlider.attr("min", Math.round(minScale * 100));
+        $zoomSlider.attr("max", Math.round(maxScale * 100));
+        $zoomSlider.val(Math.round(scale * 100));
+        $zoomValue.text(Math.round(scale * 100) + "%");
+      };
       const clampOffsets = () => {
         const scaledWidth = img.width * scale;
         const scaledHeight = img.height * scale;
@@ -28490,6 +28741,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         ctx.lineWidth = 3;
         ctx.strokeRect(cropX, cropY, cropWidth, cropHeight);
       }
+      recalcCropRect();
+      recalcScaleBounds(false);
+      clampOffsets();
       renderCrop();
       let isDragging = false;
       let lastX = 0, lastY = 0;
@@ -28518,12 +28772,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         isDragging = false;
         canvas.style.cursor = "move";
       };
-      const minScale = CROPPER_MIN_SCALE;
-      const maxScale = Math.max(coverScale * 5, 3);
-      $zoomSlider.attr("min", Math.round(minScale * 100));
-      $zoomSlider.attr("max", Math.round(maxScale * 100));
-      $zoomSlider.val(Math.round(scale * 100));
-      $zoomValue.text(Math.round(scale * 100) + "%");
+      syncZoomSlider();
       $zoomSlider.off("input").on("input", function() {
         scale = parseInt($(this).val()) / 100;
         scale = Math.max(minScale, Math.min(maxScale, scale));
@@ -28542,7 +28791,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       cropper = {
         getCroppedBlob: (outputWidth = 400) => {
           return new Promise((resolve) => {
-            const outputHeight = outputWidth / SPRITE_ASPECT_RATIO;
+            const outputHeight = outputWidth / spriteAspectRatio;
             const outputCanvas = document.createElement("canvas");
             outputCanvas.width = outputWidth;
             outputCanvas.height = outputHeight;
@@ -28558,6 +28807,15 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
             outputCtx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, outputWidth, outputHeight);
             outputCanvas.toBlob((blob) => resolve(blob), "image/png", 1);
           });
+        },
+        applyAspectRatio: (nextAspectRatio) => {
+          if (!Number.isFinite(nextAspectRatio) || nextAspectRatio <= 0) return;
+          spriteAspectRatio = nextAspectRatio;
+          recalcCropRect();
+          recalcScaleBounds(true);
+          clampOffsets();
+          syncZoomSlider();
+          renderCrop();
         }
       };
     }
@@ -28611,6 +28869,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function showBatchUploadDialog(characterId, onCloseCallback) {
     const allExpressions = getAllExpressions();
+    const settings = getSettings();
+    let {
+      ratioLabel: spriteUploadRatioLabel,
+      aspectRatio: spriteAspectRatio,
+      cssAspectRatio: spriteUploadCssAspectRatio
+    } = resolveSpriteUploadAspectRatio();
+    const batchCropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS.map((item) => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? "selected" : ""}>${item.label}</option>`).join("");
     const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-upload-modal">
         <div class="gal-input-box" style="max-width: 1100px; width: 95%; height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;">
@@ -28638,6 +28903,18 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                       <input type="text" id="gal-batch-character" value="${characterId || ""}"
                              placeholder="请在左侧选择或添加角色" readonly
                              style="width: 100%; padding: 10px 15px; border: 2px solid #eee; background: #f9f9f9; font-size: 1rem; box-sizing: border-box; border-radius: 4px; color: #555;">
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                      <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
+                        <i class="fa-solid fa-crop-simple"></i> 立绘裁剪比例
+                      </label>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                        <select id="gal-batch-crop-ratio"
+                                style="flex: 0 0 220px; max-width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; color: #333; background: #fff;">
+                          ${batchCropRatioOptions}
+                        </select>
+                        <small id="gal-batch-ratio-hint" style="color: #666;">当前：${spriteUploadRatioLabel}</small>
+                      </div>
                     </div>
                     <div class="gal-upload-tabs" style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
                         <div class="gal-upload-tab active" data-target="local" style="padding: 8px 15px; cursor: pointer; font-weight: bold; color: ${THEME.dark}; border-bottom: 2px solid ${THEME.accent};">本地上传</div>
@@ -28696,7 +28973,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                               <span style="font-weight: 700; color: ${THEME.dark};">
                                 <i class="fa-solid fa-tags"></i> 表情映射
                               </span>
-                              <small style="color: #888;">点击格子可修改表情名称，留空表示跳过</small>
+                              <small id="gal-batch-ratio-text" style="color: #888;">点击格子可修改表情名称，留空表示跳过（保存按 ${spriteUploadRatioLabel} 裁剪）</small>
                             </div>
                             <div id="gal-grid-mapping" class="gal-grid-mapping-container"></div>
                           </div>
@@ -28719,7 +28996,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         .gal-grid-cell:hover { border-color: ${THEME.accent}; background: rgba(0, 210, 255, 0.1); }
         .gal-grid-cell.active { border-color: ${THEME.accent}; background: rgba(0, 210, 255, 0.15); }
         .gal-grid-cell.skipped { opacity: 0.5; background: #eee; }
-        .gal-grid-cell-preview { width: 100%; aspect-ratio: 2 / 3; background: #ddd; border-radius: 4px; margin-bottom: 5px; overflow: hidden; }
+        .gal-grid-cell-preview { width: 100%; aspect-ratio: var(--gal-sprite-crop-ratio, ${spriteUploadCssAspectRatio}); background: #ddd; border-radius: 4px; margin-bottom: 5px; overflow: hidden; }
         .gal-grid-cell-preview img { width: 100%; height: 100%; object-fit: cover; }
         .gal-grid-cell-label { font-size: 0.75rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .gal-grid-cell-select { width: 100%; border: 1px solid #ccc; border-radius: 3px; padding: 3px 5px; font-size: 0.75rem; box-sizing: border-box; }
@@ -28744,6 +29021,21 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     let gridCols = 3;
     let cellMappings = [];
     let existingChars = /* @__PURE__ */ new Set();
+    const applyBatchCropRatioUI = () => {
+      spriteUploadCssAspectRatio = formatAspectRatioCss(spriteUploadRatioLabel);
+      $modal[0]?.style?.setProperty("--gal-sprite-crop-ratio", spriteUploadCssAspectRatio);
+      $modal.find("#gal-batch-ratio-hint").text(`当前：${spriteUploadRatioLabel}`);
+      $modal.find("#gal-batch-ratio-text").text(`点击格子可修改表情名称，留空表示跳过（保存按 ${spriteUploadRatioLabel} 裁剪）`);
+      $modal.find("#gal-batch-crop-ratio").val(spriteUploadRatioLabel);
+    };
+    $modal.find("#gal-batch-crop-ratio").on("change", function() {
+      spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio($(this).val());
+      spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
+      settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
+      saveSettings();
+      applyBatchCropRatioUI();
+    });
+    applyBatchCropRatioUI();
     getAllSprites().then((sprites) => {
       existingChars = new Set(sprites.map((s) => s.characterId));
       if ($modal.find("#gal-batch-char-list").length > 0) {
@@ -29073,13 +29365,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           const sy = mapping.row * cellHeight;
           tempCtx.drawImage(loadedImage, sx, sy, cellWidth, cellHeight, 0, 0, cellWidth, cellHeight);
           const outputWidth = 400;
-          const outputHeight = 600;
+          const outputHeight = Math.max(1, Math.round(outputWidth / spriteAspectRatio));
           const outputCanvas = document.createElement("canvas");
           outputCanvas.width = outputWidth;
           outputCanvas.height = outputHeight;
           const outputCtx = outputCanvas.getContext("2d");
           const srcAspect = cellWidth / cellHeight;
-          const dstAspect = 2 / 3;
+          const dstAspect = spriteAspectRatio;
           let cropWidth, cropHeight, cropX, cropY;
           if (srcAspect > dstAspect) {
             cropHeight = cellHeight;
@@ -36919,6 +37211,9 @@ ${baseUrl}`,
           console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件监听已注册`);
           topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, async () => {
             resetGenerationState("切换聊天");
+            const $overlay = $("#gal-global-overlay");
+            SpriteManager.reset($overlay.length ? $overlay : null);
+            console.log(`[${SCRIPT_NAME}] 聊天切换：已重置立绘状态`);
             const newEnabled = isCurrentCharEnabled();
             const wasEnabled = getIsEnabled();
             if (newEnabled !== wasEnabled) {

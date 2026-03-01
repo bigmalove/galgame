@@ -94,6 +94,14 @@ function queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, option
   state.effectSyncPromise = basePromise.then(run, run);
 }
 
+function clearSpritesOnBackgroundCommand($overlay, segment) {
+  if (!segment || !Array.isArray(segment.backgroundCommands) || segment.backgroundCommands.length === 0) {
+    return false;
+  }
+  SpriteManager.reset($overlay);
+  return true;
+}
+
 export async function updateGlobalOverlayContent(mesId, parsedContent, options = {}) {
   console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
   const $overlay = ensureGlobalOverlay();
@@ -185,6 +193,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   $overlay.find('.gal-progress-bar').css('width', `${progressPercent}%`);
 
   await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
+  clearSpritesOnBackgroundCommand($overlay, displaySegment);
   const expression = displaySegment.expression || '默认';
   await SpriteManager.updateSprite($overlay, speaker, expression, renderToken);
 
@@ -310,6 +319,7 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
   await SpriteManager.applySpriteCommands($overlay, segment.spriteCommands, expectedRenderToken);
   if (isRenderTokenStale()) return false;
 
+  clearSpritesOnBackgroundCommand($overlay, segment);
   const expression = segment.expression || '默认';
   await SpriteManager.updateSprite($overlay, speaker, expression, expectedRenderToken);
   if (isRenderTokenStale()) return false;

@@ -32,14 +32,6 @@ function findFirstSplitMarker(raw) {
  */
 export function splitZhJaForDisplayAndTts(input, enabled) {
   const raw = String(input ?? '');
-  if (!enabled) {
-    return {
-      displayText: raw,
-      ttsText: raw,
-      hasJa: false,
-    };
-  }
-
   const marker = findFirstSplitMarker(raw);
   if (!marker) {
     return {
@@ -54,10 +46,20 @@ export function splitZhJaForDisplayAndTts(input, enabled) {
   const zhPart = raw.slice(0, markerStart).trim();
   const jaPart = raw.slice(markerEnd).trim();
   const fallback = raw.trim();
+  const displayText = zhPart || fallback;
+
+  // 双语关闭时仍解析 [JP] 分隔，避免把日文段直接显示在对话框中。
+  if (!enabled) {
+    return {
+      displayText,
+      ttsText: displayText,
+      hasJa: !!jaPart,
+    };
+  }
 
   return {
-    displayText: zhPart || fallback,
-    ttsText: jaPart || zhPart || fallback,
+    displayText,
+    ttsText: jaPart || displayText || fallback,
     hasJa: !!jaPart,
   };
 }

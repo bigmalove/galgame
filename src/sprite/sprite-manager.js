@@ -113,6 +113,48 @@ export const SpriteManager = {
     return String(characterId || '').trim().toLowerCase();
   },
 
+  normalizeCharacterKey(characterId) {
+    return this.normalizeCharacterId(characterId).replace(/[\s\u3000_\-·•.。,:：'"“”‘’`~!@#$%^&*()（）[\]{}<>《》、，!?？]/g, '');
+  },
+
+  resolveCharacterId(characterId) {
+    const normalized = this.normalizeCharacterId(characterId);
+    if (!normalized) return null;
+    const normalizedKey = this.normalizeCharacterKey(characterId);
+    const ids = Array.from(this.activeCharacters.keys());
+
+    let matched = ids.find(id => this.normalizeCharacterId(id) === normalized);
+    if (matched) return matched;
+
+    if (normalizedKey) {
+      matched = ids.find(id => this.normalizeCharacterKey(id) === normalizedKey);
+      if (matched) return matched;
+    }
+
+    return null;
+  },
+
+  findCharacterElements(characterId) {
+    const normalized = this.normalizeCharacterId(characterId);
+    if (!normalized) return $();
+    const normalizedKey = this.normalizeCharacterKey(characterId);
+    return $('#gal-global-overlay .gal-char-container').filter((_, el) => {
+      const raw = String($(el).attr('data-character') || '').trim();
+      if (!raw) return false;
+      if (this.normalizeCharacterId(raw) === normalized) return true;
+      if (normalizedKey && this.normalizeCharacterKey(raw) === normalizedKey) return true;
+      return false;
+    });
+  },
+
+  cleanupCharacterDom(characterId) {
+    const $elements = this.findCharacterElements(characterId);
+    if ($elements.length) {
+      $elements.remove();
+    }
+    return $elements.length;
+  },
+
   _nextLive2DRenderSeq(characterId) {
     const next = (this.live2dRenderSeq.get(characterId) || 0) + 1;
     this.live2dRenderSeq.set(characterId, next);
@@ -284,16 +326,25 @@ export const SpriteManager = {
   },
 
   async removeCharacter(characterId, { animate = true } = {}) {
-    const info = this.activeCharacters.get(characterId);
+    const resolvedCharacterId = this.resolveCharacterId(characterId) || characterId;
+    const info = this.activeCharacters.get(resolvedCharacterId);
     if (!info) {
-      Live2DManager.releaseCharacter(characterId);
-      this._clearLive2DRenderSeq(characterId);
-      return false;
+      const removedCount = this.cleanupCharacterDom(characterId);
+      if (resolvedCharacterId !== characterId) {
+        this.cleanupCharacterDom(resolvedCharacterId);
+      }
+      Live2DManager.releaseCharacter(resolvedCharacterId);
+      this._clearLive2DRenderSeq(resolvedCharacterId);
+      if (resolvedCharacterId !== characterId) {
+        Live2DManager.releaseCharacter(characterId);
+        this._clearLive2DRenderSeq(characterId);
+      }
+      return removedCount > 0;
     }
 
     let $element = info.element;
     if (!($element?.length && $element[0]?.isConnected) && info.slot) {
-      $element = $(`#gal-global-overlay .gal-char-slot.slot-${info.slot} .gal-char-container[data-character="${characterId}"]`);
+      $element = $(`#gal-global-overlay .gal-char-slot.slot-${info.slot} .gal-char-container[data-character="${resolvedCharacterId}"]`);
     }
 
     const exitClass = info.slot === 'left'
@@ -310,16 +361,17 @@ export const SpriteManager = {
       }
       $element.remove();
     }
+    this.cleanupCharacterDom(resolvedCharacterId);
 
-    Live2DManager.releaseCharacter(characterId);
-    SpriteAnimationManager.cleanup(characterId);
-    this._clearLive2DRenderSeq(characterId);
-    this.activeCharacters.delete(characterId);
-    if (this.slotOwners.get(info.slot) === characterId) {
+    Live2DManager.releaseCharacter(resolvedCharacterId);
+    SpriteAnimationManager.cleanup(resolvedCharacterId);
+    this._clearLive2DRenderSeq(resolvedCharacterId);
+    this.activeCharacters.delete(resolvedCharacterId);
+    if (this.slotOwners.get(info.slot) === resolvedCharacterId) {
       this.slotOwners.delete(info.slot);
     }
-    this.characterQueue = this.characterQueue.filter(id => id !== characterId);
-    if (this.currentSpeaker === characterId) {
+    this.characterQueue = this.characterQueue.filter(id => id !== resolvedCharacterId);
+    if (this.currentSpeaker === resolvedCharacterId) {
       this.currentSpeaker = null;
     }
 
@@ -345,11 +397,11 @@ export const SpriteManager = {
       const rawCharacter = String(command?.character || '').trim();
       if (!rawCharacter) continue;
 
-      const normalized = this.normalizeCharacterId(rawCharacter);
-      const targetCharacter = Array.from(this.activeCharacters.keys()).find(
-        id => this.normalizeCharacterId(id) === normalized,
-      ) || rawCharacter;
-      await this.removeCharacter(targetCharacter, { animate: true });
+      const targetCharacter = this.resolveCharacterId(rawCharacter) || rawCharacter;
+      const removed = await this.removeCharacter(targetCharacter, { animate: true });
+      if (!removed && targetCharacter !== rawCharacter) {
+        await this.removeCharacter(rawCharacter, { animate: false });
+      }
     }
   },
 
@@ -446,6 +498,7 @@ export const SpriteManager = {
         this.activeCharacters.delete(oldCharIdInSlot);
         this.characterQueue = this.characterQueue.filter(id => id !== oldCharIdInSlot);
       } else {
+        $slot.find('.gal-char-container').remove();
         this.slotOwners.delete(slot);
       }
     }

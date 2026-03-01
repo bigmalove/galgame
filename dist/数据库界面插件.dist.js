@@ -16157,6 +16157,41 @@ ${lines.join("\n")}`;
     normalizeCharacterId(characterId) {
       return String(characterId || "").trim().toLowerCase();
     },
+    normalizeCharacterKey(characterId) {
+      return this.normalizeCharacterId(characterId).replace(/[\s\u3000_\-·•.。,:：'"“”‘’`~!@#$%^&*()（）[\]{}<>《》、，!?？]/g, "");
+    },
+    resolveCharacterId(characterId) {
+      const normalized = this.normalizeCharacterId(characterId);
+      if (!normalized) return null;
+      const normalizedKey = this.normalizeCharacterKey(characterId);
+      const ids = Array.from(this.activeCharacters.keys());
+      let matched = ids.find((id) => this.normalizeCharacterId(id) === normalized);
+      if (matched) return matched;
+      if (normalizedKey) {
+        matched = ids.find((id) => this.normalizeCharacterKey(id) === normalizedKey);
+        if (matched) return matched;
+      }
+      return null;
+    },
+    findCharacterElements(characterId) {
+      const normalized = this.normalizeCharacterId(characterId);
+      if (!normalized) return $();
+      const normalizedKey = this.normalizeCharacterKey(characterId);
+      return $("#gal-global-overlay .gal-char-container").filter((_, el) => {
+        const raw = String($(el).attr("data-character") || "").trim();
+        if (!raw) return false;
+        if (this.normalizeCharacterId(raw) === normalized) return true;
+        if (normalizedKey && this.normalizeCharacterKey(raw) === normalizedKey) return true;
+        return false;
+      });
+    },
+    cleanupCharacterDom(characterId) {
+      const $elements = this.findCharacterElements(characterId);
+      if ($elements.length) {
+        $elements.remove();
+      }
+      return $elements.length;
+    },
     _nextLive2DRenderSeq(characterId) {
       const next = (this.live2dRenderSeq.get(characterId) || 0) + 1;
       this.live2dRenderSeq.set(characterId, next);
@@ -16290,15 +16325,24 @@ ${lines.join("\n")}`;
       return this.getNextNpcReplacementSlot();
     },
     async removeCharacter(characterId, { animate = true } = {}) {
-      const info = this.activeCharacters.get(characterId);
+      const resolvedCharacterId = this.resolveCharacterId(characterId) || characterId;
+      const info = this.activeCharacters.get(resolvedCharacterId);
       if (!info) {
-        Live2DManager.releaseCharacter(characterId);
-        this._clearLive2DRenderSeq(characterId);
-        return false;
+        const removedCount = this.cleanupCharacterDom(characterId);
+        if (resolvedCharacterId !== characterId) {
+          this.cleanupCharacterDom(resolvedCharacterId);
+        }
+        Live2DManager.releaseCharacter(resolvedCharacterId);
+        this._clearLive2DRenderSeq(resolvedCharacterId);
+        if (resolvedCharacterId !== characterId) {
+          Live2DManager.releaseCharacter(characterId);
+          this._clearLive2DRenderSeq(characterId);
+        }
+        return removedCount > 0;
       }
       let $element = info.element;
       if (!($element?.length && $element[0]?.isConnected) && info.slot) {
-        $element = $(`#gal-global-overlay .gal-char-slot.slot-${info.slot} .gal-char-container[data-character="${characterId}"]`);
+        $element = $(`#gal-global-overlay .gal-char-slot.slot-${info.slot} .gal-char-container[data-character="${resolvedCharacterId}"]`);
       }
       const exitClass = info.slot === "left" ? "exiting-left" : info.slot === "center" ? "exiting-center" : "exiting-right";
       if ($element?.length) {
@@ -16308,15 +16352,16 @@ ${lines.join("\n")}`;
         }
         $element.remove();
       }
-      Live2DManager.releaseCharacter(characterId);
-      SpriteAnimationManager.cleanup(characterId);
-      this._clearLive2DRenderSeq(characterId);
-      this.activeCharacters.delete(characterId);
-      if (this.slotOwners.get(info.slot) === characterId) {
+      this.cleanupCharacterDom(resolvedCharacterId);
+      Live2DManager.releaseCharacter(resolvedCharacterId);
+      SpriteAnimationManager.cleanup(resolvedCharacterId);
+      this._clearLive2DRenderSeq(resolvedCharacterId);
+      this.activeCharacters.delete(resolvedCharacterId);
+      if (this.slotOwners.get(info.slot) === resolvedCharacterId) {
         this.slotOwners.delete(info.slot);
       }
-      this.characterQueue = this.characterQueue.filter((id) => id !== characterId);
-      if (this.currentSpeaker === characterId) {
+      this.characterQueue = this.characterQueue.filter((id) => id !== resolvedCharacterId);
+      if (this.currentSpeaker === resolvedCharacterId) {
         this.currentSpeaker = null;
       }
       if (this.activeCharacters.size === 1) {
@@ -16337,11 +16382,11 @@ ${lines.join("\n")}`;
         if (action !== "exit") continue;
         const rawCharacter = String(command?.character || "").trim();
         if (!rawCharacter) continue;
-        const normalized = this.normalizeCharacterId(rawCharacter);
-        const targetCharacter = Array.from(this.activeCharacters.keys()).find(
-          (id) => this.normalizeCharacterId(id) === normalized
-        ) || rawCharacter;
-        await this.removeCharacter(targetCharacter, { animate: true });
+        const targetCharacter = this.resolveCharacterId(rawCharacter) || rawCharacter;
+        const removed = await this.removeCharacter(targetCharacter, { animate: true });
+        if (!removed && targetCharacter !== rawCharacter) {
+          await this.removeCharacter(rawCharacter, { animate: false });
+        }
       }
     },
     async updateSprite($overlay, characterId, expression, renderToken = null) {
@@ -16431,6 +16476,7 @@ ${lines.join("\n")}`;
           this.activeCharacters.delete(oldCharIdInSlot);
           this.characterQueue = this.characterQueue.filter((id) => id !== oldCharIdInSlot);
         } else {
+          $slot.find(".gal-char-container").remove();
           this.slotOwners.delete(slot);
         }
       }
@@ -17283,13 +17329,6 @@ ${extraRule}
   }
   function splitZhJaForDisplayAndTts(input, enabled) {
     const raw = String(input ?? "");
-    if (!enabled) {
-      return {
-        displayText: raw,
-        ttsText: raw,
-        hasJa: false
-      };
-    }
     const marker = findFirstSplitMarker(raw);
     if (!marker) {
       return {
@@ -17303,9 +17342,17 @@ ${extraRule}
     const zhPart = raw.slice(0, markerStart).trim();
     const jaPart = raw.slice(markerEnd).trim();
     const fallback = raw.trim();
+    const displayText = zhPart || fallback;
+    if (!enabled) {
+      return {
+        displayText,
+        ttsText: displayText,
+        hasJa: !!jaPart
+      };
+    }
     return {
-      displayText: zhPart || fallback,
-      ttsText: jaPart || zhPart || fallback,
+      displayText,
+      ttsText: jaPart || displayText || fallback,
       hasJa: !!jaPart
     };
   }
@@ -17332,6 +17379,8 @@ ${extraRule}
   var RE_SPRITE_TAG = /<sprite\b([^>]*)\/?>/gi;
   var RE_POPUP1 = /<弹窗一>([\s\S]*?)<\/弹窗一>/i;
   var RE_POPUP2 = /<弹窗二>([\s\S]*?)<\/弹窗二>/i;
+  var RE_IMAGE_PLACEHOLDER_INLINE = /\[image\s*#\d+\]/gi;
+  var RE_IMAGE_PLACEHOLDER_LINE = /^\s*[“”"'‘’「」『』【】\[\]（）()<>]*\s*\[image\s*#\d+\]\s*[“”"'‘’「」『』【】\[\]（）()<>]*\s*$/i;
   var RE_ILLEGAL_TAGS = [
     /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
     /<system_ui_display[^>]*>[\s\S]*?<\/system_ui_display>/gi,
@@ -17358,6 +17407,14 @@ ${extraRule}
     搞怪: "playful, wink, tongue out, silly face"
   };
   var PARSE_CACHE_MAX_SIZE2 = 30;
+  var WRAPPER_QUOTES = [
+    ["“", "”"],
+    ["‘", "’"],
+    ["「", "」"],
+    ["『", "』"],
+    ['"', '"'],
+    ["'", "'"]
+  ];
   var _getFormattedContentRef = null;
   function setParserRefs({ getFormattedContent: getFormattedContent2 }) {
     if (getFormattedContent2) _getFormattedContentRef = getFormattedContent2;
@@ -17372,6 +17429,30 @@ ${extraRule}
       result = result.replace(regex, "");
     }
     return result.replace(/\n{3,}/g, "\n\n");
+  }
+  function removeImagePlaceholderLines(text) {
+    if (!text) return "";
+    const lines = String(text).split(/\r?\n/);
+    return lines.filter((line) => !RE_IMAGE_PLACEHOLDER_LINE.test(line.trim())).join("\n");
+  }
+  function stripOuterQuotes(text) {
+    let result = String(text || "").trim();
+    if (!result) return result;
+    let shouldContinue = true;
+    while (shouldContinue && result.length > 1) {
+      shouldContinue = false;
+      for (const [open, close] of WRAPPER_QUOTES) {
+        if (result.startsWith(open) && result.endsWith(close)) {
+          result = result.slice(open.length, result.length - close.length).trim();
+          shouldContinue = true;
+          break;
+        }
+      }
+    }
+    return result;
+  }
+  function normalizeSpeakerName(name) {
+    return String(name || "").replace(RE_IMAGE_PLACEHOLDER_INLINE, "").replace(/^[“”"'‘’「」『』\s]+/, "").replace(/[“”"'‘’「」『』\s]+$/, "").trim();
   }
   function preprocessSimplifiedFormat(html) {
     if (!html) return html;
@@ -17588,6 +17669,10 @@ ${extraRule}
       text = text.replace(/<q>([^<]*)<\/q>/gi, "$1");
       text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, "$1");
       text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, "$1");
+      text = text.replace(RE_IMAGE_PLACEHOLDER_INLINE, "");
+      text = removeImagePlaceholderLines(text).trim();
+      text = stripOuterQuotes(text);
+      if (!text) return null;
       let expression = null;
       const expressionTagRegex = new RegExp(`<(${expressionPattern})>`, "i");
       const exprMatch = text.match(expressionTagRegex);
@@ -17595,21 +17680,26 @@ ${extraRule}
         expression = exprMatch[1];
         text = text.replace(expressionTagRegex, "").trim();
       }
-      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*[""\"'「『（(]([\s\S]+)[""\"'」』）)]\s*$/);
+      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["'“‘「『（(]([\s\S]+)["'”’」』）)]\s*$/);
       if (!dialogueMatch) {
         dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
       }
       if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
-        const speaker = dialogueMatch[1].trim();
-        const dialogue = dialogueMatch[2].trim();
+        const speaker = normalizeSpeakerName(dialogueMatch[1]);
+        const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
+        if (!speaker || !dialogue) return null;
         const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
         if (speaker === "旁白") {
-          return {
+          const narrationSeg = {
             type: "narration",
             speaker: null,
-            text: dialogue,
+            text: splitResult.displayText,
             expression: null
           };
+          if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+            narrationSeg.ttsText = splitResult.ttsText;
+          }
+          return narrationSeg;
         }
         if (speaker.length <= 20 && speaker.length > 0) {
           const segResult = {
@@ -17627,12 +17717,17 @@ ${extraRule}
           return segResult;
         }
       }
-      return {
+      const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
+      const narrationResult = {
         type: "narration",
         speaker: null,
-        text,
+        text: narrationSplit.displayText,
         expression: null
       };
+      if (narrationSplit.ttsText && narrationSplit.ttsText !== narrationSplit.displayText) {
+        narrationResult.ttsText = narrationSplit.ttsText;
+      }
+      return narrationResult;
     }
     const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
     let match;
@@ -17672,19 +17767,32 @@ ${extraRule}
       }
     }
     if (result.segments.length === 0) {
-      const plainText = content.replace(/<[^>]+>/g, "").trim();
-      if (plainText) {
-        const seg = {
-          type: "narration",
-          speaker: null,
-          text: plainText,
-          expression: null,
-          _sourcePos: content.length
-        };
-        if (backgroundChanges.length > 0) {
-          seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+      const plainText = content.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "\n").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const normalizedText = removeImagePlaceholderLines(plainText).replace(RE_IMAGE_PLACEHOLDER_INLINE, "").trim();
+      if (normalizedText) {
+        const lines = normalizedText.split("\n").map((line) => line.trim()).filter(Boolean);
+        for (const line of lines) {
+          const seg = parseSegmentText(line);
+          if (!seg) continue;
+          seg._sourcePos = content.length;
+          if (backgroundChanges.length > 0) {
+            seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+          }
+          result.segments.push(seg);
         }
-        result.segments.push(seg);
+        if (result.segments.length === 0) {
+          const seg = {
+            type: "narration",
+            speaker: null,
+            text: normalizedText,
+            expression: null,
+            _sourcePos: content.length
+          };
+          if (backgroundChanges.length > 0) {
+            seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+          }
+          result.segments.push(seg);
+        }
       }
     }
     if (spriteCommands.length > 0 && result.segments.length > 0) {

@@ -30,6 +30,8 @@ const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
 const RE_SPRITE_TAG = /<sprite\b([^>]*)\/?>/gi;
 const RE_POPUP1 = /<弹窗一>([\s\S]*?)<\/弹窗一>/i;
 const RE_POPUP2 = /<弹窗二>([\s\S]*?)<\/弹窗二>/i;
+const RE_IMAGE_PLACEHOLDER_INLINE = /\[image\s*#\d+\]/gi;
+const RE_IMAGE_PLACEHOLDER_LINE = /^\s*[“”"'‘’「」『』【】\[\]（）()<>]*\s*\[image\s*#\d+\]\s*[“”"'‘’「」『』【】\[\]（）()<>]*\s*$/i;
 
 const RE_ILLEGAL_TAGS = [
   /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
@@ -62,6 +64,14 @@ const EXPRESSION_TAG_MAP = {
 
 
 const PARSE_CACHE_MAX_SIZE = 30;
+const WRAPPER_QUOTES = [
+  ['“', '”'],
+  ['‘', '’'],
+  ['「', '」'],
+  ['『', '』'],
+  ['"', '"'],
+  ["'", "'"],
+];
 
 // 延迟引用: getFormattedContent (enhanced-mode)
 let _getFormattedContentRef = null;
@@ -90,6 +100,39 @@ function cleanIllegalTags(html) {
     result = result.replace(regex, '');
   }
   return result.replace(/\n{3,}/g, '\n\n');
+}
+
+function removeImagePlaceholderLines(text) {
+  if (!text) return '';
+  const lines = String(text).split(/\r?\n/);
+  return lines.filter(line => !RE_IMAGE_PLACEHOLDER_LINE.test(line.trim())).join('\n');
+}
+
+function stripOuterQuotes(text) {
+  let result = String(text || '').trim();
+  if (!result) return result;
+
+  let shouldContinue = true;
+  while (shouldContinue && result.length > 1) {
+    shouldContinue = false;
+    for (const [open, close] of WRAPPER_QUOTES) {
+      if (result.startsWith(open) && result.endsWith(close)) {
+        result = result.slice(open.length, result.length - close.length).trim();
+        shouldContinue = true;
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
+function normalizeSpeakerName(name) {
+  return String(name || '')
+    .replace(RE_IMAGE_PLACEHOLDER_INLINE, '')
+    .replace(/^[“”"'‘’「」『』\s]+/, '')
+    .replace(/[“”"'‘’「」『』\s]+$/, '')
+    .trim();
 }
 
 // ============================================
@@ -372,6 +415,10 @@ export function parseGalgameContent(html, messageId) {
     text = text.replace(/<q>([^<]*)<\/q>/gi, '$1');
     text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, '$1');
     text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, '$1');
+    text = text.replace(RE_IMAGE_PLACEHOLDER_INLINE, '');
+    text = removeImagePlaceholderLines(text).trim();
+    text = stripOuterQuotes(text);
+    if (!text) return null;
 
     let expression = null;
     const expressionTagRegex = new RegExp(`<(${expressionPattern})>`, 'i');
@@ -381,23 +428,28 @@ export function parseGalgameContent(html, messageId) {
       text = text.replace(expressionTagRegex, '').trim();
     }
 
-    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*[""\"'「『（(]([\s\S]+)[""\"'」』）)]\s*$/);
+    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["'“‘「『（(]([\s\S]+)["'”’」』）)]\s*$/);
     if (!dialogueMatch) {
       dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
     }
 
     if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
-      const speaker = dialogueMatch[1].trim();
-      const dialogue = dialogueMatch[2].trim();
+      const speaker = normalizeSpeakerName(dialogueMatch[1]);
+      const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
+      if (!speaker || !dialogue) return null;
       const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
 
       if (speaker === '旁白') {
-        return {
+        const narrationSeg = {
           type: 'narration',
           speaker: null,
-          text: dialogue,
+          text: splitResult.displayText,
           expression: null,
         };
+        if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+          narrationSeg.ttsText = splitResult.ttsText;
+        }
+        return narrationSeg;
       }
 
       if (speaker.length <= 20 && speaker.length > 0) {
@@ -417,12 +469,17 @@ export function parseGalgameContent(html, messageId) {
       }
     }
 
-    return {
+    const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
+    const narrationResult = {
       type: 'narration',
       speaker: null,
-      text: text,
+      text: narrationSplit.displayText,
       expression: null,
     };
+    if (narrationSplit.ttsText && narrationSplit.ttsText !== narrationSplit.displayText) {
+      narrationResult.ttsText = narrationSplit.ttsText;
+    }
+    return narrationResult;
   }
 
   // 解析所有已闭合的 <p> 标签
@@ -468,19 +525,44 @@ export function parseGalgameContent(html, messageId) {
 
   // 如果没有 <p> 标签，尝试直接解析纯文本
   if (result.segments.length === 0) {
-    const plainText = content.replace(/<[^>]+>/g, '').trim();
-    if (plainText) {
-      const seg = {
-        type: 'narration',
-        speaker: null,
-        text: plainText,
-        expression: null,
-        _sourcePos: content.length,
-      };
-      if (backgroundChanges.length > 0) {
-        seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+    const plainText = content
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '\n')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
+    const normalizedText = removeImagePlaceholderLines(plainText)
+      .replace(RE_IMAGE_PLACEHOLDER_INLINE, '')
+      .trim();
+
+    if (normalizedText) {
+      const lines = normalizedText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+
+      for (const line of lines) {
+        const seg = parseSegmentText(line);
+        if (!seg) continue;
+        seg._sourcePos = content.length;
+        if (backgroundChanges.length > 0) {
+          seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+        }
+        result.segments.push(seg);
       }
-      result.segments.push(seg);
+
+      if (result.segments.length === 0) {
+        const seg = {
+          type: 'narration',
+          speaker: null,
+          text: normalizedText,
+          expression: null,
+          _sourcePos: content.length,
+        };
+        if (backgroundChanges.length > 0) {
+          seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+        }
+        result.segments.push(seg);
+      }
     }
   }
 

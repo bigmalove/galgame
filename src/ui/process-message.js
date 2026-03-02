@@ -13,6 +13,7 @@ import { hideNonLastFloors, showAllFloors } from './galgame-mode.js';
 import { injectGalgameButton } from './menu-button.js';
 import { detectAndCaptureCg } from './overlay-content.js';
 import { adjustToolbarForSpace, ensureGlobalOverlay, showGlobalOverlay } from './overlay.js';
+import { cancelTypewriter } from './typewriter.js';
 
 // ============================================
 // 新消息处理
@@ -47,6 +48,7 @@ function buildFallbackParsed(text) {
 }
 
 function renderFallbackOverlay(mesId, text) {
+  cancelTypewriter();
   const $overlay = ensureGlobalOverlay();
   $overlay.find('.gal-name-badge span').text('旁白');
   $overlay.find('.gal-name-badge').addClass('gal-narrator-label');
@@ -206,6 +208,7 @@ export async function processNewMessage(mesNode, options = {}) {
 
   const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
   if (isLastAi) {
+    cancelTypewriter();
     const fallbackText = String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）';
 
     if (_updateGlobalOverlayContentRef) {

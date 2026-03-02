@@ -118,7 +118,7 @@ export async function showSpriteConfigModal() {
       `;
     const modalHtml = `
         <div class="gal-config-modal" id="gal-config-modal">
-          <div class="gal-config-panel" style="width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; overflow-y: auto; border-radius: 0 !important;">
+          <div class="gal-config-panel" style="width: 100% !important; height: 100% !important; max-width: none !important; max-height: none !important; overflow: hidden; border-radius: 0 !important;">
             <div class="gal-config-header">
               <div class="gal-config-title"><i class="fa-solid fa-images"></i> 资源管理</div>
               <button class="gal-config-close" id="gal-config-close">

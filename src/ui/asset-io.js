@@ -11,6 +11,7 @@ import { getAllLive2DModels } from '../db/live2d-models.js';
 import { getTTSEnabled, getAllCharacterTTSVoices } from '../audio/tts-config.js';
 import { CHAR_USE_LIVE2D_KEY, LIVE2D_CONFIG_KEY } from '../live2d/render-mode.js';
 import { withResolvedLive2DRuntime } from '../live2d/runtime-router.js';
+import { getAllCharacterNameKeywords, setCharacterNameKeywords } from '../utils/character-name-keywords.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
 import { embedCardIntoPngBytes, isPngBytes } from '../utils/png-character-card.js';
 import { normalizeLocationStatusIconClass, normalizeTimeStatusIconClass } from '../utils/status-popup-icons.js';
@@ -1382,6 +1383,7 @@ async function buildGalgameCardConfig(options = {}) {
   reportProgress(18, 'Loading TTS and Live2D settings...');
   const ttsEnabled = !!getTTSEnabled();
   const characterVoice = getAllCharacterTTSVoices() || {};
+  const characterKeywords = getAllCharacterNameKeywords() || {};
   const settings = getSettings();
 
   const live2dEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
@@ -1636,6 +1638,7 @@ async function buildGalgameCardConfig(options = {}) {
     tts: {
       enabled: ttsEnabled,
       characterVoice: characterVoice || {},
+      characterKeywords: characterKeywords || {},
     },
   };
 
@@ -1956,13 +1959,14 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
 
   const dialogHtml = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
-      <div class="gal-input-box" style="max-width: 860px; width: 96%; max-height: 88vh; overflow-y: auto; padding: 22px;">
-        <div class="gal-input-title" style="margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+      <div class="gal-input-box gal-modal-layout-fixed" style="max-width: 860px; width: 96%; max-height: 88vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+        <div class="gal-input-title gal-modal-fixed-header" style="margin: 0; padding: 14px 22px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-id-card" style="color: #0d6efd;"></i> 导出角色卡（完整设置）</span>
           <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
+        <div class="gal-modal-scroll-body" style="padding: 14px 22px 12px 22px;">
 
         <div style="margin-bottom: 14px; padding: 10px 12px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #0d6efd; color: #555; font-size: 0.9rem; line-height: 1.6;">
           当前图包：<strong>${escapeHtml(currentPackName)}</strong>（${escapeHtml(String(currentPackId))}）<br>
@@ -2112,8 +2116,8 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
             </label>
           </section>
         </div>
-
-        <div class="gal-input-actions" style="display: flex; gap: 10px; margin-top: 16px;">
+        </div>
+        <div class="gal-input-actions gal-modal-fixed-actions" style="display: flex; gap: 10px; margin: 0; padding: 12px 22px 16px 22px; border-top: 1px solid #eee;">
           <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
             <i class="fa-solid fa-xmark"></i> <span>取消</span>
           </button>
@@ -3057,11 +3061,29 @@ export async function importAssetsFromJson(file, targetPackId = null) {
         count++;
       }
     }
+    const importedCharacterKeywords = json?.tts?.characterKeywords;
+    let restoredKeywordOwnerCount = 0;
+    if (importedCharacterKeywords && typeof importedCharacterKeywords === 'object' && !Array.isArray(importedCharacterKeywords)) {
+      const existingKeywordMap = getAllCharacterNameKeywords();
+      Object.keys(existingKeywordMap).forEach(characterKey => {
+        setCharacterNameKeywords(characterKey, []);
+      });
+      for (const [characterKey, keywordList] of Object.entries(importedCharacterKeywords)) {
+        const safeCharacterId = String(characterKey || '').trim();
+        if (!safeCharacterId) continue;
+        const savedKeywords = setCharacterNameKeywords(safeCharacterId, keywordList);
+        if (savedKeywords.length > 0) {
+          restoredKeywordOwnerCount++;
+        }
+      }
+    }
+
     const mapSettingsApplied = applyImportedMapSettings(json.mapSettings || json?.custom?.map || json?.meta?.mapSettings);
+    const keywordRestoreSuffix = restoredKeywordOwnerCount > 0 ? `，恢复 ${restoredKeywordOwnerCount} 个角色关键字` : '';
     showToast(
       mapSettingsApplied
-        ? `成功导入 ${count} 项资源，并同步地图设置`
-        : `成功导入 ${count} 项资源`,
+        ? `成功导入 ${count} 项资源${keywordRestoreSuffix}，并同步地图设置`
+        : `成功导入 ${count} 项资源${keywordRestoreSuffix}`,
     );
   } catch (e) {
     console.error('JSON导入失败', e);

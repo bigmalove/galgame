@@ -59,6 +59,31 @@ function findPreviousAiMessage(currentMesId) {
   return $best;
 }
 
+function findNextAiMessage(currentMesId) {
+  const currentMesIdStr = String(currentMesId || '');
+  if (!currentMesIdStr) return null;
+
+  const $currentMes = $(`#chat > .mes[mesid="${currentMesIdStr}"]`);
+  if ($currentMes.length) {
+    const $next = $currentMes.nextAll('.mes[is_user!="true"]').first();
+    if ($next.length) return $next;
+  }
+
+  const currentMesIdNum = Number.parseInt(currentMesIdStr, 10);
+  if (!Number.isFinite(currentMesIdNum)) return null;
+
+  let $best = null;
+  let bestMesId = Number.POSITIVE_INFINITY;
+  $('#chat > .mes[is_user!="true"]').each(function () {
+    const $mes = $(this);
+    const mesId = Number.parseInt($mes.attr('mesid'), 10);
+    if (!Number.isFinite(mesId) || mesId <= currentMesIdNum || mesId >= bestMesId) return;
+    $best = $mes;
+    bestMesId = mesId;
+  });
+  return $best;
+}
+
 function extractMessageContent($mes, mesId) {
   let contentToProcess = getFormattedSwipeContent(mesId);
   if (!contentToProcess) {
@@ -176,6 +201,34 @@ async function switchToPreviousAiFloor(options = {}) {
   $('#gal-global-overlay .gal-game-container').attr('data-mes-id', prepared.mesId);
   setCurrentDisplayMesId(prepared.mesId);
   const rendered = await scheduleOverlaySegmentDisplay(prepared.state, 'switch-prev-floor-fallback');
+  return rendered ? { ok: true, state: prepared.state, mesId: prepared.mesId } : { ok: false };
+}
+
+export async function switchToNextAiFloor(options = {}) {
+  const { suppressTTS = false } = options;
+  const currentMesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
+  if (!currentMesId) return { ok: false };
+
+  const $nextAiMes = findNextAiMessage(currentMesId);
+  if (!$nextAiMes || !$nextAiMes.length) return { ok: false };
+
+  const nextMesId = $nextAiMes.attr('mesid');
+  if (!nextMesId) return { ok: false };
+
+  const prepared = ensureParsedStateForMes($nextAiMes, nextMesId, 'first');
+  if (!prepared) return { ok: false };
+
+  TTSManager.stop();
+
+  if (_updateGlobalOverlayContentRef) {
+    await _updateGlobalOverlayContentRef(prepared.mesId, prepared.parsed, { suppressTTS });
+    return { ok: true, state: prepared.state, mesId: prepared.mesId };
+  }
+
+  console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，降级到段落渲染`);
+  $('#gal-global-overlay .gal-game-container').attr('data-mes-id', prepared.mesId);
+  setCurrentDisplayMesId(prepared.mesId);
+  const rendered = await scheduleOverlaySegmentDisplay(prepared.state, 'switch-next-floor-fallback');
   return rendered ? { ok: true, state: prepared.state, mesId: prepared.mesId } : { ok: false };
 }
 

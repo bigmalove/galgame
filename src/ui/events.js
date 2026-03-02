@@ -20,6 +20,7 @@ import {
   startSkipping,
   stopRewinding,
   stopSkipping,
+  switchToNextAiFloor,
   triggerPrevSegment,
   triggerReroll,
 } from './interaction.js';
@@ -28,6 +29,7 @@ import { showCustomPopupPanel } from './modal.js';
 import { detectAndCaptureCg } from './overlay-content.js';
 import { scheduleOverlaySegmentDisplay, showGlobalOverlay } from './overlay.js';
 import { showToast } from './toast.js';
+import { finishActiveTypewriter, isTypewriterActive } from './typewriter.js';
 import { showMapModal } from '../map/map-modal.js';
 
 // ============================================
@@ -74,6 +76,40 @@ export function setupGlobalEventListeners() {
     const parsed = getCurrentParsedContent();
     const fromTag = normalizeStatusPopupHtml(parsed?.timeStatusBarHtml);
     return fromTag;
+  }
+
+  async function triggerNextSegmentFromOverlay() {
+    if (isTypewriterActive()) {
+      finishActiveTypewriter();
+      return;
+    }
+
+    const $overlay = $('#gal-global-overlay');
+    const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
+    const state = messageSegmentState.get(String(mesId));
+    if (!state) return;
+
+    const nextSegment = state.segments[state.currentIndex + 1];
+    if (nextSegment) {
+      const nextSpeakText = String(nextSegment.ttsText ?? nextSegment.text ?? '').trim();
+      const nextWillSpeak = nextSegment.type === 'dialogue' && settings.ttsEnabled && nextSpeakText.length > 0;
+
+      if (nextWillSpeak) {
+        TTSManager.stop();
+      }
+      state.currentIndex++;
+      await scheduleOverlaySegmentDisplay(state, 'next-click');
+      if (nextWillSpeak) {
+        const segmentId = `${mesId}_${state.currentIndex}`;
+        TTSManager.speak(nextSegment, segmentId);
+      }
+      return;
+    }
+
+    const switched = await switchToNextAiFloor();
+    if (switched.ok) return;
+
+    showToast('已到最后AI楼层');
   }
 
   // 弹窗一图标：始终显示地点弹窗内容
@@ -486,22 +522,26 @@ export function setupGlobalEventListeners() {
   // NEXT按钮
   $(doc).on('click', '#gal-global-overlay [data-action="next"]', async function (e) {
     e.stopPropagation();
+    await triggerNextSegmentFromOverlay();
+  });
+
+  // Styled 显示时：点击空白区域等于 NEXT
+  $(doc).on('click', '#gal-global-overlay', async function (e) {
     const $overlay = $('#gal-global-overlay');
-    const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
-    const state = messageSegmentState.get(String(mesId));
-    if (!state) return;
-    const nextSegment = state.segments[state.currentIndex + 1];
-    if (nextSegment) {
-      TTSManager.stop();
-      state.currentIndex++;
-      await scheduleOverlaySegmentDisplay(state, 'next-click');
-      if (nextSegment.type === 'dialogue' && settings.ttsEnabled) {
-        const segmentId = `${mesId}_${state.currentIndex}`;
-        TTSManager.speak(nextSegment, segmentId);
-      }
-    } else {
-      showToast('已是最后一段');
-    }
+    if (!$overlay.hasClass('gal-mode-styled')) return;
+
+    const $target = $(e.target);
+    if (
+      $target.closest(
+        '.gal-bottom-toolbar, .gal-interaction-bar, .gal-name-badge, .gal-location-bar, .gal-time-bar, .gal-status-bar-container, .gal-bgm-widget, .gal-fullscreen-btn',
+      ).length
+    ) return;
+    if ($target.closest('.gal-styled-stage-content').length) return;
+    if ($target.closest('.gal-choice-layer, .gal-popup-modal, .gal-embedded-viewer, .gal-cg-viewer').length) return;
+    if ($target.closest('button, a, input, textarea, select, [data-action], [contenteditable="true"]').length) return;
+
+    e.stopPropagation();
+    await triggerNextSegmentFromOverlay();
   });
 
   // PREV按钮: click 事件由 mouseup 处理器中的 triggerPrevSegment() 处理
@@ -540,6 +580,8 @@ export function setupGlobalEventListeners() {
         if (autoTickInFlight) return;
         autoTickInFlight = true;
         try {
+          if (isTypewriterActive()) return;
+
           const state = messageSegmentState.get(String(mesId));
           if (!state) {
             clearInterval(timer);

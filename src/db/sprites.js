@@ -4,6 +4,7 @@ import { characterSprites } from '../core/store.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 import { getCurrentPackId, getRenderScope } from './image-packs.js';
+import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // ============================================
 // 立绘存储函数
@@ -176,7 +177,8 @@ export async function saveSpritesBatch(spritesList, packId = null) {
 }
 
 export async function getSprite(characterId, expression, packId = null) {
-  const safeCharacterId = String(characterId || '').trim();
+  const resolvedCharacterId = resolveCharacterIdByKeywords(characterId) || characterId;
+  const safeCharacterId = String(resolvedCharacterId || '').trim();
   const safeExpression = String(expression || '默认').trim() || '默认';
   if (!safeCharacterId) {
     console.log(`[${SCRIPT_NAME}] getSprite: 角色名为空`);

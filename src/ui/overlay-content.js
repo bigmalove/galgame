@@ -1,25 +1,194 @@
+import { TTSManager } from '../audio/tts-manager.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $ } from '../core/env.js';
-import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
-import { getIsEnabled, getPendingOptions, getGalgameChoicesVisible } from '../core/state.js';
-import { decodeHtml, getRawMessageContent, getFormattedSwipeContent } from '../utils/html.js';
-import { updateLocationTimeDisplay } from '../utils/location-time.js';
-import { Live2DPreloadManager } from '../live2d/preload.js';
-import { SpriteManager } from '../sprite/sprite-manager.js';
-import { TTSManager } from '../audio/tts-manager.js';
-import { getIsGeneratingResponse } from '../logic/generation-state.js';
-import { checkSillyTavernGenerating, resetGenerationState } from '../logic/generation-state.js';
-import { RE_GAL_TAGS, parseGalgameContent } from '../logic/parser.js';
+import { getGalgameChoicesVisible, getIsEnabled, getPendingOptions } from '../core/state.js';
+import { GalgameStore } from '../core/store.js';
 import { applyPixiEffectOps, clearAllPixiEffects, mountPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
-import { getCurrentDisplayMesId, setCurrentDisplayMesId, ensureGlobalOverlay, nextOverlayRenderToken, scheduleOverlaySegmentDisplay, showGlobalOverlay } from './overlay.js';
-import { updateNextBtnForGeneratingState, stopNextBtnAnimation } from './next-btn.js';
+import { Live2DPreloadManager } from '../live2d/preload.js';
+import { checkSillyTavernGenerating, getIsGeneratingResponse, resetGenerationState } from '../logic/generation-state.js';
+import { RE_GAL_TAGS, parseGalgameContent } from '../logic/parser.js';
+import { SpriteManager } from '../sprite/sprite-manager.js';
+import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
+import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
+import { updateLocationTimeDisplay } from '../utils/location-time.js';
+import { stopNextBtnAnimation, updateNextBtnForGeneratingState } from './next-btn.js';
+import { ensureGlobalOverlay, getCurrentDisplayMesId, nextOverlayRenderToken, setCurrentDisplayMesId, showGlobalOverlay } from './overlay.js';
+import { cancelTypewriter, renderTypewriterText } from './typewriter.js';
 
 // ============================================
 // 覆盖层内容更新
 // ============================================
 
 const messageSegmentState = GalgameStore.cache.segments;
+const TYPEWRITER_INSTANT_SOURCES = new Set(['skip', 'rewind', 'auto-play']);
+
+function shouldUseTypewriterForSegment(segment) {
+  return segment?.type === 'dialogue' || segment?.type === 'narration';
+}
+
+function shouldForceInstantBySource(source) {
+  return TYPEWRITER_INSTANT_SOURCES.has(String(source || ''));
+}
+
+// ============================================
+// Styled 内容 HTML 渲染
+// ============================================
+function renderStyledContent(segment) {
+  const type = segment.styleType || '';
+  const lines = segment.styledLines || [];
+  const from = segment.styledFrom || '';
+  const to = segment.styledTo || '';
+  const title = segment.styledTitle || '';
+  const date = segment.styledDate || '';
+
+  const escHtml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  if (type === '手机短信' || type === 'sms' || type === '微信' || type === 'wechat') {
+    // 手机短信/微信风格
+    const selfName = to || '我';
+    let html = '<div class="gal-styled gal-styled-sms">';
+    html += '<div class="gal-sms-header">';
+    html += `<span class="gal-sms-contact">${escHtml(from || '未知联系人')}</span>`;
+    if (date) html += `<span class="gal-sms-time">${escHtml(date)}</span>`;
+    html += '</div>';
+    html += '<div class="gal-sms-body">';
+    for (const line of lines) {
+      const sender = line.sender;
+      const isSelf = sender === selfName || sender === '我' || sender === to;
+      const bubbleClass = isSelf ? 'gal-sms-bubble-self' : 'gal-sms-bubble-other';
+      const displayName = sender || from || '';
+      html += `<div class="gal-sms-row ${isSelf ? 'gal-sms-row-self' : 'gal-sms-row-other'}">`;
+      if (!isSelf && displayName) html += `<span class="gal-sms-name">${escHtml(displayName)}</span>`;
+      html += `<div class="${bubbleClass}">${escHtml(line.text)}</div>`;
+      html += '</div>';
+    }
+    html += '</div></div>';
+    return html;
+  }
+
+  if (type === '信纸' || type === 'letter') {
+    let html = '<div class="gal-styled gal-styled-letter">';
+    if (to || from) {
+      html += '<div class="gal-letter-header">';
+      if (to) html += `<span class="gal-letter-to">致 ${escHtml(to)}</span>`;
+      if (date) html += `<span class="gal-letter-date">${escHtml(date)}</span>`;
+      html += '</div>';
+    }
+    html += '<div class="gal-letter-body">';
+    for (const line of lines) {
+      html += `<p class="gal-letter-line">${escHtml(line.text)}</p>`;
+    }
+    html += '</div>';
+    if (from) html += `<div class="gal-letter-signature">—— ${escHtml(from)}</div>`;
+    html += '</div>';
+    return html;
+  }
+
+  if (type === '羊皮纸' || type === 'parchment' || type === '古卷') {
+    let html = '<div class="gal-styled gal-styled-parchment">';
+    if (title) html += `<div class="gal-parchment-title">${escHtml(title)}</div>`;
+    html += '<div class="gal-parchment-body">';
+    for (const line of lines) {
+      html += `<p class="gal-parchment-line">${escHtml(line.text)}</p>`;
+    }
+    html += '</div>';
+    if (from) html += `<div class="gal-parchment-seal">${escHtml(from)}</div>`;
+    html += '</div>';
+    return html;
+  }
+
+  if (type === '新闻' || type === '报纸' || type === 'newspaper' || type === 'news') {
+    let html = '<div class="gal-styled gal-styled-newspaper">';
+    if (title) html += `<div class="gal-newspaper-headline">${escHtml(title)}</div>`;
+    if (date || from) {
+      html += '<div class="gal-newspaper-meta">';
+      if (from) html += `<span class="gal-newspaper-source">${escHtml(from)}</span>`;
+      if (date) html += `<span class="gal-newspaper-date">${escHtml(date)}</span>`;
+      html += '</div>';
+    }
+    html += '<div class="gal-newspaper-body">';
+    for (const line of lines) {
+      html += `<p class="gal-newspaper-paragraph">${escHtml(line.text)}</p>`;
+    }
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  if (type === '电脑屏幕' || type === '终端' || type === 'terminal' || type === 'computer') {
+    let html = '<div class="gal-styled gal-styled-terminal">';
+    html += '<div class="gal-terminal-titlebar">';
+    html += '<span class="gal-terminal-dots"><i></i><i></i><i></i></span>';
+    html += `<span class="gal-terminal-title">${escHtml(title || 'Terminal')}</span>`;
+    html += '</div>';
+    html += '<div class="gal-terminal-body">';
+    for (const line of lines) {
+      const prefix = line.sender ? `<span class="gal-terminal-prompt">${escHtml(line.sender)}$</span> ` : '<span class="gal-terminal-prompt">></span> ';
+      html += `<div class="gal-terminal-line">${prefix}${escHtml(line.text)}</div>`;
+    }
+    html += '<span class="gal-terminal-cursor">_</span>';
+    html += '</div></div>';
+    return html;
+  }
+
+  if (type === '便签' || type === '纸条' || type === 'note' || type === 'sticky') {
+    let html = '<div class="gal-styled gal-styled-note">';
+    html += '<div class="gal-note-body">';
+    for (const line of lines) {
+      html += `<p class="gal-note-line">${escHtml(line.text)}</p>`;
+    }
+    html += '</div>';
+    if (from) html += `<div class="gal-note-sign">— ${escHtml(from)}</div>`;
+    html += '</div>';
+    return html;
+  }
+
+  if (type === '日记' || type === 'diary' || type === 'journal') {
+    let html = '<div class="gal-styled gal-styled-diary">';
+    html += '<div class="gal-diary-header">';
+    if (date) html += `<span class="gal-diary-date">${escHtml(date)}</span>`;
+    if (title) html += `<span class="gal-diary-mood">${escHtml(title)}</span>`;
+    html += '</div>';
+    html += '<div class="gal-diary-body">';
+    for (const line of lines) {
+      html += `<p class="gal-diary-line">${escHtml(line.text)}</p>`;
+    }
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  if (type === '公告' || type === '通知' || type === 'bulletin' || type === 'notice') {
+    let html = '<div class="gal-styled gal-styled-bulletin">';
+    html += '<div class="gal-bulletin-header">';
+    html += `<span class="gal-bulletin-icon">📢</span>`;
+    html += `<span class="gal-bulletin-title">${escHtml(title || '公告')}</span>`;
+    html += '</div>';
+    if (from || date) {
+      html += '<div class="gal-bulletin-meta">';
+      if (from) html += `<span>${escHtml(from)}</span>`;
+      if (date) html += `<span>${escHtml(date)}</span>`;
+      html += '</div>';
+    }
+    html += '<div class="gal-bulletin-body">';
+    for (const line of lines) {
+      html += `<p class="gal-bulletin-line">${escHtml(line.text)}</p>`;
+    }
+    html += '</div>';
+    html += '</div>';
+    return html;
+  }
+
+  // 未知类型回退: 简单展示
+  let html = `<div class="gal-styled gal-styled-fallback">`;
+  if (title) html += `<div class="gal-styled-fallback-title">${escHtml(title)}</div>`;
+  for (const line of lines) {
+    html += `<p>${escHtml(line.text)}</p>`;
+  }
+  html += '</div>';
+  return html;
+}
 
 async function syncEffectsForSegmentDisplay($overlay, state, currentIndex, { isNewMessage = false } = {}) {
   if (!state) return;
@@ -102,6 +271,41 @@ function clearSpritesOnBackgroundCommand($overlay, segment) {
   return true;
 }
 
+function setStyledPresentationMode($overlay, enabled) {
+  if (!$overlay || !$overlay.length) return;
+  $overlay.toggleClass('gal-mode-styled', !!enabled);
+}
+
+function ensureStyledStage($overlay) {
+  const $gameContent = $overlay.find('.gal-game-content');
+  if (!$gameContent.length) return $();
+
+  let $stage = $gameContent.find('.gal-styled-stage');
+  if ($stage.length) return $stage;
+
+  $stage = $('<div class="gal-styled-stage"><div class="gal-styled-stage-content"></div></div>');
+  $gameContent.append($stage);
+  return $stage;
+}
+
+function hideStyledStage($overlay) {
+  const $stage = $overlay.find('.gal-styled-stage');
+  if (!$stage.length) return;
+  $stage.removeClass('show');
+  $stage.find('.gal-styled-stage-content').empty();
+}
+
+function showStyledStage($overlay, styledHtml) {
+  if (!styledHtml) {
+    hideStyledStage($overlay);
+    return;
+  }
+  const $stage = ensureStyledStage($overlay);
+  if (!$stage.length) return;
+  $stage.find('.gal-styled-stage-content').html(styledHtml);
+  $stage.addClass('show');
+}
+
 export async function updateGlobalOverlayContent(mesId, parsedContent, options = {}) {
   console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
   const $overlay = ensureGlobalOverlay();
@@ -162,12 +366,17 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   const displaySegment = segments[currentIndex] || { type: 'narration', text: '' };
   const displayText = displaySegment.text || '';
   const speaker = displaySegment.speaker;
+  const resolvedSpeaker = resolveCharacterIdByKeywords(speaker) || speaker;
   const isNarration = displaySegment.type === 'narration';
   const isCg = displaySegment.type === 'cg';
 
   const $nameBadge = $overlay.find('.gal-name-badge');
+  const isStyled = displaySegment.type === 'styled';
+  cancelTypewriter();
 
   if (isCg) {
+    setStyledPresentationMode($overlay, false);
+    hideStyledStage($overlay);
     $nameBadge.find('span').text('CG');
     $nameBadge.removeClass('gal-narrator-label');
     const cgSrc = getCapturedCgImage(mesId, displaySegment.cgIndex);
@@ -178,14 +387,36 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
     } else {
       $overlay.find('.gal-dialog-text').text('图片生成中...');
     }
+  } else if (isStyled) {
+    setStyledPresentationMode($overlay, true);
+    const styledLabel = {
+      '手机短信': '📱 短信', 'sms': '📱 SMS', '微信': '📱 微信', 'wechat': '📱 WeChat',
+      '信纸': '✉️ 信件', 'letter': '✉️ Letter',
+      '羊皮纸': '📜 古卷', 'parchment': '📜 Parchment', '古卷': '📜 古卷',
+      '新闻': '📰 新闻', '报纸': '📰 报纸', 'newspaper': '📰 News', 'news': '📰 News',
+      '电脑屏幕': '💻 终端', '终端': '💻 终端', 'terminal': '💻 Terminal', 'computer': '💻 Computer',
+      '便签': '📌 便签', '纸条': '📌 纸条', 'note': '📌 Note', 'sticky': '📌 Sticky',
+      '日记': '📖 日记', 'diary': '📖 Diary', 'journal': '📖 Journal',
+      '公告': '📢 公告', '通知': '📢 通知', 'bulletin': '📢 Bulletin', 'notice': '📢 Notice',
+    }[displaySegment.styleType] || displaySegment.styleType;
+    $nameBadge.find('span').text(styledLabel);
+    $nameBadge.removeClass('gal-narrator-label');
+    const styledHtml = renderStyledContent(displaySegment);
+    $overlay.find('.gal-dialog-text').text('');
+    showStyledStage($overlay, styledHtml);
   } else {
-    $nameBadge.find('span').text(speaker || '旁白');
+    setStyledPresentationMode($overlay, false);
+    hideStyledStage($overlay);
+    $nameBadge.find('span').text(resolvedSpeaker || '旁白');
     if (isNarration) {
       $nameBadge.addClass('gal-narrator-label');
     } else {
       $nameBadge.removeClass('gal-narrator-label');
     }
-    $overlay.find('.gal-dialog-text').text(displayText);
+    const enableTypewriter = shouldUseTypewriterForSegment(displaySegment);
+    renderTypewriterText($overlay.find('.gal-dialog-text'), displayText, {
+      instant: !enableTypewriter,
+    });
   }
 
   const total = segments.length;
@@ -195,7 +426,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
   clearSpritesOnBackgroundCommand($overlay, displaySegment);
   const expression = displaySegment.expression || '默认';
-  await SpriteManager.updateSprite($overlay, speaker, expression, renderToken);
+  await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken);
 
   const sceneToApply = displaySegment.backgroundScene || parsedContent.currentBackground?.scene;
   if (sceneToApply) {
@@ -235,7 +466,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   $overlay.find('.gal-game-container').attr('data-mes-id', mesIdStr);
 }
 
-export async function updateOverlaySegmentDisplay(state, expectedRenderToken = null) {
+export async function updateOverlaySegmentDisplay(state, expectedRenderToken = null, source = 'unknown') {
   if (!state) return false;
 
   const isRenderTokenStale = () =>
@@ -254,12 +485,17 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
   }
 
   const speaker = segment.speaker;
+  const resolvedSpeaker = resolveCharacterIdByKeywords(speaker) || speaker;
   const isNarration = segment.type === 'narration';
   const isCg = segment.type === 'cg';
+  const forceInstantRender = shouldForceInstantBySource(source);
 
   const $nameBadge = $overlay.find('.gal-name-badge');
+  cancelTypewriter();
 
   if (isCg) {
+    setStyledPresentationMode($overlay, false);
+    hideStyledStage($overlay);
     $nameBadge.find('span').text('CG');
     $nameBadge.removeClass('gal-narrator-label');
     const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
@@ -271,14 +507,35 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
     } else {
       $overlay.find('.gal-dialog-text').text('图片生成中...');
     }
+  } else if (segment.type === 'styled') {
+    setStyledPresentationMode($overlay, true);
+    const styledLabel = {
+      '手机短信': '📱 短信', 'sms': '📱 SMS', '微信': '📱 微信', 'wechat': '📱 WeChat',
+      '信纸': '✉️ 信件', 'letter': '✉️ Letter',
+      '羊皮纸': '📜 古卷', 'parchment': '📜 Parchment', '古卷': '📜 古卷',
+      '新闻': '📰 新闻', '报纸': '📰 报纸', 'newspaper': '📰 News', 'news': '📰 News',
+      '电脑屏幕': '💻 终端', '终端': '💻 终端', 'terminal': '💻 Terminal', 'computer': '💻 Computer',
+      '便签': '📌 便签', '纸条': '📌 纸条', 'note': '📌 Note', 'sticky': '📌 Sticky',
+      '日记': '📖 日记', 'diary': '📖 Diary', 'journal': '📖 Journal',
+      '公告': '📢 公告', '通知': '📢 通知', 'bulletin': '📢 Bulletin', 'notice': '📢 Notice',
+    }[segment.styleType] || segment.styleType;
+    $nameBadge.find('span').text(styledLabel);
+    $nameBadge.removeClass('gal-narrator-label');
+    const styledHtml = renderStyledContent(segment);
+    $overlay.find('.gal-dialog-text').text('');
+    showStyledStage($overlay, styledHtml);
   } else {
-    $nameBadge.find('span').text(speaker || '旁白');
+    setStyledPresentationMode($overlay, false);
+    hideStyledStage($overlay);
+    $nameBadge.find('span').text(resolvedSpeaker || '旁白');
     if (isNarration) {
       $nameBadge.addClass('gal-narrator-label');
     } else {
       $nameBadge.removeClass('gal-narrator-label');
     }
-    $overlay.find('.gal-dialog-text').text(segment.text || '');
+    renderTypewriterText($overlay.find('.gal-dialog-text'), segment.text || '', {
+      instant: forceInstantRender || !shouldUseTypewriterForSegment(segment),
+    });
   }
 
   const total = state.segments.length;
@@ -321,7 +578,7 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
 
   clearSpritesOnBackgroundCommand($overlay, segment);
   const expression = segment.expression || '默认';
-  await SpriteManager.updateSprite($overlay, speaker, expression, expectedRenderToken);
+  await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken);
   if (isRenderTokenStale()) return false;
 
   const sceneToApply = segment.backgroundScene || state.parsedContent?.currentBackground?.scene;

@@ -117,6 +117,13 @@
         "characterVoice": {
           "type": "object",
           "additionalProperties": { "type": "string" }
+        },
+        "characterKeywords": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         }
       }
     },

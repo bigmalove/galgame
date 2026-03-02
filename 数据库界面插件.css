@@ -1214,6 +1214,143 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* Styled 中置舞台层 */
+.gal-styled-stage {
+  position: absolute;
+  inset: 10% 12% 22% 12%;
+  z-index: 18;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.gal-styled-stage.show {
+  display: flex;
+}
+
+.gal-styled-stage .gal-styled-stage-content {
+  width: min(68vw, 42rem);
+  max-height: min(56vh, 34rem);
+  overflow: visible;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+
+.gal-styled-stage .gal-styled-stage-content .gal-styled {
+  width: 100%;
+}
+
+.gal-styled-stage .gal-styled-stage-content .gal-styled-sms,
+.gal-styled-stage .gal-styled-stage-content .gal-styled-letter,
+.gal-styled-stage .gal-styled-stage-content .gal-styled-parchment,
+.gal-styled-stage .gal-styled-stage-content .gal-styled-newspaper {
+  max-height: none;
+  overflow-y: visible !important;
+}
+
+/* Styled 演出模式：隐藏对话框壳与角色层，但保留下方按钮 */
+#gal-global-overlay.gal-mode-styled .gal-layer-character,
+#gal-global-overlay.gal-mode-styled .gal-live2d-stage-canvas,
+#gal-global-overlay.gal-mode-styled .gal-live2d-position-guide {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-name-badge,
+#gal-global-overlay.gal-mode-styled .gal-sprite-toggle,
+#gal-global-overlay.gal-mode-styled .gal-status-popup-trigger,
+#gal-global-overlay.gal-mode-styled .gal-interaction-bar,
+#gal-global-overlay.gal-mode-styled .gal-dialog-text,
+#gal-global-overlay.gal-mode-styled .gal-progress-container {
+  display: none !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-text-panel {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  overflow: visible !important;
+  padding: 0 1rem 4.8rem 1rem !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-glass {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-gradient::before {
+  display: none !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 120 !important;
+  background: linear-gradient(
+    to top,
+    rgba(10, 14, 22, 0.72) 0%,
+    rgba(10, 14, 22, 0.42) 45%,
+    rgba(10, 14, 22, 0) 100%
+  ) !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar > * {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-footer-btn,
+#gal-global-overlay.gal-mode-styled .gal-footer-btn-next,
+#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn {
+  display: inline-flex !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-footer-btn {
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #1b2230 !important;
+  border-color: #1b2230 !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn {
+  background: #e93c64 !important;
+  color: #fff !important;
+  border-color: #1b2230 !important;
+}
+
+#gal-global-overlay.gal-mode-styled .gal-footer-btn-next {
+  background: #161b27 !important;
+  color: #f7fbff !important;
+  border-color: #161b27 !important;
+  box-shadow: 0 0.25rem 0.875rem rgba(0, 0, 0, 0.45) !important;
+}
+
+@media screen and (max-width: 48rem) {
+  .gal-styled-stage {
+    inset: 11% 4% 26% 4%;
+  }
+
+  .gal-styled-stage .gal-styled-stage-content {
+    width: 100%;
+    max-height: 54vh;
+  }
+
+  #gal-global-overlay.gal-mode-styled .gal-text-panel {
+    padding: 0 0.5rem calc(4.3rem + env(safe-area-inset-bottom)) 0.5rem !important;
+  }
+}
+
 /* CG 全屏查看器 */
 .gal-cg-viewer {
   position: absolute;
@@ -1825,6 +1962,39 @@
   justify-content: flex-end;
   gap: 0.625rem;
   margin-top: 0.938rem;
+}
+
+/* 统一弹窗骨架：头部/底部固定，内容区滚动 */
+.gal-modal-layout-fixed {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.gal-modal-layout-fixed > .gal-input-title,
+.gal-modal-layout-fixed > .gal-modal-fixed-header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--SmartThemeBlurTintColor, var(--gal-white));
+}
+
+.gal-modal-layout-fixed > .gal-input-title {
+  margin-bottom: 0 !important;
+}
+
+.gal-modal-layout-fixed > .gal-modal-scroll-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.gal-modal-layout-fixed > .gal-input-actions,
+.gal-modal-layout-fixed > .gal-modal-fixed-actions {
+  flex-shrink: 0;
+  margin-top: 0 !important;
 }
 
 /* Toast 通知 */
@@ -5209,7 +5379,7 @@
   /* B2. .gal-input-modal .gal-input-box 通用移动端全屏+紧凑
            注意：L2354 有 height: 100% + display: flex + flex-direction: column，
            此处覆盖 height 为 auto 避免空白 */
-  .gal-input-modal .gal-input-box {
+  .gal-input-modal .gal-input-box:not(.gal-modal-layout-fixed) {
     width: 100% !important;
     height: auto !important;
     max-width: 100% !important;
@@ -5219,6 +5389,40 @@
     border-radius: 0 !important;
     overflow-y: auto !important;
     box-sizing: border-box !important;
+  }
+
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-modal-scroll-body {
+    padding: 0.75rem !important;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-input-title,
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-modal-fixed-header,
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-input-actions,
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-modal-fixed-actions {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    margin-bottom: 0 !important;
+  }
+
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-input-actions,
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-modal-fixed-actions {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  .gal-input-modal .gal-input-box.gal-modal-layout-fixed > .gal-modal-scroll-body {
+    margin-bottom: 0 !important;
   }
 
   /* B2b. 通用内部间距压缩 — 覆盖内联 margin-bottom: 15px/20px */

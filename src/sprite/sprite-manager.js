@@ -7,6 +7,7 @@ import { setLive2DCharacterExpression } from '../live2d/expression-motion.js';
 import { Live2DManager } from '../live2d/manager.js';
 import { updateCharacterFocus } from '../live2d/preload.js';
 import { getCharacterUseLive2D } from '../live2d/render-mode.js';
+import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // 延迟引用: getSprite, getBackground, saveBackground, sceneBackgrounds,
 //           messageSegmentState, setBackgroundWithTransition, clearBackgroundLayers,
@@ -119,20 +120,9 @@ export const SpriteManager = {
   },
 
   resolveCharacterId(characterId) {
-    const normalized = this.normalizeCharacterId(characterId);
-    if (!normalized) return null;
-    const normalizedKey = this.normalizeCharacterKey(characterId);
     const ids = Array.from(this.activeCharacters.keys());
-
-    let matched = ids.find(id => this.normalizeCharacterId(id) === normalized);
-    if (matched) return matched;
-
-    if (normalizedKey) {
-      matched = ids.find(id => this.normalizeCharacterKey(id) === normalizedKey);
-      if (matched) return matched;
-    }
-
-    return null;
+    if (ids.length === 0) return null;
+    return resolveCharacterIdByKeywords(characterId, ids);
   },
 
   findCharacterElements(characterId) {
@@ -464,6 +454,12 @@ export const SpriteManager = {
       this.setSpeaker(null);
       return;
     }
+
+    const keywordResolvedCharacterId =
+      this.resolveCharacterId(characterId) ||
+      resolveCharacterIdByKeywords(characterId) ||
+      characterId;
+    characterId = keywordResolvedCharacterId;
 
     const normalizedId = this.normalizeCharacterId(characterId);
     const existingSameCharacter = Array.from(this.activeCharacters.keys()).find(

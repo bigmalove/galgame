@@ -51,7 +51,7 @@ export function scheduleOverlaySegmentDisplay(state, source = 'unknown') {
   if (!state) return Promise.resolve(false);
   const token = nextOverlayRenderToken(state);
   return queueOverlayUpdate(source, () =>
-    _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state, token) : Promise.resolve(false),
+    _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state, token, source) : Promise.resolve(false),
   );
 }
 

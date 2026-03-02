@@ -1,4 +1,5 @@
 import { SCRIPT_ID, SCRIPT_NAME } from '../core/constants.js';
+import { getAllCharacterNameKeywords, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // ============================================
 // Live2D 娓叉煋妯″紡鍒囨崲鍣?
@@ -126,9 +127,15 @@ export function deleteLive2DConfig(characterId) {
 export function getCharacterUseLive2D(characterId) {
   try {
     const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || '{}');
-    const rawKey = String(characterId ?? '');
+    const rawKey = String(characterId ?? '').trim();
+    if (!rawKey) return false;
     if (Object.prototype.hasOwnProperty.call(settings, rawKey)) {
       return !!settings[rawKey];
+    }
+
+    const resolvedKey = resolveCharacterIdByKeywords(rawKey, Object.keys(settings));
+    if (resolvedKey && Object.prototype.hasOwnProperty.call(settings, resolvedKey)) {
+      return !!settings[resolvedKey];
     }
 
     const normalizedTarget = normalizeCharacterIdKey(characterId);
@@ -148,10 +155,20 @@ export function getCharacterUseLive2D(characterId) {
 export function setCharacterUseLive2D(characterId, useLive2D) {
   try {
     const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || '{}');
-    const rawKey = String(characterId ?? '');
-    const normalizedKey = normalizeCharacterIdKey(characterId);
-    settings[rawKey] = !!useLive2D;
-    if (normalizedKey && normalizedKey !== rawKey) {
+    const rawKey = String(characterId ?? '').trim();
+    if (!rawKey) return;
+    const candidateIds = Array.from(new Set([
+      ...Object.keys(settings),
+      ...Object.keys(getAllCharacterNameKeywords()),
+      rawKey,
+    ]));
+    const resolvedKey = resolveCharacterIdByKeywords(rawKey, candidateIds) || rawKey;
+    const normalizedKey = normalizeCharacterIdKey(resolvedKey);
+    settings[resolvedKey] = !!useLive2D;
+    if (resolvedKey !== rawKey) {
+      delete settings[rawKey];
+    }
+    if (normalizedKey && normalizedKey !== resolvedKey) {
       settings[normalizedKey] = !!useLive2D;
     }
     localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings));

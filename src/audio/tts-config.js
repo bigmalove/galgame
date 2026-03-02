@@ -2,6 +2,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
 import { fetchEdgeVoices, getEdgeFallbackVoices } from './edge-tts-direct.js';
+import { getAllCharacterNameKeywords, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // ============================================
 // TTS 音色配置 (Providers)
@@ -1287,7 +1288,16 @@ export function setTTSEnabled(enabled) {
 export function getCharacterTTSVoice(characterId) {
   try {
     const map = JSON.parse(localStorage.getItem(CHAR_TTS_VOICE_KEY) || '{}');
-    return map[characterId] || null;
+    const rawCharacterId = String(characterId || '').trim();
+    if (!rawCharacterId) return null;
+    if (Object.prototype.hasOwnProperty.call(map, rawCharacterId)) {
+      return map[rawCharacterId] || null;
+    }
+    const resolvedCharacterId = resolveCharacterIdByKeywords(rawCharacterId, Object.keys(map));
+    if (resolvedCharacterId && Object.prototype.hasOwnProperty.call(map, resolvedCharacterId)) {
+      return map[resolvedCharacterId] || null;
+    }
+    return null;
   } catch (e) {
     return null;
   }
@@ -1296,10 +1306,24 @@ export function getCharacterTTSVoice(characterId) {
 export function setCharacterTTSVoice(characterId, voiceName) {
   try {
     const map = JSON.parse(localStorage.getItem(CHAR_TTS_VOICE_KEY) || '{}');
+    const rawCharacterId = String(characterId || '').trim();
+    if (!rawCharacterId) return;
+    const candidateIds = Array.from(new Set([
+      ...Object.keys(map),
+      ...Object.keys(getAllCharacterNameKeywords()),
+      rawCharacterId,
+    ]));
+    const resolvedCharacterId = resolveCharacterIdByKeywords(rawCharacterId, candidateIds) || rawCharacterId;
     if (voiceName) {
-      map[characterId] = voiceName;
+      map[resolvedCharacterId] = voiceName;
+      if (resolvedCharacterId !== rawCharacterId) {
+        delete map[rawCharacterId];
+      }
     } else {
-      delete map[characterId];
+      delete map[rawCharacterId];
+      if (resolvedCharacterId !== rawCharacterId) {
+        delete map[resolvedCharacterId];
+      }
     }
     localStorage.setItem(CHAR_TTS_VOICE_KEY, JSON.stringify(map));
   } catch (e) {

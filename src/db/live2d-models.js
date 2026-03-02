@@ -1,6 +1,7 @@
 ﻿import { SCRIPT_NAME, STORE_LIVE2D_MODELS } from '../core/constants.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
+import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // ============================================
 // Live2D 模型存储函数
@@ -34,6 +35,11 @@ export async function saveLive2DModel(modelData) {
 }
 
 export async function getLive2DModel(characterId) {
+  const rawCharacterId = String(characterId || '').trim();
+  if (!rawCharacterId) return null;
+  const resolvedCharacterId = resolveCharacterIdByKeywords(rawCharacterId) || rawCharacterId;
+  const lookupIds = Array.from(new Set([resolvedCharacterId, rawCharacterId]));
+
   if (!getDb()) await initDB();
   const db = getDb();
   return new Promise((resolve) => {
@@ -44,7 +50,7 @@ export async function getLive2DModel(characterId) {
       }
       const transaction = db.transaction([STORE_LIVE2D_MODELS], 'readonly');
       const store = transaction.objectStore(STORE_LIVE2D_MODELS);
-      const request = store.get(characterId);
+      const request = store.get(lookupIds[0]);
       request.onsuccess = () => {
         const exact = request.result || null;
         if (exact) {
@@ -52,10 +58,32 @@ export async function getLive2DModel(characterId) {
           return;
         }
 
+        const fallbackGetId = lookupIds[1];
+        if (fallbackGetId && fallbackGetId !== lookupIds[0]) {
+          const fallbackByIdReq = store.get(fallbackGetId);
+          fallbackByIdReq.onsuccess = () => {
+            const fallbackExact = fallbackByIdReq.result || null;
+            if (fallbackExact) {
+              resolve(fallbackExact);
+              return;
+            }
+
+            const fallbackReq = store.getAll();
+            fallbackReq.onsuccess = () => {
+              const all = fallbackReq.result || [];
+              const matched = all.find(model => lookupIds.some(id => matchesCharacterId(model?.modelId, id)));
+              resolve(matched || null);
+            };
+            fallbackReq.onerror = () => resolve(null);
+          };
+          fallbackByIdReq.onerror = () => resolve(null);
+          return;
+        }
+
         const fallbackReq = store.getAll();
         fallbackReq.onsuccess = () => {
           const all = fallbackReq.result || [];
-          const matched = all.find(model => matchesCharacterId(model?.modelId, characterId));
+          const matched = all.find(model => lookupIds.some(id => matchesCharacterId(model?.modelId, id)));
           resolve(matched || null);
         };
         fallbackReq.onerror = () => resolve(null);

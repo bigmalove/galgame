@@ -36,6 +36,10 @@ export const DEFAULT_SETTINGS = {
   dialogOpacity: 0.5,
   textEffect: 'none',
   dialogFontFamily: 'sans',
+  typewriterEnabled: true,
+  typewriterSpeed: 30,
+  typewriterSoundEnabled: true,
+  typewriterSoundVolume: 35,
   // 自动播放
   autoPlaySpeed: 2,
   // 显示设置
@@ -83,7 +87,10 @@ export const DEFAULT_SETTINGS = {
   ttsEnabled: true,
   ttsAutoPlay: true,
   ttsBilingualZhJaEnabled: false,
+  situationalStyleEnabled: true,
   ttsDefaultSpeaker: '',
+  ttsDefaultMaleVoices: [],
+  ttsDefaultFemaleVoices: [],
   // TTS 引擎选择
   ttsProvider: 'littlewhitebox',
   // GPT-SoVITS 配置
@@ -195,10 +202,40 @@ function normalizeBgmWhitelist(rawList) {
   );
 }
 
+function normalizeTtsVoiceNameList(rawList) {
+  return Array.from(
+    new Set(
+      _safeArray(rawList)
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
 function normalizeDialogFontFamily(rawValue) {
   const allowed = ['sans', 'serif', 'wenkai', 'kaiti', 'mono'];
   const normalized = String(rawValue || '').trim().toLowerCase();
   return allowed.includes(normalized) ? normalized : DEFAULT_SETTINGS.dialogFontFamily;
+}
+
+function normalizeTypewriterSpeed(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS.typewriterSpeed;
+  return Math.max(5, Math.min(parsed, 60));
+}
+
+function normalizeTypewriterSoundVolume(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return DEFAULT_SETTINGS.typewriterSoundVolume;
+  return Math.max(0, Math.min(parsed, 100));
+}
+
+function normalizeTypewriterSettings(target) {
+  if (!target || typeof target !== 'object') return;
+  target.typewriterEnabled = target.typewriterEnabled !== false;
+  target.typewriterSpeed = normalizeTypewriterSpeed(target.typewriterSpeed);
+  target.typewriterSoundEnabled = target.typewriterSoundEnabled !== false;
+  target.typewriterSoundVolume = normalizeTypewriterSoundVolume(target.typewriterSoundVolume);
 }
 
 export function normalizeSpriteUploadAspectRatio(rawValue) {
@@ -428,6 +465,7 @@ export function loadSettings() {
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
       _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
+      normalizeTypewriterSettings(_settings);
       _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
       if (!_settings.gptSoVits || typeof _settings.gptSoVits !== 'object') {
         _settings.gptSoVits = Object.assign({}, DEFAULT_SETTINGS.gptSoVits);
@@ -457,6 +495,9 @@ export function loadSettings() {
         _settings.effectsMaxActive = DEFAULT_SETTINGS.effectsMaxActive;
       }
       _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
+      _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
+      _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
+      _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);
       // 兼容旧版 sceneMode -> cgMode
       if (_settings.bananaImageGen) {
         if (_settings.bananaImageGen.cgMode === undefined && _settings.bananaImageGen.sceneMode !== undefined) {
@@ -513,7 +554,10 @@ export function saveSettings() {
     _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
     _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
     _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
+    normalizeTypewriterSettings(_settings);
     _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
+    _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
+    _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);
     ensureMapSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
   } catch (e) {

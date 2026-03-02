@@ -814,9 +814,445 @@ export function injectStyles() {
 }
 `;
 
+
+  // ============================================
+  // Styled 情境内容样式
+  // ============================================
+  const styledCss = `
+
+/* === Styled 舞台布局 === */
+.gal-styled-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 50; /* Above dolls and bg, below system UI */
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    padding: 20px;
+}
+.gal-styled-stage.show {
+    display: flex;
+    opacity: 1;
+}
+.gal-styled-stage-content {
+    width: 100%;
+    max-width: 600px;
+    max-height: 85vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 51;
+    perspective: 1000px;
+    overflow: visible;
+}
+
+/* === Styled 通用基础 === */
+.gal-dialog-text .gal-styled,
+.gal-styled-stage-content .gal-styled {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 1rem;
+    line-height: 1.6;
+    animation: gal-styled-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    transform-origin: center;
+}
+@keyframes gal-styled-pop {
+    from { opacity: 0; transform: translateY(20px) scale(0.95) rotateX(10deg); }
+    to { opacity: 1; transform: translateY(0) scale(1) rotateX(0); }
+}
+
+/* =========================================================
+   1. 手机短信 / 微信 (SMS / WeChat) - Modern Glassmorphism
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-sms {
+    background: rgba(245, 245, 247, 0.95) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 20px;
+    padding: 0;
+    overflow: hidden;
+    max-height: 75vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2), 0 1px 3px rgba(0,0,0,0.05);
+    width: 100%; max-width: 400px; /* Limit width for phones */
+}
+.gal-sms-header {
+    background: rgba(255, 255, 255, 0.85);
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    color: #1a1a1b;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.gal-sms-contact { font-weight: 700; letter-spacing: 0.2px; }
+.gal-sms-time { font-size: 0.8rem; color: #8e8e93; font-weight: 500; }
+.gal-sms-body {
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    flex: 1;
+    background: #f0f0f5;
+}
+.gal-sms-row { display: flex; flex-direction: column; max-width: 85%; }
+.gal-sms-row-other { align-self: flex-start; align-items: flex-start; }
+.gal-sms-row-self { align-self: flex-end; align-items: flex-end; }
+.gal-sms-name { font-size: 0.75rem; color: #8e8e93; margin-bottom: 4px; padding-left: 12px; }
+.gal-sms-bubble-other, .gal-sms-bubble-self {
+    padding: 10px 16px; border-radius: 18px; font-size: 0.95rem;
+    line-height: 1.4; word-break: break-word;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.04);
+}
+.gal-sms-bubble-other { 
+    background: #ffffff; 
+    color: #000000; 
+    border-bottom-left-radius: 4px; 
+}
+.gal-sms-bubble-self { 
+    background: #007aff; 
+    color: #ffffff; 
+    border-bottom-right-radius: 4px; 
+}
+
+/* =========================================================
+   2. 信纸 / 信件 (Letter) - Elegant Craft Paper
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-letter {
+    background: #fffdf5;
+    background-image: 
+        linear-gradient(90deg, transparent 40px, #e8a0a0 40px, #e8a0a0 42px, transparent 42px),
+        linear-gradient(#e1e6f0 1px, transparent 1px);
+    background-size: 100% 28px;
+    background-position: 0 40px;
+    border-radius: 6px;
+    padding: 60px 40px 40px 60px !important;
+    position: relative;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15), 0 5px 15px rgba(0,0,0,0.05);
+    max-height: 80vh; overflow-y: auto;
+    width: 100%;
+}
+.gal-letter-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 28px; position: relative; z-index: 1;
+}
+.gal-letter-to {
+    font-weight: 700; color: #2c3e50; font-size: 1.2rem;
+    font-family: "LXGW WenKai Screen", "KaiTi", "STKaiti", cursive;
+}
+.gal-letter-date { font-size: 0.9rem; color: #7f8c8d; font-style: italic; }
+.gal-letter-body { position: relative; z-index: 1; }
+.gal-letter-line {
+    margin: 0; 
+    height: 28px; /* Must match background-size Y */
+    line-height: 28px;
+    text-indent: 2em; color: #34495e;
+    font-family: "LXGW WenKai Screen", "KaiTi", "STKaiti", cursive;
+    font-size: 1.05rem; letter-spacing: 0.5px;
+}
+.gal-letter-signature {
+    text-align: right; margin-top: 28px; color: #2c3e50;
+    font-weight: 700;
+    font-family: "LXGW WenKai Screen", "KaiTi", "STKaiti", cursive;
+    font-size: 1.2rem; position: relative; z-index: 1;
+}
+
+/* =========================================================
+   3. 羊皮纸 / 古卷 (Parchment) - Fantasy RPG
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-parchment {
+    background: #e8d1a7;
+    background-image: 
+        radial-gradient(circle at 20% 30%, rgba(139,119,80,0.08) 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(139,119,80,0.1) 0%, transparent 50%);
+    border: 1px solid rgba(139,119,80,0.5);
+    border-radius: 8px 12px 6px 15px;
+    padding: 40px 50px !important;
+    position: relative;
+    box-shadow: 
+        0 20px 40px rgba(0,0,0,0.3), 
+        inset 0 0 60px rgba(139,119,80,0.3),
+        inset 0 0 10px rgba(100,60,20,0.5);
+    max-height: 80vh; overflow-y: auto;
+    filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+}
+.gal-styled-stage-content .gal-styled-parchment::before {
+    content: ''; position: absolute;
+    top: 10px; left: 10px; right: 10px; bottom: 10px;
+    border: 1px solid rgba(139,119,80,0.4); 
+    border-radius: 4px; pointer-events: none;
+}
+.gal-parchment-title {
+    text-align: center; font-family: "Noto Serif SC", "KaiTi", "STKaiti", serif;
+    font-size: 1.8rem; font-weight: 900; color: #4a331a;
+    margin-bottom: 20px; padding-bottom: 15px;
+    border-bottom: 2px solid rgba(74, 51, 26, 0.4);
+    letter-spacing: 4px; text-shadow: 1px 1px 0 rgba(255,255,255,0.4);
+    position: relative; z-index: 1;
+}
+.gal-parchment-body { position: relative; z-index: 1; }
+.gal-parchment-line {
+    margin: 0 0 10px; text-indent: 2em; color: #3c2a14;
+    font-family: "Noto Serif SC", "KaiTi", "STKaiti", serif;
+    font-size: 1.1rem; line-height: 1.9;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+    font-weight: 500;
+}
+.gal-parchment-seal {
+    text-align: center; margin-top: 30px; padding-top: 15px;
+    color: #a52a2a; font-family: "Noto Serif SC", "KaiTi", "STKaiti", serif;
+    font-weight: 900; font-size: 1.4rem; letter-spacing: 6px;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.2); position: relative; z-index: 1;
+    opacity: 0.85; border-top: 1px solid rgba(74, 51, 26, 0.2);
+}
+
+/* =========================================================
+   4. 新闻 / 报纸 (Newspaper) - Vintage Print
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-newspaper {
+    background: #f4efdf;
+    border: 8px solid #f4efdf;
+    border-radius: 2px;
+    padding: 20px 25px !important; 
+    position: relative;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+    max-height: none;
+    overflow-y: visible;
+    color: #1a1a1a;
+    outline: 1px solid #2b2b2b;
+    outline-offset: -8px;
+    width: 100%; max-width: 650px;
+}
+.gal-newspaper-headline {
+    font-family: "Noto Serif SC", "Georgia", "Times New Roman", serif;
+    font-size: 2.2rem; font-weight: 900; color: #1a1a1a; text-align: center;
+    margin: 0 0 15px; line-height: 1.2; letter-spacing: 1px;
+    padding-bottom: 15px; border-bottom: 3px double #1a1a1a;
+}
+.gal-newspaper-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 0 10px; border-bottom: 1px solid #1a1a1a;
+    margin-bottom: 15px; font-size: 0.85rem; color: #333;
+    font-family: "Noto Serif SC", serif; text-transform: uppercase;
+}
+.gal-newspaper-source { font-weight: 900; }
+.gal-newspaper-date { font-weight: 500; }
+.gal-newspaper-body { 
+    columns: 2; column-gap: 25px; column-rule: 1px solid rgba(0,0,0,0.2); 
+    text-align: justify; hyphens: auto;
+}
+.gal-newspaper-paragraph {
+    margin: 0 0 12px; text-indent: 2em; color: #2a2a2a;
+    font-family: "Noto Serif SC", "Georgia", "Times New Roman", serif;
+    font-size: 0.95rem; line-height: 1.7; break-inside: avoid;
+}
+.gal-newspaper-paragraph:first-of-type::first-letter {
+    font-size: 3rem; line-height: 1; float: left; margin: 0 8px 0 0;
+    font-weight: 900; color: #1a1a1a; font-family: "Georgia", serif;
+}
+
+/* =========================================================
+   5. 电脑终端 (Terminal) - Tech Noir
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-terminal {
+    background: rgba(13, 17, 23, 0.95) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(48, 54, 61, 1);
+    border-radius: 10px;
+    overflow: hidden;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 15px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+    font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+    width: 100%; max-width: 600px;
+}
+.gal-terminal-titlebar {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.gal-terminal-dots { display: flex; gap: 6px; }
+.gal-terminal-dots i { width: 12px; height: 12px; border-radius: 50%; }
+.gal-terminal-dots i:nth-child(1) { background: #ff5f56; }
+.gal-terminal-dots i:nth-child(2) { background: #ffbd2e; }
+.gal-terminal-dots i:nth-child(3) { background: #27c93f; }
+.gal-terminal-title {
+    color: #8b949e; font-size: 0.85rem; font-weight: 600; text-align: center; flex: 1; margin-right: 48px;
+}
+.gal-terminal-body {
+    padding: 20px; overflow-y: auto; flex: 1;
+    box-shadow: inset 0 0 50px rgba(0,255,0,0.02);
+}
+.gal-terminal-line {
+    color: #56d364; font-size: 0.9rem; line-height: 1.6; margin-bottom: 4px;
+    text-shadow: 0 0 3px rgba(86, 211, 100, 0.4);
+}
+.gal-terminal-prompt { color: #58a6ff; font-weight: 700; }
+.gal-terminal-cursor {
+    color: #56d364; font-weight: bold; animation: gal-blink 1s step-end infinite;
+}
+
+/* =========================================================
+   6. 便签 / 纸条 (Sticky Note) - Realistic 3D Post-it
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-note {
+    background: #fff68f;
+    background-image: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, transparent 50%, rgba(0,0,0,0.02) 100%);
+    border-radius: 2px 2px 15px 4px;
+    padding: 30px 25px 20px !important;
+    position: relative;
+    box-shadow: 
+        5px 8px 15px rgba(0,0,0,0.15), 
+        inset -5px -5px 15px rgba(0,0,0,0.04);
+    transform: rotate(-2deg);
+    max-height: 60vh; overflow-y: auto;
+    width: 100%; max-width: 350px;
+}
+.gal-styled-stage-content .gal-styled-note::before {
+    content: ''; position: absolute;
+    top: -10px; left: 50%; transform: translateX(-50%);
+    width: 100px; height: 25px;
+    background: rgba(255,255,255,0.4);
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    backdrop-filter: blur(2px);
+    z-index: 2;
+    transform-origin: center;
+    transform: translateX(-50%) rotate(1deg);
+}
+.gal-note-line {
+    margin: 0 0 6px; color: #2c3e50;
+    font-family: "LXGW WenKai Screen", "Comic Sans MS", cursive;
+    font-size: 1.1rem; line-height: 1.6; font-weight: 500;
+}
+.gal-note-sign {
+    text-align: right; margin-top: 20px; color: #34495e;
+    font-family: "LXGW WenKai Screen", cursive;
+    font-style: italic; font-size: 1rem; font-weight: 700;
+}
+
+/* =========================================================
+   7. 日记 (Diary / Journal) - Rich Leather Bound
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-diary {
+    background: #fdfbf7;
+    border: 1px solid #d4c5b0;
+    border-left: 20px solid #5d4037; /* Leather spine */
+    border-radius: 4px 12px 12px 4px;
+    padding: 25px 35px 25px 25px !important;
+    position: relative;
+    box-shadow: 
+        10px 10px 30px rgba(0,0,0,0.2), 
+        inset 5px 0 10px rgba(0,0,0,0.05);
+    max-height: 75vh; overflow-y: auto;
+    width: 100%; max-width: 480px;
+}
+.gal-styled-stage-content .gal-styled-diary::before {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+        transparent 0px, transparent 29px,
+        rgba(160,140,120,0.2) 29px, rgba(160,140,120,0.2) 30px
+    );
+    pointer-events: none; z-index: 0;
+}
+.gal-diary-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 25px; padding-bottom: 10px;
+    border-bottom: 2px solid #5d4037;
+    position: relative; z-index: 1;
+}
+.gal-diary-date {
+    font-family: "LXGW WenKai Screen", "KaiTi", cursive;
+    font-weight: 700; color: #3e2723; font-size: 1.2rem;
+}
+.gal-diary-mood {
+    font-size: 1rem; color: #795548; font-style: italic; font-weight: 600;
+}
+.gal-diary-body { position: relative; z-index: 1; }
+.gal-diary-line {
+    margin: 0; height: 30px; line-height: 30px; /* Aligns with background lines */
+    text-indent: 1.5em; color: #3e2723;
+    font-family: "LXGW WenKai Screen", "KaiTi", cursive;
+    font-size: 1.05rem;
+}
+
+/* =========================================================
+   8. 公告 / 通知 (Bulletin / Notice) - Official Document
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-bulletin {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-top: 8px solid #c0392b;
+    border-radius: 6px;
+    padding: 0 !important;
+    overflow: hidden;
+    max-height: 80vh;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    width: 100%; max-width: 550px;
+}
+.gal-bulletin-header {
+    background: #fdfdfd;
+    color: #c0392b;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    border-bottom: 2px solid #c0392b;
+}
+.gal-bulletin-icon { font-size: 1.8rem; }
+.gal-bulletin-title {
+    font-weight: 900; font-size: 1.6rem; letter-spacing: 2px;
+}
+.gal-bulletin-meta {
+    display: flex; justify-content: space-between;
+    padding: 10px 20px;
+    font-size: 0.9rem; color: #7f8c8d; font-weight: 600;
+    border-bottom: 1px solid #ecf0f1; background: #fafafa;
+}
+.gal-bulletin-body {
+    padding: 25px 30px; overflow-y: auto; background: #fff;
+}
+.gal-bulletin-line {
+    margin: 0 0 15px; text-indent: 2.5em; color: #2c3e50;
+    font-size: 1.05rem; line-height: 1.8; font-weight: 500;
+}
+
+/* === Styled 回退样式 === */
+.gal-styled-stage-content .gal-styled-fallback {
+    background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 12px; padding: 25px 30px !important;
+    color: #333; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+.gal-styled-fallback-title { font-weight: 800; margin-bottom: 15px; font-size: 1.3rem; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+.gal-styled-fallback p { margin: 0 0 10px; line-height: 1.7; font-size: 1rem; }
+
+/* === Styled 皮肤适配 === */
+#gal-global-overlay.skin-ancient .gal-styled-letter .gal-letter-line,
+#gal-global-overlay.skin-ancient .gal-styled-parchment .gal-parchment-line {
+    font-family: "KaiTi", "STKaiti", "楷体", serif !important;
+}
+`;
+
   const styleEl = targetDoc.createElement('style');
   styleEl.id = `${SCRIPT_ID}-styles`;
-  styleEl.textContent = css + skinCss;
+  styleEl.textContent = css + skinCss + styledCss;
   (targetDoc.head || targetDoc.documentElement).appendChild(styleEl);
   console.log(`[${SCRIPT_NAME}] 样式已注入`);
 }

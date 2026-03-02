@@ -9,7 +9,7 @@ import { getAllExpressions } from '../utils/expressions.js';
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit)[^>]*>/i;
+export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|styled)[^>]*>/i;
 const RE_CLOSED_P = /<\/p>/i;
 const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;
@@ -26,6 +26,7 @@ const RE_WHIMG = /<whimg>(.*?)<\/whimg>/i;
 const RE_BNIMG = /<bnimg>([\s\S]*?)<\/bnimg>/i;
 const RE_BGM = /<bgm>(?:当前bgm[:：])?(.+?)<\/bgm>/i;
 const RE_OPTION = /<option\s+id="([^"]+)"[^>]*>([^<]+)<\/option>/gi;
+const RE_STYLED = /<styled\b([^>]*)>([\s\S]*?)<\/styled>/gi;
 const RE_P_TAG = /<p(?:\s[^>]*)?>[\s\S]*?<\/p>/gi;
 const RE_SPRITE_TAG = /<sprite\b([^>]*)\/?>/gi;
 const RE_POPUP1 = /<弹窗一>([\s\S]*?)<\/弹窗一>/i;
@@ -165,17 +166,20 @@ function preprocessSimplifiedFormat(html) {
     const expression = parts[0];
     const specifiedVoice = parts[1] || null;
 
+    const boundVoice = getCharacterTTSVoice(speaker);
     let voice = null;
-    if (specifiedVoice) {
+    if (boundVoice) {
+      voice = boundVoice;
+      // 已绑定角色优先使用绑定音色，忽略 AI 在当前句给出的任何标签。
+    } else if (specifiedVoice === '男声' || specifiedVoice === '女声') {
+      // 新格式：透传标签给 TTS manager，由其随机分配并自动绑定。
+      voice = specifiedVoice;
+    } else if (specifiedVoice) {
+      // 旧格式向前兼容：具体音色名仍可直接使用。
       voice = specifiedVoice;
       sessionVoiceCache.set(speaker, specifiedVoice);
-    } else {
-      const boundVoice = getCharacterTTSVoice(speaker);
-      if (boundVoice) {
-        voice = boundVoice;
-      } else if (sessionVoiceCache.has(speaker)) {
-        voice = sessionVoiceCache.get(speaker);
-      }
+    } else if (sessionVoiceCache.has(speaker)) {
+      voice = sessionVoiceCache.get(speaker);
     }
 
     const ttsParts = [];
@@ -407,6 +411,45 @@ export function parseGalgameContent(html, messageId) {
     });
   }
 
+  // 解析所有 <styled> 标签
+  const styledBlocks = [];
+  const styledRegex = /<styled\b([^>]*)>([\s\S]*?)<\/styled>/gi;
+  let styledMatch;
+  while ((styledMatch = styledRegex.exec(content)) !== null) {
+    const styledAttrs = parseTagAttributes(styledMatch[1] || '');
+    const styledType = String(styledAttrs.type || '').trim();
+    if (!styledType) continue;
+    const styledBody = styledMatch[2].trim();
+    if (!styledBody) continue;
+
+    // 解析消息行: "发送者: 内容" 或纯文本
+    // 支持字面量 "\n" / "\r\n" 作为换行（常见于用户直接输入标签文本）
+    const normalizedStyledBody = styledBody
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\n');
+    const styledLines = normalizedStyledBody.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const parsedLines = styledLines.map(line => {
+      const colonMatch = line.match(/^([^:：]{1,20})[：:]\s*(.+)$/);
+      if (colonMatch) {
+        return { sender: colonMatch[1].trim(), text: colonMatch[2].trim() };
+      }
+      return { sender: null, text: line };
+    });
+
+    styledBlocks.push({
+      position: styledMatch.index,
+      styleType: styledType,
+      from: styledAttrs.from || null,
+      to: styledAttrs.to || null,
+      title: styledAttrs.title || null,
+      date: styledAttrs.date || null,
+      lines: parsedLines,
+    });
+    console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到 styled 块[${styledMatch.index}]: type="${styledType}", ${parsedLines.length}行`);
+  }
+
   // 动态获取表情列表
   const expressionNames = getAllExpressions();
   const expressionPattern = expressionNames.map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
@@ -512,12 +555,12 @@ export function parseGalgameContent(html, messageId) {
     return narrationResult;
   }
 
-  // 解析所有已闭合的 <p> 标签
+  // 解析所有已闭合的 <p> 标签和 <styled> 块，统一按位置排序
   const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
+  const allContentItems = []; // { position, type, data }
+
   let match;
-  let lastIndex = 0;
   while ((match = pTagRegex.exec(content)) !== null) {
-    lastIndex = pTagRegex.lastIndex;
     const ttsConfig = match[1];
     const seg = parseSegmentText(match[2], ttsConfig);
     if (seg) {
@@ -526,12 +569,39 @@ export function parseGalgameContent(html, messageId) {
       if (bgAtThisPos) {
         seg.backgroundScene = bgAtThisPos.scene;
       }
-      if (result.segments.length < 3) {
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${match.index} 背景:${seg.backgroundScene || 'null'} 文本:${seg.text.substring(0, 20)}...`);
-      }
-      result.segments.push(seg);
+      allContentItems.push({ position: match.index, type: 'segment', data: seg });
     }
   }
+
+  // 将 styled blocks 作为独立 segment 加入
+  for (const block of styledBlocks) {
+    const bgAtThisPos = getBackgroundAtPosition(block.position);
+    const styledSeg = {
+      type: 'styled',
+      speaker: null,
+      text: block.lines.map(l => l.text).join(' '),
+      expression: null,
+      styleType: block.styleType,
+      styledFrom: block.from,
+      styledTo: block.to,
+      styledTitle: block.title,
+      styledDate: block.date,
+      styledLines: block.lines,
+      backgroundScene: bgAtThisPos ? bgAtThisPos.scene : null,
+      _sourcePos: block.position,
+    };
+    allContentItems.push({ position: block.position, type: 'segment', data: styledSeg });
+  }
+
+  // 按位置排序后统一加入 segments
+  allContentItems.sort((a, b) => a.position - b.position);
+  for (const item of allContentItems) {
+    if (result.segments.length < 3) {
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${item.position} 类型:${item.data.type} 背景:${item.data.backgroundScene || 'null'} 文本:${(item.data.text || '').substring(0, 20)}...`);
+    }
+    result.segments.push(item.data);
+  }
+  let lastIndex = pTagRegex.lastIndex;
 
   // 尝试匹配末尾未闭合的 <p> 标签 (流式输出)
   const remainingText = content.substring(lastIndex);
@@ -673,7 +743,7 @@ export function parseGalgameContent(html, messageId) {
       typeof seg.ttsText === 'string' &&
       seg.ttsText.trim().length > 0 &&
       seg.ttsText !== seg.text;
-    if (hasDedicatedTtsText) {
+    if (hasDedicatedTtsText || seg.type === 'styled') {
       finalSegments.push(seg);
       return;
     }

@@ -76,6 +76,7 @@ export const GalgameStore = {
     SETTINGS: `${SCRIPT_ID}_settings`,
     CHAR_ENABLED: `${SCRIPT_ID}_char_enabled`,
     CHAR_TTS_VOICE: `${SCRIPT_ID}_char_tts_voice`,
+    CHAR_NAME_KEYWORDS: `${SCRIPT_ID}_char_name_keywords`,
     TTS_ENABLED: `${SCRIPT_ID}_tts_enabled`,
     CUSTOM_EXPRESSIONS: `${SCRIPT_ID}_custom_expressions`,
     CUSTOM_LOCATION_HTML: `${SCRIPT_ID}_custom_location_html`,
@@ -168,6 +169,7 @@ export const worldbookInjectionState = GalgameStore.worldbookInjection;
 export const SETTINGS_STORAGE_KEY = GalgameStore.STORAGE_KEYS.SETTINGS;
 export const CHAR_ENABLED_STORAGE_KEY = GalgameStore.STORAGE_KEYS.CHAR_ENABLED;
 export const CHAR_TTS_VOICE_KEY = GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE;
+export const CHAR_NAME_KEYWORDS_KEY = GalgameStore.STORAGE_KEYS.CHAR_NAME_KEYWORDS;
 export const TTS_ENABLED_KEY = GalgameStore.STORAGE_KEYS.TTS_ENABLED;
 export const CUSTOM_EXPRESSIONS_STORAGE_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_EXPRESSIONS;
 export const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;

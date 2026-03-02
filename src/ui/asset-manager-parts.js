@@ -10,6 +10,7 @@ import { getCurrentPackId, setCurrentPack, getRenderScope, setRenderScope, getAl
 import { getSprite } from '../db/sprites.js';
 import { getCharacterListFromDatabase } from '../utils/chat.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
+import { getCharacterNameKeywords, setCharacterNameKeywords } from '../utils/character-name-keywords.js';
 import { getBananaCharacterAppearances, setBananaCharacterAppearances, buildBananaAppearanceMultimodalContent } from '../image-gen/comfyui-helpers.js';
 import { getTTSVoiceListAsync, getCharacterTTSVoice, setCharacterTTSVoice } from '../audio/tts-config.js';
 import { saveLive2DModel, hasLive2DModel, getLive2DModel, deleteLive2DModel } from '../db/live2d-models.js';
@@ -547,6 +548,8 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
 
   const ttsVoiceList = await getTTSVoiceListAsync();
   const boundVoice = getCharacterTTSVoice(characterId);
+  const characterKeywords = getCharacterNameKeywords(characterId);
+  const characterKeywordsInputValue = characterKeywords.join(', ');
   const ttsVoiceOptions = ttsVoiceList
     .map(v => `<option value="${v.name}" ${boundVoice === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`)
     .join('');
@@ -561,6 +564,20 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
         <button id="gal-char-sprites-close" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
           <i class="fa-solid fa-xmark"></i>
         </button>
+      </div>
+      <div class="gal-char-keywords-section" style="margin: 12px 25px 0 25px; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));">
+        <div class="gal-char-keywords-label" style="font-size: 0.92rem; font-weight: 700; color: var(--SmartThemeBodyColor, #f5f7fa); margin-bottom: 8px;">
+          <i class="fa-solid fa-tags"></i> 角色名关键字
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <input type="text" id="gal-char-name-keywords" class="gal-char-keywords-input" value="${escapeHtml(characterKeywordsInputValue)}" placeholder="例如：祥子,小祥|Sakiko、丰川祥子" style="flex: 1; min-width: 240px; padding: 9px 12px; border-radius: 6px;">
+          <button class="gal-action-btn" id="gal-char-keywords-save-btn" style="padding: 8px 16px; white-space: nowrap;">
+            <i class="fa-solid fa-check"></i> 保存关键字
+          </button>
+        </div>
+        <small class="gal-char-keywords-hint" style="display: block; margin-top: 8px; color: var(--SmartThemeEmColor, #9ac7ff); font-size: 0.8rem;">
+          支持分隔符：<code>,</code>、<code>，</code>、<code>、</code>、<code>|</code>。用于立绘、TTS、Live2D 的角色名匹配。
+        </small>
       </div>
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 25px; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
@@ -678,6 +695,31 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     #gal-character-sprites-modal .gal-sprite-card:hover .gal-sprite-delete {
       opacity: 1;
     }
+    #gal-character-sprites-modal input[type='text'],
+    #gal-character-sprites-modal input[type='number'],
+    #gal-character-sprites-modal textarea,
+    #gal-character-sprites-modal select {
+      color: var(--SmartThemeBodyColor, #f5f7fa);
+      background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+      border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+    }
+    #gal-character-sprites-modal input[type='text']::placeholder,
+    #gal-character-sprites-modal input[type='number']::placeholder,
+    #gal-character-sprites-modal textarea::placeholder {
+      color: var(--SmartThemeEmColor, #9ac7ff);
+      opacity: 0.9;
+    }
+    #gal-character-sprites-modal input[type='text']:focus,
+    #gal-character-sprites-modal input[type='number']:focus,
+    #gal-character-sprites-modal textarea:focus,
+    #gal-character-sprites-modal select:focus {
+      outline: none;
+      border-color: var(--SmartThemeEmColor, #9ac7ff);
+      box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
+    }
+    #gal-character-sprites-modal .gal-char-keywords-label {
+      color: var(--SmartThemeBodyColor, #f5f7fa);
+    }
   </style>
   `;
 
@@ -718,6 +760,15 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
   $('#gal-char-add-sprite-btn').on('click', async () => {
     removeModal();
     if (_showSpriteUploadDialogRef) await _showSpriteUploadDialogRef(characterId, '默认', () => showCharacterSpritesModal(characterId));
+  });
+
+  $('#gal-char-keywords-save-btn').on('click', () => {
+    const rawKeywords = String($('#gal-char-name-keywords').val() || '');
+    const savedKeywords = setCharacterNameKeywords(characterId, rawKeywords);
+    $('#gal-char-name-keywords').val(savedKeywords.join(', '));
+    showToast(savedKeywords.length > 0
+      ? `已保存角色名关键字：${characterId}（${savedKeywords.join('、')}）`
+      : `已清空角色名关键字：${characterId}`);
   });
 
   $('#gal-char-tts-save-btn').on('click', () => {

@@ -204,8 +204,11 @@ async function _openModelEditor(modelInput, onSave) {
 
   const modalHtml = `
     <div class="gal-input-modal" id="gal-gpt-model-editor-modal">
-      <div class="gal-input-box" style="width:min(1100px,95vw);max-width:none !important;max-height:90vh;overflow:auto;">
-        <h3 style="margin:0 0 12px 0;color:${THEME.dark};">GPT-SoVITS 模型编辑</h3>
+      <div class="gal-input-box gal-modal-layout-fixed" style="width:min(1100px,95vw);max-width:none !important;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+        <div class="gal-input-title gal-modal-fixed-header" style="margin:0;padding:12px 14px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;transform:none;">
+          <span style="transform:none;color:${THEME.dark};font-weight:700;font-size:1.15rem;">GPT-SoVITS 模型编辑</span>
+        </div>
+        <div class="gal-modal-scroll-body" style="padding:12px 14px 8px 14px;">
         <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:10px;">
           <label>模型名<input id="gal-gpt-edit-name" value="${_escapeHtmlLite(current.name || '')}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
           <label>备注<input id="gal-gpt-edit-desc" value="${_escapeHtmlLite(current.desc || '')}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
@@ -222,7 +225,8 @@ async function _openModelEditor(modelInput, onSave) {
         <div style="margin-top:10px;">
           <label>表情映射 JSON<textarea id="gal-gpt-edit-map" rows="6" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current.expressionRefMapJson)}</textarea></label>
         </div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        </div>
+        <div class="gal-input-actions gal-modal-fixed-actions" style="display:flex;justify-content:flex-end;gap:8px;margin:0;padding:12px 14px;border-top:1px solid #e5e7eb;">
           <button class="gal-action-btn" id="gal-gpt-edit-preview"><i class="fa-solid fa-play"></i> 试听</button>
           <button class="gal-action-btn" id="gal-gpt-edit-cancel">取消</button>
           <button class="gal-action-btn primary" id="gal-gpt-edit-save"><i class="fa-solid fa-save"></i> 保存</button>

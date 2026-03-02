@@ -466,13 +466,14 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
     .join('');
   const modalHtml = `
       <div class="gal-input-modal" id="gal-sprite-upload-modal">
-        <div class="gal-input-box" style="max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 25px;">
-          <div class="gal-input-title" style="margin-bottom: 15px; font-size: 1.4rem; display: flex; align-items: center; justify-content: space-between;">
+        <div class="gal-input-box gal-modal-layout-fixed" style="max-width: 700px; width: 90%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+          <div class="gal-input-title gal-modal-fixed-header" style="padding: 18px 25px 14px 25px; border-bottom: 1px solid #eee; margin: 0; font-size: 1.4rem; display: flex; align-items: center; justify-content: space-between;">
             <span>上传角色立绘</span>
             <button id="gal-sprite-upload-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
+          <div class="gal-modal-scroll-body" style="padding: 15px 25px 10px 25px;">
           <div style="margin-bottom: 15px; display: flex; gap: 15px;">
             <div style="flex: 1;">
               <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
@@ -632,7 +633,8 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
               <i class="fa-solid fa-hand-pointer"></i> 拖动图片调整位置，滑块调整缩放
             </p>
           </div>
-          <div class="gal-input-actions" style="display: flex; gap: 15px; margin-top: 15px;">
+          </div>
+          <div class="gal-input-actions gal-modal-fixed-actions" style="display: flex; gap: 15px; margin: 0; padding: 15px 25px 20px 25px; border-top: 1px solid #eee;">
             <button class="gal-action-btn" id="gal-batch-upload-btn" style="flex: 1; background: #666; color: #fff; min-height: 48px; padding: 12px 16px; font-size: 1rem;">
               <i class="fa-solid fa-images"></i>
               <span>批量上传</span>

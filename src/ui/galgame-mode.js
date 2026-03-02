@@ -2,6 +2,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { $ } from '../core/env.js';
 import { clearAllPixiEffects, preloadPixiEffectsRuntime } from '../effects/pixi-effect-manager.js';
 import { hideGlobalOverlay } from './overlay.js';
+import { cancelTypewriter } from './typewriter.js';
 
 // ============================================
 // Galgame 模式切换
@@ -61,6 +62,7 @@ export async function applyGalgameMode() {
 }
 
 export function restoreOriginalViews() {
+  cancelTypewriter();
   clearAllPixiEffects();
   hideGlobalOverlay();
 

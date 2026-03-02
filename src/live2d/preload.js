@@ -4,6 +4,18 @@ import { setLive2DCharacterExpression } from './expression-motion.js';
 import { getCharacterUseLive2D } from './render-mode.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { SpriteAnimationManager } from '../animation/sprite-animation.js';
+import { getAllCharacterNameKeywords, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
+
+function resolveLive2DCharacterId(characterId) {
+  const rawCharacterId = String(characterId || '').trim();
+  if (!rawCharacterId) return '';
+  const candidateIds = Array.from(new Set([
+    ...Object.keys(getAllCharacterNameKeywords()),
+    ...Array.from(Live2DManager.models.keys()),
+    rawCharacterId,
+  ]));
+  return resolveCharacterIdByKeywords(rawCharacterId, candidateIds) || rawCharacterId;
+}
 
 // ============================================
 // Live2D 预加载管理器（SDK + 模型预热）
@@ -42,18 +54,19 @@ export const Live2DPreloadManager = {
   },
 
   enqueueCharacter(characterId, reason = 'unknown') {
-    if (!characterId) return;
-    if (this.preloadedSet.has(characterId)) return;
-    if (Live2DManager.models.has(characterId)) {
-      this.preloadedSet.add(characterId);
+    const resolvedCharacterId = resolveLive2DCharacterId(characterId);
+    if (!resolvedCharacterId) return;
+    if (this.preloadedSet.has(resolvedCharacterId)) return;
+    if (Live2DManager.models.has(resolvedCharacterId)) {
+      this.preloadedSet.add(resolvedCharacterId);
       return;
     }
-    const until = this.failedUntil.get(characterId);
+    const until = this.failedUntil.get(resolvedCharacterId);
     if (until && Date.now() < until) return;
-    if (until) this.failedUntil.delete(characterId);
-    if (this.queuedSet.has(characterId)) return;
-    this.queue.push({ characterId, reason });
-    this.queuedSet.add(characterId);
+    if (until) this.failedUntil.delete(resolvedCharacterId);
+    if (this.queuedSet.has(resolvedCharacterId)) return;
+    this.queue.push({ characterId: resolvedCharacterId, reason });
+    this.queuedSet.add(resolvedCharacterId);
     this._ensureWorker();
   },
 
@@ -115,16 +128,17 @@ export const Live2DPreloadManager = {
 
 // 统一渲染入口：根据设置选择 Live2D 或静态立绘
 export async function renderCharacterVisual(characterId, expression, container, options = {}) {
-  const useLive2D = getCharacterUseLive2D(characterId);
-  const hasModel = await hasLive2DModel(characterId);
+  const resolvedCharacterId = resolveLive2DCharacterId(characterId);
+  const useLive2D = getCharacterUseLive2D(resolvedCharacterId);
+  const hasModel = await hasLive2DModel(resolvedCharacterId);
 
   if (useLive2D && hasModel) {
     try {
-      const model = await Live2DManager.loadModel(characterId);
+      const model = await Live2DManager.loadModel(resolvedCharacterId);
       if (model) {
-        Live2DManager.renderTo(characterId, container);
-        setLive2DCharacterExpression(characterId, expression, true);
-        console.log(`[${SCRIPT_NAME}] 使用 Live2D 渲染: ${characterId}`);
+        Live2DManager.renderTo(resolvedCharacterId, container);
+        setLive2DCharacterExpression(resolvedCharacterId, expression, true);
+        console.log(`[${SCRIPT_NAME}] 使用 Live2D 渲染: ${resolvedCharacterId}`);
         return { mode: 'live2d', success: true };
       }
     } catch (e) {
@@ -137,19 +151,21 @@ export async function renderCharacterVisual(characterId, expression, container, 
 
 // 更新角色焦点状态
 export function updateCharacterFocus(characterId, isSpeaking) {
-  const useLive2D = getCharacterUseLive2D(characterId);
+  const resolvedCharacterId = resolveLive2DCharacterId(characterId);
+  const useLive2D = getCharacterUseLive2D(resolvedCharacterId);
 
-  if (useLive2D && Live2DManager.models.has(characterId)) {
-    Live2DManager.setFocus(characterId, isSpeaking);
+  if (useLive2D && Live2DManager.models.has(resolvedCharacterId)) {
+    Live2DManager.setFocus(resolvedCharacterId, isSpeaking);
   }
 }
 
 // 清理角色视觉资源
 export function cleanupCharacterVisual(characterId) {
-  if (Live2DManager.models.has(characterId)) {
-    Live2DManager.cleanup(characterId);
+  const resolvedCharacterId = resolveLive2DCharacterId(characterId);
+  if (Live2DManager.models.has(resolvedCharacterId)) {
+    Live2DManager.cleanup(resolvedCharacterId);
   }
-  SpriteAnimationManager.cleanup(characterId);
+  SpriteAnimationManager.cleanup(resolvedCharacterId || characterId);
 }
 
 // 清理所有视觉资源

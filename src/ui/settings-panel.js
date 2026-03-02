@@ -14,6 +14,7 @@ import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloor
 import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
 import { updateButtonState } from './menu-button.js';
 import { showToast } from './toast.js';
+import { finishActiveTypewriter, isTypewriterActive } from './typewriter.js';
 
 // ============================================
 // 统一设置面板 + UI 应用函数
@@ -120,6 +121,25 @@ function getDialogFontStack(fontKey) {
   const normalizedKey = String(fontKey || '').trim().toLowerCase();
   const matched = DIALOG_FONT_PRESETS.find(item => item.value === normalizedKey);
   return matched ? matched.stack : DIALOG_FONT_PRESETS[0].stack;
+}
+
+function normalizeVoiceNameList(rawList) {
+  return Array.from(
+    new Set(
+      (Array.isArray(rawList) ? rawList : [])
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // 应用皮肤到覆盖层
@@ -314,6 +334,8 @@ export async function showSettingsPanel(topTab, subTab) {
   topTab = topTab || 'settings';
 
   const settings = getSettings();
+  settings.ttsDefaultMaleVoices = normalizeVoiceNameList(settings.ttsDefaultMaleVoices);
+  settings.ttsDefaultFemaleVoices = normalizeVoiceNameList(settings.ttsDefaultFemaleVoices);
   const effectQuality = ['mobile', 'balanced', 'high'].includes(settings.effectsQuality)
     ? settings.effectsQuality
     : 'balanced';
@@ -325,6 +347,16 @@ export async function showSettingsPanel(topTab, subTab) {
   settings.effectsMaxActive = effectMaxActive;
   settings.effectsEnabled = settings.effectsEnabled !== false;
   settings.effectsAutoClearOnSceneChange = settings.effectsAutoClearOnSceneChange !== false;
+  const typewriterSpeedParsed = parseInt(settings.typewriterSpeed, 10);
+  const typewriterSoundVolumeParsed = parseInt(settings.typewriterSoundVolume, 10);
+  settings.typewriterEnabled = settings.typewriterEnabled !== false;
+  settings.typewriterSpeed = Number.isFinite(typewriterSpeedParsed)
+    ? Math.max(5, Math.min(typewriterSpeedParsed, 60))
+    : 30;
+  settings.typewriterSoundEnabled = settings.typewriterSoundEnabled !== false;
+  settings.typewriterSoundVolume = Number.isFinite(typewriterSoundVolumeParsed)
+    ? Math.max(0, Math.min(typewriterSoundVolumeParsed, 100))
+    : 35;
   const live2dManager = getLive2DManagerRef();
   if (live2dManager) {
     live2dManager.debug = !!settings.globalDebug;
@@ -438,6 +470,28 @@ export async function showSettingsPanel(topTab, subTab) {
                 </select>
               </div>
             </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">打字机显示</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-enabled" ${settings.typewriterEnabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">打字速度</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-typewriter-speed" min="5" max="60" step="1" value="${settings.typewriterSpeed}">
+                <span class="gal-range-value" id="gal-typewriter-speed-value">${settings.typewriterSpeed}字/秒</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">打字音效</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-sound-enabled" ${settings.typewriterSoundEnabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">音效音量</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-typewriter-sound-volume" min="0" max="100" step="1" value="${settings.typewriterSoundVolume}">
+                <span class="gal-range-value" id="gal-typewriter-sound-volume-value">${settings.typewriterSoundVolume}%</span>
+              </div>
+            </div>
           </div>
 
           <div class="gal-settings-divider"></div>
@@ -479,6 +533,10 @@ export async function showSettingsPanel(topTab, subTab) {
               <select id="gal-skin-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 200px;">
                 ${SKIN_LIST.map(s => `<option value="${s.value}" ${settings.skin === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
               </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">情境样式 <small style="color:#999;">(控制 COT 是否包含 &lt;styled&gt; 规范)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-situational-style-enabled" ${settings.situationalStyleEnabled !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
           </div>
 
@@ -585,6 +643,35 @@ export async function showSettingsPanel(topTab, subTab) {
               </select>
             </div>
             <p id="gal-tts-default-speaker-hint" style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;"></p>
+            <div class="gal-settings-row" style="align-items: flex-start;">
+              <span class="gal-settings-label">默认男声列表</span>
+              <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 480px); gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <select id="gal-tts-default-male-candidate" class="gal-voice-pool-select" style="flex: 1;">
+                    <option value="">选择后立即加入列表</option>
+                  </select>
+                </div>
+                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
+                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
+                <div id="gal-tts-default-male-list" class="gal-voice-chip-list"></div>
+              </div>
+            </div>
+            <div class="gal-settings-row" style="align-items: flex-start;">
+              <span class="gal-settings-label">默认女声列表</span>
+              <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 480px); gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <select id="gal-tts-default-female-candidate" class="gal-voice-pool-select" style="flex: 1;">
+                    <option value="">选择后立即加入列表</option>
+                  </select>
+                </div>
+                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
+                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
+                <div id="gal-tts-default-female-list" class="gal-voice-chip-list"></div>
+              </div>
+            </div>
+            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
+              当 COT 使用 <code>男声/女声</code> 标签且角色未绑定时，将从对应列表随机分配并自动绑定。
+            </p>
 
             <div id="gal-gpt-sovits-config" style="margin-top: 10px; padding: 12px; border: 1px dashed #ddd; border-radius: 8px; background: #fafafa; ${settings.ttsProvider === 'gpt_sovits_v2' ? '' : 'display: none;'}">
               <div style="font-weight: 700; margin-bottom: 10px; color: ${THEME.dark}; display:flex; align-items:center; gap:8px;">
@@ -783,6 +870,50 @@ export async function showSettingsPanel(topTab, subTab) {
       .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
       .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
       .gal-panel-btn i { font-size: 1.3rem; }
+      .gal-voice-pool-select {
+        padding: 8px 10px;
+        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+      }
+      .gal-voice-pool-select:focus {
+        outline: none;
+        border-color: var(--SmartThemeEmColor, #9ac7ff);
+        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
+      }
+      .gal-voice-chip-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 28px; }
+      .gal-voice-chip-empty { font-size: 0.78rem; color: #888; }
+      .gal-voice-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        font-size: 0.8rem;
+        max-width: 100%;
+      }
+      .gal-voice-chip-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gal-voice-chip-remove {
+        border: none;
+        border-radius: 999px;
+        width: 18px;
+        height: 18px;
+        line-height: 18px;
+        padding: 0;
+        cursor: pointer;
+        background: rgba(220, 53, 69, 0.2);
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        font-weight: 700;
+      }
+      .gal-voice-chip-remove:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
+      }
 
       /* L1 Tab Header */
       .gal-l1-tab-header { display:flex; align-items:center; background:var(--SmartThemeBotMesBlurTintColor, #1a1a2e); padding:0; border-bottom:2px solid ${THEME.accent}; }
@@ -805,6 +936,55 @@ export async function showSettingsPanel(topTab, subTab) {
   $(getModalMountRoot()).append(panelHtml);
   const $panel = $('#gal-unified-panel');
 
+  const renderVoicePoolChips = (containerSelector, poolKey) => {
+    const $container = $(containerSelector);
+    if (!$container.length) return;
+    const normalizedList = normalizeVoiceNameList(settings[poolKey]);
+    settings[poolKey] = normalizedList;
+    if (normalizedList.length === 0) {
+      $container.html('<span class="gal-voice-chip-empty">当前为空（从上方选择音色即可加入）。</span>');
+      return;
+    }
+
+    const html = normalizedList
+      .map(voiceName => `
+        <span class="gal-voice-chip">
+          <span class="gal-voice-chip-name" title="${escapeHtml(voiceName)}">${escapeHtml(voiceName)}</span>
+          <button type="button" class="gal-voice-chip-remove" data-pool="${poolKey}" data-voice="${escapeHtml(voiceName)}">×</button>
+        </span>
+      `)
+      .join('');
+    $container.html(html);
+  };
+
+  const refreshTtsVoicePoolCandidates = voiceList => {
+    const optionHtml = ['<option value="">选择后立即加入列表</option>']
+      .concat(
+        voiceList.map(v => {
+          const name = String(v?.name || '').trim();
+          if (!name) return '';
+          const desc = String(v?.desc || '').trim();
+          const label = desc ? `${name} (${desc})` : name;
+          return `<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
+        }).filter(Boolean),
+      )
+      .join('');
+
+    const $maleCandidate = $('#gal-tts-default-male-candidate');
+    const $femaleCandidate = $('#gal-tts-default-female-candidate');
+    if ($maleCandidate.length) {
+      $maleCandidate.html(optionHtml);
+      $maleCandidate.val('');
+    }
+    if ($femaleCandidate.length) {
+      $femaleCandidate.html(optionHtml);
+      $femaleCandidate.val('');
+    }
+
+    renderVoicePoolChips('#gal-tts-default-male-list', 'ttsDefaultMaleVoices');
+    renderVoicePoolChips('#gal-tts-default-female-list', 'ttsDefaultFemaleVoices');
+  };
+
   // TTS 音色列表异步填充
   const refreshTtsVoiceOptions = async () => {
     const $sel = $('#gal-tts-default-speaker');
@@ -815,10 +995,15 @@ export async function showSettingsPanel(topTab, subTab) {
     const current = settings.ttsDefaultSpeaker || '';
     $sel.empty().append('<option value="">（不指定）</option>');
     voiceList.forEach(v => {
-      const desc = v.desc ? ` (${v.desc})` : '';
-      $sel.append(`<option value="${v.name}">${v.name}${desc}</option>`);
+      const name = String(v?.name || '').trim();
+      if (!name) return;
+      const desc = String(v?.desc || '').trim();
+      const label = desc ? `${name} (${desc})` : name;
+      $sel.append(`<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`);
     });
     $sel.val(current);
+    refreshTtsVoicePoolCandidates(voiceList);
+
     const provider = getTTSProvider();
     const providerHint = provider === TTS_PROVIDER.GPT_SOVITS_V2
       ? 'GPT-SoVITS：建议把音色 name 设为角色名。'
@@ -870,6 +1055,29 @@ export async function showSettingsPanel(topTab, subTab) {
   $('#gal-dialog-font-family').on('change', function () { settings.dialogFontFamily = $(this).val(); applySettingsToUI(); saveSettings(); });
   $('#gal-dialog-opacity').on('input', function () { const t = parseInt($(this).val()); settings.dialogOpacity = 1 - (t / 100); $('#gal-dialog-opacity-value').text(t + '%'); applySettingsToUI(); saveSettings(); });
   $('#gal-text-effect').on('change', function () { settings.textEffect = $(this).val(); applySettingsToUI(); saveSettings(); });
+  $('#gal-typewriter-enabled').on('change', function () {
+    settings.typewriterEnabled = $(this).is(':checked');
+    if (!settings.typewriterEnabled && isTypewriterActive()) {
+      finishActiveTypewriter();
+    }
+    saveSettings();
+  });
+  $('#gal-typewriter-speed').on('input', function () {
+    const parsed = parseInt($(this).val(), 10);
+    settings.typewriterSpeed = Number.isFinite(parsed) ? Math.max(5, Math.min(parsed, 60)) : 30;
+    $('#gal-typewriter-speed-value').text(settings.typewriterSpeed + '字/秒');
+    saveSettings();
+  });
+  $('#gal-typewriter-sound-enabled').on('change', function () {
+    settings.typewriterSoundEnabled = $(this).is(':checked');
+    saveSettings();
+  });
+  $('#gal-typewriter-sound-volume').on('input', function () {
+    const parsed = parseInt($(this).val(), 10);
+    settings.typewriterSoundVolume = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 100)) : 35;
+    $('#gal-typewriter-sound-volume-value').text(settings.typewriterSoundVolume + '%');
+    saveSettings();
+  });
   $('#gal-auto-speed').on('input', function () { settings.autoPlaySpeed = parseFloat($(this).val()); $('#gal-auto-speed-value').text(settings.autoPlaySpeed + '秒'); saveSettings(); });
 
   // 开关设置
@@ -1026,7 +1234,42 @@ export async function showSettingsPanel(topTab, subTab) {
       .then(() => showToast(settings.ttsBilingualZhJaEnabled ? '中日双语模式已开启，COT已更新' : '中日双语模式已关闭，COT已更新'))
       .catch(() => showToast(settings.ttsBilingualZhJaEnabled ? '中日双语模式已开启' : '中日双语模式已关闭'));
   });
+  $('#gal-situational-style-enabled').on('change', function () {
+    settings.situationalStyleEnabled = $(this).is(':checked');
+    saveSettings();
+    injectCOTToWorldbook()
+      .then(() => showToast(settings.situationalStyleEnabled ? '情境样式已开启，COT已更新' : '情境样式已关闭，COT已更新'))
+      .catch(() => showToast(settings.situationalStyleEnabled ? '情境样式已开启' : '情境样式已关闭'));
+  });
   $('#gal-tts-default-speaker').on('change', function () { settings.ttsDefaultSpeaker = $(this).val(); saveSettings(); });
+
+  const addVoiceToGenderPool = (poolKey, candidateSelector) => {
+    const $candidate = $(candidateSelector);
+    if (!$candidate.length) return;
+    const selectedVoice = String($candidate.val() || '').trim();
+    if (!selectedVoice) return;
+    const nextList = normalizeVoiceNameList([...(settings[poolKey] || []), selectedVoice]);
+    if (nextList.length === (settings[poolKey] || []).length) {
+      showToast('该音色已在列表中');
+      return;
+    }
+    settings[poolKey] = nextList;
+    saveSettings();
+    renderVoicePoolChips(poolKey === 'ttsDefaultMaleVoices' ? '#gal-tts-default-male-list' : '#gal-tts-default-female-list', poolKey);
+    $candidate.val('');
+  };
+
+  $('#gal-tts-default-male-candidate').on('change', () => addVoiceToGenderPool('ttsDefaultMaleVoices', '#gal-tts-default-male-candidate'));
+  $('#gal-tts-default-female-candidate').on('change', () => addVoiceToGenderPool('ttsDefaultFemaleVoices', '#gal-tts-default-female-candidate'));
+
+  $panel.on('click', '.gal-voice-chip-remove', function () {
+    const poolKey = String($(this).data('pool') || '').trim();
+    const voiceName = String($(this).data('voice') || '').trim();
+    if (!poolKey || !voiceName || !Array.isArray(settings[poolKey])) return;
+    settings[poolKey] = normalizeVoiceNameList(settings[poolKey].filter(item => String(item || '').trim() !== voiceName));
+    saveSettings();
+    renderVoicePoolChips(poolKey === 'ttsDefaultMaleVoices' ? '#gal-tts-default-male-list' : '#gal-tts-default-female-list', poolKey);
+  });
 
   // GPT-SoVITS
   $('#gal-gpt-sovits-url').on('change', function () { settings.gptSoVits = settings.gptSoVits || {}; settings.gptSoVits.apiUrl = $(this).val().trim(); saveSettings(); });

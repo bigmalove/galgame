@@ -5,7 +5,9 @@ import {
   TTS_PROVIDER,
   getTTSProvider,
   getGptSoVitsConfig,
+  getTTSVoiceListAsync,
   getCharacterTTSVoice,
+  setCharacterTTSVoice,
   resolveVoiceByName,
   inferResourceId,
   normalizeGptSoVitsSwitchMode,
@@ -14,6 +16,7 @@ import { Live2DManager } from '../live2d/manager.js';
 import { LipSyncManager } from '../live2d/lip-sync.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { synthesizeToBlob } from './edge-tts-direct.js';
+import { getAllCharacterNameKeywords, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // 延迟引用: showToast (来自 UI 层)
 let _showToastRef = null;
@@ -38,6 +41,17 @@ function getSegmentSpeakText(segment) {
   return String(segment.text ?? '').trim();
 }
 
+function resolveTTSCharacterId(characterId) {
+  const rawCharacterId = String(characterId || '').trim();
+  if (!rawCharacterId) return '';
+  const candidateIds = Array.from(new Set([
+    ...Object.keys(getAllCharacterNameKeywords()),
+    ...Array.from(Live2DManager.models.keys()),
+    rawCharacterId,
+  ]));
+  return resolveCharacterIdByKeywords(rawCharacterId, candidateIds) || rawCharacterId;
+}
+
 function isProxyNotFound(status, bodyText = '') {
   if (status !== 404) return false;
   const body = String(bodyText || '').toLowerCase();
@@ -58,6 +72,43 @@ function _safeArray(value) {
 
 function _safeObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function _normalizeVoiceNameList(value) {
+  return Array.from(
+    new Set(
+      _safeArray(value)
+        .map(item => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function _pickRandomVoiceName(value) {
+  const list = _normalizeVoiceNameList(value);
+  if (list.length === 0) return '';
+  const idx = Math.floor(Math.random() * list.length);
+  return list[idx] || '';
+}
+
+function _normalizeVoiceLookupKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function _filterVoicePoolByProvider(pool, providerVoices) {
+  const normalizedPool = _normalizeVoiceNameList(pool);
+  if (normalizedPool.length === 0) return [];
+
+  const availableKeys = new Set();
+  for (const voice of _safeArray(providerVoices)) {
+    const nameKey = _normalizeVoiceLookupKey(voice?.name);
+    const valueKey = _normalizeVoiceLookupKey(voice?.value);
+    if (nameKey) availableKeys.add(nameKey);
+    if (valueKey) availableKeys.add(valueKey);
+  }
+  if (availableKeys.size === 0) return [];
+
+  return normalizedPool.filter(voiceName => availableKeys.has(_normalizeVoiceLookupKey(voiceName)));
 }
 
 function _toFiniteNumber(value, fallback = 0) {
@@ -257,35 +308,42 @@ export const TTSManager = {
     this._gptSoVitsCurrentObjectUrl = '';
   },
 
-  stop() {
-    if (
-      !this.isPlaying &&
-      !this.isLoading &&
-      !this._edgeDirectSocket &&
-      !this._edgeDirectFetchController &&
-      !this._edgeDirectObjectUrl
-    ) {
-      return;
-    }
+  _forceStopAudioElement(audioElement) {
+    if (!audioElement || typeof audioElement.pause !== 'function') return;
+    try { audioElement.pause(); } catch (e) {}
+    try { audioElement.currentTime = 0; } catch (e) {}
+    try {
+      audioElement.src = '';
+      if (typeof audioElement.load === 'function') audioElement.load();
+    } catch (e) {}
+  },
 
+  stop() {
     this._activePlaybackSessionId = Number(this._activePlaybackSessionId || 0) + 1;
     this._abortGptSoVitsFetch('stop');
     this._cleanupEdgeDirectResources();
     console.log(`[${SCRIPT_NAME}] TTS: 中止当前播放`);
 
     try {
-      if (this.currentAudio && typeof this.currentAudio.pause === 'function') {
-        try { this.currentAudio.pause(); } catch (e) {}
-        try {
-          this.currentAudio.src = '';
-          if (typeof this.currentAudio.load === 'function') this.currentAudio.load();
-        } catch (e) {}
+      const preferredAudio = this.currentAudio;
+      const fallbackAudio = this._getCurrentAudioElement();
+      this._forceStopAudioElement(preferredAudio);
+      if (fallbackAudio && fallbackAudio !== preferredAudio) {
+        this._forceStopAudioElement(fallbackAudio);
       }
 
       if (this.xiaobaixTts && this.xiaobaixTts.player) {
         const player = this.xiaobaixTts.player;
+        let stopCalled = false;
         if (typeof player._stopCurrent === 'function') {
           player._stopCurrent();
+          stopCalled = true;
+        } else if (typeof player.stop === 'function') {
+          player.stop();
+          stopCalled = true;
+        }
+        if (!stopCalled && typeof this.xiaobaixTts.stop === 'function') {
+          this.xiaobaixTts.stop();
         }
         if (typeof player.clear === 'function') {
           player.clear();
@@ -1738,9 +1796,10 @@ export const TTSManager = {
 
     this.isPlaying = true;
     if (segment.speaker) {
-      const hasLive2D = Live2DManager.models.has(segment.speaker);
-      if (hasLive2D) this._startLipSyncOnPlay(segment.speaker);
-      else this._startLipSyncWhenModelReady(segment.speaker);
+      const resolvedSpeakerId = resolveTTSCharacterId(segment.speaker);
+      const hasLive2D = Live2DManager.models.has(resolvedSpeakerId);
+      if (hasLive2D) this._startLipSyncOnPlay(resolvedSpeakerId);
+      else this._startLipSyncWhenModelReady(resolvedSpeakerId);
     }
     return true;
   },
@@ -1843,15 +1902,16 @@ export const TTSManager = {
     this.isPlaying = true;
 
     if (segment.speaker) {
-      const hasLive2D = Live2DManager.models.has(segment.speaker);
-      if (hasLive2D) this._startLipSyncOnPlay(segment.speaker);
-      else this._startLipSyncWhenModelReady(segment.speaker);
+      const resolvedSpeakerId = resolveTTSCharacterId(segment.speaker);
+      const hasLive2D = Live2DManager.models.has(resolvedSpeakerId);
+      if (hasLive2D) this._startLipSyncOnPlay(resolvedSpeakerId);
+      else this._startLipSyncWhenModelReady(resolvedSpeakerId);
     }
     return true;
   },
 
   async _hasAvailableLive2DModel(characterId) {
-    const safeCharacterId = String(characterId || '').trim();
+    const safeCharacterId = resolveTTSCharacterId(characterId);
     if (!safeCharacterId) return false;
     if (Live2DManager.models.has(safeCharacterId)) return true;
     try {
@@ -1862,7 +1922,7 @@ export const TTSManager = {
   },
 
   _startLipSyncWhenModelReady(characterId, maxWait = 5000) {
-    const safeCharacterId = String(characterId || '').trim();
+    const safeCharacterId = resolveTTSCharacterId(characterId);
     if (!safeCharacterId) return;
     const startTime = Date.now();
     let hasCheckedModelExists = false;
@@ -1899,7 +1959,7 @@ export const TTSManager = {
   },
 
   async _waitForModelReadyBeforeTTS(characterId, maxWait = 5000) {
-    const safeCharacterId = String(characterId || '').trim();
+    const safeCharacterId = resolveTTSCharacterId(characterId);
     if (!safeCharacterId) return false;
     if (Live2DManager.models.has(safeCharacterId)) return true;
 
@@ -1921,7 +1981,9 @@ export const TTSManager = {
   },
 
   _startLipSyncOnPlay(characterId, maxWait = 5000) {
-    console.log(`[${SCRIPT_NAME}] LipSync: _startLipSyncOnPlay 被调用 - characterId=${characterId}`);
+    const resolvedCharacterId = resolveTTSCharacterId(characterId);
+    if (!resolvedCharacterId) return;
+    console.log(`[${SCRIPT_NAME}] LipSync: _startLipSyncOnPlay 被调用 - characterId=${resolvedCharacterId}`);
     const startTime = Date.now();
     let hasStarted = false;
 
@@ -1942,7 +2004,7 @@ export const TTSManager = {
       if (!audioElement.paused) {
         console.log(`[${SCRIPT_NAME}] LipSync: 音频已在播放，立即启动口型同步`);
         hasStarted = true;
-        this._bindLipSyncToAudio(audioElement, characterId);
+        this._bindLipSyncToAudio(audioElement, resolvedCharacterId);
         return;
       }
 
@@ -1952,7 +2014,7 @@ export const TTSManager = {
         } else if (!hasStarted) {
           console.warn(`[${SCRIPT_NAME}] LipSync: 等待播放超时，尝试强制启动`);
           if (audioElement.src) {
-            this._bindLipSyncToAudio(audioElement, characterId);
+            this._bindLipSyncToAudio(audioElement, resolvedCharacterId);
           }
         }
         return;
@@ -1964,7 +2026,7 @@ export const TTSManager = {
         if (hasStarted) return;
         hasStarted = true;
         console.log(`[${SCRIPT_NAME}] LipSync: 音频开始播放，启动口型同步`);
-        this._bindLipSyncToAudio(audioElement, characterId);
+        this._bindLipSyncToAudio(audioElement, resolvedCharacterId);
       };
 
       audioElement.addEventListener('playing', onPlaying, { once: true });
@@ -1986,7 +2048,7 @@ export const TTSManager = {
         if (!hasStarted) {
           console.warn(`[${SCRIPT_NAME}] LipSync: 等待播放超时，尝试强制启动`);
           if (audioElement.src) {
-            this._bindLipSyncToAudio(audioElement, characterId);
+            this._bindLipSyncToAudio(audioElement, resolvedCharacterId);
           }
         }
       }, maxWait);
@@ -2039,10 +2101,49 @@ export const TTSManager = {
 
     const settings = getSettings();
     const ttsConfig = segment.tts || {};
-    const boundVoice = getCharacterTTSVoice(segment.speaker);
-    let voiceName = ttsConfig.speaker || boundVoice || settings.ttsDefaultSpeaker;
+    const speakerName = String(segment.speaker || '').trim();
+    const resolvedSpeakerName = resolveTTSCharacterId(speakerName);
+    const requestedVoiceTag = String(ttsConfig.speaker || '').trim();
+    const boundVoice = getCharacterTTSVoice(resolvedSpeakerName || speakerName);
+    let voiceName = '';
+
+    if (boundVoice) {
+      // 已绑定角色始终优先使用绑定音色。
+      voiceName = boundVoice;
+    } else if (requestedVoiceTag === '男声' || requestedVoiceTag === '女声') {
+      const voicePool = requestedVoiceTag === '男声'
+        ? settings.ttsDefaultMaleVoices
+        : settings.ttsDefaultFemaleVoices;
+      let providerVoices = [];
+      try {
+        providerVoices = await getTTSVoiceListAsync();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] TTS: 获取当前引擎音色列表失败，跳过性别候选过滤`, e);
+      }
+      const filteredVoicePool = _filterVoicePoolByProvider(voicePool, providerVoices);
+      voiceName = _pickRandomVoiceName(filteredVoicePool);
+
+      if (!voiceName && _normalizeVoiceNameList(voicePool).length > 0) {
+        console.warn(
+          `[${SCRIPT_NAME}] TTS: ${requestedVoiceTag}候选池未命中当前引擎可用音色 (provider=${provider})，回退默认音色`,
+        );
+      }
+
+      if (voiceName && (resolvedSpeakerName || speakerName)) {
+        const bindingCharacterId = resolvedSpeakerName || speakerName;
+        setCharacterTTSVoice(bindingCharacterId, voiceName);
+        console.log(`[${SCRIPT_NAME}] TTS: 自动绑定 "${bindingCharacterId}" -> "${voiceName}"`);
+      }
+      if (!voiceName) {
+        voiceName = String(settings.ttsDefaultSpeaker || '').trim();
+      }
+    } else {
+      // 旧格式：具体音色名继续支持。
+      voiceName = requestedVoiceTag || String(settings.ttsDefaultSpeaker || '').trim();
+    }
+
     if (!voiceName) {
-      voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? (segment.speaker || '') : '桃夭';
+      voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? (resolvedSpeakerName || speakerName) : '桃夭';
     }
     if (!voiceName) voiceName = '桃夭';
     const context = ttsConfig.context || '';
@@ -2065,7 +2166,7 @@ export const TTSManager = {
     this.showLoadingIndicator();
 
     try {
-      await this._waitForModelReadyBeforeTTS(segment.speaker);
+      await this._waitForModelReadyBeforeTTS(resolvedSpeakerName || speakerName);
 
       if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
         await this._speakWithGptSoVits(segment, segmentId, resolvedVoice, playbackSessionId);
@@ -2078,7 +2179,8 @@ export const TTSManager = {
 
       const speakerValue = resolvedVoice.value;
       const resourceId = inferResourceId(speakerValue);
-      const hasLive2D = Live2DManager.models.has(segment.speaker);
+      const live2DSpeakerId = resolvedSpeakerName || speakerName;
+      const hasLive2D = Live2DManager.models.has(live2DSpeakerId);
 
       if (this.xiaobaixTts && typeof this.xiaobaixTts.speak === 'function') {
         await this.xiaobaixTts.speak(speakText, {
@@ -2090,9 +2192,9 @@ export const TTSManager = {
         this.currentSegmentId = segmentId;
         console.log(`[${SCRIPT_NAME}] TTS: 检查口型同步 - hasLive2D=${hasLive2D}, speaker=${segment.speaker}`);
         if (hasLive2D) {
-          this._startLipSyncOnPlay(segment.speaker);
+          this._startLipSyncOnPlay(live2DSpeakerId);
         } else {
-          this._startLipSyncWhenModelReady(segment.speaker);
+          this._startLipSyncWhenModelReady(live2DSpeakerId);
         }
         return;
       }
@@ -2108,9 +2210,9 @@ export const TTSManager = {
         this.currentSegmentId = segmentId;
         console.log(`[${SCRIPT_NAME}] TTS: 检查口型同步 - hasLive2D=${hasLive2D}, speaker=${segment.speaker}`);
         if (hasLive2D) {
-          this._startLipSyncOnPlay(segment.speaker);
+          this._startLipSyncOnPlay(live2DSpeakerId);
         } else {
-          this._startLipSyncWhenModelReady(segment.speaker);
+          this._startLipSyncWhenModelReady(live2DSpeakerId);
         }
         return;
       }

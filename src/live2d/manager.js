@@ -7,7 +7,7 @@ import { getBuiltinExpressionByKey, getBuiltinMotionByKey } from './builtin-expr
 
 const LIVE2D_TICKER_GUARD_KEY = '__galgameLive2dTickerRef__';
 
-// 寤惰繜寮曠敤: Live2DStage (鏉ヨ嚜 ./stage.js锛岄伩鍏嶅惊鐜?, showToast (鏉ヨ嚜 UI 灞?
+// 延迟引用: Live2DStage (来自 ./stage.js，避免循环), showToast (来自 UI 层)
 let _Live2DStageRef = null;
 let _showToastRef = null;
 export function setLive2DManagerRefs({ Live2DStage, showToast }) {
@@ -16,7 +16,7 @@ export function setLive2DManagerRefs({ Live2DStage, showToast }) {
 }
 
 // ============================================
-// Live2D 鏍稿績娓叉煋绠＄悊鍣?
+// Live2D 核心渲染管理器
 // ============================================
 export const Live2DManager = {
   models: new Map(),        // characterId -> PIXI.Live2DModel
@@ -30,7 +30,7 @@ export const Live2DManager = {
   builtinMotionPlayers: new Map(), // characterId -> { rafId, stopped }
   builtinMotionFrameStates: new Map(), // characterId -> { params, weight }
   storedModelParamIds: new Map(), // characterId -> string[]
-  cachedDetachedAt: new Map(), // characterId -> timestamp (宸查€€鍦虹紦瀛?
+  cachedDetachedAt: new Map(), // characterId -> timestamp (已退场缓存时间)
   coreParamIndexCache: new WeakMap(), // coreModel -> Map<normalizedParamId, index>
   maxDetachedCache: 3,
   xhrBlobUrlSupport: null, // null=unknown, boolean=supported

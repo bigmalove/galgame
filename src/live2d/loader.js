@@ -738,7 +738,7 @@ export const Live2DLoader = {
 
       const cached = await this._getFromCache();
       if (cached && cached.sdk) {
-        console.log(`[${SCRIPT_NAME}] 浠庣紦瀛樺姞杞?pixi-live2d-display`);
+        console.log(`[${SCRIPT_NAME}] 从缓存加载 pixi-live2d-display`);
         await this._executeScript(cached.sdk, _topWindow);
       } else {
         console.log(`[${SCRIPT_NAME}] 从 CDN 加载 pixi-live2d-display...`);
@@ -828,7 +828,7 @@ export const Live2DLoader = {
           store.put({ id: this.SDK_CACHE_KEY, data, timestamp: Date.now() });
           tx.oncomplete = () => {
             database.close();
-            console.log(`[${SCRIPT_NAME}] Live2D SDK 宸茬紦瀛樺埌 IndexedDB`);
+            console.log(`[${SCRIPT_NAME}] Live2D SDK 已缓存到 IndexedDB`);
             resolve();
           };
           tx.onerror = () => {

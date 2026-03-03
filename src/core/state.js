@@ -17,6 +17,7 @@ let _skipTimer = null;
 let _isRewinding = false;
 let _rewindTimer = null;
 let _rewindHoldTimer = null;
+let _isLoadingSave = false;
 export const REWIND_HOLD_DELAY = 3000;
 
 // db
@@ -50,6 +51,10 @@ export function setRewindTimer(v) { _rewindTimer = v; }
 // rewindHoldTimer
 export function getRewindHoldTimer() { return _rewindHoldTimer; }
 export function setRewindHoldTimer(v) { _rewindHoldTimer = v; }
+
+// isLoadingSave
+export function getIsLoadingSave() { return _isLoadingSave; }
+export function setIsLoadingSave(v) { _isLoadingSave = !!v; }
 
 // choices 相关状态
 export function getLastGalgameOptionHash() { return _lastGalgameOptionHash; }

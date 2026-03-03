@@ -6,6 +6,7 @@ import { getIsRewinding, getPendingOptions, REWIND_HOLD_DELAY, setIsEnabled } fr
 import { GalgameStore } from '../core/store.js';
 import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
 import { parseGalgameContent } from '../logic/parser.js';
+import { clearSpecialCgOverlayAndQueue } from '../logic/special-cg-trigger.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
 import { renderGalgameChoices } from './choices.js';
@@ -28,7 +29,9 @@ import { updateButtonState } from './menu-button.js';
 import { showCustomPopupPanel } from './modal.js';
 import { detectAndCaptureCg } from './overlay-content.js';
 import { scheduleOverlaySegmentDisplay, showGlobalOverlay } from './overlay.js';
+import { showSaveLoadModal } from './save-load-modal.js';
 import { showToast } from './toast.js';
+import { maybeShowTitleScreen, resetTitleScreenSession } from './title-screen.js';
 import { finishActiveTypewriter, isTypewriterActive } from './typewriter.js';
 import { showMapModal } from '../map/map-modal.js';
 
@@ -212,6 +215,7 @@ export function setupGlobalEventListeners() {
     console.log(`[${SCRIPT_NAME}] Galgame模式关闭（已取消世界书全局启用）`);
 
     clearAllPixiEffects();
+    clearSpecialCgOverlayAndQueue();
     closeEmbeddedViewer();
     restoreOriginalViews();
 
@@ -290,6 +294,8 @@ export function setupGlobalEventListeners() {
     await _updateGlobalOverlayContentRef(mesId, parsed);
     showGlobalOverlay();
     if (getSettings().hideOtherFloors) setTimeout(hideNonLastFloors, 80);
+    resetTitleScreenSession();
+    await maybeShowTitleScreen({ reason: 'chat-enter' });
     showToast('Galgame 模式已开启');
   });
 
@@ -373,6 +379,18 @@ export function setupGlobalEventListeners() {
     closeMobileMenu();
     showToast('正在打开设置...');
     if (_showSettingsPanelRef) _showSettingsPanelRef();
+  });
+
+  $(doc).on('click', '#gal-global-overlay [data-action="save"]', function (e) {
+    e.stopPropagation();
+    closeMobileMenu();
+    showSaveLoadModal('save');
+  });
+
+  $(doc).on('click', '#gal-global-overlay [data-action="load"]', function (e) {
+    e.stopPropagation();
+    closeMobileMenu();
+    showSaveLoadModal('load');
   });
 
   $(doc).on('click', '#gal-mobile-menu .gal-menu-btn', function () {
@@ -537,7 +555,7 @@ export function setupGlobalEventListeners() {
       ).length
     ) return;
     if ($target.closest('.gal-styled-stage-content').length) return;
-    if ($target.closest('.gal-choice-layer, .gal-popup-modal, .gal-embedded-viewer, .gal-cg-viewer').length) return;
+    if ($target.closest('.gal-choice-layer, .gal-popup-modal, .gal-embedded-viewer, .gal-cg-viewer, .gal-special-cg-overlay').length) return;
     if ($target.closest('button, a, input, textarea, select, [data-action], [contenteditable="true"]').length) return;
 
     e.stopPropagation();
@@ -640,6 +658,18 @@ export function setupGlobalEventListeners() {
   $(doc).on('click', '#gal-global-overlay .gal-cg-viewer', function (e) {
     e.stopPropagation();
     $(this).hide();
+  });
+
+  // 特殊 CG 叠层关闭
+  $(doc).on('click', '#gal-global-overlay .gal-special-cg-overlay-close', function (e) {
+    e.stopPropagation();
+    clearSpecialCgOverlayAndQueue();
+  });
+
+  $(doc).on('click', '#gal-global-overlay .gal-special-cg-overlay', function (e) {
+    if ($(e.target).closest('.gal-special-cg-overlay-image, .gal-special-cg-overlay-close').length) return;
+    e.stopPropagation();
+    clearSpecialCgOverlayAndQueue();
   });
 
   // 双击立绘修改

@@ -29,6 +29,23 @@ export const SPRITE_UPLOAD_RATIO_OPTIONS = [
 
 const SPRITE_UPLOAD_RATIO_VALUE_SET = new Set(SPRITE_UPLOAD_RATIO_OPTIONS.map(item => item.value));
 
+export const DEFAULT_SPECIAL_CG_SETTINGS = {
+  enabled: false,
+  rules: [],
+};
+
+export const DEFAULT_TITLE_SCREEN_SETTINGS = {
+  enabled: false,
+  titleText: '',
+  subtitleText: '',
+  startButtonText: '开始游戏',
+  backgroundSource: 'auto',
+  backgroundSceneName: '__title__',
+  backgroundUrl: '',
+  backgroundFit: 'cover',
+  enableBackdropMask: true,
+};
+
 // 默认设置 (全局)
 export const DEFAULT_SETTINGS = {
   // 文本显示
@@ -83,6 +100,9 @@ export const DEFAULT_SETTINGS = {
   mapMarkerStyle: 'pin',
   mapLayoutSeed: 'default',
   mapCoordsByRegion: {},
+  titleScreen: Object.assign({}, DEFAULT_TITLE_SCREEN_SETTINGS),
+  titleScreenByChar: {},
+  specialCg: Object.assign({}, DEFAULT_SPECIAL_CG_SETTINGS),
   // TTS 设置
   ttsEnabled: true,
   ttsAutoPlay: true,
@@ -238,9 +258,119 @@ function normalizeTypewriterSettings(target) {
   target.typewriterSoundVolume = normalizeTypewriterSoundVolume(target.typewriterSoundVolume);
 }
 
+function normalizeSpecialCgOperator(rawOperator) {
+  const operator = String(rawOperator || '').trim().toLowerCase();
+  const allowed = new Set(['gte', 'gt', 'eq', 'lte', 'lt']);
+  return allowed.has(operator) ? operator : 'gte';
+}
+
+function normalizeSpecialCgRule(rule, index = 0) {
+  const safeRule = _safeObject(rule);
+  const parsedThreshold = Number(safeRule.threshold);
+  const parsedPriority = Number(safeRule.priority);
+  const baseId = String(safeRule.id || '').trim() || `special_cg_rule_${Date.now()}_${index}`;
+  const variablePath = String(safeRule.variablePath || '')
+    .trim()
+    .replace(/^stat_data\./, '');
+
+  return {
+    id: baseId,
+    name: String(safeRule.name || baseId).trim() || baseId,
+    enabled: safeRule.enabled !== false,
+    variablePath,
+    operator: normalizeSpecialCgOperator(safeRule.operator),
+    threshold: Number.isFinite(parsedThreshold) ? parsedThreshold : 0,
+    cgId: String(safeRule.cgId || '').trim(),
+    priority: Number.isFinite(parsedPriority) ? parsedPriority : 0,
+    oncePerChat: true,
+  };
+}
+
+export function createDefaultSpecialCgSettings() {
+  return {
+    enabled: false,
+    rules: [],
+  };
+}
+
+export function normalizeSpecialCgSettings(rawSpecialCg) {
+  const safeConfig = _safeObject(rawSpecialCg);
+  const seenIds = new Set();
+  const normalizedRules = [];
+
+  _safeArray(safeConfig.rules).forEach((item, index) => {
+    const normalized = normalizeSpecialCgRule(item, index);
+    if (!normalized.id || seenIds.has(normalized.id)) {
+      normalized.id = `special_cg_rule_${Date.now()}_${index}`;
+    }
+    seenIds.add(normalized.id);
+    normalizedRules.push(normalized);
+  });
+
+  return {
+    enabled: safeConfig.enabled === true,
+    rules: normalizedRules,
+  };
+}
+
 export function normalizeSpriteUploadAspectRatio(rawValue) {
   const normalized = String(rawValue || '').trim();
   return SPRITE_UPLOAD_RATIO_VALUE_SET.has(normalized) ? normalized : DEFAULT_SPRITE_UPLOAD_RATIO;
+}
+
+function normalizeTitleScreenBackgroundSource(rawValue) {
+  const source = String(rawValue || '').trim().toLowerCase();
+  const allowed = new Set(['auto', 'upload', 'url']);
+  return allowed.has(source) ? source : DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSource;
+}
+
+function normalizeTitleScreenBackgroundFit(rawValue) {
+  const fit = String(rawValue || '').trim().toLowerCase();
+  return fit === 'contain' ? 'contain' : DEFAULT_TITLE_SCREEN_SETTINGS.backgroundFit;
+}
+
+export function normalizeTitleScreenSettings(rawTitleScreen) {
+  const safe = _safeObject(rawTitleScreen);
+  const startButtonText = String(safe.startButtonText || '').trim() || DEFAULT_TITLE_SCREEN_SETTINGS.startButtonText;
+  const backgroundSceneName = String(safe.backgroundSceneName || '').trim() || DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSceneName;
+
+  return {
+    enabled: safe.enabled === true,
+    titleText: String(safe.titleText || '').trim(),
+    subtitleText: String(safe.subtitleText || '').trim(),
+    startButtonText,
+    backgroundSource: normalizeTitleScreenBackgroundSource(safe.backgroundSource),
+    backgroundSceneName,
+    backgroundUrl: String(safe.backgroundUrl || '').trim(),
+    backgroundFit: normalizeTitleScreenBackgroundFit(safe.backgroundFit),
+    enableBackdropMask: safe.enableBackdropMask !== false,
+  };
+}
+
+const TITLE_SCENE_CHAR_MARKER = '::char::';
+
+function normalizeTitleScreenByCharMap(rawMap) {
+  const source = _safeObject(rawMap);
+  const result = {};
+  Object.entries(source).forEach(([rawCharId, rawConfig]) => {
+    const charId = String(rawCharId || '').trim();
+    if (!charId) return;
+    result[charId] = normalizeTitleScreenSettings(rawConfig);
+  });
+  return result;
+}
+
+function encodeTitleSceneCharId(rawCharId) {
+  const charId = String(rawCharId || '').trim() || 'default';
+  return encodeURIComponent(charId);
+}
+
+export function buildTitleSceneNameForChar(charId, rawSceneName = DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSceneName) {
+  const sceneName = String(rawSceneName || '').trim() || DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSceneName;
+  const markerIndex = sceneName.lastIndexOf(TITLE_SCENE_CHAR_MARKER);
+  const baseName = markerIndex >= 0 ? sceneName.slice(0, markerIndex) : sceneName;
+  const safeBaseName = baseName || DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSceneName;
+  return `${safeBaseName}${TITLE_SCENE_CHAR_MARKER}${encodeTitleSceneCharId(charId)}`;
 }
 
 function normalizeMapMarkerStyle(rawStyle) {
@@ -413,6 +543,33 @@ export function normalizeEnhancedModeSettings(rawEnhancedMode) {
   };
 }
 
+export function ensureSpecialCgSettings() {
+  _settings.specialCg = normalizeSpecialCgSettings(_settings.specialCg);
+  return _settings.specialCg;
+}
+
+export function ensureTitleScreenSettings() {
+  if (!_settings || typeof _settings !== 'object') {
+    _settings = Object.assign({}, DEFAULT_SETTINGS);
+  }
+
+  const currentCharId = String(getCurrentCharId() || 'default').trim() || 'default';
+  _settings.titleScreenByChar = normalizeTitleScreenByCharMap(_settings.titleScreenByChar);
+  const rawCurrentCharSettings = _settings.titleScreenByChar[currentCharId] || null;
+  const fallbackSettings = DEFAULT_TITLE_SCREEN_SETTINGS;
+  const currentCharSettings = normalizeTitleScreenSettings(
+    rawCurrentCharSettings || fallbackSettings,
+  );
+  currentCharSettings.backgroundSceneName = buildTitleSceneNameForChar(
+    currentCharId,
+    currentCharSettings.backgroundSceneName,
+  );
+
+  _settings.titleScreenByChar[currentCharId] = currentCharSettings;
+  _settings.titleScreen = currentCharSettings;
+  return _settings.titleScreen;
+}
+
 // 当前设置 (getter/setter 模式 - esbuild IIFE 中 export let 不可靠)
 let _settings = Object.assign({}, DEFAULT_SETTINGS);
 export function ensureEnhancedModeSettings() {
@@ -421,6 +578,8 @@ export function ensureEnhancedModeSettings() {
 }
 ensureEnhancedModeSettings();
 ensureMapSettings();
+ensureSpecialCgSettings();
+ensureTitleScreenSettings();
 
 export function getSettings() { return _settings; }
 export function setSettings(v) { _settings = v; }
@@ -428,17 +587,59 @@ export function setSettings(v) { _settings = v; }
 // 每个角色卡的开关状态
 let _charEnabledMap = {};
 
-// 获取当前角色卡ID
-export function getCurrentCharId() {
-  var _a, _b;
-  try {
-    const ctx =
-      (_b = (_a = topWindow.SillyTavern) === null || _a === void 0 ? void 0 : _a.getContext) === null || _b === void 0
-        ? void 0
-        : _b.call(_a);
-    if ((ctx === null || ctx === void 0 ? void 0 : ctx.characterId) !== undefined) {
-      return String(ctx.characterId);
+function normalizeCurrentCharToken(rawValue) {
+  if (rawValue === undefined || rawValue === null) return '';
+  const text = String(rawValue).trim();
+  if (!text) return '';
+  if (text === '-1') return '';
+  const lowerText = text.toLowerCase();
+  if (lowerText === 'undefined' || lowerText === 'null') return '';
+  return text;
+}
+
+function readCharacterNameById(characters, rawCharacterId) {
+  const characterId = normalizeCurrentCharToken(rawCharacterId);
+  if (!characterId || !characters || typeof characters !== 'object') return '';
+
+  let characterData = null;
+  if (Array.isArray(characters)) {
+    const numericId = Number.parseInt(characterId, 10);
+    if (Number.isFinite(numericId) && numericId >= 0 && numericId < characters.length) {
+      characterData = characters[numericId];
     }
+  } else {
+    characterData = characters[characterId] || null;
+    if (!characterData && /^\d+$/.test(characterId)) {
+      characterData = characters[Number.parseInt(characterId, 10)] || null;
+    }
+  }
+
+  return String(characterData?.name || '').trim();
+}
+
+function getCurrentCharacterSnapshot() {
+  const st = topWindow?.SillyTavern || null;
+  const ctx = typeof st?.getContext === 'function' ? st.getContext() : null;
+
+  const ctxCharacterId = normalizeCurrentCharToken(ctx?.characterId);
+  const stCharacterId = normalizeCurrentCharToken(st?.characterId);
+  const thisChid = normalizeCurrentCharToken(topWindow?.this_chid);
+
+  const ctxCharacterName = readCharacterNameById(ctx?.characters, ctxCharacterId || stCharacterId || thisChid);
+  const stCharacterName = readCharacterNameById(st?.characters, stCharacterId || ctxCharacterId || thisChid);
+  const currentCharacterName = ctxCharacterName || stCharacterName || '';
+
+  return {
+    characterName: currentCharacterName,
+  };
+}
+
+// 获取当前角色卡（按角色卡名）
+export function getCurrentCharId() {
+  try {
+    const snapshot = getCurrentCharacterSnapshot();
+    const currentCharacterName = normalizeCurrentCharToken(snapshot.characterName);
+    if (currentCharacterName) return currentCharacterName;
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 获取当前角色ID失败:`, e);
   }
@@ -463,6 +664,9 @@ export function loadSettings() {
       }
       _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
+      _settings.specialCg = normalizeSpecialCgSettings(_settings.specialCg);
+      _settings.titleScreen = normalizeTitleScreenSettings(_settings.titleScreen);
+      _settings.titleScreenByChar = normalizeTitleScreenByCharMap(_settings.titleScreenByChar);
       _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
       _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
       normalizeTypewriterSettings(_settings);
@@ -532,6 +736,7 @@ export function loadSettings() {
         }
       }
       ensureMapSettings();
+      ensureTitleScreenSettings();
     }
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 加载设置失败:`, e);
@@ -552,13 +757,17 @@ export function saveSettings() {
   const SETTINGS_STORAGE_KEY = GalgameStore.STORAGE_KEYS.SETTINGS;
   try {
     _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
+    _settings.specialCg = normalizeSpecialCgSettings(_settings.specialCg);
     _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
     _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
     normalizeTypewriterSettings(_settings);
+    _settings.titleScreen = normalizeTitleScreenSettings(_settings.titleScreen);
+    _settings.titleScreenByChar = normalizeTitleScreenByCharMap(_settings.titleScreenByChar);
     _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
     _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
     _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);
     ensureMapSettings();
+    ensureTitleScreenSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 保存设置失败:`, e);
@@ -577,13 +786,13 @@ export function saveCharEnabled() {
 
 // 获取当前角色卡的开关状态
 export function isCurrentCharEnabled() {
-  const charId = getCurrentCharId();
+  const charId = String(getCurrentCharId() || 'default').trim() || 'default';
   return _charEnabledMap[charId] === true;
 }
 
 // 设置当前角色卡的开关状态
 export function setCurrentCharEnabled(enabled) {
-  const charId = getCurrentCharId();
-  _charEnabledMap[charId] = enabled;
+  const charId = String(getCurrentCharId() || 'default').trim() || 'default';
+  _charEnabledMap[charId] = enabled === true;
   saveCharEnabled();
 }

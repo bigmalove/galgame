@@ -36,7 +36,7 @@
               "type": "object",
               "additionalProperties": true,
               "properties": {
-                "mode": { "type": "string", "enum": ["local", "remote"] },
+                "mode": { "type": "string", "enum": ["local", "remote", "skip-export"] },
                 "remoteAssetsUrl": { "type": "string" },
                 "remoteBaseUrl": { "type": "string" }
               }
@@ -45,7 +45,7 @@
               "type": "object",
               "additionalProperties": true,
               "properties": {
-                "mode": { "type": "string", "enum": ["local", "remote"] },
+                "mode": { "type": "string", "enum": ["local", "remote", "skip-export"] },
                 "remoteAssetsUrl": { "type": "string" },
                 "remoteBaseUrl": { "type": "string" }
               }
@@ -134,7 +134,41 @@
         "locationStatusHtml": { "type": "string" },
         "timeStatusHtml": { "type": "string" },
         "locationStatusIconClass": { "type": "string" },
-        "timeStatusIconClass": { "type": "string" }
+        "timeStatusIconClass": { "type": "string" },
+        "uiAccess": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "hiddenAssetTabs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "sprites",
+                  "backgrounds",
+                  "title-screen",
+                  "special-cgs",
+                  "special-cg-rules",
+                  "maps",
+                  "skin",
+                  "imagegen",
+                  "opening",
+                  "bgm",
+                  "custom"
+                ]
+              }
+            },
+            "unlock": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "mode": { "type": "string", "enum": ["plaintext"] },
+                "password": { "type": "string" }
+              }
+            }
+          }
+        }
       }
     },
     "bgm": {

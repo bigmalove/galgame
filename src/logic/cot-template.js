@@ -4,14 +4,25 @@ import { topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
 import { CUSTOM_LOCATION_HTML_KEY, CUSTOM_TIME_HTML_KEY } from '../core/store.js';
 import { getAllBackgrounds } from '../db/backgrounds.js';
+import { getPendingSpecialCg } from './special-cg-trigger.js';
 import { getAllExpressions } from '../utils/expressions.js';
 
 // ============================================
 // COT (Chain of Thought) 模板生成
 // ============================================
 
-export async function generateCOTTemplate() {
+export async function generateCOTTemplate(options = {}) {
   const settings = getSettings();
+  const hasProvidedPending = !!(options && Object.prototype.hasOwnProperty.call(options, 'pendingSpecialCg'));
+  let pendingSpecialCg = hasProvidedPending ? options.pendingSpecialCg : null;
+  if (!hasProvidedPending) {
+    try {
+      pendingSpecialCg = await getPendingSpecialCg();
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] 获取待触发特殊CG失败:`, error);
+      pendingSpecialCg = null;
+    }
+  }
 
   // 获取所有已上传的背景场景名称
   let sceneNames = [];
@@ -209,6 +220,16 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
         ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
         : `5. **背景场景必须使用已配置的场景名称**`;
 
+  const pendingSceneAlias = pendingSpecialCg
+    ? String(pendingSpecialCg.sceneAlias || pendingSpecialCg.ruleName || pendingSpecialCg.ruleId || '规则名').trim()
+    : '';
+  const pendingSpecialCgSection = pendingSceneAlias
+    ? `
+### 临时特殊CG提示（必须遵守）
+- 请在此次输出适合的段落，**必须**插入一次：\`<background scene="${pendingSceneAlias}" />\`
+`
+    : '';
+
   const pixiEffectNames = ['rain', 'snow', 'heavySnow', 'cherryBlossoms', 'fog', 'fireflies', 'embers', 'screenFlash'];
   const pixiEffectListText = pixiEffectNames.join(', ');
   const pixiEffectTagSection =
@@ -345,6 +366,7 @@ ${bgmRuleSection}
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
 - ${sceneListText}
+${pendingSpecialCgSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）
@@ -421,6 +443,7 @@ ${bgmRuleSection}
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
 - ${sceneListText}
+${pendingSpecialCgSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）

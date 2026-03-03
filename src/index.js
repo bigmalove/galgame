@@ -93,6 +93,7 @@ import { showSettingsPanel, applySettingsToUI, applyBgFillMode, applyTextEffect,
 import { showLive2DSettingsModal } from './ui/live2d-settings-modal.js';
 import { showSpriteConfigModal, setSpriteConfigRefs } from './ui/sprite-config.js';
 import { showBatchBackgroundUploadDialog, showBackgroundUploadDialog } from './ui/bg-upload.js';
+import { showBatchSpecialCgUploadDialog, showSpecialCgUploadDialog } from './ui/cg-upload.js';
 import { ImageCropper, showCharAppearancePromptEditor, showBananaAppearancePicker, showSpriteUploadDialog, showBatchUploadDialog, showCustomExpressionManager } from './ui/sprite-upload.js';
 import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, importFromRemoteZip, showImportPackSelector, processZipContents, showImportProgress, showImportError } from './ui/asset-io.js';
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog, setAssetManagerRefs, setAssetManagerModalRef, renderBananaAppearanceList, refreshBananaAppearancePreviews } from './ui/asset-manager-parts.js';
@@ -171,10 +172,28 @@ setSettingsPanelRefs({ buildAssetsPane: buildAssetManagerContent, bindAssetsPane
 setSpriteConfigRefs({ showBatchUploadDialog, showSpriteUploadDialog, showBackgroundUploadDialog });
 
 // Phase 8 延迟引用: asset-manager-parts -> sprite-upload + bg-upload + banana
-setAssetManagerRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker });
+setAssetManagerRefs({
+  showSpriteUploadDialog,
+  showBatchUploadDialog,
+  showBackgroundUploadDialog,
+  showBatchBackgroundUploadDialog,
+  showCustomExpressionManager,
+  showBananaAppearancePicker,
+  showSpecialCgUploadDialog,
+  showBatchSpecialCgUploadDialog,
+});
 
 // Phase 8 延迟引用: asset-manager-modal -> sprite-upload + bg-upload + settings-panel
-setAssetManagerModalRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showSettingsPanel });
+setAssetManagerModalRefs({
+  showSpriteUploadDialog,
+  showBatchUploadDialog,
+  showBackgroundUploadDialog,
+  showBatchBackgroundUploadDialog,
+  showCustomExpressionManager,
+  showSpecialCgUploadDialog,
+  showBatchSpecialCgUploadDialog,
+  showSettingsPanel,
+});
 
 // Phase 8 延迟引用: image-gen-config -> sprite-upload (banana appearance picker)
 setImageGenConfigRefs({ showBananaAppearancePicker });

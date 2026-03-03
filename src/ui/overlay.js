@@ -171,6 +171,12 @@ export function ensureGlobalOverlay() {
                   <button class="gal-footer-btn" data-action="config" title="设置">
                     <i class="fa-solid fa-gear"></i> <span class="gal-btn-text">CONFIG</span>
                   </button>
+                  <button class="gal-footer-btn" data-action="save" title="存档">
+                    <i class="fa-solid fa-floppy-disk"></i> <span class="gal-btn-text">SAVE</span>
+                  </button>
+                  <button class="gal-footer-btn" data-action="load" title="读档">
+                    <i class="fa-solid fa-folder-open"></i> <span class="gal-btn-text">LOAD</span>
+                  </button>
                   <button class="gal-footer-btn gal-nav-btn" data-action="prev" title="上一段">
                     <i class="fa-solid fa-chevron-left"></i> <span class="gal-btn-text">PREV</span>
                   </button>
@@ -197,6 +203,14 @@ export function ensureGlobalOverlay() {
           </div>
         </div>
 
+        <!-- 特殊 CG 叠层 -->
+        <div class="gal-special-cg-overlay" style="display:none;">
+          <img class="gal-special-cg-overlay-image" alt="特殊CG" />
+          <button class="gal-special-cg-overlay-close" title="关闭">
+            <i class="fa-solid fa-times"></i>
+          </button>
+        </div>
+
         <!-- CG 全屏查看器 -->
         <div class="gal-cg-viewer" style="display:none;">
           <img class="gal-cg-viewer-img" style="display:none;" />
@@ -216,6 +230,12 @@ export function ensureGlobalOverlay() {
           </button>
           <button class="gal-menu-btn" data-action="view-original">
               <i class="fa-solid fa-display"></i> 原界面
+          </button>
+          <button class="gal-menu-btn" data-action="save">
+              <i class="fa-solid fa-floppy-disk"></i> 存档
+          </button>
+          <button class="gal-menu-btn" data-action="load">
+              <i class="fa-solid fa-folder-open"></i> 读档
           </button>
         </div>
       </div>

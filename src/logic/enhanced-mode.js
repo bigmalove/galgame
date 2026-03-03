@@ -16,6 +16,7 @@ import {
     stopGenerationTimeout,
 } from './generation-state.js';
 import { parseGalgameContent } from './parser.js';
+import { getPendingSpecialCg } from './special-cg-trigger.js';
 
 // ============================================
 // 加强模式
@@ -390,7 +391,8 @@ export async function convertTextToCotFormat(sourceText, options = {}) {
       }
     }
 
-    const cotTemplate = await generateCOTTemplate();
+    const pendingSpecialCg = await getPendingSpecialCg();
+    const cotTemplate = await generateCOTTemplate({ pendingSpecialCg });
     const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}\n\n${cotTemplate}`;
     const userPrompt = `请将以下内容转换为标准Galgame格式：\n\n${normalizedSource}`;
 

@@ -3,8 +3,8 @@ import { TTSManager } from './audio/tts-manager.js';
 import { SCRIPT_NAME, VERSION } from './core/constants.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
 import { $, topWindow } from './core/env.js';
-import { getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings } from './core/settings.js';
-import { getIsEnabled, setHideOtherFloors, setIsEnabled } from './core/state.js';
+import { ensureTitleScreenSettings, getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings, setCurrentCharEnabled } from './core/settings.js';
+import { getIsEnabled, getIsLoadingSave, setHideOtherFloors, setIsEnabled } from './core/state.js';
 import { loadAllBackgroundsToCache } from './db/backgrounds.js';
 import { initDB } from './db/init.js';
 import { loadAllSpritesToCache } from './db/sprites.js';
@@ -16,6 +16,7 @@ import { initEnhancedModeListener, initWorldbookInjectionListener } from './logi
 import { getGenerationState, getVerificationDelayMs, resetGenerationState, verifyGenerationComplete } from './logic/generation-state.js';
 import { setupMessageObserver } from './logic/message-observer.js';
 import { RE_GAL_TAGS } from './logic/parser.js';
+import { detectSpecialCgPendingNow, initSpecialCgTrigger, resetSpecialCgTriggerForChat, setSpecialCgTriggerRefs } from './logic/special-cg-trigger.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from './logic/worldbook.js';
 import { SpriteManager } from './sprite/sprite-manager.js';
 import { setupOptionsPanelObserver } from './ui/choices.js';
@@ -27,6 +28,7 @@ import { addMenuButton, injectGalgameButton, updateButtonState } from './ui/menu
 import { ensureGlobalOverlay, setupGameContentResizeListener, showGlobalOverlay } from './ui/overlay.js';
 import { processNewMessage } from './ui/process-message.js';
 import { injectStyles } from './ui/styles.js';
+import { isTitleScreenVisible, maybeShowTitleScreen, resetTitleScreenSession } from './ui/title-screen.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from './utils/html.js';
 import { updateLocationTimeDisplay } from './utils/location-time.js';
 
@@ -65,12 +67,29 @@ async function init() {
       setupGameContentResizeListener();
       initEnhancedModeListener();
       initWorldbookInjectionListener();
+      setSpecialCgTriggerRefs({ injectCOTToWorldbook });
+      initSpecialCgTrigger().catch(error => {
+        console.warn(`[${SCRIPT_NAME}] 特殊CG触发器初始化失败:`, error);
+      });
 
       $('#chat > .mes').each(function () {
         injectGalgameButton(this);
       });
 
+      const titleSettingsOnInit = ensureTitleScreenSettings();
+      if (!getIsEnabled() && titleSettingsOnInit?.enabled === true) {
+        setIsEnabled(true);
+        setCurrentCharEnabled(true);
+        updateButtonState();
+      }
+
       if (getIsEnabled()) {
+        resetTitleScreenSession();
+        try {
+          await detectSpecialCgPendingNow();
+        } catch (error) {
+          console.warn(`[${SCRIPT_NAME}] 启动时特殊CG检测失败:`, error);
+        }
         injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 世界书注入失败:`, e));
         console.log(`[${SCRIPT_NAME}] 初始化完成（世界书按需附加模式）`);
         // 等待 applyGalgameMode 完成（包括异步的 overlay 渲染）
@@ -89,6 +108,7 @@ async function init() {
           }
         }
 
+        await maybeShowTitleScreen({ reason: 'page-load' });
         setTimeout(() => updateLocationTimeDisplay(), 500);
 
       } else {
@@ -96,6 +116,7 @@ async function init() {
       }
 
       if (typeof topWindow.eventOn === 'function' && topWindow.tavern_events) {
+        let chatSwitchPostCheckSeq = 0;
         topWindow.eventOn(topWindow.tavern_events.MESSAGE_RECEIVED, messageId => {
           console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件触发, messageId: ${messageId}`);
 
@@ -132,14 +153,27 @@ async function init() {
         console.log(`[${SCRIPT_NAME}] MESSAGE_RECEIVED 事件监听已注册`);
 
         topWindow.eventOn(topWindow.tavern_events.CHAT_CHANGED, async () => {
+          const postCheckSeq = ++chatSwitchPostCheckSeq;
           resetGenerationState('切换聊天');
+          if (getIsLoadingSave()) {
+            console.log(`[${SCRIPT_NAME}] CHAT_CHANGED 来自读档流程，跳过常规重建`);
+            return;
+          }
+          resetSpecialCgTriggerForChat();
           // 清理上一聊天的立绘状态，避免新聊天首段错误复用旧槽位
           const $overlay = $('#gal-global-overlay');
           SpriteManager.reset($overlay.length ? $overlay : null);
           console.log(`[${SCRIPT_NAME}] 聊天切换：已重置立绘状态`);
 
-          const newEnabled = isCurrentCharEnabled();
+          let newEnabled = isCurrentCharEnabled();
           const wasEnabled = getIsEnabled();
+          const titleSettingsForCurrentChar = ensureTitleScreenSettings();
+          const shouldAutoEnableByTitle = titleSettingsForCurrentChar?.enabled === true;
+
+          if (!newEnabled && shouldAutoEnableByTitle) {
+            newEnabled = true;
+            setCurrentCharEnabled(true);
+          }
 
           if (newEnabled !== wasEnabled) {
             setIsEnabled(newEnabled);
@@ -151,15 +185,112 @@ async function init() {
             // 切换聊天时 SillyTavern 会清除 #chat 內容，overlay 会被销毁
             // 必须重新创建 overlay 并渲染最新消息
             console.log(`[${SCRIPT_NAME}] 聊天切换，重新应用 Galgame 模式`);
-            await applyGalgameMode();
+            resetTitleScreenSession();
+            const overlayShown = await applyGalgameMode();
+            if (!overlayShown) {
+              console.log(`[${SCRIPT_NAME}] 聊天切换后未找到AI消息，强制显示界面`);
+              showGlobalOverlay();
+            } else {
+              const $overlayAfterRender = $('#gal-global-overlay');
+              if (!$overlayAfterRender.hasClass('active')) {
+                console.log(`[${SCRIPT_NAME}] 聊天切换后 overlay 未 active，强制显示界面`);
+                showGlobalOverlay();
+              }
+            }
+            try {
+              await detectSpecialCgPendingNow();
+            } catch (error) {
+              console.warn(`[${SCRIPT_NAME}] 聊天切换后特殊CG检测失败:`, error);
+            }
+            injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 聊天切换后世界书注入失败:`, e));
+            await maybeShowTitleScreen({ reason: 'chat-enter' });
           } else if (wasEnabled) {
             // 从启用变为禁用
             await disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));
             restoreOriginalViews();
           }
+
+          // 兜底：角色切换后多次重试，抵抗 ST 切换时序波动
+          const runTitleScreenRecovery = async () => {
+            if (postCheckSeq !== chatSwitchPostCheckSeq) return;
+            if (getIsLoadingSave()) return;
+            if (isTitleScreenVisible()) return;
+
+            const latestTitleSettings = ensureTitleScreenSettings();
+            if (!latestTitleSettings || latestTitleSettings.enabled !== true) return;
+
+            if (!getIsEnabled()) {
+              setIsEnabled(true);
+              setCurrentCharEnabled(true);
+              updateButtonState();
+            }
+
+            let $overlayLater = $('#gal-global-overlay');
+            let overlayActive = $overlayLater.length > 0 && $overlayLater.hasClass('active');
+            if (!overlayActive) {
+              const overlayShownLater = await applyGalgameMode();
+              $overlayLater = $('#gal-global-overlay');
+              overlayActive = !!overlayShownLater && $overlayLater.length > 0 && $overlayLater.hasClass('active');
+              if (!overlayActive) {
+                showGlobalOverlay();
+                $overlayLater = $('#gal-global-overlay');
+                overlayActive = $overlayLater.length > 0 && $overlayLater.hasClass('active');
+              }
+            }
+
+            if (!isTitleScreenVisible() && overlayActive) {
+              resetTitleScreenSession();
+              await maybeShowTitleScreen({ reason: 'chat-enter', force: true });
+            }
+          };
+
+          [120, 360, 800, 1600].forEach(delay => {
+            setTimeout(() => {
+              runTitleScreenRecovery().catch(error => {
+                console.warn(`[${SCRIPT_NAME}] 角色切换后标题界面兜底失败:`, error);
+              });
+            }, delay);
+          });
         });
         console.log(`[${SCRIPT_NAME}] CHAT_CHANGED 事件监听已注册`);
       }
+
+      // 兜底：当 ST 未按预期触发 CHAT_CHANGED 时，轮询检测角色卡变化
+      let lastObservedCharKey = String(getCurrentCharId() || 'default').trim() || 'default';
+      let charPollingSeq = 0;
+      setInterval(() => {
+        const currentCharKey = String(getCurrentCharId() || 'default').trim() || 'default';
+        if (currentCharKey === lastObservedCharKey) return;
+        lastObservedCharKey = currentCharKey;
+        const pollSeq = ++charPollingSeq;
+
+        setTimeout(async () => {
+          if (pollSeq !== charPollingSeq) return;
+          if (getIsLoadingSave()) return;
+
+          try {
+            const titleSettings = ensureTitleScreenSettings();
+            if (!titleSettings || titleSettings.enabled !== true) return;
+
+            if (!getIsEnabled()) {
+              setIsEnabled(true);
+              setCurrentCharEnabled(true);
+              updateButtonState();
+            }
+
+            resetTitleScreenSession();
+            const overlayShown = await applyGalgameMode();
+            const $overlay = $('#gal-global-overlay');
+            if (!overlayShown || !$overlay.hasClass('active')) {
+              showGlobalOverlay();
+            }
+            await maybeShowTitleScreen({ reason: 'chat-enter', force: true });
+          } catch (error) {
+            console.warn(`[${SCRIPT_NAME}] 角色轮询兜底触发标题界面失败:`, error);
+          }
+        }, 120);
+      }, 700);
+      console.log(`[${SCRIPT_NAME}] 角色切换轮询兜底已启用`);
     }, 1500);
 
     console.log(`[${SCRIPT_NAME}] v${VERSION} 初始化完成`);

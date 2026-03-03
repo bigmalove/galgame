@@ -5906,3 +5906,124 @@
     font-size: 0.95rem !important;
   }
 }
+
+/* ========================================
+       特殊 CG 叠层
+       ======================================== */
+#gal-global-overlay .gal-special-cg-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 8, 12, 0.82);
+  backdrop-filter: blur(2px);
+}
+
+#gal-global-overlay .gal-special-cg-overlay.active {
+  display: flex !important;
+}
+
+#gal-global-overlay .gal-special-cg-overlay-image {
+  width: min(92%, 72rem);
+  max-height: 88%;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.75rem 2.5rem rgba(0, 0, 0, 0.45);
+  border: 0.0625rem solid rgba(255, 255, 255, 0.2);
+}
+
+#gal-global-overlay .gal-special-cg-overlay-close {
+  position: absolute;
+  top: 0.875rem;
+  right: 0.875rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0.0625rem solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(12, 16, 24, 0.72);
+  color: #f5f7fa;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#gal-global-overlay .gal-special-cg-overlay-close:hover {
+  background: rgba(22, 28, 40, 0.9);
+}
+
+/* ========================================
+       资源管理新增区：可读性与输入控件高对比
+       ======================================== */
+#gal-unified-panel .gal-special-cg-card,
+#gal-unified-panel .gal-special-cg-rules-panel {
+  background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92)) !important;
+  border-color: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)) !important;
+}
+
+#gal-unified-panel .gal-special-cg-name,
+#gal-unified-panel .gal-special-cg-id,
+#gal-unified-panel .gal-special-cg-rules-hint,
+#gal-unified-panel .gal-special-cg-rules-header > span,
+#gal-unified-panel .gal-special-cg-master-switch,
+#gal-unified-panel .gal-special-cg-rule-enabled-wrap,
+#gal-unified-panel .gal-special-cg-empty-hint {
+  color: var(--SmartThemeBodyColor, #f5f7fa) !important;
+}
+
+#gal-unified-panel .gal-special-cg-id {
+  opacity: 0.86;
+}
+
+#gal-unified-panel .gal-special-cg-rules-hint code {
+  color: var(--SmartThemeEmColor, #9ac7ff) !important;
+}
+
+#gal-unified-panel .gal-special-cg-rule-row input[type='text'],
+#gal-unified-panel .gal-special-cg-rule-row input[type='number'],
+#gal-unified-panel .gal-special-cg-rule-row textarea,
+#gal-unified-panel .gal-special-cg-rule-row select,
+#gal-special-cg-upload-modal input[type='text'],
+#gal-special-cg-upload-modal input[type='number'],
+#gal-special-cg-upload-modal textarea,
+#gal-special-cg-upload-modal select,
+#gal-batch-special-cg-upload-modal input[type='text'],
+#gal-batch-special-cg-upload-modal input[type='number'],
+#gal-batch-special-cg-upload-modal textarea,
+#gal-batch-special-cg-upload-modal select {
+  color: var(--SmartThemeBodyColor, #f5f7fa) !important;
+  background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92)) !important;
+  border: 0.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)) !important;
+}
+
+#gal-unified-panel .gal-special-cg-rule-row input[type='text']::placeholder,
+#gal-unified-panel .gal-special-cg-rule-row input[type='number']::placeholder,
+#gal-unified-panel .gal-special-cg-rule-row textarea::placeholder,
+#gal-special-cg-upload-modal input[type='text']::placeholder,
+#gal-special-cg-upload-modal input[type='number']::placeholder,
+#gal-special-cg-upload-modal textarea::placeholder,
+#gal-batch-special-cg-upload-modal input[type='text']::placeholder,
+#gal-batch-special-cg-upload-modal input[type='number']::placeholder,
+#gal-batch-special-cg-upload-modal textarea::placeholder {
+  color: var(--SmartThemeEmColor, #9ac7ff) !important;
+  opacity: 0.82 !important;
+}
+
+#gal-unified-panel .gal-special-cg-rule-row input[type='text']:focus,
+#gal-unified-panel .gal-special-cg-rule-row input[type='number']:focus,
+#gal-unified-panel .gal-special-cg-rule-row textarea:focus,
+#gal-unified-panel .gal-special-cg-rule-row select:focus,
+#gal-special-cg-upload-modal input[type='text']:focus,
+#gal-special-cg-upload-modal input[type='number']:focus,
+#gal-special-cg-upload-modal textarea:focus,
+#gal-special-cg-upload-modal select:focus,
+#gal-batch-special-cg-upload-modal input[type='text']:focus,
+#gal-batch-special-cg-upload-modal input[type='number']:focus,
+#gal-batch-special-cg-upload-modal textarea:focus,
+#gal-batch-special-cg-upload-modal select:focus {
+  outline: none !important;
+  border-color: var(--SmartThemeEmColor, #9ac7ff) !important;
+  box-shadow: 0 0 0 0.125rem rgba(154, 199, 255, 0.35) !important;
+}

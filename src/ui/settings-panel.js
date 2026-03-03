@@ -3,9 +3,10 @@ import { TTSManager } from '../audio/tts-manager.js';
 import { SCRIPT_NAME, THEME } from '../core/constants.js';
 import { setGlobalDebugEnabled } from '../core/debug.js';
 import { $, topWindow } from '../core/env.js';
-import { ensureEnhancedModeSettings, getSettings, saveSettings, setCurrentCharEnabled } from '../core/settings.js';
+import { ensureEnhancedModeSettings, ensureTitleScreenSettings, getSettings, saveSettings, setCurrentCharEnabled } from '../core/settings.js';
 import { getIsEnabled, setHideOtherFloors, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
+import { saveBackground } from '../db/backgrounds.js';
 import { clearAllPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { getAvailableModels, getAvailablePresets, getAvailableProfiles, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
@@ -334,6 +335,7 @@ export async function showSettingsPanel(topTab, subTab) {
   topTab = topTab || 'settings';
 
   const settings = getSettings();
+  ensureTitleScreenSettings();
   settings.ttsDefaultMaleVoices = normalizeVoiceNameList(settings.ttsDefaultMaleVoices);
   settings.ttsDefaultFemaleVoices = normalizeVoiceNameList(settings.ttsDefaultFemaleVoices);
   const effectQuality = ['mobile', 'balanced', 'high'].includes(settings.effectsQuality)
@@ -870,6 +872,31 @@ export async function showSettingsPanel(topTab, subTab) {
       .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
       .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
       .gal-panel-btn i { font-size: 1.3rem; }
+      .gal-title-settings-input,
+      .gal-title-settings-select {
+        width: min(100%, 460px);
+        min-height: 36px;
+        border-radius: 8px;
+        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        padding: 7px 10px;
+        box-sizing: border-box;
+        outline: none;
+      }
+      .gal-title-settings-input::placeholder {
+        color: rgba(245, 247, 250, 0.74);
+      }
+      .gal-title-settings-input:focus,
+      .gal-title-settings-select:focus {
+        border-color: var(--SmartThemeEmColor, #9ac7ff);
+        box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
+      }
+      .gal-title-settings-input:disabled,
+      .gal-title-settings-select:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
       .gal-voice-pool-select {
         padding: 8px 10px;
         border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
@@ -1090,6 +1117,89 @@ export async function showSettingsPanel(topTab, subTab) {
   });
   $('#gal-bg-fill-mode').on('change', function () { settings.bgFillMode = $(this).val(); applyBgFillMode(); saveSettings(); });
   $('#gal-skin-select').on('change', function () { settings.skin = $(this).val(); applySkin(); applySettingsToUI(); saveSettings(); });
+  const getTitleSettingsState = () => {
+    const normalized = ensureTitleScreenSettings();
+    settings.titleScreen = normalized;
+    return normalized;
+  };
+  const getTitleSceneName = () => {
+    const ts = getTitleSettingsState();
+    return String(ts.backgroundSceneName || '__title__').trim() || '__title__';
+  };
+  const syncTitleSourceInputs = () => {
+    const ts = getTitleSettingsState();
+    const source = String(ts.backgroundSource || 'auto');
+    const useUrl = source === 'url' || source === 'auto';
+    $('#gal-title-bg-url').prop('disabled', !useUrl);
+  };
+  $('#gal-title-enabled').on('change', function () {
+    const ts = getTitleSettingsState();
+    const enabled = $(this).is(':checked');
+    ts.enabled = enabled;
+    if (enabled) {
+      setIsEnabled(true);
+      setCurrentCharEnabled(true);
+      updateButtonState();
+    }
+    saveSettings();
+  });
+  $('#gal-title-text').on('input change', function () {
+    const ts = getTitleSettingsState();
+    ts.titleText = String($(this).val() || '').trim();
+    saveSettings();
+  });
+  $('#gal-title-subtitle').on('input change', function () {
+    const ts = getTitleSettingsState();
+    ts.subtitleText = String($(this).val() || '').trim();
+    saveSettings();
+  });
+  $('#gal-title-start-text').on('input change', function () {
+    const ts = getTitleSettingsState();
+    ts.startButtonText = String($(this).val() || '').trim();
+    saveSettings();
+  });
+  $('#gal-title-bg-source').on('change', function () {
+    const ts = getTitleSettingsState();
+    ts.backgroundSource = String($(this).val() || 'auto').trim();
+    syncTitleSourceInputs();
+    saveSettings();
+  });
+  $('#gal-title-bg-fit').on('change', function () {
+    const ts = getTitleSettingsState();
+    ts.backgroundFit = String($(this).val() || 'cover').trim();
+    saveSettings();
+  });
+  $('#gal-title-mask-enabled').on('change', function () {
+    const ts = getTitleSettingsState();
+    ts.enableBackdropMask = $(this).is(':checked');
+    saveSettings();
+  });
+  $('#gal-title-bg-url').on('input change', function () {
+    const ts = getTitleSettingsState();
+    ts.backgroundUrl = String($(this).val() || '').trim();
+    saveSettings();
+  });
+  $('#gal-title-bg-upload-btn').on('click', function () {
+    $('#gal-title-bg-file').trigger('click');
+  });
+  $('#gal-title-bg-file').on('change', async function () {
+    const file = this.files && this.files[0] ? this.files[0] : null;
+    if (!file) return;
+    const sceneName = getTitleSceneName();
+    const $hint = $('#gal-title-bg-upload-hint');
+    try {
+      await saveBackground(sceneName, file);
+      $hint.text(`已保存：${sceneName}（${file.name}）`);
+      showToast('标题背景上传成功');
+    } catch (error) {
+      console.error(`[${SCRIPT_NAME}] 标题背景上传失败:`, error);
+      showToast('标题背景上传失败');
+    } finally {
+      this.value = '';
+      saveSettings();
+    }
+  });
+  syncTitleSourceInputs();
   $('#gal-effects-enabled').on('change', function () {
     settings.effectsEnabled = $(this).is(':checked');
     if (!settings.effectsEnabled) {
@@ -1345,3 +1455,4 @@ export async function showSettingsPanel(topTab, subTab) {
     _bindAssetsPaneRef($panel, subTab);
   }
 }
+

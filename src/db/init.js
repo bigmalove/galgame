@@ -1,4 +1,4 @@
-import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_IMAGE_PACKS, STORE_LIVE2D_MODELS, STORE_SDK_CACHE, STORE_UI_SKINS, DEFAULT_PACK_ID, DEFAULT_PACK_NAME } from '../core/constants.js';
+import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_IMAGE_PACKS, STORE_LIVE2D_MODELS, STORE_SDK_CACHE, STORE_UI_SKINS, STORE_SPECIAL_CGS, DEFAULT_PACK_ID, DEFAULT_PACK_NAME } from '../core/constants.js';
 import { getDb, setDb } from '../core/state.js';
 
 // ============================================
@@ -18,13 +18,13 @@ export function initDB() {
       const transaction = event.target.transaction;
       const oldVersion = event.oldVersion;
 
-      // 绔嬬粯瀛樺偍
+      // 立绘存储
       if (!database.objectStoreNames.contains(STORE_SPRITES)) {
         const store = database.createObjectStore(STORE_SPRITES, { keyPath: 'id' });
         store.createIndex('characterId', 'characterId', { unique: false });
         store.createIndex('expression', 'expression', { unique: false });
       }
-      // 鑳屾櫙瀛樺偍
+      // 背景存储
       if (!database.objectStoreNames.contains(STORE_BACKGROUNDS)) {
         const bgStore = database.createObjectStore(STORE_BACKGROUNDS, { keyPath: 'id' });
         bgStore.createIndex('sceneName', 'sceneName', { unique: true });
@@ -59,7 +59,7 @@ export function initDB() {
         };
         packStore.add(defaultPack);
 
-        // 杩佺Щ鐜版湁 sprites 鏁版嵁
+        // 迁移现有 sprites 数据
         if (database.objectStoreNames.contains(STORE_SPRITES)) {
           const spriteStore = transaction.objectStore(STORE_SPRITES);
           const spriteRequest = spriteStore.openCursor();
@@ -76,7 +76,7 @@ export function initDB() {
           };
         }
 
-        // 杩佺Щ鐜版湁 backgrounds 鏁版嵁
+        // 迁移现有 backgrounds 数据
         if (database.objectStoreNames.contains(STORE_BACKGROUNDS)) {
           const bgStore = transaction.objectStore(STORE_BACKGROUNDS);
           const bgRequest = bgStore.openCursor();
@@ -101,12 +101,12 @@ export function initDB() {
         if (!database.objectStoreNames.contains(STORE_LIVE2D_MODELS)) {
           const live2dStore = database.createObjectStore(STORE_LIVE2D_MODELS, { keyPath: 'modelId' });
           live2dStore.createIndex('uploadTime', 'uploadTime', { unique: false });
-          console.log(`[${SCRIPT_NAME}] 宸插垱寤?Live2D 妯″瀷瀛樺偍`);
+          console.log(`[${SCRIPT_NAME}] 已创建 Live2D 模型存储`);
         }
 
         if (!database.objectStoreNames.contains(STORE_SDK_CACHE)) {
           database.createObjectStore(STORE_SDK_CACHE, { keyPath: 'id' });
-          console.log(`[${SCRIPT_NAME}] 宸插垱寤?SDK 缂撳瓨瀛樺偍`);
+          console.log(`[${SCRIPT_NAME}] 已创建 SDK 缓存存储`);
         }
 
         console.log(`[${SCRIPT_NAME}] 数据库升级到版本4: 已添加 Live2D 支持`);
@@ -184,6 +184,18 @@ export function initDB() {
           };
         }
         console.log(`[${SCRIPT_NAME}] 数据库升级到版本7: 立绘主键已升级为图包隔离格式`);
+      }
+
+      // 版本8: 新增特殊 CG 资源存储
+      if (oldVersion < 8) {
+        if (!database.objectStoreNames.contains(STORE_SPECIAL_CGS)) {
+          const specialCgStore = database.createObjectStore(STORE_SPECIAL_CGS, { keyPath: 'id' });
+          specialCgStore.createIndex('packId', 'packId', { unique: false });
+          specialCgStore.createIndex('cgId', 'cgId', { unique: false });
+          specialCgStore.createIndex('lastModified', 'lastModified', { unique: false });
+          console.log(`[${SCRIPT_NAME}] 已创建特殊 CG 存储`);
+        }
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本8: 已添加特殊 CG 存储`);
       }
     };
   });

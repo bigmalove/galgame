@@ -1,6 +1,7 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { generateCOTTemplate } from './cot-template.js';
 import { WORLDBOOK_NAME, COT_ENTRY_NAME } from './enhanced-mode.js';
+import { getPendingSpecialCg } from './special-cg-trigger.js';
 
 // ============================================
 // 世界书管理
@@ -69,7 +70,12 @@ function buildCotEntry(cotTemplate) {
  */
 export async function injectCOTToWorldbook() {
   try {
-    const cotTemplate = await generateCOTTemplate();
+    const pendingSpecialCg = await getPendingSpecialCg();
+    const pendingLog = pendingSpecialCg
+      ? `rule=${pendingSpecialCg.ruleId}, scene=${pendingSpecialCg.sceneAlias}, cgId=${pendingSpecialCg.cgId}`
+      : 'none';
+    console.log(`[${SCRIPT_NAME}] COT注入: pendingSpecialCg=${pendingLog}`);
+    const cotTemplate = await generateCOTTemplate({ pendingSpecialCg });
     const exists = await checkWorldbookExists(WORLDBOOK_NAME);
 
     if (!exists) {

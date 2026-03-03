@@ -4,6 +4,8 @@ import { sceneBackgrounds } from '../core/store.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 import { getCurrentPackId, getRenderScope } from './image-packs.js';
+import { resolveSpecialCgSceneAlias } from '../logic/special-cg-trigger.js';
+import { getSpecialCg } from './special-cgs.js';
 
 // ============================================
 // 背景图片存储
@@ -92,21 +94,31 @@ export async function saveBackgroundsBatch(backgroundsList, packId = null) {
 }
 
 export async function getBackground(sceneName) {
-  if (!sceneName) return null;
+  const safeSceneName = String(sceneName || '').trim();
+  if (!safeSceneName) return null;
+
+  const mappedCgId = resolveSpecialCgSceneAlias(safeSceneName);
+  if (mappedCgId) {
+    const specialCgUrl = await getSpecialCg(mappedCgId);
+    if (specialCgUrl) {
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 特殊CG背景命中(别名): "${safeSceneName}" -> ${mappedCgId}`);
+      return specialCgUrl;
+    }
+  }
   console.log(
-    `[${SCRIPT_NAME}] [DEBUG] getBackground 查缓存: "${sceneName}" (len=${sceneName.length}). CacheSize: ${sceneBackgrounds.size}`,
+    `[${SCRIPT_NAME}] [DEBUG] getBackground 查缓存: "${safeSceneName}" (len=${safeSceneName.length}). CacheSize: ${sceneBackgrounds.size}`,
   );
 
-  if (sceneBackgrounds.has(sceneName)) {
-    console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 命中缓存: "${sceneName}"`);
-    return sceneBackgrounds.get(sceneName);
+  if (sceneBackgrounds.has(safeSceneName)) {
+    console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 命中缓存: "${safeSceneName}"`);
+    return sceneBackgrounds.get(safeSceneName);
   }
   if (!getDb()) await initDB();
   const db = getDb();
   return new Promise(resolve => {
     const transaction = db.transaction([STORE_BACKGROUNDS], 'readonly');
     const store = transaction.objectStore(STORE_BACKGROUNDS);
-    const request = store.get(sceneName);
+    const request = store.get(safeSceneName);
     request.onsuccess = () => {
       if (request.result) {
         let blobUrl;
@@ -116,8 +128,8 @@ export async function getBackground(sceneName) {
           blobUrl = (topWindow.URL || URL).createObjectURL(request.result.imageBlob);
         }
         if (blobUrl) {
-          sceneBackgrounds.set(sceneName, blobUrl);
-          console.log(`[${SCRIPT_NAME}] [DEBUG] 背景 URL 获取成功: ${sceneName}`);
+          sceneBackgrounds.set(safeSceneName, blobUrl);
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 背景 URL 获取成功: ${safeSceneName}`);
           resolve(blobUrl);
           return;
         }

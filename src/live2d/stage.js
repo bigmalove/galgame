@@ -2,7 +2,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { Live2DManager } from './manager.js';
 import { getLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
 
-// 寤惰繜寮曠敤: showToast (鏉ヨ嚜 UI 灞?
+// 延迟引用: showToast (来自 UI 层)
 let _showToastRef = null;
 export function setLive2DStageRefs({ showToast }) {
   if (showToast) _showToastRef = showToast;

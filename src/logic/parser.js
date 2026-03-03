@@ -560,6 +560,7 @@ export function parseGalgameContent(html, messageId) {
   const allContentItems = []; // { position, type, data }
 
   let match;
+  let lastClosedPTagEnd = 0;
   while ((match = pTagRegex.exec(content)) !== null) {
     const ttsConfig = match[1];
     const seg = parseSegmentText(match[2], ttsConfig);
@@ -571,6 +572,7 @@ export function parseGalgameContent(html, messageId) {
       }
       allContentItems.push({ position: match.index, type: 'segment', data: seg });
     }
+    lastClosedPTagEnd = pTagRegex.lastIndex;
   }
 
   // 将 styled blocks 作为独立 segment 加入
@@ -601,10 +603,8 @@ export function parseGalgameContent(html, messageId) {
     }
     result.segments.push(item.data);
   }
-  let lastIndex = pTagRegex.lastIndex;
-
   // 尝试匹配末尾未闭合的 <p> 标签 (流式输出)
-  const remainingText = content.substring(lastIndex);
+  const remainingText = content.substring(lastClosedPTagEnd);
   const unclosedPMatch = remainingText.match(/<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*)$/i);
   if (unclosedPMatch) {
     const rawContent = unclosedPMatch[2];
@@ -612,7 +612,7 @@ export function parseGalgameContent(html, messageId) {
     if (rawContent && rawContent.trim()) {
       const seg = parseSegmentText(rawContent, ttsConfig);
       if (seg) {
-        const segPos = content.length - remainingText.length + unclosedPMatch.index;
+        const segPos = lastClosedPTagEnd + unclosedPMatch.index;
         seg._sourcePos = segPos;
         const bgAtThisPos = getBackgroundAtPosition(segPos);
         if (bgAtThisPos) {

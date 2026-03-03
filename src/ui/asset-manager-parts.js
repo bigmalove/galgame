@@ -6,7 +6,7 @@ import { getSettings, saveSettings } from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
 import { getAllSprites, deleteSprite } from '../db/sprites.js';
 import { getAllBackgrounds, deleteBackground } from '../db/backgrounds.js';
-import { getCurrentPackId, setCurrentPack, getRenderScope, setRenderScope, getAllImagePacks, getDefaultPack, createImagePack, renameImagePack, deleteImagePack, getPackResourceCount, transferSpritesToPack, transferBackgroundsToPack } from '../db/image-packs.js';
+import { getCurrentPackId, setCurrentPack, getRenderScope, setRenderScope, getAllImagePacks, getDefaultPack, createImagePack, renameImagePack, deleteImagePack, getPackResourceCount, transferSpritesToPack, transferBackgroundsToPack, transferSpecialCgsToPack } from '../db/image-packs.js';
 import { getSprite } from '../db/sprites.js';
 import { getCharacterListFromDatabase } from '../utils/chat.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
@@ -37,21 +37,25 @@ import { showLive2DSettingsModal } from './live2d-settings-modal.js';
 import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, showImportError } from './asset-io.js';
 import { refreshGalgameViews } from './galgame-mode.js';
 
-// 寤惰繜寮曠敤
+// 延迟引用
 let _showSpriteUploadDialogRef = null;
 let _showBatchUploadDialogRef = null;
 let _showBackgroundUploadDialogRef = null;
 let _showBatchBackgroundUploadDialogRef = null;
 let _showCustomExpressionManagerRef = null;
 let _showBananaAppearancePickerRef = null;
+let _showSpecialCgUploadDialogRef = null;
+let _showBatchSpecialCgUploadDialogRef = null;
 
-export function setAssetManagerRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker }) {
+export function setAssetManagerRefs({ showSpriteUploadDialog, showBatchUploadDialog, showBackgroundUploadDialog, showBatchBackgroundUploadDialog, showCustomExpressionManager, showBananaAppearancePicker, showSpecialCgUploadDialog, showBatchSpecialCgUploadDialog }) {
   if (showSpriteUploadDialog) _showSpriteUploadDialogRef = showSpriteUploadDialog;
   if (showBatchUploadDialog) _showBatchUploadDialogRef = showBatchUploadDialog;
   if (showBackgroundUploadDialog) _showBackgroundUploadDialogRef = showBackgroundUploadDialog;
   if (showBatchBackgroundUploadDialog) _showBatchBackgroundUploadDialogRef = showBatchBackgroundUploadDialog;
   if (showCustomExpressionManager) _showCustomExpressionManagerRef = showCustomExpressionManager;
   if (showBananaAppearancePicker) _showBananaAppearancePickerRef = showBananaAppearancePicker;
+  if (showSpecialCgUploadDialog) _showSpecialCgUploadDialogRef = showSpecialCgUploadDialog;
+  if (showBatchSpecialCgUploadDialog) _showBatchSpecialCgUploadDialogRef = showBatchSpecialCgUploadDialog;
 }
 
 const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
@@ -539,7 +543,7 @@ function showLive2DModelSourceDialog(characterId, onSaved) {
 }
 
 // ============================================
-// 瑙掕壊绔嬬粯绠＄悊寮圭獥
+// 角色立绘管理弹窗
 // ============================================
 
 export async function showCharacterSpritesModal(characterId, onCloseCallback) {
@@ -1044,7 +1048,7 @@ export async function showPackManagerModal() {
           </div>
           <div class="gal-pack-list" style="display: flex; flex-direction: column; gap: 10px;">
             ${allPacks.map(pack => {
-              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0 };
+              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0, cgs: 0 };
               const isDefault = pack.id === DEFAULT_PACK_ID;
               const isCurrent = pack.id === currentPackId;
               return `
@@ -1060,7 +1064,8 @@ export async function showPackManagerModal() {
                       <div style="font-size: 0.8rem; color: #666; margin-top: 4px;">
                         <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘&nbsp;|&nbsp;
                         <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景&nbsp;|&nbsp;
-                        <i class="fa-solid fa-map-location-dot"></i> ${stats.maps || 0} 张地图
+                        <i class="fa-solid fa-map-location-dot"></i> ${stats.maps || 0} 张地图&nbsp;|&nbsp;
+                        <i class="fa-solid fa-photo-film"></i> ${stats.cgs || 0} 张CG
                       </div>
                     </div>
                   </div>
@@ -1131,6 +1136,7 @@ export async function showPackManagerModal() {
 export async function showTransferDialog(resourceType, resourceIds, onComplete) {
   const allPacks = await getAllImagePacks();
   const currentPackId = getCurrentPackId();
+  const resourceTypeLabel = resourceType === 'sprite' ? '立绘' : (resourceType === 'cg' ? 'CG' : '背景');
 
   const modalHtml = `
     <div class="gal-input-modal" id="gal-transfer-modal">
@@ -1143,7 +1149,7 @@ export async function showTransferDialog(resourceType, resourceIds, onComplete) 
         </div>
         <div style="padding: 20px;">
           <p style="margin-bottom: 15px; color: #333;">
-            将 <strong>${resourceIds.length}</strong> 个${resourceType === 'sprite' ? '立绘' : '背景'}转移到：
+            将 <strong>${resourceIds.length}</strong> 个${resourceTypeLabel}转移到：
           </p>
           <select id="gal-transfer-target" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 6px; font-size: 1rem;">
             ${allPacks.filter(p => p.id !== currentPackId).map(pack => `
@@ -1172,17 +1178,17 @@ export async function showTransferDialog(resourceType, resourceIds, onComplete) 
     if (!targetPackId) { alert('请选择目标图包'); return; }
     const transferPromise = resourceType === 'sprite'
       ? transferSpritesToPack(resourceIds, targetPackId)
-      : transferBackgroundsToPack(resourceIds, targetPackId);
+      : (resourceType === 'cg' ? transferSpecialCgsToPack(resourceIds, targetPackId) : transferBackgroundsToPack(resourceIds, targetPackId));
     transferPromise.then(count => {
       $modal.remove();
-      showToast(`已转移 ${count} 个${resourceType === 'sprite' ? '立绘' : '背景'}`);
+      showToast(`已转移 ${count} 个${resourceTypeLabel}`);
       if (typeof onComplete === 'function') onComplete();
     }).catch(err => { alert('转移失败: ' + err.message); });
   });
 }
 
 // ============================================
-// showAssetManagerModal 鐨勫墠鍚戝０鏄?(瀹為檯瀹炵幇鍦?asset-manager-modal.js)
+// showAssetManagerModal 的前向声明（实际实现在 asset-manager-modal.js）
 // ============================================
 let _showAssetManagerModalRef = null;
 

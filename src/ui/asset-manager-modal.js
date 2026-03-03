@@ -1,6 +1,6 @@
 import { DEFAULT_PACK_ID, SCRIPT_NAME, THEME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
-import { getSettings, saveSettings } from '../core/settings.js';
+import { ensureTitleScreenSettings, getCurrentCharId, getSettings, saveSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { deleteBackground, getAllBackgrounds } from '../db/backgrounds.js';
@@ -13,8 +13,10 @@ import {
     setRenderScope,
 } from '../db/image-packs.js';
 import { GLOBAL_MAP_REGION_KEY, deleteMapImage, getAllMapImages, getUnifiedMapImage } from '../db/map-images.js';
+import { deleteSpecialCg, getAllSpecialCgs } from '../db/special-cgs.js';
 import { deleteSprite, getAllSprites } from '../db/sprites.js';
 import { convertTextToCotFormat } from '../logic/enhanced-mode.js';
+import { detectSpecialCgPendingNow, resetSpecialCgRuntimeForChat } from '../logic/special-cg-trigger.js';
 import { injectCOTToWorldbook } from '../logic/worldbook.js';
 import { showMapModal } from '../map/map-modal.js';
 import { getCharacterListFromDatabase } from '../utils/chat.js';
@@ -49,6 +51,8 @@ let _showBatchUploadDialogRef = null;
 let _showBackgroundUploadDialogRef = null;
 let _showBatchBackgroundUploadDialogRef = null;
 let _showCustomExpressionManagerRef = null;
+let _showSpecialCgUploadDialogRef = null;
+let _showBatchSpecialCgUploadDialogRef = null;
 let _showSettingsPanelRef = null;
 
 export function setAssetManagerModalRefs({
@@ -57,6 +61,8 @@ export function setAssetManagerModalRefs({
   showBackgroundUploadDialog,
   showBatchBackgroundUploadDialog,
   showCustomExpressionManager,
+  showSpecialCgUploadDialog,
+  showBatchSpecialCgUploadDialog,
   showSettingsPanel,
 }) {
   if (showSpriteUploadDialog) _showSpriteUploadDialogRef = showSpriteUploadDialog;
@@ -64,6 +70,8 @@ export function setAssetManagerModalRefs({
   if (showBackgroundUploadDialog) _showBackgroundUploadDialogRef = showBackgroundUploadDialog;
   if (showBatchBackgroundUploadDialog) _showBatchBackgroundUploadDialogRef = showBatchBackgroundUploadDialog;
   if (showCustomExpressionManager) _showCustomExpressionManagerRef = showCustomExpressionManager;
+  if (showSpecialCgUploadDialog) _showSpecialCgUploadDialogRef = showSpecialCgUploadDialog;
+  if (showBatchSpecialCgUploadDialog) _showBatchSpecialCgUploadDialogRef = showBatchSpecialCgUploadDialog;
   if (showSettingsPanel) _showSettingsPanelRef = showSettingsPanel;
 }
 
@@ -71,6 +79,481 @@ const CUSTOM_LOCATION_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_HTML;
 const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 const CUSTOM_LOCATION_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS;
 const CUSTOM_TIME_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS;
+const ASSET_SUB_TAB_DEFS = [
+  { id: 'sprites', icon: 'fa-user', label: '立绘管理' },
+  { id: 'backgrounds', icon: 'fa-image', label: '背景管理' },
+  { id: 'title-screen', icon: 'fa-house', label: '标题界面' },
+  { id: 'special-cgs', icon: 'fa-photo-film', label: 'CG管理' },
+  { id: 'special-cg-rules', icon: 'fa-bolt', label: 'MVU触发CG' },
+  { id: 'maps', icon: 'fa-map-location-dot', label: '地图管理' },
+  { id: 'skin', icon: 'fa-palette', label: '皮肤编辑(未实装)' },
+  { id: 'imagegen', icon: 'fa-wand-magic-sparkles', label: '生图配置' },
+  { id: 'opening', icon: 'fa-pen-to-square', label: '开场白转换' },
+  { id: 'bgm', icon: 'fa-music', label: '指定BGM' },
+  { id: 'custom', icon: 'fa-code', label: '自定义模块' },
+];
+const ASSET_SUB_TAB_ID_SET = new Set(ASSET_SUB_TAB_DEFS.map(item => item.id));
+const UI_ACCESS_UNLOCK_VAR_PATH = ['galgame_ui_plugin', 'uiAccessUnlock', 'assets'];
+const uiAccessUnlockSessionCache = new Map();
+
+function normalizeAssetSubTabIds(rawList) {
+  const source = Array.isArray(rawList)
+    ? rawList
+    : (typeof rawList === 'string' ? rawList.split(/[,\r\n]/) : []);
+  const normalized = [];
+  source.forEach((item) => {
+    const tabId = String(item || '').trim();
+    if (!tabId || !ASSET_SUB_TAB_ID_SET.has(tabId) || normalized.includes(tabId)) return;
+    normalized.push(tabId);
+  });
+  return normalized;
+}
+
+function hashText(value) {
+  let hash = 2166136261;
+  const text = String(value || '');
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `h${(hash >>> 0).toString(16)}`;
+}
+
+function buildUiAccessPolicyHash(hiddenAssetTabs, password, mode = 'plaintext') {
+  const tabs = normalizeAssetSubTabIds(hiddenAssetTabs).sort();
+  const payload = JSON.stringify({
+    mode: String(mode || 'plaintext').trim().toLowerCase(),
+    hiddenAssetTabs: tabs,
+    password: String(password || ''),
+  });
+  return hashText(payload);
+}
+
+function getNestedValue(source, path) {
+  if (!source || typeof source !== 'object') return undefined;
+  const keys = Array.isArray(path) ? path : [];
+  let cursor = source;
+  for (const key of keys) {
+    if (!cursor || typeof cursor !== 'object' || !Object.prototype.hasOwnProperty.call(cursor, key)) {
+      return undefined;
+    }
+    cursor = cursor[key];
+  }
+  return cursor;
+}
+
+function setNestedValue(target, path, value) {
+  if (!target || typeof target !== 'object') return;
+  const keys = Array.isArray(path) ? path.filter(Boolean) : [];
+  if (keys.length === 0) return;
+  let cursor = target;
+  for (let i = 0; i < keys.length - 1; i += 1) {
+    const key = keys[i];
+    if (!cursor[key] || typeof cursor[key] !== 'object' || Array.isArray(cursor[key])) {
+      cursor[key] = {};
+    }
+    cursor = cursor[key];
+  }
+  cursor[keys[keys.length - 1]] = value;
+}
+
+function getSillyTavernContextSafe() {
+  try {
+    const getContext = topWindow?.SillyTavern?.getContext;
+    if (typeof getContext === 'function') {
+      return getContext.call(topWindow.SillyTavern) || null;
+    }
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] 获取 SillyTavern 上下文失败`, error);
+  }
+  return null;
+}
+
+function extractGalgamePluginConfigFromCard(card) {
+  if (!card || typeof card !== 'object') return null;
+  const candidates = [
+    card?.data?.extensions?.galgame_ui_plugin,
+    card?.extensions?.galgame_ui_plugin,
+    card?.json_data?.data?.extensions?.galgame_ui_plugin,
+    card?.json_data?.extensions?.galgame_ui_plugin,
+  ];
+  for (const item of candidates) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) return item;
+  }
+  return null;
+}
+
+function collectCurrentCharacterCardCandidates() {
+  const candidates = [];
+  const append = (item) => {
+    if (!item || typeof item !== 'object') return;
+    if (!candidates.includes(item)) candidates.push(item);
+  };
+
+  const ctx = getSillyTavernContextSafe();
+  if (ctx?.characters && ctx?.characterId != null) {
+    append(ctx.characters[ctx.characterId]);
+  }
+
+  const st = topWindow?.SillyTavern;
+  if (st?.characters && st?.characterId != null) {
+    append(st.characters[st.characterId]);
+  }
+
+  return candidates;
+}
+
+async function readCurrentCharacterGalgamePluginConfig() {
+  const candidates = collectCurrentCharacterCardCandidates();
+  for (const card of candidates) {
+    const config = extractGalgamePluginConfigFromCard(card);
+    if (config) return config;
+  }
+
+  const getCharacter = topWindow?.TavernHelper?.getCharacter;
+  if (typeof getCharacter === 'function') {
+    try {
+      const current = await getCharacter('current');
+      const config = extractGalgamePluginConfigFromCard(current);
+      if (config) return config;
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] 读取 current 角色卡扩展失败`, error);
+    }
+  }
+
+  return null;
+}
+
+function normalizeUiAccessPolicy(rawPolicy) {
+  const source = rawPolicy && typeof rawPolicy === 'object' && !Array.isArray(rawPolicy)
+    ? rawPolicy
+    : {};
+  const enabled = source.enabled === true;
+  const hiddenAssetTabs = normalizeAssetSubTabIds(source.hiddenAssetTabs);
+  const unlock = source.unlock && typeof source.unlock === 'object' && !Array.isArray(source.unlock)
+    ? source.unlock
+    : {};
+  const unlockMode = String(unlock.mode || 'plaintext').trim().toLowerCase() || 'plaintext';
+  const password = String(unlock.password || '').trim();
+  const valid = enabled && hiddenAssetTabs.length > 0 && unlockMode === 'plaintext' && !!password;
+  if (!valid) {
+    return {
+      enabled: false,
+      hiddenAssetTabs: [],
+      unlockMode: 'plaintext',
+      password: '',
+      policyHash: '',
+    };
+  }
+  return {
+    enabled: true,
+    hiddenAssetTabs,
+    unlockMode: 'plaintext',
+    password,
+    policyHash: buildUiAccessPolicyHash(hiddenAssetTabs, password, unlockMode),
+  };
+}
+
+function resolveCurrentCharacterUnlockCacheKey() {
+  const charId = String(getCurrentCharId() || '').trim();
+  if (charId) return `char:${charId}`;
+  const ctx = getSillyTavernContextSafe();
+  const fallbackName = String(
+    ctx?.characters?.[ctx?.characterId]?.name
+      || topWindow?.SillyTavern?.characters?.[topWindow?.SillyTavern?.characterId]?.name
+      || '',
+  ).trim();
+  return fallbackName ? `char-name:${fallbackName}` : 'char:unknown';
+}
+
+function readAssetTabUnlockState(policyHash) {
+  const key = resolveCurrentCharacterUnlockCacheKey();
+  const currentHash = String(policyHash || '').trim();
+  const sessionState = uiAccessUnlockSessionCache.get(key);
+  if (
+    sessionState
+    && sessionState.unlocked === true
+    && String(sessionState.policyHash || '').trim() === currentHash
+  ) {
+    return { unlocked: true, source: 'session', error: null };
+  }
+
+  try {
+    if (typeof getVariables !== 'function') {
+      throw new Error('getVariables 不可用');
+    }
+    const variables = getVariables({ type: 'character' }) || {};
+    const stored = getNestedValue(variables, UI_ACCESS_UNLOCK_VAR_PATH);
+    if (
+      stored
+      && typeof stored === 'object'
+      && stored.unlocked === true
+      && String(stored.policyHash || '').trim() === currentHash
+    ) {
+      return { unlocked: true, source: 'character', error: null };
+    }
+    return { unlocked: false, source: 'character', error: null };
+  } catch (error) {
+    return { unlocked: false, source: 'unavailable', error };
+  }
+}
+
+function persistAssetTabUnlockState(policyHash) {
+  const safePolicyHash = String(policyHash || '').trim();
+  const key = resolveCurrentCharacterUnlockCacheKey();
+  const payload = {
+    unlocked: true,
+    policyHash: safePolicyHash,
+    updatedAt: new Date().toISOString(),
+  };
+
+  uiAccessUnlockSessionCache.set(key, payload);
+
+  try {
+    if (typeof getVariables !== 'function' || typeof replaceVariables !== 'function') {
+      throw new Error('变量接口不可用');
+    }
+    const variables = getVariables({ type: 'character' });
+    const nextVariables =
+      variables && typeof variables === 'object' && !Array.isArray(variables)
+        ? variables
+        : {};
+    setNestedValue(nextVariables, UI_ACCESS_UNLOCK_VAR_PATH, payload);
+    replaceVariables(nextVariables, { type: 'character' });
+    return { persisted: true, payload, error: null };
+  } catch (error) {
+    return { persisted: false, payload, error };
+  }
+}
+
+async function resolveAssetTabUiAccessState() {
+  const config = await readCurrentCharacterGalgamePluginConfig();
+  const policy = normalizeUiAccessPolicy(config?.custom?.uiAccess);
+  if (!policy.enabled) {
+    return {
+      enabled: false,
+      hiddenAssetTabs: [],
+      unlockMode: 'plaintext',
+      password: '',
+      policyHash: '',
+      locked: false,
+      unlockStateSource: 'none',
+      unlockReadError: null,
+    };
+  }
+
+  const unlockState = readAssetTabUnlockState(policy.policyHash);
+  return {
+    ...policy,
+    locked: !unlockState.unlocked,
+    unlockStateSource: unlockState.source,
+    unlockReadError: unlockState.error,
+  };
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const SPECIAL_CG_VAR_PATH_DATALIST_ID = 'gal-special-cg-variable-path-datalist';
+const MAX_MVU_VAR_PATH_COUNT = 1200;
+const MAX_MVU_SCAN_DEPTH = 8;
+const MVU_SCOPE_OPTIONS = [
+  { type: 'message', message_id: 'latest' },
+  { type: 'chat' },
+  { type: 'character' },
+  { type: 'global' },
+  null,
+];
+
+function isNumericLike(value) {
+  if (value === null || value === undefined) return false;
+  return Number.isFinite(Number(value));
+}
+
+function collectMvuVariablePaths(value, prefix, bucket, visited, depth = 0) {
+  if (bucket.length >= MAX_MVU_VAR_PATH_COUNT) return;
+  if (depth > MAX_MVU_SCAN_DEPTH) return;
+
+  if (value && typeof value === 'object') {
+    if (visited.has(value)) return;
+    visited.add(value);
+  }
+
+  if (isNumericLike(value)) {
+    if (prefix) bucket.push(prefix);
+    return;
+  }
+
+  if (!value || typeof value !== 'object') return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      const nextPrefix = prefix ? `${prefix}.${index}` : String(index);
+      collectMvuVariablePaths(item, nextPrefix, bucket, visited, depth + 1);
+    });
+    return;
+  }
+
+  Object.keys(value).forEach(key => {
+    const safeKey = String(key || '').trim();
+    if (!safeKey) return;
+    const nextPrefix = prefix ? `${prefix}.${safeKey}` : safeKey;
+    collectMvuVariablePaths(value[safeKey], nextPrefix, bucket, visited, depth + 1);
+  });
+}
+
+function buildVariablePathOptionsHtml(paths) {
+  const safePaths = Array.from(new Set((Array.isArray(paths) ? paths : [])
+    .map(item => String(item || '').trim().replace(/^stat_data\./, ''))
+    .filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  return safePaths.map(path => `<option value="${escapeHtml(path)}"></option>`).join('');
+}
+
+function extractMvuVariablePathsFromData(variables) {
+  const statData = variables?.stat_data;
+  if (!statData || typeof statData !== 'object') return [];
+  const bucket = [];
+  collectMvuVariablePaths(statData, '', bucket, new Set(), 0);
+  return Array.from(new Set(bucket)).slice(0, MAX_MVU_VAR_PATH_COUNT);
+}
+
+function readMvuDataByOptions(Mvu, optionList) {
+  const result = [];
+  const safeOptionList = Array.isArray(optionList) ? optionList : [];
+  if (!Mvu || typeof Mvu.getMvuData !== 'function') return result;
+
+  safeOptionList.forEach(option => {
+    try {
+      const data = option ? Mvu.getMvuData(option) : Mvu.getMvuData();
+      if (data && typeof data === 'object') {
+        result.push(data);
+      }
+    } catch (error) {
+      // 忽略当前作用域读取失败，继续尝试其他作用域
+    }
+  });
+
+  return result;
+}
+
+function getMvuDataListFromScopes(Mvu) {
+  return readMvuDataByOptions(Mvu, MVU_SCOPE_OPTIONS);
+}
+
+function normalizeMvuVariablePath(path) {
+  return String(path || '')
+    .trim()
+    .replace(/^stat_data\./, '')
+    .replace(/\[(\d+)\]/g, '.$1')
+    .replace(/^\.+/, '')
+    .replace(/\.+/g, '.');
+}
+
+function findMvuVariableValueInDataList(path, mvuDataList) {
+  const normalizedPath = normalizeMvuVariablePath(path);
+  if (!normalizedPath) return { found: false, value: undefined };
+
+  const parts = normalizedPath.split('.').map(part => part.trim()).filter(Boolean);
+  if (parts.length === 0) return { found: false, value: undefined };
+
+  const safeMvuDataList = Array.isArray(mvuDataList) ? mvuDataList : [];
+  for (const mvuData of safeMvuDataList) {
+    const statData = mvuData?.stat_data;
+    if (!statData || typeof statData !== 'object') continue;
+
+    let cursor = statData;
+    let matched = true;
+    for (const part of parts) {
+      if (!cursor || typeof cursor !== 'object' || !Object.prototype.hasOwnProperty.call(cursor, part)) {
+        matched = false;
+        break;
+      }
+      cursor = cursor[part];
+    }
+
+    if (matched) {
+      return { found: true, value: cursor };
+    }
+  }
+
+  return { found: false, value: undefined };
+}
+
+function stringifyMvuVariableValue(value) {
+  if (value === undefined) return '未找到';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return String(value);
+  }
+}
+
+function formatMvuVariableValueForDisplay(value, maxLength = 42) {
+  const rawText = stringifyMvuVariableValue(value);
+  if (rawText.length <= maxLength) return rawText;
+  return `${rawText.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function extractMvuVariablePathsFromScopes(Mvu) {
+  const mvuDataList = getMvuDataListFromScopes(Mvu);
+  if (mvuDataList.length === 0) return [];
+
+  const pathSet = new Set();
+  for (const mvuData of mvuDataList) {
+    const paths = extractMvuVariablePathsFromData(mvuData);
+    for (const path of paths) {
+      if (pathSet.size >= MAX_MVU_VAR_PATH_COUNT) {
+        return Array.from(pathSet);
+      }
+      pathSet.add(path);
+    }
+  }
+
+  return Array.from(pathSet);
+}
+
+function getMvuVariablePathsSync() {
+  try {
+    const Mvu = topWindow.Mvu || globalThis.Mvu;
+    if (!Mvu || typeof Mvu.getMvuData !== 'function') return [];
+    return extractMvuVariablePathsFromScopes(Mvu);
+  } catch (error) {
+    return [];
+  }
+}
+
+async function loadMvuVariablePathsAsync(timeoutMs = 8000) {
+  const waitFn = topWindow.waitGlobalInitialized || globalThis.waitGlobalInitialized;
+  try {
+    if (typeof waitFn === 'function') {
+      await Promise.race([
+        waitFn('Mvu'),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('MVU 初始化超时')), timeoutMs);
+        }),
+      ]);
+    }
+  } catch (error) {
+    // 超时后继续尝试读取已存在的全局对象
+  }
+
+  const Mvu = topWindow.Mvu || globalThis.Mvu;
+  if (!Mvu || typeof Mvu.getMvuData !== 'function') {
+    throw new Error('未检测到 MVU 或 getMvuData 接口');
+  }
+
+  return extractMvuVariablePathsFromScopes(Mvu);
+}
 
 // ============================================
 // showAssetManagerModal - 代理到统一面板
@@ -88,6 +571,8 @@ export async function showAssetManagerModal(activeTab = 'sprites') {
 
 export async function buildAssetManagerContent(activeTab) {
   const settings = getSettings();
+  const titleScreen = ensureTitleScreenSettings();
+  const currentCharId = getCurrentCharId();
   const allPacks = await getAllImagePacks();
   const currentPackId = getCurrentPackId();
   const currentPack = allPacks.find(p => p.id === currentPackId) || allPacks.find(p => p.id === DEFAULT_PACK_ID);
@@ -95,6 +580,8 @@ export async function buildAssetManagerContent(activeTab) {
   const currentRenderScope = getRenderScope();
   const allSprites = await getAllSprites(currentPackId);
   const allBackgrounds = await getAllBackgrounds(currentPackId);
+  const allSpecialCgs = await getAllSpecialCgs(currentPackId);
+  const mvuVariablePaths = getMvuVariablePathsSync();
   const allMapImages = await getAllMapImages(currentPackId);
   const unifiedMapRecord = await getUnifiedMapImage(currentPackId);
   const legacyMapCount = allMapImages.filter(item => String(item?.regionKey || '').trim() !== GLOBAL_MAP_REGION_KEY).length;
@@ -117,7 +604,52 @@ export async function buildAssetManagerContent(activeTab) {
     }
   });
 
-  activeTab = activeTab || 'sprites';
+  const uiAccessState = await resolveAssetTabUiAccessState();
+  let visibleTabIds = ASSET_SUB_TAB_DEFS.map(item => item.id);
+  if (uiAccessState.enabled && uiAccessState.locked) {
+    visibleTabIds = visibleTabIds.filter(tabId => !uiAccessState.hiddenAssetTabs.includes(tabId));
+    if (visibleTabIds.length === 0) {
+      visibleTabIds = ASSET_SUB_TAB_DEFS.map(item => item.id);
+    }
+  }
+
+  activeTab = String(activeTab || 'sprites').trim() || 'sprites';
+  if (!visibleTabIds.includes(activeTab)) {
+    activeTab = visibleTabIds[0] || 'sprites';
+  }
+
+  const tabHeaderHtml = visibleTabIds
+    .map(tab => {
+      const def = ASSET_SUB_TAB_DEFS.find(item => item.id === tab);
+      if (!def) return '';
+      return `<button class="gal-tab-btn ${activeTab === tab ? 'active' : ''}" data-tab="${tab}"><i class="fa-solid ${def.icon}"></i> ${def.label}</button>`;
+    })
+    .join('');
+  const tabContentMap = {
+    sprites: buildSpritesTab(activeTab, allSprites, charactersData),
+    backgrounds: buildBackgroundsTab(settings, allBackgrounds),
+    'title-screen': buildTitleScreenTab(activeTab, titleScreen, currentCharId),
+    'special-cgs': buildSpecialCgsTab(activeTab, allSpecialCgs),
+    'special-cg-rules': buildSpecialCgRulesTab(activeTab, settings, allSpecialCgs, mvuVariablePaths),
+    maps: buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount),
+    skin: buildWesternSkinEditorTab(activeTab, currentPackId),
+    imagegen: buildImagegenTab(activeTab, settings),
+    opening: buildOpeningTab(activeTab),
+    bgm: buildBgmTab(activeTab, settings),
+    custom: buildCustomTab(settings),
+  };
+  const tabContentHtml = visibleTabIds
+    .map(tabId => tabContentMap[tabId] || '')
+    .filter(Boolean)
+    .join('');
+  const showUnlockButton = uiAccessState.enabled && uiAccessState.locked && uiAccessState.hiddenAssetTabs.length > 0;
+  const unlockButtonHtml = showUnlockButton
+    ? `
+          <button class="gal-action-btn" id="gal-unlock-restricted-tabs-btn" title="输入口令后显示所有受限标签" style="padding: 6px 12px; font-size: 0.9rem; background: #0ea5e9; color: #fff; border-color: #0ea5e9;">
+            <i class="fa-solid fa-lock-open"></i> <span>解锁受限标签</span>
+          </button>
+        `
+    : '';
 
   const html = `
     <div class="gal-asset-header">
@@ -153,6 +685,7 @@ export async function buildAssetManagerContent(activeTab) {
           </button>
         </div>
         <div style="display: flex; gap: 8px;">
+          ${unlockButtonHtml}
           <div class="gal-export-dropdown" style="position: relative;">
             <button class="gal-action-btn" id="gal-export-dropdown-btn" title="导出资源" style="padding: 6px 12px; font-size: 0.9rem;">
               <i class="fa-solid fa-file-export"></i> <span>导出</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
@@ -195,24 +728,10 @@ export async function buildAssetManagerContent(activeTab) {
       <input type="file" id="gal-asset-import-json-input" accept=".json" style="display: none;">
     </div>
     <div class="gal-tab-header">
-      <button class="gal-tab-btn ${activeTab === 'sprites' ? 'active' : ''}" data-tab="sprites"><i class="fa-solid fa-user"></i> 立绘管理</button>
-      <button class="gal-tab-btn ${activeTab === 'backgrounds' ? 'active' : ''}" data-tab="backgrounds"><i class="fa-solid fa-image"></i> 背景管理</button>
-      <button class="gal-tab-btn ${activeTab === 'maps' ? 'active' : ''}" data-tab="maps"><i class="fa-solid fa-map-location-dot"></i> 地图管理</button>
-      <button class="gal-tab-btn ${activeTab === 'skin' ? 'active' : ''}" data-tab="skin"><i class="fa-solid fa-palette"></i> 皮肤编辑(未实装)</button>
-      <button class="gal-tab-btn ${activeTab === 'imagegen' ? 'active' : ''}" data-tab="imagegen"><i class="fa-solid fa-wand-magic-sparkles"></i> 生图配置</button>
-      <button class="gal-tab-btn ${activeTab === 'opening' ? 'active' : ''}" data-tab="opening"><i class="fa-solid fa-pen-to-square"></i> 开场白转换</button>
-      <button class="gal-tab-btn ${activeTab === 'bgm' ? 'active' : ''}" data-tab="bgm"><i class="fa-solid fa-music"></i> 指定BGM</button>
-      <button class="gal-tab-btn ${activeTab === 'custom' ? 'active' : ''}" data-tab="custom"><i class="fa-solid fa-code"></i> 自定义模块</button>
+      ${tabHeaderHtml}
     </div>
     <div class="gal-tab-content">
-      ${buildSpritesTab(activeTab, allSprites, charactersData)}
-      ${buildBackgroundsTab(settings, allBackgrounds)}
-      ${buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount)}
-      ${buildWesternSkinEditorTab(activeTab, currentPackId)}
-      ${buildImagegenTab(activeTab, settings)}
-      ${buildOpeningTab(activeTab)}
-      ${buildBgmTab(activeTab, settings)}
-      ${buildCustomTab(settings)}
+      ${tabContentHtml}
     </div>
   `;
 
@@ -233,6 +752,49 @@ export function bindAssetManagerContentEvents($modal, activeTab) {
     $(this).addClass('active');
     $modal.find('.gal-tab-pane').hide();
     $modal.find(`.gal-tab-pane[data-pane="${tab}"]`).show();
+  });
+
+  // 解锁受限标签
+  $modal.find('#gal-unlock-restricted-tabs-btn').on('click', async function () {
+    const policyState = await resolveAssetTabUiAccessState();
+    if (!policyState.enabled || !policyState.locked) {
+      showToast('当前没有受限标签需要解锁');
+      return;
+    }
+
+    const input = await showInAppPromptDialog({
+      title: '解锁受限标签',
+      message: `当前有 ${policyState.hiddenAssetTabs.length} 个资源子标签被隐藏，请输入解锁口令。`,
+      label: '解锁口令',
+      placeholder: '请输入口令',
+      confirmText: '解锁',
+      cancelText: '取消',
+      iconClass: 'fa-solid fa-unlock-keyhole',
+      accent: '#0ea5e9',
+      required: true,
+      requiredMessage: '请输入解锁口令',
+      trim: false,
+      inputType: 'password',
+    });
+    if (input === null) return;
+
+    if (String(input) !== String(policyState.password)) {
+      showToast('口令错误，受限标签仍保持隐藏');
+      return;
+    }
+
+    const persistResult = persistAssetTabUnlockState(policyState.policyHash);
+    if (persistResult.persisted) {
+      showToast('口令正确，已解锁受限标签');
+    } else {
+      console.warn(`[${SCRIPT_NAME}] 写入角色变量失败，已降级为会话态解锁`, persistResult.error);
+      showToast('口令正确，已解锁（变量接口不可用，仅本次会话生效）');
+    }
+
+    const currentTab = $modal.find('.gal-tab-btn.active').data('tab') || activeTab || 'sprites';
+    $modal.remove();
+    $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
+    showAssetManagerModal(currentTab);
   });
 
   // 自定义HTML保存
@@ -311,18 +873,22 @@ export function bindAssetManagerContentEvents($modal, activeTab) {
 
   bindSpriteEvents($modal, activeTab);
   bindBackgroundEvents($modal, activeTab);
+  bindSpecialCgEvents($modal, activeTab);
+  bindSpecialCgRulesEvents($modal, activeTab);
   bindMapEvents($modal, activeTab);
   bindPackSelectorEvents($modal, activeTab);
   bindExportImportEvents($modal, activeTab);
 
-  // 激活正确的 sub-tab
-  activeTab = activeTab || 'sprites';
-  if (activeTab !== 'sprites') {
-    $modal.find('.gal-tab-btn').removeClass('active');
-    $modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).addClass('active');
-    $modal.find('.gal-tab-pane').hide();
-    $modal.find(`.gal-tab-pane[data-pane="${activeTab}"]`).show();
+  // 激活正确的 sub-tab（若目标 tab 被策略隐藏，自动回退到第一个可见 tab）
+  const firstVisibleTab = String($modal.find('.gal-tab-btn').first().data('tab') || 'sprites');
+  activeTab = String(activeTab || '').trim() || firstVisibleTab;
+  if (!$modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).length) {
+    activeTab = firstVisibleTab;
   }
+  $modal.find('.gal-tab-btn').removeClass('active');
+  $modal.find(`.gal-tab-btn[data-tab="${activeTab}"]`).addClass('active');
+  $modal.find('.gal-tab-pane').hide();
+  $modal.find(`.gal-tab-pane[data-pane="${activeTab}"]`).show();
 }
 
 // ============================================
@@ -406,6 +972,206 @@ function buildBackgroundsTab(settings, allBackgrounds) {
             )
             .join('')}</div>`
     }
+  </div>`;
+}
+
+function buildTitleScreenTab(activeTab, titleScreen, currentCharId) {
+  const safeTitleScreen = titleScreen && typeof titleScreen === 'object' ? titleScreen : {};
+  const safeCharName = String(currentCharId || '').trim() || 'default';
+
+  return `
+  <div class="gal-tab-pane" data-pane="title-screen" style="${activeTab !== 'title-screen' ? 'display: none;' : ''}">
+    <div class="gal-settings-section">
+      <div class="gal-settings-section-title"><i class="fa-solid fa-house"></i> 标题界面</div>
+      <div style="font-size: 0.8rem; color: #666; margin: -6px 0 8px 0;">
+        当前角色卡独立配置（角色卡名: ${escapeHtml(safeCharName)}）
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">启用标题界面</span>
+        <label class="gal-switch"><input type="checkbox" id="gal-title-enabled" ${safeTitleScreen.enabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">标题文字</span>
+        <input type="text" id="gal-title-text" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.titleText || '')}" placeholder="例如：夏日物语">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">副标题</span>
+        <input type="text" id="gal-title-subtitle" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.subtitleText || '')}" placeholder="例如：按下开始继续">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">开始按钮文案</span>
+        <input type="text" id="gal-title-start-text" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.startButtonText || '')}" placeholder="开始游戏">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">背景来源</span>
+        <select id="gal-title-bg-source" class="gal-title-settings-select">
+          <option value="auto" ${safeTitleScreen.backgroundSource === 'auto' ? 'selected' : ''}>自动（优先上传，回退URL）</option>
+          <option value="upload" ${safeTitleScreen.backgroundSource === 'upload' ? 'selected' : ''}>仅本地上传</option>
+          <option value="url" ${safeTitleScreen.backgroundSource === 'url' ? 'selected' : ''}>仅URL</option>
+        </select>
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">背景填充模式</span>
+        <select id="gal-title-bg-fit" class="gal-title-settings-select">
+          <option value="cover" ${safeTitleScreen.backgroundFit === 'cover' ? 'selected' : ''}>Cover（铺满裁剪）</option>
+          <option value="contain" ${safeTitleScreen.backgroundFit === 'contain' ? 'selected' : ''}>Contain（完整显示）</option>
+        </select>
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">遮罩层</span>
+        <label class="gal-switch"><input type="checkbox" id="gal-title-mask-enabled" ${safeTitleScreen.enableBackdropMask !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+      </div>
+      <div class="gal-settings-row" style="align-items: flex-start;">
+        <span class="gal-settings-label">上传标题背景</span>
+        <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 460px); gap: 8px;">
+          <input type="file" id="gal-title-bg-file" accept="image/*" style="display:none;">
+          <button class="gal-action-btn" id="gal-title-bg-upload-btn" style="justify-content:center; min-width: 220px;">
+            <i class="fa-solid fa-image"></i> 上传图片（支持 gif/webp）
+          </button>
+          <small id="gal-title-bg-upload-hint" style="color: var(--SmartThemeBodyColor, #f5f7fa); opacity: 0.82;">上传后将保存到当前角色卡标题背景（scene: ${escapeHtml(safeTitleScreen.backgroundSceneName || '__title__')}）</small>
+        </div>
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">背景URL</span>
+        <input type="url" id="gal-title-bg-url" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.backgroundUrl || '')}" placeholder="https://example.com/title.webp">
+      </div>
+    </div>
+  </div>`;
+}
+
+function buildSpecialCgsTab(activeTab, allSpecialCgs) {
+  return `
+  <div class="gal-tab-pane" data-pane="special-cgs" style="${activeTab !== 'special-cgs' ? 'display: none;' : ''}">
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">已保存 ${allSpecialCgs.length} 张特殊CG</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-special-cg-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>批量上传</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-add-special-cg-btn"><i class="fa-solid fa-plus"></i> <span>添加CG</span></button>
+      </div>
+    </div>
+    ${
+      allSpecialCgs.length === 0
+        ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-photo-film" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>暂无特殊CG资源，点击上方按钮上传</p></div>`
+        : `<div class="gal-special-cg-grid">${allSpecialCgs
+            .map(item => {
+              const cgId = String(item.cgId || item.id || '').trim();
+              const name = String(item.name || cgId || '未命名CG').trim();
+              const preview = item.imageUrl
+                ? item.imageUrl
+                : (item.imageBlob ? URL.createObjectURL(item.imageBlob) : '');
+              return `
+          <div class="gal-special-cg-card" data-cg-id="${escapeHtml(cgId)}">
+            <div class="gal-special-cg-preview">${preview ? `<img src="${preview}" alt="${escapeHtml(name)}">` : '<span>无预览</span>'}</div>
+            <div class="gal-special-cg-name">${escapeHtml(name)}</div>
+            <div class="gal-special-cg-id">${escapeHtml(cgId)}</div>
+            <div class="gal-special-cg-actions">
+              <button class="gal-special-cg-transfer" data-cg-id="${escapeHtml(cgId)}" title="转移到其他图包"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+              <button class="gal-special-cg-delete" data-cg-id="${escapeHtml(cgId)}" title="删除"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>`;
+            })
+            .join('')}</div>`
+    }
+  </div>`;
+}
+
+function buildSpecialCgRuleRowHtml(rule, cgOptionsHtml, index = 0) {
+  const safeRule = rule && typeof rule === 'object' ? rule : {};
+  const id = String(safeRule.id || '').trim() || `special_cg_rule_${Date.now()}_${index}`;
+  const name = String(safeRule.name || '').trim();
+  const variablePath = String(safeRule.variablePath || '').trim().replace(/^stat_data\./, '');
+  const operator = String(safeRule.operator || 'gte').trim().toLowerCase();
+  const threshold = Number.isFinite(Number(safeRule.threshold)) ? Number(safeRule.threshold) : 0;
+  const priority = Number.isFinite(Number(safeRule.priority)) ? Number(safeRule.priority) : 0;
+  const cgId = String(safeRule.cgId || '').trim();
+  const enabled = safeRule.enabled !== false;
+
+  return `
+    <div class="gal-special-cg-rule-row" data-rule-id="${escapeHtml(id)}">
+      <input type="text" class="gal-special-cg-rule-name" value="${escapeHtml(name)}" placeholder="规则名称">
+      <input type="text" class="gal-special-cg-rule-path" list="${SPECIAL_CG_VAR_PATH_DATALIST_ID}" value="${escapeHtml(variablePath)}" placeholder="变量路径，如：角色.艾莉.好感度" autocomplete="off">
+      <span class="gal-special-cg-rule-current-value is-empty" title="当前值：未读取">未读取</span>
+      <select class="gal-special-cg-rule-operator">
+        <option value="gte" ${operator === 'gte' ? 'selected' : ''}>≥</option>
+        <option value="gt" ${operator === 'gt' ? 'selected' : ''}>&gt;</option>
+        <option value="eq" ${operator === 'eq' ? 'selected' : ''}>=</option>
+        <option value="lte" ${operator === 'lte' ? 'selected' : ''}>≤</option>
+        <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt;</option>
+      </select>
+      <input type="number" class="gal-special-cg-rule-threshold" value="${threshold}" step="any">
+      <select class="gal-special-cg-rule-cg-id">
+        ${cgOptionsHtml}
+      </select>
+      <input type="number" class="gal-special-cg-rule-priority" value="${priority}" step="1">
+      <label class="gal-special-cg-rule-enabled-wrap"><input type="checkbox" class="gal-special-cg-rule-enabled" ${enabled ? 'checked' : ''}>启用</label>
+      <button class="gal-special-cg-rule-remove" title="删除规则"><i class="fa-solid fa-trash"></i></button>
+      <input type="hidden" class="gal-special-cg-rule-id" value="${escapeHtml(id)}">
+      <input type="hidden" class="gal-special-cg-rule-once" value="true">
+      <input type="hidden" class="gal-special-cg-rule-current-cg-id" value="${escapeHtml(cgId)}">
+    </div>
+  `;
+}
+
+function buildSpecialCgRulesTab(activeTab, settings, allSpecialCgs, mvuVariablePaths = []) {
+  const specialCgSettings = settings?.specialCg || { enabled: false, rules: [] };
+  const allRules = Array.isArray(specialCgSettings.rules) ? specialCgSettings.rules : [];
+  const safeCgs = Array.isArray(allSpecialCgs) ? allSpecialCgs : [];
+  const safeVariablePaths = Array.isArray(mvuVariablePaths) ? mvuVariablePaths : [];
+  const variablePathOptionsHtml = buildVariablePathOptionsHtml(safeVariablePaths);
+  const cgOptions = safeCgs
+    .map(item => {
+      const cgId = String(item.cgId || item.id || '').trim();
+      const cgName = String(item.name || cgId).trim();
+      return `<option value="${escapeHtml(cgId)}">${escapeHtml(`${cgName} (${cgId})`)}</option>`;
+    })
+    .join('');
+  const cgOptionsHtml = `<option value="">选择CG资源</option>${cgOptions}`;
+
+  const rowsHtml = allRules.length > 0
+    ? allRules.map((rule, index) => buildSpecialCgRuleRowHtml(rule, cgOptionsHtml, index)).join('')
+    : '';
+
+  return `
+  <div class="gal-tab-pane" data-pane="special-cg-rules" style="${activeTab !== 'special-cg-rules' ? 'display: none;' : ''}">
+    <div class="gal-pane-header">
+      <span class="gal-pane-stat">MVU 事件触发特殊CG</span>
+      <div class="gal-pane-actions">
+        <button class="gal-action-btn gal-pane-btn teal" id="gal-special-cg-rule-add-btn"><i class="fa-solid fa-plus"></i> <span>新增规则</span></button>
+        <button class="gal-action-btn gal-pane-btn primary" id="gal-special-cg-rule-save-btn"><i class="fa-solid fa-save"></i> <span>保存规则</span></button>
+      </div>
+    </div>
+    <div class="gal-special-cg-rules-panel">
+      <label class="gal-special-cg-master-switch">
+        <input type="checkbox" id="gal-special-cg-enabled" ${specialCgSettings.enabled ? 'checked' : ''}>
+        <span>启用特殊CG触发系统</span>
+      </label>
+      <div class="gal-special-cg-path-tools">
+        <button class="gal-action-btn gal-pane-btn" id="gal-special-cg-load-mvu-vars-btn">
+          <i class="fa-solid fa-arrows-rotate"></i> <span>读取MVU变量</span>
+        </button>
+        <span class="gal-special-cg-path-count" id="gal-special-cg-var-count" data-count="${safeVariablePaths.length}">
+          ${safeVariablePaths.length > 0 ? `已加载 ${safeVariablePaths.length} 项变量路径` : '尚未加载MVU变量路径'}
+        </span>
+      </div>
+      <div class="gal-special-cg-rules-hint">规则变量路径相对 <code>stat_data</code>，例如：<code>角色.艾莉.好感度</code>。同一聊天仅触发一次。</div>
+      <div class="gal-special-cg-rules-header">
+        <span>规则名</span>
+        <span>变量路径</span>
+        <span>当前值</span>
+        <span>条件</span>
+        <span>阈值</span>
+        <span>目标CG</span>
+        <span>优先级</span>
+        <span>状态</span>
+        <span>操作</span>
+      </div>
+      <div id="gal-special-cg-rules-list">
+        ${rowsHtml}
+      </div>
+      <datalist id="${SPECIAL_CG_VAR_PATH_DATALIST_ID}">${variablePathOptionsHtml}</datalist>
+      ${safeCgs.length === 0 ? '<div class="gal-special-cg-empty-hint">请先在“CG管理”中上传CG资源，否则规则无法生效。</div>' : ''}
+      <input type="hidden" id="gal-special-cg-options-template" value="${escapeHtml(cgOptionsHtml)}">
+    </div>
   </div>`;
 }
 
@@ -625,6 +1391,35 @@ export function buildAssetManagerStyles() {
     .gal-bg-label { padding: 10px; text-align: center; font-size: 0.9rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .gal-bg-actions { opacity: 0; transition: opacity 0.2s; }
     .gal-bg-card:hover .gal-bg-actions { opacity: 1; }
+    .gal-special-cg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+    .gal-special-cg-card { position: relative; border: 1px solid #dbe2ea; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); transition: all 0.2s; cursor: pointer; }
+    .gal-special-cg-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15); }
+    .gal-special-cg-preview { aspect-ratio: 16 / 9; background: linear-gradient(135deg, #0f172a, #1e293b); display: flex; align-items: center; justify-content: center; color: #94a3b8; overflow: hidden; }
+    .gal-special-cg-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .gal-special-cg-name { padding: 8px 10px 0; font-size: 0.88rem; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gal-special-cg-id { padding: 2px 10px 10px; font-size: 0.76rem; color: #64748b; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gal-special-cg-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; opacity: 0; transition: opacity 0.2s; }
+    .gal-special-cg-card:hover .gal-special-cg-actions { opacity: 1; }
+    .gal-special-cg-transfer, .gal-special-cg-delete { width: 30px; height: 30px; border: none; border-radius: 50%; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+    .gal-special-cg-transfer { background: rgba(111, 66, 193, 0.95); }
+    .gal-special-cg-delete { background: rgba(220, 53, 69, 0.95); }
+    .gal-special-cg-rules-panel { border: 1px solid #dbe2ea; border-radius: 10px; background: #fff; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .gal-special-cg-master-switch { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: #0f172a; }
+    .gal-special-cg-path-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .gal-special-cg-path-tools #gal-special-cg-load-mvu-vars-btn { padding: 6px 12px !important; min-height: 34px; font-size: 0.82rem !important; }
+    .gal-special-cg-path-count { font-size: 0.8rem; color: #64748b; }
+    .gal-special-cg-rules-hint { color: #475569; font-size: 0.82rem; }
+    .gal-special-cg-rules-header { display: grid; grid-template-columns: 1fr 1.7fr 1.2fr 70px 90px 1.2fr 80px 80px 48px; gap: 8px; font-size: 0.75rem; font-weight: 700; color: #334155; padding: 0 4px; }
+    #gal-special-cg-rules-list { display: flex; flex-direction: column; gap: 8px; }
+    .gal-special-cg-rule-row { display: grid; grid-template-columns: 1fr 1.7fr 1.2fr 70px 90px 1.2fr 80px 80px 48px; gap: 8px; align-items: center; }
+    .gal-special-cg-rule-row input[type='text'],
+    .gal-special-cg-rule-row input[type='number'],
+    .gal-special-cg-rule-row select { width: 100%; min-height: 34px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; background: #fff; color: #0f172a; }
+    .gal-special-cg-rule-current-value { min-height: 34px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; background: #f8fafc; color: #0f172a; display: inline-flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
+    .gal-special-cg-rule-current-value.is-empty { color: #64748b; }
+    .gal-special-cg-rule-enabled-wrap { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 0.82rem; }
+    .gal-special-cg-rule-remove { width: 34px; height: 34px; border: none; border-radius: 6px; cursor: pointer; background: rgba(220, 53, 69, 0.95); color: #fff; }
+    .gal-special-cg-empty-hint { font-size: 0.82rem; color: #92400e; padding: 8px 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; }
     .gal-map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
     .gal-map-card { position: relative; border: 1px solid #dbe2ea; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); transition: all 0.2s; cursor: pointer; }
     .gal-map-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15); }
@@ -792,6 +1587,9 @@ export function buildAssetManagerStyles() {
       #gal-unified-panel .gal-opening-column { min-height: 220px; }
       #gal-unified-panel .gal-opening-textarea { min-height: 180px; }
       #gal-unified-panel .gal-opening-actions .gal-pane-btn { flex: 1 1 100%; min-width: 0; }
+      .gal-special-cg-rules-header { display: none; }
+      .gal-special-cg-rule-row { grid-template-columns: 1fr; padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+      .gal-special-cg-rule-remove { width: 100%; }
       #gal-unified-panel .gal-custom-icon-grid {
         grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
         max-height: 220px;
@@ -1044,6 +1842,240 @@ function bindBackgroundEvents($modal, activeTab) {
       $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
       showAssetManagerModal('backgrounds');
     });
+  });
+}
+
+function bindSpecialCgEvents($modal, activeTab) {
+  $modal.on('click', '.gal-special-cg-card', function (e) {
+    if ($(e.target).closest('.gal-special-cg-actions').length) return;
+    const $img = $(this).find('.gal-special-cg-preview img');
+    if (!$img.length) return;
+    const src = $img.attr('src');
+    const title = $(this).find('.gal-special-cg-name').text();
+    const mountRoot = getModalMountRoot();
+    const isFullscreen = mountRoot !== topWindow.document.body;
+    const posStyle = isFullscreen
+      ? 'position:absolute;top:0;left:0;width:100%;height:100%;'
+      : 'position:fixed;top:0;left:0;width:100vw;height:100vh;';
+    const $lightbox =
+      $(`<div style="${posStyle}background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
+      <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
+      <span style="color:#ccc;font-size:0.9rem;">${escapeHtml(title)}</span>
+    </div>`);
+    $lightbox.on('click', function () {
+      $(this).remove();
+    });
+    $(mountRoot).append($lightbox);
+  });
+
+  $modal.find('#gal-add-special-cg-btn').on('click', () => {
+    $modal.remove();
+    if (_showSpecialCgUploadDialogRef) {
+      _showSpecialCgUploadDialogRef(() => showAssetManagerModal('special-cgs'));
+    }
+  });
+
+  $modal.find('#gal-batch-special-cg-upload-btn').on('click', () => {
+    $modal.remove();
+    if (_showBatchSpecialCgUploadDialogRef) {
+      _showBatchSpecialCgUploadDialogRef(() => showAssetManagerModal('special-cgs'));
+    }
+  });
+
+  $modal.find('.gal-special-cg-delete').on('click', async function (e) {
+    e.stopPropagation();
+    const cgId = String($(this).data('cg-id') || '').trim();
+    if (!cgId) return;
+    if (!confirm(`确定删除特殊CG「${cgId}」吗？`)) return;
+    try {
+      await deleteSpecialCg(cgId);
+      showToast(`已删除特殊CG: ${cgId}`);
+      $modal.remove();
+      showAssetManagerModal('special-cgs');
+    } catch (error) {
+      showToast(`删除失败: ${error?.message || error}`);
+    }
+  });
+
+  $modal.find('.gal-special-cg-transfer').on('click', function (e) {
+    e.stopPropagation();
+    const cgId = String($(this).data('cg-id') || '').trim();
+    if (!cgId) return;
+    showTransferDialog('cg', [cgId], () => {
+      $modal.remove();
+      $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
+      showAssetManagerModal('special-cgs');
+    });
+  });
+}
+
+function bindSpecialCgRulesEvents($modal, activeTab) {
+  const getOptionsTemplate = () =>
+    $('<textarea/>').html(String($modal.find('#gal-special-cg-options-template').val() || '').trim()).text();
+  const getMvuDataListForValueDisplay = () => {
+    const Mvu = topWindow.Mvu || globalThis.Mvu;
+    if (!Mvu || typeof Mvu.getMvuData !== 'function') return [];
+    return getMvuDataListFromScopes(Mvu);
+  };
+  const updateRuleRowCurrentValue = ($row, mvuDataList = null) => {
+    const $valueNode = $row.find('.gal-special-cg-rule-current-value');
+    if (!$valueNode.length) return;
+
+    const rawPath = String($row.find('.gal-special-cg-rule-path').val() || '').trim();
+    if (!rawPath) {
+      $valueNode
+        .text('未填写')
+        .attr('title', '当前值：请先填写变量路径')
+        .addClass('is-empty');
+      return;
+    }
+
+    const safeMvuDataList = Array.isArray(mvuDataList) ? mvuDataList : getMvuDataListForValueDisplay();
+    const result = findMvuVariableValueInDataList(rawPath, safeMvuDataList);
+    if (!result.found) {
+      const normalizedPath = normalizeMvuVariablePath(rawPath);
+      $valueNode
+        .text('未找到')
+        .attr('title', `当前值：未找到路径 ${normalizedPath || rawPath}`)
+        .addClass('is-empty');
+      return;
+    }
+
+    const valueText = stringifyMvuVariableValue(result.value);
+    $valueNode
+      .text(formatMvuVariableValueForDisplay(result.value))
+      .attr('title', `当前值：${valueText}`)
+      .removeClass('is-empty');
+  };
+  const updateAllRuleRowsCurrentValue = (mvuDataList = null) => {
+    const safeMvuDataList = Array.isArray(mvuDataList) ? mvuDataList : getMvuDataListForValueDisplay();
+    $modal.find('.gal-special-cg-rule-row').each(function () {
+      updateRuleRowCurrentValue($(this), safeMvuDataList);
+    });
+  };
+  const updateVariablePathCandidates = (paths, mvuDataList = null) => {
+    const safePaths = Array.from(new Set((Array.isArray(paths) ? paths : [])
+      .map(item => String(item || '').trim().replace(/^stat_data\./, ''))
+      .filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+    const optionsHtml = buildVariablePathOptionsHtml(safePaths);
+    $modal.find(`#${SPECIAL_CG_VAR_PATH_DATALIST_ID}`).html(optionsHtml);
+    updateAllRuleRowsCurrentValue(mvuDataList);
+    const $counter = $modal.find('#gal-special-cg-var-count');
+    $counter.attr('data-count', String(safePaths.length));
+    $counter.text(safePaths.length > 0 ? `已加载 ${safePaths.length} 项变量路径` : '未提取到可用于数值比较的变量路径');
+    return safePaths.length;
+  };
+
+  const buildBlankRow = () => {
+    const optionsHtml = getOptionsTemplate() || '<option value="">选择CG资源</option>';
+    return buildSpecialCgRuleRowHtml(
+      {
+        id: `special_cg_rule_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+        name: '',
+        enabled: true,
+        variablePath: '',
+        operator: 'gte',
+        threshold: 0,
+        cgId: '',
+        priority: 0,
+      },
+      optionsHtml,
+    );
+  };
+  let loadingMvuVars = false;
+  const $loadBtn = $modal.find('#gal-special-cg-load-mvu-vars-btn');
+  $loadBtn.on('click', async () => {
+    if (loadingMvuVars) return;
+    loadingMvuVars = true;
+    $loadBtn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> <span>读取中...</span>');
+    try {
+      const paths = await loadMvuVariablePathsAsync();
+      const mvuDataList = getMvuDataListForValueDisplay();
+      const count = updateVariablePathCandidates(paths, mvuDataList);
+      if (count > 0) {
+        showToast(`已读取 ${count} 项 MVU 变量路径`);
+      } else {
+        showToast('MVU变量中未找到可用于数值比较的路径');
+      }
+    } catch (error) {
+      showToast(`读取MVU变量失败: ${error?.message || error}`);
+    } finally {
+      loadingMvuVars = false;
+      $loadBtn.prop('disabled', false).html('<i class="fa-solid fa-arrows-rotate"></i> <span>读取MVU变量</span>');
+    }
+  });
+
+  $modal.find('.gal-special-cg-rule-row').each(function () {
+    const $row = $(this);
+    const currentCgId = String($row.find('.gal-special-cg-rule-current-cg-id').val() || '').trim();
+    if (currentCgId) {
+      $row.find('.gal-special-cg-rule-cg-id').val(currentCgId);
+    }
+  });
+
+  $modal.find('#gal-special-cg-rule-add-btn').on('click', () => {
+    const $newRow = $(buildBlankRow());
+    $modal.find('#gal-special-cg-rules-list').append($newRow);
+    updateRuleRowCurrentValue($newRow);
+  });
+
+  $modal.on('click', '.gal-special-cg-rule-remove', function () {
+    $(this).closest('.gal-special-cg-rule-row').remove();
+  });
+  $modal.on('input change', '.gal-special-cg-rule-path', function () {
+    const $row = $(this).closest('.gal-special-cg-rule-row');
+    updateRuleRowCurrentValue($row);
+  });
+  updateAllRuleRowsCurrentValue();
+
+  $modal.find('#gal-special-cg-rule-save-btn').on('click', () => {
+    const settings = getSettings();
+    const rules = [];
+    let skippedCount = 0;
+    $modal.find('.gal-special-cg-rule-row').each(function (index) {
+      const $row = $(this);
+      const id = String($row.find('.gal-special-cg-rule-id').val() || '').trim() || `special_cg_rule_${Date.now()}_${index}`;
+      const name = String($row.find('.gal-special-cg-rule-name').val() || '').trim();
+      const variablePath = String($row.find('.gal-special-cg-rule-path').val() || '').trim().replace(/^stat_data\./, '');
+      const operator = String($row.find('.gal-special-cg-rule-operator').val() || 'gte').trim().toLowerCase();
+      const thresholdRaw = Number($row.find('.gal-special-cg-rule-threshold').val());
+      const cgId = String($row.find('.gal-special-cg-rule-cg-id').val() || '').trim();
+      const priorityRaw = Number($row.find('.gal-special-cg-rule-priority').val());
+      const enabled = $row.find('.gal-special-cg-rule-enabled').is(':checked');
+      if (!variablePath || !cgId) {
+        skippedCount++;
+        return;
+      }
+      rules.push({
+        id,
+        name: name || id,
+        enabled,
+        variablePath,
+        operator: ['gte', 'gt', 'eq', 'lte', 'lt'].includes(operator) ? operator : 'gte',
+        threshold: Number.isFinite(thresholdRaw) ? thresholdRaw : 0,
+        cgId,
+        priority: Number.isFinite(priorityRaw) ? priorityRaw : 0,
+        oncePerChat: true,
+      });
+    });
+
+    settings.specialCg = {
+      enabled: $modal.find('#gal-special-cg-enabled').is(':checked'),
+      rules,
+    };
+    saveSettings();
+    if (skippedCount > 0) {
+      showToast(`规则已保存，已跳过 ${skippedCount} 条不完整规则`);
+    } else {
+      showToast('MVU触发CG规则已保存');
+    }
+    if (getIsEnabled()) {
+      resetSpecialCgRuntimeForChat();
+      detectSpecialCgPendingNow()
+        .then(() => injectCOTToWorldbook())
+        .catch(error => console.warn(`[${SCRIPT_NAME}] 保存规则后刷新特殊CG COT失败:`, error));
+    }
   });
 }
 

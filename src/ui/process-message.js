@@ -7,6 +7,7 @@ import { GalgameStore } from '../core/store.js';
 import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.js';
 import { Live2DPreloadManager } from '../live2d/preload.js';
 import { parseGalgameContent, RE_GAL_TAGS } from '../logic/parser.js';
+import { consumePendingSpecialCgByScene } from '../logic/special-cg-trigger.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
 import { renderBGMWidget } from './bgm-widget.js';
 import { hideNonLastFloors, showAllFloors } from './galgame-mode.js';
@@ -141,6 +142,16 @@ export async function processNewMessage(mesNode, options = {}) {
   } catch (error) {
     console.error(`[${SCRIPT_NAME}] 解析消息失败，使用纯文本兜底`, error);
     parsed = buildFallbackParsed(String(contentToProcess || '').trim());
+  }
+
+  if (parsed && Array.isArray(parsed.backgroundChanges) && parsed.backgroundChanges.length > 0) {
+    for (const change of parsed.backgroundChanges) {
+      const scene = String(change?.scene || '').trim();
+      if (!scene) continue;
+      if (consumePendingSpecialCgByScene(scene)) {
+        break;
+      }
+    }
   }
 
   // 实时背景生成处理 (根据 bgImageSource 单选分派)

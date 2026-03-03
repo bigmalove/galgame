@@ -1,4 +1,4 @@
-import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, BG_TRANSITION_MS } from '../core/constants.js';
+import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_SPECIAL_CGS, BG_TRANSITION_MS } from '../core/constants.js';
 import { $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getDb } from '../core/state.js';
@@ -96,7 +96,7 @@ export async function renameImagePack(packId, newName) {
       pack.name = newName;
       const putRequest = store.put(pack);
       putRequest.onsuccess = () => {
-        console.log(`[${SCRIPT_NAME}] 閲嶅懡鍚嶅浘鍖? ${packId} -> ${newName}`);
+        console.log(`[${SCRIPT_NAME}] 重命名图包: ${packId} -> ${newName}`);
         resolve();
       };
       putRequest.onerror = () => reject(putRequest.error);
@@ -200,12 +200,46 @@ export async function transferBackgroundsToPack(sceneNames, targetPackId) {
   });
 }
 
+export async function transferSpecialCgsToPack(cgIds, targetPackId) {
+  if (!getDb()) await initDB();
+  const db = getDb();
+  let count = 0;
+  return new Promise(resolve => {
+    const transaction = db.transaction([STORE_SPECIAL_CGS], 'readwrite');
+    const store = transaction.objectStore(STORE_SPECIAL_CGS);
+    let processed = 0;
+    cgIds.forEach(cgId => {
+      const getRequest = store.get(cgId);
+      getRequest.onsuccess = () => {
+        const record = getRequest.result;
+        if (record) {
+          record.packId = targetPackId;
+          store.put(record);
+          count++;
+        }
+        processed++;
+        if (processed === cgIds.length) {
+          resolve(count);
+        }
+      };
+      getRequest.onerror = () => {
+        processed++;
+        if (processed === cgIds.length) {
+          resolve(count);
+        }
+      };
+    });
+    if (cgIds.length === 0) resolve(0);
+  });
+}
+
 async function transferAllResourcesToDefaultPack(packId) {
   if (!getDb()) await initDB();
   const db = getDb();
   let spriteCount = 0;
   let bgCount = 0;
   let mapCount = 0;
+  let cgCount = 0;
 
   await new Promise((resolve) => {
     const transaction = db.transaction([STORE_SPRITES], 'readwrite');
@@ -279,8 +313,29 @@ async function transferAllResourcesToDefaultPack(packId) {
     request.onerror = () => resolve();
   });
 
-  console.log(`[${SCRIPT_NAME}] moved ${spriteCount} sprites, ${bgCount} backgrounds and ${mapCount} maps from pack ${packId} to default pack`);
-  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount };
+  await new Promise((resolve) => {
+    const transaction = db.transaction([STORE_SPECIAL_CGS], 'readwrite');
+    const store = transaction.objectStore(STORE_SPECIAL_CGS);
+    const request = store.openCursor();
+    request.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        const cgRecord = cursor.value;
+        if (cgRecord.packId === packId) {
+          cgRecord.packId = DEFAULT_PACK_ID;
+          cursor.update(cgRecord);
+          cgCount++;
+        }
+        cursor.continue();
+      } else {
+        resolve();
+      }
+    };
+    request.onerror = () => resolve();
+  });
+
+  console.log(`[${SCRIPT_NAME}] moved ${spriteCount} sprites, ${bgCount} backgrounds, ${mapCount} maps and ${cgCount} cgs from pack ${packId} to default pack`);
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
 }
 
 export async function getPackResourceCount(packId) {
@@ -289,6 +344,7 @@ export async function getPackResourceCount(packId) {
   let spriteCount = 0;
   let bgCount = 0;
   let mapCount = 0;
+  let cgCount = 0;
 
   await new Promise((resolve) => {
     const transaction = db.transaction([STORE_SPRITES], 'readonly');
@@ -326,7 +382,19 @@ export async function getPackResourceCount(packId) {
     request.onerror = () => resolve();
   });
 
-  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount };
+  await new Promise((resolve) => {
+    const transaction = db.transaction([STORE_SPECIAL_CGS], 'readonly');
+    const store = transaction.objectStore(STORE_SPECIAL_CGS);
+    const index = store.index('packId');
+    const request = index.count(IDBKeyRange.only(packId));
+    request.onsuccess = () => {
+      cgCount = request.result;
+      resolve();
+    };
+    request.onerror = () => resolve();
+  });
+
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
 }
 
 export function ensureBackgroundLayers($bgLayer) {

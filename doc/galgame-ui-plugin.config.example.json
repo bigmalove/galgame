@@ -18,7 +18,7 @@
         "remoteBaseUrl": "https://cdn.jsdelivr.net/gh/yourname/yourrepo@main/"
       },
       "backgrounds": {
-        "mode": "local"
+        "mode": "skip-export"
       },
       "live2d": {
         "mode": "remote",
@@ -55,7 +55,18 @@
     "locationStatusHtml": "<div>教学楼天台，风很大。</div>",
     "timeStatusHtml": "<div>放学后 / 黄昏</div>",
     "locationStatusIconClass": "fa-solid fa-location-dot",
-    "timeStatusIconClass": "fa-regular fa-clock"
+    "timeStatusIconClass": "fa-regular fa-clock",
+    "uiAccess": {
+      "enabled": true,
+      "hiddenAssetTabs": [
+        "custom",
+        "imagegen"
+      ],
+      "unlock": {
+        "mode": "plaintext",
+        "password": "your-password"
+      }
+    }
   },
   "bgm": {
     "whitelist": [

@@ -2,7 +2,7 @@ import { SCRIPT_ID, SCRIPT_NAME } from '../core/constants.js';
 import { getAllCharacterNameKeywords, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // ============================================
-// Live2D 娓叉煋妯″紡鍒囨崲鍣?
+// Live2D 渲染模式切换器
 // ============================================
 export const CHAR_USE_LIVE2D_KEY = `${SCRIPT_ID}_char_use_live2d`;
 export const LIVE2D_CONFIG_KEY = `${SCRIPT_ID}_live2d_config`;

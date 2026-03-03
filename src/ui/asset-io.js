@@ -1,6 +1,6 @@
 import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
-import { getMapSettings, getSettings, updateMapSettings } from '../core/settings.js';
+import { getMapSettings, getSettings, saveSettings, updateMapSettings } from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
 import { saveSprite, saveSpritesBatch, getAllSprites } from '../db/sprites.js';
 import { saveBackground, saveBackgroundsBatch, getAllBackgrounds } from '../db/backgrounds.js';
@@ -8,7 +8,8 @@ import { GLOBAL_MAP_REGION_KEY, getAllMapImages, saveUnifiedMapImage } from '../
 import { getCurrentPackId, getAllImagePacks, createImagePack } from '../db/image-packs.js';
 import { getAllUiSkinAssets, saveUiSkinAsset } from '../db/ui-skins.js';
 import { getAllLive2DModels } from '../db/live2d-models.js';
-import { getTTSEnabled, getAllCharacterTTSVoices } from '../audio/tts-config.js';
+import { getAllSpecialCgs, saveSpecialCg } from '../db/special-cgs.js';
+import { getTTSEnabled, getAllCharacterTTSVoices, setTTSEnabled } from '../audio/tts-config.js';
 import { CHAR_USE_LIVE2D_KEY, LIVE2D_CONFIG_KEY } from '../live2d/render-mode.js';
 import { withResolvedLive2DRuntime } from '../live2d/runtime-router.js';
 import { getAllCharacterNameKeywords, setCharacterNameKeywords } from '../utils/character-name-keywords.js';
@@ -32,6 +33,20 @@ const CUSTOM_TIME_HTML_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_HTML;
 const CUSTOM_LOCATION_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS;
 const CUSTOM_TIME_ICON_CLASS_KEY = GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS;
 const MAP_IMAGE_CARD_PAYLOAD_SCHEMA = 'galgame_map_image_v1';
+const ASSET_TAB_ACCESS_OPTIONS = [
+  { id: 'sprites', label: '立绘管理' },
+  { id: 'backgrounds', label: '背景管理' },
+  { id: 'title-screen', label: '标题界面' },
+  { id: 'special-cgs', label: 'CG管理' },
+  { id: 'special-cg-rules', label: 'MVU触发CG' },
+  { id: 'maps', label: '地图管理' },
+  { id: 'skin', label: '皮肤编辑' },
+  { id: 'imagegen', label: '生图配置' },
+  { id: 'opening', label: '开场白转换' },
+  { id: 'bgm', label: '指定BGM' },
+  { id: 'custom', label: '自定义模块' },
+];
+const ASSET_TAB_ACCESS_ID_SET = new Set(ASSET_TAB_ACCESS_OPTIONS.map(item => item.id));
 
 function safeJsonParse(text, fallback) {
   try {
@@ -372,8 +387,27 @@ function buildLive2dRemoteModelUrl(templateInput, characterId) {
   return `${ensureTrailingSlash(raw)}${encodedChar}/model3.json`;
 }
 
-function normalizeRemoteMode(value) {
-  return String(value || '').trim().toLowerCase() === 'remote' ? 'remote' : 'local';
+function normalizeRemoteMode(value, options = {}) {
+  const allowSkipExport = !!options.allowSkipExport;
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === 'remote') return 'remote';
+  if (allowSkipExport && (mode === 'skip-export' || mode === 'skip' || mode === 'manual' || mode === 'none')) {
+    return 'skip-export';
+  }
+  return 'local';
+}
+
+function normalizeAssetTabAccessList(rawList) {
+  const source = Array.isArray(rawList)
+    ? rawList
+    : (typeof rawList === 'string' ? rawList.split(/[,\r\n]/) : []);
+  const normalized = [];
+  source.forEach((item) => {
+    const tabId = String(item || '').trim();
+    if (!tabId || !ASSET_TAB_ACCESS_ID_SET.has(tabId) || normalized.includes(tabId)) return;
+    normalized.push(tabId);
+  });
+  return normalized;
 }
 
 function normalizeExportOutputFormat(value) {
@@ -431,6 +465,265 @@ function parseUiSkinMetaFromFilename(fileName) {
     device: parts[2],
     state: parts.slice(3).join('__') || 'normal',
   });
+}
+
+function normalizeSpecialCgMetaRecord(raw = {}) {
+  const safe = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const cgId = String(safe.cgId || safe.id || '').trim();
+  if (!cgId) return null;
+  const tags = Array.isArray(safe.tags)
+    ? safe.tags.map(item => String(item || '').trim()).filter(Boolean)
+    : [];
+  return {
+    cgId,
+    name: String(safe.name || cgId).trim() || cgId,
+    description: String(safe.description || '').trim(),
+    tags,
+    packId: String(safe.packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID,
+    lastModified: String(safe.lastModified || '').trim(),
+  };
+}
+
+function buildSpecialCgZipFilename(record, ext = 'png') {
+  const safeCgId = sanitizeFileName(record?.cgId || 'cg');
+  const safeExt = sanitizeFileName(ext || 'png');
+  return `${safeCgId}.${safeExt}`;
+}
+
+function parseSpecialCgMetaFromFilename(fileName) {
+  const baseName = String(fileName || '').replace(/\.[^.]+$/, '');
+  const cgId = String(baseName || '').trim();
+  if (!cgId) return null;
+  return normalizeSpecialCgMetaRecord({ cgId });
+}
+
+function extractGalgamePluginConfigFromCardObject(card) {
+  if (!card || typeof card !== 'object') return null;
+  const candidates = [
+    card?.data?.extensions?.galgame_ui_plugin,
+    card?.extensions?.galgame_ui_plugin,
+    card?.json_data?.data?.extensions?.galgame_ui_plugin,
+    card?.json_data?.extensions?.galgame_ui_plugin,
+  ];
+  for (const item of candidates) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) return item;
+  }
+  return null;
+}
+
+function extractImportPayloadFromJson(rawJson) {
+  const json = rawJson && typeof rawJson === 'object' ? rawJson : {};
+  const extensionConfig = extractGalgamePluginConfigFromCardObject(json);
+  const directConfig = json?.schema === 'galgame_ui_plugin_config_v2' ? json : null;
+  const pluginConfig = directConfig || extensionConfig || null;
+  return {
+    rawJson: json,
+    pluginConfig,
+    isCharacterCard: !!extensionConfig,
+    cardObject: extensionConfig ? json : null,
+  };
+}
+
+function getRemoteBaseUrlFromNormalizedInput(normalized, rawInput = '') {
+  const safeNormalized = normalized && typeof normalized === 'object' ? normalized : {};
+  const fromBase = String(safeNormalized.remoteBaseUrl || '').trim();
+  if (fromBase) return ensureTrailingSlash(fromBase);
+
+  const fromAssetsUrl = String(safeNormalized.remoteAssetsUrl || '').trim();
+  if (fromAssetsUrl) {
+    const matched = fromAssetsUrl.match(/^(.*\/)remote_assets\.json(?:\?.*)?$/i);
+    if (matched?.[1]) return ensureTrailingSlash(matched[1]);
+  }
+
+  const normalizedInput = normalizeRemoteInput(rawInput);
+  const fromInputBase = String(normalizedInput.remoteBaseUrl || '').trim();
+  if (fromInputBase) return ensureTrailingSlash(fromInputBase);
+  const fromInputAssets = String(normalizedInput.remoteAssetsUrl || '').trim();
+  const matchedInput = fromInputAssets.match(/^(.*\/)remote_assets\.json(?:\?.*)?$/i);
+  if (matchedInput?.[1]) return ensureTrailingSlash(matchedInput[1]);
+  return '';
+}
+
+function cloneJsonLike(value, fallback) {
+  try {
+    if (typeof structuredClone === 'function') {
+      return structuredClone(value);
+    }
+  } catch {
+    // fallback below
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeGalgamePluginConfigToCurrentCharacter(config) {
+  if (!config || typeof config !== 'object') {
+    return { ok: false, reason: 'empty-config' };
+  }
+  if (typeof updateCharacterWith !== 'function') {
+    return { ok: false, reason: 'updateCharacterWith-unavailable' };
+  }
+
+  try {
+    const payload = cloneJsonLike(config, {});
+    await updateCharacterWith('current', (character) => {
+      const next = character && typeof character === 'object'
+        ? (typeof structuredClone === 'function' ? structuredClone(character) : JSON.parse(JSON.stringify(character)))
+        : {};
+      if (!next.data || typeof next.data !== 'object' || Array.isArray(next.data)) {
+        next.data = {};
+      }
+      if (!next.data.extensions || typeof next.data.extensions !== 'object' || Array.isArray(next.data.extensions)) {
+        next.data.extensions = {};
+      }
+      next.data.extensions.galgame_ui_plugin = payload;
+      return next;
+    });
+    return { ok: true, reason: null };
+  } catch (error) {
+    return { ok: false, reason: 'write-failed', error };
+  }
+}
+
+function restoreImportedTtsSettings(rawTtsConfig) {
+  const ttsConfig = rawTtsConfig && typeof rawTtsConfig === 'object' && !Array.isArray(rawTtsConfig)
+    ? rawTtsConfig
+    : null;
+  if (!ttsConfig) return { restoredEnabled: false, restoredVoiceCount: 0, restoredKeywordCount: 0 };
+
+  let restoredEnabled = false;
+  let restoredVoiceCount = 0;
+  let restoredKeywordCount = 0;
+
+  if (Object.prototype.hasOwnProperty.call(ttsConfig, 'enabled')) {
+    setTTSEnabled(!!ttsConfig.enabled);
+    restoredEnabled = true;
+  }
+
+  const importedVoiceMap = ttsConfig.characterVoice;
+  if (importedVoiceMap && typeof importedVoiceMap === 'object' && !Array.isArray(importedVoiceMap)) {
+    const existingVoiceMap = readLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE, {});
+    const mergedVoiceMap = {
+      ...(existingVoiceMap && typeof existingVoiceMap === 'object' ? existingVoiceMap : {}),
+    };
+    for (const [characterId, voiceName] of Object.entries(importedVoiceMap)) {
+      const safeCharacterId = String(characterId || '').trim();
+      const safeVoiceName = String(voiceName || '').trim();
+      if (!safeCharacterId || !safeVoiceName) continue;
+      mergedVoiceMap[safeCharacterId] = safeVoiceName;
+      restoredVoiceCount += 1;
+    }
+    saveLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE, mergedVoiceMap);
+  }
+
+  const importedKeywordMap = ttsConfig.characterKeywords;
+  if (importedKeywordMap && typeof importedKeywordMap === 'object' && !Array.isArray(importedKeywordMap)) {
+    for (const [characterId, keywordList] of Object.entries(importedKeywordMap)) {
+      const safeCharacterId = String(characterId || '').trim();
+      if (!safeCharacterId) continue;
+      const savedKeywords = setCharacterNameKeywords(safeCharacterId, keywordList);
+      if (savedKeywords.length > 0) {
+        restoredKeywordCount += 1;
+      }
+    }
+  }
+
+  return { restoredEnabled, restoredVoiceCount, restoredKeywordCount };
+}
+
+function restoreImportedLive2dSettings(rawLive2dConfig) {
+  const live2dConfig = rawLive2dConfig && typeof rawLive2dConfig === 'object' && !Array.isArray(rawLive2dConfig)
+    ? rawLive2dConfig
+    : null;
+  if (!live2dConfig) return { restoredEnabledMapCount: 0, restoredConfigCount: 0 };
+
+  let restoredEnabledMapCount = 0;
+  let restoredConfigCount = 0;
+
+  const importedEnabledMap = live2dConfig.enabledMap;
+  if (importedEnabledMap && typeof importedEnabledMap === 'object' && !Array.isArray(importedEnabledMap)) {
+    const existingEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
+    const mergedEnabledMap = {
+      ...(existingEnabledMap && typeof existingEnabledMap === 'object' ? existingEnabledMap : {}),
+    };
+    for (const [characterId, enabled] of Object.entries(importedEnabledMap)) {
+      const safeCharacterId = String(characterId || '').trim();
+      if (!safeCharacterId) continue;
+      mergedEnabledMap[safeCharacterId] = !!enabled;
+      restoredEnabledMapCount += 1;
+    }
+    saveLocalStorageJson(CHAR_USE_LIVE2D_KEY, mergedEnabledMap);
+  }
+
+  const importedModels = live2dConfig.models;
+  if (importedModels && typeof importedModels === 'object' && !Array.isArray(importedModels)) {
+    const existingConfigMap = readLocalStorageJson(LIVE2D_CONFIG_KEY, {});
+    const mergedConfigMap = {
+      ...(existingConfigMap && typeof existingConfigMap === 'object' ? existingConfigMap : {}),
+    };
+    for (const [characterId, modelPayload] of Object.entries(importedModels)) {
+      const safeCharacterId = String(characterId || '').trim();
+      if (!safeCharacterId) continue;
+      const config = modelPayload?.config;
+      if (!config || typeof config !== 'object' || Array.isArray(config)) continue;
+      mergedConfigMap[safeCharacterId] = config;
+      restoredConfigCount += 1;
+    }
+    saveLocalStorageJson(LIVE2D_CONFIG_KEY, mergedConfigMap);
+  }
+
+  return { restoredEnabledMapCount, restoredConfigCount };
+}
+
+function restoreImportedCustomModuleSettings(rawCustomConfig) {
+  const customConfig = rawCustomConfig && typeof rawCustomConfig === 'object' && !Array.isArray(rawCustomConfig)
+    ? rawCustomConfig
+    : null;
+  if (!customConfig) return { restoredCustomFields: 0, mapSettingsApplied: false };
+
+  let restoredCustomFields = 0;
+  const setStringLocalStorage = (key, fieldName) => {
+    if (!Object.prototype.hasOwnProperty.call(customConfig, fieldName)) return;
+    localStorage.setItem(key, String(customConfig[fieldName] || ''));
+    restoredCustomFields += 1;
+  };
+
+  setStringLocalStorage(CUSTOM_LOCATION_HTML_KEY, 'locationStatusHtml');
+  setStringLocalStorage(CUSTOM_TIME_HTML_KEY, 'timeStatusHtml');
+
+  if (Object.prototype.hasOwnProperty.call(customConfig, 'locationStatusIconClass')) {
+    localStorage.setItem(
+      CUSTOM_LOCATION_ICON_CLASS_KEY,
+      normalizeLocationStatusIconClass(customConfig.locationStatusIconClass || ''),
+    );
+    restoredCustomFields += 1;
+  }
+  if (Object.prototype.hasOwnProperty.call(customConfig, 'timeStatusIconClass')) {
+    localStorage.setItem(
+      CUSTOM_TIME_ICON_CLASS_KEY,
+      normalizeTimeStatusIconClass(customConfig.timeStatusIconClass || ''),
+    );
+    restoredCustomFields += 1;
+  }
+
+  const mapSettingsApplied = applyImportedMapSettings(customConfig.map);
+  return { restoredCustomFields, mapSettingsApplied };
+}
+
+function restoreImportedBgmSettings(rawBgmConfig) {
+  const bgmConfig = rawBgmConfig && typeof rawBgmConfig === 'object' && !Array.isArray(rawBgmConfig)
+    ? rawBgmConfig
+    : null;
+  if (!bgmConfig || !Object.prototype.hasOwnProperty.call(bgmConfig, 'whitelist')) {
+    return { restored: false, count: 0 };
+  }
+  const settings = getSettings();
+  settings.bgmWhitelist = normalizeStringList(bgmConfig.whitelist);
+  saveSettings();
+  return { restored: true, count: settings.bgmWhitelist.length };
 }
 
 function escapeHtml(input) {
@@ -1316,11 +1609,16 @@ async function buildGalgameCardConfig(options = {}) {
     spriteRemoteInput = '',
     backgroundResourceMode = '',
     backgroundRemoteInput = '',
+    specialCgResourceMode = '',
+    specialCgRemoteInput = '',
     live2dResourceMode = '',
     live2dRemoteInput = '',
     includeLocalLive2dPlaceholder = true,
     includeCustomModuleSettings = true,
     includeBgmSettings = true,
+    uiAccessEnabled = false,
+    hiddenAssetTabs = [],
+    unlockPassword = '',
     onProgress = null,
   } = options;
   const reportProgress = typeof onProgress === 'function'
@@ -1340,9 +1638,15 @@ async function buildGalgameCardConfig(options = {}) {
 
   const normalizedSpriteMode = normalizeRemoteMode(
     spriteResourceMode || ((String(spriteRemoteInput || remoteInput || '').trim()) ? 'remote' : 'local'),
+    { allowSkipExport: true },
   );
   const normalizedBackgroundMode = normalizeRemoteMode(
     backgroundResourceMode || ((String(backgroundRemoteInput || remoteInput || '').trim()) ? 'remote' : 'local'),
+    { allowSkipExport: true },
+  );
+  const normalizedSpecialCgMode = normalizeRemoteMode(
+    specialCgResourceMode || ((String(specialCgRemoteInput || remoteInput || '').trim()) ? 'remote' : 'local'),
+    { allowSkipExport: true },
   );
   const normalizedSpriteRemote = normalizedSpriteMode === 'remote'
     ? normalizeRemoteInput(spriteRemoteInput || remoteInput || '')
@@ -1350,13 +1654,23 @@ async function buildGalgameCardConfig(options = {}) {
   const normalizedBackgroundRemote = normalizedBackgroundMode === 'remote'
     ? normalizeRemoteInput(backgroundRemoteInput || remoteInput || '')
     : { remoteBaseUrl: '', remoteAssetsUrl: '' };
+  const normalizedSpecialCgRemote = normalizedSpecialCgMode === 'remote'
+    ? normalizeRemoteInput(specialCgRemoteInput || remoteInput || '')
+    : { remoteBaseUrl: '', remoteAssetsUrl: '' };
   const normalizedLive2dMode = normalizeRemoteMode(
     live2dResourceMode || ((String(live2dRemoteInput || '').trim()) ? 'remote' : 'local'),
   );
+  const normalizedUiAccessTabs = normalizeAssetTabAccessList(hiddenAssetTabs);
+  const normalizedUiAccessPassword = String(unlockPassword || '').trim();
+  const shouldIncludeUiAccess =
+    !!uiAccessEnabled
+    && normalizedUiAccessTabs.length > 0
+    && !!normalizedUiAccessPassword;
   const resolvedLive2dRemoteInput = String(live2dRemoteInput || '').trim();
   const normalizedLive2dRemote = normalizedLive2dMode === 'remote' && resolvedLive2dRemoteInput
     ? normalizeRemoteInput(resolvedLive2dRemoteInput)
     : { remoteBaseUrl: '', remoteAssetsUrl: '' };
+  const resolvedSpecialCgRemoteInput = String(specialCgRemoteInput || remoteInput || '').trim();
 
   const isUnifiedPackRemote =
     normalizedSpriteMode === 'remote'
@@ -1395,10 +1709,12 @@ async function buildGalgameCardConfig(options = {}) {
   const embeddedAssets = {
     sprites: [],
     backgrounds: [],
+    specialCgs: [],
   };
   const embeddedAssetStats = {
     spriteBytes: 0,
     backgroundBytes: 0,
+    specialCgBytes: 0,
   };
 
   if ((normalizedSpriteMode === 'remote' || normalizedBackgroundMode === 'remote') && !isUnifiedPackRemote) {
@@ -1491,10 +1807,98 @@ async function buildGalgameCardConfig(options = {}) {
     }
   }
 
-  const embeddedAssetTotalBytes = embeddedAssetStats.spriteBytes + embeddedAssetStats.backgroundBytes;
+  if (normalizedSpecialCgMode === 'local') {
+    reportProgress(30, 'Embedding local special-CG assets into card config...');
+    let skippedNoDataCount = 0;
+    for (const packId of packIds) {
+      const specialCgs = await getAllSpecialCgs(packId);
+      for (const rawCg of Array.isArray(specialCgs) ? specialCgs : []) {
+        const meta = normalizeSpecialCgMetaRecord(rawCg);
+        if (!meta) continue;
+        const record = {
+          packId: String(rawCg?.packId || packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID,
+          cgId: meta.cgId,
+          name: meta.name,
+          description: meta.description,
+          tags: meta.tags,
+          lastModified: meta.lastModified || String(rawCg?.lastModified || '').trim(),
+        };
+        const encoded = await encodeBlobToInlineAsset(rawCg?.imageBlob, 'image/png');
+        if (encoded) {
+          record.source = 'embedded';
+          record.mimeType = encoded.mimeType;
+          record.dataBase64 = encoded.dataBase64;
+          record.sizeBytes = encoded.sizeBytes;
+          embeddedAssetStats.specialCgBytes += encoded.sizeBytes;
+          embeddedAssets.specialCgs.push(record);
+          continue;
+        }
+        const fallbackUrl = String(rawCg?.imageUrl || '').trim();
+        if (fallbackUrl) {
+          record.source = 'remote';
+          record.url = fallbackUrl;
+          embeddedAssets.specialCgs.push(record);
+          continue;
+        }
+        skippedNoDataCount += 1;
+      }
+    }
+    if (skippedNoDataCount > 0) {
+      warnings.push(`[Assets] 有 ${skippedNoDataCount} 条 CG 缺失可导出的本地数据，已跳过。`);
+    }
+  }
+
+  if (normalizedSpecialCgMode === 'remote') {
+    reportProgress(32, 'Collecting special-CG remote references...');
+    const remoteBaseUrl = getRemoteBaseUrlFromNormalizedInput(
+      normalizedSpecialCgRemote,
+      resolvedSpecialCgRemoteInput || remoteInput || '',
+    );
+    let missingRemoteUrlCount = 0;
+    for (const packId of packIds) {
+      const specialCgs = await getAllSpecialCgs(packId);
+      for (const rawCg of Array.isArray(specialCgs) ? specialCgs : []) {
+        const meta = normalizeSpecialCgMetaRecord(rawCg);
+        if (!meta) continue;
+        const record = {
+          packId: String(rawCg?.packId || packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID,
+          cgId: meta.cgId,
+          name: meta.name,
+          description: meta.description,
+          tags: meta.tags,
+          lastModified: meta.lastModified || String(rawCg?.lastModified || '').trim(),
+          source: 'remote',
+        };
+        const explicitUrl = String(rawCg?.imageUrl || '').trim();
+        if (explicitUrl) {
+          record.url = explicitUrl;
+          embeddedAssets.specialCgs.push(record);
+          continue;
+        }
+        if (remoteBaseUrl) {
+          record.url = `${remoteBaseUrl}special-cgs/${buildSpecialCgZipFilename(meta, 'png')}`;
+          embeddedAssets.specialCgs.push(record);
+          continue;
+        }
+        missingRemoteUrlCount += 1;
+      }
+    }
+    if (missingRemoteUrlCount > 0) {
+      warnings.push(`[Assets] 有 ${missingRemoteUrlCount} 条 CG 无法生成远程地址，已跳过。`);
+    }
+  }
+
+  const embeddedAssetTotalBytes =
+    embeddedAssetStats.spriteBytes
+    + embeddedAssetStats.backgroundBytes
+    + embeddedAssetStats.specialCgBytes;
+  const hasEmbeddedAssetRecords =
+    embeddedAssets.sprites.length > 0
+    || embeddedAssets.backgrounds.length > 0
+    || embeddedAssets.specialCgs.length > 0;
   if (embeddedAssetTotalBytes > 0) {
     warnings.push(
-      `[Assets] 本地模式已内嵌资源：立绘 ${formatSizeMb(embeddedAssetStats.spriteBytes)}，背景 ${formatSizeMb(embeddedAssetStats.backgroundBytes)}。`,
+      `[Assets] 本地模式已内嵌资源：立绘 ${formatSizeMb(embeddedAssetStats.spriteBytes)}，背景 ${formatSizeMb(embeddedAssetStats.backgroundBytes)}，CG ${formatSizeMb(embeddedAssetStats.specialCgBytes)}。`,
     );
   }
 
@@ -1587,12 +1991,14 @@ async function buildGalgameCardConfig(options = {}) {
         exportHardLimitBytes: CARD_EXPORT_HARD_LIMIT_BYTES,
         // 兼容旧字段名，语义改为当前导出硬限制
         discordUploadLimitBytes: CARD_EXPORT_HARD_LIMIT_BYTES,
-        ...(embeddedAssetTotalBytes > 0 ? {
+        ...(hasEmbeddedAssetRecords ? {
           embeddedAssets: {
             spriteCount: embeddedAssets.sprites.length,
             backgroundCount: embeddedAssets.backgrounds.length,
+            specialCgCount: embeddedAssets.specialCgs.length,
             spriteBytes: embeddedAssetStats.spriteBytes,
             backgroundBytes: embeddedAssetStats.backgroundBytes,
+            specialCgBytes: embeddedAssetStats.specialCgBytes,
             totalBytes: embeddedAssetTotalBytes,
           },
         } : {}),
@@ -1610,6 +2016,16 @@ async function buildGalgameCardConfig(options = {}) {
           mode: normalizedBackgroundMode,
           ...(normalizedBackgroundMode === 'remote' ? normalizedBackgroundRemote : {}),
         },
+        specialCgs: {
+          mode: normalizedSpecialCgMode,
+          ...(normalizedSpecialCgMode === 'remote'
+            ? {
+                remoteInput: resolvedSpecialCgRemoteInput,
+                ...(normalizedSpecialCgRemote.remoteBaseUrl ? { remoteBaseUrl: normalizedSpecialCgRemote.remoteBaseUrl } : {}),
+                ...(normalizedSpecialCgRemote.remoteAssetsUrl ? { remoteAssetsUrl: normalizedSpecialCgRemote.remoteAssetsUrl } : {}),
+              }
+            : {}),
+        },
         live2d: {
           mode: normalizedLive2dMode === 'remote'
             ? 'remote'
@@ -1622,11 +2038,12 @@ async function buildGalgameCardConfig(options = {}) {
           } : {}),
         },
       },
-      ...(embeddedAssets.sprites.length > 0 || embeddedAssets.backgrounds.length > 0
+      ...(embeddedAssets.sprites.length > 0 || embeddedAssets.backgrounds.length > 0 || embeddedAssets.specialCgs.length > 0
         ? {
             embedded: {
               ...(embeddedAssets.sprites.length > 0 ? { sprites: embeddedAssets.sprites } : {}),
               ...(embeddedAssets.backgrounds.length > 0 ? { backgrounds: embeddedAssets.backgrounds } : {}),
+              ...(embeddedAssets.specialCgs.length > 0 ? { specialCgs: embeddedAssets.specialCgs } : {}),
             },
           }
         : {}),
@@ -1650,6 +2067,20 @@ async function buildGalgameCardConfig(options = {}) {
       timeStatusIconClass: normalizeTimeStatusIconClass(localStorage.getItem(CUSTOM_TIME_ICON_CLASS_KEY) || ''),
       map: buildExportableMapSettings(),
       ...(customMapImagePayload ? { mapImage: customMapImagePayload } : {}),
+    };
+  }
+
+  if (shouldIncludeUiAccess) {
+    if (!out.custom || typeof out.custom !== 'object') {
+      out.custom = {};
+    }
+    out.custom.uiAccess = {
+      enabled: true,
+      hiddenAssetTabs: normalizedUiAccessTabs,
+      unlock: {
+        mode: 'plaintext',
+        password: normalizedUiAccessPassword,
+      },
     };
   }
 
@@ -1853,12 +2284,18 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
   const backgroundRemoteInputDefault = hasOwn('backgroundRemoteInput')
     ? String(options.backgroundRemoteInput || '').trim()
     : String(prefs.backgroundRemoteInput || sharedRemoteInputDefault).trim();
+  const specialCgRemoteInputDefault = hasOwn('specialCgRemoteInput')
+    ? String(options.specialCgRemoteInput || '').trim()
+    : String(prefs.specialCgRemoteInput || sharedRemoteInputDefault).trim();
   const spriteResourceModeDefault = hasOwn('spriteResourceMode')
-    ? normalizeRemoteMode(options.spriteResourceMode)
-    : normalizeRemoteMode(prefs.spriteResourceMode || (spriteRemoteInputDefault ? 'remote' : 'local'));
+    ? normalizeRemoteMode(options.spriteResourceMode, { allowSkipExport: true })
+    : normalizeRemoteMode(prefs.spriteResourceMode || (spriteRemoteInputDefault ? 'remote' : 'local'), { allowSkipExport: true });
   const backgroundResourceModeDefault = hasOwn('backgroundResourceMode')
-    ? normalizeRemoteMode(options.backgroundResourceMode)
-    : normalizeRemoteMode(prefs.backgroundResourceMode || (backgroundRemoteInputDefault ? 'remote' : 'local'));
+    ? normalizeRemoteMode(options.backgroundResourceMode, { allowSkipExport: true })
+    : normalizeRemoteMode(prefs.backgroundResourceMode || (backgroundRemoteInputDefault ? 'remote' : 'local'), { allowSkipExport: true });
+  const specialCgResourceModeDefault = hasOwn('specialCgResourceMode')
+    ? normalizeRemoteMode(options.specialCgResourceMode, { allowSkipExport: true })
+    : normalizeRemoteMode(prefs.specialCgResourceMode || (specialCgRemoteInputDefault ? 'remote' : 'local'), { allowSkipExport: true });
   const live2dRemoteInputDefault = hasOwn('live2dRemoteInput')
     ? String(options.live2dRemoteInput || '').trim()
     : String(prefs.live2dRemoteInput || '').trim();
@@ -1878,6 +2315,15 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
   const includeBgmSettingsDefault = hasOwn('includeBgmSettings')
     ? !!options.includeBgmSettings
     : (prefs.includeBgmSettings !== undefined ? !!prefs.includeBgmSettings : true);
+  const uiAccessEnabledDefault = hasOwn('uiAccessEnabled')
+    ? !!options.uiAccessEnabled
+    : !!prefs.uiAccessEnabled;
+  const hiddenAssetTabsDefault = hasOwn('hiddenAssetTabs')
+    ? normalizeAssetTabAccessList(options.hiddenAssetTabs)
+    : normalizeAssetTabAccessList(prefs.hiddenAssetTabs);
+  const unlockPasswordDefault = hasOwn('unlockPassword')
+    ? String(options.unlockPassword || '').trim()
+    : String(prefs.unlockPassword || '').trim();
   const outputFormatDefault = hasOwn('outputFormat')
     ? normalizeExportOutputFormat(options.outputFormat)
     : normalizeExportOutputFormat(prefs.outputFormat || 'json');
@@ -1913,6 +2359,7 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
   const remoteUseCdnId = `${dialogId}-remote-use-cdn`;
   const spriteModeName = `${dialogId}-sprite-mode`;
   const backgroundModeName = `${dialogId}-background-mode`;
+  const specialCgModeName = `${dialogId}-special-cg-mode`;
   const live2dModeName = `${dialogId}-live2d-mode`;
   const characterSelectId = `${dialogId}-character-select`;
   const characterInputId = `${dialogId}-character-input`;
@@ -1921,6 +2368,8 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
   const spriteRemoteWrapId = `${dialogId}-sprite-remote-wrap`;
   const backgroundRemoteInputId = `${dialogId}-background-remote-input`;
   const backgroundRemoteWrapId = `${dialogId}-background-remote-wrap`;
+  const specialCgRemoteInputId = `${dialogId}-special-cg-remote-input`;
+  const specialCgRemoteWrapId = `${dialogId}-special-cg-remote-wrap`;
   const live2dRemoteInputId = `${dialogId}-live2d-remote-input`;
   const live2dRemoteWrapId = `${dialogId}-live2d-remote-wrap`;
   const outputFormatName = `${dialogId}-output-format`;
@@ -1930,6 +2379,9 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
   const pngBaseFileNameId = `${dialogId}-png-base-file-name`;
   const includeCustomId = `${dialogId}-include-custom`;
   const includeBgmId = `${dialogId}-include-bgm`;
+  const uiAccessEnabledId = `${dialogId}-ui-access-enabled`;
+  const uiAccessWrapId = `${dialogId}-ui-access-wrap`;
+  const uiAccessPasswordId = `${dialogId}-ui-access-password`;
 
   const characterFieldHtml = characterNames.length > 0
     ? `
@@ -1954,6 +2406,17 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
       const packName = String(pack.name || packId || '未命名图包');
       const suffix = packId === String(currentPackId) ? '（当前）' : '';
       return `<option value="${escapeHtml(packId)}">${escapeHtml(packName)}${escapeHtml(suffix)}</option>`;
+    })
+    .join('');
+  const uiAccessTabOptionsHtml = ASSET_TAB_ACCESS_OPTIONS
+    .map((tab) => {
+      const checked = hiddenAssetTabsDefault.includes(tab.id);
+      return `
+        <label class="gal-card-export-access-tab-item">
+          <input type="checkbox" class="gal-card-export-hidden-tab" value="${escapeHtml(tab.id)}" ${checked ? 'checked' : ''}>
+          <span>${escapeHtml(tab.label)}</span>
+        </label>
+      `;
     })
     .join('');
 
@@ -1999,7 +2462,7 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
           <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
             <div style="font-weight: 700; color: #333; margin-bottom: 8px;">3) 资源模式（细分）</div>
             <div style="font-size: 0.84rem; color: #6b7280; margin-bottom: 10px;">
-              可分别为立绘和背景设置本地/远程地址，互不影响。
+              可分别为立绘、背景、CG 设置本地/远程地址，互不影响。
             </div>
             <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #333; cursor: pointer;">
               <input type="checkbox" id="${remoteUseCdnId}" ${remoteUseCdnDefault ? 'checked' : ''}>
@@ -2020,6 +2483,10 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
                   <input type="radio" name="${spriteModeName}" value="remote" ${spriteResourceModeDefault === 'remote' ? 'checked' : ''}>
                   <span>远程</span>
                 </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${spriteModeName}" value="skip-export" ${spriteResourceModeDefault === 'skip-export' ? 'checked' : ''}>
+                  <span>不导出（手工导出图包）</span>
+                </label>
               </div>
               <div id="${spriteRemoteWrapId}">
                 <input id="${spriteRemoteInputId}" type="text" value="${escapeHtml(spriteRemoteInputDefault)}"
@@ -2028,7 +2495,7 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
               </div>
             </div>
 
-            <div style="padding: 10px; border: 1px dashed #d1d5db; border-radius: 6px;">
+            <div style="padding: 10px; border: 1px dashed #d1d5db; border-radius: 6px; margin-bottom: 10px;">
               <div style="font-weight: 600; color: #374151; margin-bottom: 6px;">背景图包模式</div>
               <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
                 <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
@@ -2039,10 +2506,37 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
                   <input type="radio" name="${backgroundModeName}" value="remote" ${backgroundResourceModeDefault === 'remote' ? 'checked' : ''}>
                   <span>远程</span>
                 </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${backgroundModeName}" value="skip-export" ${backgroundResourceModeDefault === 'skip-export' ? 'checked' : ''}>
+                  <span>不导出（手工导出图包）</span>
+                </label>
               </div>
               <div id="${backgroundRemoteWrapId}">
                 <input id="${backgroundRemoteInputId}" type="text" value="${escapeHtml(backgroundRemoteInputDefault)}"
                        placeholder="例如 user/repo@main/backgrounds/ 或 https://.../remote_assets.json"
+                       style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
+              </div>
+            </div>
+
+            <div style="padding: 10px; border: 1px dashed #d1d5db; border-radius: 6px;">
+              <div style="font-weight: 600; color: #374151; margin-bottom: 6px;">CG 资源模式（special-cgs）</div>
+              <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${specialCgModeName}" value="local" ${specialCgResourceModeDefault === 'local' ? 'checked' : ''}>
+                  <span>本地</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${specialCgModeName}" value="remote" ${specialCgResourceModeDefault === 'remote' ? 'checked' : ''}>
+                  <span>远程</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; color: #333; cursor: pointer;">
+                  <input type="radio" name="${specialCgModeName}" value="skip-export" ${specialCgResourceModeDefault === 'skip-export' ? 'checked' : ''}>
+                  <span>不导出</span>
+                </label>
+              </div>
+              <div id="${specialCgRemoteWrapId}">
+                <input id="${specialCgRemoteInputId}" type="text" value="${escapeHtml(specialCgRemoteInputDefault)}"
+                       placeholder="例如 user/repo@main/special-cgs/ 或 https://.../remote_assets.json"
                        style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               </div>
             </div>
@@ -2115,7 +2609,97 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
               <span>导出 BGM 白名单设置</span>
             </label>
           </section>
+
+          <section style="padding: 12px; border: 1px solid #e9ecef; border-radius: 8px;">
+            <div style="font-weight: 700; color: #333; margin-bottom: 8px;">7) 资源子Tab访问控制（导出到角色卡）</div>
+            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #333; cursor: pointer;">
+              <input type="checkbox" id="${uiAccessEnabledId}" ${uiAccessEnabledDefault ? 'checked' : ''}>
+              <span>启用资源子Tab访问控制</span>
+            </label>
+            <div id="${uiAccessWrapId}" class="gal-card-export-access-wrap">
+              <div class="gal-card-export-access-label">默认隐藏的资源子Tab（未解锁时生效）</div>
+              <div class="gal-card-export-access-grid">
+                ${uiAccessTabOptionsHtml}
+              </div>
+              <div class="gal-card-export-access-row">
+                <span class="gal-card-export-access-label">解锁口令</span>
+                <input
+                  id="${uiAccessPasswordId}"
+                  type="password"
+                  class="gal-card-export-access-input"
+                  value="${escapeHtml(unlockPasswordDefault)}"
+                  placeholder="请输入解锁口令"
+                  autocomplete="off"
+                />
+                <div class="gal-card-export-access-hint">
+                  说明：当前实现为前端明文校验；修改口令或隐藏列表后，旧解锁状态会自动失效。
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
+        <style>
+          #${dialogId} .gal-card-export-access-wrap {
+            padding: 10px;
+            border: 1px dashed var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+            border-radius: 8px;
+            background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+            display: grid;
+            gap: 10px;
+          }
+          #${dialogId} .gal-card-export-access-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 8px;
+          }
+          #${dialogId} .gal-card-export-access-tab-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--SmartThemeBodyColor, #f5f7fa);
+            font-size: 0.86rem;
+            cursor: pointer;
+          }
+          #${dialogId} .gal-card-export-access-row {
+            display: grid;
+            gap: 6px;
+          }
+          #${dialogId} .gal-card-export-access-label {
+            color: var(--SmartThemeBodyColor, #1f2937);
+            font-size: 0.84rem;
+            font-weight: 600;
+          }
+          #${dialogId} .gal-card-export-access-hint {
+            color: var(--SmartThemeBodyColor, #dbe5f0);
+            font-size: 0.8rem;
+            line-height: 1.5;
+            opacity: 0.9;
+          }
+          #${dialogId} .gal-card-export-access-input[type='text'],
+          #${dialogId} .gal-card-export-access-input[type='password'] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 9px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+            background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+            color: var(--SmartThemeBodyColor, #f5f7fa);
+            caret-color: var(--SmartThemeBodyColor, #f5f7fa);
+            font-size: 0.92rem;
+            transition: border-color 0.18s ease, box-shadow 0.18s ease;
+          }
+          #${dialogId} .gal-card-export-access-input[type='text']::placeholder,
+          #${dialogId} .gal-card-export-access-input[type='password']::placeholder {
+            color: var(--SmartThemeBodyColor, #cbd5e1);
+            opacity: 0.9;
+          }
+          #${dialogId} .gal-card-export-access-input[type='text']:focus,
+          #${dialogId} .gal-card-export-access-input[type='password']:focus {
+            outline: none;
+            border-color: var(--SmartThemeEmColor, #9ac7ff);
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--SmartThemeEmColor, #9ac7ff) 35%, transparent);
+          }
+        </style>
         </div>
         <div class="gal-input-actions gal-modal-fixed-actions" style="display: flex; gap: 10px; margin: 0; padding: 12px 22px 16px 22px; border-top: 1px solid #eee;">
           <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
@@ -2140,6 +2724,8 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
     const $spriteRemoteInput = $dialog.find(`#${spriteRemoteInputId}`);
     const $backgroundRemoteWrap = $dialog.find(`#${backgroundRemoteWrapId}`);
     const $backgroundRemoteInput = $dialog.find(`#${backgroundRemoteInputId}`);
+    const $specialCgRemoteWrap = $dialog.find(`#${specialCgRemoteWrapId}`);
+    const $specialCgRemoteInput = $dialog.find(`#${specialCgRemoteInputId}`);
     const $live2dRemoteWrap = $dialog.find(`#${live2dRemoteWrapId}`);
     const $live2dRemoteInput = $dialog.find(`#${live2dRemoteInputId}`);
     const $pngBaseWrap = $dialog.find(`#${pngBaseWrapId}`);
@@ -2148,6 +2734,9 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
     const $pngBaseFileName = $dialog.find(`#${pngBaseFileNameId}`);
     const $characterSelect = $dialog.find(`#${characterSelectId}`);
     const $characterInput = $dialog.find(`#${characterInputId}`);
+    const $uiAccessEnabled = $dialog.find(`#${uiAccessEnabledId}`);
+    const $uiAccessWrap = $dialog.find(`#${uiAccessWrapId}`);
+    const $uiAccessPassword = $dialog.find(`#${uiAccessPasswordId}`);
     makeDraggable($box, $dialog.find('.gal-input-title'));
     if ($packSelect.length > 0) {
       $packSelect.val(selectedPackIdDefault);
@@ -2182,11 +2771,23 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
       $backgroundRemoteWrap.css('opacity', backgroundIsRemote ? 1 : 0.6);
       $backgroundRemoteWrap.css('pointer-events', backgroundIsRemote ? 'auto' : 'none');
 
+      const specialCgMode = String($dialog.find(`input[name="${specialCgModeName}"]:checked`).val() || 'local');
+      const specialCgIsRemote = specialCgMode === 'remote';
+      $specialCgRemoteInput.prop('disabled', !specialCgIsRemote);
+      $specialCgRemoteWrap.css('opacity', specialCgIsRemote ? 1 : 0.6);
+      $specialCgRemoteWrap.css('pointer-events', specialCgIsRemote ? 'auto' : 'none');
+
       const live2dMode = String($dialog.find(`input[name="${live2dModeName}"]:checked`).val() || 'local');
       const live2dIsRemote = live2dMode === 'remote';
       $live2dRemoteInput.prop('disabled', !live2dIsRemote);
       $live2dRemoteWrap.css('opacity', live2dIsRemote ? 1 : 0.6);
       $live2dRemoteWrap.css('pointer-events', live2dIsRemote ? 'auto' : 'none');
+
+      const uiAccessEnabled = !!$uiAccessEnabled.prop('checked');
+      $uiAccessWrap.css('opacity', uiAccessEnabled ? 1 : 0.86);
+      $uiAccessWrap.css('pointer-events', uiAccessEnabled ? 'auto' : 'none');
+      $uiAccessPassword.prop('disabled', !uiAccessEnabled);
+      $uiAccessWrap.find('.gal-card-export-hidden-tab').prop('disabled', !uiAccessEnabled);
     };
 
     let settled = false;
@@ -2289,6 +2890,19 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
           backgroundRemoteInput = resolvedBackgroundInput.value;
         }
 
+        const specialCgResourceMode = String($dialog.find(`input[name="${specialCgModeName}"]:checked`).val() || 'local');
+        const specialCgRemoteInputRaw = String($specialCgRemoteInput.val() || '').trim();
+        let specialCgRemoteInput = specialCgResourceMode === 'remote' ? specialCgRemoteInputRaw : '';
+        if (specialCgResourceMode === 'remote') {
+          const resolvedSpecialCgInput = resolveRemoteAddressInput(specialCgRemoteInputRaw, remoteUseCdn);
+          if (!resolvedSpecialCgInput.ok) {
+            showToast(`CG 远程地址无效：${resolvedSpecialCgInput.error}`);
+            $specialCgRemoteInput.trigger('focus');
+            return;
+          }
+          specialCgRemoteInput = resolvedSpecialCgInput.value;
+        }
+
         const live2dResourceMode = String($dialog.find(`input[name="${live2dModeName}"]:checked`).val() || 'local');
         const live2dRemoteInputRaw = String($live2dRemoteInput.val() || '').trim();
         let live2dRemoteInput = live2dResourceMode === 'remote' ? live2dRemoteInputRaw : '';
@@ -2302,13 +2916,26 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
           live2dRemoteInput = resolvedLive2dInput.value;
         }
 
-        const remoteInput = spriteRemoteInput || backgroundRemoteInput || live2dRemoteInput || '';
+        const remoteInput = spriteRemoteInput || backgroundRemoteInput || specialCgRemoteInput || live2dRemoteInput || '';
         const includeLocalLive2dPlaceholder = live2dResourceMode === 'remote'
           ? true
           : includeLocalLive2dPlaceholderDefault;
 
         const includeCustomModuleSettings = !!$dialog.find(`#${includeCustomId}`).prop('checked');
         const includeBgmSettings = !!$dialog.find(`#${includeBgmId}`).prop('checked');
+        const uiAccessEnabled = !!$uiAccessEnabled.prop('checked');
+        const hiddenAssetTabs = normalizeAssetTabAccessList(
+          $uiAccessWrap
+            .find('.gal-card-export-hidden-tab:checked')
+            .map((_, node) => String($(node).val() || '').trim())
+            .get(),
+        );
+        const unlockPassword = String($uiAccessPassword.val() || '').trim();
+        if (uiAccessEnabled && hiddenAssetTabs.length > 0 && !unlockPassword) {
+          showToast('启用资源子Tab访问控制后，请输入解锁口令');
+          $uiAccessPassword.trigger('focus');
+          return;
+        }
 
         const result = {
           characterName,
@@ -2321,12 +2948,17 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
           spriteRemoteInput,
           backgroundResourceMode,
           backgroundRemoteInput,
+          specialCgResourceMode,
+          specialCgRemoteInput,
           live2dResourceMode,
           live2dRemoteInput,
           remoteUseCdn,
           includeLocalLive2dPlaceholder,
           includeCustomModuleSettings,
           includeBgmSettings,
+          uiAccessEnabled,
+          hiddenAssetTabs,
+          unlockPassword,
         };
 
         saveCardExportPrefs({
@@ -2339,12 +2971,17 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
           spriteRemoteInput,
           backgroundResourceMode,
           backgroundRemoteInput,
+          specialCgResourceMode,
+          specialCgRemoteInput,
           live2dResourceMode,
           live2dRemoteInput,
           remoteUseCdn,
           includeLocalLive2dPlaceholder,
           includeCustomModuleSettings,
           includeBgmSettings,
+          uiAccessEnabled,
+          hiddenAssetTabs,
+          unlockPassword,
         });
 
         done(result);
@@ -2360,7 +2997,9 @@ export async function showCharacterCardExportConfigDialog(options = {}) {
     $dialog.find(`input[name="${outputFormatName}"]`).on('change', syncState);
     $dialog.find(`input[name="${spriteModeName}"]`).on('change', syncState);
     $dialog.find(`input[name="${backgroundModeName}"]`).on('change', syncState);
+    $dialog.find(`input[name="${specialCgModeName}"]`).on('change', syncState);
     $dialog.find(`input[name="${live2dModeName}"]`).on('change', syncState);
+    $uiAccessEnabled.on('change', syncState);
     const updatePngFileLabel = () => {
       const inputEl = $pngBaseInput.get(0);
       const pickedFile = inputEl && inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
@@ -2631,12 +3270,17 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     let spriteRemoteInput = options.spriteRemoteInput || '';
     let backgroundResourceMode = options.backgroundResourceMode;
     let backgroundRemoteInput = options.backgroundRemoteInput || '';
+    let specialCgResourceMode = options.specialCgResourceMode;
+    let specialCgRemoteInput = options.specialCgRemoteInput || '';
     let live2dResourceMode = options.live2dResourceMode;
     let live2dRemoteInput = options.live2dRemoteInput || '';
     let remoteUseCdn = options.remoteUseCdn;
     let includeLocalLive2dPlaceholder = options.includeLocalLive2dPlaceholder;
     let includeCustomModuleSettings = options.includeCustomModuleSettings;
     let includeBgmSettings = options.includeBgmSettings;
+    let uiAccessEnabled = options.uiAccessEnabled;
+    let hiddenAssetTabs = normalizeAssetTabAccessList(options.hiddenAssetTabs);
+    let unlockPassword = options.unlockPassword || '';
 
     if (interactive) {
       const exportParams = await showCharacterCardExportConfigDialog({
@@ -2649,12 +3293,17 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
         spriteRemoteInput,
         backgroundResourceMode,
         backgroundRemoteInput,
+        specialCgResourceMode,
+        specialCgRemoteInput,
         live2dResourceMode,
         live2dRemoteInput,
         remoteUseCdn,
         includeLocalLive2dPlaceholder,
         includeCustomModuleSettings,
         includeBgmSettings,
+        uiAccessEnabled,
+        hiddenAssetTabs,
+        unlockPassword,
       });
       if (!exportParams) {
         showToast('已取消导出角色卡');
@@ -2670,26 +3319,36 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       spriteRemoteInput = exportParams.spriteRemoteInput || '';
       backgroundResourceMode = exportParams.backgroundResourceMode;
       backgroundRemoteInput = exportParams.backgroundRemoteInput || '';
+      specialCgResourceMode = exportParams.specialCgResourceMode;
+      specialCgRemoteInput = exportParams.specialCgRemoteInput || '';
       live2dResourceMode = exportParams.live2dResourceMode;
       live2dRemoteInput = exportParams.live2dRemoteInput || '';
       remoteUseCdn = exportParams.remoteUseCdn;
       includeLocalLive2dPlaceholder = exportParams.includeLocalLive2dPlaceholder;
       includeCustomModuleSettings = exportParams.includeCustomModuleSettings;
       includeBgmSettings = exportParams.includeBgmSettings;
+      uiAccessEnabled = exportParams.uiAccessEnabled;
+      hiddenAssetTabs = normalizeAssetTabAccessList(exportParams.hiddenAssetTabs);
+      unlockPassword = exportParams.unlockPassword || '';
     }
 
     if (includeAllPacks === undefined) includeAllPacks = true;
     if (!selectedPackId) selectedPackId = getCurrentPackId() || DEFAULT_PACK_ID;
     if (!spriteRemoteInput && remoteInput) spriteRemoteInput = remoteInput;
     if (!backgroundRemoteInput && remoteInput) backgroundRemoteInput = remoteInput;
+    if (!specialCgRemoteInput && remoteInput) specialCgRemoteInput = remoteInput;
     if (spriteResourceMode === undefined || spriteResourceMode === null || spriteResourceMode === '') {
       spriteResourceMode = spriteRemoteInput ? 'remote' : 'local';
     }
     if (backgroundResourceMode === undefined || backgroundResourceMode === null || backgroundResourceMode === '') {
       backgroundResourceMode = backgroundRemoteInput ? 'remote' : 'local';
     }
-    spriteResourceMode = normalizeRemoteMode(spriteResourceMode);
-    backgroundResourceMode = normalizeRemoteMode(backgroundResourceMode);
+    if (specialCgResourceMode === undefined || specialCgResourceMode === null || specialCgResourceMode === '') {
+      specialCgResourceMode = specialCgRemoteInput ? 'remote' : 'local';
+    }
+    spriteResourceMode = normalizeRemoteMode(spriteResourceMode, { allowSkipExport: true });
+    backgroundResourceMode = normalizeRemoteMode(backgroundResourceMode, { allowSkipExport: true });
+    specialCgResourceMode = normalizeRemoteMode(specialCgResourceMode, { allowSkipExport: true });
     if (!live2dRemoteInput && remoteInput) live2dRemoteInput = remoteInput;
     if (live2dResourceMode === undefined || live2dResourceMode === null || live2dResourceMode === '') {
       live2dResourceMode = live2dRemoteInput ? 'remote' : 'local';
@@ -2710,6 +3369,13 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       }
       backgroundRemoteInput = resolvedBackgroundInput.value;
     }
+    if (specialCgResourceMode === 'remote') {
+      const resolvedSpecialCgInput = resolveRemoteAddressInput(specialCgRemoteInput, remoteUseCdn);
+      if (!resolvedSpecialCgInput.ok) {
+        throw new Error(`CG 资源模式设置为远程，但远程地址无效：${resolvedSpecialCgInput.error}`);
+      }
+      specialCgRemoteInput = resolvedSpecialCgInput.value;
+    }
     if (live2dResourceMode === 'remote') {
       const resolvedLive2dInput = resolveRemoteAddressInput(live2dRemoteInput, remoteUseCdn);
       if (!resolvedLive2dInput.ok) {
@@ -2717,10 +3383,13 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       }
       live2dRemoteInput = resolvedLive2dInput.value;
     }
-    remoteInput = spriteRemoteInput || backgroundRemoteInput || live2dRemoteInput || remoteInput;
+    remoteInput = spriteRemoteInput || backgroundRemoteInput || specialCgRemoteInput || live2dRemoteInput || remoteInput;
     if (includeLocalLive2dPlaceholder === undefined) includeLocalLive2dPlaceholder = true;
     if (includeCustomModuleSettings === undefined) includeCustomModuleSettings = true;
     if (includeBgmSettings === undefined) includeBgmSettings = true;
+    if (uiAccessEnabled === undefined) uiAccessEnabled = false;
+    hiddenAssetTabs = normalizeAssetTabAccessList(hiddenAssetTabs);
+    unlockPassword = String(unlockPassword || '').trim();
     outputFormat = normalizeExportOutputFormat(outputFormat);
     if (!Number.isFinite(Number(pngPrettyJsonIndent))) {
       pngPrettyJsonIndent = 2;
@@ -2759,11 +3428,16 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       spriteRemoteInput,
       backgroundResourceMode,
       backgroundRemoteInput,
+      specialCgResourceMode,
+      specialCgRemoteInput,
       live2dResourceMode,
       live2dRemoteInput,
       includeLocalLive2dPlaceholder,
       includeCustomModuleSettings,
       includeBgmSettings,
+      uiAccessEnabled,
+      hiddenAssetTabs,
+      unlockPassword,
       onProgress: updateProgress,
     });
     const appendExportNotice = (notice) => {
@@ -2881,9 +3555,11 @@ export async function importAssetsFromJson(file, targetPackId = null) {
   try {
     const text = await file.text();
     const json = JSON.parse(text);
+    const { rawJson, pluginConfig } = extractImportPayloadFromJson(json);
+    const payload = pluginConfig && typeof pluginConfig === 'object' ? pluginConfig : rawJson;
 
     if (!targetPackId) {
-      const suggestedName = json.packageName || json.name;
+      const suggestedName = payload?.packageName || payload?.name || rawJson?.packageName || rawJson?.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
         showToast('已取消导入');
@@ -2906,9 +3582,10 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       }
     };
 
-    const embeddedSprites = Array.isArray(json?.assets?.embedded?.sprites)
-      ? json.assets.embedded.sprites
-      : [];
+    const embeddedSprites = [
+      ...(Array.isArray(payload?.assets?.embedded?.sprites) ? payload.assets.embedded.sprites : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.assets?.embedded?.sprites) ? rawJson.assets.embedded.sprites : []),
+    ];
     for (const rawSprite of embeddedSprites) {
       const characterId = String(rawSprite?.characterId || '').trim();
       const expression = String(rawSprite?.expression || '').trim();
@@ -2945,28 +3622,32 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       }
     }
 
-    if (Array.isArray(json?.sprites)) {
-      for (const s of json.sprites) {
-        const characterId = String(s?.characterId || '').trim();
-        const expression = String(s?.expression || '').trim();
-        const remoteUrl = String(s?.url || s?.imageUrl || '').trim();
-        if (!characterId || !expression || !remoteUrl) continue;
-        const key = `${characterId}__${expression}`.toLowerCase();
-        if (importedSpriteKeys.has(key)) continue;
-        await saveSprite(characterId, expression, null, remoteUrl, targetPackId);
-        importedSpriteKeys.add(key);
-        registerExpression(expression);
-        count++;
-      }
+    const remoteSprites = [
+      ...(Array.isArray(payload?.sprites) ? payload.sprites : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.sprites) ? rawJson.sprites : []),
+    ];
+    for (const s of remoteSprites) {
+      const characterId = String(s?.characterId || '').trim();
+      const expression = String(s?.expression || '').trim();
+      const remoteUrl = String(s?.url || s?.imageUrl || '').trim();
+      if (!characterId || !expression || !remoteUrl) continue;
+      const key = `${characterId}__${expression}`.toLowerCase();
+      if (importedSpriteKeys.has(key)) continue;
+      await saveSprite(characterId, expression, null, remoteUrl, targetPackId);
+      importedSpriteKeys.add(key);
+      registerExpression(expression);
+      count++;
     }
+
     if (newExpressions.length > 0) {
       saveCustomExpressions(customs);
       console.log(`[${SCRIPT_NAME}] 自动注册表情标签: ${newExpressions.join(', ')}`);
     }
 
-    const embeddedBackgrounds = Array.isArray(json?.assets?.embedded?.backgrounds)
-      ? json.assets.embedded.backgrounds
-      : [];
+    const embeddedBackgrounds = [
+      ...(Array.isArray(payload?.assets?.embedded?.backgrounds) ? payload.assets.embedded.backgrounds : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.assets?.embedded?.backgrounds) ? rawJson.assets.embedded.backgrounds : []),
+    ];
     for (const rawBackground of embeddedBackgrounds) {
       const sceneName = String(rawBackground?.sceneName || '').trim();
       if (!sceneName) continue;
@@ -3001,20 +3682,86 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       }
     }
 
-    if (Array.isArray(json?.backgrounds)) {
-      for (const bg of json.backgrounds) {
-        const sceneName = String(bg?.sceneName || '').trim();
-        const remoteUrl = String(bg?.url || bg?.imageUrl || '').trim();
-        if (!sceneName || !remoteUrl) continue;
-        const key = sceneName.toLowerCase();
-        if (importedBackgroundKeys.has(key)) continue;
-        await saveBackground(sceneName, null, remoteUrl, targetPackId);
-        importedBackgroundKeys.add(key);
+    const remoteBackgrounds = [
+      ...(Array.isArray(payload?.backgrounds) ? payload.backgrounds : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.backgrounds) ? rawJson.backgrounds : []),
+    ];
+    for (const bg of remoteBackgrounds) {
+      const sceneName = String(bg?.sceneName || '').trim();
+      const remoteUrl = String(bg?.url || bg?.imageUrl || '').trim();
+      if (!sceneName || !remoteUrl) continue;
+      const key = sceneName.toLowerCase();
+      if (importedBackgroundKeys.has(key)) continue;
+      await saveBackground(sceneName, null, remoteUrl, targetPackId);
+      importedBackgroundKeys.add(key);
+      count++;
+    }
+
+    const importedSpecialCgKeys = new Set();
+    const specialCgList = [
+      ...(Array.isArray(payload?.assets?.embedded?.specialCgs) ? payload.assets.embedded.specialCgs : []),
+      ...(Array.isArray(payload?.specialCgs) ? payload.specialCgs : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.assets?.embedded?.specialCgs) ? rawJson.assets.embedded.specialCgs : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.specialCgs) ? rawJson.specialCgs : []),
+    ];
+    for (const rawCg of specialCgList) {
+      const meta = normalizeSpecialCgMetaRecord(rawCg) || parseSpecialCgMetaFromFilename(rawCg?.file || '');
+      const cgId = String(meta?.cgId || rawCg?.cgId || rawCg?.id || '').trim();
+      if (!cgId) continue;
+      const key = cgId.toLowerCase();
+      if (importedSpecialCgKeys.has(key)) continue;
+
+      const normalizedMeta = normalizeSpecialCgMetaRecord({
+        ...rawCg,
+        ...(meta || {}),
+        cgId,
+      }) || { cgId, name: cgId, description: '', tags: [], lastModified: '' };
+      const saveMeta = {
+        name: normalizedMeta.name,
+        description: normalizedMeta.description,
+        tags: normalizedMeta.tags,
+        lastModified: normalizedMeta.lastModified,
+      };
+
+      let imported = false;
+      const source = String(rawCg?.source || '').trim().toLowerCase();
+      const dataBase64 = String(rawCg?.dataBase64 || '').trim();
+      if ((source === 'embedded' || dataBase64) && dataBase64) {
+        const bytes = base64ToUint8Array(dataBase64);
+        if (bytes && bytes.byteLength > 0) {
+          const blob = new Blob([bytes], {
+            type: String(rawCg?.mimeType || 'application/octet-stream').trim() || 'application/octet-stream',
+          });
+          await saveSpecialCg(cgId, blob, null, saveMeta, targetPackId);
+          imported = true;
+        } else {
+          console.warn(`[${SCRIPT_NAME}] 跳过无效 CG base64: ${cgId}`);
+        }
+      }
+      if (!imported) {
+        const remoteUrl = String(rawCg?.url || rawCg?.imageUrl || '').trim();
+        if (remoteUrl) {
+          await saveSpecialCg(cgId, null, remoteUrl, saveMeta, targetPackId);
+          imported = true;
+        }
+      }
+      if (imported) {
+        importedSpecialCgKeys.add(key);
         count++;
       }
     }
+
     let mapImported = false;
-    const cardMapPayload = json?.custom?.mapImage || json?.custom?.mapAsset || json?.mapImage || json?.meta?.mapImage || null;
+    const cardMapPayload =
+      payload?.custom?.mapImage
+      || payload?.custom?.mapAsset
+      || rawJson?.custom?.mapImage
+      || rawJson?.custom?.mapAsset
+      || payload?.mapImage
+      || payload?.meta?.mapImage
+      || rawJson?.mapImage
+      || rawJson?.meta?.mapImage
+      || null;
     if (cardMapPayload) {
       try {
         mapImported = await applyImportedCardMapImagePayload(cardMapPayload, targetPackId);
@@ -3023,8 +3770,12 @@ export async function importAssetsFromJson(file, targetPackId = null) {
         console.warn(`[${SCRIPT_NAME}] 导入角色卡地图图片失败`, e);
       }
     }
-    if (!mapImported && Array.isArray(json.maps)) {
-      const mapCandidates = json.maps
+    const mapList = [
+      ...(Array.isArray(payload?.maps) ? payload.maps : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.maps) ? rawJson.maps : []),
+    ];
+    if (!mapImported && mapList.length > 0) {
+      const mapCandidates = mapList
         .map(rawMap => ({
           regionKey: String(rawMap?.regionKey || '').trim(),
           remoteUrl: String(rawMap?.url || rawMap?.imageUrl || '').trim(),
@@ -3036,55 +3787,77 @@ export async function importAssetsFromJson(file, targetPackId = null) {
         count++;
       }
     }
-    if (Array.isArray(json.uiSkins)) {
-      for (const rawItem of json.uiSkins) {
-        const meta = normalizeUiSkinMetaRecord(rawItem);
-        if (!meta) continue;
-        const remoteUrl = String(rawItem.url || rawItem.imageUrl || '').trim();
-        const payload = {
-          packId: targetPackId,
-          skinId: meta.skinId,
-          elementId: meta.elementId,
-          device: meta.device,
-          state: meta.state,
-          layout: meta.layout,
-          scaleMode: meta.scaleMode,
-          slice: meta.slice,
-          textPadding: meta.textPadding,
-          meta: meta.meta,
-        };
-        if (remoteUrl) {
-          payload.imageUrl = remoteUrl;
-          payload.imageBlob = null;
-        }
-        await saveUiSkinAsset(payload);
-        count++;
+    const uiSkinList = [
+      ...(Array.isArray(payload?.uiSkins) ? payload.uiSkins : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.uiSkins) ? rawJson.uiSkins : []),
+    ];
+    for (const rawItem of uiSkinList) {
+      const meta = normalizeUiSkinMetaRecord(rawItem);
+      if (!meta) continue;
+      const remoteUrl = String(rawItem.url || rawItem.imageUrl || '').trim();
+      const payloadRecord = {
+        packId: targetPackId,
+        skinId: meta.skinId,
+        elementId: meta.elementId,
+        device: meta.device,
+        state: meta.state,
+        layout: meta.layout,
+        scaleMode: meta.scaleMode,
+        slice: meta.slice,
+        textPadding: meta.textPadding,
+        meta: meta.meta,
+      };
+      if (remoteUrl) {
+        payloadRecord.imageUrl = remoteUrl;
+        payloadRecord.imageBlob = null;
       }
+      await saveUiSkinAsset(payloadRecord);
+      count++;
     }
-    const importedCharacterKeywords = json?.tts?.characterKeywords;
-    let restoredKeywordOwnerCount = 0;
-    if (importedCharacterKeywords && typeof importedCharacterKeywords === 'object' && !Array.isArray(importedCharacterKeywords)) {
-      const existingKeywordMap = getAllCharacterNameKeywords();
-      Object.keys(existingKeywordMap).forEach(characterKey => {
-        setCharacterNameKeywords(characterKey, []);
-      });
-      for (const [characterKey, keywordList] of Object.entries(importedCharacterKeywords)) {
-        const safeCharacterId = String(characterKey || '').trim();
-        if (!safeCharacterId) continue;
-        const savedKeywords = setCharacterNameKeywords(safeCharacterId, keywordList);
-        if (savedKeywords.length > 0) {
-          restoredKeywordOwnerCount++;
-        }
+
+    let pluginWriteResult = null;
+    if (pluginConfig && typeof pluginConfig === 'object') {
+      pluginWriteResult = await writeGalgamePluginConfigToCurrentCharacter(pluginConfig);
+      if (!pluginWriteResult.ok) {
+        console.warn(`[${SCRIPT_NAME}] 角色卡扩展写回失败`, pluginWriteResult);
       }
     }
 
-    const mapSettingsApplied = applyImportedMapSettings(json.mapSettings || json?.custom?.map || json?.meta?.mapSettings);
-    const keywordRestoreSuffix = restoredKeywordOwnerCount > 0 ? `，恢复 ${restoredKeywordOwnerCount} 个角色关键字` : '';
-    showToast(
-      mapSettingsApplied
-        ? `成功导入 ${count} 项资源${keywordRestoreSuffix}，并同步地图设置`
-        : `成功导入 ${count} 项资源${keywordRestoreSuffix}`,
+    const restoredLive2d = restoreImportedLive2dSettings(payload?.live2d || rawJson?.live2d);
+    const restoredTts = restoreImportedTtsSettings(payload?.tts || rawJson?.tts);
+    const restoredCustom = restoreImportedCustomModuleSettings(payload?.custom || rawJson?.custom);
+    const restoredBgm = restoreImportedBgmSettings(payload?.bgm || rawJson?.bgm);
+    const mapSettingsAppliedDirect = applyImportedMapSettings(
+      payload?.mapSettings
+      || payload?.meta?.mapSettings
+      || rawJson?.mapSettings
+      || rawJson?.meta?.mapSettings,
     );
+    const mapSettingsApplied = restoredCustom.mapSettingsApplied || mapSettingsAppliedDirect;
+
+    const summaryParts = [`成功导入 ${count} 项资源`];
+    if (importedSpecialCgKeys.size > 0) summaryParts.push(`CG ${importedSpecialCgKeys.size} 项`);
+    if (mapSettingsApplied) summaryParts.push('已同步地图设置');
+    if (restoredLive2d.restoredEnabledMapCount > 0 || restoredLive2d.restoredConfigCount > 0) {
+      summaryParts.push(`Live2D 映射 ${restoredLive2d.restoredEnabledMapCount}，配置 ${restoredLive2d.restoredConfigCount}`);
+    }
+    if (restoredBgm.restored) summaryParts.push(`BGM 白名单 ${restoredBgm.count}`);
+    if (restoredCustom.restoredCustomFields > 0) summaryParts.push(`自定义弹窗字段 ${restoredCustom.restoredCustomFields}`);
+    if (restoredTts.restoredEnabled || restoredTts.restoredVoiceCount > 0 || restoredTts.restoredKeywordCount > 0) {
+      summaryParts.push(`TTS 音色 ${restoredTts.restoredVoiceCount}，关键字 ${restoredTts.restoredKeywordCount}`);
+    }
+    showToast(summaryParts.join('，'));
+
+    const hasUiAccessConfig = !!(pluginConfig?.custom?.uiAccess && pluginConfig.custom.uiAccess.enabled);
+    if (hasUiAccessConfig) {
+      if (pluginWriteResult?.ok) {
+        showToast('已恢复角色卡 uiAccess 策略');
+      } else {
+        showToast('已执行本地恢复，但 uiAccess 需写回角色卡扩展后才会完全生效');
+      }
+    } else if (pluginConfig && pluginWriteResult && !pluginWriteResult.ok) {
+      showToast('检测到角色卡扩展但未能写回 current，本次仅执行本地恢复');
+    }
   } catch (e) {
     console.error('JSON导入失败', e);
     showToast('JSON导入失败: ' + e.message);
@@ -3127,6 +3900,7 @@ export const AssetIO = {
         packId: currentPackId,
         sprites: [],
         backgrounds: [],
+        specialCgs: [],
         maps: [],
         uiSkins: [],
         mapSettings: buildExportableMapSettings(),
@@ -3167,6 +3941,50 @@ export const AssetIO = {
             });
           }
         }
+      }
+
+      const specialCgs = await getAllSpecialCgs(currentPackId);
+      const specialCgManifest = [];
+      if (specialCgs.length > 0) {
+        const specialCgFolder = zip.folder('special-cgs');
+        for (const rawCg of specialCgs) {
+          const meta = normalizeSpecialCgMetaRecord(rawCg);
+          if (!meta) continue;
+          const manifestRecord = {
+            cgId: meta.cgId,
+            name: meta.name,
+            description: meta.description,
+            tags: meta.tags,
+            packId: String(rawCg?.packId || currentPackId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID,
+            lastModified: meta.lastModified || String(rawCg?.lastModified || '').trim(),
+          };
+          if (rawCg.imageBlob) {
+            const ext = String(rawCg.imageBlob.type || '').split('/')[1] || 'png';
+            const fileName = buildSpecialCgZipFilename(meta, ext);
+            specialCgFolder.file(fileName, rawCg.imageBlob);
+            manifestRecord.file = fileName;
+            if (remoteBaseUrl) {
+              remoteConfig.specialCgs.push({
+                ...manifestRecord,
+                url: `${baseUrl}special-cgs/${fileName}`,
+              });
+            }
+          } else {
+            const remoteUrl = String(rawCg.imageUrl || '').trim();
+            if (!remoteUrl) continue;
+            manifestRecord.imageUrl = remoteUrl;
+            if (remoteBaseUrl) {
+              remoteConfig.specialCgs.push({
+                ...manifestRecord,
+                url: remoteUrl,
+              });
+            }
+          }
+          specialCgManifest.push(manifestRecord);
+        }
+      }
+      if (specialCgManifest.length > 0) {
+        zip.file('special-cgs/manifest.json', JSON.stringify({ version: '1.0', assets: specialCgManifest }, null, 2));
       }
 
       const allMaps = await getAllMapImages(currentPackId);
@@ -3279,6 +4097,7 @@ export const AssetIO = {
         packId: currentPackId,
         spriteCount: sprites.length,
         backgroundCount: backgrounds.length,
+        specialCgCount: specialCgs.length,
         mapCount: maps.length,
         uiSkinCount: uiSkinAssets.length,
         mapSettings: remoteConfig.mapSettings,
@@ -3299,7 +4118,7 @@ export const AssetIO = {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${maps.length} 张地图，${uiSkinAssets.length} 个皮肤元素`);
+      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${specialCgs.length} 个 CG，${maps.length} 张地图，${uiSkinAssets.length} 个皮肤元素`);
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
       showToast('导出失败: ' + e.message);
@@ -3322,6 +4141,7 @@ export const AssetIO = {
         const path = file.webkitRelativePath || file.name;
         const isSpriteFolder = path.includes('sprites/');
         const isBgFolder = path.includes('backgrounds/');
+        const isSpecialCgFolder = path.includes('special-cgs/');
         const isMapFolder = path.includes('maps/');
         let imported = false;
         if (isSpriteFolder) {
@@ -3329,6 +4149,9 @@ export const AssetIO = {
           imported = true;
         } else if (isBgFolder) {
           await this.importAsBackground(file, targetPackId);
+          imported = true;
+        } else if (isSpecialCgFolder) {
+          await this.importAsSpecialCg(file, targetPackId);
           imported = true;
         } else if (isMapFolder) {
           await this.importAsMap(file, targetPackId);
@@ -3371,7 +4194,7 @@ export const AssetIO = {
         return;
       }
     }
-    throw new Error('鏂囦欢鍚嶆牸寮忎笉鍖归厤 Name_Expression.ext');
+    throw new Error('文件名格式不匹配 Name_Expression.ext');
   },
   async importAsBackground(file, packId = null) {
     const fileName = file.name.split('/').pop();
@@ -3386,6 +4209,25 @@ export const AssetIO = {
     if (!fileName) return;
     await saveUnifiedMapImage(file, null, packId);
     console.log(`[${SCRIPT_NAME}] 导入统一世界地图: ${fileName}`);
+  },
+  async importAsSpecialCg(file, packId = null) {
+    const fileName = file.name.split('/').pop();
+    const meta = parseSpecialCgMetaFromFilename(fileName);
+    if (!meta?.cgId) {
+      throw new Error('CG 文件名格式不匹配 {cgId}.ext');
+    }
+    await saveSpecialCg(
+      meta.cgId,
+      file,
+      null,
+      {
+        name: meta.name,
+        description: meta.description,
+        tags: meta.tags,
+      },
+      packId,
+    );
+    console.log(`[${SCRIPT_NAME}] 导入 CG: ${meta.cgId}`);
   },
   async importFromGitHub(repoUrl, targetPackId = null) {
     try {
@@ -3419,7 +4261,7 @@ export const AssetIO = {
         }
       }
       if (!owner || !repo) {
-        throw new Error('鏃犳晥鐨?GitHub 浠撳簱鍦板潃');
+        throw new Error('无效的 GitHub 仓库地址');
       }
       showToast(`正在获取文件列表: ${owner}/${repo}...`);
       const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
@@ -3443,6 +4285,8 @@ export const AssetIO = {
           const itemPath = String(item.path || item.name || '').toLowerCase();
           if (itemPath.includes('/maps/') || itemPath.startsWith('maps/')) {
             await this.importAsMap(file, targetPackId);
+          } else if (itemPath.includes('/special-cgs/') || itemPath.startsWith('special-cgs/')) {
+            await this.importAsSpecialCg(file, targetPackId);
           } else if (item.name.includes('_')) {
             await this.importAsSprite(file, targetPackId);
           } else {
@@ -3533,7 +4377,7 @@ export async function importFromZipFile(file) {
       onprogress: event => {
         if (isCancelled) return;
         const percent = Math.round(event.percent || 0);
-        progressController.update(percent, `瑙ｅ帇涓?.. ${percent}%`);
+        progressController.update(percent, `解压中... ${percent}%`);
       },
     });
 
@@ -3578,7 +4422,7 @@ export async function importFromRemoteZip(url) {
     const MAX_SIZE = 5 * 1024 * 1024 * 1024;
 
     if (contentLength && parseInt(contentLength) > MAX_SIZE) {
-      throw new Error(`鏂囦欢澶у皬 ${(parseInt(contentLength) / 1024 / 1024 / 1024).toFixed(2)} GB 瓒呰繃 5GB 闄愬埗`);
+      throw new Error(`文件大小 ${(parseInt(contentLength) / 1024 / 1024 / 1024).toFixed(2)} GB 超过 5GB 限制`);
     }
 
     const reader = response.body.getReader();
@@ -3682,7 +4526,7 @@ export async function showImportPackSelector(suggestedName = null) {
                 <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
                 <span style="font-weight: 600; color: #2b2e38;">创建新图包</span>
               </label>
-              <input type="text" id="gal-import-new-pack-name" disabled placeholder="杈撳叆鏂板浘鍖呭悕绉? value="${defaultNewName}"
+              <input type="text" id="gal-import-new-pack-name" disabled placeholder="输入新图包名称" value="${defaultNewName}"
                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
             </div>
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
@@ -3760,6 +4604,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
   const hasBackgroundsDir = zipPaths.some(path => path.startsWith('backgrounds/'));
   const hasMapsDir = zipPaths.some(path => path.startsWith('maps/'));
   const hasUiSkinsDir = zipPaths.some(path => path.startsWith('ui-skins/'));
+  const hasSpecialCgsDir = zipPaths.some(path => path.startsWith('special-cgs/'));
 
   let packageInfo = null;
   const infoFile = zip.file('package_info.json');
@@ -3801,6 +4646,20 @@ export async function processZipContents(zip, progressController, isCancelledChe
     }
   }
 
+  let specialCgManifestAssets = [];
+  const specialCgManifestFile = zip.file('special-cgs/manifest.json');
+  if (specialCgManifestFile) {
+    try {
+      const manifestText = await specialCgManifestFile.async('text');
+      const manifestJson = JSON.parse(manifestText);
+      if (Array.isArray(manifestJson?.assets)) {
+        specialCgManifestAssets = manifestJson.assets;
+      }
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 读取 special-cgs/manifest.json 失败:`, e);
+    }
+  }
+
   const uiSkinManifestByFile = new Map();
   const uiSkinManifestUrlOnly = [];
   uiSkinManifestAssets.forEach(item => {
@@ -3837,8 +4696,39 @@ export async function processZipContents(zip, progressController, isCancelledChe
     }
   });
 
-  if (!hasSpritesDir && !hasBackgroundsDir && !hasMapsDir && !hasUiSkinsDir && uiSkinManifestUrlOnly.length === 0 && mapManifestUrlOnly.length === 0) {
-    throw new Error('ZIP 包格式错误：需包含 sprites/、backgrounds/、maps/ 或 ui-skins/ 目录');
+  const specialCgManifestByFile = new Map();
+  const specialCgManifestUrlOnly = [];
+  specialCgManifestAssets.forEach(item => {
+    const meta = normalizeSpecialCgMetaRecord(item);
+    if (!meta) return;
+    const fileName = String(item?.file || '').trim();
+    const imageUrl = String(item?.imageUrl || item?.url || '').trim();
+    const payload = {
+      ...meta,
+      imageUrl,
+      lastModified: meta.lastModified || String(item?.lastModified || '').trim(),
+    };
+    if (fileName) {
+      specialCgManifestByFile.set(fileName, payload);
+      specialCgManifestByFile.set(`special-cgs/${fileName}`, payload);
+      return;
+    }
+    if (imageUrl) {
+      specialCgManifestUrlOnly.push(payload);
+    }
+  });
+
+  if (
+    !hasSpritesDir
+    && !hasBackgroundsDir
+    && !hasMapsDir
+    && !hasUiSkinsDir
+    && !hasSpecialCgsDir
+    && uiSkinManifestUrlOnly.length === 0
+    && mapManifestUrlOnly.length === 0
+    && specialCgManifestUrlOnly.length === 0
+  ) {
+    throw new Error('ZIP 包格式错误：需包含 sprites/、backgrounds/、special-cgs/、maps/ 或 ui-skins/ 目录');
   }
 
   if (!targetPackId) {
@@ -3855,19 +4745,20 @@ export async function processZipContents(zip, progressController, isCancelledChe
     if (zipEntry.dir) return;
     const isSprite = relativePath.startsWith('sprites/');
     const isBackground = relativePath.startsWith('backgrounds/');
+    const isSpecialCg = relativePath.startsWith('special-cgs/');
     const isMap = relativePath.startsWith('maps/');
     const isUiSkin = relativePath.startsWith('ui-skins/');
-    if (!isSprite && !isBackground && !isMap && !isUiSkin) return;
+    if (!isSprite && !isBackground && !isSpecialCg && !isMap && !isUiSkin) return;
     const ext = relativePath.split('.').pop().toLowerCase();
     if (!['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) return;
     imageFiles.push({
       path: relativePath,
       entry: zipEntry,
-      type: isSprite ? 'sprite' : isBackground ? 'background' : isMap ? 'map' : 'ui-skin',
+      type: isSprite ? 'sprite' : isBackground ? 'background' : isSpecialCg ? 'special-cg' : isMap ? 'map' : 'ui-skin',
     });
   });
 
-  const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + mapManifestUrlOnly.length;
+  const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
   if (totalItems === 0) {
     throw new Error('ZIP 包中未找到有效资源文件');
   }
@@ -3887,6 +4778,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
     const batch = imageFiles.slice(i, i + BATCH_SIZE);
     const spriteBatch = [];
     const backgroundBatch = [];
+    const specialCgBatch = [];
     const mapBatch = [];
     const uiSkinBatch = [];
 
@@ -3910,6 +4802,20 @@ export async function processZipContents(zip, progressController, isCancelledChe
           if (item.type === 'background') {
             const sceneName = fileName.substring(0, fileName.lastIndexOf('.'));
             backgroundBatch.push({ sceneName, imageBlob: blob });
+            return;
+          }
+
+          if (item.type === 'special-cg') {
+            const manifestMeta = specialCgManifestByFile.get(item.path) || specialCgManifestByFile.get(fileName);
+            const parsedMeta = manifestMeta || parseSpecialCgMetaFromFilename(fileName);
+            if (!parsedMeta) {
+              throw new Error('无法解析 CG 文件名，请提供 special-cgs/manifest.json');
+            }
+            specialCgBatch.push({
+              ...parsedMeta,
+              imageBlob: blob,
+              imageUrl: null,
+            });
             return;
           }
 
@@ -3969,6 +4875,25 @@ export async function processZipContents(zip, progressController, isCancelledChe
       await saveBackgroundsBatch(backgroundBatch, targetPackId);
     }
 
+    if (specialCgBatch.length > 0) {
+      await Promise.all(
+        specialCgBatch.map(item =>
+          saveSpecialCg(
+            item.cgId,
+            item.imageBlob || null,
+            item.imageUrl || null,
+            {
+              name: item.name,
+              description: item.description,
+              tags: item.tags,
+              lastModified: item.lastModified,
+            },
+            targetPackId,
+          ),
+        ),
+      );
+    }
+
     if (mapBatch.length > 0) {
       const preferredMap = mapBatch.find(item => String(item?.regionKey || '').trim() === GLOBAL_MAP_REGION_KEY) || mapBatch[mapBatch.length - 1];
       await saveUnifiedMapImage(preferredMap?.imageBlob || null, preferredMap?.imageUrl || null, targetPackId);
@@ -3995,7 +4920,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
       );
     }
 
-    successCount += spriteBatch.length + backgroundBatch.length + (mapBatch.length > 0 ? 1 : 0) + uiSkinBatch.length;
+    successCount += spriteBatch.length + backgroundBatch.length + specialCgBatch.length + (mapBatch.length > 0 ? 1 : 0) + uiSkinBatch.length;
     const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
     const percent = Math.round((processed / totalItems) * 100);
     progressController.update(percent, `导入中... ${processed}/${totalItems} (文件资源)`);
@@ -4034,6 +4959,36 @@ export async function processZipContents(zip, progressController, isCancelledChe
   }
 
   if (!isCancelledCheck || !isCancelledCheck()) {
+    for (let i = 0; i < specialCgManifestUrlOnly.length; i++) {
+      if (isCancelledCheck && isCancelledCheck()) {
+        console.log(`[${SCRIPT_NAME}] 导入已取消`);
+        return;
+      }
+      const item = specialCgManifestUrlOnly[i];
+      try {
+        await saveSpecialCg(
+          item.cgId,
+          null,
+          item.imageUrl,
+          {
+            name: item.name,
+            description: item.description,
+            tags: item.tags,
+            lastModified: item.lastModified,
+          },
+          targetPackId,
+        );
+        successCount++;
+      } catch (e) {
+        failedItems.push({ path: `special-cgs/${item.cgId}`, error: e.message });
+      }
+      const processed = imageFiles.length + uiSkinManifestUrlOnly.length + i + 1;
+      const percent = Math.round((processed / totalItems) * 100);
+      progressController.update(percent, `导入中... ${processed}/${totalItems} (CG链接)`);
+    }
+  }
+
+  if (!isCancelledCheck || !isCancelledCheck()) {
     if (isCancelledCheck && isCancelledCheck()) {
       console.log(`[${SCRIPT_NAME}] 导入已取消`);
       return;
@@ -4046,7 +5001,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
       } catch (e) {
         failedItems.push({ path: `maps/${preferredMap.regionKey || GLOBAL_MAP_REGION_KEY}`, error: e.message });
       }
-      const processed = imageFiles.length + uiSkinManifestUrlOnly.length + mapManifestUrlOnly.length;
+      const processed = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
       const percent = Math.round((processed / totalItems) * 100);
       progressController.update(percent, `导入中... ${processed}/${totalItems} (地图链接)`);
     }

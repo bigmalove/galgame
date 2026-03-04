@@ -348,7 +348,17 @@ export function adjustGameContentScale() {
   if (!overlay) return;
 
   if (overlay.classList.contains('fullscreen')) {
-    overlay.style.setProperty('--ui-scale', '1');
+    const fullscreenScale = 1;
+    const currentFullscreenScale = parseFloat(overlay.style.getPropertyValue('--ui-scale')) || 0;
+    const currentFullscreenBase = parseFloat(overlay.style.getPropertyValue('--ui-scale-base')) || 0;
+    if (
+      Math.abs(currentFullscreenScale - fullscreenScale) >= 0.001 ||
+      Math.abs(currentFullscreenBase - fullscreenScale) >= 0.001
+    ) {
+      overlay.style.setProperty('--ui-auto-scale', '1');
+      overlay.style.setProperty('--ui-scale-base', '1');
+      overlay.style.setProperty('--ui-scale', String(fullscreenScale));
+    }
     resizePixiEffects();
     return;
   }
@@ -359,11 +369,22 @@ export function adjustGameContentScale() {
   if (!width || !Number.isFinite(width)) return;
 
   const baseWidth = 1200;
-  const newScale = Math.max(0.01, Math.min(1, width / baseWidth));
+  const autoScale = Math.max(0.01, Math.min(1, width / baseWidth));
+  const newScale = autoScale;
 
   const currentScale = parseFloat(overlay.style.getPropertyValue('--ui-scale')) || 0;
-  if (Math.abs(currentScale - newScale) < 0.001) return;
+  const currentAutoScale = parseFloat(overlay.style.getPropertyValue('--ui-auto-scale')) || 0;
+  const currentBaseScale = parseFloat(overlay.style.getPropertyValue('--ui-scale-base')) || 0;
+  if (
+    Math.abs(currentScale - newScale) < 0.001 &&
+    Math.abs(currentAutoScale - autoScale) < 0.001 &&
+    Math.abs(currentBaseScale - newScale) < 0.001
+  ) {
+    return;
+  }
 
+  overlay.style.setProperty('--ui-auto-scale', String(autoScale));
+  overlay.style.setProperty('--ui-scale-base', String(newScale));
   overlay.style.setProperty('--ui-scale', String(newScale));
   resizePixiEffects();
 }
@@ -372,6 +393,8 @@ export function resetGameContentScale() {
   const targetDoc = topWindow.document;
   const overlay = targetDoc.getElementById('gal-global-overlay');
   if (overlay) {
+    overlay.style.setProperty('--ui-auto-scale', '1');
+    overlay.style.setProperty('--ui-scale-base', '1');
     overlay.style.setProperty('--ui-scale', '1');
   }
 

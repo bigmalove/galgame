@@ -1,7 +1,8 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
-import { ensureTitleScreenSettings, getCurrentCharId } from '../core/settings.js';
+import { ensureTitleScreenSettings, getCurrentCharId, getUnlockedSpecialCgIdsForChar } from '../core/settings.js';
 import { getBackground } from '../db/backgrounds.js';
+import { getSpecialCg, getSpecialCgRecord } from '../db/special-cgs.js';
 import { ensureGlobalOverlay } from './overlay.js';
 import { showSaveLoadModal } from './save-load-modal.js';
 import { showSettingsPanel } from './settings-panel.js';
@@ -11,6 +12,16 @@ const DEFAULT_TITLE_SCENE = '__title__';
 
 let hasShownInCurrentSession = false;
 let lastShownCharId = '';
+let cgGalleryLoadToken = 0;
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function resolveCurrentCharId() {
   return String(getCurrentCharId() || 'default').trim() || 'default';
@@ -44,8 +55,24 @@ function ensureTitleScreenElement() {
       </div>
       <div class="gal-title-screen-actions">
         <button type="button" class="gal-title-screen-btn primary" data-action="start"></button>
+        <button type="button" class="gal-title-screen-btn" data-action="cg-gallery">CG图鉴</button>
         <button type="button" class="gal-title-screen-btn" data-action="settings">设置</button>
         <button type="button" class="gal-title-screen-btn" data-action="load">读档</button>
+      </div>
+    </div>
+    <div class="gal-title-cg-gallery" aria-hidden="true">
+      <div class="gal-title-cg-gallery-panel" role="dialog" aria-modal="true" aria-label="CG图鉴">
+        <div class="gal-title-cg-gallery-header">
+          <div class="gal-title-cg-gallery-title">CG图鉴</div>
+          <button type="button" class="gal-title-cg-gallery-close" aria-label="关闭图鉴">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="gal-title-cg-gallery-subtitle">显示当前角色卡已解锁（已触发过）的 CG</div>
+        <div class="gal-title-cg-gallery-body">
+          <div class="gal-title-cg-gallery-empty">暂无已解锁 CG</div>
+          <div class="gal-title-cg-gallery-grid"></div>
+        </div>
       </div>
     </div>
   `;
@@ -59,6 +86,13 @@ function ensureTitleScreenElement() {
     hideTitleScreen();
   });
 
+  root.querySelector('[data-action="cg-gallery"]')?.addEventListener('click', event => {
+    event.stopPropagation();
+    openTitleCgGallery(root).catch(error => {
+      console.warn(`[${SCRIPT_NAME}] 打开CG图鉴失败:`, error);
+    });
+  });
+
   root.querySelector('[data-action="settings"]')?.addEventListener('click', event => {
     event.stopPropagation();
     showSettingsPanel('assets', 'title-screen');
@@ -67,6 +101,18 @@ function ensureTitleScreenElement() {
   root.querySelector('[data-action="load"]')?.addEventListener('click', event => {
     event.stopPropagation();
     showSaveLoadModal('load');
+  });
+
+  const galleryLayer = root.querySelector('.gal-title-cg-gallery');
+  galleryLayer?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (event.target === galleryLayer) {
+      closeTitleCgGallery(root);
+    }
+  });
+  root.querySelector('.gal-title-cg-gallery-close')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closeTitleCgGallery(root);
   });
 
   $overlay[0].appendChild(root);
@@ -80,7 +126,6 @@ function applyTitleText(root, config) {
 
   const titleText = String(config?.titleText || '').trim();
   const subtitleText = String(config?.subtitleText || '').trim();
-  const startButtonText = String(config?.startButtonText || '').trim() || '开始游戏';
 
   if (titleNode) {
     titleNode.textContent = titleText || 'Galgame';
@@ -94,8 +139,86 @@ function applyTitleText(root, config) {
   }
 
   if (startButton) {
-    startButton.textContent = startButtonText;
+    startButton.textContent = '开始游戏';
   }
+}
+
+function closeTitleCgGallery(root) {
+  const galleryLayer = root?.querySelector('.gal-title-cg-gallery');
+  if (!galleryLayer) return;
+  galleryLayer.classList.remove('active');
+  galleryLayer.setAttribute('aria-hidden', 'true');
+}
+
+async function loadUnlockedCgGalleryItems(charId) {
+  const unlockedCgIds = getUnlockedSpecialCgIdsForChar(charId);
+  if (!Array.isArray(unlockedCgIds) || unlockedCgIds.length === 0) return [];
+
+  const items = [];
+  for (const rawCgId of unlockedCgIds) {
+    const cgId = String(rawCgId || '').trim();
+    if (!cgId) continue;
+    const imageUrl = await getSpecialCg(cgId);
+    if (!imageUrl) continue;
+    const record = await getSpecialCgRecord(cgId);
+    items.push({
+      cgId,
+      name: String(record?.name || cgId).trim() || cgId,
+      description: String(record?.description || '').trim(),
+      imageUrl,
+    });
+  }
+  return items;
+}
+
+function renderTitleCgGallery(root, items) {
+  const galleryLayer = root?.querySelector('.gal-title-cg-gallery');
+  if (!galleryLayer) return;
+  const emptyNode = galleryLayer.querySelector('.gal-title-cg-gallery-empty');
+  const gridNode = galleryLayer.querySelector('.gal-title-cg-gallery-grid');
+  if (!emptyNode || !gridNode) return;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    gridNode.innerHTML = '';
+    emptyNode.textContent = '暂无已解锁 CG';
+    emptyNode.style.display = '';
+    return;
+  }
+
+  gridNode.innerHTML = items
+    .map(item => `
+      <div class="gal-title-cg-gallery-card" title="${escapeHtml(item.name)}">
+        <div class="gal-title-cg-gallery-preview">
+          <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}">
+        </div>
+        <div class="gal-title-cg-gallery-name">${escapeHtml(item.name)}</div>
+        ${item.description ? `<div class="gal-title-cg-gallery-desc">${escapeHtml(item.description)}</div>` : ''}
+      </div>
+    `)
+    .join('');
+  emptyNode.style.display = 'none';
+}
+
+async function openTitleCgGallery(root) {
+  if (!root) return;
+  const galleryLayer = root.querySelector('.gal-title-cg-gallery');
+  if (!galleryLayer) return;
+  galleryLayer.classList.add('active');
+  galleryLayer.setAttribute('aria-hidden', 'false');
+
+  const emptyNode = galleryLayer.querySelector('.gal-title-cg-gallery-empty');
+  const gridNode = galleryLayer.querySelector('.gal-title-cg-gallery-grid');
+  if (!emptyNode || !gridNode) return;
+
+  gridNode.innerHTML = '';
+  emptyNode.textContent = '正在加载已解锁 CG...';
+  emptyNode.style.display = '';
+
+  const token = ++cgGalleryLoadToken;
+  const currentCharId = resolveCurrentCharId();
+  const items = await loadUnlockedCgGalleryItems(currentCharId);
+  if (token !== cgGalleryLoadToken) return;
+  renderTitleCgGallery(root, items);
 }
 
 function applyBackgroundStyle(root, config, backgroundUrl) {
@@ -143,7 +266,9 @@ async function resolveBackgroundUrl(config) {
     return readUpload(uploadSceneName);
   }
   if (source === 'url') {
-    return customUrl;
+    if (customUrl) return customUrl;
+    // URL 模式但尚未填写时，回退到已上传标题背景，避免页面空白
+    return readUpload(uploadSceneName);
   }
 
   const uploadedUrl = await readUpload(uploadSceneName);
@@ -158,6 +283,7 @@ export function resetTitleScreenSession() {
 export function hideTitleScreen() {
   const root = topWindow.document.getElementById(TITLE_SCREEN_ID);
   if (!root) return;
+  closeTitleCgGallery(root);
   root.classList.remove('active');
 }
 
@@ -184,6 +310,7 @@ export async function maybeShowTitleScreen({ reason = 'chat-enter', force = fals
   applyTitleText(root, config);
   const backgroundUrl = await resolveBackgroundUrl(config);
   applyBackgroundStyle(root, config, backgroundUrl);
+  closeTitleCgGallery(root);
   root.classList.add('active');
 
   hasShownInCurrentSession = true;

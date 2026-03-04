@@ -203,7 +203,7 @@ async function init() {
               console.warn(`[${SCRIPT_NAME}] 聊天切换后特殊CG检测失败:`, error);
             }
             injectCOTToWorldbook().catch(e => console.warn(`[${SCRIPT_NAME}] 聊天切换后世界书注入失败:`, e));
-            await maybeShowTitleScreen({ reason: 'chat-enter' });
+            await maybeShowTitleScreen({ reason: 'char-switch', force: true });
           } else if (wasEnabled) {
             // 从启用变为禁用
             await disableWorldbookGlobally().catch(e => console.warn(`[${SCRIPT_NAME}] 角色切换：关闭世界书失败`, e));

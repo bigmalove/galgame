@@ -735,7 +735,7 @@ export function injectStyles() {
 #gal-global-overlay.skin-classic .gal-progress-bar { background: linear-gradient(90deg, #E8A2B6, #D4849E) !important; box-shadow: none !important; }
 
 /* === 非默认皮肤移动端：设置/LOG 合体菜单适配 === */
-@media screen and (max-width: 48rem) {
+@media screen and (max-width: 48rem), screen and (max-height: 46rem) {
     #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn .gal-btn-text,
     #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-pending-choices-btn .gal-btn-text,
     #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn-next .gal-btn-text {
@@ -743,7 +743,9 @@ export function injectStyles() {
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='log'],
-    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='view-original'] {
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='view-original'],
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='save'],
+    #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-footer-btn[data-action='load'] {
         display: none !important;
     }
 
@@ -754,7 +756,7 @@ export function injectStyles() {
     #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-bottom-toolbar {
         justify-content: flex-start !important;
         gap: 0.3rem !important;
-        padding: 0 1.5rem 0.5rem 0.5rem !important;
+        padding: 0 0.875rem 0.5rem 0.5rem !important;
         overflow: visible !important;
     }
 
@@ -783,8 +785,8 @@ export function injectStyles() {
         min-width: 5rem !important;
         height: 2.5rem !important;
         min-height: 2.5rem !important;
-        margin-left: 0.5rem !important;
-        margin-right: -0.5rem !important;
+        margin-left: 0.35rem !important;
+        margin-right: 0 !important;
         padding: 0 !important;
         justify-content: center !important;
         transform: none !important;
@@ -1600,51 +1602,7 @@ const saveLoadCss = `
     transform: translateY(0);
     opacity: 1;
 }
-#gal-global-overlay .gal-title-screen-title {
-    margin: 0;
-    font-size: clamp(3.5rem, 6.5vw, 5.5rem);
-    font-weight: 800;
-    letter-spacing: 0.2em;
-    color: #ffffff;
-    text-shadow: 
-        0 4px 20px rgba(0, 0, 0, 0.8), 
-        0 0 40px rgba(255, 255, 255, 0.3),
-        2px 2px 0px rgba(0, 0, 0, 0.9);
-    line-height: 1.1;
-    position: relative;
-    display: inline-block;
-}
-/* Title glow/sweep animation */
-#gal-global-overlay .gal-title-screen-title::after {
-    content: attr(data-text); /* Fallback or visual sweep */
-    position: absolute;
-    left: 0; top: 0;
-    color: transparent;
-    background: linear-gradient(120deg, transparent 0%, transparent 40%, rgba(255,255,255,0.6) 50%, transparent 60%, transparent 100%);
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    animation: galTitleSweep 6s infinite linear;
-    pointer-events: none;
-}
-@keyframes galTitleSweep {
-    0% { background-position: 200% center; }
-    100% { background-position: -200% center; }
-}
-
-#gal-global-overlay .gal-title-screen-subtitle {
-    margin: 0;
-    padding-left: 0.5em; /* Offset for the large letter spacing */
-    font-size: clamp(1rem, 2vw, 1.3rem);
-    font-family: "Barlow", sans-serif;
-    font-weight: 300;
-    letter-spacing: 0.6em;
-    text-transform: uppercase;
-    color: rgba(220, 235, 255, 0.9);
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
-    transform: translateY(-8px);
-}
-/* Delicate line under title */
+#gal-global-overlay .gal-title-screen-title {\n    margin: 0;\n    font-size: clamp(4rem, 7vw, 6.5rem);\n    font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;\n    font-weight: 900;\n    letter-spacing: 0.05em;\n    color: #ffffff;\n    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);\n    line-height: 1.2;\n    position: relative;\n    display: inline-block;\n}\n\n#gal-global-overlay .gal-title-screen-subtitle {\n    margin: 0;\n    padding-left: 0.2em;\n    font-size: clamp(1rem, 2vw, 1.3rem);\n    font-family: inherit;\n    font-weight: 500;\n    letter-spacing: 0.3em;\n    text-transform: uppercase;\n    color: rgba(255, 255, 255, 0.85);\n    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);\n    transform: translateY(0);\n}\n/* Delicate line under title */
 #gal-global-overlay .gal-title-screen-subtitle::before {
     content: '';
     display: block;
@@ -1743,6 +1701,118 @@ const saveLoadCss = `
     transition: all 0.1s;
 }
 
+/* CG Gallery Layer */
+#gal-global-overlay .gal-title-cg-gallery {
+    position: absolute;
+    inset: 0;
+    z-index: 180;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(6, 10, 18, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+#gal-global-overlay .gal-title-cg-gallery.active {
+    display: flex;
+}
+#gal-global-overlay .gal-title-cg-gallery-panel {
+    width: min(1040px, 92vw);
+    max-height: 88vh;
+    border-radius: 16px;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+}
+#gal-global-overlay .gal-title-cg-gallery-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px 10px;
+}
+#gal-global-overlay .gal-title-cg-gallery-title {
+    font-size: 1.18rem;
+    font-weight: 700;
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+}
+#gal-global-overlay .gal-title-cg-gallery-close {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+#gal-global-overlay .gal-title-cg-gallery-close:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: var(--SmartThemeEmColor, #9ac7ff);
+}
+#gal-global-overlay .gal-title-cg-gallery-subtitle {
+    margin: 0;
+    padding: 0 18px 14px;
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+    opacity: 0.84;
+    font-size: 0.9rem;
+}
+#gal-global-overlay .gal-title-cg-gallery-body {
+    padding: 0 18px 18px;
+    overflow: auto;
+}
+#gal-global-overlay .gal-title-cg-gallery-empty {
+    padding: 24px 8px;
+    text-align: center;
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+    opacity: 0.86;
+}
+#gal-global-overlay .gal-title-cg-gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+}
+#gal-global-overlay .gal-title-cg-gallery-card {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+    background: rgba(255, 255, 255, 0.04);
+}
+#gal-global-overlay .gal-title-cg-gallery-preview {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: rgba(255, 255, 255, 0.06);
+}
+#gal-global-overlay .gal-title-cg-gallery-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+#gal-global-overlay .gal-title-cg-gallery-name {
+    padding: 9px 10px 2px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#gal-global-overlay .gal-title-cg-gallery-desc {
+    padding: 0 10px 10px;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+    opacity: 0.82;
+    word-break: break-word;
+}
+
 /* Mobile Adjustments */
 @media (max-width: 760px) {
     #gal-global-overlay .gal-title-screen {
@@ -1791,6 +1861,18 @@ const saveLoadCss = `
     #gal-global-overlay .gal-title-screen-btn:hover {
         padding-left: 1rem; /* don't slide right on hover */
         transform: scale(1.05);
+    }
+    #gal-global-overlay .gal-title-cg-gallery {
+        padding: 10px;
+    }
+    #gal-global-overlay .gal-title-cg-gallery-panel {
+        width: 100%;
+        max-height: 92vh;
+        border-radius: 12px;
+    }
+    #gal-global-overlay .gal-title-cg-gallery-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
     }
 }
 `;

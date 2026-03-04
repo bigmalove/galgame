@@ -1,6 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
-import { getSettings } from '../core/settings.js';
+import { addUnlockedSpecialCgForCurrentChar, ensureSpecialCgSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { getSpecialCg } from '../db/special-cgs.js';
 import { ensureGlobalOverlay } from '../ui/overlay.js';
@@ -301,7 +301,8 @@ function hideSpecialCgOverlayView() {
 function getRuleById(ruleId) {
   const safeRuleId = String(ruleId || '').trim();
   if (!safeRuleId) return null;
-  const rules = Array.isArray(getSettings()?.specialCg?.rules) ? getSettings().specialCg.rules : [];
+  const specialCg = ensureSpecialCgSettings();
+  const rules = Array.isArray(specialCg?.rules) ? specialCg.rules : [];
   return rules.find(rule => String(rule?.id || '').trim() === safeRuleId) || null;
 }
 
@@ -384,8 +385,7 @@ function buildPendingEntry(chatKey, selectedRule) {
 }
 
 function buildMatchedRules(statData, chatKey) {
-  const settings = getSettings();
-  const specialCg = settings?.specialCg;
+  const specialCg = ensureSpecialCgSettings();
   if (!specialCg || specialCg.enabled !== true) return [];
 
   const rules = Array.isArray(specialCg.rules) ? specialCg.rules : [];
@@ -697,6 +697,7 @@ export function consumePendingSpecialCgByScene(sceneAlias, chatId = null) {
   pushRecentAliasMapping(chatKey, normalizedScene, pending.cgId);
   runtimeState.pendingByChat.delete(chatKey);
   runtimeState.aliasToCgIdByChat.delete(chatKey);
+  addUnlockedSpecialCgForCurrentChar(pending.cgId);
   const oncePerChat = shouldUseOncePerChat(pending.ruleId, pending.oncePerChat !== false);
   if (oncePerChat) {
     getConsumedRuleSet(chatKey, { create: true }).add(pending.ruleId);

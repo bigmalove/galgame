@@ -1,6 +1,6 @@
 import { DEFAULT_PACK_ID, SCRIPT_NAME, THEME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
-import { ensureTitleScreenSettings, getCurrentCharId, getSettings, saveSettings } from '../core/settings.js';
+import { ensureSpecialCgSettings, ensureTitleScreenSettings, getCurrentCharId, getSettings, saveSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { deleteBackground, getAllBackgrounds } from '../db/backgrounds.js';
@@ -95,6 +95,13 @@ const ASSET_SUB_TAB_DEFS = [
 const ASSET_SUB_TAB_ID_SET = new Set(ASSET_SUB_TAB_DEFS.map(item => item.id));
 const UI_ACCESS_UNLOCK_VAR_PATH = ['galgame_ui_plugin', 'uiAccessUnlock', 'assets'];
 const uiAccessUnlockSessionCache = new Map();
+
+function isTitleBackgroundSceneName(rawSceneName) {
+  const sceneName = String(rawSceneName || '').trim();
+  if (!sceneName) return false;
+  if (sceneName === '__title__') return true;
+  return sceneName.includes('::char::');
+}
 
 function normalizeAssetSubTabIds(rawList) {
   const source = Array.isArray(rawList)
@@ -571,6 +578,7 @@ export async function showAssetManagerModal(activeTab = 'sprites') {
 
 export async function buildAssetManagerContent(activeTab) {
   const settings = getSettings();
+  const specialCgSettings = ensureSpecialCgSettings();
   const titleScreen = ensureTitleScreenSettings();
   const currentCharId = getCurrentCharId();
   const allPacks = await getAllImagePacks();
@@ -579,7 +587,13 @@ export async function buildAssetManagerContent(activeTab) {
   const currentPackName = currentPack ? currentPack.name : '未定义';
   const currentRenderScope = getRenderScope();
   const allSprites = await getAllSprites(currentPackId);
-  const allBackgrounds = await getAllBackgrounds(currentPackId);
+  const allBackgroundsRaw = await getAllBackgrounds(currentPackId);
+  const allBackgrounds = (Array.isArray(allBackgroundsRaw) ? allBackgroundsRaw : [])
+    .filter(bg => !isTitleBackgroundSceneName(bg?.sceneName));
+  const hiddenTitleBackgroundCount = Math.max(
+    0,
+    (Array.isArray(allBackgroundsRaw) ? allBackgroundsRaw.length : 0) - allBackgrounds.length,
+  );
   const allSpecialCgs = await getAllSpecialCgs(currentPackId);
   const mvuVariablePaths = getMvuVariablePathsSync();
   const allMapImages = await getAllMapImages(currentPackId);
@@ -627,10 +641,10 @@ export async function buildAssetManagerContent(activeTab) {
     .join('');
   const tabContentMap = {
     sprites: buildSpritesTab(activeTab, allSprites, charactersData),
-    backgrounds: buildBackgroundsTab(settings, allBackgrounds),
+    backgrounds: buildBackgroundsTab(settings, allBackgrounds, hiddenTitleBackgroundCount),
     'title-screen': buildTitleScreenTab(activeTab, titleScreen, currentCharId),
     'special-cgs': buildSpecialCgsTab(activeTab, allSpecialCgs),
-    'special-cg-rules': buildSpecialCgRulesTab(activeTab, settings, allSpecialCgs, mvuVariablePaths),
+    'special-cg-rules': buildSpecialCgRulesTab(activeTab, specialCgSettings, allSpecialCgs, mvuVariablePaths),
     maps: buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount),
     skin: buildWesternSkinEditorTab(activeTab, currentPackId),
     imagegen: buildImagegenTab(activeTab, settings),
@@ -945,11 +959,11 @@ function buildSpritesTab(activeTab, allSprites, charactersData) {
   </div>`;
 }
 
-function buildBackgroundsTab(settings, allBackgrounds) {
+function buildBackgroundsTab(settings, allBackgrounds, hiddenTitleBackgroundCount = 0) {
   return `
   <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
     <div class="gal-pane-header">
-      <span class="gal-pane-stat">已保存 ${allBackgrounds.length} 个背景</span>
+      <span class="gal-pane-stat">已保存 ${allBackgrounds.length} 个背景${hiddenTitleBackgroundCount > 0 ? `（已隐藏标题背景 ${hiddenTitleBackgroundCount} 项）` : ''}</span>
       <div class="gal-pane-actions">
         <button class="gal-action-btn gal-pane-btn purple" id="gal-batch-bg-upload-btn"><i class="fa-solid fa-cloud-arrow-up"></i> <span>批量上传</span></button>
         <button class="gal-action-btn gal-pane-btn primary" id="gal-add-bg-btn"><i class="fa-solid fa-plus"></i> <span>添加背景</span></button>
@@ -978,6 +992,13 @@ function buildBackgroundsTab(settings, allBackgrounds) {
 function buildTitleScreenTab(activeTab, titleScreen, currentCharId) {
   const safeTitleScreen = titleScreen && typeof titleScreen === 'object' ? titleScreen : {};
   const safeCharName = String(currentCharId || '').trim() || 'default';
+  const selectedBgSource = safeTitleScreen.backgroundSource === 'url'
+    ? 'url'
+    : (
+        safeTitleScreen.backgroundSource === 'upload'
+          ? 'upload'
+          : (String(safeTitleScreen.backgroundUrl || '').trim() ? 'url' : 'upload')
+      );
 
   return `
   <div class="gal-tab-pane" data-pane="title-screen" style="${activeTab !== 'title-screen' ? 'display: none;' : ''}">
@@ -999,16 +1020,14 @@ function buildTitleScreenTab(activeTab, titleScreen, currentCharId) {
         <input type="text" id="gal-title-subtitle" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.subtitleText || '')}" placeholder="例如：按下开始继续">
       </div>
       <div class="gal-settings-row">
-        <span class="gal-settings-label">开始按钮文案</span>
-        <input type="text" id="gal-title-start-text" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.startButtonText || '')}" placeholder="开始游戏">
-      </div>
-      <div class="gal-settings-row">
         <span class="gal-settings-label">背景来源</span>
         <select id="gal-title-bg-source" class="gal-title-settings-select">
-          <option value="auto" ${safeTitleScreen.backgroundSource === 'auto' ? 'selected' : ''}>自动（优先上传，回退URL）</option>
-          <option value="upload" ${safeTitleScreen.backgroundSource === 'upload' ? 'selected' : ''}>仅本地上传</option>
-          <option value="url" ${safeTitleScreen.backgroundSource === 'url' ? 'selected' : ''}>仅URL</option>
+          <option value="upload" ${selectedBgSource === 'upload' ? 'selected' : ''}>上传图片</option>
+          <option value="url" ${selectedBgSource === 'url' ? 'selected' : ''}>背景URL</option>
         </select>
+      </div>
+      <div style="margin: -6px 0 4px 0; color: var(--SmartThemeBodyColor, #475569); opacity: 0.9; font-size: 0.8rem;">
+        二选一：通过下拉切换。当前仅显示所选模式的配置项。
       </div>
       <div class="gal-settings-row">
         <span class="gal-settings-label">背景填充模式</span>
@@ -1021,7 +1040,7 @@ function buildTitleScreenTab(activeTab, titleScreen, currentCharId) {
         <span class="gal-settings-label">遮罩层</span>
         <label class="gal-switch"><input type="checkbox" id="gal-title-mask-enabled" ${safeTitleScreen.enableBackdropMask !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
       </div>
-      <div class="gal-settings-row" style="align-items: flex-start;">
+      <div class="gal-settings-row" id="gal-title-bg-upload-row" style="align-items: flex-start;">
         <span class="gal-settings-label">上传标题背景</span>
         <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 460px); gap: 8px;">
           <input type="file" id="gal-title-bg-file" accept="image/*" style="display:none;">
@@ -1031,7 +1050,7 @@ function buildTitleScreenTab(activeTab, titleScreen, currentCharId) {
           <small id="gal-title-bg-upload-hint" style="color: var(--SmartThemeBodyColor, #f5f7fa); opacity: 0.82;">上传后将保存到当前角色卡标题背景（scene: ${escapeHtml(safeTitleScreen.backgroundSceneName || '__title__')}）</small>
         </div>
       </div>
-      <div class="gal-settings-row">
+      <div class="gal-settings-row" id="gal-title-bg-url-row">
         <span class="gal-settings-label">背景URL</span>
         <input type="url" id="gal-title-bg-url" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.backgroundUrl || '')}" placeholder="https://example.com/title.webp">
       </div>
@@ -1088,7 +1107,7 @@ function buildSpecialCgRuleRowHtml(rule, cgOptionsHtml, index = 0) {
 
   return `
     <div class="gal-special-cg-rule-row" data-rule-id="${escapeHtml(id)}">
-      <input type="text" class="gal-special-cg-rule-name" value="${escapeHtml(name)}" placeholder="规则名称">
+      <input type="text" class="gal-special-cg-rule-name" value="${escapeHtml(name)}" placeholder="规则名（必填）" required title="规则名必填">
       <input type="text" class="gal-special-cg-rule-path" list="${SPECIAL_CG_VAR_PATH_DATALIST_ID}" value="${escapeHtml(variablePath)}" placeholder="变量路径，如：角色.艾莉.好感度" autocomplete="off">
       <span class="gal-special-cg-rule-current-value is-empty" title="当前值：未读取">未读取</span>
       <select class="gal-special-cg-rule-operator">
@@ -1112,9 +1131,11 @@ function buildSpecialCgRuleRowHtml(rule, cgOptionsHtml, index = 0) {
   `;
 }
 
-function buildSpecialCgRulesTab(activeTab, settings, allSpecialCgs, mvuVariablePaths = []) {
-  const specialCgSettings = settings?.specialCg || { enabled: false, rules: [] };
-  const allRules = Array.isArray(specialCgSettings.rules) ? specialCgSettings.rules : [];
+function buildSpecialCgRulesTab(activeTab, specialCgSettings, allSpecialCgs, mvuVariablePaths = []) {
+  const safeSpecialCgSettings = specialCgSettings && typeof specialCgSettings === 'object'
+    ? specialCgSettings
+    : { enabled: false, rules: [] };
+  const allRules = Array.isArray(safeSpecialCgSettings.rules) ? safeSpecialCgSettings.rules : [];
   const safeCgs = Array.isArray(allSpecialCgs) ? allSpecialCgs : [];
   const safeVariablePaths = Array.isArray(mvuVariablePaths) ? mvuVariablePaths : [];
   const variablePathOptionsHtml = buildVariablePathOptionsHtml(safeVariablePaths);
@@ -1142,7 +1163,7 @@ function buildSpecialCgRulesTab(activeTab, settings, allSpecialCgs, mvuVariableP
     </div>
     <div class="gal-special-cg-rules-panel">
       <label class="gal-special-cg-master-switch">
-        <input type="checkbox" id="gal-special-cg-enabled" ${specialCgSettings.enabled ? 'checked' : ''}>
+        <input type="checkbox" id="gal-special-cg-enabled" ${safeSpecialCgSettings.enabled ? 'checked' : ''}>
         <span>启用特殊CG触发系统</span>
       </label>
       <div class="gal-special-cg-path-tools">
@@ -1153,7 +1174,7 @@ function buildSpecialCgRulesTab(activeTab, settings, allSpecialCgs, mvuVariableP
           ${safeVariablePaths.length > 0 ? `已加载 ${safeVariablePaths.length} 项变量路径` : '尚未加载MVU变量路径'}
         </span>
       </div>
-      <div class="gal-special-cg-rules-hint">规则变量路径相对 <code>stat_data</code>，例如：<code>角色.艾莉.好感度</code>。同一聊天仅触发一次。</div>
+      <div class="gal-special-cg-rules-hint">规则名为必填项。建议填写简短事件名，如：生日告白。规则变量路径相对 <code>stat_data</code>，例如：<code>角色.艾莉.好感度</code>。同一聊天仅触发一次。</div>
       <div class="gal-special-cg-rules-header">
         <span>规则名</span>
         <span>变量路径</span>
@@ -1415,6 +1436,7 @@ export function buildAssetManagerStyles() {
     .gal-special-cg-rule-row input[type='text'],
     .gal-special-cg-rule-row input[type='number'],
     .gal-special-cg-rule-row select { width: 100%; min-height: 34px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; background: #fff; color: #0f172a; }
+    .gal-special-cg-rule-name.is-invalid { border-color: #dc2626 !important; box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2); background: #fff7f7; }
     .gal-special-cg-rule-current-value { min-height: 34px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; background: #f8fafc; color: #0f172a; display: inline-flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
     .gal-special-cg-rule-current-value.is-empty { color: #64748b; }
     .gal-special-cg-rule-enabled-wrap { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 0.82rem; }
@@ -2027,29 +2049,47 @@ function bindSpecialCgRulesEvents($modal, activeTab) {
     const $row = $(this).closest('.gal-special-cg-rule-row');
     updateRuleRowCurrentValue($row);
   });
+  $modal.on('input change', '.gal-special-cg-rule-name', function () {
+    const $input = $(this);
+    if (String($input.val() || '').trim()) {
+      $input.removeClass('is-invalid');
+    }
+  });
   updateAllRuleRowsCurrentValue();
 
   $modal.find('#gal-special-cg-rule-save-btn').on('click', () => {
     const settings = getSettings();
     const rules = [];
     let skippedCount = 0;
+    let missingNameCount = 0;
+    let $firstMissingNameInput = null;
+    $modal.find('.gal-special-cg-rule-name').removeClass('is-invalid');
     $modal.find('.gal-special-cg-rule-row').each(function (index) {
       const $row = $(this);
+      const $nameInput = $row.find('.gal-special-cg-rule-name');
       const id = String($row.find('.gal-special-cg-rule-id').val() || '').trim() || `special_cg_rule_${Date.now()}_${index}`;
-      const name = String($row.find('.gal-special-cg-rule-name').val() || '').trim();
+      const name = String($nameInput.val() || '').trim();
       const variablePath = String($row.find('.gal-special-cg-rule-path').val() || '').trim().replace(/^stat_data\./, '');
       const operator = String($row.find('.gal-special-cg-rule-operator').val() || 'gte').trim().toLowerCase();
       const thresholdRaw = Number($row.find('.gal-special-cg-rule-threshold').val());
       const cgId = String($row.find('.gal-special-cg-rule-cg-id').val() || '').trim();
       const priorityRaw = Number($row.find('.gal-special-cg-rule-priority').val());
       const enabled = $row.find('.gal-special-cg-rule-enabled').is(':checked');
+      if (!name) {
+        missingNameCount++;
+        $nameInput.addClass('is-invalid');
+        if (!$firstMissingNameInput) {
+          $firstMissingNameInput = $nameInput;
+        }
+        return;
+      }
       if (!variablePath || !cgId) {
         skippedCount++;
         return;
       }
       rules.push({
         id,
-        name: name || id,
+        name,
         enabled,
         variablePath,
         operator: ['gte', 'gt', 'eq', 'lte', 'lt'].includes(operator) ? operator : 'gte',
@@ -2059,6 +2099,14 @@ function bindSpecialCgRulesEvents($modal, activeTab) {
         oncePerChat: true,
       });
     });
+
+    if (missingNameCount > 0) {
+      showToast(`规则名为必填项，请补全 ${missingNameCount} 条规则后再保存`);
+      if ($firstMissingNameInput && $firstMissingNameInput.length > 0) {
+        $firstMissingNameInput.trigger('focus');
+      }
+      return;
+    }
 
     settings.specialCg = {
       enabled: $modal.find('#gal-special-cg-enabled').is(':checked'),

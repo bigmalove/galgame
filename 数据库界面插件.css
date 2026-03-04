@@ -55,7 +55,19 @@
 /* --font-scale 由 applySettingsToUI() 动态设置，此处给默认值防止竞态 */
 #gal-global-overlay {
   --ui-scale: 1;
+  --ui-scale-base: 1;
   --font-scale: 1;
+  --gal-dialog-scale-user: 1;
+  --gal-toolbar-scale-user: 1;
+}
+
+/* 对话框与底栏独立缩放（可视化设置项驱动） */
+#gal-global-overlay .gal-dialog-layer {
+  --ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-dialog-scale-user, 1));
+}
+
+#gal-global-overlay .gal-bottom-toolbar {
+  --ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-toolbar-scale-user, 1));
 }
 
 #gal-global-overlay.active {
@@ -1040,10 +1052,15 @@
 /* 对话框层 - 底部悬浮 */
 .gal-dialog-layer {
   position: absolute;
-  bottom: 1.25rem;
-  left: 10%;
-  right: 10%;
-  height: 30%; /* 相对高度 */
+  bottom: calc(1.25rem * var(--gal-dialog-scale-user, 1));
+  left: 50%;
+  right: auto;
+  width: min(96%, calc(80% * var(--gal-dialog-scale-user, 1)));
+  height: calc(30% * var(--gal-dialog-scale-user, 1)); /* 相对高度 */
+  min-height: 9rem;
+  max-height: 72%;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
   max-width: none;
   z-index: 30;
   pointer-events: auto;
@@ -1517,7 +1534,10 @@
   border-radius: 0;
 
   /* 内边距 */
-  padding: 2.5rem 3.75rem 5rem 3.75rem;
+  padding: calc(2.5rem * var(--gal-dialog-scale-user, 1))
+    calc(3.75rem * var(--gal-dialog-scale-user, 1))
+    calc(5rem * var(--gal-dialog-scale-user, 1))
+    calc(3.75rem * var(--gal-dialog-scale-user, 1));
 
   /* 行为控制：允许垂直滚动以防内容被截断，但隐藏滚动条保持美观 */
   overflow-y: auto !important;
@@ -3708,18 +3728,24 @@
 
   /* 1. 对话框容器空间优化 */
   .gal-dialog-layer {
-    left: 2% !important;
-    right: 2% !important;
-    width: 96% !important;
-    bottom: 0.625rem !important;
-    height: 40% !important; /* 增加高度占比至40% */
+    left: 50% !important;
+    right: auto !important;
+    width: min(98%, calc(96% * var(--gal-dialog-scale-user, 1))) !important;
+    bottom: calc(0.625rem * var(--gal-dialog-scale-user, 1)) !important;
+    height: calc(40% * var(--gal-dialog-scale-user, 1)) !important; /* 增加高度占比至40% */
+    min-height: 11rem !important;
+    max-height: 84% !important;
+    transform: translateX(-50%) !important;
     padding-bottom: env(safe-area-inset-bottom); /* 底部安全区 */
   }
 
   /* 2. 文本面板内边距压缩 */
   .gal-text-panel {
     /* 上 右 下 左 - 减少左右留白，增加可视区域 */
-    padding: 1.563rem 0.938rem 2.813rem 0.938rem !important;
+    padding: calc(1.563rem * var(--gal-dialog-scale-user, 1))
+      calc(0.938rem * var(--gal-dialog-scale-user, 1))
+      calc(2.813rem * var(--gal-dialog-scale-user, 1))
+      calc(0.938rem * var(--gal-dialog-scale-user, 1)) !important;
   }
 
   /* 3. 排版微调 - 移动端基准 0.88rem（等效桌面 fontSize=9），乘以 --font-scale */
@@ -4012,7 +4038,7 @@
 }
 
 /* === 移动端紧凑模式适配 (Compact Mode) - 优化版 === */
-@media screen and (max-width: 48rem) {
+@media screen and (max-width: 48rem), screen and (max-height: 46rem) {
   /* 1. 隐藏按钮文字，仅显示图标 */
   .gal-footer-btn .gal-btn-text,
   .gal-pending-choices-btn .gal-btn-text,
@@ -4020,9 +4046,11 @@
     display: none !important;
   }
 
-  /* 2. 在移动端隐藏 LOG 和原界面按钮 (已移入上拉菜单)，CLOSE 保留在工具栏最左 */
+  /* 2. 在移动端隐藏已移入上拉菜单的按钮，CLOSE 保留在工具栏最左 */
   .gal-footer-btn[data-action='log'],
-  .gal-footer-btn[data-action='view-original'] {
+  .gal-footer-btn[data-action='view-original'],
+  .gal-footer-btn[data-action='save'],
+  .gal-footer-btn[data-action='load'] {
     display: none !important;
   }
 
@@ -4035,15 +4063,17 @@
   .gal-bottom-toolbar {
     justify-content: flex-start !important;
     gap: 0.3rem !important;
-    /* 增加右侧内边距，防止 NEXT 按钮因为倾斜被切掉 */
-    padding: 0 1.5rem 0.5rem 0.5rem !important;
+    /* 预留右侧空间，避免 NEXT 图标贴边裁切 */
+    padding: 0 0.875rem 0.5rem 0.5rem !important;
     overflow: visible !important; /* 允许子元素溢出显示 */
   }
 
   /* 4. 普通功能按钮：自动填充 */
   .gal-footer-btn,
   .gal-pending-choices-btn {
-    flex: 1 !important;
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
     padding: 0 !important;
     justify-content: center !important;
     height: 2.5rem !important;
@@ -4062,10 +4092,10 @@
     width: 5rem !important; /* 再宽一点 */
     min-width: 5rem !important;
     height: 2.5rem !important;
-    margin-left: 0.5rem !important;
+    margin-left: 0.35rem !important;
     padding: 0 !important;
     justify-content: center !important;
-    margin-right: -0.5rem !important; /*稍微向右贴一点，配合容器padding */
+    margin-right: 0 !important;
     z-index: 100 !important; /* 确保在最上层 */
   }
 

@@ -38,13 +38,22 @@ export const DEFAULT_TITLE_SCREEN_SETTINGS = {
   enabled: false,
   titleText: '',
   subtitleText: '',
-  startButtonText: '开始游戏',
   backgroundSource: 'auto',
   backgroundSceneName: '__title__',
   backgroundUrl: '',
   backgroundFit: 'cover',
   enableBackdropMask: true,
 };
+
+export const UI_SCALE_PERCENT_MIN = 70;
+export const UI_SCALE_PERCENT_MAX = 130;
+export const UI_SCALE_PERCENT_DEFAULT = 100;
+
+export function normalizeUiScalePercent(rawValue) {
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed)) return UI_SCALE_PERCENT_DEFAULT;
+  return Math.max(UI_SCALE_PERCENT_MIN, Math.min(parsed, UI_SCALE_PERCENT_MAX));
+}
 
 // 默认设置 (全局)
 export const DEFAULT_SETTINGS = {
@@ -69,6 +78,8 @@ export const DEFAULT_SETTINGS = {
   effectsQuality: 'balanced',
   effectsAutoClearOnSceneChange: true,
   effectsMaxActive: 2,
+  dialogScalePercent: UI_SCALE_PERCENT_DEFAULT,
+  toolbarScalePercent: UI_SCALE_PERCENT_DEFAULT,
   // 立绘设置
   spriteScale: 100,
   spriteBottomOffset: 20,
@@ -103,6 +114,8 @@ export const DEFAULT_SETTINGS = {
   titleScreen: Object.assign({}, DEFAULT_TITLE_SCREEN_SETTINGS),
   titleScreenByChar: {},
   specialCg: Object.assign({}, DEFAULT_SPECIAL_CG_SETTINGS),
+  specialCgByChar: {},
+  specialCgUnlockedByChar: {},
   // TTS 设置
   ttsEnabled: true,
   ttsAutoPlay: true,
@@ -331,14 +344,12 @@ function normalizeTitleScreenBackgroundFit(rawValue) {
 
 export function normalizeTitleScreenSettings(rawTitleScreen) {
   const safe = _safeObject(rawTitleScreen);
-  const startButtonText = String(safe.startButtonText || '').trim() || DEFAULT_TITLE_SCREEN_SETTINGS.startButtonText;
   const backgroundSceneName = String(safe.backgroundSceneName || '').trim() || DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSceneName;
 
   return {
     enabled: safe.enabled === true,
     titleText: String(safe.titleText || '').trim(),
     subtitleText: String(safe.subtitleText || '').trim(),
-    startButtonText,
     backgroundSource: normalizeTitleScreenBackgroundSource(safe.backgroundSource),
     backgroundSceneName,
     backgroundUrl: String(safe.backgroundUrl || '').trim(),
@@ -356,6 +367,35 @@ function normalizeTitleScreenByCharMap(rawMap) {
     const charId = String(rawCharId || '').trim();
     if (!charId) return;
     result[charId] = normalizeTitleScreenSettings(rawConfig);
+  });
+  return result;
+}
+
+function normalizeSpecialCgByCharMap(rawMap) {
+  const source = _safeObject(rawMap);
+  const result = {};
+  Object.entries(source).forEach(([rawCharId, rawConfig]) => {
+    const charId = String(rawCharId || '').trim();
+    if (!charId) return;
+    result[charId] = normalizeSpecialCgSettings(rawConfig);
+  });
+  return result;
+}
+
+function normalizeSpecialCgUnlockedByCharMap(rawMap) {
+  const source = _safeObject(rawMap);
+  const result = {};
+  Object.entries(source).forEach(([rawCharId, rawList]) => {
+    const charId = String(rawCharId || '').trim();
+    if (!charId) return;
+    const normalizedList = Array.from(
+      new Set(
+        _safeArray(rawList)
+          .map(item => String(item || '').trim())
+          .filter(Boolean),
+      ),
+    );
+    result[charId] = normalizedList;
   });
   return result;
 }
@@ -544,8 +584,93 @@ export function normalizeEnhancedModeSettings(rawEnhancedMode) {
 }
 
 export function ensureSpecialCgSettings() {
-  _settings.specialCg = normalizeSpecialCgSettings(_settings.specialCg);
+  if (!_settings || typeof _settings !== 'object') {
+    _settings = Object.assign({}, DEFAULT_SETTINGS);
+  }
+
+  const charAliases = getCurrentCharKeyAliases();
+  const currentCharId = charAliases[0] || 'default';
+  _settings.specialCgByChar = normalizeSpecialCgByCharMap(_settings.specialCgByChar);
+
+  const legacyGlobalConfig = normalizeSpecialCgSettings(_settings.specialCg);
+  const hasAnyByCharConfig = Object.keys(_settings.specialCgByChar).length > 0;
+  const hasLegacyData = legacyGlobalConfig.enabled === true || legacyGlobalConfig.rules.length > 0;
+  if (!hasAnyByCharConfig && hasLegacyData) {
+    _settings.specialCgByChar[currentCharId] = legacyGlobalConfig;
+  }
+
+  let rawCurrentCharConfig = _settings.specialCgByChar[currentCharId] || null;
+  if (!rawCurrentCharConfig) {
+    for (let i = 1; i < charAliases.length; i += 1) {
+      const aliasKey = charAliases[i];
+      if (!aliasKey) continue;
+      const aliasConfig = _settings.specialCgByChar[aliasKey];
+      if (aliasConfig) {
+        rawCurrentCharConfig = aliasConfig;
+        _settings.specialCgByChar[currentCharId] = aliasConfig;
+        break;
+      }
+    }
+  }
+
+  const currentCharConfig = normalizeSpecialCgSettings(
+    rawCurrentCharConfig || createDefaultSpecialCgSettings(),
+  );
+  _settings.specialCgByChar[currentCharId] = currentCharConfig;
+  _settings.specialCg = currentCharConfig;
   return _settings.specialCg;
+}
+
+export function ensureSpecialCgUnlockedByCharSettings() {
+  _settings.specialCgUnlockedByChar = normalizeSpecialCgUnlockedByCharMap(_settings.specialCgUnlockedByChar);
+  return _settings.specialCgUnlockedByChar;
+}
+
+export function getUnlockedSpecialCgIdsForChar(charId = null) {
+  const explicitCharId = String(charId || '').trim();
+  const charAliases = explicitCharId ? [explicitCharId] : getCurrentCharKeyAliases();
+  const safeCharId = charAliases[0] || 'default';
+  const map = ensureSpecialCgUnlockedByCharSettings();
+  let list = map[safeCharId];
+  if (!Array.isArray(list)) {
+    for (let i = 1; i < charAliases.length; i += 1) {
+      const aliasKey = charAliases[i];
+      if (!aliasKey) continue;
+      const aliasList = map[aliasKey];
+      if (Array.isArray(aliasList)) {
+        list = aliasList;
+        map[safeCharId] = aliasList.slice();
+        break;
+      }
+    }
+  }
+  if (!Array.isArray(list)) return [];
+  return list.slice();
+}
+
+export function addUnlockedSpecialCgForCurrentChar(cgId, charId = null) {
+  const safeCgId = String(cgId || '').trim();
+  if (!safeCgId) return false;
+  const explicitCharId = String(charId || '').trim();
+  const charAliases = explicitCharId ? [explicitCharId] : getCurrentCharKeyAliases();
+  const safeCharId = charAliases[0] || 'default';
+  const map = ensureSpecialCgUnlockedByCharSettings();
+  let currentList = Array.isArray(map[safeCharId]) ? map[safeCharId].slice() : [];
+  if (currentList.length === 0) {
+    for (let i = 1; i < charAliases.length; i += 1) {
+      const aliasKey = charAliases[i];
+      if (!aliasKey) continue;
+      if (Array.isArray(map[aliasKey]) && map[aliasKey].length > 0) {
+        currentList = map[aliasKey].slice();
+        break;
+      }
+    }
+  }
+  if (currentList.includes(safeCgId)) return false;
+  currentList.push(safeCgId);
+  map[safeCharId] = currentList;
+  saveSettings();
+  return true;
 }
 
 export function ensureTitleScreenSettings() {
@@ -553,9 +678,22 @@ export function ensureTitleScreenSettings() {
     _settings = Object.assign({}, DEFAULT_SETTINGS);
   }
 
-  const currentCharId = String(getCurrentCharId() || 'default').trim() || 'default';
+  const charAliases = getCurrentCharKeyAliases();
+  const currentCharId = charAliases[0] || 'default';
   _settings.titleScreenByChar = normalizeTitleScreenByCharMap(_settings.titleScreenByChar);
-  const rawCurrentCharSettings = _settings.titleScreenByChar[currentCharId] || null;
+  let rawCurrentCharSettings = _settings.titleScreenByChar[currentCharId] || null;
+  if (!rawCurrentCharSettings) {
+    for (let i = 1; i < charAliases.length; i += 1) {
+      const aliasKey = charAliases[i];
+      if (!aliasKey) continue;
+      const aliasSettings = _settings.titleScreenByChar[aliasKey];
+      if (aliasSettings) {
+        rawCurrentCharSettings = aliasSettings;
+        _settings.titleScreenByChar[currentCharId] = aliasSettings;
+        break;
+      }
+    }
+  }
   const fallbackSettings = DEFAULT_TITLE_SCREEN_SETTINGS;
   const currentCharSettings = normalizeTitleScreenSettings(
     rawCurrentCharSettings || fallbackSettings,
@@ -579,6 +717,7 @@ export function ensureEnhancedModeSettings() {
 ensureEnhancedModeSettings();
 ensureMapSettings();
 ensureSpecialCgSettings();
+ensureSpecialCgUnlockedByCharSettings();
 ensureTitleScreenSettings();
 
 export function getSettings() { return _settings; }
@@ -597,9 +736,9 @@ function normalizeCurrentCharToken(rawValue) {
   return text;
 }
 
-function readCharacterNameById(characters, rawCharacterId) {
+function readCharacterDataById(characters, rawCharacterId) {
   const characterId = normalizeCurrentCharToken(rawCharacterId);
-  if (!characterId || !characters || typeof characters !== 'object') return '';
+  if (!characterId || !characters || typeof characters !== 'object') return null;
 
   let characterData = null;
   if (Array.isArray(characters)) {
@@ -613,8 +752,25 @@ function readCharacterNameById(characters, rawCharacterId) {
       characterData = characters[Number.parseInt(characterId, 10)] || null;
     }
   }
+  return characterData || null;
+}
 
-  return String(characterData?.name || '').trim();
+function readCharacterNameById(characters, rawCharacterId) {
+  const characterData = readCharacterDataById(characters, rawCharacterId);
+  return String(characterData?.name || characterData?.data?.name || '').trim();
+}
+
+function readCharacterAvatarById(characters, rawCharacterId) {
+  const characterData = readCharacterDataById(characters, rawCharacterId);
+  return normalizeCurrentCharToken(characterData?.avatar || characterData?.data?.avatar);
+}
+
+function resolveCharacterPrimaryKey(snapshot) {
+  const avatar = normalizeCurrentCharToken(snapshot?.characterAvatar);
+  if (avatar && avatar.toLowerCase() !== 'none') {
+    return `avatar:${avatar}`;
+  }
+  return normalizeCurrentCharToken(snapshot?.characterName);
 }
 
 function getCurrentCharacterSnapshot() {
@@ -627,19 +783,36 @@ function getCurrentCharacterSnapshot() {
 
   const ctxCharacterName = readCharacterNameById(ctx?.characters, ctxCharacterId || stCharacterId || thisChid);
   const stCharacterName = readCharacterNameById(st?.characters, stCharacterId || ctxCharacterId || thisChid);
-  const currentCharacterName = ctxCharacterName || stCharacterName || '';
+  const ctxCharacterAvatar = readCharacterAvatarById(ctx?.characters, ctxCharacterId || stCharacterId || thisChid);
+  const stCharacterAvatar = readCharacterAvatarById(st?.characters, stCharacterId || ctxCharacterId || thisChid);
+  const ctxName2 = normalizeCurrentCharToken(ctx?.name2);
+  const stName2 = normalizeCurrentCharToken(st?.name2);
+  const globalName2 = normalizeCurrentCharToken(topWindow?.name2);
+  const currentCharacterName = ctxCharacterName || stCharacterName || ctxName2 || stName2 || globalName2 || '';
+  const currentCharacterAvatar = ctxCharacterAvatar || stCharacterAvatar || '';
 
   return {
     characterName: currentCharacterName,
+    characterAvatar: currentCharacterAvatar,
   };
+}
+
+function getCurrentCharKeyAliases() {
+  const snapshot = getCurrentCharacterSnapshot();
+  const aliases = [];
+  const primaryKey = resolveCharacterPrimaryKey(snapshot);
+  if (primaryKey) aliases.push(primaryKey);
+  const legacyNameKey = normalizeCurrentCharToken(snapshot.characterName);
+  if (legacyNameKey && !aliases.includes(legacyNameKey)) aliases.push(legacyNameKey);
+  return aliases.length > 0 ? aliases : ['default'];
 }
 
 // 获取当前角色卡（按角色卡名）
 export function getCurrentCharId() {
   try {
     const snapshot = getCurrentCharacterSnapshot();
-    const currentCharacterName = normalizeCurrentCharToken(snapshot.characterName);
-    if (currentCharacterName) return currentCharacterName;
+    const primaryKey = resolveCharacterPrimaryKey(snapshot);
+    if (primaryKey) return primaryKey;
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 获取当前角色ID失败:`, e);
   }
@@ -663,8 +836,21 @@ export function loadSettings() {
         console.log(`[${SCRIPT_NAME}] 已清除缓存中的自定义 systemPrompt`);
       }
       _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
+      const hasLegacyUiScale = Object.prototype.hasOwnProperty.call(parsed, 'uiScalePercent');
+      if (hasLegacyUiScale) {
+        const legacyScale = normalizeUiScalePercent(parsed.uiScalePercent);
+        if (!Object.prototype.hasOwnProperty.call(parsed, 'dialogScalePercent')) {
+          _settings.dialogScalePercent = legacyScale;
+        }
+        if (!Object.prototype.hasOwnProperty.call(parsed, 'toolbarScalePercent')) {
+          _settings.toolbarScalePercent = legacyScale;
+        }
+      }
+      delete _settings.uiScalePercent;
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
       _settings.specialCg = normalizeSpecialCgSettings(_settings.specialCg);
+      _settings.specialCgByChar = normalizeSpecialCgByCharMap(_settings.specialCgByChar);
+      _settings.specialCgUnlockedByChar = normalizeSpecialCgUnlockedByCharMap(_settings.specialCgUnlockedByChar);
       _settings.titleScreen = normalizeTitleScreenSettings(_settings.titleScreen);
       _settings.titleScreenByChar = normalizeTitleScreenByCharMap(_settings.titleScreenByChar);
       _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
@@ -698,6 +884,8 @@ export function loadSettings() {
       } else {
         _settings.effectsMaxActive = DEFAULT_SETTINGS.effectsMaxActive;
       }
+      _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
+      _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
       _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
       _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
       _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
@@ -736,6 +924,7 @@ export function loadSettings() {
         }
       }
       ensureMapSettings();
+      ensureSpecialCgSettings();
       ensureTitleScreenSettings();
     }
   } catch (e) {
@@ -758,6 +947,9 @@ export function saveSettings() {
   try {
     _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
     _settings.specialCg = normalizeSpecialCgSettings(_settings.specialCg);
+    _settings.specialCgByChar = normalizeSpecialCgByCharMap(_settings.specialCgByChar);
+    ensureSpecialCgSettings();
+    _settings.specialCgUnlockedByChar = normalizeSpecialCgUnlockedByCharMap(_settings.specialCgUnlockedByChar);
     _settings.bgmWhitelist = normalizeBgmWhitelist(_settings.bgmWhitelist);
     _settings.dialogFontFamily = normalizeDialogFontFamily(_settings.dialogFontFamily);
     normalizeTypewriterSettings(_settings);
@@ -766,6 +958,9 @@ export function saveSettings() {
     _settings.spriteUploadAspectRatio = normalizeSpriteUploadAspectRatio(_settings.spriteUploadAspectRatio);
     _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
     _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);
+    delete _settings.uiScalePercent;
+    _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
+    _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
     ensureMapSettings();
     ensureTitleScreenSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));
@@ -786,13 +981,25 @@ export function saveCharEnabled() {
 
 // 获取当前角色卡的开关状态
 export function isCurrentCharEnabled() {
-  const charId = String(getCurrentCharId() || 'default').trim() || 'default';
-  return _charEnabledMap[charId] === true;
+  const charAliases = getCurrentCharKeyAliases();
+  const charId = charAliases[0] || 'default';
+  if (_charEnabledMap[charId] === true) return true;
+  for (let i = 1; i < charAliases.length; i += 1) {
+    const aliasKey = charAliases[i];
+    if (!aliasKey) continue;
+    if (_charEnabledMap[aliasKey] === true) {
+      _charEnabledMap[charId] = true;
+      saveCharEnabled();
+      return true;
+    }
+  }
+  return false;
 }
 
 // 设置当前角色卡的开关状态
 export function setCurrentCharEnabled(enabled) {
-  const charId = String(getCurrentCharId() || 'default').trim() || 'default';
+  const charAliases = getCurrentCharKeyAliases();
+  const charId = charAliases[0] || 'default';
   _charEnabledMap[charId] = enabled === true;
   saveCharEnabled();
 }

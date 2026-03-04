@@ -3,7 +3,7 @@ import { TTSManager } from '../audio/tts-manager.js';
 import { SCRIPT_NAME, THEME } from '../core/constants.js';
 import { setGlobalDebugEnabled } from '../core/debug.js';
 import { $, topWindow } from '../core/env.js';
-import { ensureEnhancedModeSettings, ensureTitleScreenSettings, getSettings, saveSettings, setCurrentCharEnabled } from '../core/settings.js';
+import { ensureEnhancedModeSettings, ensureTitleScreenSettings, getSettings, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled } from '../core/settings.js';
 import { getIsEnabled, setHideOtherFloors, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { saveBackground } from '../db/backgrounds.js';
@@ -158,8 +158,14 @@ export function applySkin() {
 export function applySettingsToUI() {
   const settings = getSettings();
   const fontScale = 0.5 + (settings.fontSize / 30) * 1.0;
+  const dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
+  const toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
+  settings.dialogScalePercent = dialogScalePercent;
+  settings.toolbarScalePercent = toolbarScalePercent;
   const dialogFontStack = getDialogFontStack(settings.dialogFontFamily);
   $('#gal-global-overlay').css({
+    '--gal-dialog-scale-user': dialogScalePercent / 100,
+    '--gal-toolbar-scale-user': toolbarScalePercent / 100,
     '--font-scale': fontScale,
     '--gal-dialog-font-family': dialogFontStack,
   });
@@ -349,6 +355,8 @@ export async function showSettingsPanel(topTab, subTab) {
   settings.effectsMaxActive = effectMaxActive;
   settings.effectsEnabled = settings.effectsEnabled !== false;
   settings.effectsAutoClearOnSceneChange = settings.effectsAutoClearOnSceneChange !== false;
+  settings.dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
+  settings.toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
   const typewriterSpeedParsed = parseInt(settings.typewriterSpeed, 10);
   const typewriterSoundVolumeParsed = parseInt(settings.typewriterSoundVolume, 10);
   settings.typewriterEnabled = settings.typewriterEnabled !== false;
@@ -441,6 +449,20 @@ export async function showSettingsPanel(topTab, subTab) {
               <div class="gal-settings-control">
                 <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${settings.fontSize}">
                 <span class="gal-range-value" id="gal-font-size-value">${settings.fontSize}</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">对话框缩放</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-dialog-scale-percent" min="70" max="130" step="1" value="${settings.dialogScalePercent}">
+                <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings.dialogScalePercent}%</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">底栏缩放</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-toolbar-scale-percent" min="70" max="130" step="1" value="${settings.toolbarScalePercent}">
+                <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings.toolbarScalePercent}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
@@ -1079,6 +1101,18 @@ export async function showSettingsPanel(topTab, subTab) {
 
   // 滑块设置
   $('#gal-font-size').on('input', function () { settings.fontSize = parseInt($(this).val()); $('#gal-font-size-value').text(settings.fontSize); applySettingsToUI(); saveSettings(); });
+  $('#gal-dialog-scale-percent').on('input', function () {
+    settings.dialogScalePercent = normalizeUiScalePercent($(this).val());
+    $('#gal-dialog-scale-percent-value').text(`${settings.dialogScalePercent}%`);
+    applySettingsToUI();
+    saveSettings();
+  });
+  $('#gal-toolbar-scale-percent').on('input', function () {
+    settings.toolbarScalePercent = normalizeUiScalePercent($(this).val());
+    $('#gal-toolbar-scale-percent-value').text(`${settings.toolbarScalePercent}%`);
+    applySettingsToUI();
+    saveSettings();
+  });
   $('#gal-dialog-font-family').on('change', function () { settings.dialogFontFamily = $(this).val(); applySettingsToUI(); saveSettings(); });
   $('#gal-dialog-opacity').on('input', function () { const t = parseInt($(this).val()); settings.dialogOpacity = 1 - (t / 100); $('#gal-dialog-opacity-value').text(t + '%'); applySettingsToUI(); saveSettings(); });
   $('#gal-text-effect').on('change', function () { settings.textEffect = $(this).val(); applySettingsToUI(); saveSettings(); });
@@ -1122,15 +1156,33 @@ export async function showSettingsPanel(topTab, subTab) {
     settings.titleScreen = normalized;
     return normalized;
   };
+  const normalizeTitleSourceChoice = (ts) => {
+    const source = String(ts?.backgroundSource || '').trim().toLowerCase();
+    if (source === 'url' || source === 'upload') return source;
+    return String(ts?.backgroundUrl || '').trim() ? 'url' : 'upload';
+  };
   const getTitleSceneName = () => {
     const ts = getTitleSettingsState();
     return String(ts.backgroundSceneName || '__title__').trim() || '__title__';
   };
   const syncTitleSourceInputs = () => {
     const ts = getTitleSettingsState();
-    const source = String(ts.backgroundSource || 'auto');
-    const useUrl = source === 'url' || source === 'auto';
+    const source = normalizeTitleSourceChoice(ts);
+    if (String(ts.backgroundSource || '').trim().toLowerCase() !== source) {
+      ts.backgroundSource = source;
+      saveSettings();
+    }
+    $('#gal-title-bg-source').val(source);
+    const useUrl = source === 'url';
+    const useUpload = source === 'upload';
+    $('#gal-title-bg-upload-row').css('display', useUpload ? 'flex' : 'none');
+    $('#gal-title-bg-url-row').css('display', useUrl ? 'flex' : 'none');
     $('#gal-title-bg-url').prop('disabled', !useUrl);
+    $('#gal-title-bg-upload-btn')
+      .prop('disabled', !useUpload)
+      .css('opacity', useUpload ? 1 : 0.6)
+      .css('pointer-events', useUpload ? 'auto' : 'none');
+    $('#gal-title-bg-file').prop('disabled', !useUpload);
   };
   $('#gal-title-enabled').on('change', function () {
     const ts = getTitleSettingsState();
@@ -1153,16 +1205,12 @@ export async function showSettingsPanel(topTab, subTab) {
     ts.subtitleText = String($(this).val() || '').trim();
     saveSettings();
   });
-  $('#gal-title-start-text').on('input change', function () {
-    const ts = getTitleSettingsState();
-    ts.startButtonText = String($(this).val() || '').trim();
-    saveSettings();
-  });
   $('#gal-title-bg-source').on('change', function () {
     const ts = getTitleSettingsState();
-    ts.backgroundSource = String($(this).val() || 'auto').trim();
-    syncTitleSourceInputs();
+    const nextSource = String($(this).val() || 'upload').trim().toLowerCase() === 'url' ? 'url' : 'upload';
+    ts.backgroundSource = nextSource;
     saveSettings();
+    syncTitleSourceInputs();
   });
   $('#gal-title-bg-fit').on('change', function () {
     const ts = getTitleSettingsState();
@@ -1176,10 +1224,12 @@ export async function showSettingsPanel(topTab, subTab) {
   });
   $('#gal-title-bg-url').on('input change', function () {
     const ts = getTitleSettingsState();
-    ts.backgroundUrl = String($(this).val() || '').trim();
+    const nextUrl = String($(this).val() || '').trim();
+    ts.backgroundUrl = nextUrl;
     saveSettings();
   });
   $('#gal-title-bg-upload-btn').on('click', function () {
+    if ($(this).prop('disabled')) return;
     $('#gal-title-bg-file').trigger('click');
   });
   $('#gal-title-bg-file').on('change', async function () {
@@ -1189,14 +1239,17 @@ export async function showSettingsPanel(topTab, subTab) {
     const $hint = $('#gal-title-bg-upload-hint');
     try {
       await saveBackground(sceneName, file);
+      const ts = getTitleSettingsState();
+      ts.backgroundSource = 'upload';
       $hint.text(`已保存：${sceneName}（${file.name}）`);
       showToast('标题背景上传成功');
+      saveSettings();
+      syncTitleSourceInputs();
     } catch (error) {
       console.error(`[${SCRIPT_NAME}] 标题背景上传失败:`, error);
       showToast('标题背景上传失败');
     } finally {
       this.value = '';
-      saveSettings();
     }
   });
   syncTitleSourceInputs();

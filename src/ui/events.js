@@ -340,14 +340,13 @@ export function setupGlobalEventListeners() {
   }
 
   function isMobileMenuMode() {
-    const isNarrowViewport = !!(
-      topWindow &&
-      typeof topWindow.matchMedia === 'function' &&
-      topWindow.matchMedia('(max-width: 768px)').matches
-    );
+    const hasMatchMedia = !!(topWindow && typeof topWindow.matchMedia === 'function');
+    const isNarrowViewport = hasMatchMedia && topWindow.matchMedia('(max-width: 768px)').matches;
+    const isShortViewport = hasMatchMedia && topWindow.matchMedia('(max-height: 736px)').matches;
+    const preferMobileMenu = isNarrowViewport || isShortViewport;
     const $logBtn = $('#gal-global-overlay .gal-footer-btn[data-action="log"]');
-    if (!$logBtn.length) return isNarrowViewport;
-    return isNarrowViewport || !$logBtn.is(':visible');
+    if (!$logBtn.length) return preferMobileMenu;
+    return preferMobileMenu || !$logBtn.is(':visible');
   }
 
   // 设置按钮

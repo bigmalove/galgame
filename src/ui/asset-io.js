@@ -1,6 +1,15 @@
 import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
-import { getMapSettings, getSettings, saveSettings, updateMapSettings } from '../core/settings.js';
+import {
+  buildTitleSceneNameForChar,
+  getCurrentCharId,
+  getMapSettings,
+  getSettings,
+  normalizeSpecialCgSettings,
+  normalizeTitleScreenSettings,
+  saveSettings,
+  updateMapSettings,
+} from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
 import { saveSprite, saveSpritesBatch, getAllSprites } from '../db/sprites.js';
 import { saveBackground, saveBackgroundsBatch, getAllBackgrounds } from '../db/backgrounds.js';
@@ -559,6 +568,39 @@ function cloneJsonLike(value, fallback) {
   }
 }
 
+function normalizeCharacterCardId(rawValue) {
+  return String(rawValue || '').trim() || 'default';
+}
+
+function buildExportableTitleScreenSettings(rawSettings, targetCharId = 'default') {
+  const normalized = normalizeTitleScreenSettings(rawSettings);
+  normalized.backgroundSceneName = buildTitleSceneNameForChar(
+    targetCharId,
+    normalized.backgroundSceneName,
+  );
+  return normalized;
+}
+
+function buildTitleScreenExportPayload(rawSettings, targetCharId = 'default') {
+  const safeTargetCharId = normalizeCharacterCardId(targetCharId);
+  return {
+    ...buildExportableTitleScreenSettings(rawSettings, safeTargetCharId),
+    forCharacterId: safeTargetCharId,
+  };
+}
+
+function buildExportableSpecialCgSettings(rawSettings) {
+  return normalizeSpecialCgSettings(rawSettings);
+}
+
+function buildSpecialCgExportPayload(rawSettings, targetCharId = 'default') {
+  const safeTargetCharId = normalizeCharacterCardId(targetCharId);
+  return {
+    ...buildExportableSpecialCgSettings(rawSettings),
+    forCharacterId: safeTargetCharId,
+  };
+}
+
 async function writeGalgamePluginConfigToCurrentCharacter(config) {
   if (!config || typeof config !== 'object') {
     return { ok: false, reason: 'empty-config' };
@@ -711,6 +753,92 @@ function restoreImportedCustomModuleSettings(rawCustomConfig) {
 
   const mapSettingsApplied = applyImportedMapSettings(customConfig.map);
   return { restoredCustomFields, mapSettingsApplied };
+}
+
+function restoreImportedTitleScreenSettings(rawTitleScreenConfig) {
+  const titleScreenConfig = rawTitleScreenConfig && typeof rawTitleScreenConfig === 'object' && !Array.isArray(rawTitleScreenConfig)
+    ? rawTitleScreenConfig
+    : null;
+  if (!titleScreenConfig) return { restored: false, charIds: [] };
+
+  const settings = getSettings();
+  if (!settings || typeof settings !== 'object') {
+    return { restored: false, charIds: [] };
+  }
+
+  const currentCharId = normalizeCharacterCardId(getCurrentCharId());
+  const importedCharId = normalizeCharacterCardId(
+    titleScreenConfig.forCharacterId
+    || titleScreenConfig.charId
+    || '',
+  );
+  const targetCharIds = new Set();
+  if (currentCharId && currentCharId !== 'default') targetCharIds.add(currentCharId);
+  if (importedCharId && importedCharId !== 'default') targetCharIds.add(importedCharId);
+  if (targetCharIds.size === 0) {
+    targetCharIds.add(currentCharId || 'default');
+  }
+
+  const currentMap = settings.titleScreenByChar && typeof settings.titleScreenByChar === 'object' && !Array.isArray(settings.titleScreenByChar)
+    ? settings.titleScreenByChar
+    : {};
+  const nextMap = { ...currentMap };
+
+  targetCharIds.forEach(charId => {
+    nextMap[charId] = buildExportableTitleScreenSettings(titleScreenConfig, charId);
+  });
+
+  const primaryCharId = targetCharIds.has(currentCharId)
+    ? currentCharId
+    : Array.from(targetCharIds)[0];
+  settings.titleScreenByChar = nextMap;
+  settings.titleScreen = nextMap[primaryCharId] || buildExportableTitleScreenSettings(titleScreenConfig, primaryCharId);
+  saveSettings();
+
+  return { restored: true, charIds: Array.from(targetCharIds) };
+}
+
+function restoreImportedSpecialCgSettings(rawSpecialCgConfig) {
+  const specialCgConfig = rawSpecialCgConfig && typeof rawSpecialCgConfig === 'object' && !Array.isArray(rawSpecialCgConfig)
+    ? rawSpecialCgConfig
+    : null;
+  if (!specialCgConfig) return { restored: false, charIds: [] };
+
+  const settings = getSettings();
+  if (!settings || typeof settings !== 'object') {
+    return { restored: false, charIds: [] };
+  }
+
+  const currentCharId = normalizeCharacterCardId(getCurrentCharId());
+  const importedCharId = normalizeCharacterCardId(
+    specialCgConfig.forCharacterId
+    || specialCgConfig.charId
+    || '',
+  );
+  const targetCharIds = new Set();
+  if (currentCharId && currentCharId !== 'default') targetCharIds.add(currentCharId);
+  if (importedCharId && importedCharId !== 'default') targetCharIds.add(importedCharId);
+  if (targetCharIds.size === 0) {
+    targetCharIds.add(currentCharId || 'default');
+  }
+
+  const currentMap = settings.specialCgByChar && typeof settings.specialCgByChar === 'object' && !Array.isArray(settings.specialCgByChar)
+    ? settings.specialCgByChar
+    : {};
+  const nextMap = { ...currentMap };
+  targetCharIds.forEach(charId => {
+    nextMap[charId] = buildExportableSpecialCgSettings(specialCgConfig);
+  });
+
+  const primaryCharId = targetCharIds.has(currentCharId)
+    ? currentCharId
+    : Array.from(targetCharIds)[0];
+  const fallbackSettings = buildExportableSpecialCgSettings(specialCgConfig);
+  settings.specialCgByChar = nextMap;
+  settings.specialCg = nextMap[primaryCharId] || fallbackSettings;
+  saveSettings();
+
+  return { restored: true, charIds: Array.from(targetCharIds) };
 }
 
 function restoreImportedBgmSettings(rawBgmConfig) {
@@ -1602,6 +1730,8 @@ function ensureCharacterCardImportCompatibility(card) {
 
 async function buildGalgameCardConfig(options = {}) {
   const {
+    exportCharacterId = '',
+    exportCharacterName = '',
     remoteInput = '',
     includeAllPacks = true,
     selectedPackId = '',
@@ -1699,6 +1829,21 @@ async function buildGalgameCardConfig(options = {}) {
   const characterVoice = getAllCharacterTTSVoices() || {};
   const characterKeywords = getAllCharacterNameKeywords() || {};
   const settings = getSettings();
+  const targetTitleCharId = normalizeCharacterCardId(
+    exportCharacterId
+    || exportCharacterName
+    || getCurrentCharId(),
+  );
+  const titleScreenByCharMap = settings?.titleScreenByChar && typeof settings.titleScreenByChar === 'object' && !Array.isArray(settings.titleScreenByChar)
+    ? settings.titleScreenByChar
+    : {};
+  const rawTitleScreenSettings = titleScreenByCharMap[targetTitleCharId] || settings?.titleScreen;
+  const exportTitleScreenSettings = buildTitleScreenExportPayload(rawTitleScreenSettings, targetTitleCharId);
+  const specialCgByCharMap = settings?.specialCgByChar && typeof settings.specialCgByChar === 'object' && !Array.isArray(settings.specialCgByChar)
+    ? settings.specialCgByChar
+    : {};
+  const rawSpecialCgSettings = specialCgByCharMap[targetTitleCharId] || settings?.specialCg;
+  const exportSpecialCgSettings = buildSpecialCgExportPayload(rawSpecialCgSettings, targetTitleCharId);
 
   const live2dEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
   const live2dConfigMap = readLocalStorageJson(LIVE2D_CONFIG_KEY, {});
@@ -2048,6 +2193,8 @@ async function buildGalgameCardConfig(options = {}) {
           }
         : {}),
     },
+    titleScreen: exportTitleScreenSettings,
+    specialCg: exportSpecialCgSettings,
     live2d: {
       enabledMap: live2dEnabledMap || {},
       models: live2dOutModels,
@@ -2066,6 +2213,8 @@ async function buildGalgameCardConfig(options = {}) {
       locationStatusIconClass: normalizeLocationStatusIconClass(localStorage.getItem(CUSTOM_LOCATION_ICON_CLASS_KEY) || ''),
       timeStatusIconClass: normalizeTimeStatusIconClass(localStorage.getItem(CUSTOM_TIME_ICON_CLASS_KEY) || ''),
       map: buildExportableMapSettings(),
+      titleScreen: exportTitleScreenSettings,
+      specialCg: exportSpecialCgSettings,
       ...(customMapImagePayload ? { mapImage: customMapImagePayload } : {}),
     };
   }
@@ -3421,6 +3570,13 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
 
     updateProgress(8, '收集插件配置...');
     const config = await buildGalgameCardConfig({
+      exportCharacterId: String(
+        resolvedCharacter?.resolvedName
+        || currentCharacter?.name
+        || preferredCharacterName
+        || '',
+      ).trim(),
+      exportCharacterName: String(currentCharacter?.name || '').trim(),
       remoteInput,
       includeAllPacks,
       selectedPackId,
@@ -3826,6 +3982,18 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     const restoredLive2d = restoreImportedLive2dSettings(payload?.live2d || rawJson?.live2d);
     const restoredTts = restoreImportedTtsSettings(payload?.tts || rawJson?.tts);
     const restoredCustom = restoreImportedCustomModuleSettings(payload?.custom || rawJson?.custom);
+    const restoredTitleScreen = restoreImportedTitleScreenSettings(
+      payload?.titleScreen
+      || payload?.custom?.titleScreen
+      || rawJson?.titleScreen
+      || rawJson?.custom?.titleScreen,
+    );
+    const restoredSpecialCg = restoreImportedSpecialCgSettings(
+      payload?.specialCg
+      || payload?.custom?.specialCg
+      || rawJson?.specialCg
+      || rawJson?.custom?.specialCg,
+    );
     const restoredBgm = restoreImportedBgmSettings(payload?.bgm || rawJson?.bgm);
     const mapSettingsAppliedDirect = applyImportedMapSettings(
       payload?.mapSettings
@@ -3843,6 +4011,14 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     }
     if (restoredBgm.restored) summaryParts.push(`BGM 白名单 ${restoredBgm.count}`);
     if (restoredCustom.restoredCustomFields > 0) summaryParts.push(`自定义弹窗字段 ${restoredCustom.restoredCustomFields}`);
+    if (restoredTitleScreen.restored) {
+      const restoredCharCount = Array.isArray(restoredTitleScreen.charIds) ? restoredTitleScreen.charIds.length : 0;
+      summaryParts.push(`标题界面配置已恢复${restoredCharCount > 1 ? `（${restoredCharCount} 个角色键）` : ''}`);
+    }
+    if (restoredSpecialCg.restored) {
+      const restoredCharCount = Array.isArray(restoredSpecialCg.charIds) ? restoredSpecialCg.charIds.length : 0;
+      summaryParts.push(`MVU触发CG规则已恢复${restoredCharCount > 1 ? `（${restoredCharCount} 个角色键）` : ''}`);
+    }
     if (restoredTts.restoredEnabled || restoredTts.restoredVoiceCount > 0 || restoredTts.restoredKeywordCount > 0) {
       summaryParts.push(`TTS 音色 ${restoredTts.restoredVoiceCount}，关键字 ${restoredTts.restoredKeywordCount}`);
     }

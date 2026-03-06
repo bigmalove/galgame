@@ -17,6 +17,7 @@ import { getModalMountRoot } from './fullscreen.js';
 // ============================================
 
 const messageSegmentState = GalgameStore.cache.segments;
+const KEYBOARD_SHORTCUTS_BOUND_FLAG = '__galgame_keyboard_shortcuts_bound__';
 
 let rewindHoldTimer = null;
 let rewindTimer = null;
@@ -463,6 +464,12 @@ export function clearRewindHoldTimer() {
 // ============================================
 
 export function setupKeyboardShortcuts() {
+  if (topWindow[KEYBOARD_SHORTCUTS_BOUND_FLAG]) {
+    console.log(`[${SCRIPT_NAME}] 快捷键监听已存在，跳过重复注册`);
+    return;
+  }
+  topWindow[KEYBOARD_SHORTCUTS_BOUND_FLAG] = true;
+
   const settings = getSettings();
 
   $(topWindow.document).on('keydown', function (e) {

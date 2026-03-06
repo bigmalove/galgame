@@ -177,6 +177,9 @@ export function ensureGlobalOverlay() {
                   <button class="gal-footer-btn" data-action="load" title="读档">
                     <i class="fa-solid fa-folder-open"></i> <span class="gal-btn-text">LOAD</span>
                   </button>
+                  <button class="gal-footer-btn" data-action="timeline" title="时间线图谱">
+                    <i class="fa-solid fa-diagram-project"></i> <span class="gal-btn-text">TL</span>
+                  </button>
                   <button class="gal-footer-btn gal-nav-btn" data-action="prev" title="上一段">
                     <i class="fa-solid fa-chevron-left"></i> <span class="gal-btn-text">PREV</span>
                   </button>
@@ -236,6 +239,9 @@ export function ensureGlobalOverlay() {
           </button>
           <button class="gal-menu-btn" data-action="load">
               <i class="fa-solid fa-folder-open"></i> 读档
+          </button>
+          <button class="gal-menu-btn" data-action="timeline">
+              <i class="fa-solid fa-diagram-project"></i> 时间线
           </button>
         </div>
       </div>
@@ -511,8 +517,15 @@ export function updateGeneratingStatus(statusText) {
 // ============================================
 // Resize 监听器
 // ============================================
+const RESIZE_LISTENER_BOUND_FLAG = '__galgame_overlay_resize_listener_bound__';
 
 export function setupGameContentResizeListener() {
+  if (topWindow[RESIZE_LISTENER_BOUND_FLAG]) {
+    console.log(`[${SCRIPT_NAME}] 窗口 resize 监听已存在，跳过重复注册`);
+    return;
+  }
+  topWindow[RESIZE_LISTENER_BOUND_FLAG] = true;
+
   let resizeTimer = null;
   let isProcessing = false;
 

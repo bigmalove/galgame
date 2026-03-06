@@ -8,6 +8,7 @@ import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.
 import { Live2DPreloadManager } from '../live2d/preload.js';
 import { parseGalgameContent, RE_GAL_TAGS } from '../logic/parser.js';
 import { consumePendingSpecialCgByScene } from '../logic/special-cg-trigger.js';
+import { markTimelineCacheDirty } from '../timeline/data.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
 import { renderBGMWidget } from './bgm-widget.js';
 import { hideNonLastFloors, showAllFloors } from './galgame-mode.js';
@@ -214,6 +215,8 @@ export async function processNewMessage(mesNode, options = {}) {
       state.currentIndex = parsed.segments.length - 1;
     }
   }
+
+  markTimelineCacheDirty();
 
   Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, 'process-message');
 

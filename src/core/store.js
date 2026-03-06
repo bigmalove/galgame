@@ -19,6 +19,7 @@ export const GalgameStore = {
     segments: new Map(),     // mesId -> { currentIndex, segments }
     voices: new Map(),       // 角色名 -> 音色名 (会话级)
     parse: new Map(),        // 解析结果缓存
+    timeline: new Map(),     // characterKey -> { data, dirty, updatedAt }
     dom: {
       $chatContainer: null,
       $globalOverlay: null,
@@ -92,6 +93,7 @@ export const GalgameStore = {
     CURRENT_PACK: `${SCRIPT_ID}_current_pack`,
     RENDER_SCOPE: `${SCRIPT_ID}_render_scope`,
     MAP_SETTINGS: `${SCRIPT_ID}_map_settings`,
+    TIMELINE_PREFS: `${SCRIPT_ID}_timeline_prefs`,
   },
 
   // ===== 方法 =====

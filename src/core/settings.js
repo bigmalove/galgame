@@ -359,6 +359,32 @@ export function normalizeTitleScreenSettings(rawTitleScreen) {
 }
 
 const TITLE_SCENE_CHAR_MARKER = '::char::';
+const CHARACTER_SLOT_KEY_MARKER = '::slot::';
+const TITLE_SCREEN_FALLBACK_CHAR_IDS = new Set(['default', 'assistant']);
+const _titleScreenCardConfigSignatureByChar = {};
+const _titleScreenLastCardObjectByChar = {};
+const _titleScreenPendingCardSyncByChar = {};
+let _lastActiveTitleScreenCharId = '';
+
+function isFallbackTitleScreenCharId(rawCharId) {
+  const normalized = String(rawCharId || '').trim().toLowerCase();
+  return TITLE_SCREEN_FALLBACK_CHAR_IDS.has(normalized);
+}
+
+function stringifyTitleScreenConfigForSignature(rawConfig) {
+  try {
+    return JSON.stringify(rawConfig);
+  } catch (error) {
+    return '';
+  }
+}
+
+function buildCharacterSlotKey(rawName, rawSlotId) {
+  const safeName = normalizeCurrentCharToken(rawName);
+  const safeSlotId = normalizeCurrentCharToken(rawSlotId);
+  if (!safeName || !safeSlotId) return '';
+  return `${safeName}${CHARACTER_SLOT_KEY_MARKER}${safeSlotId}`;
+}
 
 function normalizeTitleScreenByCharMap(rawMap) {
   const source = _safeObject(rawMap);
@@ -380,6 +406,26 @@ function normalizeSpecialCgByCharMap(rawMap) {
     result[charId] = normalizeSpecialCgSettings(rawConfig);
   });
   return result;
+}
+
+function resolveFallbackTitleScreenSettings(currentCharId, preservedSettings) {
+  const currentMap = _safeObject(_settings?.titleScreenByChar);
+  const explicitFallbackSettings =
+    currentMap[currentCharId]
+    || currentMap.default
+    || currentMap.assistant
+    || null;
+
+  if (explicitFallbackSettings) {
+    return normalizeTitleScreenSettings(explicitFallbackSettings);
+  }
+
+  const hasPerCharacterOverrides = Object.keys(currentMap).some(key => !isFallbackTitleScreenCharId(key));
+  if (hasPerCharacterOverrides) {
+    return normalizeTitleScreenSettings(DEFAULT_TITLE_SCREEN_SETTINGS);
+  }
+
+  return normalizeTitleScreenSettings(preservedSettings);
 }
 
 function normalizeSpecialCgUnlockedByCharMap(rawMap) {
@@ -680,8 +726,85 @@ export function ensureTitleScreenSettings() {
 
   const charAliases = getCurrentCharKeyAliases();
   const currentCharId = charAliases[0] || 'default';
+  const shouldSkipFallbackChar = isFallbackTitleScreenCharId(currentCharId);
   _settings.titleScreenByChar = normalizeTitleScreenByCharMap(_settings.titleScreenByChar);
+  const beforeMapKeys = Object.keys(_settings.titleScreenByChar || {});
+  let matchedAliasKey = '';
   let rawCurrentCharSettings = _settings.titleScreenByChar[currentCharId] || null;
+  if (shouldSkipFallbackChar) {
+    if (_lastActiveTitleScreenCharId && !isFallbackTitleScreenCharId(_lastActiveTitleScreenCharId)) {
+      _titleScreenPendingCardSyncByChar[_lastActiveTitleScreenCharId] = true;
+    }
+    const preserved = normalizeTitleScreenSettings(_settings.titleScreen || DEFAULT_TITLE_SCREEN_SETTINGS);
+    const fallbackSettings = resolveFallbackTitleScreenSettings(currentCharId, preserved);
+    logTitleScreenDiag('ensureTitleScreenSettings:skip-fallback-char', {
+      charAliases,
+      currentCharId,
+      beforeMapKeys,
+      syncTargetCharId: _lastActiveTitleScreenCharId,
+      preservedTitleScreen: summarizeTitleScreenConfigForLog(preserved),
+      fallbackTitleScreen: summarizeTitleScreenConfigForLog(fallbackSettings),
+    });
+    _settings.titleScreen = fallbackSettings;
+    return _settings.titleScreen;
+  }
+
+  const needsCardSyncFromFallback = _titleScreenPendingCardSyncByChar[currentCharId] === true;
+  const cardTitlePayload = readCurrentCharacterTitleScreenConfigFromCard();
+  let appliedCardExtension = false;
+  let cardSyncReason = '';
+  let cardSignatureChanged = false;
+  let cardRefChanged = false;
+  let cardConfigSummary = null;
+
+  if (cardTitlePayload && cardTitlePayload.hasCardData === true) {
+    const previousCardSignature = String(_titleScreenCardConfigSignatureByChar[currentCharId] || '');
+    const previousCardObject = _titleScreenLastCardObjectByChar[currentCharId] || null;
+    const currentCardObject =
+      cardTitlePayload.cardData && typeof cardTitlePayload.cardData === 'object'
+        ? cardTitlePayload.cardData
+        : null;
+    cardRefChanged = !!previousCardObject && !!currentCardObject && previousCardObject !== currentCardObject;
+    if (currentCardObject) {
+      _titleScreenLastCardObjectByChar[currentCharId] = currentCardObject;
+    }
+
+    if (cardTitlePayload.rawTitleScreen) {
+      const cardTitleSettings = normalizeTitleScreenSettings(cardTitlePayload.rawTitleScreen);
+      cardTitleSettings.backgroundSceneName = buildTitleSceneNameForChar(
+        currentCharId,
+        cardTitleSettings.backgroundSceneName,
+      );
+      const cardSignature = stringifyTitleScreenConfigForSignature(cardTitleSettings);
+      cardSignatureChanged = !!previousCardSignature && !!cardSignature && cardSignature !== previousCardSignature;
+      cardConfigSummary = summarizeTitleScreenConfigForLog(cardTitleSettings);
+      const shouldApplyCardSettings =
+        needsCardSyncFromFallback
+        || cardSignatureChanged
+        || cardRefChanged
+        || (!rawCurrentCharSettings && !previousCardSignature);
+
+      if (shouldApplyCardSettings) {
+        rawCurrentCharSettings = cardTitleSettings;
+        _settings.titleScreenByChar[currentCharId] = cardTitleSettings;
+        _settings.titleScreen = cardTitleSettings;
+        appliedCardExtension = true;
+        if (needsCardSyncFromFallback) cardSyncReason = 'fallback-sync';
+        else if (cardSignatureChanged) cardSyncReason = 'signature-changed';
+        else if (cardRefChanged) cardSyncReason = 'card-ref-changed';
+        else cardSyncReason = 'missing-local-config';
+      }
+
+      if (cardSignature) {
+        _titleScreenCardConfigSignatureByChar[currentCharId] = cardSignature;
+      }
+    }
+  }
+
+  if (needsCardSyncFromFallback && (appliedCardExtension || cardTitlePayload.hasCardData === true)) {
+    delete _titleScreenPendingCardSyncByChar[currentCharId];
+  }
+
   if (!rawCurrentCharSettings) {
     for (let i = 1; i < charAliases.length; i += 1) {
       const aliasKey = charAliases[i];
@@ -689,6 +812,7 @@ export function ensureTitleScreenSettings() {
       const aliasSettings = _settings.titleScreenByChar[aliasKey];
       if (aliasSettings) {
         rawCurrentCharSettings = aliasSettings;
+        matchedAliasKey = aliasKey;
         _settings.titleScreenByChar[currentCharId] = aliasSettings;
         break;
       }
@@ -705,6 +829,21 @@ export function ensureTitleScreenSettings() {
 
   _settings.titleScreenByChar[currentCharId] = currentCharSettings;
   _settings.titleScreen = currentCharSettings;
+  _lastActiveTitleScreenCharId = currentCharId;
+  logTitleScreenDiag('ensureTitleScreenSettings', {
+    charAliases,
+    currentCharId,
+    matchedAliasKey,
+    beforeMapKeys,
+    pendingCardSync: needsCardSyncFromFallback,
+    appliedCardExtension,
+    cardSyncReason,
+    cardSignatureChanged,
+    cardRefChanged,
+    cardConfigSummary,
+    afterMapKeys: Object.keys(_settings.titleScreenByChar || {}),
+    activeTitleScreen: summarizeTitleScreenConfigForLog(_settings.titleScreen),
+  });
   return _settings.titleScreen;
 }
 
@@ -725,6 +864,71 @@ export function setSettings(v) { _settings = v; }
 
 // 每个角色卡的开关状态
 let _charEnabledMap = {};
+const CHAR_ENABLED_VAR_PATH = ['galgame_ui_plugin', 'runtime', 'enabled'];
+let _charEnabledVariableReadWarned = false;
+let _charEnabledVariableWriteWarned = false;
+
+function getNestedValueByPath(source, path) {
+  if (!source || typeof source !== 'object' || !Array.isArray(path) || path.length === 0) return undefined;
+  let current = source;
+  for (const segment of path) {
+    if (!current || typeof current !== 'object') return undefined;
+    current = current[segment];
+  }
+  return current;
+}
+
+function setNestedValueByPath(target, path, value) {
+  if (!target || typeof target !== 'object' || !Array.isArray(path) || path.length === 0) return;
+  let current = target;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const segment = path[i];
+    const next = current[segment];
+    if (!next || typeof next !== 'object' || Array.isArray(next)) {
+      current[segment] = {};
+    }
+    current = current[segment];
+  }
+  current[path[path.length - 1]] = value;
+}
+
+function readCurrentCharEnabledFromCharacterVariables() {
+  try {
+    if (typeof getVariables !== 'function') return null;
+    const variables = getVariables({ type: 'character' });
+    const rawEnabled = getNestedValueByPath(variables, CHAR_ENABLED_VAR_PATH);
+    if (rawEnabled === true) return true;
+    if (rawEnabled === false) return false;
+  } catch (e) {
+    if (!_charEnabledVariableReadWarned) {
+      _charEnabledVariableReadWarned = true;
+      console.warn(`[${SCRIPT_NAME}] 读取角色卡开关变量失败:`, e);
+    }
+  }
+  return null;
+}
+
+function persistCurrentCharEnabledToCharacterVariables(enabled) {
+  try {
+    if (typeof getVariables !== 'function' || typeof replaceVariables !== 'function') {
+      return false;
+    }
+    const variables = getVariables({ type: 'character' });
+    const nextVariables =
+      variables && typeof variables === 'object' && !Array.isArray(variables)
+        ? variables
+        : {};
+    setNestedValueByPath(nextVariables, CHAR_ENABLED_VAR_PATH, enabled === true);
+    replaceVariables(nextVariables, { type: 'character' });
+    return true;
+  } catch (e) {
+    if (!_charEnabledVariableWriteWarned) {
+      _charEnabledVariableWriteWarned = true;
+      console.warn(`[${SCRIPT_NAME}] 写入角色卡开关变量失败:`, e);
+    }
+    return false;
+  }
+}
 
 function normalizeCurrentCharToken(rawValue) {
   if (rawValue === undefined || rawValue === null) return '';
@@ -734,6 +938,35 @@ function normalizeCurrentCharToken(rawValue) {
   const lowerText = text.toLowerCase();
   if (lowerText === 'undefined' || lowerText === 'null') return '';
   return text;
+}
+
+function shouldLogTitleScreenDiag() {
+  return topWindow?.__GAL_TITLE_DEBUG__ !== false;
+}
+
+function summarizeTitleScreenConfigForLog(rawConfig) {
+  const config = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
+  const backgroundUrl = String(config.backgroundUrl || '').trim();
+  return {
+    enabled: config.enabled === true,
+    titleText: String(config.titleText || ''),
+    subtitleText: String(config.subtitleText || ''),
+    backgroundSource: String(config.backgroundSource || ''),
+    backgroundSceneName: String(config.backgroundSceneName || ''),
+    backgroundFit: String(config.backgroundFit || ''),
+    enableBackdropMask: config.enableBackdropMask !== false,
+    hasBackgroundUrl: !!backgroundUrl,
+    backgroundUrlLength: backgroundUrl.length,
+  };
+}
+
+function logTitleScreenDiag(stage, payload = {}) {
+  if (!shouldLogTitleScreenDiag()) return;
+  try {
+    console.log(`[${SCRIPT_NAME}] [TitleScreenDiag] ${stage}`, payload);
+  } catch {
+    // ignore diagnostic logging errors
+  }
 }
 
 function readCharacterDataById(characters, rawCharacterId) {
@@ -755,6 +988,67 @@ function readCharacterDataById(characters, rawCharacterId) {
   return characterData || null;
 }
 
+function readCurrentCharacterData() {
+  const st = topWindow?.SillyTavern || null;
+  const ctx = typeof st?.getContext === 'function' ? st.getContext() : null;
+  const ctxCharacterId = normalizeCurrentCharToken(ctx?.characterId);
+  const stCharacterId = normalizeCurrentCharToken(st?.characterId);
+  const thisChid = normalizeCurrentCharToken(topWindow?.this_chid);
+  const resolvedId = ctxCharacterId || stCharacterId || thisChid;
+
+  const fromCtx = readCharacterDataById(ctx?.characters, resolvedId);
+  if (fromCtx && typeof fromCtx === 'object') return fromCtx;
+  const fromSt = readCharacterDataById(st?.characters, resolvedId);
+  if (fromSt && typeof fromSt === 'object') return fromSt;
+  return null;
+}
+
+function extractGalgamePluginConfigFromCardObject(cardLike) {
+  if (!cardLike || typeof cardLike !== 'object') return null;
+  const candidates = [
+    cardLike?.data?.extensions?.galgame_ui_plugin,
+    cardLike?.extensions?.galgame_ui_plugin,
+    cardLike?.json_data?.data?.extensions?.galgame_ui_plugin,
+    cardLike?.json_data?.extensions?.galgame_ui_plugin,
+  ];
+  for (const item of candidates) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) return item;
+  }
+  return null;
+}
+
+function readCurrentCharacterTitleScreenConfigFromCard() {
+  const cardData = readCurrentCharacterData();
+  if (!cardData || typeof cardData !== 'object') {
+    return {
+      hasCardData: false,
+      cardData: null,
+      rawTitleScreen: null,
+    };
+  }
+  const pluginConfig = extractGalgamePluginConfigFromCardObject(cardData);
+  if (!pluginConfig || typeof pluginConfig !== 'object') {
+    return {
+      hasCardData: true,
+      cardData,
+      rawTitleScreen: null,
+    };
+  }
+  const rawTitleScreen =
+    pluginConfig?.titleScreen
+    || pluginConfig?.custom?.titleScreen
+    || null;
+  const validTitleScreen =
+    rawTitleScreen && typeof rawTitleScreen === 'object' && !Array.isArray(rawTitleScreen)
+      ? rawTitleScreen
+      : null;
+  return {
+    hasCardData: true,
+    cardData,
+    rawTitleScreen: validTitleScreen,
+  };
+}
+
 function readCharacterNameById(characters, rawCharacterId) {
   const characterData = readCharacterDataById(characters, rawCharacterId);
   return String(characterData?.name || characterData?.data?.name || '').trim();
@@ -766,11 +1060,11 @@ function readCharacterAvatarById(characters, rawCharacterId) {
 }
 
 function resolveCharacterPrimaryKey(snapshot) {
-  const avatar = normalizeCurrentCharToken(snapshot?.characterAvatar);
-  if (avatar && avatar.toLowerCase() !== 'none') {
-    return `avatar:${avatar}`;
-  }
-  return normalizeCurrentCharToken(snapshot?.characterName);
+  const characterName = normalizeCurrentCharToken(snapshot?.characterName);
+  if (!characterName) return '';
+  const slotKey = buildCharacterSlotKey(characterName, snapshot?.characterSlotId);
+  if (slotKey) return slotKey;
+  return characterName;
 }
 
 function getCurrentCharacterSnapshot() {
@@ -780,20 +1074,27 @@ function getCurrentCharacterSnapshot() {
   const ctxCharacterId = normalizeCurrentCharToken(ctx?.characterId);
   const stCharacterId = normalizeCurrentCharToken(st?.characterId);
   const thisChid = normalizeCurrentCharToken(topWindow?.this_chid);
+  const resolvedCharacterId = ctxCharacterId || stCharacterId || thisChid;
 
-  const ctxCharacterName = readCharacterNameById(ctx?.characters, ctxCharacterId || stCharacterId || thisChid);
-  const stCharacterName = readCharacterNameById(st?.characters, stCharacterId || ctxCharacterId || thisChid);
-  const ctxCharacterAvatar = readCharacterAvatarById(ctx?.characters, ctxCharacterId || stCharacterId || thisChid);
-  const stCharacterAvatar = readCharacterAvatarById(st?.characters, stCharacterId || ctxCharacterId || thisChid);
-  const ctxName2 = normalizeCurrentCharToken(ctx?.name2);
-  const stName2 = normalizeCurrentCharToken(st?.name2);
-  const globalName2 = normalizeCurrentCharToken(topWindow?.name2);
-  const currentCharacterName = ctxCharacterName || stCharacterName || ctxName2 || stName2 || globalName2 || '';
+  const ctxCharacterName = readCharacterNameById(ctx?.characters, resolvedCharacterId);
+  const stCharacterName = readCharacterNameById(st?.characters, resolvedCharacterId);
+  const ctxCharacterAvatar = readCharacterAvatarById(ctx?.characters, resolvedCharacterId);
+  const stCharacterAvatar = readCharacterAvatarById(st?.characters, resolvedCharacterId);
+  const ctxFallbackCharacterName = resolvedCharacterId ? normalizeCurrentCharToken(ctx?.name2) : '';
+  const stFallbackCharacterName = resolvedCharacterId ? normalizeCurrentCharToken(st?.name2) : '';
+  const currentCharacterName =
+    ctxCharacterName
+    || stCharacterName
+    || ctxFallbackCharacterName
+    || stFallbackCharacterName
+    || '';
   const currentCharacterAvatar = ctxCharacterAvatar || stCharacterAvatar || '';
+  const currentCharacterSlotId = resolvedCharacterId;
 
   return {
     characterName: currentCharacterName,
     characterAvatar: currentCharacterAvatar,
+    characterSlotId: currentCharacterSlotId,
   };
 }
 
@@ -802,20 +1103,33 @@ function getCurrentCharKeyAliases() {
   const aliases = [];
   const primaryKey = resolveCharacterPrimaryKey(snapshot);
   if (primaryKey) aliases.push(primaryKey);
+
+  const slotKey = buildCharacterSlotKey(snapshot?.characterName, snapshot?.characterSlotId);
+  if (slotKey && !aliases.includes(slotKey)) aliases.push(slotKey);
+
   const legacyNameKey = normalizeCurrentCharToken(snapshot.characterName);
   if (legacyNameKey && !aliases.includes(legacyNameKey)) aliases.push(legacyNameKey);
   return aliases.length > 0 ? aliases : ['default'];
 }
 
-// 获取当前角色卡（按角色卡名）
+// 获取当前角色卡主键（统一按 槽位ID > 角色名）
 export function getCurrentCharId() {
   try {
     const snapshot = getCurrentCharacterSnapshot();
     const primaryKey = resolveCharacterPrimaryKey(snapshot);
-    if (primaryKey) return primaryKey;
+    if (primaryKey) {
+      logTitleScreenDiag('getCurrentCharId', {
+        primaryKey,
+        characterName: String(snapshot?.characterName || ''),
+        characterAvatar: String(snapshot?.characterAvatar || ''),
+        characterSlotId: String(snapshot?.characterSlotId || ''),
+      });
+      return primaryKey;
+    }
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 获取当前角色ID失败:`, e);
   }
+  logTitleScreenDiag('getCurrentCharId:fallback-default', {});
   return 'default';
 }
 
@@ -983,14 +1297,25 @@ export function saveCharEnabled() {
 export function isCurrentCharEnabled() {
   const charAliases = getCurrentCharKeyAliases();
   const charId = charAliases[0] || 'default';
-  if (_charEnabledMap[charId] === true) return true;
+  const variableEnabled = readCurrentCharEnabledFromCharacterVariables();
+  if (variableEnabled === true || variableEnabled === false) {
+    if (_charEnabledMap[charId] !== variableEnabled) {
+      _charEnabledMap[charId] = variableEnabled;
+      saveCharEnabled();
+    }
+    return variableEnabled;
+  }
+
+  if (_charEnabledMap[charId] === true || _charEnabledMap[charId] === false) {
+    return _charEnabledMap[charId] === true;
+  }
   for (let i = 1; i < charAliases.length; i += 1) {
     const aliasKey = charAliases[i];
     if (!aliasKey) continue;
-    if (_charEnabledMap[aliasKey] === true) {
-      _charEnabledMap[charId] = true;
+    if (_charEnabledMap[aliasKey] === true || _charEnabledMap[aliasKey] === false) {
+      _charEnabledMap[charId] = _charEnabledMap[aliasKey] === true;
       saveCharEnabled();
-      return true;
+      return _charEnabledMap[charId];
     }
   }
   return false;
@@ -1000,6 +1325,8 @@ export function isCurrentCharEnabled() {
 export function setCurrentCharEnabled(enabled) {
   const charAliases = getCurrentCharKeyAliases();
   const charId = charAliases[0] || 'default';
-  _charEnabledMap[charId] = enabled === true;
+  const safeEnabled = enabled === true;
+  _charEnabledMap[charId] = safeEnabled;
   saveCharEnabled();
+  persistCurrentCharEnabledToCharacterVariables(safeEnabled);
 }

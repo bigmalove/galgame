@@ -12,5 +12,10 @@
   "devDependencies": {
     "esbuild": "^0.24.0",
     "vitepress": "^1.6.4"
+  },
+  "dependencies": {
+    "cytoscape": "^3.33.1",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5"
   }
 }

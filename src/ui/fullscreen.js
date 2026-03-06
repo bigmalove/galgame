@@ -5,6 +5,7 @@ import { resizePixiEffects } from '../effects/pixi-effect-manager.js';
 // ============================================
 // 全屏模式
 // ============================================
+const FULLSCREEN_CHANGE_LISTENER_BOUND_FLAG = '__galgame_fullscreen_listener_bound__';
 
 // 延迟引用
 let _showToastRef = null;
@@ -86,6 +87,12 @@ export async function toggleFullscreen() {
 }
 
 export function setupFullscreenChangeListener() {
+  if (topWindow[FULLSCREEN_CHANGE_LISTENER_BOUND_FLAG]) {
+    console.log(`[${SCRIPT_NAME}] 全屏状态监听已存在，跳过重复注册`);
+    return;
+  }
+  topWindow[FULLSCREEN_CHANGE_LISTENER_BOUND_FLAG] = true;
+
   const handleFullscreenChange = () => {
     const overlay = topWindow.document.getElementById('gal-global-overlay');
     if (!overlay) return;

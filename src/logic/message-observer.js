@@ -10,6 +10,7 @@ import { getIsEnabled } from '../core/state.js';
 // ============================================
 
 const messageContentDebounceTimers = new Map();
+const MESSAGE_OBSERVER_BOUND_FLAG = '__galgame_message_observer_bound__';
 
 // 延迟引用: processNewMessage, injectGalgameButton
 let _processNewMessageRef = null;
@@ -21,6 +22,12 @@ export function setMessageObserverRefs({ processNewMessage, injectGalgameButton 
 }
 
 export function setupMessageObserver() {
+  if (topWindow[MESSAGE_OBSERVER_BOUND_FLAG]) {
+    console.log(`[${SCRIPT_NAME}] 消息监听器已存在，跳过重复注册`);
+    return;
+  }
+  topWindow[MESSAGE_OBSERVER_BOUND_FLAG] = true;
+
   BGMManager.init();
   TTSManager.init();
 

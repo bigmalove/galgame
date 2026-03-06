@@ -30,6 +30,7 @@ import { showCustomPopupPanel } from './modal.js';
 import { detectAndCaptureCg } from './overlay-content.js';
 import { scheduleOverlaySegmentDisplay, showGlobalOverlay } from './overlay.js';
 import { showSaveLoadModal } from './save-load-modal.js';
+import { showTimelineModal } from './timeline-modal.js';
 import { showToast } from './toast.js';
 import { maybeShowTitleScreen, resetTitleScreenSession } from './title-screen.js';
 import { finishActiveTypewriter, isTypewriterActive } from './typewriter.js';
@@ -40,6 +41,7 @@ import { showMapModal } from '../map/map-modal.js';
 // ============================================
 
 const messageSegmentState = GalgameStore.cache.segments;
+const GLOBAL_EVENT_DELEGATION_BOUND_FLAG = '__galgame_event_delegation_bound__';
 
 // 延迟引用
 let _showSettingsPanelRef = null;
@@ -53,6 +55,12 @@ export function setEventsRefs({ showSettingsPanel, showSpriteUploadDialog, updat
 }
 
 export function setupGlobalEventListeners() {
+  if (topWindow[GLOBAL_EVENT_DELEGATION_BOUND_FLAG]) {
+    console.log(`[${SCRIPT_NAME}] 全局事件委托已存在，跳过重复注册`);
+    return;
+  }
+  topWindow[GLOBAL_EVENT_DELEGATION_BOUND_FLAG] = true;
+
   console.log(`[${SCRIPT_NAME}] 设置全局事件委托...`);
   const doc = topWindow.document;
   const settings = getSettings();
@@ -390,6 +398,12 @@ export function setupGlobalEventListeners() {
     e.stopPropagation();
     closeMobileMenu();
     showSaveLoadModal('load');
+  });
+
+  $(doc).on('click', '#gal-global-overlay [data-action="timeline"]', async function (e) {
+    e.stopPropagation();
+    closeMobileMenu();
+    await showTimelineModal();
   });
 
   $(doc).on('click', '#gal-mobile-menu .gal-menu-btn', function () {

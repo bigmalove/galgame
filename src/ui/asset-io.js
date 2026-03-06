@@ -57,6 +57,36 @@ const ASSET_TAB_ACCESS_OPTIONS = [
 ];
 const ASSET_TAB_ACCESS_ID_SET = new Set(ASSET_TAB_ACCESS_OPTIONS.map(item => item.id));
 
+function shouldLogTitleScreenDiag() {
+  return topWindow?.__GAL_TITLE_DEBUG__ !== false;
+}
+
+function summarizeTitleScreenConfigForLog(rawConfig) {
+  const config = rawConfig && typeof rawConfig === 'object' ? rawConfig : {};
+  const backgroundUrl = String(config.backgroundUrl || '').trim();
+  return {
+    enabled: config.enabled === true,
+    titleText: String(config.titleText || ''),
+    subtitleText: String(config.subtitleText || ''),
+    backgroundSource: String(config.backgroundSource || ''),
+    backgroundSceneName: String(config.backgroundSceneName || ''),
+    backgroundFit: String(config.backgroundFit || ''),
+    enableBackdropMask: config.enableBackdropMask !== false,
+    hasBackgroundUrl: !!backgroundUrl,
+    backgroundUrlLength: backgroundUrl.length,
+    forCharacterId: String(config.forCharacterId || config.charId || '').trim(),
+  };
+}
+
+function logTitleScreenDiag(stage, payload = {}) {
+  if (!shouldLogTitleScreenDiag()) return;
+  try {
+    console.log(`[${SCRIPT_NAME}] [TitleScreenDiag] ${stage}`, payload);
+  } catch {
+    // ignore diagnostic logging errors
+  }
+}
+
 function safeJsonParse(text, fallback) {
   try {
     if (text == null || text === '') return fallback;
@@ -572,6 +602,50 @@ function normalizeCharacterCardId(rawValue) {
   return String(rawValue || '').trim() || 'default';
 }
 
+function normalizeCharacterToken(rawValue) {
+  const text = String(rawValue || '').trim();
+  if (!text) return '';
+  if (text === '-1') return '';
+  const lowered = text.toLowerCase();
+  if (lowered === 'undefined' || lowered === 'null') return '';
+  return text;
+}
+
+function buildCharacterSlotKey(rawName, rawSlotId) {
+  const safeName = normalizeCharacterToken(rawName);
+  const safeSlotId = normalizeCharacterToken(rawSlotId);
+  if (!safeName || !safeSlotId) return '';
+  return `${safeName}::slot::${safeSlotId}`;
+}
+
+function appendCharacterIdCandidateFromCard(cardLike, idSet, rawSlotId = '') {
+  if (!cardLike || typeof cardLike !== 'object' || !(idSet instanceof Set)) return;
+  const name = normalizeCharacterToken(cardLike?.data?.name || cardLike?.name);
+  if (name) {
+    idSet.add(name);
+  }
+  const slotKey = buildCharacterSlotKey(name, rawSlotId);
+  if (slotKey) idSet.add(slotKey);
+}
+
+function collectCurrentCharacterIdCandidates() {
+  const idSet = new Set();
+  const currentCharId = normalizeCharacterCardId(getCurrentCharId());
+  if (currentCharId && currentCharId !== 'default') {
+    idSet.add(currentCharId);
+  }
+
+  const ctx = getSillyTavernContextSafe();
+  if (ctx?.characters && ctx?.characterId != null) {
+    appendCharacterIdCandidateFromCard(ctx.characters[ctx.characterId], idSet, ctx.characterId);
+  }
+  const st = topWindow?.SillyTavern;
+  if (st?.characters && st?.characterId != null) {
+    appendCharacterIdCandidateFromCard(st.characters[st.characterId], idSet, st.characterId);
+  }
+  return Array.from(idSet);
+}
+
 function buildExportableTitleScreenSettings(rawSettings, targetCharId = 'default') {
   const normalized = normalizeTitleScreenSettings(rawSettings);
   normalized.backgroundSceneName = buildTitleSceneNameForChar(
@@ -755,7 +829,7 @@ function restoreImportedCustomModuleSettings(rawCustomConfig) {
   return { restoredCustomFields, mapSettingsApplied };
 }
 
-function restoreImportedTitleScreenSettings(rawTitleScreenConfig) {
+function restoreImportedTitleScreenSettings(rawTitleScreenConfig, options = {}) {
   const titleScreenConfig = rawTitleScreenConfig && typeof rawTitleScreenConfig === 'object' && !Array.isArray(rawTitleScreenConfig)
     ? rawTitleScreenConfig
     : null;
@@ -775,6 +849,12 @@ function restoreImportedTitleScreenSettings(rawTitleScreenConfig) {
   const targetCharIds = new Set();
   if (currentCharId && currentCharId !== 'default') targetCharIds.add(currentCharId);
   if (importedCharId && importedCharId !== 'default') targetCharIds.add(importedCharId);
+  const extraCharIds = Array.isArray(options?.extraCharIds) ? options.extraCharIds : [];
+  extraCharIds.forEach(rawCharId => {
+    const normalizedCharId = normalizeCharacterCardId(rawCharId);
+    if (!normalizedCharId || normalizedCharId === 'default') return;
+    targetCharIds.add(normalizedCharId);
+  });
   if (targetCharIds.size === 0) {
     targetCharIds.add(currentCharId || 'default');
   }
@@ -783,6 +863,14 @@ function restoreImportedTitleScreenSettings(rawTitleScreenConfig) {
     ? settings.titleScreenByChar
     : {};
   const nextMap = { ...currentMap };
+  logTitleScreenDiag('restoreImportedTitleScreenSettings:begin', {
+    currentCharId,
+    importedCharId,
+    extraCharIds,
+    targetCharIds: Array.from(targetCharIds),
+    beforeMapKeys: Object.keys(currentMap),
+    incoming: summarizeTitleScreenConfigForLog(titleScreenConfig),
+  });
 
   targetCharIds.forEach(charId => {
     nextMap[charId] = buildExportableTitleScreenSettings(titleScreenConfig, charId);
@@ -794,11 +882,16 @@ function restoreImportedTitleScreenSettings(rawTitleScreenConfig) {
   settings.titleScreenByChar = nextMap;
   settings.titleScreen = nextMap[primaryCharId] || buildExportableTitleScreenSettings(titleScreenConfig, primaryCharId);
   saveSettings();
+  logTitleScreenDiag('restoreImportedTitleScreenSettings:end', {
+    primaryCharId,
+    afterMapKeys: Object.keys(settings.titleScreenByChar || {}),
+    activeTitleScreen: summarizeTitleScreenConfigForLog(settings.titleScreen),
+  });
 
   return { restored: true, charIds: Array.from(targetCharIds) };
 }
 
-function restoreImportedSpecialCgSettings(rawSpecialCgConfig) {
+function restoreImportedSpecialCgSettings(rawSpecialCgConfig, options = {}) {
   const specialCgConfig = rawSpecialCgConfig && typeof rawSpecialCgConfig === 'object' && !Array.isArray(rawSpecialCgConfig)
     ? rawSpecialCgConfig
     : null;
@@ -818,6 +911,12 @@ function restoreImportedSpecialCgSettings(rawSpecialCgConfig) {
   const targetCharIds = new Set();
   if (currentCharId && currentCharId !== 'default') targetCharIds.add(currentCharId);
   if (importedCharId && importedCharId !== 'default') targetCharIds.add(importedCharId);
+  const extraCharIds = Array.isArray(options?.extraCharIds) ? options.extraCharIds : [];
+  extraCharIds.forEach(rawCharId => {
+    const normalizedCharId = normalizeCharacterCardId(rawCharId);
+    if (!normalizedCharId || normalizedCharId === 'default') return;
+    targetCharIds.add(normalizedCharId);
+  });
   if (targetCharIds.size === 0) {
     targetCharIds.add(currentCharId || 'default');
   }
@@ -1831,7 +1930,6 @@ async function buildGalgameCardConfig(options = {}) {
   const settings = getSettings();
   const targetTitleCharId = normalizeCharacterCardId(
     exportCharacterId
-    || exportCharacterName
     || getCurrentCharId(),
   );
   const titleScreenByCharMap = settings?.titleScreenByChar && typeof settings.titleScreenByChar === 'object' && !Array.isArray(settings.titleScreenByChar)
@@ -1844,6 +1942,15 @@ async function buildGalgameCardConfig(options = {}) {
     : {};
   const rawSpecialCgSettings = specialCgByCharMap[targetTitleCharId] || settings?.specialCg;
   const exportSpecialCgSettings = buildSpecialCgExportPayload(rawSpecialCgSettings, targetTitleCharId);
+  logTitleScreenDiag('buildGalgameCardConfig:title-export', {
+    exportCharacterId: String(exportCharacterId || '').trim(),
+    exportCharacterName: String(exportCharacterName || '').trim(),
+    currentCharId: String(getCurrentCharId() || '').trim(),
+    targetTitleCharId,
+    titleScreenByCharKeys: Object.keys(titleScreenByCharMap),
+    pickedFrom: titleScreenByCharMap[targetTitleCharId] ? 'titleScreenByChar' : 'settings.titleScreen',
+    exportTitleScreen: summarizeTitleScreenConfigForLog(exportTitleScreenSettings),
+  });
 
   const live2dEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
   const live2dConfigMap = readLocalStorageJson(LIVE2D_CONFIG_KEY, {});
@@ -3569,13 +3676,14 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     updateProgress(8, '收集插件配置...');
+    const exportCharacterIdFromSession = String(getCurrentCharId() || '').trim();
+    logTitleScreenDiag('exportCurrentCharacterCardWithConfig:resolved-character', {
+      resolvedCharacterName: String(resolvedCharacter?.resolvedName || '').trim(),
+      currentCharacterName: String(currentCharacter?.name || '').trim(),
+      exportCharacterIdFromSession,
+    });
     const config = await buildGalgameCardConfig({
-      exportCharacterId: String(
-        resolvedCharacter?.resolvedName
-        || currentCharacter?.name
-        || preferredCharacterName
-        || '',
-      ).trim(),
+      exportCharacterId: exportCharacterIdFromSession,
       exportCharacterName: String(currentCharacter?.name || '').trim(),
       remoteInput,
       includeAllPacks,
@@ -3595,6 +3703,10 @@ export async function exportCurrentCharacterCardWithConfig(options = {}) {
       hiddenAssetTabs,
       unlockPassword,
       onProgress: updateProgress,
+    });
+    logTitleScreenDiag('exportCurrentCharacterCardWithConfig:config-built', {
+      titleScreen: summarizeTitleScreenConfigForLog(config?.titleScreen),
+      specialCgForCharacterId: String(config?.specialCg?.forCharacterId || '').trim(),
     });
     const appendExportNotice = (notice) => {
       const text = String(notice || '').trim();
@@ -3711,8 +3823,15 @@ export async function importAssetsFromJson(file, targetPackId = null) {
   try {
     const text = await file.text();
     const json = JSON.parse(text);
-    const { rawJson, pluginConfig } = extractImportPayloadFromJson(json);
+    const { rawJson, pluginConfig, cardObject } = extractImportPayloadFromJson(json);
     const payload = pluginConfig && typeof pluginConfig === 'object' ? pluginConfig : rawJson;
+    logTitleScreenDiag('importAssetsFromJson:payload-detected', {
+      hasPluginConfig: !!pluginConfig,
+      payloadSchema: String(payload?.schema || ''),
+      hasPayloadTitleScreen: !!(payload?.titleScreen || payload?.custom?.titleScreen),
+      hasRawTitleScreen: !!(rawJson?.titleScreen || rawJson?.custom?.titleScreen),
+      cardName: String(cardObject?.name || cardObject?.data?.name || ''),
+    });
 
     if (!targetPackId) {
       const suggestedName = payload?.packageName || payload?.name || rawJson?.packageName || rawJson?.name;
@@ -3979,6 +4098,13 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       }
     }
 
+    const importCharIdCandidates = new Set(collectCurrentCharacterIdCandidates());
+    appendCharacterIdCandidateFromCard(cardObject, importCharIdCandidates);
+    logTitleScreenDiag('importAssetsFromJson:char-candidates', {
+      currentCharId: String(getCurrentCharId() || '').trim(),
+      candidates: Array.from(importCharIdCandidates),
+    });
+
     const restoredLive2d = restoreImportedLive2dSettings(payload?.live2d || rawJson?.live2d);
     const restoredTts = restoreImportedTtsSettings(payload?.tts || rawJson?.tts);
     const restoredCustom = restoreImportedCustomModuleSettings(payload?.custom || rawJson?.custom);
@@ -3987,14 +4113,23 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       || payload?.custom?.titleScreen
       || rawJson?.titleScreen
       || rawJson?.custom?.titleScreen,
+      { extraCharIds: Array.from(importCharIdCandidates) },
     );
     const restoredSpecialCg = restoreImportedSpecialCgSettings(
       payload?.specialCg
       || payload?.custom?.specialCg
       || rawJson?.specialCg
       || rawJson?.custom?.specialCg,
+      { extraCharIds: Array.from(importCharIdCandidates) },
     );
     const restoredBgm = restoreImportedBgmSettings(payload?.bgm || rawJson?.bgm);
+    const settingsAfterImport = getSettings();
+    logTitleScreenDiag('importAssetsFromJson:restore-result', {
+      restoredTitleScreen,
+      restoredSpecialCg,
+      titleScreenMapKeys: Object.keys(settingsAfterImport?.titleScreenByChar || {}),
+      activeTitleScreen: summarizeTitleScreenConfigForLog(settingsAfterImport?.titleScreen),
+    });
     const mapSettingsAppliedDirect = applyImportedMapSettings(
       payload?.mapSettings
       || payload?.meta?.mapSettings

@@ -226,7 +226,7 @@ function applyBackgroundStyle(root, config, backgroundUrl) {
   if (!bgNode) return;
 
   const fitMode = config?.backgroundFit === 'contain' ? 'contain' : 'cover';
-  const fallbackGradient = 'linear-gradient(145deg, rgba(10, 14, 22, 0.92) 0%, rgba(20, 30, 48, 0.88) 50%, rgba(8, 12, 18, 0.95) 100%)';
+  const fallbackGradient = 'linear-gradient(145deg, rgb(10, 14, 22) 0%, rgb(20, 30, 48) 50%, rgb(8, 12, 18) 100%)';
   const safeUrl = String(backgroundUrl || '').trim().replace(/"/g, '%22');
 
   if (safeUrl) {

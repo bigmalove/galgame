@@ -104,13 +104,17 @@ function buildDefaultLabel(messageId) {
   return `${formatTimestamp(Date.now())} 楼层${floor}`;
 }
 
-function normalizeChatId(value) {
+export function normalizeChatId(value) {
   const text = String(value ?? '').trim();
   if (!text) return '';
   const lower = text.toLowerCase();
   if (lower === 'null' || lower === 'undefined' || lower === '[object object]') return '';
   if (text.includes('{{') || text.includes('}}')) return '';
   return text;
+}
+
+function stripChatFileSuffixes(value) {
+  return String(value || '').replace(/(?:\.jsonl?)+$/i, '').trim();
 }
 
 function extractChatBasename(value) {
@@ -128,10 +132,10 @@ function extractChatBasename(value) {
 function canonicalizeChatId(value) {
   const basename = extractChatBasename(value);
   if (!basename) return '';
-  return basename.replace(/\.jsonl?$/i, '').trim().toLowerCase();
+  return stripChatFileSuffixes(basename).toLowerCase();
 }
 
-function isSameChatId(a, b) {
+export function isSameChatId(a, b) {
   const normalizedA = normalizeChatId(a);
   const normalizedB = normalizeChatId(b);
   if (!normalizedA || !normalizedB) return false;
@@ -145,23 +149,12 @@ function buildChatIdCandidates(chatId) {
   const raw = normalizeChatId(chatId);
   if (!raw) return [];
 
-  const candidates = new Set([raw]);
   const basename = extractChatBasename(raw);
-  const withoutExt = raw.replace(/\.jsonl?$/i, '');
-  const withExt = /\.jsonl?$/i.test(raw) ? raw : `${raw}.jsonl`;
-  const basenameWithoutExt = basename.replace(/\.jsonl?$/i, '');
-  const basenameWithExt = /\.jsonl?$/i.test(basename) ? basename : `${basename}.jsonl`;
+  const rawWithoutExt = stripChatFileSuffixes(raw);
+  const basenameWithoutExt = stripChatFileSuffixes(basename);
 
-  candidates.add(withoutExt);
-  candidates.add(withExt);
-  if (basename) {
-    candidates.add(basename);
-    candidates.add(basenameWithoutExt);
-    candidates.add(basenameWithExt);
-  }
-
-  return Array.from(candidates)
-    .map(value => normalizeChatId(value))
+  return Array.from(new Set([basenameWithoutExt, rawWithoutExt, raw, basename]))
+    .map(value => stripChatFileSuffixes(normalizeChatId(value)))
     .filter(Boolean);
 }
 
@@ -178,7 +171,7 @@ function tryGetContext() {
   return null;
 }
 
-function getCurrentChatId() {
+export function getCurrentChatId() {
   try {
     const context = tryGetContext();
     const apis = getSillyTavernApiCandidates();
@@ -261,7 +254,7 @@ function getOverlayMessageId() {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function safeGetLastMessageId() {
+export function safeGetLastMessageId() {
   try {
     const messageId = getLastMessageId();
     return Number.isFinite(messageId) ? messageId : -1;
@@ -512,7 +505,7 @@ function stopBgmImmediately() {
   }
 }
 
-async function waitFor(predicate, timeoutMs = 5000, intervalMs = 90) {
+export async function waitFor(predicate, timeoutMs = 5000, intervalMs = 90) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -559,7 +552,7 @@ async function runSlashSafe(command) {
   }
 }
 
-async function resolveCurrentChatId() {
+export async function resolveCurrentChatId() {
   const direct = normalizeChatId(getCurrentChatId());
   if (direct) {
     logSaveLoad('resolveCurrentChatId.direct', { direct });
@@ -585,7 +578,7 @@ async function waitForTargetChatSwitched(targetChatId, targetSlot, timeoutMs = 8
   }, timeoutMs, 120);
 }
 
-async function switchToTargetChat(targetChatId, targetSlot) {
+export async function switchToTargetChat(targetChatId, targetSlot) {
   const normalizedTarget = normalizeChatId(targetChatId);
   if (!normalizedTarget) return false;
 
@@ -742,7 +735,7 @@ async function renderSaveSlot(slot) {
   showGlobalOverlay();
 }
 
-async function prepareLoadEnvironment() {
+export async function prepareLoadEnvironment() {
   resetEnhancedModeState();
   TTSManager.stop();
   stopBgmImmediately();
@@ -752,7 +745,93 @@ async function prepareLoadEnvironment() {
   SpriteManager.reset($overlay.length ? $overlay : null);
 }
 
-async function forkAndTrimToMessage(targetMessageId) {
+function clearTimelineRelatedCaches() {
+  if (GalgameStore.cache.timeline instanceof Map) {
+    GalgameStore.cache.timeline.clear();
+  }
+  if (GalgameStore.cache.segments instanceof Map) {
+    GalgameStore.cache.segments.clear();
+  }
+  if (GalgameStore.cache.parse instanceof Map) {
+    GalgameStore.cache.parse.clear();
+  }
+  GalgameStore.core.currentDisplayMesId = null;
+}
+
+async function trimChatTailAfterMessage(targetMessageId, knownLastMessageId = NaN) {
+  const numericTargetMessageId = Math.max(0, Math.floor(safeNumber(targetMessageId, 0)));
+  const lastMessageId = Number.isFinite(knownLastMessageId)
+    ? Math.max(-1, Math.floor(knownLastMessageId))
+    : safeGetLastMessageId();
+
+  if (lastMessageId <= numericTargetMessageId) {
+    return { ok: true, trimmed: false, finalLastMessageId: lastMessageId };
+  }
+
+  const idsToDelete = buildRange(numericTargetMessageId + 1, lastMessageId + 1);
+  if (idsToDelete.length > 0) {
+    logSaveLoad('trimTail.delete_tail_messages', {
+      idsCount: idsToDelete.length,
+      from: idsToDelete[0],
+      to: idsToDelete[idsToDelete.length - 1],
+    });
+    await deleteChatMessages(idsToDelete, { refresh: 'all' });
+  }
+
+  await waitFor(() => safeGetLastMessageId() <= numericTargetMessageId, 6000, 120);
+  return {
+    ok: true,
+    trimmed: true,
+    deletedCount: idsToDelete.length,
+    finalLastMessageId: safeGetLastMessageId(),
+  };
+}
+
+export async function forceForkAndTrimToMessage(targetMessageId, options = {}) {
+  const numericTargetMessageId = Math.max(0, Math.floor(safeNumber(targetMessageId, 0)));
+  const trimTail = options.trimTail !== false;
+  const lastMessageId = safeGetLastMessageId();
+  logSaveLoad('forceFork.start', { targetMessageId: numericTargetMessageId, lastMessageId, trimTail });
+
+  if (lastMessageId < 0) {
+    return { ok: false, reason: '当前聊天暂无可分支楼层' };
+  }
+  if (numericTargetMessageId > lastMessageId) {
+    return { ok: false, reason: '目标楼层超出当前聊天范围' };
+  }
+
+  const forked = await executeChatFork(numericTargetMessageId);
+  if (!forked) {
+    return { ok: false, reason: '当前环境不支持回溯分支命令（/branch-create 或 /checkpoint-go）' };
+  }
+
+  await waitFor(() => safeGetLastMessageId() >= numericTargetMessageId, 6000, 120);
+  const afterForkLast = safeGetLastMessageId();
+  logSaveLoad('forceFork.afterFork', { afterForkLast, targetMessageId: numericTargetMessageId });
+
+  const trimResult = trimTail
+    ? await trimChatTailAfterMessage(numericTargetMessageId, afterForkLast)
+    : { ok: true, trimmed: false, finalLastMessageId: afterForkLast };
+  if (!trimResult.ok) {
+    return trimResult;
+  }
+
+  clearTimelineRelatedCaches();
+  logSaveLoad('forceFork.done', {
+    targetMessageId: numericTargetMessageId,
+    finalLastMessageId: trimResult.finalLastMessageId,
+    trimmed: !!trimResult.trimmed,
+  });
+
+  return {
+    ok: true,
+    branchCreated: true,
+    trimmed: !!trimResult.trimmed,
+    finalLastMessageId: trimResult.finalLastMessageId,
+  };
+}
+
+export async function forkAndTrimToMessage(targetMessageId) {
   const lastMessageId = safeGetLastMessageId();
   logSaveLoad('forkAndTrim.start', { targetMessageId, lastMessageId });
   if (targetMessageId >= lastMessageId) {
@@ -760,26 +839,57 @@ async function forkAndTrimToMessage(targetMessageId) {
     return { ok: true };
   }
 
-  const forked = await executeChatFork(targetMessageId);
-  if (!forked) {
-    return { ok: false, reason: '当前环境不支持回溯分支命令（/branch-create 或 /checkpoint-go）' };
+  const result = await forceForkAndTrimToMessage(targetMessageId, { trimTail: true });
+  if (!result.ok) {
+    return result;
   }
 
-  await waitFor(() => safeGetLastMessageId() >= targetMessageId, 6000, 120);
-  const afterForkLast = safeGetLastMessageId();
-  logSaveLoad('forkAndTrim.afterFork', { afterForkLast, targetMessageId });
-  if (afterForkLast <= targetMessageId) {
-    return { ok: true };
-  }
-
-  const idsToDelete = buildRange(targetMessageId + 1, afterForkLast + 1);
-  if (idsToDelete.length > 0) {
-    logSaveLoad('forkAndTrim.delete_tail_messages', { idsCount: idsToDelete.length, from: idsToDelete[0], to: idsToDelete[idsToDelete.length - 1] });
-    await deleteChatMessages(idsToDelete, { refresh: 'all' });
-  }
-  await waitFor(() => safeGetLastMessageId() <= targetMessageId, 6000, 120);
-  logSaveLoad('forkAndTrim.done', { finalLastMessageId: safeGetLastMessageId() });
+  logSaveLoad('forkAndTrim.done', { finalLastMessageId: result.finalLastMessageId });
   return { ok: true };
+}
+
+export async function renderOverlayAtMessage(messageId, options = {}) {
+  const numericMessageId = clamp(safeNumber(messageId, 0), 0, Math.max(0, safeGetLastMessageId()));
+  const segmentIndex = Math.max(0, Math.floor(safeNumber(options.segmentIndex, 0)));
+  const contentOverride = typeof options.contentOverride === 'string' ? options.contentOverride : '';
+  const mesId = String(numericMessageId);
+  const mesNode = topWindow.document.querySelector(`.mes[mesid="${mesId}"]`);
+
+  let content = contentOverride || buildMessageText(mesId);
+  let parsed = null;
+  if (content) {
+    try {
+      parsed = parseGalgameContent(content, mesId);
+      if (mesNode) {
+        detectAndCaptureCg(mesId, mesNode, parsed);
+      }
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] 时间线渲染解析失败，回退文本显示:`, error);
+    }
+  }
+
+  if (!parsed || !Array.isArray(parsed.segments) || parsed.segments.length === 0) {
+    const fallbackText = content || String(mesNode?.querySelector('.mes_text')?.textContent || '').trim();
+    parsed = createFallbackParsed(fallbackText || '（当前消息无可显示内容）');
+  }
+
+  const state = GalgameStore.cache.segments.get(mesId) || {
+    currentIndex: 0,
+    segments: parsed.segments,
+    parsedContent: parsed,
+    renderToken: 0,
+    lastAppliedEffectIndex: -1,
+    effectSyncTicket: 0,
+    effectSyncPromise: Promise.resolve(),
+  };
+  state.segments = parsed.segments;
+  state.parsedContent = parsed;
+  state.currentIndex = clamp(segmentIndex, 0, Math.max(0, parsed.segments.length - 1));
+  GalgameStore.cache.segments.set(mesId, state);
+
+  await updateGlobalOverlayContent(mesId, parsed, { suppressTTS: !!options.suppressTTS });
+  showGlobalOverlay();
+  return { ok: true, messageId: numericMessageId, parsed };
 }
 
 export function getSaveSlots() {

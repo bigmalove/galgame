@@ -11,6 +11,7 @@ import { showToast } from './toast.js';
 // ============================================
 
 const messageSegmentState = GalgameStore.cache.segments;
+const OPTIONS_OBSERVER_BOUND_FLAG = '__galgame_options_observer_bound__';
 
 // 延迟引用
 let _isRerollingRef = null;
@@ -127,6 +128,12 @@ function handleChoiceSelection(optionValue) {
 }
 
 export function setupOptionsPanelObserver() {
+  if (topWindow[OPTIONS_OBSERVER_BOUND_FLAG]) {
+    console.log(`[${SCRIPT_NAME}] 选项表监控已存在，跳过重复注册`);
+    return;
+  }
+  topWindow[OPTIONS_OBSERVER_BOUND_FLAG] = true;
+
   setInterval(() => {
     if (!getIsEnabled()) return;
     checkAndRenderOptions();

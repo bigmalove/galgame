@@ -1307,7 +1307,7 @@ function buildBgmTab(activeTab, settings) {
         .filter(Boolean),
     ),
   );
-  const bgmText = bgmWhitelist.join('\n');
+  const bgmText = escapeHtml(bgmWhitelist.join('\n'));
 
   return `
   <div class="gal-tab-pane" data-pane="bgm" style="${activeTab !== 'bgm' ? 'display: none;' : ''}">
@@ -1338,6 +1338,8 @@ function buildBgmTab(activeTab, settings) {
 }
 
 function buildCustomTab(settings) {
+  const locationHtml = escapeHtml(localStorage.getItem(CUSTOM_LOCATION_HTML_KEY) || '');
+  const timeHtml = escapeHtml(localStorage.getItem(CUSTOM_TIME_HTML_KEY) || '');
   const locationIconClass = normalizeLocationStatusIconClass(
     localStorage.getItem(CUSTOM_LOCATION_ICON_CLASS_KEY) || '',
   );
@@ -1360,8 +1362,8 @@ function buildCustomTab(settings) {
   return `
   <div class="gal-tab-pane" data-pane="custom" style="display: none;">
     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> 自定义弹窗一内容 - 自定义内容格式要求（注入到世界书）</label><textarea id="gal-custom-location-html" placeholder="<div>自定义地点介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_LOCATION_HTML_KEY) || ''}</textarea></div>
-      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> 自定义弹窗二内容 - 自定义内容格式要求（注入到世界书）</label><textarea id="gal-custom-time-html" placeholder="<div>自定义时间介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${localStorage.getItem(CUSTOM_TIME_HTML_KEY) || ''}</textarea></div>
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> 自定义弹窗一内容 - 自定义内容格式要求（注入到世界书）</label><textarea id="gal-custom-location-html" placeholder="<div>自定义地点介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${locationHtml}</textarea></div>
+      <div style="margin-bottom: 15px;"><label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-clock" style="color: ${THEME.accentSub};"></i> 自定义弹窗二内容 - 自定义内容格式要求（注入到世界书）</label><textarea id="gal-custom-time-html" placeholder="<div>自定义时间介绍...</div>" style="width: 100%; height: 120px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; font-size: 0.9rem; color: #333; resize: vertical;">${timeHtml}</textarea></div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px;">
         <div>
           <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};"><i class="fa-solid fa-location-dot" style="color: ${THEME.accent};"></i> 弹窗一图标</label>

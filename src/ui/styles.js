@@ -1519,6 +1519,8 @@ const saveLoadCss = `
     overflow: hidden;
     font-family: var(--SmartThemeFontFamily, "Noto Serif SC", serif);
     isolation: isolate;
+    /* 标题页底层强制不透明，避免透明 WebP 露出游玩界面 */
+    background: #060a12;
 }
 #gal-global-overlay .gal-title-screen.active {
     opacity: 1;
@@ -1533,6 +1535,7 @@ const saveLoadCss = `
     pointer-events: none;
 }
 #gal-global-overlay .gal-title-screen-bg {
+    background-color: #060a12;
     background-size: cover;
     background-position: center center;
     background-repeat: no-repeat;

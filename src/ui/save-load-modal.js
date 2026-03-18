@@ -24,13 +24,20 @@ function formatTime(timestamp) {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
+function buildSlotCode(index, prefix = '') {
+  if (prefix) return prefix;
+  const safeIndex = Number.isFinite(index) ? index + 1 : 1;
+  return `SLOT-${String(safeIndex).padStart(2, '0')}`;
+}
+
 function getThumbnailHtml(slot) {
   const src = String(slot?.thumbnailDataUrl || '').trim();
   if (!src) {
     return `
       <div class="gal-save-thumb-placeholder">
         <i class="fa-regular fa-image"></i>
-        <span>无缩略图</span>
+        <span>NO SIGNAL</span>
+        <small>未记录画面</small>
       </div>
     `;
   }
@@ -40,41 +47,60 @@ function getThumbnailHtml(slot) {
 function buildSlotActions(slot, mode) {
   if (mode === 'quick-load') {
     return `
-      <button class="gal-save-slot-btn primary" data-role="quick-load">快速读档</button>
+      <button class="gal-save-slot-btn primary" data-role="quick-load">
+        <i class="fa-solid fa-bolt"></i>
+        <span>快速读档</span>
+      </button>
     `;
   }
   if (mode === 'save') {
     return `
-      <button class="gal-save-slot-btn primary" data-role="overwrite" data-slot-id="${escapeHtml(slot.id)}">覆盖</button>
-      <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">删除</button>
+      <button class="gal-save-slot-btn primary" data-role="overwrite" data-slot-id="${escapeHtml(slot.id)}">
+        <i class="fa-solid fa-pen-to-square"></i>
+        <span>覆盖存档</span>
+      </button>
+      <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">
+        <i class="fa-solid fa-trash"></i>
+        <span>删除</span>
+      </button>
     `;
   }
   return `
-    <button class="gal-save-slot-btn primary" data-role="load" data-slot-id="${escapeHtml(slot.id)}">读档</button>
-    <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">删除</button>
+    <button class="gal-save-slot-btn primary" data-role="load" data-slot-id="${escapeHtml(slot.id)}">
+      <i class="fa-solid fa-folder-open"></i>
+      <span>读取进度</span>
+    </button>
+    <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">
+      <i class="fa-solid fa-trash"></i>
+      <span>删除</span>
+    </button>
   `;
 }
 
-function buildSlotCard(slot, mode, prefix = '') {
+function buildSlotCard(slot, mode, index, prefix = '') {
   const floorText = Number.isFinite(Number(slot.totalFloorCount)) ? `总楼层 ${Number(slot.totalFloorCount)}` : '总楼层 --';
-  const slotType = prefix ? `<span class="gal-save-slot-badge">${escapeHtml(prefix)}</span>` : '';
   const charName = String(slot?.characterCard?.name || '').trim();
   const charId = String(slot?.characterCard?.id || '').trim();
   const charInfo = charName && charId && charName !== charId ? `${charName} (${charId})` : charName || charId;
+  const slotCode = buildSlotCode(index, prefix ? 'QUICK' : '');
+  const badgeText = prefix || '手动存档';
   return `
     <div class="gal-save-slot-card" data-slot-id="${escapeHtml(slot.id)}">
       <div class="gal-save-thumb-wrap">
         ${getThumbnailHtml(slot)}
       </div>
       <div class="gal-save-slot-info">
+        <div class="gal-save-slot-meta">
+          <span class="gal-save-slot-code">${escapeHtml(slotCode)}</span>
+          <span class="gal-save-slot-badge">${escapeHtml(badgeText)}</span>
+          <span class="gal-save-slot-time">${formatTime(slot.timestamp)}</span>
+        </div>
         <div class="gal-save-slot-title-row">
           <span class="gal-save-slot-title">${escapeHtml(slot.label || '未命名存档')}</span>
-          ${slotType}
         </div>
-        <div class="gal-save-slot-meta">
+        <div class="gal-save-slot-detail">
           <span class="gal-save-slot-char">${escapeHtml(charInfo || '角色卡未记录')}</span>
           <span>${floorText}</span>
-          <span>${formatTime(slot.timestamp)}</span>
         </div>
       </div>
       <div class="gal-save-slot-actions">
@@ -90,18 +116,21 @@ function renderSlots($modal, mode) {
   let html = '';
 
   if (quick && mode === 'load') {
-    html += buildSlotCard(quick, 'quick-load', '快速存档');
+    html += buildSlotCard(quick, 'quick-load', 0, '快速存档');
   }
 
   if (!slots.length) {
     html += `
       <div class="gal-save-empty">
         <i class="fa-regular fa-folder-open"></i>
-        <span>暂无手动存档</span>
+        <div class="gal-save-empty-copy">
+          <strong>暂无手动存档</strong>
+          <span>新的剧情切片会在这里形成陈列。</span>
+        </div>
       </div>
     `;
   } else {
-    html += slots.map(slot => buildSlotCard(slot, mode)).join('');
+    html += slots.map((slot, index) => buildSlotCard(slot, mode, index)).join('');
   }
 
   $modal.find('.gal-save-slot-list').html(html);
@@ -118,36 +147,65 @@ export function showSaveLoadModal(mode = 'load') {
 
   const isSaveMode = safeMode === 'save';
   const modalHtml = `
-    <div id="${MODAL_ID}" class="gal-input-modal gal-save-load-modal">
-      <div class="gal-save-load-box">
+    <div id="${MODAL_ID}" class="gal-save-load-modal" data-mode="${safeMode}">
+      <div class="gal-save-load-shell">
         <div class="gal-save-load-header">
-          <div class="gal-save-load-title">
-            <i class="fa-solid ${isSaveMode ? 'fa-floppy-disk' : 'fa-folder-open'}"></i>
-            <span>${isSaveMode ? '存档' : '读档'}</span>
+          <div class="gal-save-load-heading">
+            <div class="gal-save-load-kicker">SYSTEM / ${isSaveMode ? 'SAVE' : 'LOAD'}</div>
+            <div class="gal-save-load-title">
+              <i class="fa-solid ${isSaveMode ? 'fa-floppy-disk' : 'fa-folder-open'}"></i>
+              <span>${isSaveMode ? '存档陈列柜' : '读档陈列柜'}</span>
+            </div>
           </div>
-          <button class="gal-save-load-close" title="关闭"><i class="fa-solid fa-xmark"></i></button>
+          <button class="gal-save-load-close" title="关闭" aria-label="关闭">
+            <span>[ X ] RETURN</span>
+          </button>
         </div>
         <div class="gal-save-load-body">
-          <div class="gal-save-load-controls">
-            ${
-              isSaveMode
-                ? `
-              <input type="text" class="gal-save-label-input" id="gal-save-label-input" maxlength="40" placeholder="输入存档名称（可选）">
-              <button class="gal-save-control-btn primary" id="gal-save-create-btn">
-                <i class="fa-solid fa-floppy-disk"></i><span>保存当前进度</span>
-              </button>
-              <button class="gal-save-control-btn" id="gal-save-quick-btn">
-                <i class="fa-solid fa-bolt"></i><span>快速存档</span>
-              </button>
-              `
-                : `
-              <button class="gal-save-control-btn primary" id="gal-load-quick-btn">
-                <i class="fa-solid fa-bolt"></i><span>快速读档</span>
-              </button>
-              `
-            }
-          </div>
-          <div class="gal-save-slot-list"></div>
+          <aside class="gal-save-load-rail">
+            <section class="gal-save-load-panel gal-save-load-panel-intro">
+              <div class="gal-save-load-panel-label">系统说明</div>
+              <h2 class="gal-save-load-panel-title">${isSaveMode ? '将当前章节定格为可回溯节点。' : '从任意节点重返故事分岔点。'}</h2>
+              <p class="gal-save-load-panel-copy">
+                ${isSaveMode ? '你可以直接创建新存档，或在槽位悬停后覆盖旧记录。' : '快速读档会优先恢复最近一次的快速存档，手动槽位可按需逐个读取。'}
+              </p>
+            </section>
+            <section class="gal-save-load-panel gal-save-load-controls-panel">
+              <div class="gal-save-load-panel-label">操作面板</div>
+              ${
+                isSaveMode
+                  ? `
+                <label class="gal-save-load-field" for="gal-save-label-input">
+                  <span class="gal-save-load-field-label">存档标题</span>
+                  <input type="text" class="gal-save-label-input" id="gal-save-label-input" maxlength="40" placeholder="输入存档名称（可选）">
+                </label>
+                <div class="gal-save-load-controls">
+                  <button class="gal-save-control-btn primary" id="gal-save-create-btn">
+                    <i class="fa-solid fa-floppy-disk"></i><span>保存当前进度</span>
+                  </button>
+                  <button class="gal-save-control-btn" id="gal-save-quick-btn">
+                    <i class="fa-solid fa-bolt"></i><span>快速存档</span>
+                  </button>
+                </div>
+                `
+                  : `
+                <p class="gal-save-load-panel-copy compact">快速读档会直接载入最近一次的快速存档。</p>
+                <div class="gal-save-load-controls">
+                  <button class="gal-save-control-btn primary" id="gal-load-quick-btn">
+                    <i class="fa-solid fa-bolt"></i><span>快速读档</span>
+                  </button>
+                </div>
+                `
+              }
+            </section>
+          </aside>
+          <section class="gal-save-load-stage">
+            <div class="gal-save-load-stage-head">
+              <div class="gal-save-load-stage-kicker">ARCHIVE DISPLAY</div>
+              <div class="gal-save-load-stage-title">${isSaveMode ? '选择槽位覆盖旧档，或直接创建新的时间切片。' : '悬停槽位后执行读取或整理操作。'}</div>
+            </div>
+            <div class="gal-save-slot-list"></div>
+          </section>
         </div>
       </div>
     </div>

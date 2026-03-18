@@ -1,4 +1,4 @@
-import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
+import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID, CUSTOM_SKIN_ID, GLOBAL_CUSTOM_SKIN_PACK_ID } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
 import {
   buildTitleSceneNameForChar,
@@ -16,6 +16,14 @@ import { saveBackground, saveBackgroundsBatch, getAllBackgrounds } from '../db/b
 import { GLOBAL_MAP_REGION_KEY, getAllMapImages, saveUnifiedMapImage } from '../db/map-images.js';
 import { getCurrentPackId, getAllImagePacks, createImagePack } from '../db/image-packs.js';
 import { getAllUiSkinAssets, saveUiSkinAsset } from '../db/ui-skins.js';
+import {
+  getAvailableUiSkinProfileDisplayName,
+  hasUiSkinProfileId,
+  isCustomSkinProfileId,
+  listUiSkinProfiles,
+  refreshUiSkinProfilesCache,
+  saveUiSkinProfile,
+} from '../db/ui-skin-profiles.js';
 import { getAllLive2DModels } from '../db/live2d-models.js';
 import { getAllSpecialCgs, saveSpecialCg } from '../db/special-cgs.js';
 import { getTTSEnabled, getAllCharacterTTSVoices, setTTSEnabled } from '../audio/tts-config.js';
@@ -26,7 +34,7 @@ import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '
 import { embedCardIntoPngBytes, isPngBytes } from '../utils/png-character-card.js';
 import { normalizeLocationStatusIconClass, normalizeTimeStatusIconClass } from '../utils/status-popup-icons.js';
 import { getModalMountRoot } from './fullscreen.js';
-import { WESTERN_SKIN_ID } from './skin-western-runtime.js';
+import { applySettingsToUI, refreshSkinSelectElement } from './settings-panel.js';
 import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
 
@@ -426,6 +434,148 @@ function buildLive2dRemoteModelUrl(templateInput, characterId) {
   return `${ensureTrailingSlash(raw)}${encodedChar}/model3.json`;
 }
 
+async function buildCustomSkinProfileExportBundle(profileIds = [], activeProfileId = '') {
+  const idSet = new Set(
+    (Array.isArray(profileIds) ? profileIds : [])
+      .map(id => String(id || '').trim())
+      .filter(id => isCustomSkinProfileId(id)),
+  );
+  if (idSet.size === 0) {
+    return {
+      profiles: [],
+      assets: [],
+      activeProfileId: '',
+    };
+  }
+
+  const allProfiles = await listUiSkinProfiles();
+  const profiles = allProfiles.filter(profile => idSet.has(String(profile?.id || '').trim()));
+  const availableProfileIds = new Set(profiles.map(profile => profile.id));
+  const allAssets = await getAllUiSkinAssets();
+  const assets = allAssets.filter(asset => {
+    const packId = String(asset?.packId || '').trim();
+    const skinId = String(asset?.skinId || '').trim();
+    return packId === GLOBAL_CUSTOM_SKIN_PACK_ID && availableProfileIds.has(skinId);
+  });
+
+  return {
+    profiles,
+    assets,
+    activeProfileId: availableProfileIds.has(String(activeProfileId || '').trim())
+      ? String(activeProfileId || '').trim()
+      : '',
+  };
+}
+
+async function exportCustomSkinBundleArchive(loadJSZip, {
+  profileIds = [],
+  packageName = null,
+  activeProfileId = '',
+  scope = 'custom-skin-library',
+  preparingMessage = '正在准备导出自定义皮肤...',
+  compressMessage = '正在压缩自定义皮肤...',
+  emptyMessage = '当前还没有可导出的自定义皮肤',
+  defaultPackageName = '自定义皮肤',
+  successMessageBuilder = null,
+} = {}) {
+  showToast(preparingMessage);
+  const zip = new (await loadJSZip())();
+  const {
+    profiles: exportedProfiles,
+    assets: uiSkinAssets,
+    activeProfileId: safeActiveProfileId,
+  } = await buildCustomSkinProfileExportBundle(profileIds, activeProfileId);
+
+  if (exportedProfiles.length === 0) {
+    showToast(emptyMessage);
+    return false;
+  }
+
+  const resolvedPackageName = String(
+    packageName
+    || exportedProfiles[0]?.displayName
+    || defaultPackageName,
+  ).trim() || defaultPackageName;
+
+  zip.file('ui-skin-profiles/manifest.json', JSON.stringify({
+    version: '1.0',
+    profiles: exportedProfiles,
+    activeProfileId: safeActiveProfileId,
+  }, null, 2));
+
+  const uiSkinManifest = [];
+  if (uiSkinAssets.length > 0) {
+    const uiSkinFolder = zip.folder('ui-skins');
+    for (const rawAsset of uiSkinAssets) {
+      const meta = normalizeUiSkinMetaRecord(rawAsset);
+      if (!meta) continue;
+      const manifestRecord = {
+        skinId: meta.skinId,
+        elementId: meta.elementId,
+        device: meta.device,
+        state: meta.state,
+        scaleMode: meta.scaleMode,
+        layout: meta.layout,
+        slice: meta.slice,
+        textPadding: meta.textPadding,
+        meta: meta.meta,
+      };
+      if (rawAsset.imageBlob) {
+        const ext = rawAsset.imageBlob.type.split('/')[1] || 'png';
+        const fileName = buildUiSkinZipFilename(meta, ext);
+        uiSkinFolder.file(fileName, rawAsset.imageBlob);
+        manifestRecord.file = fileName;
+      } else if (rawAsset.imageUrl) {
+        manifestRecord.imageUrl = rawAsset.imageUrl;
+      }
+      uiSkinManifest.push(manifestRecord);
+    }
+    zip.file('ui-skins/manifest.json', JSON.stringify({ version: '1.0', assets: uiSkinManifest }, null, 2));
+  }
+
+  zip.file('package_info.json', JSON.stringify({
+    packageName: resolvedPackageName,
+    exportDate: new Date().toISOString(),
+    version: '1.0',
+    scope: String(scope || 'custom-skin-library').trim() || 'custom-skin-library',
+    uiSkinProfileCount: exportedProfiles.length,
+    uiSkinCount: uiSkinAssets.length,
+  }, null, 2));
+
+  showToast(compressMessage);
+  const content = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  a.href = url;
+  const safePackageName = sanitizeFileName(resolvedPackageName);
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `${safePackageName}_${date}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  if (typeof successMessageBuilder === 'function') {
+    showToast(successMessageBuilder({
+      exportedProfiles,
+      uiSkinAssets,
+      packageName: resolvedPackageName,
+    }));
+  }
+  return true;
+}
+
+function resolveImportedCustomSkinActiveProfileId(rawActiveProfileId, profiles = []) {
+  const safeProfiles = (Array.isArray(profiles) ? profiles : [])
+    .map(profile => normalizeUiSkinProfileRecord(profile))
+    .filter(Boolean);
+  const safeActiveProfileId = String(rawActiveProfileId || '').trim();
+  if (safeActiveProfileId && safeProfiles.some(profile => profile.id === safeActiveProfileId)) {
+    return safeActiveProfileId;
+  }
+  return safeProfiles.length === 1 ? safeProfiles[0].id : '';
+}
+
 function normalizeRemoteMode(value, options = {}) {
   const allowSkipExport = !!options.allowSkipExport;
   const mode = String(value || '').trim().toLowerCase();
@@ -466,12 +616,26 @@ function sanitizeFileName(name) {
   return String(name || 'character').replace(/[\\/:*?"<>|]/g, '_').trim() || 'character';
 }
 
+function normalizeUiSkinProfileRecord(raw = {}) {
+  const safe = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const id = String(safe.id || safe.profileId || safe.skinId || '').trim();
+  if (!isCustomSkinProfileId(id)) return null;
+  return {
+    id,
+    displayName: String(safe.displayName || safe.name || safe.label || '').trim() || id,
+    createdAt: String(safe.createdAt || '').trim(),
+    updatedAt: String(safe.updatedAt || '').trim(),
+    sortOrder: Number.isFinite(Number(safe.sortOrder)) ? Number(safe.sortOrder) : null,
+  };
+}
+
 function normalizeUiSkinMetaRecord(raw = {}) {
-  const skinId = String(raw.skinId || WESTERN_SKIN_ID).trim() || WESTERN_SKIN_ID;
+  const rawSkinId = String(raw.skinId || '').trim();
+  const skinId = rawSkinId === 'skin-western' || rawSkinId === CUSTOM_SKIN_ID ? '' : rawSkinId;
   const elementId = String(raw.elementId || '').trim();
   const device = String(raw.device || 'desktop').trim() || 'desktop';
   const state = String(raw.state || 'normal').trim() || 'normal';
-  if (!elementId) return null;
+  if (!elementId || !isCustomSkinProfileId(skinId)) return null;
   return {
     skinId,
     elementId,
@@ -486,7 +650,7 @@ function normalizeUiSkinMetaRecord(raw = {}) {
 }
 
 function buildUiSkinZipFilename(record, ext = 'png') {
-  const safeSkin = sanitizeFileName(record.skinId || WESTERN_SKIN_ID);
+  const safeSkin = sanitizeFileName(record.skinId || 'skin');
   const safeElement = sanitizeFileName(record.elementId || 'element');
   const safeDevice = sanitizeFileName(record.device || 'desktop');
   const safeState = sanitizeFileName(record.state || 'normal');
@@ -504,6 +668,50 @@ function parseUiSkinMetaFromFilename(fileName) {
     device: parts[2],
     state: parts.slice(3).join('__') || 'normal',
   });
+}
+
+async function importUiSkinProfilesIntoGlobalLibrary(rawProfiles = []) {
+  const existingProfiles = await listUiSkinProfiles();
+  const existingById = new Map(existingProfiles.map(profile => [profile.id, profile]));
+  const resolvedProfiles = [];
+  const nameScope = [...existingProfiles];
+
+  for (const rawProfile of Array.isArray(rawProfiles) ? rawProfiles : []) {
+    const profile = normalizeUiSkinProfileRecord(rawProfile);
+    if (!profile) continue;
+
+    const existing = existingById.get(profile.id) || null;
+    let displayName = profile.displayName;
+    if (!existing) {
+      displayName = getAvailableUiSkinProfileDisplayName(displayName, nameScope);
+    }
+
+    const savedProfile = await saveUiSkinProfile({
+      ...existing,
+      ...profile,
+      displayName,
+      createdAt: profile.createdAt || existing?.createdAt || new Date().toISOString(),
+      updatedAt: profile.updatedAt || new Date().toISOString(),
+      sortOrder: Number.isFinite(profile.sortOrder) ? profile.sortOrder : (existing?.sortOrder || Date.now()),
+    });
+    existingById.set(savedProfile.id, savedProfile);
+    nameScope.push(savedProfile);
+    resolvedProfiles.push(savedProfile);
+  }
+
+  await refreshUiSkinProfilesCache();
+  return resolvedProfiles;
+}
+
+async function switchToImportedCustomSkinProfile(activeProfileId = '') {
+  const safeProfileId = String(activeProfileId || '').trim();
+  if (!hasUiSkinProfileId(safeProfileId)) return false;
+  const settings = getSettings();
+  settings.skin = safeProfileId;
+  saveSettings();
+  refreshSkinSelectElement();
+  applySettingsToUI();
+  return true;
 }
 
 function normalizeSpecialCgMetaRecord(raw = {}) {
@@ -3825,6 +4033,10 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     const json = JSON.parse(text);
     const { rawJson, pluginConfig, cardObject } = extractImportPayloadFromJson(json);
     const payload = pluginConfig && typeof pluginConfig === 'object' ? pluginConfig : rawJson;
+    const importedUiSkinProfiles = [
+      ...(Array.isArray(payload?.uiSkinProfiles) ? payload.uiSkinProfiles : []),
+      ...(payload !== rawJson && Array.isArray(rawJson?.uiSkinProfiles) ? rawJson.uiSkinProfiles : []),
+    ];
     logTitleScreenDiag('importAssetsFromJson:payload-detected', {
       hasPluginConfig: !!pluginConfig,
       payloadSchema: String(payload?.schema || ''),
@@ -3843,6 +4055,17 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     }
 
     let count = 0;
+    const savedUiSkinProfiles = importedUiSkinProfiles.length > 0
+      ? await importUiSkinProfilesIntoGlobalLibrary(importedUiSkinProfiles)
+      : [];
+    const importedUiSkinProfileIds = new Set(savedUiSkinProfiles.map(profile => profile.id));
+    const importedActiveCustomSkinProfileId = resolveImportedCustomSkinActiveProfileId(
+      payload?.activeCustomSkinProfileId
+      || payload?.activeProfileId
+      || rawJson?.activeCustomSkinProfileId
+      || rawJson?.activeProfileId,
+      savedUiSkinProfiles,
+    );
     const importedSpriteKeys = new Set();
     const importedBackgroundKeys = new Set();
     const newExpressions = [];
@@ -4071,7 +4294,9 @@ export async function importAssetsFromJson(file, targetPackId = null) {
       if (!meta) continue;
       const remoteUrl = String(rawItem.url || rawItem.imageUrl || '').trim();
       const payloadRecord = {
-        packId: targetPackId,
+        packId: importedUiSkinProfileIds.has(meta.skinId) || isCustomSkinProfileId(meta.skinId)
+          ? GLOBAL_CUSTOM_SKIN_PACK_ID
+          : targetPackId,
         skinId: meta.skinId,
         elementId: meta.elementId,
         device: meta.device,
@@ -4157,6 +4382,16 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     if (restoredTts.restoredEnabled || restoredTts.restoredVoiceCount > 0 || restoredTts.restoredKeywordCount > 0) {
       summaryParts.push(`TTS 音色 ${restoredTts.restoredVoiceCount}，关键字 ${restoredTts.restoredKeywordCount}`);
     }
+    if (savedUiSkinProfiles.length > 0) {
+      summaryParts.push(`自定义皮肤 ${savedUiSkinProfiles.length} 套`);
+    }
+    if (importedActiveCustomSkinProfileId) {
+      const switched = await switchToImportedCustomSkinProfile(importedActiveCustomSkinProfileId);
+      if (switched) {
+        const switchedProfile = savedUiSkinProfiles.find(profile => profile.id === importedActiveCustomSkinProfileId);
+        summaryParts.push(`已切换到 ${switchedProfile?.displayName || importedActiveCustomSkinProfileId}`);
+      }
+    }
     showToast(summaryParts.join('，'));
 
     const hasUiAccessConfig = !!(pluginConfig?.custom?.uiAccess && pluginConfig.custom.uiAccess.enabled);
@@ -4195,7 +4430,7 @@ export const AssetIO = {
       document.head.appendChild(script);
     });
   },
-  async exportAllAssets(remoteBaseUrl = null, packageName = null) {
+  async exportAllAssets(remoteBaseUrl = null, packageName = null, options = {}) {
     try {
       showToast('正在准备导出...');
       const zip = new (await this.loadJSZip())();
@@ -4204,6 +4439,9 @@ export const AssetIO = {
       const allPacks = await getAllImagePacks();
       const currentPack = allPacks.find(p => p.id === currentPackId);
       const currentPackName = currentPack ? currentPack.name : '未命名包';
+      const attachedCustomSkinProfileId = isCustomSkinProfileId(options?.attachedCustomSkinProfileId)
+        ? String(options.attachedCustomSkinProfileId).trim()
+        : '';
 
       const remoteConfig = {
         packageName: packageName || currentPackName,
@@ -4214,6 +4452,8 @@ export const AssetIO = {
         specialCgs: [],
         maps: [],
         uiSkins: [],
+        uiSkinProfiles: [],
+        activeCustomSkinProfileId: '',
         mapSettings: buildExportableMapSettings(),
       };
       const baseUrl = remoteBaseUrl ? (remoteBaseUrl.endsWith('/') ? remoteBaseUrl : remoteBaseUrl + '/') : '';
@@ -4352,12 +4592,32 @@ export const AssetIO = {
         zip.file('maps/manifest.json', JSON.stringify({ version: '1.0', assets: mapManifest }, null, 2));
       }
 
-      const allUiSkinAssets = await getAllUiSkinAssets();
-      const uiSkinAssets = allUiSkinAssets.filter(asset => {
-        const assetPackId = String(asset?.packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID;
-        return assetPackId === currentPackId;
-      });
+      const {
+        profiles: exportedUiSkinProfiles,
+        assets: uiSkinAssets,
+        activeProfileId: exportedActiveProfileId,
+      } = await buildCustomSkinProfileExportBundle(
+        attachedCustomSkinProfileId ? [attachedCustomSkinProfileId] : [],
+        attachedCustomSkinProfileId,
+      );
       const uiSkinManifest = [];
+      if (exportedUiSkinProfiles.length > 0) {
+        zip.file('ui-skin-profiles/manifest.json', JSON.stringify({
+          version: '1.0',
+          profiles: exportedUiSkinProfiles,
+          activeProfileId: exportedActiveProfileId,
+        }, null, 2));
+        if (remoteBaseUrl) {
+          remoteConfig.uiSkinProfiles = exportedUiSkinProfiles.map(profile => ({
+            id: profile.id,
+            displayName: profile.displayName,
+            createdAt: profile.createdAt,
+            updatedAt: profile.updatedAt,
+            sortOrder: profile.sortOrder,
+          }));
+          remoteConfig.activeCustomSkinProfileId = exportedActiveProfileId;
+        }
+      }
       if (uiSkinAssets.length > 0) {
         const uiSkinFolder = zip.folder('ui-skins');
         for (const rawAsset of uiSkinAssets) {
@@ -4411,6 +4671,8 @@ export const AssetIO = {
         specialCgCount: specialCgs.length,
         mapCount: maps.length,
         uiSkinCount: uiSkinAssets.length,
+        uiSkinProfileCount: exportedUiSkinProfiles.length,
+        attachedCustomSkinProfileId: exportedActiveProfileId,
         mapSettings: remoteConfig.mapSettings,
       };
       zip.file('package_info.json', JSON.stringify(packageInfo, null, 2));
@@ -4429,10 +4691,57 @@ export const AssetIO = {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${specialCgs.length} 个 CG，${maps.length} 张地图，${uiSkinAssets.length} 个皮肤元素`);
+      const skinSummary = exportedUiSkinProfiles.length > 0
+        ? `，附带 ${exportedUiSkinProfiles.length} 套自定义皮肤（${uiSkinAssets.length} 个皮肤元素）`
+        : '';
+      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${specialCgs.length} 个 CG，${maps.length} 张地图${skinSummary}`);
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
       showToast('导出失败: ' + e.message);
+    }
+  },
+  async exportCustomSkinLibrary(packageName = null) {
+    try {
+      const exportedProfiles = await listUiSkinProfiles();
+      const profileIds = exportedProfiles.map(profile => profile.id);
+      return await exportCustomSkinBundleArchive(() => this.loadJSZip(), {
+        profileIds,
+        packageName,
+        scope: 'custom-skin-library',
+        preparingMessage: '正在准备导出自定义皮肤库...',
+        compressMessage: '正在压缩皮肤库...',
+        emptyMessage: '当前还没有可导出的自定义皮肤',
+        defaultPackageName: '自定义皮肤库',
+        successMessageBuilder: ({ exportedProfiles: profiles, uiSkinAssets }) =>
+          `已导出 ${profiles.length} 套自定义皮肤（${uiSkinAssets.length} 个皮肤元素）`,
+      });
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 导出自定义皮肤库失败:`, e);
+      showToast('导出自定义皮肤库失败: ' + e.message);
+      return false;
+    }
+  },
+  async exportCustomSkinProfile(profileId, packageName = null) {
+    try {
+      const safeProfileId = String(profileId || '').trim();
+      return await exportCustomSkinBundleArchive(() => this.loadJSZip(), {
+        profileIds: safeProfileId ? [safeProfileId] : [],
+        packageName,
+        activeProfileId: safeProfileId,
+        scope: 'custom-skin-profile',
+        preparingMessage: '正在准备导出当前自定义皮肤...',
+        compressMessage: '正在压缩当前自定义皮肤...',
+        emptyMessage: '当前皮肤不存在或没有可导出的内容',
+        defaultPackageName: '自定义皮肤',
+        successMessageBuilder: ({ exportedProfiles, uiSkinAssets }) => {
+          const profileLabel = exportedProfiles[0]?.displayName || '当前皮肤';
+          return `已导出自定义皮肤“${profileLabel}”（${uiSkinAssets.length} 个皮肤元素）`;
+        },
+      });
+    } catch (e) {
+      console.error(`[${SCRIPT_NAME}] 导出当前自定义皮肤失败:`, e);
+      showToast('导出当前自定义皮肤失败: ' + e.message);
+      return false;
     }
   },
   async importFiles(fileList, targetPackId = null) {
@@ -4804,12 +5113,14 @@ export async function showImportPackSelector(suggestedName = null) {
       const currentPackId = getCurrentPackId();
       const currentPack = packs.find(p => p.id === currentPackId);
       const currentPackName = currentPack ? currentPack.name : '当前图包';
+      const safeCurrentPackName = escapeHtml(currentPackName);
 
       const packOptions = packs.map(p =>
-        `<option value="${p.id}">${p.name}${p.id === currentPackId ? ' (当前)' : ''}</option>`
+        `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}${p.id === currentPackId ? ' (当前)' : ''}</option>`
       ).join('');
 
       const defaultNewName = suggestedName || `导入包_${new Date().toISOString().slice(0, 10)}`;
+      const safeDefaultNewName = escapeHtml(defaultNewName);
 
       const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
@@ -4824,7 +5135,7 @@ export async function showImportPackSelector(suggestedName = null) {
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
                 <input type="radio" name="import-target" value="current" checked style="width: 18px; height: 18px;">
                 <span style="font-weight: 600; color: #2b2e38;">导入到当前图包</span>
-                <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${currentPackName}</span>
+                <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${safeCurrentPackName}</span>
               </label>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="existing" style="width: 18px; height: 18px;">
@@ -4837,7 +5148,7 @@ export async function showImportPackSelector(suggestedName = null) {
                 <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
                 <span style="font-weight: 600; color: #2b2e38;">创建新图包</span>
               </label>
-              <input type="text" id="gal-import-new-pack-name" disabled placeholder="输入新图包名称" value="${defaultNewName}"
+              <input type="text" id="gal-import-new-pack-name" disabled placeholder="输入新图包名称" value="${safeDefaultNewName}"
                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
             </div>
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
@@ -4915,6 +5226,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
   const hasBackgroundsDir = zipPaths.some(path => path.startsWith('backgrounds/'));
   const hasMapsDir = zipPaths.some(path => path.startsWith('maps/'));
   const hasUiSkinsDir = zipPaths.some(path => path.startsWith('ui-skins/'));
+  const hasUiSkinProfilesDir = zipPaths.some(path => path.startsWith('ui-skin-profiles/'));
   const hasSpecialCgsDir = zipPaths.some(path => path.startsWith('special-cgs/'));
 
   let packageInfo = null;
@@ -4926,6 +5238,22 @@ export async function processZipContents(zip, progressController, isCancelledChe
       console.log(`[${SCRIPT_NAME}] 读取到包信息:`, packageInfo);
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] 读取 package_info.json 失败:`, e);
+    }
+  }
+
+  let uiSkinProfileManifestProfiles = [];
+  let uiSkinProfileManifestActiveProfileId = '';
+  const uiSkinProfileManifestFile = zip.file('ui-skin-profiles/manifest.json');
+  if (uiSkinProfileManifestFile) {
+    try {
+      const manifestText = await uiSkinProfileManifestFile.async('text');
+      const manifestJson = JSON.parse(manifestText);
+      if (Array.isArray(manifestJson?.profiles)) {
+        uiSkinProfileManifestProfiles = manifestJson.profiles;
+      }
+      uiSkinProfileManifestActiveProfileId = String(manifestJson?.activeProfileId || '').trim();
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 读取 ui-skin-profiles/manifest.json 失败:`, e);
     }
   }
 
@@ -5029,20 +5357,40 @@ export async function processZipContents(zip, progressController, isCancelledChe
     }
   });
 
+  const importedUiSkinProfiles = uiSkinProfileManifestProfiles.length > 0
+    ? await importUiSkinProfilesIntoGlobalLibrary(uiSkinProfileManifestProfiles)
+    : [];
+  const importedUiSkinProfileIds = new Set(importedUiSkinProfiles.map(profile => profile.id));
+  const importedActiveCustomSkinProfileId = resolveImportedCustomSkinActiveProfileId(
+    uiSkinProfileManifestActiveProfileId,
+    importedUiSkinProfiles,
+  );
+
   if (
     !hasSpritesDir
     && !hasBackgroundsDir
     && !hasMapsDir
     && !hasUiSkinsDir
+    && !hasUiSkinProfilesDir
     && !hasSpecialCgsDir
     && uiSkinManifestUrlOnly.length === 0
     && mapManifestUrlOnly.length === 0
     && specialCgManifestUrlOnly.length === 0
+    && importedUiSkinProfiles.length === 0
   ) {
-    throw new Error('ZIP 包格式错误：需包含 sprites/、backgrounds/、special-cgs/、maps/ 或 ui-skins/ 目录');
+    throw new Error('ZIP 包格式错误：需包含 sprites/、backgrounds/、special-cgs/、maps/、ui-skins/ 或 ui-skin-profiles/ 目录');
   }
 
-  if (!targetPackId) {
+  const requiresPackTarget = (
+    hasSpritesDir
+    || hasBackgroundsDir
+    || hasMapsDir
+    || hasSpecialCgsDir
+    || mapManifestUrlOnly.length > 0
+    || specialCgManifestUrlOnly.length > 0
+  );
+
+  if (!targetPackId && requiresPackTarget) {
     const suggestedName = packageInfo?.packageName || packageInfo?.name;
     targetPackId = await showImportPackSelector(suggestedName);
     if (!targetPackId) {
@@ -5069,15 +5417,21 @@ export async function processZipContents(zip, progressController, isCancelledChe
     });
   });
 
-  const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
+  const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length + importedUiSkinProfiles.length;
   if (totalItems === 0) {
     throw new Error('ZIP 包中未找到有效资源文件');
   }
 
-  progressController.update(0, `准备导入 ${totalItems} 个资源...`);
+  const importedProfileCount = importedUiSkinProfiles.length;
+  progressController.update(
+    importedProfileCount > 0 ? Math.round((importedProfileCount / totalItems) * 100) : 0,
+    importedProfileCount > 0
+      ? `已恢复 ${importedProfileCount} 套自定义皮肤，继续导入其余 ${totalItems - importedProfileCount} 个资源...`
+      : `准备导入 ${totalItems} 个资源...`,
+  );
 
   const BATCH_SIZE = 50;
-  let successCount = 0;
+  let successCount = importedUiSkinProfiles.length;
   const failedItems = [];
 
   for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
@@ -5214,7 +5568,9 @@ export async function processZipContents(zip, progressController, isCancelledChe
       await Promise.all(
         uiSkinBatch.map(asset =>
           saveUiSkinAsset({
-            packId: targetPackId,
+            packId: importedUiSkinProfileIds.has(asset.skinId) || isCustomSkinProfileId(asset.skinId)
+              ? GLOBAL_CUSTOM_SKIN_PACK_ID
+              : targetPackId,
             skinId: asset.skinId,
             elementId: asset.elementId,
             device: asset.device,
@@ -5232,7 +5588,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
     }
 
     successCount += spriteBatch.length + backgroundBatch.length + specialCgBatch.length + (mapBatch.length > 0 ? 1 : 0) + uiSkinBatch.length;
-    const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
+    const processed = importedProfileCount + Math.min(i + BATCH_SIZE, imageFiles.length);
     const percent = Math.round((processed / totalItems) * 100);
     progressController.update(percent, `导入中... ${processed}/${totalItems} (文件资源)`);
   }
@@ -5246,7 +5602,9 @@ export async function processZipContents(zip, progressController, isCancelledChe
       const item = uiSkinManifestUrlOnly[i];
       try {
         await saveUiSkinAsset({
-          packId: targetPackId,
+          packId: importedUiSkinProfileIds.has(item.skinId) || isCustomSkinProfileId(item.skinId)
+            ? GLOBAL_CUSTOM_SKIN_PACK_ID
+            : targetPackId,
           skinId: item.skinId,
           elementId: item.elementId,
           device: item.device,
@@ -5263,7 +5621,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
       } catch (e) {
         failedItems.push({ path: `${item.skinId}/${item.elementId}/${item.device}/${item.state}`, error: e.message });
       }
-      const processed = imageFiles.length + i + 1;
+      const processed = importedProfileCount + imageFiles.length + i + 1;
       const percent = Math.round((processed / totalItems) * 100);
       progressController.update(percent, `导入中... ${processed}/${totalItems} (皮肤链接)`);
     }
@@ -5293,7 +5651,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
       } catch (e) {
         failedItems.push({ path: `special-cgs/${item.cgId}`, error: e.message });
       }
-      const processed = imageFiles.length + uiSkinManifestUrlOnly.length + i + 1;
+      const processed = importedProfileCount + imageFiles.length + uiSkinManifestUrlOnly.length + i + 1;
       const percent = Math.round((processed / totalItems) * 100);
       progressController.update(percent, `导入中... ${processed}/${totalItems} (CG链接)`);
     }
@@ -5312,13 +5670,17 @@ export async function processZipContents(zip, progressController, isCancelledChe
       } catch (e) {
         failedItems.push({ path: `maps/${preferredMap.regionKey || GLOBAL_MAP_REGION_KEY}`, error: e.message });
       }
-      const processed = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
+      const processed = importedProfileCount + imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
       const percent = Math.round((processed / totalItems) * 100);
       progressController.update(percent, `导入中... ${processed}/${totalItems} (地图链接)`);
     }
   }
 
   const mapSettingsApplied = applyImportedMapSettings(packageInfo?.mapSettings);
+  let switchedCustomSkin = false;
+  if (importedActiveCustomSkinProfileId) {
+    switchedCustomSkin = await switchToImportedCustomSkinProfile(importedActiveCustomSkinProfileId);
+  }
 
   if (failedItems.length > 0) {
     showImportError([
@@ -5327,7 +5689,12 @@ export async function processZipContents(zip, progressController, isCancelledChe
     ]);
   }
 
-  console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}, 地图设置同步=${mapSettingsApplied}`);
+  if (switchedCustomSkin) {
+    const switchedProfile = importedUiSkinProfiles.find(profile => profile.id === importedActiveCustomSkinProfileId);
+    showToast(`已切换到导入的自定义皮肤：${switchedProfile?.displayName || importedActiveCustomSkinProfileId}`);
+  }
+
+  console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}, 自定义皮肤=${importedUiSkinProfiles.length}, 自动切换=${switchedCustomSkin}, 地图设置同步=${mapSettingsApplied}`);
 }
 
 export function showImportProgress(initialText, onCancel, options = {}) {

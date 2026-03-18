@@ -5,7 +5,7 @@ export const SCRIPT_ID = 'galgame-ui-plugin';
 export const SCRIPT_NAME = 'Galgame界面插件';
 export const VERSION = '2.2.1';
 export const DB_NAME = 'GalgameUIPluginDB';
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 export const STORE_SPRITES = 'sprites';
 export const STORE_BACKGROUNDS = 'backgrounds';
 export const STORE_MAP_IMAGES = 'mapImages';
@@ -13,9 +13,13 @@ export const STORE_IMAGE_PACKS = 'imagePacks';
 export const STORE_LIVE2D_MODELS = 'live2dModels';
 export const STORE_SDK_CACHE = 'sdkCache';
 export const STORE_UI_SKINS = 'uiSkins';
+export const STORE_UI_SKIN_PROFILES = 'uiSkinProfiles';
 export const STORE_SPECIAL_CGS = 'specialCgs';
 export const DEFAULT_PACK_ID = 'pack_default';
 export const DEFAULT_PACK_NAME = '未定义';
+export const CUSTOM_SKIN_ID = 'custom-skin';
+export const GLOBAL_CUSTOM_SKIN_PACK_ID = '__global_custom_skin__';
+export const CUSTOM_SKIN_PROFILE_ID_PREFIX = 'custom-profile::';
 
 // 样式主题常量 (Cyber Pop)
 export const THEME = {

@@ -1,4 +1,19 @@
-import { SCRIPT_NAME, DB_NAME, DB_VERSION, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_IMAGE_PACKS, STORE_LIVE2D_MODELS, STORE_SDK_CACHE, STORE_UI_SKINS, STORE_SPECIAL_CGS, DEFAULT_PACK_ID, DEFAULT_PACK_NAME } from '../core/constants.js';
+import {
+  SCRIPT_NAME,
+  DB_NAME,
+  DB_VERSION,
+  STORE_SPRITES,
+  STORE_BACKGROUNDS,
+  STORE_MAP_IMAGES,
+  STORE_IMAGE_PACKS,
+  STORE_LIVE2D_MODELS,
+  STORE_SDK_CACHE,
+  STORE_UI_SKINS,
+  STORE_UI_SKIN_PROFILES,
+  STORE_SPECIAL_CGS,
+  DEFAULT_PACK_ID,
+  DEFAULT_PACK_NAME,
+} from '../core/constants.js';
 import { getDb, setDb } from '../core/state.js';
 
 // ============================================
@@ -196,6 +211,18 @@ export function initDB() {
           console.log(`[${SCRIPT_NAME}] 已创建特殊 CG 存储`);
         }
         console.log(`[${SCRIPT_NAME}] 数据库升级到版本8: 已添加特殊 CG 存储`);
+      }
+
+      // 版本9: 新增自定义皮肤 profile 存储
+      if (oldVersion < 9) {
+        if (!database.objectStoreNames.contains(STORE_UI_SKIN_PROFILES)) {
+          const profileStore = database.createObjectStore(STORE_UI_SKIN_PROFILES, { keyPath: 'id' });
+          profileStore.createIndex('displayName', 'displayName', { unique: false });
+          profileStore.createIndex('sortOrder', 'sortOrder', { unique: false });
+          profileStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          console.log(`[${SCRIPT_NAME}] 已创建自定义皮肤 profile 存储`);
+        }
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本9: 已新增自定义皮肤 profile 存储`);
       }
     };
   });

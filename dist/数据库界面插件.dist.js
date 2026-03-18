@@ -7646,7 +7646,7 @@
   var SCRIPT_NAME = "Galgame界面插件";
   var VERSION = "2.2.1";
   var DB_NAME = "GalgameUIPluginDB";
-  var DB_VERSION = 8;
+  var DB_VERSION = 9;
   var STORE_SPRITES = "sprites";
   var STORE_BACKGROUNDS = "backgrounds";
   var STORE_MAP_IMAGES = "mapImages";
@@ -7654,9 +7654,13 @@
   var STORE_LIVE2D_MODELS = "live2dModels";
   var STORE_SDK_CACHE = "sdkCache";
   var STORE_UI_SKINS = "uiSkins";
+  var STORE_UI_SKIN_PROFILES = "uiSkinProfiles";
   var STORE_SPECIAL_CGS = "specialCgs";
   var DEFAULT_PACK_ID = "pack_default";
   var DEFAULT_PACK_NAME = "未定义";
+  var CUSTOM_SKIN_ID = "custom-skin";
+  var GLOBAL_CUSTOM_SKIN_PACK_ID = "__global_custom_skin__";
+  var CUSTOM_SKIN_PROFILE_ID_PREFIX = "custom-profile::";
   var THEME = {
     white: "#ffffff",
     dark: "#2b2e38",
@@ -8348,9 +8352,9 @@
     return getMapSettings();
   }
   function getMapCoords(regionKey) {
-    const settings = ensureMapSettings();
+    const settings2 = ensureMapSettings();
     const key = String(regionKey || "").trim() || "default-region";
-    return _safeObject(settings.mapCoordsByRegion[key]);
+    return _safeObject(settings2.mapCoordsByRegion[key]);
   }
   function setMapCoord(regionKey, detailedLocation, coord) {
     const key = String(regionKey || "").trim() || "default-region";
@@ -9649,6 +9653,16 @@
           }
           console.log(`[${SCRIPT_NAME}] 数据库升级到版本8: 已添加特殊 CG 存储`);
         }
+        if (oldVersion < 9) {
+          if (!database.objectStoreNames.contains(STORE_UI_SKIN_PROFILES)) {
+            const profileStore = database.createObjectStore(STORE_UI_SKIN_PROFILES, { keyPath: "id" });
+            profileStore.createIndex("displayName", "displayName", { unique: false });
+            profileStore.createIndex("sortOrder", "sortOrder", { unique: false });
+            profileStore.createIndex("updatedAt", "updatedAt", { unique: false });
+            console.log(`[${SCRIPT_NAME}] 已创建自定义皮肤 profile 存储`);
+          }
+          console.log(`[${SCRIPT_NAME}] 数据库升级到版本9: 已新增自定义皮肤 profile 存储`);
+        }
       };
     });
   }
@@ -10217,7 +10231,7 @@
       request.onerror = () => resolve2();
     });
     console.log(`[${SCRIPT_NAME}] moved ${spriteCount} sprites, ${bgCount} backgrounds, ${mapCount} maps and ${cgCount} cgs from pack ${packId} to default pack`);
-    return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
+    return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount, uiSkins: 0 };
   }
   async function getPackResourceCount(packId) {
     if (!getDb()) await initDB();
@@ -10270,7 +10284,7 @@
       };
       request.onerror = () => resolve2();
     });
-    return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
+    return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount, uiSkins: 0 };
   }
   function ensureBackgroundLayers($bgLayer) {
     if (!$bgLayer || !$bgLayer.length) return { $base: $2(), $front: $2() };
@@ -11579,8 +11593,8 @@ ${ssml}`;
   }
   function getTTSProvider() {
     try {
-      const settings = getSettings();
-      return settings?.ttsProvider || TTS_PROVIDER.LITTLEWHITEBOX;
+      const settings2 = getSettings();
+      return settings2?.ttsProvider || TTS_PROVIDER.LITTLEWHITEBOX;
     } catch (e) {
       return TTS_PROVIDER.LITTLEWHITEBOX;
     }
@@ -11605,8 +11619,8 @@ ${ssml}`;
       voices: []
     };
     try {
-      const settings = getSettings();
-      const cfg = settings?.gptSoVits || {};
+      const settings2 = getSettings();
+      const cfg = settings2?.gptSoVits || {};
       const merged = Object.assign(
         Object.assign({}, defaults3),
         cfg,
@@ -13762,14 +13776,14 @@ ${ssml}`;
     return Math.max(min4, Math.min(max5, value));
   }
   function getEffectSettings() {
-    const settings = getSettings() || {};
-    const quality = QUALITY_PROFILES[settings.effectsQuality] ? settings.effectsQuality : DEFAULT_EFFECT_SETTINGS.effectsQuality;
-    const parsedMax = Number.parseInt(settings.effectsMaxActive, 10);
+    const settings2 = getSettings() || {};
+    const quality = QUALITY_PROFILES[settings2.effectsQuality] ? settings2.effectsQuality : DEFAULT_EFFECT_SETTINGS.effectsQuality;
+    const parsedMax = Number.parseInt(settings2.effectsMaxActive, 10);
     const effectsMaxActive = Number.isFinite(parsedMax) ? clamp2(parsedMax, 1, 6) : DEFAULT_EFFECT_SETTINGS.effectsMaxActive;
     return {
-      effectsEnabled: settings.effectsEnabled !== false,
+      effectsEnabled: settings2.effectsEnabled !== false,
       effectsQuality: quality,
-      effectsAutoClearOnSceneChange: settings.effectsAutoClearOnSceneChange !== false,
+      effectsAutoClearOnSceneChange: settings2.effectsAutoClearOnSceneChange !== false,
       effectsMaxActive
     };
   }
@@ -13905,7 +13919,7 @@ ${ssml}`;
     bindTicker("fg", effectState.fgApp);
     effectState.tickerBound = true;
   }
-  function applySingleOp(op, settings, quality) {
+  function applySingleOp(op, settings2, quality) {
     const action = String(op?.action || "").trim();
     if (!action) return;
     if (action === "init") {
@@ -13932,7 +13946,7 @@ ${ssml}`;
       return;
     }
     if (name !== "screenFlash") {
-      prunePersistentEffects(settings.effectsMaxActive - 1);
+      prunePersistentEffects(settings2.effectsMaxActive - 1);
     }
     const { width: width2, height: height2 } = getLayerSize(app);
     const instance = createPixiEffectInstance(name, { PIXI, width: width2, height: height2, quality });
@@ -13953,8 +13967,8 @@ ${ssml}`;
     if (!overlayEl) return false;
     const { bgHost, fgHost } = ensureEffectHosts(overlayEl);
     if (!bgHost || !fgHost) return false;
-    const settings = getEffectSettings();
-    const quality = getQualityProfile(settings.effectsQuality);
+    const settings2 = getEffectSettings();
+    const quality = getQualityProfile(settings2.effectsQuality);
     if (effectState.mounted && effectState.bgHost === bgHost && effectState.fgHost === fgHost) {
       return true;
     }
@@ -13981,18 +13995,18 @@ ${ssml}`;
   async function applyPixiEffectOps(ops = [], overlayLike = null) {
     const list = Array.isArray(ops) ? ops : [];
     if (list.length === 0) return true;
-    const settings = getEffectSettings();
-    if (!settings.effectsEnabled) {
+    const settings2 = getEffectSettings();
+    if (!settings2.effectsEnabled) {
       clearAllPixiEffects();
       return false;
     }
     const mounted = await mountPixiEffects(overlayLike);
     if (!mounted) return false;
-    const quality = getQualityProfile(settings.effectsQuality);
+    const quality = getQualityProfile(settings2.effectsQuality);
     for (const op of list) {
-      applySingleOp(op, settings, quality);
+      applySingleOp(op, settings2, quality);
     }
-    prunePersistentEffects(settings.effectsMaxActive);
+    prunePersistentEffects(settings2.effectsMaxActive);
     return true;
   }
   function resizePixiEffects() {
@@ -14033,23 +14047,23 @@ ${ssml}`;
   }
   function resumePixiEffects() {
     if (!effectState.mounted) return;
-    const settings = getEffectSettings();
-    if (!settings.effectsEnabled) return;
+    const settings2 = getEffectSettings();
+    if (!settings2.effectsEnabled) return;
     effectState.bgApp?.ticker?.start();
     effectState.fgApp?.ticker?.start();
   }
   function syncPixiEffectsSettings() {
     if (!effectState.mounted) return;
-    const settings = getEffectSettings();
-    const quality = getQualityProfile(settings.effectsQuality);
+    const settings2 = getEffectSettings();
+    const quality = getQualityProfile(settings2.effectsQuality);
     if (effectState.bgApp?.ticker) {
       effectState.bgApp.ticker.maxFPS = quality.targetFps;
     }
     if (effectState.fgApp?.ticker) {
       effectState.fgApp.ticker.maxFPS = quality.targetFps;
     }
-    prunePersistentEffects(settings.effectsMaxActive);
-    if (!settings.effectsEnabled) {
+    prunePersistentEffects(settings2.effectsMaxActive);
+    if (!settings2.effectsEnabled) {
       clearAllPixiEffects();
       pausePixiEffects();
       return;
@@ -14200,7 +14214,7 @@ ${ssml}`;
     if (updateOverlaySegmentDisplay2) _updateOverlaySegmentDisplayRef = updateOverlaySegmentDisplay2;
   }
   function ensureGlobalOverlay() {
-    const settings = getSettings();
+    const settings2 = getSettings();
     const targetDoc = topWindow.document;
     let $overlay = $2(targetDoc).find("#gal-global-overlay");
     if (!$overlay.length) {
@@ -14242,7 +14256,7 @@ ${ssml}`;
           <!-- 游戏内容层 -->
           <div class="gal-game-content">
             <!-- 立绘层 -->
-            <div class="gal-layer-character${settings.speakerGlow ? " glow-enabled" : ""}${settings.speakerBubble ? " bubble-enabled" : ""}${getTTSEnabled() ? " tts-mode-enabled" : ""}">
+            <div class="gal-layer-character${settings2.speakerGlow ? " glow-enabled" : ""}${settings2.speakerBubble ? " bubble-enabled" : ""}${getTTSEnabled() ? " tts-mode-enabled" : ""}">
               <div class="gal-char-slot slot-left"></div>
               <div class="gal-char-slot slot-center"></div>
               <div class="gal-char-slot slot-right"></div>
@@ -15485,7 +15499,7 @@ ${ssml}`;
   }
   function buildUiSkinAssetId(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
     const safePackId = normalizeKeyPart(packId, DEFAULT_PACK_ID);
-    const safeSkinId = normalizeKeyPart(skinId, "skin-western");
+    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
     const safeElementId = normalizeKeyPart(elementId, "unknown-element");
     const safeDevice = normalizeKeyPart(device, DEFAULT_DEVICE);
     const safeState = normalizeKeyPart(state, DEFAULT_STATE);
@@ -15493,7 +15507,7 @@ ${ssml}`;
   }
   function normalizeUiSkinAsset(payload = {}) {
     const resolvedPackId = normalizeKeyPart(payload.packId, getCurrentPackId() || DEFAULT_PACK_ID);
-    const resolvedSkinId = normalizeKeyPart(payload.skinId, "skin-western");
+    const resolvedSkinId = normalizeKeyPart(payload.skinId, CUSTOM_SKIN_ID);
     const resolvedElementId = normalizeKeyPart(payload.elementId, "unknown-element");
     const resolvedDevice = normalizeKeyPart(payload.device, DEFAULT_DEVICE);
     const resolvedState = normalizeKeyPart(payload.state, DEFAULT_STATE);
@@ -15532,10 +15546,12 @@ ${ssml}`;
       const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
       const store = transaction.objectStore(STORE_UI_SKINS);
       const request = store.put(data4);
-      request.onsuccess = () => {
+      transaction.oncomplete = () => {
         console.log(`[${SCRIPT_NAME}] UI 皮肤元素已保存: ${data4.id}`);
         resolve2(data4);
       };
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
       request.onerror = () => reject2(request.error);
     });
   }
@@ -15557,7 +15573,7 @@ ${ssml}`;
   }
   async function getUiSkinAssetsByPackSkin(packId, skinId, device = null) {
     const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
-    const safeSkinId = normalizeKeyPart(skinId, "skin-western");
+    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
     const safeDevice = device ? normalizeKeyPart(device, DEFAULT_DEVICE) : null;
     const db = await ensureDbReady();
     return new Promise((resolve2) => {
@@ -15589,7 +15605,9 @@ ${ssml}`;
       const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
       const store = transaction.objectStore(STORE_UI_SKINS);
       const request = store.delete(safeId);
-      request.onsuccess = () => resolve2(true);
+      transaction.oncomplete = () => resolve2(true);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
       request.onerror = () => reject2(request.error);
     });
   }
@@ -15599,7 +15617,7 @@ ${ssml}`;
   }
   async function deleteUiSkinAssetsByPackSkin(packId, skinId) {
     const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
-    const safeSkinId = normalizeKeyPart(skinId, "skin-western");
+    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
     const targetPackSkinKey = buildPackSkinKey(safePackId, safeSkinId);
     const db = await ensureDbReady();
     return new Promise((resolve2, reject2) => {
@@ -15608,6 +15626,9 @@ ${ssml}`;
       const store = transaction.objectStore(STORE_UI_SKINS);
       const index = store.index("packSkinKey");
       const request = index.openCursor(IDBKeyRange.only(targetPackSkinKey));
+      transaction.oncomplete = () => resolve2(deletedCount);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
       request.onsuccess = (event3) => {
         const cursor = event3.target.result;
         if (cursor) {
@@ -15616,7 +15637,6 @@ ${ssml}`;
           cursor.continue();
           return;
         }
-        resolve2(deletedCount);
       };
       request.onerror = () => reject2(request.error);
     });
@@ -15911,19 +15931,19 @@ ${ssml}`;
   }
   function getCharacterUseLive2D(characterId) {
     try {
-      const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
+      const settings2 = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
       const rawKey = String(characterId ?? "").trim();
       if (!rawKey) return false;
-      if (Object.prototype.hasOwnProperty.call(settings, rawKey)) {
-        return !!settings[rawKey];
+      if (Object.prototype.hasOwnProperty.call(settings2, rawKey)) {
+        return !!settings2[rawKey];
       }
-      const resolvedKey = resolveCharacterIdByKeywords(rawKey, Object.keys(settings));
-      if (resolvedKey && Object.prototype.hasOwnProperty.call(settings, resolvedKey)) {
-        return !!settings[resolvedKey];
+      const resolvedKey = resolveCharacterIdByKeywords(rawKey, Object.keys(settings2));
+      if (resolvedKey && Object.prototype.hasOwnProperty.call(settings2, resolvedKey)) {
+        return !!settings2[resolvedKey];
       }
       const normalizedTarget = normalizeCharacterIdKey2(characterId);
       if (!normalizedTarget) return false;
-      for (const [key, value] of Object.entries(settings)) {
+      for (const [key, value] of Object.entries(settings2)) {
         if (normalizeCharacterIdKey2(key) === normalizedTarget) {
           return !!value;
         }
@@ -15935,24 +15955,24 @@ ${ssml}`;
   }
   function setCharacterUseLive2D(characterId, useLive2D) {
     try {
-      const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
+      const settings2 = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
       const rawKey = String(characterId ?? "").trim();
       if (!rawKey) return;
       const candidateIds = Array.from(/* @__PURE__ */ new Set([
-        ...Object.keys(settings),
+        ...Object.keys(settings2),
         ...Object.keys(getAllCharacterNameKeywords()),
         rawKey
       ]));
       const resolvedKey = resolveCharacterIdByKeywords(rawKey, candidateIds) || rawKey;
       const normalizedKey = normalizeCharacterIdKey2(resolvedKey);
-      settings[resolvedKey] = !!useLive2D;
+      settings2[resolvedKey] = !!useLive2D;
       if (resolvedKey !== rawKey) {
-        delete settings[rawKey];
+        delete settings2[rawKey];
       }
       if (normalizedKey && normalizedKey !== resolvedKey) {
-        settings[normalizedKey] = !!useLive2D;
+        settings2[normalizedKey] = !!useLive2D;
       }
-      localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings));
+      localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings2));
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 保存 Live2D 设置失败:`, e);
     }
@@ -16790,14 +16810,14 @@ ${ssml}`;
     saveCharAppearancePrompts(prompts);
   }
   function getBananaCharacterAppearances() {
-    const settings = getSettings();
-    const list = settings.bananaImageGen?.characterAppearances;
+    const settings2 = getSettings();
+    const list = settings2.bananaImageGen?.characterAppearances;
     return Array.isArray(list) ? list : [];
   }
   function setBananaCharacterAppearances(list) {
-    const settings = getSettings();
-    if (!settings.bananaImageGen) settings.bananaImageGen = {};
-    settings.bananaImageGen.characterAppearances = Array.isArray(list) ? list : [];
+    const settings2 = getSettings();
+    if (!settings2.bananaImageGen) settings2.bananaImageGen = {};
+    settings2.bananaImageGen.characterAppearances = Array.isArray(list) ? list : [];
     saveSettings();
   }
   function buildBananaAppearancePromptText() {
@@ -16932,15 +16952,15 @@ ${lines.join("\n")}`;
     }
   }
   function getComfyUISettings() {
-    const settings = getSettings();
-    if (!settings.comfyui) {
-      settings.comfyui = Object.assign({}, DEFAULT_COMFYUI_SETTINGS);
+    const settings2 = getSettings();
+    if (!settings2.comfyui) {
+      settings2.comfyui = Object.assign({}, DEFAULT_COMFYUI_SETTINGS);
     }
-    return settings.comfyui;
+    return settings2.comfyui;
   }
   function saveComfyUISettings(newSettings) {
-    const settings = getSettings();
-    settings.comfyui = newSettings;
+    const settings2 = getSettings();
+    settings2.comfyui = newSettings;
     saveSettings();
   }
   function getComfyWorkflows() {
@@ -16967,8 +16987,8 @@ ${lines.join("\n")}`;
     lastRequestTime: 0,
     minRequestInterval: 1400,
     getSettings() {
-      const settings = getSettings();
-      return settings.wallhaven || {};
+      const settings2 = getSettings();
+      return settings2.wallhaven || {};
     },
     buildSearchQuery(tags, options2 = {}) {
       const ws = this.getSettings();
@@ -22665,11 +22685,11 @@ ${lines.join("\n")}`;
       candidates.push(obj);
     };
     const motionManager = model?.internalModel?.motionManager;
-    const settings = model?.internalModel?.settings;
-    add3(settings);
-    add3(settings?.json);
-    add3(settings?.rawSettings);
-    add3(settings?.modelJson);
+    const settings2 = model?.internalModel?.settings;
+    add3(settings2);
+    add3(settings2?.json);
+    add3(settings2?.rawSettings);
+    add3(settings2?.modelJson);
     add3(motionManager?.settings);
     add3(motionManager?.settings?.json);
     add3(motionManager?.settings?.rawSettings);
@@ -22704,31 +22724,31 @@ ${lines.join("\n")}`;
     pushFromContainer(expressionManager?.definitions, "definition");
     pushFromContainer(expressionManager?.expressions, "expression");
     const settingsCandidates = collectSettingsCandidates(model);
-    for (const settings2 of settingsCandidates) {
-      pushFromContainer(settings2?.expressions, "settings_expr");
-      pushFromContainer(settings2?.Expressions, "settings_expr");
-      pushFromContainer(settings2?.FileReferences?.Expressions, "file_ref_expr");
+    for (const settings3 of settingsCandidates) {
+      pushFromContainer(settings3?.expressions, "settings_expr");
+      pushFromContainer(settings3?.Expressions, "settings_expr");
+      pushFromContainer(settings3?.FileReferences?.Expressions, "file_ref_expr");
     }
-    const settings = model?.internalModel?.settings;
-    if (settings && typeof settings === "object") {
-      if (typeof settings.getExpressionCount === "function") {
+    const settings2 = model?.internalModel?.settings;
+    if (settings2 && typeof settings2 === "object") {
+      if (typeof settings2.getExpressionCount === "function") {
         let count = 0;
         try {
-          count = Number(settings.getExpressionCount()) || 0;
+          count = Number(settings2.getExpressionCount()) || 0;
         } catch (e) {
         }
         count = Math.max(0, Math.min(count, 1e3));
         for (let i = 0; i < count; i++) {
           let name = "";
-          if (typeof settings.getExpressionName === "function") {
+          if (typeof settings2.getExpressionName === "function") {
             try {
-              name = String(settings.getExpressionName(i) ?? "").trim();
+              name = String(settings2.getExpressionName(i) ?? "").trim();
             } catch (e) {
             }
           }
-          if (!name && typeof settings.getExpressionFile === "function") {
+          if (!name && typeof settings2.getExpressionFile === "function") {
             try {
-              name = normalizeFileStem(settings.getExpressionFile(i));
+              name = normalizeFileStem(settings2.getExpressionFile(i));
             } catch (e) {
             }
           }
@@ -22752,29 +22772,29 @@ ${lines.join("\n")}`;
     pushFromObject(motionManager?.groups);
     pushFromObject(motionManager?.definitions);
     const settingsCandidates = collectSettingsCandidates(model);
-    for (const settings2 of settingsCandidates) {
-      pushFromObject(settings2?.motions);
-      pushFromObject(settings2?.Motions);
-      pushFromObject(settings2?.FileReferences?.Motions);
+    for (const settings3 of settingsCandidates) {
+      pushFromObject(settings3?.motions);
+      pushFromObject(settings3?.Motions);
+      pushFromObject(settings3?.FileReferences?.Motions);
     }
-    const settings = model?.internalModel?.settings;
-    if (settings && typeof settings === "object") {
-      if (typeof settings.getMotionGroupCount === "function" && typeof settings.getMotionGroupName === "function") {
+    const settings2 = model?.internalModel?.settings;
+    if (settings2 && typeof settings2 === "object") {
+      if (typeof settings2.getMotionGroupCount === "function" && typeof settings2.getMotionGroupName === "function") {
         let count = 0;
         try {
-          count = Number(settings.getMotionGroupCount()) || 0;
+          count = Number(settings2.getMotionGroupCount()) || 0;
         } catch (e) {
         }
         count = Math.max(0, Math.min(count, 1e3));
         for (let i = 0; i < count; i++) {
           try {
-            uniquePush(groupNames, seen, String(settings.getMotionGroupName(i) ?? ""));
+            uniquePush(groupNames, seen, String(settings2.getMotionGroupName(i) ?? ""));
           } catch (e) {
           }
         }
-      } else if (typeof settings.getMotionGroupNames === "function") {
+      } else if (typeof settings2.getMotionGroupNames === "function") {
         try {
-          const names = settings.getMotionGroupNames();
+          const names = settings2.getMotionGroupNames();
           if (Array.isArray(names)) {
             for (const name of names) uniquePush(groupNames, seen, name);
           }
@@ -25153,7 +25173,7 @@ ${lines.join("\n")}`;
         this._refreshProviderState();
       }
       if (!this.enabled) return;
-      const settings = getSettings();
+      const settings2 = getSettings();
       const ttsConfig = segment.tts || {};
       const speakerName = String(segment.speaker || "").trim();
       const resolvedSpeakerName = resolveTTSCharacterId(speakerName);
@@ -25163,7 +25183,7 @@ ${lines.join("\n")}`;
       if (boundVoice) {
         voiceName = boundVoice;
       } else if (requestedVoiceTag === "男声" || requestedVoiceTag === "女声") {
-        const voicePool = requestedVoiceTag === "男声" ? settings.ttsDefaultMaleVoices : settings.ttsDefaultFemaleVoices;
+        const voicePool = requestedVoiceTag === "男声" ? settings2.ttsDefaultMaleVoices : settings2.ttsDefaultFemaleVoices;
         let providerVoices = [];
         try {
           providerVoices = await getTTSVoiceListAsync();
@@ -25183,10 +25203,10 @@ ${lines.join("\n")}`;
           console.log(`[${SCRIPT_NAME}] TTS: 自动绑定 "${bindingCharacterId}" -> "${voiceName}"`);
         }
         if (!voiceName) {
-          voiceName = String(settings.ttsDefaultSpeaker || "").trim();
+          voiceName = String(settings2.ttsDefaultSpeaker || "").trim();
         }
       } else {
-        voiceName = requestedVoiceTag || String(settings.ttsDefaultSpeaker || "").trim();
+        voiceName = requestedVoiceTag || String(settings2.ttsDefaultSpeaker || "").trim();
       }
       if (!voiceName) {
         voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? resolvedSpeakerName || speakerName : "桃夭";
@@ -26468,8 +26488,8 @@ ${lines.join("\n")}`;
     return optimized;
   }
   function handleWallhavenBackgroundSearch(sceneName, tags) {
-    const settings = getSettings();
-    if (settings.bgImageSource !== "wallhaven") return;
+    const settings2 = getSettings();
+    if (settings2.bgImageSource !== "wallhaven") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     if (sceneBackgrounds2.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] Wallhaven: 场景「${sceneName}」已存在缓存，跳过搜索`);
@@ -26506,7 +26526,7 @@ ${lines.join("\n")}`;
 
   // src/logic/cot-template.js
   async function generateCOTTemplate(options2 = {}) {
-    const settings = getSettings();
+    const settings2 = getSettings();
     const hasProvidedPending = !!(options2 && Object.prototype.hasOwnProperty.call(options2, "pendingSpecialCg"));
     let pendingSpecialCg = hasProvidedPending ? options2.pendingSpecialCg : null;
     if (!hasProvidedPending) {
@@ -26539,11 +26559,11 @@ ${statusTagInstructions.join("\n")}
 - 以上标签请放在 <maintext> 内。消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
 ` : "";
     let sceneListText = "";
-    const bgSrc = settings.bgImageSource || "none";
+    const bgSrc = settings2.bgImageSource || "none";
     const useBananaImageGen = bgSrc === "banana";
     const useWallhaven = bgSrc === "wallhaven";
     if (useBananaImageGen) {
-      const bs = settings.bananaImageGen;
+      const bs = settings2.bananaImageGen;
       let modeHint = "";
       if (bs.cgMode) {
         modeHint = `📌 **CG模式已开启**：请生成符合剧情的CG画面，必须包含人物（不是单纯背景）。
@@ -26596,7 +26616,7 @@ ${customCotText}${localSceneHint}
 - 樱花小径 → "春日午后的樱花小径，粉色花瓣随风飘落，两旁是盛开的樱花树，阳光透过花枝洒下斑驳光影"
 - 废弃工厂 → "荒废多年的工业厂房，锈迹斑斑的机器静默矗立，破碎的玻璃窗透进灰暗的光线，地上杂草丛生"`;
     } else if (useWallhaven) {
-      const ws = settings.wallhaven;
+      const ws = settings2.wallhaven;
       let categoryHint = "";
       switch (ws.category) {
         case "anime":
@@ -26707,7 +26727,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 ` : "";
     const pixiEffectNames = ["rain", "snow", "heavySnow", "cherryBlossoms", "fog", "fireflies", "embers", "screenFlash"];
     const pixiEffectListText = pixiEffectNames.join(", ");
-    const pixiEffectTagSection = settings.effectsEnabled === false ? "" : `
+    const pixiEffectTagSection = settings2.effectsEnabled === false ? "" : `
 ### Pixi 特效标签（可选）
 - 可用特效: ${pixiEffectListText}
 - 叠加特效格式: \`<pixiPerform name="特效名" />\`
@@ -26720,7 +26740,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 `;
     const bgmWhitelist = Array.from(
       new Set(
-        (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
+        (Array.isArray(settings2.bgmWhitelist) ? settings2.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
       )
     );
     const bgmWhitelistText = bgmWhitelist.map((name) => `  - ${name}`).join("\n");
@@ -26739,7 +26759,7 @@ ${bgmWhitelistText}
   - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
   - **示例**: \`<bgm>歌曲名</bgm>\``;
     const ttsEnabled = getTTSEnabled();
-    const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
+    const ttsBilingualZhJaEnabled = settings2.ttsBilingualZhJaEnabled === true;
     const ttsDialogueFormatLine = ttsBilingualZhJaEnabled ? '- **格式**: `<p>角色名[表情,男声/女声]: "中文文本[JP]日文文本"</p>`' : '- **格式**: `<p>角色名[表情,男声/女声]: "对话内容"</p>`';
     const ttsBilingualHintSection = ttsBilingualZhJaEnabled ? `
 ### 中日双语输出（必须严格遵守）
@@ -26756,7 +26776,7 @@ ${bgmWhitelistText}
     const ttsStructureDialogueLine1 = ttsBilingualZhJaEnabled ? '  <p>少女[微笑,女声]: "你终于来了～[JP]やっと来たね～"</p>' : '  <p>少女[微笑,女声]: "你终于来了～"</p>';
     const ttsStructureDialogueLine2 = ttsBilingualZhJaEnabled ? '  <p>少女[惊讶,女声|又急又关心地说]: "下这么大的雨，你怎么不带伞？[JP]こんな大雨なのに、どうして傘を持ってこなかったの？"</p>' : '  <p>少女[惊讶,女声|又急又关心地说]: "下这么大的雨，你怎么不带伞？"</p>';
     const ttsStructureDialogueLine3 = ttsBilingualZhJaEnabled ? '  <p>少女[难过,女声|带着心疼的语气]: "会感冒的……[JP]風邪ひいちゃうよ……"</p>' : '  <p>少女[难过,女声|带着心疼的语气]: "会感冒的……"</p>';
-    const situationalStyleEnabled = settings.situationalStyleEnabled !== false;
+    const situationalStyleEnabled = settings2.situationalStyleEnabled !== false;
     const removeStyledSectionFromCot = (template) => {
       if (situationalStyleEnabled || typeof template !== "string" || !template) return template;
       const styledFormatMarker = '- **格式**: `<styled type="';
@@ -27243,7 +27263,7 @@ ${extraRule}
     return result;
   }
   function parseGalgameContent(html, messageId) {
-    const settings = getSettings();
+    const settings2 = getSettings();
     const isEnabled = getIsEnabled();
     const parseCache2 = GalgameStore.cache.parse;
     const popup1Match = html.match(RE_POPUP1);
@@ -27251,7 +27271,7 @@ ${extraRule}
     if (popup1Match) html = html.replace(RE_POPUP1, "");
     if (popup2Match) html = html.replace(RE_POPUP2, "");
     html = preprocessSimplifiedFormat(html);
-    if (isEnabled && settings.enhancedMode?.enabled && messageId) {
+    if (isEnabled && settings2.enhancedMode?.enabled && messageId) {
       const formatData = _getFormattedContentRef ? _getFormattedContentRef(messageId) : null;
       if (formatData) {
         console.log(`[${SCRIPT_NAME}] 使用格式化版本 (swipe ${formatData.formattedIndex})`);
@@ -27491,7 +27511,7 @@ ${extraRule}
         const speaker = normalizeSpeakerName(dialogueMatch[1]);
         const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
         if (!speaker || !dialogue) return null;
-        const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
+        const splitResult = splitZhJaForDisplayAndTts(dialogue, settings2.ttsBilingualZhJaEnabled === true);
         if (speaker === "旁白") {
           const narrationSeg = {
             type: "narration",
@@ -27520,7 +27540,7 @@ ${extraRule}
           return segResult;
         }
       }
-      const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
+      const narrationSplit = splitZhJaForDisplayAndTts(text, settings2.ttsBilingualZhJaEnabled === true);
       const narrationResult = {
         type: "narration",
         speaker: null,
@@ -28626,8 +28646,8 @@ ${normalizedSource}`;
   // src/image-gen/banana-image.js
   var sceneBackgrounds3 = GalgameStore.cache.backgrounds;
   async function handleRealTimeBackgroundGeneration(sceneName, tags) {
-    const settings = getSettings();
-    if (settings.bgImageSource !== "comfyui") return;
+    const settings2 = getSettings();
+    if (settings2.bgImageSource !== "comfyui") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     try {
       const backgrounds = await getAllBackgrounds();
@@ -28647,7 +28667,7 @@ ${normalizedSource}`;
     }
     (async () => {
       try {
-        const workflowId = settings.comfyui.defaultBgWorkflow;
+        const workflowId = settings2.comfyui.defaultBgWorkflow;
         const allWorkflows = getComfyWorkflows();
         let targetWorkflow = null;
         if (workflowId && allWorkflows[workflowId]) {
@@ -28661,7 +28681,7 @@ ${normalizedSource}`;
           throw new Error(`未找到默认背景生成工作流: ${workflowId || "default_bg"}。请在设置-ComfyUI中配置。`);
         }
         const positive = `${tags}, (high quality, masterpiece, best quality, 4k, 8k:1.2), no humans`;
-        const negative = settings.comfyui.negativePrompt || "nsfw, lowres, bad anatomy, bad hands, text, error";
+        const negative = settings2.comfyui.negativePrompt || "nsfw, lowres, bad anatomy, bad hands, text, error";
         const seed = Math.floor(Math.random() * 1e10);
         const blob = await ComfyUIAPI.generate(targetWorkflow.json, positive, negative, seed);
         if (!blob) {
@@ -28741,14 +28761,14 @@ ${normalizedSource}`;
     return null;
   }
   function handleBananaBackgroundGeneration(sceneName, prompt2) {
-    const settings = getSettings();
-    if (settings.bgImageSource !== "banana") return;
+    const settings2 = getSettings();
+    if (settings2.bgImageSource !== "banana") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     if (sceneBackgrounds3.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] 大香蕉生图: 场景「${sceneName}」已存在缓存，跳过生成`);
       return;
     }
-    const bs = settings.bananaImageGen;
+    const bs = settings2.bananaImageGen;
     if (!bs.proxyUrl) {
       console.warn(`[${SCRIPT_NAME}] 大香蕉生图: 未配置反代 API 地址`);
       return;
@@ -28903,8 +28923,8 @@ ${normalizedSource}`;
     }
     throw new Error(`不支持的压缩方式: ${compressionMethod}`);
   }
-  function buildRequestBody(tags, settings) {
-    const ns = settings.novelai;
+  function buildRequestBody(tags, settings2) {
+    const ns = settings2.novelai;
     const negativePrompt = ns.negativePrompt || "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark";
     let finalPrompt = tags;
     if (ns.defaultPromptPrefix) {
@@ -28956,14 +28976,14 @@ ${normalizedSource}`;
     };
   }
   function handleNovelAIBackgroundGeneration(sceneName, tags) {
-    const settings = getSettings();
-    if (settings.bgImageSource !== "novelai") return;
+    const settings2 = getSettings();
+    if (settings2.bgImageSource !== "novelai") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     if (sceneBackgrounds4.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] NovelAI 生图: 场景「${sceneName}」已存在缓存，跳过生成`);
       return;
     }
-    const ns = settings.novelai;
+    const ns = settings2.novelai;
     if (!ns.apiKey) {
       console.warn(`[${SCRIPT_NAME}] NovelAI 生图: 未配置 API Key`);
       return;
@@ -28979,7 +28999,7 @@ ${normalizedSource}`;
       try {
         console.log(`[${SCRIPT_NAME}] NovelAI 生图: 开始生成场景「${sceneName}」`);
         console.log(`[${SCRIPT_NAME}] NovelAI 生图: Tags = ${tags.substring(0, 100)}`);
-        const requestBody = buildRequestBody(tags, settings);
+        const requestBody = buildRequestBody(tags, settings2);
         console.log(`[${SCRIPT_NAME}] NovelAI 生图: 模型=${requestBody.model}, 尺寸=${requestBody.parameters.width}x${requestBody.parameters.height}`);
         const response = await fetch("https://image.novelai.net/ai/generate-image", {
           method: "POST",
@@ -29049,7 +29069,7 @@ ${normalizedSource}`;
     }
     let chatStabilizeTimer = null;
     const chatObserver = new MutationObserver((mutations) => {
-      const settings = getSettings();
+      const settings2 = getSettings();
       const isEnabled = getIsEnabled();
       const overlayActive = !!topWindow.document.querySelector("#gal-global-overlay.active");
       let hasNewMessages = false;
@@ -29057,7 +29077,7 @@ ${normalizedSource}`;
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1 && node.classList?.contains("mes")) {
             hasNewMessages = true;
-            if (isEnabled && settings.hideOtherFloors && overlayActive) {
+            if (isEnabled && settings2.hideOtherFloors && overlayActive) {
               node.classList.add("gal-hidden");
             }
             setTimeout(() => {
@@ -29273,157 +29293,145 @@ ${normalizedSource}`;
 #gal-global-overlay.skin-ancient .gal-progress-bar { background: linear-gradient(90deg, #5a1e1e, #8B2626) !important; box-shadow: none !important; }
 
 /* =========================================================
-   2. 冒险者酒馆 (Western) — 元素级图片皮肤
-   说明: 由 skin-western-runtime 注入 CSS 变量
+   2. 自定义皮肤 (Custom Skin) — 元素级图片皮肤
+   说明: 由 custom-skin-runtime 注入 CSS 变量
    ========================================================= */
-#gal-global-overlay.skin-western {
-    --western-scene-clip: inset(14% 18% 54% 18%);
-    --western-control-top: clamp(5.5rem, 10vh, 7.5rem);
-    font-family: "Georgia", "Palatino Linotype", "Times New Roman", serif;
+#gal-global-overlay.custom-skin {
+    --custom-skin-control-top: clamp(5.2rem, 10vh, 7.2rem);
+    --custom-skin-footer-auto-scale: 1;
+    font-family: "Noto Serif SC", "Source Han Serif SC", "Georgia", serif;
 }
 
 @media screen and (max-width: 48rem) {
-    #gal-global-overlay.skin-western {
-        --western-scene-clip: inset(17% 15% 55% 15%);
-        --western-control-top: clamp(4.7rem, 10vh, 6rem);
+    #gal-global-overlay.custom-skin {
+        --custom-skin-control-top: clamp(4.7rem, 10vh, 6rem);
     }
 }
 
-#gal-global-overlay.skin-western .gal-game-container {
+#gal-global-overlay.custom-skin .gal-game-container {
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
-    background: #1f130b !important;
+    background: linear-gradient(180deg, #101722 0%, #1a2433 48%, #0f1723 100%) !important;
     position: relative !important;
     isolation: isolate;
 }
 
-#gal-global-overlay.skin-western.skin-western-image-mode .gal-game-container::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    background-image: var(--western-main_frame_scene-normal-image);
-    background-repeat: no-repeat;
-    background-size: var(--western-main_frame_scene-bg-size, 100% 100%);
-    transform: translate(
-      calc(var(--western-main_frame_scene-offset-x, 0px) + var(--western-main_frame_scene-anchor-x, 0px)),
-      calc(var(--western-main_frame_scene-offset-y, 0px) + var(--western-main_frame_scene-anchor-y, 0px))
-    );
-}
-
-#gal-global-overlay.skin-western.skin-western-image-mode .gal-layer-bg {
-    clip-path: var(--western-scene-clip) !important;
-    -webkit-clip-path: var(--western-scene-clip) !important;
-}
-
-#gal-global-overlay.skin-western .gal-layer-bg::before,
-#gal-global-overlay.skin-western .gal-layer-bg.generating-bg::after {
-    display: none !important;
-    content: none !important;
-}
-
-#gal-global-overlay.skin-western .gal-layer-bg.generating-bg .gal-bg-layer {
-    opacity: 1 !important;
-}
-
-#gal-global-overlay.skin-western .gal-game-content {
+#gal-global-overlay.custom-skin .gal-game-content {
     z-index: 4 !important;
 }
 
-#gal-global-overlay.skin-western .gal-dialog-layer,
-#gal-global-overlay.skin-western .gal-text-panel,
-#gal-global-overlay.skin-western .gal-name-badge,
-#gal-global-overlay.skin-western .gal-action-btn,
-#gal-global-overlay.skin-western .gal-footer-btn,
-#gal-global-overlay.skin-western .gal-footer-btn-next,
-#gal-global-overlay.skin-western .gal-pending-choices-btn,
-#gal-global-overlay.skin-western .gal-location-bar,
-#gal-global-overlay.skin-western .gal-time-bar,
-#gal-global-overlay.skin-western .gal-fullscreen-btn,
-#gal-global-overlay.skin-western .gal-bgm-widget {
+#gal-global-overlay.custom-skin .custom-skin-element-active {
     border: none !important;
     box-shadow: none !important;
 }
 
-#gal-global-overlay.skin-western .gal-text-panel,
-#gal-global-overlay.skin-western .gal-name-badge,
-#gal-global-overlay.skin-western .gal-action-btn,
-#gal-global-overlay.skin-western .gal-footer-btn,
-#gal-global-overlay.skin-western .gal-footer-btn-next,
-#gal-global-overlay.skin-western .gal-pending-choices-btn,
-#gal-global-overlay.skin-western .gal-location-bar,
-#gal-global-overlay.skin-western .gal-time-bar,
-#gal-global-overlay.skin-western .gal-fullscreen-btn,
-#gal-global-overlay.skin-western .gal-bgm-widget {
+#gal-global-overlay.custom-skin .custom-skin-element-active {
     background-color: transparent !important;
     background-repeat: no-repeat !important;
     background-size: 100% 100% !important;
 }
 
-#gal-global-overlay.skin-western .gal-text-panel {
-    background-color: rgba(225, 205, 168, var(--panel-opacity, 0.92)) !important;
-    background-image: var(--western-dialog_panel-normal-image) !important;
-    background-size: var(--western-dialog_panel-bg-size, 100% 100%) !important;
-    color: #2f1d10 !important;
+#gal-global-overlay.custom-skin .gal-text-panel.custom-skin-element-active {
+    background-color: rgba(240, 236, 231, var(--panel-opacity, 0.92)) !important;
+    background-image: var(--custom-skin-dialog_panel-normal-image) !important;
+    background-size: var(--custom-skin-dialog_panel-bg-size, 100% 100%) !important;
+    color: #18212c !important;
     transform: translate(
-      calc(var(--western-dialog_panel-offset-x, 0px) + var(--western-dialog_panel-anchor-x, 0px)),
-      calc(var(--western-dialog_panel-offset-y, 0px) + var(--western-dialog_panel-anchor-y, 0px))
+      calc(var(--custom-skin-dialog_panel-offset-x, 0px) - var(--custom-skin-dialog_panel-anchor-x, 0px)),
+      calc(var(--custom-skin-dialog_panel-offset-y, 0px) - var(--custom-skin-dialog_panel-anchor-y, 0px))
     ) !important;
-    width: var(--western-dialog_panel-width, auto) !important;
-    height: var(--western-dialog_panel-height, auto) !important;
-    padding-top: var(--western-dialog-panel-padding-top, 0.9rem) !important;
-    padding-right: var(--western-dialog-panel-padding-right, 0.95rem) !important;
-    padding-bottom: var(--western-dialog-panel-padding-bottom, 0.55rem) !important;
-    padding-left: var(--western-dialog-panel-padding-left, 0.95rem) !important;
+    width: var(--custom-skin-dialog_panel-width, auto) !important;
+    height: var(--custom-skin-dialog_panel-height, auto) !important;
+    padding-top: var(--custom-skin-dialog-panel-padding-top, 0.9rem) !important;
+    padding-right: var(--custom-skin-dialog-panel-padding-right, 1rem) !important;
+    padding-bottom: var(--custom-skin-dialog-panel-padding-bottom, 0.6rem) !important;
+    padding-left: var(--custom-skin-dialog-panel-padding-left, 1rem) !important;
 }
 
-#gal-global-overlay.skin-western .gal-dialog-text {
-    color: #2f1d10 !important;
-    text-shadow: 0 1px 0 rgba(243, 224, 185, 0.35) !important;
+#gal-global-overlay.custom-skin .gal-text-panel.custom-skin-element-active .gal-dialog-text {
+    color: #18212c !important;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.32) !important;
 }
 
-#gal-global-overlay.skin-western .gal-name-badge {
-    background-color: rgba(61, 40, 24, 0.86) !important;
-    background-image: var(--western-name_badge-normal-image) !important;
-    background-size: var(--western-name_badge-bg-size, 100% 100%) !important;
+#gal-global-overlay.custom-skin .gal-name-badge.custom-skin-element-active {
+    background-color: rgba(27, 39, 52, 0.88) !important;
+    background-image: var(--custom-skin-name_badge-normal-image) !important;
+    background-size: var(--custom-skin-name_badge-bg-size, 100% 100%) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    transform-origin: left top !important;
     transform: translate(
-      calc(var(--western-name_badge-offset-x, 0px) + var(--western-name_badge-anchor-x, 0px)),
-      calc(var(--western-name_badge-offset-y, 0px) + var(--western-name_badge-anchor-y, 0px))
+      calc(var(--custom-skin-name_badge-offset-x, 0px) - var(--custom-skin-name_badge-anchor-x, 0px)),
+      calc(var(--custom-skin-name_badge-offset-y, 0px) - var(--custom-skin-name_badge-anchor-y, 0px))
     ) !important;
-    width: var(--western-name_badge-width, auto) !important;
-    height: var(--western-name_badge-height, auto) !important;
+    width: var(--custom-skin-name_badge-width, auto) !important;
+    height: var(--custom-skin-name_badge-height, auto) !important;
 }
 
-#gal-global-overlay.skin-western .gal-name-badge span {
-    color: #2b1b0f !important;
-    text-shadow: 0 1px 2px rgba(255, 246, 220, 0.5) !important;
+#gal-global-overlay.custom-skin .gal-name-badge.custom-skin-element-active span {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    padding: 0 clamp(10px, 8%, 22px) !important;
+    box-sizing: border-box !important;
+    line-height: 1.1 !important;
+    white-space: nowrap !important;
+    color: #f8fafc !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
 }
 
-#gal-global-overlay.skin-western .gal-bottom-toolbar {
+#gal-global-overlay.custom-skin .gal-name-badge.custom-skin-element-active.custom-skin-hide-text span,
+#gal-global-overlay.custom-skin .gal-action-btn.custom-skin-element-active.custom-skin-hide-text > span,
+#gal-global-overlay.custom-skin .gal-action-btn.custom-skin-element-active.custom-skin-hide-text > i,
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active.custom-skin-hide-text .gal-btn-text,
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active.custom-skin-hide-text i,
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active.custom-skin-hide-text .gal-btn-text,
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active.custom-skin-hide-text i,
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active.custom-skin-hide-text .gal-btn-text,
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active.custom-skin-hide-text i,
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active.custom-skin-hide-text > span,
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active.custom-skin-hide-text > i,
+#gal-global-overlay.custom-skin .gal-bgm-widget.custom-skin-element-active.custom-skin-hide-text .gal-bgm-title {
+    display: none !important;
+}
+
+#gal-global-overlay.custom-skin .gal-bottom-toolbar.custom-skin-element-active {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
+    gap: calc(0.5rem * var(--custom-skin-footer-auto-scale, 1)) !important;
 }
 
-#gal-global-overlay.skin-western .gal-action-btn,
-#gal-global-overlay.skin-western .gal-footer-btn,
-#gal-global-overlay.skin-western .gal-footer-btn-next,
-#gal-global-overlay.skin-western .gal-pending-choices-btn,
-#gal-global-overlay.skin-western .gal-fullscreen-btn {
-    background-color: rgba(55, 36, 23, 0.86) !important;
+#gal-global-overlay.custom-skin .gal-action-btn.custom-skin-element-active,
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active,
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active,
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active,
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active {
+    background-color: rgba(30, 41, 59, 0.88) !important;
     position: relative !important;
     overflow: visible !important;
-    color: #f4e6ca !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65) !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    flex: 0 0 auto !important;
+    color: var(--SmartThemeBodyColor, #f8fafc) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55) !important;
 }
 
-#gal-global-overlay.skin-western .gal-action-btn::before,
-#gal-global-overlay.skin-western .gal-footer-btn::before,
-#gal-global-overlay.skin-western .gal-footer-btn-next::before,
-#gal-global-overlay.skin-western .gal-pending-choices-btn::before,
-#gal-global-overlay.skin-western .gal-fullscreen-btn::before {
+#gal-global-overlay.custom-skin .gal-action-btn.custom-skin-element-active::before,
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active::before,
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active::before,
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active::before,
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active::before {
     content: '';
     position: absolute;
     inset: 0;
@@ -29434,186 +29442,273 @@ ${normalizedSource}`;
     transition: filter 0.14s ease, transform 0.14s ease;
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-reroll {
-    width: var(--western-btn_reroll-width, auto) !important;
-    height: var(--western-btn_reroll-height, auto) !important;
+#gal-global-overlay.custom-skin .gal-action-btn.custom-skin-element-active:focus-visible,
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active:focus-visible,
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active:focus-visible,
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active:focus-visible,
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active:focus-visible {
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.42) !important;
+}
+
+#gal-global-overlay.custom-skin .gal-action-btn.btn-reroll.custom-skin-element-active {
+    width: var(--custom-skin-btn_reroll-width, auto) !important;
+    height: var(--custom-skin-btn_reroll-height, auto) !important;
     transform: translate(
-      calc(var(--western-btn_reroll-offset-x, 0px) + var(--western-btn_reroll-anchor-x, 0px)),
-      calc(var(--western-btn_reroll-offset-y, 0px) + var(--western-btn_reroll-anchor-y, 0px))
+      calc(var(--custom-skin-btn_reroll-offset-x, 0px) - var(--custom-skin-btn_reroll-anchor-x, 0px)),
+      calc(var(--custom-skin-btn_reroll-offset-y, 0px) - var(--custom-skin-btn_reroll-anchor-y, 0px))
     ) !important;
+    clip-path: var(--custom-skin-btn_reroll-normal-hit-clip, none);
+    -webkit-clip-path: var(--custom-skin-btn_reroll-normal-hit-clip, none);
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-reroll::before {
-    background-image: var(--western-btn_reroll-normal-image);
-    background-size: var(--western-btn_reroll-bg-size, 100% 100%);
+#gal-global-overlay.custom-skin .gal-action-btn.btn-reroll.custom-skin-element-active::before {
+    background-image: var(--custom-skin-btn_reroll-normal-image);
+    background-size: var(--custom-skin-btn_reroll-bg-size, 100% 100%);
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-reroll:hover::before {
-    background-image: var(--western-btn_reroll-hover-image, var(--western-btn_reroll-normal-image));
+#gal-global-overlay.custom-skin .gal-action-btn.btn-reroll.custom-skin-element-active:hover {
+    clip-path: var(--custom-skin-btn_reroll-hover-hit-clip, var(--custom-skin-btn_reroll-normal-hit-clip, none));
+    -webkit-clip-path: var(--custom-skin-btn_reroll-hover-hit-clip, var(--custom-skin-btn_reroll-normal-hit-clip, none));
+}
+
+#gal-global-overlay.custom-skin .gal-action-btn.btn-reroll.custom-skin-element-active:hover::before {
+    background-image: var(--custom-skin-btn_reroll-hover-image, var(--custom-skin-btn_reroll-normal-image));
     filter: brightness(1.08);
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-reroll:active::before {
-    background-image: var(--western-btn_reroll-active-image, var(--western-btn_reroll-hover-image, var(--western-btn_reroll-normal-image)));
+#gal-global-overlay.custom-skin .gal-action-btn.btn-reroll.custom-skin-element-active:active {
+    clip-path: var(--custom-skin-btn_reroll-active-hit-clip, var(--custom-skin-btn_reroll-hover-hit-clip, var(--custom-skin-btn_reroll-normal-hit-clip, none)));
+    -webkit-clip-path: var(--custom-skin-btn_reroll-active-hit-clip, var(--custom-skin-btn_reroll-hover-hit-clip, var(--custom-skin-btn_reroll-normal-hit-clip, none)));
+}
+
+#gal-global-overlay.custom-skin .gal-action-btn.btn-reroll.custom-skin-element-active:active::before {
+    background-image: var(--custom-skin-btn_reroll-active-image, var(--custom-skin-btn_reroll-hover-image, var(--custom-skin-btn_reroll-normal-image)));
     filter: brightness(0.94);
     transform: translateY(1px);
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-free {
-    width: var(--western-btn_free_input-width, auto) !important;
-    height: var(--western-btn_free_input-height, auto) !important;
+#gal-global-overlay.custom-skin .gal-action-btn.btn-free.custom-skin-element-active {
+    width: var(--custom-skin-btn_free_input-width, auto) !important;
+    height: var(--custom-skin-btn_free_input-height, auto) !important;
     transform: translate(
-      calc(var(--western-btn_free_input-offset-x, 0px) + var(--western-btn_free_input-anchor-x, 0px)),
-      calc(var(--western-btn_free_input-offset-y, 0px) + var(--western-btn_free_input-anchor-y, 0px))
+      calc(var(--custom-skin-btn_free_input-offset-x, 0px) - var(--custom-skin-btn_free_input-anchor-x, 0px)),
+      calc(var(--custom-skin-btn_free_input-offset-y, 0px) - var(--custom-skin-btn_free_input-anchor-y, 0px))
     ) !important;
+    clip-path: var(--custom-skin-btn_free_input-normal-hit-clip, none);
+    -webkit-clip-path: var(--custom-skin-btn_free_input-normal-hit-clip, none);
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-free::before {
-    background-image: var(--western-btn_free_input-normal-image);
-    background-size: var(--western-btn_free_input-bg-size, 100% 100%);
+#gal-global-overlay.custom-skin .gal-action-btn.btn-free.custom-skin-element-active::before {
+    background-image: var(--custom-skin-btn_free_input-normal-image);
+    background-size: var(--custom-skin-btn_free_input-bg-size, 100% 100%);
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-free:hover::before {
-    background-image: var(--western-btn_free_input-hover-image, var(--western-btn_free_input-normal-image));
+#gal-global-overlay.custom-skin .gal-action-btn.btn-free.custom-skin-element-active:hover {
+    clip-path: var(--custom-skin-btn_free_input-hover-hit-clip, var(--custom-skin-btn_free_input-normal-hit-clip, none));
+    -webkit-clip-path: var(--custom-skin-btn_free_input-hover-hit-clip, var(--custom-skin-btn_free_input-normal-hit-clip, none));
+}
+
+#gal-global-overlay.custom-skin .gal-action-btn.btn-free.custom-skin-element-active:hover::before {
+    background-image: var(--custom-skin-btn_free_input-hover-image, var(--custom-skin-btn_free_input-normal-image));
     filter: brightness(1.08);
 }
 
-#gal-global-overlay.skin-western .gal-action-btn.btn-free:active::before {
-    background-image: var(--western-btn_free_input-active-image, var(--western-btn_free_input-hover-image, var(--western-btn_free_input-normal-image)));
+#gal-global-overlay.custom-skin .gal-action-btn.btn-free.custom-skin-element-active:active {
+    clip-path: var(--custom-skin-btn_free_input-active-hit-clip, var(--custom-skin-btn_free_input-hover-hit-clip, var(--custom-skin-btn_free_input-normal-hit-clip, none)));
+    -webkit-clip-path: var(--custom-skin-btn_free_input-active-hit-clip, var(--custom-skin-btn_free_input-hover-hit-clip, var(--custom-skin-btn_free_input-normal-hit-clip, none)));
+}
+
+#gal-global-overlay.custom-skin .gal-action-btn.btn-free.custom-skin-element-active:active::before {
+    background-image: var(--custom-skin-btn_free_input-active-image, var(--custom-skin-btn_free_input-hover-image, var(--custom-skin-btn_free_input-normal-image)));
     filter: brightness(0.94);
     transform: translateY(1px);
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn {
-    width: var(--western-footer_btn_common-width, auto) !important;
-    height: var(--western-footer_btn_common-height, auto) !important;
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active {
+    width: calc(var(--custom-skin-footer_btn_common-width, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
+    height: calc(var(--custom-skin-footer_btn_common-height, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
     transform: translate(
-      calc(var(--western-footer_btn_common-offset-x, 0px) + var(--western-footer_btn_common-anchor-x, 0px)),
-      calc(var(--western-footer_btn_common-offset-y, 0px) + var(--western-footer_btn_common-anchor-y, 0px))
+      calc((var(--custom-skin-footer_btn_common-offset-x, 0px) - var(--custom-skin-footer_btn_common-anchor-x, 0px)) * var(--custom-skin-footer-auto-scale, 1)),
+      calc((var(--custom-skin-footer_btn_common-offset-y, 0px) - var(--custom-skin-footer_btn_common-anchor-y, 0px)) * var(--custom-skin-footer-auto-scale, 1))
     ) !important;
+    clip-path: var(--custom-skin-footer_btn_common-normal-hit-clip, none);
+    -webkit-clip-path: var(--custom-skin-footer_btn_common-normal-hit-clip, none);
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn::before {
-    background-image: var(--western-footer_btn_common-normal-image);
-    background-size: var(--western-footer_btn_common-bg-size, 100% 100%);
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active::before {
+    background-image: var(--custom-skin-footer_btn_common-normal-image);
+    background-size: var(--custom-skin-footer_btn_common-bg-size, 100% 100%);
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn:hover::before {
-    background-image: var(--western-footer_btn_common-hover-image, var(--western-footer_btn_common-normal-image));
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active:hover {
+    clip-path: var(--custom-skin-footer_btn_common-hover-hit-clip, var(--custom-skin-footer_btn_common-normal-hit-clip, none));
+    -webkit-clip-path: var(--custom-skin-footer_btn_common-hover-hit-clip, var(--custom-skin-footer_btn_common-normal-hit-clip, none));
+}
+
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active:hover::before {
+    background-image: var(--custom-skin-footer_btn_common-hover-image, var(--custom-skin-footer_btn_common-normal-image));
     filter: brightness(1.08);
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn:active::before {
-    background-image: var(--western-footer_btn_common-active-image, var(--western-footer_btn_common-hover-image, var(--western-footer_btn_common-normal-image)));
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active:active {
+    clip-path: var(--custom-skin-footer_btn_common-active-hit-clip, var(--custom-skin-footer_btn_common-hover-hit-clip, var(--custom-skin-footer_btn_common-normal-hit-clip, none)));
+    -webkit-clip-path: var(--custom-skin-footer_btn_common-active-hit-clip, var(--custom-skin-footer_btn_common-hover-hit-clip, var(--custom-skin-footer_btn_common-normal-hit-clip, none)));
+}
+
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active:active::before {
+    background-image: var(--custom-skin-footer_btn_common-active-image, var(--custom-skin-footer_btn_common-hover-image, var(--custom-skin-footer_btn_common-normal-image)));
     filter: brightness(0.94);
     transform: translateY(1px);
 }
 
-#gal-global-overlay.skin-western .gal-pending-choices-btn {
-    width: var(--western-footer_btn_choices-width, auto) !important;
-    height: var(--western-footer_btn_choices-height, auto) !important;
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active {
+    width: calc(var(--custom-skin-footer_btn_choices-width, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
+    height: calc(var(--custom-skin-footer_btn_choices-height, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
     transform: translate(
-      calc(var(--western-footer_btn_choices-offset-x, 0px) + var(--western-footer_btn_choices-anchor-x, 0px)),
-      calc(var(--western-footer_btn_choices-offset-y, 0px) + var(--western-footer_btn_choices-anchor-y, 0px))
+      calc((var(--custom-skin-footer_btn_choices-offset-x, 0px) - var(--custom-skin-footer_btn_choices-anchor-x, 0px)) * var(--custom-skin-footer-auto-scale, 1)),
+      calc((var(--custom-skin-footer_btn_choices-offset-y, 0px) - var(--custom-skin-footer_btn_choices-anchor-y, 0px)) * var(--custom-skin-footer-auto-scale, 1))
     ) !important;
+    clip-path: var(--custom-skin-footer_btn_choices-normal-hit-clip, none);
+    -webkit-clip-path: var(--custom-skin-footer_btn_choices-normal-hit-clip, none);
 }
 
-#gal-global-overlay.skin-western .gal-pending-choices-btn::before {
-    background-image: var(--western-footer_btn_choices-normal-image);
-    background-size: var(--western-footer_btn_choices-bg-size, 100% 100%);
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active::before {
+    background-image: var(--custom-skin-footer_btn_choices-normal-image);
+    background-size: var(--custom-skin-footer_btn_choices-bg-size, 100% 100%);
 }
 
-#gal-global-overlay.skin-western .gal-pending-choices-btn:hover::before {
-    background-image: var(--western-footer_btn_choices-hover-image, var(--western-footer_btn_choices-normal-image));
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active:hover {
+    clip-path: var(--custom-skin-footer_btn_choices-hover-hit-clip, var(--custom-skin-footer_btn_choices-normal-hit-clip, none));
+    -webkit-clip-path: var(--custom-skin-footer_btn_choices-hover-hit-clip, var(--custom-skin-footer_btn_choices-normal-hit-clip, none));
+}
+
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active:hover::before {
+    background-image: var(--custom-skin-footer_btn_choices-hover-image, var(--custom-skin-footer_btn_choices-normal-image));
     filter: brightness(1.08);
 }
 
-#gal-global-overlay.skin-western .gal-pending-choices-btn:active::before {
-    background-image: var(--western-footer_btn_choices-active-image, var(--western-footer_btn_choices-hover-image, var(--western-footer_btn_choices-normal-image)));
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active:active {
+    clip-path: var(--custom-skin-footer_btn_choices-active-hit-clip, var(--custom-skin-footer_btn_choices-hover-hit-clip, var(--custom-skin-footer_btn_choices-normal-hit-clip, none)));
+    -webkit-clip-path: var(--custom-skin-footer_btn_choices-active-hit-clip, var(--custom-skin-footer_btn_choices-hover-hit-clip, var(--custom-skin-footer_btn_choices-normal-hit-clip, none)));
+}
+
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active:active::before {
+    background-image: var(--custom-skin-footer_btn_choices-active-image, var(--custom-skin-footer_btn_choices-hover-image, var(--custom-skin-footer_btn_choices-normal-image)));
     filter: brightness(0.94);
     transform: translateY(1px);
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn-next {
-    width: var(--western-footer_btn_next-width, auto) !important;
-    height: var(--western-footer_btn_next-height, auto) !important;
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active {
+    width: calc(var(--custom-skin-footer_btn_next-width, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
+    height: calc(var(--custom-skin-footer_btn_next-height, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
     transform: translate(
-      calc(var(--western-footer_btn_next-offset-x, 0px) + var(--western-footer_btn_next-anchor-x, 0px)),
-      calc(var(--western-footer_btn_next-offset-y, 0px) + var(--western-footer_btn_next-anchor-y, 0px))
+      calc((var(--custom-skin-footer_btn_next-offset-x, 0px) - var(--custom-skin-footer_btn_next-anchor-x, 0px)) * var(--custom-skin-footer-auto-scale, 1)),
+      calc((var(--custom-skin-footer_btn_next-offset-y, 0px) - var(--custom-skin-footer_btn_next-anchor-y, 0px)) * var(--custom-skin-footer-auto-scale, 1))
     ) !important;
+    clip-path: var(--custom-skin-footer_btn_next-normal-hit-clip, none);
+    -webkit-clip-path: var(--custom-skin-footer_btn_next-normal-hit-clip, none);
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn-next::before {
-    background-image: var(--western-footer_btn_next-normal-image);
-    background-size: var(--western-footer_btn_next-bg-size, 100% 100%);
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active .gal-btn-text,
+#gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active i,
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active .gal-btn-text,
+#gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active i,
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active .gal-btn-text,
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active i {
+    font-size: calc(1em * var(--custom-skin-footer-auto-scale, 1)) !important;
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn-next:hover::before {
-    background-image: var(--western-footer_btn_next-hover-image, var(--western-footer_btn_next-normal-image));
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active::before {
+    background-image: var(--custom-skin-footer_btn_next-normal-image);
+    background-size: var(--custom-skin-footer_btn_next-bg-size, 100% 100%);
+}
+
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active:hover {
+    clip-path: var(--custom-skin-footer_btn_next-hover-hit-clip, var(--custom-skin-footer_btn_next-normal-hit-clip, none));
+    -webkit-clip-path: var(--custom-skin-footer_btn_next-hover-hit-clip, var(--custom-skin-footer_btn_next-normal-hit-clip, none));
+}
+
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active:hover::before {
+    background-image: var(--custom-skin-footer_btn_next-hover-image, var(--custom-skin-footer_btn_next-normal-image));
     filter: brightness(1.08);
 }
 
-#gal-global-overlay.skin-western .gal-footer-btn-next:active::before {
-    background-image: var(--western-footer_btn_next-active-image, var(--western-footer_btn_next-hover-image, var(--western-footer_btn_next-normal-image)));
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active:active {
+    clip-path: var(--custom-skin-footer_btn_next-active-hit-clip, var(--custom-skin-footer_btn_next-hover-hit-clip, var(--custom-skin-footer_btn_next-normal-hit-clip, none)));
+    -webkit-clip-path: var(--custom-skin-footer_btn_next-active-hit-clip, var(--custom-skin-footer_btn_next-hover-hit-clip, var(--custom-skin-footer_btn_next-normal-hit-clip, none)));
+}
+
+#gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active:active::before {
+    background-image: var(--custom-skin-footer_btn_next-active-image, var(--custom-skin-footer_btn_next-hover-image, var(--custom-skin-footer_btn_next-normal-image)));
     filter: brightness(0.94);
     transform: translateY(1px);
 }
 
-#gal-global-overlay.skin-western .gal-location-bar,
-#gal-global-overlay.skin-western .gal-time-bar {
-    background-color: rgba(44, 28, 18, 0.9) !important;
-    background-image: var(--western-status_bar_container-normal-image) !important;
-    background-size: var(--western-status_bar_container-bg-size, 100% 100%) !important;
-    color: #ead7b3 !important;
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active,
+#gal-global-overlay.custom-skin .gal-bgm-widget.custom-skin-element-active {
+    top: var(--custom-skin-control-top, clamp(5.2rem, 10vh, 7.2rem)) !important;
 }
 
-#gal-global-overlay.skin-western .gal-status-bar-container,
-#gal-global-overlay.skin-western .gal-fullscreen-btn,
-#gal-global-overlay.skin-western .gal-bgm-widget {
-    top: var(--western-control-top, clamp(5.5rem, 10vh, 7.5rem)) !important;
-}
-
-#gal-global-overlay.skin-western .gal-fullscreen-btn {
-    width: var(--western-fullscreen_btn-width, auto) !important;
-    height: var(--western-fullscreen_btn-height, auto) !important;
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active {
+    width: var(--custom-skin-fullscreen_btn-width, auto) !important;
+    height: var(--custom-skin-fullscreen_btn-height, auto) !important;
     transform: translate(
-      calc(var(--western-fullscreen_btn-offset-x, 0px) + var(--western-fullscreen_btn-anchor-x, 0px)),
-      calc(var(--western-fullscreen_btn-offset-y, 0px) + var(--western-fullscreen_btn-anchor-y, 0px))
+      calc(var(--custom-skin-fullscreen_btn-offset-x, 0px) - var(--custom-skin-fullscreen_btn-anchor-x, 0px)),
+      calc(var(--custom-skin-fullscreen_btn-offset-y, 0px) - var(--custom-skin-fullscreen_btn-anchor-y, 0px))
     ) !important;
+    clip-path: var(--custom-skin-fullscreen_btn-normal-hit-clip, none);
+    -webkit-clip-path: var(--custom-skin-fullscreen_btn-normal-hit-clip, none);
 }
 
-#gal-global-overlay.skin-western .gal-fullscreen-btn::before {
-    background-image: var(--western-fullscreen_btn-normal-image);
-    background-size: var(--western-fullscreen_btn-bg-size, 100% 100%);
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active::before {
+    background-image: var(--custom-skin-fullscreen_btn-normal-image);
+    background-size: var(--custom-skin-fullscreen_btn-bg-size, 100% 100%);
 }
 
-#gal-global-overlay.skin-western .gal-fullscreen-btn:hover::before {
-    background-image: var(--western-fullscreen_btn-hover-image, var(--western-fullscreen_btn-normal-image));
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active:hover {
+    clip-path: var(--custom-skin-fullscreen_btn-hover-hit-clip, var(--custom-skin-fullscreen_btn-normal-hit-clip, none));
+    -webkit-clip-path: var(--custom-skin-fullscreen_btn-hover-hit-clip, var(--custom-skin-fullscreen_btn-normal-hit-clip, none));
+}
+
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active:hover::before {
+    background-image: var(--custom-skin-fullscreen_btn-hover-image, var(--custom-skin-fullscreen_btn-normal-image));
     filter: brightness(1.08);
 }
 
-#gal-global-overlay.skin-western .gal-fullscreen-btn:active::before {
-    background-image: var(--western-fullscreen_btn-active-image, var(--western-fullscreen_btn-hover-image, var(--western-fullscreen_btn-normal-image)));
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active:active {
+    clip-path: var(--custom-skin-fullscreen_btn-active-hit-clip, var(--custom-skin-fullscreen_btn-hover-hit-clip, var(--custom-skin-fullscreen_btn-normal-hit-clip, none)));
+    -webkit-clip-path: var(--custom-skin-fullscreen_btn-active-hit-clip, var(--custom-skin-fullscreen_btn-hover-hit-clip, var(--custom-skin-fullscreen_btn-normal-hit-clip, none)));
+}
+
+#gal-global-overlay.custom-skin .gal-fullscreen-btn.custom-skin-element-active:active::before {
+    background-image: var(--custom-skin-fullscreen_btn-active-image, var(--custom-skin-fullscreen_btn-hover-image, var(--custom-skin-fullscreen_btn-normal-image)));
     filter: brightness(0.94);
     transform: translateY(1px);
 }
 
-#gal-global-overlay.skin-western .gal-bgm-widget {
-    background-color: rgba(44, 28, 18, 0.88) !important;
-    background-image: var(--western-bgm_widget-normal-image) !important;
-    background-size: var(--western-bgm_widget-bg-size, 100% 100%) !important;
-    width: var(--western-bgm_widget-width, auto) !important;
-    height: var(--western-bgm_widget-height, auto) !important;
+#gal-global-overlay.custom-skin .gal-bgm-widget.custom-skin-element-active {
+    background-color: rgba(22, 31, 44, 0.88) !important;
+    background-image: var(--custom-skin-bgm_widget-normal-image) !important;
+    background-size: var(--custom-skin-bgm_widget-bg-size, 100% 100%) !important;
+    width: var(--custom-skin-bgm_widget-width, auto) !important;
+    height: var(--custom-skin-bgm_widget-height, auto) !important;
     transform: translate(
-      calc(var(--western-bgm_widget-offset-x, 0px) + var(--western-bgm_widget-anchor-x, 0px)),
-      calc(var(--western-bgm_widget-offset-y, 0px) + var(--western-bgm_widget-anchor-y, 0px))
+      calc(var(--custom-skin-bgm_widget-offset-x, 0px) - var(--custom-skin-bgm_widget-anchor-x, 0px)),
+      calc(var(--custom-skin-bgm_widget-offset-y, 0px) - var(--custom-skin-bgm_widget-anchor-y, 0px))
     ) !important;
-    color: #f5e7c8 !important;
+    color: var(--SmartThemeBodyColor, #f8fafc) !important;
 }
 
-#gal-global-overlay.skin-western .gal-progress-bar {
-    background: linear-gradient(90deg, #6b4f0a, #c9a84c, #8b6914) !important;
-    box-shadow: 0 0 8px rgba(232, 168, 76, 0.25) !important;
+#gal-global-overlay.custom-skin .custom-skin-element-active.custom-skin-has-normal-image,
+#gal-global-overlay.custom-skin .custom-skin-element-active.custom-skin-has-hover-image:hover,
+#gal-global-overlay.custom-skin .custom-skin-element-active.custom-skin-has-active-image:active {
+    background-color: transparent !important;
+}
+
+#gal-global-overlay.custom-skin .gal-progress-bar {
+    background: linear-gradient(90deg, #6aa3d4, #b9d6f2, #7db4de) !important;
+    box-shadow: 0 0 8px rgba(125, 180, 222, 0.28) !important;
 }
 
 /* =========================================================
@@ -31016,9 +31111,1047 @@ ${normalizedSource}`;
     }
 }
 `;
+    const immersiveBaseCss = `
+:root {
+    --gal-immersive-bg: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+    --gal-immersive-panel: rgba(15, 20, 30, 0.78);
+    --gal-immersive-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+    --gal-immersive-text: var(--SmartThemeBodyColor, #f5f7fa);
+    --gal-immersive-text-dim: rgba(245, 247, 250, 0.72);
+    --gal-immersive-accent: var(--SmartThemeEmColor, #9ac7ff);
+    --gal-immersive-accent-glow: rgba(154, 199, 255, 0.48);
+}
+
+#gal-save-load-modal.gal-save-load-modal,
+.gal-cg-upload-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 16000;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: clamp(14px, 2.6vw, 32px);
+    background: rgba(5, 8, 15, 0.84);
+    backdrop-filter: blur(14px) saturate(125%);
+    -webkit-backdrop-filter: blur(14px) saturate(125%);
+}
+
+#gal-save-load-modal.gal-save-load-modal::before,
+.gal-cg-upload-modal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 18% 20%, rgba(154, 199, 255, 0.14), transparent 30%),
+        radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.08), transparent 26%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%, rgba(255, 255, 255, 0.02) 100%);
+    pointer-events: none;
+}
+
+#gal-save-load-modal .gal-save-label-input,
+#gal-save-load-modal input[type='text'],
+#gal-save-load-modal input[type='number'],
+#gal-save-load-modal textarea,
+#gal-save-load-modal select,
+.gal-cg-upload-modal input[type='text'],
+.gal-cg-upload-modal input[type='number'],
+.gal-cg-upload-modal textarea,
+.gal-cg-upload-modal select {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+    background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+    color: var(--SmartThemeBodyColor, #f5f7fa);
+    padding: 0 14px;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.24s ease, box-shadow 0.24s ease, background 0.24s ease;
+}
+
+#gal-save-load-modal .gal-save-label-input::placeholder,
+#gal-save-load-modal input[type='text']::placeholder,
+#gal-save-load-modal input[type='number']::placeholder,
+#gal-save-load-modal textarea::placeholder,
+#gal-save-load-modal select::placeholder,
+.gal-cg-upload-modal input[type='text']::placeholder,
+.gal-cg-upload-modal input[type='number']::placeholder,
+.gal-cg-upload-modal textarea::placeholder,
+.gal-cg-upload-modal select::placeholder {
+    color: rgba(245, 247, 250, 0.68);
+}
+
+#gal-save-load-modal .gal-save-label-input:focus,
+#gal-save-load-modal input[type='text']:focus,
+#gal-save-load-modal input[type='number']:focus,
+#gal-save-load-modal textarea:focus,
+#gal-save-load-modal select:focus,
+.gal-cg-upload-modal input[type='text']:focus,
+.gal-cg-upload-modal input[type='number']:focus,
+.gal-cg-upload-modal textarea:focus,
+.gal-cg-upload-modal select:focus {
+    border-color: rgba(154, 199, 255, 0.86);
+    box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.18), 0 0 18px rgba(154, 199, 255, 0.14);
+    background: rgba(22, 30, 42, 0.96);
+}
+`;
+    const saveLoadImmersiveCss = `
+#gal-save-load-modal .gal-save-load-shell {
+    position: relative;
+    z-index: 1;
+    width: min(1480px, 100%);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: 28px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(20, 24, 32, 0.92), rgba(8, 12, 18, 0.94));
+    border: 1px solid var(--gal-immersive-border);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: var(--gal-immersive-text);
+}
+
+#gal-save-load-modal .gal-save-load-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 18px;
+    padding: clamp(28px, 4vw, 44px) clamp(24px, 4vw, 56px) 20px;
+}
+
+#gal-save-load-modal .gal-save-load-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#gal-save-load-modal .gal-save-load-kicker,
+#gal-save-load-modal .gal-save-load-stage-kicker,
+#gal-save-load-modal .gal-save-load-panel-label {
+    font-size: 0.78rem;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--gal-immersive-accent);
+    opacity: 0.88;
+}
+
+#gal-save-load-modal .gal-save-load-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    font-size: clamp(1.8rem, 3vw, 2.8rem);
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+    text-shadow: 0 0 20px var(--gal-immersive-accent-glow);
+}
+
+#gal-save-load-modal .gal-save-load-title i {
+    color: var(--gal-immersive-accent);
+}
+
+#gal-save-load-modal .gal-save-load-close {
+    min-height: 42px;
+    padding: 0 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--gal-immersive-text-dim);
+    cursor: pointer;
+    letter-spacing: 0.18em;
+    font-family: "Courier New", monospace;
+    transition: all 0.28s ease;
+}
+
+#gal-save-load-modal .gal-save-load-close:hover {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+#gal-save-load-modal .gal-save-load-body {
+    flex: 1;
+    min-height: 0;
+    padding: 0 clamp(20px, 4vw, 56px) clamp(20px, 4vw, 40px);
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+    gap: 24px;
+}
+
+#gal-save-load-modal .gal-save-load-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+#gal-save-load-modal .gal-save-load-panel,
+#gal-save-load-modal .gal-save-load-stage {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 22px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(18, 24, 34, 0.78), rgba(10, 14, 22, 0.92));
+}
+
+#gal-save-load-modal .gal-save-load-panel {
+    padding: 22px;
+}
+
+#gal-save-load-modal .gal-save-load-panel-title {
+    margin: 10px 0 12px;
+    font-size: 1.34rem;
+    font-weight: 700;
+    line-height: 1.45;
+    color: #ffffff;
+}
+
+#gal-save-load-modal .gal-save-load-panel-copy {
+    margin: 0;
+    line-height: 1.75;
+    color: var(--gal-immersive-text-dim);
+}
+
+#gal-save-load-modal .gal-save-load-panel-copy.compact {
+    margin-bottom: 16px;
+}
+
+#gal-save-load-modal .gal-save-load-field {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+#gal-save-load-modal .gal-save-load-field-label {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--gal-immersive-text);
+}
+
+#gal-save-load-modal .gal-save-load-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+#gal-save-load-modal .gal-save-control-btn {
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--gal-immersive-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: all 0.28s ease;
+}
+
+#gal-save-load-modal .gal-save-control-btn.primary {
+    border-color: rgba(154, 199, 255, 0.42);
+    background: linear-gradient(135deg, rgba(154, 199, 255, 0.18), rgba(35, 57, 86, 0.48));
+    color: #ffffff;
+    box-shadow: 0 0 24px rgba(154, 199, 255, 0.1);
+}
+
+#gal-save-load-modal .gal-save-control-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+#gal-save-load-modal .gal-save-control-btn.primary:hover {
+    border-color: rgba(154, 199, 255, 0.78);
+    box-shadow: 0 0 24px rgba(154, 199, 255, 0.2);
+}
+
+#gal-save-load-modal .gal-save-control-btn:disabled {
+    opacity: 0.58;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+#gal-save-load-modal .gal-save-load-stage {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#gal-save-load-modal .gal-save-load-stage-head {
+    margin-bottom: 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#gal-save-load-modal .gal-save-load-stage-title {
+    margin-top: 10px;
+    font-size: 1.06rem;
+    line-height: 1.65;
+    color: var(--gal-immersive-text);
+}
+`;
+    const saveLoadSlotsCss = `
+#gal-save-load-modal .gal-save-slot-list {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 22px;
+    padding-right: 6px;
+    align-content: start;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) rgba(0, 0, 0, 0.18);
+}
+
+#gal-save-load-modal .gal-save-slot-list::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+#gal-save-load-modal .gal-save-slot-list::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.16);
+    border-radius: 999px;
+}
+
+#gal-save-load-modal .gal-save-slot-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+}
+
+#gal-save-load-modal .gal-save-slot-list::-webkit-scrollbar-thumb:hover {
+    background: var(--gal-immersive-accent);
+}
+
+#gal-save-load-modal .gal-save-empty {
+    min-height: 220px;
+    border: 1px dashed rgba(255, 255, 255, 0.18);
+    border-radius: 20px;
+    color: var(--gal-immersive-text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+#gal-save-load-modal .gal-save-empty-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#gal-save-load-modal .gal-save-empty-copy strong {
+    color: #ffffff;
+    font-size: 1rem;
+}
+
+#gal-save-load-modal .gal-save-slot-card {
+    position: relative;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(18, 24, 34, 0.4), rgba(10, 14, 22, 0.92)), rgba(20, 25, 35, 0.6);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s ease, box-shadow 0.28s ease;
+}
+
+#gal-save-load-modal .gal-save-slot-card:hover {
+    transform: translateY(-4px) scale(1.015);
+    border-color: rgba(255, 255, 255, 0.24);
+    box-shadow: 0 20px 36px rgba(0, 0, 0, 0.5), 0 0 28px rgba(154, 199, 255, 0.12);
+}
+
+#gal-save-load-modal .gal-save-thumb-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #05070d;
+}
+
+#gal-save-load-modal .gal-save-thumb-wrap::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gal-immersive-accent), transparent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.36s ease;
+}
+
+#gal-save-load-modal .gal-save-slot-card:hover .gal-save-thumb-wrap::after {
+    transform: scaleX(1);
+}
+
+#gal-save-load-modal .gal-save-thumb-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    opacity: 0.82;
+    transition: opacity 0.5s ease, transform 10s ease, filter 0.5s ease;
+}
+
+#gal-save-load-modal .gal-save-slot-card:hover .gal-save-thumb-image {
+    opacity: 1;
+    transform: scale(1.08);
+    filter: contrast(1.08) saturate(1.16);
+}
+
+#gal-save-load-modal .gal-save-thumb-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.24);
+    font-family: "Courier New", monospace;
+    letter-spacing: 0.2em;
+    background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 255, 255, 0.025) 10px, rgba(255, 255, 255, 0.025) 20px);
+}
+
+#gal-save-load-modal .gal-save-slot-info {
+    position: relative;
+    z-index: 2;
+    margin-top: -58px;
+    padding: 18px 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: linear-gradient(180deg, transparent, rgba(2, 5, 10, 0.78) 26%, rgba(2, 5, 10, 0.94) 100%);
+}
+
+#gal-save-load-modal .gal-save-slot-meta,
+#gal-save-load-modal .gal-save-slot-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+#gal-save-load-modal .gal-save-slot-code,
+#gal-save-load-modal .gal-save-slot-time {
+    font-family: "Courier New", monospace;
+    font-size: 0.78rem;
+}
+
+#gal-save-load-modal .gal-save-slot-code,
+#gal-save-load-modal .gal-save-slot-char {
+    color: var(--gal-immersive-accent);
+}
+
+#gal-save-load-modal .gal-save-slot-time {
+    margin-left: auto;
+    color: rgba(255, 255, 255, 0.66);
+}
+
+#gal-save-load-modal .gal-save-slot-badge {
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.72rem;
+}
+
+#gal-save-load-modal .gal-save-slot-title {
+    color: #ffffff;
+    font-size: 1.08rem;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+#gal-save-load-modal .gal-save-slot-detail {
+    font-size: 0.86rem;
+    color: var(--gal-immersive-text-dim);
+}
+
+#gal-save-load-modal .gal-save-slot-char {
+    font-weight: 700;
+}
+
+#gal-save-load-modal .gal-save-slot-actions {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.28s ease;
+}
+
+#gal-save-load-modal .gal-save-slot-card:hover .gal-save-slot-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#gal-save-load-modal .gal-save-slot-btn {
+    min-width: 168px;
+    min-height: 42px;
+    padding: 0 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.44);
+    color: #ffffff;
+    font-size: 0.9rem;
+    letter-spacing: 0.12em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.28s ease;
+}
+
+#gal-save-load-modal .gal-save-slot-btn.primary {
+    border-color: rgba(154, 199, 255, 0.58);
+    color: var(--gal-immersive-accent);
+}
+
+#gal-save-load-modal .gal-save-slot-btn.primary:hover {
+    background: var(--gal-immersive-accent);
+    color: #03111d;
+}
+
+#gal-save-load-modal .gal-save-slot-btn.danger {
+    border-color: rgba(255, 107, 107, 0.46);
+    color: #ffb1b1;
+}
+
+#gal-save-load-modal .gal-save-slot-btn.danger:hover {
+    background: rgba(220, 53, 69, 0.88);
+    color: #ffffff;
+}
+
+#gal-save-load-modal .gal-save-slot-btn:disabled {
+    opacity: 0.58;
+    cursor: not-allowed;
+    transform: none;
+}
+`;
+    const cgUploadImmersiveCss = `
+.gal-cg-upload-modal .gal-cg-upload-shell {
+    position: relative;
+    z-index: 1;
+    width: min(720px, 100%);
+    max-height: min(92vh, 980px);
+    display: flex;
+    flex-direction: column;
+    border-radius: 24px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(20, 24, 32, 0.92), rgba(8, 12, 18, 0.94));
+    border: 1px solid var(--gal-immersive-border);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: var(--gal-immersive-text);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-shell-batch {
+    width: min(1180px, 100%);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: move;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.08rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-title i {
+    color: var(--gal-immersive-accent);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-close {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--gal-immersive-text-dim);
+    cursor: pointer;
+    transition: all 0.28s ease;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-close:hover {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-body {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-label {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--gal-immersive-text);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-dropzone {
+    min-height: 220px;
+    border-radius: 20px;
+    border: 1px dashed rgba(255, 255, 255, 0.22);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+    color: var(--gal-immersive-text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.28s ease;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-dropzone i {
+    font-size: 2.8rem;
+    color: var(--gal-immersive-accent);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-dropzone small,
+.gal-cg-upload-modal .gal-cg-upload-toolbar-hint {
+    color: var(--gal-immersive-text-dim);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-dropzone:hover {
+    border-color: rgba(154, 199, 255, 0.68);
+    box-shadow: 0 0 24px rgba(154, 199, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-preview {
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-preview-img {
+    display: block;
+    width: 100%;
+    max-height: 360px;
+    object-fit: contain;
+    background: rgba(6, 10, 18, 0.9);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-actions,
+.gal-cg-upload-modal .gal-cg-upload-footer {
+    display: flex;
+    gap: 12px;
+    padding: 0 22px 22px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-footer {
+    padding-top: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-primary-btn {
+    flex: 1;
+    min-height: 46px;
+    justify-content: center;
+}
+
+.gal-cg-upload-modal .gal-action-btn:disabled,
+.gal-cg-upload-modal .gal-batch-special-cg-remove:disabled {
+    opacity: 0.58;
+    cursor: not-allowed;
+}
+`;
+    const cgUploadGalleryCss = `
+.gal-cg-upload-modal .gal-cg-upload-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-trigger-btn {
+    min-height: 42px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-gallery-grid {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 22px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) rgba(0, 0, 0, 0.18);
+}
+
+.gal-cg-upload-modal .gal-cg-upload-gallery-grid::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-gallery-grid::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.16);
+    border-radius: 999px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-gallery-grid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+}
+
+.gal-cg-upload-modal .gal-cg-upload-gallery-empty {
+    grid-column: 1 / -1;
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-radius: 18px;
+    border: 1px dashed rgba(255, 255, 255, 0.16);
+    color: var(--gal-immersive-text-dim);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.gal-cg-upload-modal .gal-batch-special-cg-item {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, rgba(20, 24, 32, 0.7), rgba(10, 14, 22, 0.94));
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+}
+
+.gal-cg-upload-modal .gal-batch-special-cg-preview {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #05070d;
+}
+
+.gal-cg-upload-modal .gal-batch-special-cg-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.gal-cg-upload-modal .gal-batch-special-cg-remove {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(220, 53, 69, 0.88);
+    color: #ffffff;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gal-cg-upload-modal .gal-batch-special-cg-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+}
+
+@media (hover: none), (max-width: 760px) {
+    #gal-save-load-modal.gal-save-load-modal,
+    .gal-cg-upload-modal {
+        padding: 10px;
+    }
+
+    #gal-save-load-modal .gal-save-load-shell,
+    .gal-cg-upload-modal .gal-cg-upload-shell {
+        border-radius: 18px;
+    }
+
+    #gal-save-load-modal .gal-save-load-body {
+        grid-template-columns: 1fr;
+        padding: 0 14px 14px;
+    }
+
+    #gal-save-load-modal .gal-save-load-panel,
+    #gal-save-load-modal .gal-save-load-stage {
+        border-radius: 18px;
+        padding: 18px;
+    }
+
+    #gal-save-load-modal .gal-save-slot-list {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    #gal-save-load-modal .gal-save-slot-actions {
+        position: static;
+        opacity: 1;
+        pointer-events: auto;
+        padding: 0 18px 18px;
+        background: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    #gal-save-load-modal .gal-save-slot-btn {
+        flex: 1 1 10rem;
+        min-width: 0;
+    }
+
+    #gal-save-load-modal .gal-save-slot-time {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .gal-cg-upload-modal .gal-cg-upload-shell,
+    .gal-cg-upload-modal .gal-cg-upload-shell-batch {
+        width: 100%;
+        max-height: calc(100vh - 20px);
+    }
+
+    .gal-cg-upload-modal .gal-cg-upload-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .gal-cg-upload-modal .gal-cg-upload-body,
+    .gal-cg-upload-modal .gal-cg-upload-toolbar,
+    .gal-cg-upload-modal .gal-cg-upload-gallery-grid,
+    .gal-cg-upload-modal .gal-cg-upload-actions,
+    .gal-cg-upload-modal .gal-cg-upload-footer {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .gal-cg-upload-modal .gal-cg-upload-gallery-grid {
+        grid-template-columns: 1fr;
+    }
+}
+`;
+    const titleGalleryImmersiveCss = `
+#gal-global-overlay .gal-title-cg-gallery {
+    padding: 24px;
+    background: rgba(4, 6, 12, 0.82);
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-panel {
+    width: min(1180px, 94vw);
+    max-height: 90vh;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(17, 22, 30, 0.94), rgba(7, 11, 18, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.52);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-title {
+    font-size: clamp(1.28rem, 2.2vw, 1.9rem);
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: #ffffff;
+    text-shadow: 0 0 18px rgba(154, 199, 255, 0.2);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-subtitle {
+    color: rgba(245, 247, 250, 0.72);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-body {
+    padding: 0 18px 18px;
+}
+
+#gal-global-overlay .gal-title-cg-gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 24px;
+}
+
+#gal-global-overlay .gal-title-cg-gallery-card {
+    appearance: none;
+    border: none;
+    text-align: left;
+    padding: 0;
+    cursor: zoom-in;
+    background: transparent;
+    border-radius: 0;
+    overflow: visible;
+    transform: rotate(-1.4deg);
+    transition: transform 0.32s ease, filter 0.32s ease;
+}
+
+#gal-global-overlay .gal-title-cg-gallery-card:nth-child(even) {
+    transform: rotate(1.2deg);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-card:nth-child(3n) {
+    transform: rotate(-0.6deg);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-card:hover {
+    transform: scale(1.04) rotate(0deg);
+    z-index: 2;
+    filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.5));
+}
+
+#gal-global-overlay .gal-title-cg-gallery-preview {
+    border: 10px solid rgba(255, 255, 255, 0.92);
+    border-bottom-width: 16px;
+    border-radius: 2px;
+    background: #05070d;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.4);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-preview img {
+    filter: saturate(1.02) contrast(1.02);
+}
+
+#gal-global-overlay .gal-title-cg-gallery-name {
+    padding: 12px 8px 4px;
+    font-size: 0.96rem;
+    color: #ffffff;
+}
+
+#gal-global-overlay .gal-title-cg-gallery-desc {
+    padding: 0 8px;
+    color: rgba(245, 247, 250, 0.72);
+}
+
+#gal-global-overlay .gal-title-cg-lightbox {
+    position: absolute;
+    inset: 0;
+    z-index: 190;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    background: rgba(0, 0, 0, 0.92);
+}
+
+#gal-global-overlay .gal-title-cg-lightbox.active {
+    display: flex;
+}
+
+#gal-global-overlay .gal-title-cg-lightbox-frame {
+    max-width: min(92vw, 1320px);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+#gal-global-overlay .gal-title-cg-lightbox-image {
+    max-width: 100%;
+    max-height: calc(90vh - 96px);
+    object-fit: contain;
+    border-radius: 12px;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.72);
+}
+
+#gal-global-overlay .gal-title-cg-lightbox-caption {
+    text-align: center;
+    color: #ffffff;
+}
+
+#gal-global-overlay .gal-title-cg-lightbox-title {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+#gal-global-overlay .gal-title-cg-lightbox-desc {
+    margin-top: 6px;
+    color: rgba(245, 247, 250, 0.74);
+}
+
+#gal-global-overlay .gal-title-cg-lightbox-close {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    cursor: pointer;
+}
+
+@media (max-width: 760px) {
+    #gal-global-overlay .gal-title-cg-gallery {
+        padding: 10px;
+    }
+
+    #gal-global-overlay .gal-title-cg-gallery-panel {
+        width: 100%;
+        max-height: 92vh;
+        border-radius: 16px;
+    }
+
+    #gal-global-overlay .gal-title-cg-gallery-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    #gal-global-overlay .gal-title-cg-lightbox {
+        padding: 16px;
+    }
+}
+`;
     const styleEl = targetDoc.createElement("style");
     styleEl.id = `${SCRIPT_ID}-styles`;
-    styleEl.textContent = css + skinCss + styledCss + saveLoadCss + titleScreenCss;
+    styleEl.textContent = css + skinCss + styledCss + saveLoadCss + titleScreenCss + immersiveBaseCss + saveLoadImmersiveCss + saveLoadSlotsCss + cgUploadImmersiveCss + cgUploadGalleryCss + titleGalleryImmersiveCss;
     (targetDoc.head || targetDoc.documentElement).appendChild(styleEl);
     console.log(`[${SCRIPT_NAME}] 样式已注入`);
   }
@@ -31361,13 +32494,13 @@ ${normalizedSource}`;
     return null;
   }
   function getRuntimeSettings() {
-    const settings = getSettings();
-    const speed = clampNumber(settings?.typewriterSpeed, MIN_SPEED, MAX_SPEED, DEFAULT_SPEED);
-    const soundVolume = clampNumber(settings?.typewriterSoundVolume, 0, 100, DEFAULT_SOUND_VOLUME);
+    const settings2 = getSettings();
+    const speed = clampNumber(settings2?.typewriterSpeed, MIN_SPEED, MAX_SPEED, DEFAULT_SPEED);
+    const soundVolume = clampNumber(settings2?.typewriterSoundVolume, 0, 100, DEFAULT_SOUND_VOLUME);
     return {
-      enabled: settings?.typewriterEnabled !== false,
+      enabled: settings2?.typewriterEnabled !== false,
       speed,
-      soundEnabled: settings?.typewriterSoundEnabled !== false,
+      soundEnabled: settings2?.typewriterSoundEnabled !== false,
       soundVolume
     };
   }
@@ -31656,8 +32789,8 @@ ${normalizedSource}`;
   }
   async function syncEffectsForSegmentDisplay($overlay, state, currentIndex, { isNewMessage = false } = {}) {
     if (!state) return;
-    const settings = getSettings();
-    if (!settings.effectsEnabled) {
+    const settings2 = getSettings();
+    if (!settings2.effectsEnabled) {
       clearAllPixiEffects();
       state.lastAppliedEffectIndex = currentIndex;
       return;
@@ -31666,7 +32799,7 @@ ${normalizedSource}`;
     if (!mounted) return;
     syncPixiEffectsSettings();
     const lastApplied = Number.isFinite(state.lastAppliedEffectIndex) ? state.lastAppliedEffectIndex : -1;
-    const shouldClearOnSceneChange = !!settings.effectsAutoClearOnSceneChange;
+    const shouldClearOnSceneChange = !!settings2.effectsAutoClearOnSceneChange;
     const shouldAutoClearOnMessageSwitch = isNewMessage;
     const shouldReplay = shouldAutoClearOnMessageSwitch || currentIndex <= lastApplied || lastApplied < 0;
     const clearIfSceneChangedAt = (segmentIndex) => {
@@ -31754,7 +32887,7 @@ ${normalizedSource}`;
     console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
     const $overlay = ensureGlobalOverlay();
     const segments = parsedContent.segments;
-    const settings = getSettings();
+    const settings2 = getSettings();
     const mesIdStr = String(mesId);
     const suppressTTS = !!options2.suppressTTS;
     let state = messageSegmentState3.get(mesIdStr);
@@ -31906,7 +33039,7 @@ ${normalizedSource}`;
       $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     }
     updateLocationTimeDisplay();
-    if (isNewMessage && !suppressTTS && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
+    if (isNewMessage && !suppressTTS && settings2.ttsEnabled && settings2.ttsAutoPlay && !isNarration && !isCg) {
       const segmentId = `${mesIdStr}_${currentIndex}`;
       TTSManager.stop();
       TTSManager.speak(displaySegment, segmentId);
@@ -32452,7 +33585,7 @@ ${normalizedSource}`;
   function startSkipping() {
     if (getIsSkipping()) return;
     setIsSkipping(true);
-    const settings = getSettings();
+    const settings2 = getSettings();
     const $btn = $2('#gal-global-overlay [data-action="skip"]');
     $btn.addClass("active");
     TTSManager.stop();
@@ -32470,7 +33603,7 @@ ${normalizedSource}`;
         TTSManager.stop();
         state.currentIndex++;
         await scheduleOverlaySegmentDisplay(state, "skip");
-        setSkipTimer(setTimeout(doSkip, settings.skipSpeed * 1e3));
+        setSkipTimer(setTimeout(doSkip, settings2.skipSpeed * 1e3));
       } else {
         stopSkipping();
         showToast4("已快进到最后");
@@ -32490,7 +33623,7 @@ ${normalizedSource}`;
   function startRewinding() {
     if (getIsRewinding()) return;
     setIsRewinding(true);
-    const settings = getSettings();
+    const settings2 = getSettings();
     showToast4("快速回退中...");
     const $btn = $2('#gal-global-overlay [data-action="prev"]');
     $btn.addClass("active");
@@ -32506,11 +33639,11 @@ ${normalizedSource}`;
         TTSManager.stop();
         state.currentIndex--;
         await scheduleOverlaySegmentDisplay(state, "rewind");
-        rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
+        rewindTimer = setTimeout(doRewind, settings2.skipSpeed * 1e3);
       } else {
         const switched = await switchToPreviousAiFloor({ suppressTTS: true });
         if (switched.ok) {
-          rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
+          rewindTimer = setTimeout(doRewind, settings2.skipSpeed * 1e3);
         } else {
           stopRewinding();
           showToast4("已回退到最早AI楼层");
@@ -32568,27 +33701,27 @@ ${normalizedSource}`;
       return;
     }
     topWindow[KEYBOARD_SHORTCUTS_BOUND_FLAG] = true;
-    const settings = getSettings();
+    const settings2 = getSettings();
     $2(topWindow.document).on("keydown", function(e) {
       if (!getIsEnabled()) return;
       const activeEl = topWindow.document.activeElement;
       if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.isContentEditable)) {
         return;
       }
-      if (e.key === "Control" && settings.ctrlKeySkip) {
+      if (e.key === "Control" && settings2.ctrlKeySkip) {
         startSkipping();
       }
-      if (e.code === "Space" && settings.spaceKeyNext) {
+      if (e.code === "Space" && settings2.spaceKeyNext) {
         e.preventDefault();
         triggerNextSegment();
       }
-      if (e.code === "Enter" && settings.enterKeyNext) {
+      if (e.code === "Enter" && settings2.enterKeyNext) {
         e.preventDefault();
         triggerNextSegment();
       }
     });
     $2(topWindow.document).on("keyup", function(e) {
-      if (e.key === "Control" && settings.ctrlKeySkip) {
+      if (e.key === "Control" && settings2.ctrlKeySkip) {
         stopSkipping();
       }
     });
@@ -34739,7 +35872,7 @@ ${normalizedSource}`;
     const isUser = $mes.attr("is_user") === "true";
     if (isUser) return;
     const mesId = $mes.attr("mesid");
-    const settings = getSettings();
+    const settings2 = getSettings();
     let contentToProcess = getFormattedSwipeContent(mesId);
     if (!contentToProcess) {
       contentToProcess = getRawMessageContent(mesId);
@@ -34755,7 +35888,7 @@ ${normalizedSource}`;
       }
     }
     const hasGalTags = RE_GAL_TAGS2.test(contentToProcess);
-    if (settings.smartDetection && !hasGalTags && !forceRender2) return;
+    if (settings2.smartDetection && !hasGalTags && !forceRender2) return;
     const hasClosedP = RE_CLOSED_P3.test(contentToProcess);
     if (!hasClosedP && !forceRender2) {
       console.log(`[${SCRIPT_NAME}] 流式输出中，等待完整内容...`);
@@ -34800,7 +35933,7 @@ ${normalizedSource}`;
       }
     }
     if (parsed && parsed.backgroundChanges) {
-      const bgSrc = settings.bgImageSource || "none";
+      const bgSrc = settings2.bgImageSource || "none";
       const bgDispatch = {
         comfyui: { tagKey: "generationTags", handler: _handleRealTimeBackgroundGenerationRef, label: "ComfyUI 背景生成" },
         banana: { tagKey: "bananaPrompt", handler: _handleBananaBackgroundGenerationRef, label: "大香蕉背景生成" },
@@ -34829,7 +35962,7 @@ ${normalizedSource}`;
     }
     console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed?.segments?.length || 0}`);
     if (!parsed || parsed.segments.length === 0) {
-      if (!settings.smartDetection || forceRender2) {
+      if (!settings2.smartDetection || forceRender2) {
         const fallbackText = contentToProcess && contentToProcess.trim().length > 0 ? contentToProcess : String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
         parsed = buildFallbackParsed2(fallbackText);
       } else {
@@ -34975,13 +36108,19 @@ ${normalizedSource}`;
     const mi = String(date.getMinutes()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
   }
+  function buildSlotCode(index, prefix = "") {
+    if (prefix) return prefix;
+    const safeIndex = Number.isFinite(index) ? index + 1 : 1;
+    return `SLOT-${String(safeIndex).padStart(2, "0")}`;
+  }
   function getThumbnailHtml(slot) {
     const src = String(slot?.thumbnailDataUrl || "").trim();
     if (!src) {
       return `
       <div class="gal-save-thumb-placeholder">
         <i class="fa-regular fa-image"></i>
-        <span>无缩略图</span>
+        <span>NO SIGNAL</span>
+        <small>未记录画面</small>
       </div>
     `;
     }
@@ -34990,40 +36129,59 @@ ${normalizedSource}`;
   function buildSlotActions(slot, mode) {
     if (mode === "quick-load") {
       return `
-      <button class="gal-save-slot-btn primary" data-role="quick-load">快速读档</button>
+      <button class="gal-save-slot-btn primary" data-role="quick-load">
+        <i class="fa-solid fa-bolt"></i>
+        <span>快速读档</span>
+      </button>
     `;
     }
     if (mode === "save") {
       return `
-      <button class="gal-save-slot-btn primary" data-role="overwrite" data-slot-id="${escapeHtml(slot.id)}">覆盖</button>
-      <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">删除</button>
+      <button class="gal-save-slot-btn primary" data-role="overwrite" data-slot-id="${escapeHtml(slot.id)}">
+        <i class="fa-solid fa-pen-to-square"></i>
+        <span>覆盖存档</span>
+      </button>
+      <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">
+        <i class="fa-solid fa-trash"></i>
+        <span>删除</span>
+      </button>
     `;
     }
     return `
-    <button class="gal-save-slot-btn primary" data-role="load" data-slot-id="${escapeHtml(slot.id)}">读档</button>
-    <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">删除</button>
+    <button class="gal-save-slot-btn primary" data-role="load" data-slot-id="${escapeHtml(slot.id)}">
+      <i class="fa-solid fa-folder-open"></i>
+      <span>读取进度</span>
+    </button>
+    <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">
+      <i class="fa-solid fa-trash"></i>
+      <span>删除</span>
+    </button>
   `;
   }
-  function buildSlotCard(slot, mode, prefix = "") {
+  function buildSlotCard(slot, mode, index, prefix = "") {
     const floorText = Number.isFinite(Number(slot.totalFloorCount)) ? `总楼层 ${Number(slot.totalFloorCount)}` : "总楼层 --";
-    const slotType = prefix ? `<span class="gal-save-slot-badge">${escapeHtml(prefix)}</span>` : "";
     const charName = String(slot?.characterCard?.name || "").trim();
     const charId = String(slot?.characterCard?.id || "").trim();
     const charInfo = charName && charId && charName !== charId ? `${charName} (${charId})` : charName || charId;
+    const slotCode = buildSlotCode(index, prefix ? "QUICK" : "");
+    const badgeText = prefix || "手动存档";
     return `
     <div class="gal-save-slot-card" data-slot-id="${escapeHtml(slot.id)}">
       <div class="gal-save-thumb-wrap">
         ${getThumbnailHtml(slot)}
       </div>
       <div class="gal-save-slot-info">
+        <div class="gal-save-slot-meta">
+          <span class="gal-save-slot-code">${escapeHtml(slotCode)}</span>
+          <span class="gal-save-slot-badge">${escapeHtml(badgeText)}</span>
+          <span class="gal-save-slot-time">${formatTime(slot.timestamp)}</span>
+        </div>
         <div class="gal-save-slot-title-row">
           <span class="gal-save-slot-title">${escapeHtml(slot.label || "未命名存档")}</span>
-          ${slotType}
         </div>
-        <div class="gal-save-slot-meta">
+        <div class="gal-save-slot-detail">
           <span class="gal-save-slot-char">${escapeHtml(charInfo || "角色卡未记录")}</span>
           <span>${floorText}</span>
-          <span>${formatTime(slot.timestamp)}</span>
         </div>
       </div>
       <div class="gal-save-slot-actions">
@@ -35037,17 +36195,20 @@ ${normalizedSource}`;
     const quick = getQuickSaveSlot();
     let html = "";
     if (quick && mode === "load") {
-      html += buildSlotCard(quick, "quick-load", "快速存档");
+      html += buildSlotCard(quick, "quick-load", 0, "快速存档");
     }
     if (!slots.length) {
       html += `
       <div class="gal-save-empty">
         <i class="fa-regular fa-folder-open"></i>
-        <span>暂无手动存档</span>
+        <div class="gal-save-empty-copy">
+          <strong>暂无手动存档</strong>
+          <span>新的剧情切片会在这里形成陈列。</span>
+        </div>
       </div>
     `;
     } else {
-      html += slots.map((slot) => buildSlotCard(slot, mode)).join("");
+      html += slots.map((slot, index) => buildSlotCard(slot, mode, index)).join("");
     }
     $modal.find(".gal-save-slot-list").html(html);
   }
@@ -35060,32 +36221,61 @@ ${normalizedSource}`;
     $2(mountRoot).find(`#${MODAL_ID}`).remove();
     const isSaveMode = safeMode === "save";
     const modalHtml = `
-    <div id="${MODAL_ID}" class="gal-input-modal gal-save-load-modal">
-      <div class="gal-save-load-box">
+    <div id="${MODAL_ID}" class="gal-save-load-modal" data-mode="${safeMode}">
+      <div class="gal-save-load-shell">
         <div class="gal-save-load-header">
-          <div class="gal-save-load-title">
-            <i class="fa-solid ${isSaveMode ? "fa-floppy-disk" : "fa-folder-open"}"></i>
-            <span>${isSaveMode ? "存档" : "读档"}</span>
+          <div class="gal-save-load-heading">
+            <div class="gal-save-load-kicker">SYSTEM / ${isSaveMode ? "SAVE" : "LOAD"}</div>
+            <div class="gal-save-load-title">
+              <i class="fa-solid ${isSaveMode ? "fa-floppy-disk" : "fa-folder-open"}"></i>
+              <span>${isSaveMode ? "存档陈列柜" : "读档陈列柜"}</span>
+            </div>
           </div>
-          <button class="gal-save-load-close" title="关闭"><i class="fa-solid fa-xmark"></i></button>
+          <button class="gal-save-load-close" title="关闭" aria-label="关闭">
+            <span>[ X ] RETURN</span>
+          </button>
         </div>
         <div class="gal-save-load-body">
-          <div class="gal-save-load-controls">
-            ${isSaveMode ? `
-              <input type="text" class="gal-save-label-input" id="gal-save-label-input" maxlength="40" placeholder="输入存档名称（可选）">
-              <button class="gal-save-control-btn primary" id="gal-save-create-btn">
-                <i class="fa-solid fa-floppy-disk"></i><span>保存当前进度</span>
-              </button>
-              <button class="gal-save-control-btn" id="gal-save-quick-btn">
-                <i class="fa-solid fa-bolt"></i><span>快速存档</span>
-              </button>
-              ` : `
-              <button class="gal-save-control-btn primary" id="gal-load-quick-btn">
-                <i class="fa-solid fa-bolt"></i><span>快速读档</span>
-              </button>
-              `}
-          </div>
-          <div class="gal-save-slot-list"></div>
+          <aside class="gal-save-load-rail">
+            <section class="gal-save-load-panel gal-save-load-panel-intro">
+              <div class="gal-save-load-panel-label">系统说明</div>
+              <h2 class="gal-save-load-panel-title">${isSaveMode ? "将当前章节定格为可回溯节点。" : "从任意节点重返故事分岔点。"}</h2>
+              <p class="gal-save-load-panel-copy">
+                ${isSaveMode ? "你可以直接创建新存档，或在槽位悬停后覆盖旧记录。" : "快速读档会优先恢复最近一次的快速存档，手动槽位可按需逐个读取。"}
+              </p>
+            </section>
+            <section class="gal-save-load-panel gal-save-load-controls-panel">
+              <div class="gal-save-load-panel-label">操作面板</div>
+              ${isSaveMode ? `
+                <label class="gal-save-load-field" for="gal-save-label-input">
+                  <span class="gal-save-load-field-label">存档标题</span>
+                  <input type="text" class="gal-save-label-input" id="gal-save-label-input" maxlength="40" placeholder="输入存档名称（可选）">
+                </label>
+                <div class="gal-save-load-controls">
+                  <button class="gal-save-control-btn primary" id="gal-save-create-btn">
+                    <i class="fa-solid fa-floppy-disk"></i><span>保存当前进度</span>
+                  </button>
+                  <button class="gal-save-control-btn" id="gal-save-quick-btn">
+                    <i class="fa-solid fa-bolt"></i><span>快速存档</span>
+                  </button>
+                </div>
+                ` : `
+                <p class="gal-save-load-panel-copy compact">快速读档会直接载入最近一次的快速存档。</p>
+                <div class="gal-save-load-controls">
+                  <button class="gal-save-control-btn primary" id="gal-load-quick-btn">
+                    <i class="fa-solid fa-bolt"></i><span>快速读档</span>
+                  </button>
+                </div>
+                `}
+            </section>
+          </aside>
+          <section class="gal-save-load-stage">
+            <div class="gal-save-load-stage-head">
+              <div class="gal-save-load-stage-kicker">ARCHIVE DISPLAY</div>
+              <div class="gal-save-load-stage-title">${isSaveMode ? "选择槽位覆盖旧档，或直接创建新的时间切片。" : "悬停槽位后执行读取或整理操作。"}</div>
+            </div>
+            <div class="gal-save-slot-list"></div>
+          </section>
         </div>
       </div>
     </div>
@@ -65584,6 +66774,205 @@ ${normalizedSource}`;
     return deleteMapImage(GLOBAL_MAP_REGION_KEY, packId);
   }
 
+  // src/db/ui-skin-profiles.js
+  var DEFAULT_PROFILE_NAME = "自定义皮肤";
+  var cachedProfiles = [];
+  var cachedProfileMap = /* @__PURE__ */ new Map();
+  function normalizeProfileDisplayName(rawName, fallback = DEFAULT_PROFILE_NAME) {
+    const name = String(rawName || "").trim();
+    return name || fallback;
+  }
+  function normalizeProfileId(rawId) {
+    const id2 = String(rawId || "").trim();
+    if (!id2) return "";
+    return id2.startsWith(CUSTOM_SKIN_PROFILE_ID_PREFIX) ? id2 : "";
+  }
+  function generateProfileId() {
+    const seed = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    return `${CUSTOM_SKIN_PROFILE_ID_PREFIX}${seed}`;
+  }
+  function compareProfiles(a, b) {
+    const sortA = Number(a?.sortOrder || 0);
+    const sortB = Number(b?.sortOrder || 0);
+    if (sortA !== sortB) return sortA - sortB;
+    const updatedA = String(a?.updatedAt || "");
+    const updatedB = String(b?.updatedAt || "");
+    if (updatedA !== updatedB) return updatedA.localeCompare(updatedB, "zh-Hans-CN");
+    return String(a?.displayName || "").localeCompare(String(b?.displayName || ""), "zh-Hans-CN");
+  }
+  function setProfileCache(list) {
+    cachedProfiles = Array.isArray(list) ? [...list].sort(compareProfiles) : [];
+    cachedProfileMap = new Map(cachedProfiles.map((profile) => [profile.id, profile]));
+    return cachedProfiles;
+  }
+  async function ensureDbReady2() {
+    if (!getDb()) await initDB();
+    return getDb();
+  }
+  async function putProfileRecord(record) {
+    const db = await ensureDbReady2();
+    return new Promise((resolve2, reject2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readwrite");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.put(record);
+      transaction.oncomplete = () => resolve2(record);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
+      request.onerror = () => reject2(request.error);
+    });
+  }
+  async function getProfileRecord(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return null;
+    const db = await ensureDbReady2();
+    return new Promise((resolve2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readonly");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.get(safeId);
+      request.onsuccess = () => resolve2(request.result || null);
+      request.onerror = () => resolve2(null);
+    });
+  }
+  async function deleteProfileRecord(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return false;
+    const db = await ensureDbReady2();
+    return new Promise((resolve2, reject2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readwrite");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.delete(safeId);
+      transaction.oncomplete = () => resolve2(true);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
+      request.onerror = () => reject2(request.error);
+    });
+  }
+  function buildUniqueDisplayName(rawName, profiles = cachedProfiles) {
+    const baseName = normalizeProfileDisplayName(rawName);
+    const existing = new Set((Array.isArray(profiles) ? profiles : []).map((item) => String(item?.displayName || "").trim()));
+    if (!existing.has(baseName)) return baseName;
+    let index = 2;
+    while (existing.has(`${baseName} (${index})`)) {
+      index += 1;
+    }
+    return `${baseName} (${index})`;
+  }
+  function isCustomSkinProfileId(rawId) {
+    return !!normalizeProfileId(rawId);
+  }
+  function hasUiSkinProfileId(rawId) {
+    const safeId = normalizeProfileId(rawId);
+    return !!safeId && cachedProfileMap.has(safeId);
+  }
+  function getCachedUiSkinProfiles() {
+    return cachedProfiles.map((profile) => ({ ...profile }));
+  }
+  function getUiSkinProfileLabel(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return "";
+    return cachedProfileMap.get(safeId)?.displayName || safeId;
+  }
+  function getAvailableUiSkinProfileDisplayName(rawName, profiles = cachedProfiles) {
+    return buildUniqueDisplayName(rawName, profiles);
+  }
+  async function refreshUiSkinProfilesCache() {
+    const db = await ensureDbReady2();
+    return new Promise((resolve2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readonly");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.getAll();
+      request.onsuccess = () => resolve2(setProfileCache(request.result || []));
+      request.onerror = () => resolve2(setProfileCache([]));
+    });
+  }
+  async function listUiSkinProfiles() {
+    const profiles = await refreshUiSkinProfilesCache();
+    return profiles.map((profile) => ({ ...profile }));
+  }
+  async function getUiSkinProfile(id2) {
+    const record = await getProfileRecord(id2);
+    return record ? { ...record } : null;
+  }
+  async function saveUiSkinProfile(profile = {}) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const existing = normalizeProfileId(profile.id) ? await getProfileRecord(profile.id) : null;
+    const id2 = normalizeProfileId(profile.id) || generateProfileId();
+    const record = {
+      id: id2,
+      displayName: normalizeProfileDisplayName(profile.displayName, existing?.displayName || DEFAULT_PROFILE_NAME),
+      createdAt: String(profile.createdAt || existing?.createdAt || now),
+      updatedAt: String(profile.updatedAt || now),
+      sortOrder: Number.isFinite(Number(profile.sortOrder)) ? Number(profile.sortOrder) : Number(existing?.sortOrder || Date.now())
+    };
+    await putProfileRecord(record);
+    await refreshUiSkinProfilesCache();
+    console.log(`[${SCRIPT_NAME}] 保存自定义皮肤 profile: ${record.id} (${record.displayName})`);
+    return { ...record };
+  }
+  async function createUiSkinProfile({ displayName, id: id2 } = {}) {
+    const currentProfiles = await refreshUiSkinProfilesCache();
+    const record = await saveUiSkinProfile({
+      id: id2,
+      displayName: buildUniqueDisplayName(
+        displayName || `${DEFAULT_PROFILE_NAME} ${currentProfiles.length + 1}`,
+        currentProfiles
+      ),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      sortOrder: Date.now()
+    });
+    return record;
+  }
+  async function renameUiSkinProfile(id2, displayName) {
+    const existing = await getProfileRecord(id2);
+    if (!existing) {
+      throw new Error("要重命名的自定义皮肤不存在");
+    }
+    const profiles = await refreshUiSkinProfilesCache();
+    const otherProfiles = profiles.filter((profile) => profile.id !== existing.id);
+    return saveUiSkinProfile({
+      ...existing,
+      displayName: buildUniqueDisplayName(displayName, otherProfiles),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+  async function duplicateUiSkinProfile(sourceId, { displayName, newId } = {}) {
+    const sourceProfile = await getProfileRecord(sourceId);
+    if (!sourceProfile) {
+      throw new Error("源自定义皮肤不存在");
+    }
+    const profiles = await refreshUiSkinProfilesCache();
+    const duplicatedProfile = await saveUiSkinProfile({
+      id: newId || generateProfileId(),
+      displayName: buildUniqueDisplayName(displayName || `${sourceProfile.displayName} 副本`, profiles),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      sortOrder: Date.now()
+    });
+    const assets = await getUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, sourceProfile.id);
+    await Promise.all(
+      assets.map(
+        (asset) => saveUiSkinAsset({
+          ...asset,
+          id: void 0,
+          packId: GLOBAL_CUSTOM_SKIN_PACK_ID,
+          skinId: duplicatedProfile.id
+        })
+      )
+    );
+    console.log(`[${SCRIPT_NAME}] 复制自定义皮肤 profile: ${sourceProfile.id} -> ${duplicatedProfile.id}`);
+    return duplicatedProfile;
+  }
+  async function deleteUiSkinProfile(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return false;
+    await deleteUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, safeId);
+    await deleteProfileRecord(safeId);
+    await refreshUiSkinProfilesCache();
+    console.log(`[${SCRIPT_NAME}] 删除自定义皮肤 profile: ${safeId}`);
+    return true;
+  }
+
   // src/utils/png-character-card.js
   var PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
   function concatBytes(parts) {
@@ -65829,333 +67218,3192 @@ ${normalizedSource}`;
     return concatBytes(parts);
   }
 
-  // src/ui/skin-western-runtime.js
-  var WESTERN_SKIN_ID = "skin-western";
-  var WESTERN_SKIN_STATES = ["normal", "hover", "active"];
-  var WESTERN_SKIN_ELEMENTS = [
-    {
-      id: "main_frame_scene",
-      label: "主画框装饰",
-      selector: ".gal-game-container",
-      aspectRatio: 16 / 9,
-      outputWidth: 1440,
-      supportsStates: ["normal"]
+  // src/core/debug.js
+  var SCRIPT_LOG_PREFIX = `[${SCRIPT_NAME}]`;
+  var EXTRA_LOG_PREFIXES = ["[Live2DManager]"];
+  var PLUGIN_STACK_HINTS = ["数据库界面插件.dist.js", "galgame通用生成器/src/"];
+  var globalDebugEnabled = true;
+  var patchedConsoles = /* @__PURE__ */ new WeakSet();
+  function isPluginLog(args) {
+    if (!Array.isArray(args) || args.length === 0) return false;
+    const first2 = args[0];
+    if (typeof first2 === "string") {
+      if (first2.startsWith(SCRIPT_LOG_PREFIX)) return true;
+      if (EXTRA_LOG_PREFIXES.some((prefix) => first2.startsWith(prefix))) return true;
+    }
+    return isPluginCallsite();
+  }
+  function isPluginCallsite() {
+    try {
+      const stack = new Error().stack;
+      if (!stack) return false;
+      const stackLines = stack.split("\n").slice(3);
+      return stackLines.some((line) => PLUGIN_STACK_HINTS.some((hint) => line.includes(hint)));
+    } catch (e) {
+      return false;
+    }
+  }
+  function shouldSuppress(level, args) {
+    if (globalDebugEnabled) return false;
+    if (level === "error") return false;
+    return isPluginLog(args);
+  }
+  function getConsoleTargets() {
+    const targets = [];
+    if (typeof console !== "undefined") targets.push(console);
+    if (typeof window !== "undefined" && window?.console) targets.push(window.console);
+    if (topWindow?.console) targets.push(topWindow.console);
+    return Array.from(new Set(targets));
+  }
+  function patchSingleConsole(targetConsole) {
+    if (!targetConsole || patchedConsoles.has(targetConsole)) return;
+    patchedConsoles.add(targetConsole);
+    const original = {
+      log: targetConsole.log?.bind(targetConsole),
+      info: targetConsole.info?.bind(targetConsole),
+      warn: targetConsole.warn?.bind(targetConsole),
+      debug: (targetConsole.debug || targetConsole.log)?.bind(targetConsole),
+      error: targetConsole.error?.bind(targetConsole)
+    };
+    const wrap = (level, raw) => (...args) => {
+      if (typeof raw !== "function") return;
+      if (shouldSuppress(level, args)) return;
+      raw(...args);
+    };
+    targetConsole.log = wrap("log", original.log);
+    targetConsole.info = wrap("info", original.info);
+    targetConsole.warn = wrap("warn", original.warn);
+    targetConsole.debug = wrap("debug", original.debug);
+    targetConsole.error = wrap("error", original.error);
+  }
+  function patchConsole() {
+    const targets = getConsoleTargets();
+    for (const targetConsole of targets) {
+      patchSingleConsole(targetConsole);
+    }
+  }
+  function setGlobalDebugEnabled(enabled) {
+    patchConsole();
+    globalDebugEnabled = !!enabled;
+  }
+  function getGlobalDebugEnabled() {
+    return globalDebugEnabled;
+  }
+
+  // src/ui/gpt-sovits-model-manager.js
+  function _safeArray4(value) {
+    return Array.isArray(value) ? value : [];
+  }
+  function _safeObject4(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+  function _toFiniteNumber3(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  function _escapeHtmlLite(text) {
+    return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function _normalizePathSep3(path) {
+    let s = String(path || "");
+    if (!s) return "";
+    s = s.trim();
+    if (s.startsWith('"') && s.endsWith('"') || s.startsWith("'") && s.endsWith("'")) {
+      s = s.slice(1, -1).trim();
+    }
+    try {
+      s = s.normalize("NFC");
+    } catch (e) {
+    }
+    return s.replace(/\\+/g, "/");
+  }
+  function _normalizeImportRootPath(path) {
+    let s = _normalizePathSep3(path).replace(/[\\/]+$/g, "");
+    if (/^[a-zA-Z]:$/.test(s)) s = `${s}/`;
+    return s;
+  }
+  function _normalizeModelMatchKey2(value) {
+    let s = String(value || "").trim();
+    if (!s) return "";
+    try {
+      s = s.normalize("NFKC");
+    } catch (e) {
+    }
+    return s.toLowerCase();
+  }
+  function _pickDefaultRef(model) {
+    const refs = _safeArray4(model?.refAudios);
+    const path = String(model?.paths?.defaultRefAudioPath || "").trim();
+    const id2 = String(model?.defaultRefId || "").trim();
+    return refs.find((item) => item.path === path) || refs.find((item) => item.id === id2) || refs[0] || null;
+  }
+  function _clearLegacyImportPathSettings() {
+    const settings2 = getSettings();
+    settings2.gptSoVits = settings2.gptSoVits || {};
+    let changed = false;
+    if (String(settings2.gptSoVits.rootDir || "").trim()) {
+      settings2.gptSoVits.rootDir = "";
+      changed = true;
+    }
+    if (String(settings2.gptSoVits.importPathPrefix || "").trim()) {
+      settings2.gptSoVits.importPathPrefix = "";
+      changed = true;
+    }
+    if (changed) saveSettings();
+  }
+  function _modelToLegacyVoice(model) {
+    if (!model) return null;
+    const defRef = _pickDefaultRef(model);
+    const params = _safeObject4(model.params);
+    return {
+      name: String(model.name || "").trim(),
+      desc: String(model.desc || "").trim(),
+      refAudioPath: String(defRef?.path || model?.paths?.defaultRefAudioPath || "").trim(),
+      promptText: String(defRef?.promptText || params.promptText || "").trim(),
+      promptLang: String(defRef?.promptLang || params.promptLang || "zh").trim() || "zh",
+      textLang: String(defRef?.textLang || params.textLang || "auto").trim() || "auto",
+      gptWeightsPath: String(model?.paths?.gptWeightsPath || "").trim(),
+      sovitsWeightsPath: String(model?.paths?.sovitsWeightsPath || "").trim()
+    };
+  }
+  function _saveModelsToSettings(models) {
+    const settings2 = getSettings();
+    settings2.gptSoVits = settings2.gptSoVits || {};
+    const cfg = getGptSoVitsConfig();
+    const normalized = normalizeGptSoVitsModelsForStore(models, cfg);
+    settings2.gptSoVits.models = normalized;
+    settings2.gptSoVits.voices = normalized.map(_modelToLegacyVoice).filter(Boolean);
+    saveSettings();
+    return normalized;
+  }
+  function _getModelsFromSettings() {
+    const cfg = getGptSoVitsConfig();
+    return normalizeGptSoVitsModelsForStore(cfg.models, cfg);
+  }
+  function _buildDefaultModel() {
+    const cfg = getGptSoVitsConfig();
+    return normalizeGptSoVitsModelForStore(
+      {
+        id: buildGptSoVitsModelId("model"),
+        name: "新模型",
+        enabled: true,
+        desc: "",
+        paths: { gptWeightsPath: "", sovitsWeightsPath: "", defaultRefAudioPath: "" },
+        params: {
+          promptText: "",
+          promptLang: "zh",
+          textLang: cfg.textLang || "auto",
+          textSplitMethod: cfg.textSplitMethod || "cut5",
+          speedFactor: _toFiniteNumber3(cfg.speedFactor, 1),
+          mediaType: cfg.mediaType || "wav",
+          streamingMode: !!cfg.streamingMode,
+          modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || "set_weights"),
+          setModelEndpoint: normalizeSetModelEndpoint(cfg.setModelEndpoint || "/set_model"),
+          strictWeightSwitch: !!cfg.strictWeightSwitch
+        },
+        refAudios: [],
+        defaultRefId: "",
+        expressionRefMap: {}
+      },
+      cfg
+    ) || null;
+  }
+  async function _previewModel(model, sampleText = "") {
+    const cfg = getGptSoVitsConfig();
+    const normalized = normalizeGptSoVitsModelForStore(model, cfg);
+    if (!normalized) {
+      showToast4("试听失败：模型配置无效");
+      return false;
+    }
+    const runtimeVoice = buildRuntimeVoiceFromGptSoVitsModel(normalized, cfg);
+    if (!runtimeVoice) {
+      showToast4("试听失败：请先配置参考音频");
+      return false;
+    }
+    if (!String(cfg.apiUrl || "").trim()) {
+      showToast4("试听失败：请先填写 GPT-SoVITS API 地址");
+      return false;
+    }
+    const segment = {
+      type: "dialogue",
+      speaker: "",
+      text: String(sampleText || normalized?.params?.promptText || "").trim() || "你好，这是模型试听。",
+      expression: "默认",
+      tts: { emotion: "默认" }
+    };
+    try {
+      TTSManager.stop();
+      const playbackSessionId = Number(TTSManager._activePlaybackSessionId || 0) + 1;
+      TTSManager._activePlaybackSessionId = playbackSessionId;
+      TTSManager._abortGptSoVitsFetch("model-preview");
+      const ok = await TTSManager._speakWithGptSoVits(segment, `model_preview_${Date.now()}`, runtimeVoice, playbackSessionId);
+      if (!ok) showToast4("试听失败：请检查 API、模型路径和参考音频");
+      return !!ok;
+    } catch (e) {
+      const msg = String(e?.message || e || "").trim();
+      showToast4(`试听失败：${msg || "unknown error"}`);
+      return false;
+    }
+  }
+  async function _openModelEditor(modelInput, onSave) {
+    const cfg = getGptSoVitsConfig();
+    const working = normalizeGptSoVitsModelForStore(modelInput || _buildDefaultModel(), cfg) || _buildDefaultModel();
+    if (!working) {
+      showToast4("模型初始化失败");
+      return;
+    }
+    const refsText = JSON.stringify(_safeArray4(working.refAudios), null, 2);
+    const mapText = JSON.stringify(_safeObject4(working.expressionRefMap), null, 2);
+    const current = Object.assign({}, working, {
+      refAudiosJson: refsText,
+      expressionRefMapJson: mapText
+    });
+    const modalHtml = `
+    <div class="gal-input-modal" id="gal-gpt-model-editor-modal">
+      <div class="gal-input-box gal-modal-layout-fixed" style="width:min(1100px,95vw);max-width:none !important;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+        <div class="gal-input-title gal-modal-fixed-header" style="margin:0;padding:12px 14px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;transform:none;">
+          <span style="transform:none;color:${THEME.dark};font-weight:700;font-size:1.15rem;">GPT-SoVITS 模型编辑</span>
+        </div>
+        <div class="gal-modal-scroll-body" style="padding:12px 14px 8px 14px;">
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:10px;">
+          <label>模型名<input id="gal-gpt-edit-name" value="${_escapeHtmlLite(current.name || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>备注<input id="gal-gpt-edit-desc" value="${_escapeHtmlLite(current.desc || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>gpt权重<input id="gal-gpt-edit-gpt" value="${_escapeHtmlLite(current.paths?.gptWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>sovits权重<input id="gal-gpt-edit-sovits" value="${_escapeHtmlLite(current.paths?.sovitsWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>默认参考音频<input id="gal-gpt-edit-ref" value="${_escapeHtmlLite(current.paths?.defaultRefAudioPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>prompt_text<input id="gal-gpt-edit-prompt" value="${_escapeHtmlLite(current.params?.promptText || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>prompt_lang<input id="gal-gpt-edit-plang" value="${_escapeHtmlLite(current.params?.promptLang || "zh")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>text_lang<input id="gal-gpt-edit-tlang" value="${_escapeHtmlLite(current.params?.textLang || "auto")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+        </div>
+        <div style="margin-top:10px;">
+          <label>参考音频列表 JSON<textarea id="gal-gpt-edit-refs" rows="8" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current.refAudiosJson)}</textarea></label>
+        </div>
+        <div style="margin-top:10px;">
+          <label>表情映射 JSON<textarea id="gal-gpt-edit-map" rows="6" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current.expressionRefMapJson)}</textarea></label>
+        </div>
+        </div>
+        <div class="gal-input-actions gal-modal-fixed-actions" style="display:flex;justify-content:flex-end;gap:8px;margin:0;padding:12px 14px;border-top:1px solid #e5e7eb;">
+          <button class="gal-action-btn" id="gal-gpt-edit-preview"><i class="fa-solid fa-play"></i> 试听</button>
+          <button class="gal-action-btn" id="gal-gpt-edit-cancel">取消</button>
+          <button class="gal-action-btn primary" id="gal-gpt-edit-save"><i class="fa-solid fa-save"></i> 保存</button>
+        </div>
+      </div>
+    </div>
+  `;
+    const mountRoot = getModalMountRoot();
+    $2(mountRoot).find("#gal-gpt-model-editor-modal").remove();
+    $2(mountRoot).append(modalHtml);
+    const $modal = $2(mountRoot).find("#gal-gpt-model-editor-modal");
+    const close = () => $modal.remove();
+    $modal.on("click", (e) => {
+      if (e.target === $modal[0]) close();
+    });
+    $modal.find("#gal-gpt-edit-cancel").on("click", close);
+    $modal.find("#gal-gpt-edit-preview").on("click", async () => {
+      let refs = [];
+      try {
+        refs = JSON.parse($modal.find("#gal-gpt-edit-refs").val() || "[]");
+      } catch (e) {
+        showToast4("参考音频 JSON 无法解析");
+        return;
+      }
+      const draft = {
+        id: working.id || buildGptSoVitsModelId("model"),
+        name: String($modal.find("#gal-gpt-edit-name").val() || "").trim(),
+        desc: String($modal.find("#gal-gpt-edit-desc").val() || "").trim(),
+        enabled: true,
+        paths: {
+          gptWeightsPath: String($modal.find("#gal-gpt-edit-gpt").val() || "").trim(),
+          sovitsWeightsPath: String($modal.find("#gal-gpt-edit-sovits").val() || "").trim(),
+          defaultRefAudioPath: String($modal.find("#gal-gpt-edit-ref").val() || "").trim()
+        },
+        params: {
+          promptText: String($modal.find("#gal-gpt-edit-prompt").val() || "").trim(),
+          promptLang: String($modal.find("#gal-gpt-edit-plang").val() || "zh").trim() || "zh",
+          textLang: String($modal.find("#gal-gpt-edit-tlang").val() || "auto").trim() || "auto"
+        },
+        refAudios: _safeArray4(refs),
+        expressionRefMap: {},
+        defaultRefId: ""
+      };
+      await _previewModel(draft);
+    });
+    $modal.find("#gal-gpt-edit-save").on("click", async () => {
+      let refs = [];
+      let exprMap = {};
+      try {
+        refs = JSON.parse($modal.find("#gal-gpt-edit-refs").val() || "[]");
+      } catch (e) {
+        showToast4("参考音频 JSON 无法解析");
+        return;
+      }
+      try {
+        exprMap = JSON.parse($modal.find("#gal-gpt-edit-map").val() || "{}");
+      } catch (e) {
+        showToast4("表情映射 JSON 无法解析");
+        return;
+      }
+      const draft = {
+        id: working.id || buildGptSoVitsModelId("model"),
+        name: String($modal.find("#gal-gpt-edit-name").val() || "").trim(),
+        desc: String($modal.find("#gal-gpt-edit-desc").val() || "").trim(),
+        enabled: true,
+        paths: {
+          gptWeightsPath: String($modal.find("#gal-gpt-edit-gpt").val() || "").trim(),
+          sovitsWeightsPath: String($modal.find("#gal-gpt-edit-sovits").val() || "").trim(),
+          defaultRefAudioPath: String($modal.find("#gal-gpt-edit-ref").val() || "").trim()
+        },
+        params: {
+          promptText: String($modal.find("#gal-gpt-edit-prompt").val() || "").trim(),
+          promptLang: String($modal.find("#gal-gpt-edit-plang").val() || "zh").trim() || "zh",
+          textLang: String($modal.find("#gal-gpt-edit-tlang").val() || "auto").trim() || "auto"
+        },
+        refAudios: _safeArray4(refs),
+        expressionRefMap: _safeObject4(exprMap),
+        defaultRefId: ""
+      };
+      const normalized = normalizeGptSoVitsModelForStore(draft, cfg);
+      if (!normalized || !String(normalized.name || "").trim()) {
+        showToast4("模型保存失败：模型名不能为空");
+        return;
+      }
+      if (typeof onSave === "function") await onSave(normalized);
+      close();
+    });
+  }
+  function openGptSoVitsModelManager(options2 = {}) {
+    const onChanged = typeof options2.onChanged === "function" ? options2.onChanged : null;
+    const mountRoot = getModalMountRoot();
+    $2(mountRoot).find("#gal-gpt-model-manager-modal").remove();
+    _clearLegacyImportPathSettings();
+    $2(mountRoot).append(`
+    <div class="gal-input-modal" id="gal-gpt-model-manager-modal">
+      <div class="gal-input-box" style="width:min(1500px,96vw);max-width:none !important;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
+        <div style="padding:12px 14px;border-bottom:1px solid #ddd;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-weight:700;">GPT-SoVITS 模型管理</div>
+          <button class="gal-action-btn" id="gal-gpt-model-manager-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
+        </div>
+        <div style="padding:10px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;flex-wrap:wrap;background:#f8fafc;">
+          <button class="gal-action-btn primary" id="gal-gpt-model-add"><i class="fa-solid fa-plus"></i> 新增模型</button>
+          <button class="gal-action-btn" id="gal-gpt-model-import-folder"><i class="fa-solid fa-folder-open"></i> 文件夹导入</button>
+          <input type="file" id="gal-gpt-model-import-folder-file" webkitdirectory directory multiple style="display:none;">
+          <input type="text" id="gal-gpt-model-search" placeholder="搜索模型名..." style="flex:1;min-width:260px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;">
+        </div>
+        <div id="gal-gpt-model-list" style="padding:12px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;background:var(--SmartThemeFormBg,#fff);"></div>
+      </div>
+    </div>
+  `);
+    const $modal = $2(mountRoot).find("#gal-gpt-model-manager-modal");
+    let models = _getModelsFromSettings();
+    const close = () => $modal.remove();
+    $modal.on("click", (e) => {
+      if (e.target === $modal[0]) close();
+    });
+    $modal.find("#gal-gpt-model-manager-close").on("click", close);
+    const saveModels = async (next) => {
+      models = _saveModelsToSettings(next);
+      if (typeof onChanged === "function") await onChanged(models);
+      renderList();
+    };
+    const getLegacyImportPrefix = () => {
+      const settings2 = getSettings();
+      return String(settings2.gptSoVits?.importPathPrefix || settings2.gptSoVits?.rootDir || "").trim();
+    };
+    const renderList = () => {
+      const keyword = String($modal.find("#gal-gpt-model-search").val() || "").trim().toLowerCase();
+      const filtered = models.filter((model) => String(model.name || "").toLowerCase().includes(keyword));
+      const $list = $modal.find("#gal-gpt-model-list");
+      $list.empty();
+      if (!filtered.length) {
+        $list.html('<div style="color:#94a3b8;">暂无模型，可点击「新增模型」或「文件夹导入」。</div>');
+        return;
+      }
+      filtered.forEach((model) => {
+        const refCount = _safeArray4(model.refAudios).length;
+        const gptPath = String(model?.paths?.gptWeightsPath || "").trim();
+        const sovitsPath = String(model?.paths?.sovitsWeightsPath || "").trim();
+        const activeRef = _pickDefaultRef(model);
+        const refPath = String(activeRef?.path || model?.paths?.defaultRefAudioPath || "").trim();
+        $list.append(`
+        <div style="border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,#fff,#f8fbff);" data-model-id="${_escapeHtmlLite(model.id)}">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+            <div style="font-weight:700;color:#0f172a;">${_escapeHtmlLite(model.name)}</div>
+            <span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${model.enabled !== false ? "#dcfce7" : "#fee2e2"};color:${model.enabled !== false ? "#166534" : "#991b1b"};">${model.enabled !== false ? "已启用" : "已停用"}</span>
+          </div>
+          <div style="font-size:0.78rem;color:#475569;">${_escapeHtmlLite(model.desc || "无备注")}</div>
+          <div style="font-size:0.78rem;color:#64748b;">参考音频 ${refCount} 条</div>
+          <div style="font-size:0.78rem;color:#64748b;">CKPT: ${_escapeHtmlLite(gptPath || "(未设置)")}</div>
+          <div style="font-size:0.78rem;color:#64748b;">PTH: ${_escapeHtmlLite(sovitsPath || "(未设置)")}</div>
+          <div style="font-size:0.78rem;color:#64748b;">默认参考: ${_escapeHtmlLite(refPath || "(未设置)")}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="gal-action-btn primary" data-action="edit"><i class="fa-solid fa-pen"></i> 编辑</button>
+            <button class="gal-action-btn" data-action="preview"><i class="fa-solid fa-play"></i> 试听</button>
+            <button class="gal-action-btn" data-action="copy"><i class="fa-solid fa-copy"></i> 复制</button>
+            <button class="gal-action-btn" data-action="set-default"><i class="fa-solid fa-star"></i> 设为默认</button>
+            <button class="gal-action-btn" data-action="delete"><i class="fa-solid fa-trash"></i> 删除</button>
+          </div>
+        </div>
+      `);
+      });
+    };
+    $modal.find("#gal-gpt-model-search").on("input", renderList);
+    $modal.find("#gal-gpt-model-add").on("click", () => {
+      _openModelEditor(_buildDefaultModel(), async (model) => {
+        await saveModels(models.concat([model]));
+        showToast4(`已新增模型：${model.name}`);
+      });
+    });
+    $modal.find("#gal-gpt-model-import-folder").on("click", () => {
+      $modal.find("#gal-gpt-model-import-folder-file").trigger("click");
+    });
+    $modal.find("#gal-gpt-model-import-folder-file").on("change", async function() {
+      try {
+        const list = this.files;
+        if (!list || list.length === 0) return;
+        const files = Array.from(list);
+        const legacyPrefix = _normalizePathSep3(getLegacyImportPrefix());
+        const manualPrefix = window.prompt(
+          "请输入导入根路径（绝对路径）。\n例如你选的是 I:/Downloads/GPT-SoVITS v2 pro plus/MyGO!!!!!/高松灯\n可填写 I:/Downloads/GPT-SoVITS v2 pro plus/MyGO!!!!!\n也可填写 I:/Downloads/GPT-SoVITS v2 pro plus/MyGO!!!!!/高松灯（末尾有无 / 或 \\ 都可）",
+          legacyPrefix || ""
+        );
+        const importPrefix = _normalizeImportRootPath(String(manualPrefix || "").trim());
+        if (!importPrefix) {
+          showToast4("已取消导入：未填写导入根路径。");
+          return;
+        }
+        showToast4(`本次导入路径：${importPrefix}`);
+        let rootName = "";
+        for (const file of files) {
+          const rel = String(file?.webkitRelativePath || "").trim().replace(/\\/g, "/");
+          const first2 = String(rel.split("/")[0] || "").trim();
+          if (first2) {
+            rootName = first2;
+            break;
+          }
+        }
+        const imported = inferGptSoVitsModelsFromFolderFiles(files, importPrefix, { relativeRootName: rootName });
+        if (!imported.length) {
+          showToast4("未识别到可导入模型（至少需要参考音频）");
+          return;
+        }
+        if (!window.confirm(`识别到 ${imported.length} 个模型，是否导入？`)) return;
+        const next = models.slice();
+        let replaced = 0;
+        imported.forEach((model) => {
+          const incomingName = _normalizeModelMatchKey2(model?.name);
+          const incomingId = _normalizeModelMatchKey2(model?.id);
+          const idx = next.findIndex((item) => {
+            const currentName = _normalizeModelMatchKey2(item?.name);
+            const currentId = _normalizeModelMatchKey2(item?.id);
+            if (incomingName && currentName === incomingName) return true;
+            if (incomingId && currentId === incomingId) return true;
+            return false;
+          });
+          if (idx >= 0) {
+            next[idx] = model;
+            replaced += 1;
+          } else {
+            next.push(model);
+          }
+        });
+        await saveModels(next);
+        showToast4(replaced > 0 ? `已导入 ${imported.length} 条，覆盖同名 ${replaced} 条` : `已导入模型 ${imported.length} 条`);
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 模型导入失败:`, e);
+        showToast4("模型导入失败，请检查目录结构");
+      } finally {
+        $2(this).val("");
+      }
+    });
+    $modal.on("click", "[data-model-id] [data-action]", function() {
+      const id2 = String($2(this).closest("[data-model-id]").attr("data-model-id") || "").trim();
+      const action = String($2(this).attr("data-action") || "").trim();
+      const index = models.findIndex((item) => item.id === id2);
+      if (index < 0) return;
+      const target = models[index];
+      if (action === "edit") {
+        _openModelEditor(target, async (model) => {
+          const next = models.slice();
+          next[index] = model;
+          await saveModels(next);
+          showToast4(`已更新模型：${model.name}`);
+        });
+        return;
+      }
+      if (action === "preview") {
+        void _previewModel(target, String(target?.params?.promptText || "").trim() || "你好，这是模型试听。");
+        return;
+      }
+      if (action === "copy") {
+        const copied = Object.assign({}, JSON.parse(JSON.stringify(target || {})), {
+          id: buildGptSoVitsModelId(target.name || "model"),
+          name: `${target.name}_副本`
+        });
+        void saveModels(models.concat([copied])).then(() => showToast4(`已复制模型：${copied.name}`));
+        return;
+      }
+      if (action === "set-default") {
+        const settings2 = getSettings();
+        settings2.ttsDefaultSpeaker = target.name;
+        saveSettings();
+        showToast4(`默认音色已切换为：${target.name}`);
+        if (typeof onChanged === "function") void onChanged(models);
+        return;
+      }
+      if (action === "delete") {
+        if (!window.confirm(`确定删除模型「${target.name}」吗？`)) return;
+        const next = models.filter((item) => item.id !== id2);
+        void saveModels(next).then(() => showToast4(`已删除模型：${target.name}`));
+      }
+    });
+    renderList();
+  }
+
+  // src/ui/custom-skin-runtime.js
+  var MOBILE_BREAKPOINT = 768;
+  var INTERACTIVE_MIN_SIZE = 36;
+  var FULL_RECT_POINTS = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 }
+  ];
+  var FOOTER_BUTTON_DEFAULTS = {
+    desktop: {
+      widthRatio: 0.11,
+      offsetXRatio: 0,
+      offsetYRatio: 0,
+      anchorXRatio: 0,
+      anchorYRatio: 0,
+      hitArea: { type: "polygon", points: FULL_RECT_POINTS }
     },
+    mobile: {
+      widthRatio: 0.18,
+      offsetXRatio: 0,
+      offsetYRatio: 0,
+      anchorXRatio: 0,
+      anchorYRatio: 0,
+      hitArea: { type: "polygon", points: FULL_RECT_POINTS }
+    }
+  };
+  var CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID = "footer_btn_common";
+  var CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS = [
+    "footer_btn_log",
+    "footer_btn_close",
+    "footer_btn_view",
+    "footer_btn_config",
+    "footer_btn_save",
+    "footer_btn_load",
+    "footer_btn_timeline",
+    "footer_btn_prev",
+    "footer_btn_auto",
+    "footer_btn_skip"
+  ];
+  var CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS = [
+    ...CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS,
+    "footer_btn_choices",
+    "footer_btn_next"
+  ];
+  function createFooterButtonElement(id2, label) {
+    return {
+      id: id2,
+      label,
+      supportsTextToggle: true,
+      aspectRatio: 3.3,
+      outputWidth: 720,
+      supportsStates: ["normal", "hover", "active"],
+      interactive: true,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { ...FOOTER_BUTTON_DEFAULTS.desktop },
+        mobile: { ...FOOTER_BUTTON_DEFAULTS.mobile }
+      }
+    };
+  }
+  var CUSTOM_SKIN_STATES = ["normal", "hover", "active"];
+  var CUSTOM_SKIN_ELEMENTS = [
     {
       id: "dialog_panel",
       label: "对话框",
-      selector: ".gal-text-panel",
-      aspectRatio: 2.5,
-      outputWidth: 1280,
-      supportsStates: ["normal"]
+      transparentContentTarget: "textPadding",
+      aspectRatio: 4.25,
+      outputWidth: 1440,
+      supportsStates: ["normal"],
+      interactive: false,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: {
+          widthRatio: 0.76,
+          offsetXRatio: 0,
+          offsetYRatio: 0,
+          anchorXRatio: 0,
+          anchorYRatio: 0,
+          textPaddingRatio: { top: 0.18, right: 0.055, bottom: 0.14, left: 0.055 }
+        },
+        mobile: {
+          widthRatio: 0.9,
+          offsetXRatio: 0,
+          offsetYRatio: 0,
+          anchorXRatio: 0,
+          anchorYRatio: 0,
+          textPaddingRatio: { top: 0.18, right: 0.06, bottom: 0.15, left: 0.06 }
+        }
+      }
     },
     {
       id: "name_badge",
-      label: "名牌",
-      selector: ".gal-name-badge",
-      aspectRatio: 3.2,
-      outputWidth: 480,
-      supportsStates: ["normal"]
+      label: "姓名牌",
+      supportsTextToggle: true,
+      aspectRatio: 4.8,
+      outputWidth: 720,
+      supportsStates: ["normal"],
+      interactive: false,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { widthRatio: 0.19, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0 },
+        mobile: { widthRatio: 0.3, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0 }
+      }
     },
     {
       id: "btn_reroll",
-      label: "重绘按钮",
-      selector: ".gal-action-btn.btn-reroll",
+      label: "重掷按钮",
+      supportsTextToggle: true,
       aspectRatio: 2.6,
-      outputWidth: 420,
-      supportsStates: WESTERN_SKIN_STATES
+      outputWidth: 640,
+      supportsStates: ["normal", "hover", "active"],
+      interactive: true,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { widthRatio: 0.08, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } },
+        mobile: { widthRatio: 0.15, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } }
+      }
     },
     {
       id: "btn_free_input",
-      label: "自由对话按钮",
-      selector: ".gal-action-btn.btn-free",
-      aspectRatio: 2.6,
-      outputWidth: 420,
-      supportsStates: WESTERN_SKIN_STATES
+      label: "自由输入按钮",
+      supportsTextToggle: true,
+      aspectRatio: 3.5,
+      outputWidth: 720,
+      supportsStates: ["normal", "hover", "active"],
+      interactive: true,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { widthRatio: 0.11, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } },
+        mobile: { widthRatio: 0.18, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } }
+      }
     },
     {
       id: "footer_btn_common",
-      label: "底栏普通按钮",
-      selector: ".gal-footer-btn",
-      aspectRatio: 1.8,
-      outputWidth: 360,
-      supportsStates: WESTERN_SKIN_STATES
+      label: "底栏通用按钮 / 批量导入",
+      supportsTextToggle: true,
+      aspectRatio: 3.3,
+      outputWidth: 720,
+      supportsStates: ["normal", "hover", "active"],
+      interactive: true,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { ...FOOTER_BUTTON_DEFAULTS.desktop },
+        mobile: { ...FOOTER_BUTTON_DEFAULTS.mobile }
+      }
     },
+    createFooterButtonElement("footer_btn_log", "底栏按钮 LOG"),
+    createFooterButtonElement("footer_btn_close", "底栏按钮 CLOSE"),
+    createFooterButtonElement("footer_btn_view", "底栏按钮 VIEW"),
+    createFooterButtonElement("footer_btn_config", "底栏按钮 CONFIG"),
+    createFooterButtonElement("footer_btn_save", "底栏按钮 SAVE"),
+    createFooterButtonElement("footer_btn_load", "底栏按钮 LOAD"),
+    createFooterButtonElement("footer_btn_timeline", "底栏按钮 TL"),
+    createFooterButtonElement("footer_btn_prev", "底栏按钮 PREV"),
+    createFooterButtonElement("footer_btn_auto", "底栏按钮 AUTO"),
+    createFooterButtonElement("footer_btn_skip", "底栏按钮 SKIP"),
     {
       id: "footer_btn_choices",
-      label: "底栏选项按钮",
-      selector: ".gal-pending-choices-btn",
-      aspectRatio: 1.8,
-      outputWidth: 360,
-      supportsStates: WESTERN_SKIN_STATES
+      label: "选项按钮",
+      supportsTextToggle: true,
+      aspectRatio: 3.2,
+      outputWidth: 720,
+      supportsStates: ["normal", "hover", "active"],
+      interactive: true,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { widthRatio: 0.13, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } },
+        mobile: { widthRatio: 0.23, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } }
+      }
     },
     {
       id: "footer_btn_next",
-      label: "NEXT 按钮",
-      selector: ".gal-footer-btn-next",
-      aspectRatio: 2.6,
-      outputWidth: 520,
-      supportsStates: WESTERN_SKIN_STATES
-    },
-    {
-      id: "status_bar_container",
-      label: "顶部状态栏",
-      selector: ".gal-location-bar, .gal-time-bar",
-      aspectRatio: 3.8,
-      outputWidth: 500,
-      supportsStates: ["normal"]
+      label: "下一句按钮",
+      supportsTextToggle: true,
+      aspectRatio: 3.2,
+      outputWidth: 720,
+      supportsStates: ["normal", "hover", "active"],
+      interactive: true,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { widthRatio: 0.11, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } },
+        mobile: { widthRatio: 0.19, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } }
+      }
     },
     {
       id: "fullscreen_btn",
       label: "全屏按钮",
-      selector: ".gal-fullscreen-btn",
-      aspectRatio: 2.2,
+      supportsTextToggle: true,
+      aspectRatio: 1,
       outputWidth: 320,
-      supportsStates: WESTERN_SKIN_STATES
+      supportsStates: ["normal", "hover", "active"],
+      interactive: true,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { widthRatio: 0.045, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } },
+        mobile: { widthRatio: 0.085, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0, hitArea: { type: "polygon", points: FULL_RECT_POINTS } }
+      }
     },
     {
       id: "bgm_widget",
-      label: "BGM 小组件",
-      selector: ".gal-bgm-widget",
-      aspectRatio: 3.8,
-      outputWidth: 640,
-      supportsStates: ["normal"]
-    }
-  ];
-  var DEFAULT_SCENE_CLIP_DESKTOP = "inset(14% 18% 54% 18%)";
-  var DEFAULT_SCENE_CLIP_MOBILE = "inset(17% 15% 55% 15%)";
-  var DEFAULT_CONTROL_TOP_DESKTOP = "clamp(5.5rem, 10vh, 7.5rem)";
-  var DEFAULT_CONTROL_TOP_MOBILE = "clamp(4.7rem, 10vh, 6rem)";
-  var runtimeBlobUrls = [];
-  var forcedRuntimeDevice = null;
-  function normalizeString(value, fallback = "") {
-    const text = String(value || "").trim();
-    return text || fallback;
-  }
-  function normalizeNumber(value, fallback = null) {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return parsed;
-  }
-  function toPx(value, fallback = null) {
-    const num = normalizeNumber(value, null);
-    if (num === null) return fallback;
-    return `${num}px`;
-  }
-  function getRuntimeDevice() {
-    if (forcedRuntimeDevice === "desktop" || forcedRuntimeDevice === "mobile") {
-      return forcedRuntimeDevice;
-    }
-    try {
-      const isMobile = topWindow.matchMedia && topWindow.matchMedia("(max-width: 48rem)").matches;
-      return isMobile ? "mobile" : "desktop";
-    } catch {
-      return "desktop";
-    }
-  }
-  function setWesternSkinRuntimePreviewDevice(device = null) {
-    const next = normalizeString(device, "");
-    if (next === "desktop" || next === "mobile") {
-      forcedRuntimeDevice = next;
-      return forcedRuntimeDevice;
-    }
-    forcedRuntimeDevice = null;
-    return null;
-  }
-  function cssVarKey(elementId, state, suffix = "image") {
-    return `--western-${elementId}-${state}-${suffix}`;
-  }
-  function cssLayoutVarKey(elementId, key) {
-    return `--western-${elementId}-${key}`;
-  }
-  function resolveBackgroundSize(scaleMode) {
-    const mode = normalizeString(scaleMode, "stretch");
-    if (mode === "contain") return "contain";
-    if (mode === "cover") return "cover";
-    return "100% 100%";
-  }
-  function clearWesternCssVars(overlayEl) {
-    if (!overlayEl) return;
-    for (let i = overlayEl.style.length - 1; i >= 0; i--) {
-      const propName = overlayEl.style[i];
-      if (propName && propName.startsWith("--western-")) {
-        overlayEl.style.removeProperty(propName);
+      label: "BGM 组件",
+      supportsTextToggle: true,
+      aspectRatio: 3.4,
+      outputWidth: 720,
+      supportsStates: ["normal"],
+      interactive: false,
+      defaultScaleMode: "stretch",
+      defaults: {
+        desktop: { widthRatio: 0.18, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0 },
+        mobile: { widthRatio: 0.28, offsetXRatio: 0, offsetYRatio: 0, anchorXRatio: 0, anchorYRatio: 0 }
       }
     }
+  ];
+  var RUNTIME_ELEMENT_MAP = new Map(CUSTOM_SKIN_ELEMENTS.map((item) => [item.id, item]));
+  var RUNTIME_STYLE_SUFFIXES = [
+    "width",
+    "height",
+    "offset-x",
+    "offset-y",
+    "anchor-x",
+    "anchor-y",
+    "bg-size"
+  ];
+  var ACTIVE_RUNTIME_CLASS = "custom-skin-element-active";
+  var TEXT_HIDDEN_RUNTIME_CLASS = "custom-skin-hide-text";
+  var STATE_IMAGE_CLASS_MAP = {
+    normal: "custom-skin-has-normal-image",
+    hover: "custom-skin-has-hover-image",
+    active: "custom-skin-has-active-image"
+  };
+  var TOOLBAR_RELATED_ELEMENT_IDS = /* @__PURE__ */ new Set([
+    "btn_reroll",
+    "btn_free_input",
+    ...CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS,
+    "footer_btn_choices",
+    "footer_btn_next"
+  ]);
+  var RUNTIME_ELEMENT_SELECTOR_MAP = {
+    dialog_panel: [".gal-text-panel"],
+    name_badge: [".gal-name-badge"],
+    btn_reroll: [".gal-action-btn.btn-reroll"],
+    btn_free_input: [".gal-action-btn.btn-free"],
+    footer_btn_log: ['.gal-footer-btn[data-action="log"]'],
+    footer_btn_close: ['.gal-footer-btn[data-action="close-mode"]'],
+    footer_btn_view: ['.gal-footer-btn[data-action="view-original"]'],
+    footer_btn_config: ['.gal-footer-btn[data-action="config"]'],
+    footer_btn_save: ['.gal-footer-btn[data-action="save"]'],
+    footer_btn_load: ['.gal-footer-btn[data-action="load"]'],
+    footer_btn_timeline: ['.gal-footer-btn[data-action="timeline"]'],
+    footer_btn_prev: ['.gal-footer-btn[data-action="prev"]'],
+    footer_btn_auto: ['.gal-footer-btn[data-action="auto"]'],
+    footer_btn_skip: ['.gal-footer-btn[data-action="skip"]'],
+    footer_btn_choices: [".gal-pending-choices-btn"],
+    footer_btn_next: [".gal-footer-btn-next"],
+    fullscreen_btn: [".gal-fullscreen-btn"],
+    bgm_widget: [".gal-bgm-widget"],
+    __toolbar_controls__: [".gal-bottom-toolbar"]
+  };
+  var COMPONENT_DETECTION_SELECTOR_MAP = {
+    ...RUNTIME_ELEMENT_SELECTOR_MAP
+  };
+  var FOOTER_NODE_STYLE_PREFIX = "--custom-skin-footer_btn_common-";
+  var FOOTER_FALLBACK_ELEMENT_ID_SET = new Set(CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS);
+  var LIVE_RUNTIME_LAYOUT_ELEMENT_IDS = /* @__PURE__ */ new Set([
+    "dialog_panel"
+  ]);
+  var runtimePreviewDevice = null;
+  var runtimeBlobUrls = [];
+  var runtimeResizeObserver = null;
+  var runtimeObservedHost = null;
+  var runtimeResizeWindow = null;
+  var runtimeResizeRaf = 0;
+  var runtimeApplyToken = 0;
+  function getWindowObject() {
+    return topWindow || window;
+  }
+  function getOverlayElement() {
+    return getWindowObject().document?.querySelector?.("#gal-global-overlay") || null;
+  }
+  function getHostElement(overlay = getOverlayElement()) {
+    if (!overlay) return null;
+    return overlay.querySelector(".gal-game-container") || overlay;
+  }
+  function getRuntimeNodesForElement(overlay, elementId, { forDetection = false } = {}) {
+    if (!overlay) return [];
+    const selectorMap = forDetection ? COMPONENT_DETECTION_SELECTOR_MAP : RUNTIME_ELEMENT_SELECTOR_MAP;
+    const selectors = selectorMap[elementId];
+    if (!Array.isArray(selectors) || selectors.length === 0) return [];
+    const nodes3 = [];
+    const seen = /* @__PURE__ */ new Set();
+    selectors.forEach((selector) => {
+      overlay.querySelectorAll(selector).forEach((node) => {
+        if (seen.has(node)) return;
+        seen.add(node);
+        nodes3.push(node);
+      });
+    });
+    return nodes3;
+  }
+  function customSkinElementUsesRuntimeLayout(elementId) {
+    return LIVE_RUNTIME_LAYOUT_ELEMENT_IDS.has(String(elementId || "").trim());
+  }
+  function getRuntimeTextNodes(node) {
+    if (!node?.querySelectorAll) return [];
+    if (node.matches?.(".gal-name-badge")) {
+      return Array.from(node.querySelectorAll("span"));
+    }
+    if (node.matches?.(".gal-action-btn, .gal-fullscreen-btn")) {
+      return [
+        ...node.querySelectorAll(":scope > span"),
+        ...node.querySelectorAll(":scope > i")
+      ];
+    }
+    if (node.matches?.(".gal-footer-btn, .gal-footer-btn-next, .gal-pending-choices-btn")) {
+      return [
+        ...node.querySelectorAll(".gal-btn-text"),
+        ...node.querySelectorAll("i")
+      ];
+    }
+    if (node.matches?.(".gal-bgm-widget")) {
+      return Array.from(node.querySelectorAll(".gal-bgm-title"));
+    }
+    return [
+      ...node.querySelectorAll(":scope > i"),
+      ...node.querySelectorAll(".gal-btn-text"),
+      ...node.querySelectorAll(".gal-bgm-title")
+    ];
+  }
+  function previewCustomSkinTextVisibility(elementIds, showText = true) {
+    const overlay = getOverlayElement();
+    if (!overlay) return;
+    const ids = Array.isArray(elementIds) ? elementIds : [elementIds];
+    const shouldShowText = showText !== false;
+    const seenNodes = /* @__PURE__ */ new Set();
+    ids.forEach((elementId) => {
+      getRuntimeNodesForElement(overlay, elementId).forEach((node) => {
+        if (!node || seenNodes.has(node)) return;
+        seenNodes.add(node);
+        node.classList.toggle(TEXT_HIDDEN_RUNTIME_CLASS, !shouldShowText);
+        getRuntimeTextNodes(node).forEach((textNode) => {
+          if (!textNode?.style) return;
+          if (shouldShowText) {
+            textNode.style.removeProperty("display");
+          } else {
+            textNode.style.setProperty("display", "none", "important");
+          }
+        });
+      });
+    });
+  }
+  function normalizeRuntimeRect(rect, hostRect) {
+    if (!rect || !hostRect || hostRect.width <= 0 || hostRect.height <= 0) return null;
+    const left = Math.max(hostRect.left, rect.left);
+    const top = Math.max(hostRect.top, rect.top);
+    const right = Math.min(hostRect.right, rect.right);
+    const bottom = Math.min(hostRect.bottom, rect.bottom);
+    const width2 = Math.max(0, right - left);
+    const height2 = Math.max(0, bottom - top);
+    if (width2 <= 0 || height2 <= 0) return null;
+    const x2 = clamp01((left - hostRect.left) / hostRect.width, 0);
+    const y2 = clamp01((top - hostRect.top) / hostRect.height, 0);
+    const normalizedWidth = Math.max(0, Math.min(1 - x2, width2 / hostRect.width));
+    const normalizedHeight = Math.max(0, Math.min(1 - y2, height2 / hostRect.height));
+    if (normalizedWidth <= 0 || normalizedHeight <= 0) return null;
+    return {
+      x: x2,
+      y: y2,
+      width: normalizedWidth,
+      height: normalizedHeight,
+      centerX: x2 + normalizedWidth / 2,
+      centerY: y2 + normalizedHeight / 2,
+      areaRatio: normalizedWidth * normalizedHeight,
+      aspectRatio: normalizedWidth / Math.max(normalizedHeight, 1e-4)
+    };
+  }
+  function getRuntimeElementLayoutSnapshot(elementId, overlay = getOverlayElement(), host = getHostElement(overlay), hostRect = host?.getBoundingClientRect?.() || null) {
+    const safeElementId = String(elementId || "").trim();
+    if (!safeElementId || !overlay || !hostRect || hostRect.width <= 0 || hostRect.height <= 0) return null;
+    const mergedRect = mergeRuntimeNodeRects(getRuntimeNodesForElement(overlay, safeElementId));
+    const box = normalizeRuntimeRect(mergedRect, hostRect);
+    if (!mergedRect || !box) return null;
+    return {
+      elementId: safeElementId,
+      rect: mergedRect,
+      box,
+      hostRect
+    };
+  }
+  function mergeRuntimeNodeRects(nodes3 = []) {
+    const rects = nodes3.map((node) => node?.getBoundingClientRect?.()).filter((rect) => rect && rect.width > 0 && rect.height > 0);
+    if (!rects.length) return null;
+    const merged = rects.reduce((acc, rect) => ({
+      left: Math.min(acc.left, rect.left),
+      top: Math.min(acc.top, rect.top),
+      right: Math.max(acc.right, rect.right),
+      bottom: Math.max(acc.bottom, rect.bottom)
+    }), {
+      left: rects[0].left,
+      top: rects[0].top,
+      right: rects[0].right,
+      bottom: rects[0].bottom
+    });
+    return {
+      left: merged.left,
+      top: merged.top,
+      right: merged.right,
+      bottom: merged.bottom,
+      width: Math.max(0, merged.right - merged.left),
+      height: Math.max(0, merged.bottom - merged.top)
+    };
+  }
+  function setStyleEntriesOnTarget(target, entries) {
+    if (!target || !target.style || !(entries instanceof Map)) return;
+    entries.forEach((value, key) => {
+      target.style.setProperty(key, value);
+    });
+  }
+  function clearFooterButtonRuntimeNodeStyles(overlay) {
+    if (!overlay) return;
+    overlay.querySelectorAll(".gal-footer-btn").forEach((node) => {
+      RUNTIME_STYLE_SUFFIXES.forEach((suffix) => {
+        node.style.removeProperty(`${FOOTER_NODE_STYLE_PREFIX}${suffix}`);
+      });
+      CUSTOM_SKIN_STATES.forEach((state) => {
+        node.style.removeProperty(`${FOOTER_NODE_STYLE_PREFIX}${state}-image`);
+        node.style.removeProperty(`${FOOTER_NODE_STYLE_PREFIX}${state}-hit-clip`);
+      });
+    });
+  }
+  function updateRuntimeElementActivationClasses(overlay, activeElementIds = /* @__PURE__ */ new Set(), imageStateLookup = /* @__PURE__ */ new Map(), textVisibilityLookup = /* @__PURE__ */ new Map()) {
+    if (!overlay) return;
+    Object.entries(RUNTIME_ELEMENT_SELECTOR_MAP).forEach(([elementId, selectors]) => {
+      const isToolbarGroup = elementId === "__toolbar_controls__";
+      const shouldActivate = isToolbarGroup ? Array.from(TOOLBAR_RELATED_ELEMENT_IDS).some((id2) => activeElementIds.has(id2)) : activeElementIds.has(elementId);
+      const imageStates = !isToolbarGroup && imageStateLookup instanceof Map ? imageStateLookup.get(elementId) || {} : {};
+      const showText = !isToolbarGroup && textVisibilityLookup instanceof Map ? textVisibilityLookup.get(elementId) !== false : true;
+      const seenNodes = /* @__PURE__ */ new Set();
+      selectors.forEach((selector) => {
+        overlay.querySelectorAll(selector).forEach((node) => {
+          if (seenNodes.has(node)) return;
+          seenNodes.add(node);
+          node.classList.toggle(ACTIVE_RUNTIME_CLASS, shouldActivate);
+          node.classList.toggle(TEXT_HIDDEN_RUNTIME_CLASS, shouldActivate && showText === false);
+          Object.entries(STATE_IMAGE_CLASS_MAP).forEach(([state, className]) => {
+            node.classList.toggle(className, shouldActivate && imageStates[state] === true);
+          });
+        });
+      });
+    });
+  }
+  function clamp01(value, fallback = 0) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(0, Math.min(1, num));
+  }
+  function hasNumericDifference(left, right, epsilon = 1e-4) {
+    const safeLeft = Number(left);
+    const safeRight = Number(right);
+    if (!Number.isFinite(safeLeft) && !Number.isFinite(safeRight)) return false;
+    if (!Number.isFinite(safeLeft) || !Number.isFinite(safeRight)) return true;
+    return Math.abs(safeLeft - safeRight) > epsilon;
+  }
+  function clonePoints(points = FULL_RECT_POINTS) {
+    return (Array.isArray(points) ? points : FULL_RECT_POINTS).map((point) => ({
+      x: clamp01(point?.x, 0),
+      y: clamp01(point?.y, 0)
+    }));
+  }
+  function normalizeHitArea(raw, fallback = null) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const points = clonePoints(Array.isArray(source.points) ? source.points : fallback?.points || FULL_RECT_POINTS);
+    if (points.length < 3) {
+      return {
+        type: "polygon",
+        points: clonePoints(fallback?.points || FULL_RECT_POINTS)
+      };
+    }
+    return {
+      type: "polygon",
+      points
+    };
+  }
+  function normalizeTextPadding(raw, fallback = {}) {
+    const safe = raw && typeof raw === "object" ? raw : {};
+    return {
+      top: clamp01(safe.top, clamp01(fallback.top, 0)),
+      right: clamp01(safe.right, clamp01(fallback.right, 0)),
+      bottom: clamp01(safe.bottom, clamp01(fallback.bottom, 0)),
+      left: clamp01(safe.left, clamp01(fallback.left, 0))
+    };
+  }
+  function normalizeLayout(raw, fallback = {}) {
+    const safe = raw && typeof raw === "object" ? raw : {};
+    const safeAspectRatioOverride = Number(safe.aspectRatioOverride);
+    const fallbackAspectRatioOverride = Number(fallback.aspectRatioOverride);
+    return {
+      widthRatio: clamp01(safe.widthRatio, clamp01(fallback.widthRatio, 0)),
+      offsetXRatio: Number.isFinite(Number(safe.offsetXRatio)) ? Number(safe.offsetXRatio) : Number(fallback.offsetXRatio || 0),
+      offsetYRatio: Number.isFinite(Number(safe.offsetYRatio)) ? Number(safe.offsetYRatio) : Number(fallback.offsetYRatio || 0),
+      anchorXRatio: clamp01(safe.anchorXRatio, clamp01(fallback.anchorXRatio, 0)),
+      anchorYRatio: clamp01(safe.anchorYRatio, clamp01(fallback.anchorYRatio, 0)),
+      aspectRatioOverride: Number.isFinite(safeAspectRatioOverride) && safeAspectRatioOverride > 0 ? safeAspectRatioOverride : Number.isFinite(fallbackAspectRatioOverride) && fallbackAspectRatioOverride > 0 ? fallbackAspectRatioOverride : void 0
+    };
+  }
+  function hasPointSetDifference(pointsA = [], pointsB = []) {
+    if (pointsA.length !== pointsB.length) return true;
+    return pointsA.some((point, index) => hasNumericDifference(point?.x, pointsB[index]?.x) || hasNumericDifference(point?.y, pointsB[index]?.y));
+  }
+  function hasLayoutCustomization(layout4, defaults3) {
+    const safeLayout = normalizeLayout(layout4, defaults3);
+    const safeDefaults = normalizeLayout(defaults3, defaults3);
+    return [
+      "widthRatio",
+      "offsetXRatio",
+      "offsetYRatio",
+      "anchorXRatio",
+      "anchorYRatio",
+      "aspectRatioOverride"
+    ].some((field) => hasNumericDifference(safeLayout[field], safeDefaults[field]));
+  }
+  function hasTextPaddingCustomization(textPadding, defaults3) {
+    const safeTextPadding = normalizeTextPadding(textPadding, defaults3);
+    const safeDefaults = normalizeTextPadding(defaults3, defaults3);
+    return ["top", "right", "bottom", "left"].some((field) => hasNumericDifference(safeTextPadding[field], safeDefaults[field]));
+  }
+  function hasMetaCustomization(def, meta3, defaultsMeta, { state = "normal" } = {}) {
+    const safeMeta = meta3 && typeof meta3 === "object" ? meta3 : {};
+    const safeDefaultsMeta = defaultsMeta && typeof defaultsMeta === "object" ? defaultsMeta : {};
+    const baseShowText = def?.supportsTextToggle === true ? safeDefaultsMeta.showText !== false : true;
+    const currentShowText = def?.supportsTextToggle === true ? safeMeta.showText !== false : true;
+    if (currentShowText !== baseShowText) return true;
+    if (def?.interactive !== true) return false;
+    const baseHitArea = normalizeHitArea(safeDefaultsMeta.hitArea, { type: "polygon", points: FULL_RECT_POINTS });
+    if (state !== "normal" && safeMeta.hitAreaOverride !== true) {
+      return false;
+    }
+    const currentHitArea = normalizeHitArea(safeMeta.hitArea, baseHitArea);
+    return hasPointSetDifference(currentHitArea.points, baseHitArea.points);
+  }
+  function hasRuntimeCustomization(def, asset, defaults3, options2 = {}) {
+    if (!asset || typeof asset !== "object") return false;
+    if (asset.imageBlob || asset.imageUrl) return true;
+    const assetScaleMode = String(asset.scaleMode || defaults3?.scaleMode || "").trim();
+    const defaultScaleMode = String(defaults3?.scaleMode || "").trim();
+    if (assetScaleMode !== defaultScaleMode) return true;
+    if (hasLayoutCustomization(asset.layout, defaults3?.layout)) return true;
+    if (hasTextPaddingCustomization(asset.textPadding, defaults3?.textPadding)) return true;
+    return hasMetaCustomization(def, asset.meta, defaults3?.meta, options2);
+  }
+  function resolveScaleMode(scaleMode, fallback = "stretch") {
+    const value = String(scaleMode || fallback || "stretch").trim().toLowerCase();
+    if (value === "cover") return "cover";
+    if (value === "contain") return "contain";
+    if (value === "nine-slice") return "100% 100%";
+    return "100% 100%";
+  }
+  function toCssUrl(rawUrl) {
+    const safeUrl2 = String(rawUrl || "").trim();
+    if (!safeUrl2) return "none";
+    return `url("${safeUrl2.replace(/"/g, '\\"')}")`;
+  }
+  function toCssPolygon(hitArea) {
+    const safeHitArea = normalizeHitArea(hitArea);
+    return `polygon(${safeHitArea.points.map((point) => `${(point.x * 100).toFixed(3)}% ${(point.y * 100).toFixed(3)}%`).join(", ")})`;
   }
   function revokeRuntimeBlobUrls() {
-    if (!runtimeBlobUrls.length) return;
     runtimeBlobUrls.forEach((url) => {
       try {
-        (topWindow.URL || URL).revokeObjectURL(url);
-      } catch {
+        (getWindowObject().URL || URL).revokeObjectURL(url);
+      } catch (error3) {
       }
     });
     runtimeBlobUrls = [];
   }
-  function resolveAssetUrl(asset) {
-    if (!asset) return "";
-    if (asset.imageUrl) return String(asset.imageUrl);
-    if (asset.imageBlob) {
-      const blobUrl = (topWindow.URL || URL).createObjectURL(asset.imageBlob);
-      runtimeBlobUrls.push(blobUrl);
-      return blobUrl;
-    }
-    return "";
+  function buildLookupKey2(elementId, device, state) {
+    return `${elementId}::${device}::${state}`;
   }
-  function setCssVar(overlayEl, key, value) {
-    if (!overlayEl || !key) return;
-    if (value === null || value === void 0 || value === "") {
-      overlayEl.style.removeProperty(key);
-      return;
-    }
-    overlayEl.style.setProperty(key, String(value));
-  }
-  function scoreAssetForDevice(asset, targetDevice) {
-    const device = normalizeString(asset?.device, "desktop");
-    if (device === targetDevice) return 100;
-    if (device === "desktop" || device === "mobile") return 10;
-    return 1;
-  }
-  function pickBestAssetMap(assets, targetDevice) {
-    const bestMap = /* @__PURE__ */ new Map();
-    (assets || []).forEach((asset) => {
-      const elementId = normalizeString(asset.elementId);
+  function createAssetLookup(assets) {
+    const lookup2 = /* @__PURE__ */ new Map();
+    (Array.isArray(assets) ? assets : []).forEach((asset) => {
+      const elementId = String(asset?.elementId || "").trim();
+      const device = String(asset?.device || "desktop").trim() || "desktop";
+      const state = String(asset?.state || "normal").trim() || "normal";
       if (!elementId) return;
-      const state = normalizeString(asset.state, "normal");
-      const key = `${elementId}::${state}`;
-      const nextScore = scoreAssetForDevice(asset, targetDevice);
-      const current = bestMap.get(key);
-      if (!current || nextScore > current.score) {
-        bestMap.set(key, { asset, score: nextScore });
-      }
+      lookup2.set(buildLookupKey2(elementId, device, state), asset);
     });
-    return bestMap;
+    return lookup2;
   }
-  function getWesternSkinElementById(elementId) {
-    return WESTERN_SKIN_ELEMENTS.find((item) => item.id === elementId) || null;
+  function getFallbackDevice(device) {
+    return device === "mobile" ? "desktop" : "mobile";
   }
-  function buildDefaultWesternAssetPayload({
-    packId,
-    elementId,
-    device = "desktop",
-    state = "normal"
-  } = {}) {
-    const definition = getWesternSkinElementById(elementId);
-    const resolvedPackId = normalizeString(packId, getCurrentPackId() || DEFAULT_PACK_ID);
-    const resolvedElementId = normalizeString(elementId, definition?.id || WESTERN_SKIN_ELEMENTS[0].id);
-    const resolvedDevice = normalizeString(device, "desktop");
-    const resolvedState = normalizeString(state, "normal");
-    const defaultWidth = definition?.outputWidth || 480;
-    const defaultHeight = definition?.aspectRatio ? Math.round(defaultWidth / definition.aspectRatio) : null;
+  function getLookupAsset(lookup2, elementId, device, state) {
+    return lookup2.get(buildLookupKey2(elementId, device, state)) || null;
+  }
+  function resolveStateAsset(lookup2, elementId, device, state) {
+    const fallbackDevice = getFallbackDevice(device);
+    const candidates = [
+      getLookupAsset(lookup2, elementId, device, state),
+      state !== "normal" ? getLookupAsset(lookup2, elementId, device, "normal") : null,
+      getLookupAsset(lookup2, elementId, fallbackDevice, state),
+      state !== "normal" ? getLookupAsset(lookup2, elementId, fallbackDevice, "normal") : null
+    ];
+    return candidates.find(Boolean) || null;
+  }
+  function resolveNormalAsset(lookup2, elementId, device) {
+    const fallbackDevice = getFallbackDevice(device);
+    return getLookupAsset(lookup2, elementId, device, "normal") || getLookupAsset(lookup2, elementId, fallbackDevice, "normal") || getLookupAsset(lookup2, elementId, device, "hover") || getLookupAsset(lookup2, elementId, fallbackDevice, "hover") || null;
+  }
+  function resolveStateAssetWithFallback(lookup2, elementId, fallbackElementId, device, state) {
+    return resolveStateAsset(lookup2, elementId, device, state) || (fallbackElementId ? resolveStateAsset(lookup2, fallbackElementId, device, state) : null);
+  }
+  function resolveNormalAssetWithFallback(lookup2, elementId, fallbackElementId, device) {
+    return resolveNormalAsset(lookup2, elementId, device) || (fallbackElementId ? resolveNormalAsset(lookup2, fallbackElementId, device) : null);
+  }
+  function resolveAssetImageUrl(asset, nextBlobUrls) {
+    if (!asset) return "none";
+    if (asset.imageBlob) {
+      const objectUrl = (getWindowObject().URL || URL).createObjectURL(asset.imageBlob);
+      nextBlobUrls.push(objectUrl);
+      return toCssUrl(objectUrl);
+    }
+    if (asset.imageUrl) {
+      return toCssUrl(asset.imageUrl);
+    }
+    return "none";
+  }
+  function getDeviceDefaults(elementId, device) {
+    const def = getCustomSkinElementById(elementId);
+    if (!def) return null;
+    return def.defaults?.[device] || def.defaults?.desktop || null;
+  }
+  function getLiveRuntimeLayoutDefaults(elementId) {
+    if (!customSkinElementUsesRuntimeLayout(elementId)) return null;
+    const snapshot = getRuntimeElementLayoutSnapshot(elementId);
+    if (!snapshot?.box) return null;
     return {
-      packId: resolvedPackId,
-      skinId: WESTERN_SKIN_ID,
-      elementId: resolvedElementId,
-      device: resolvedDevice,
-      state: resolvedState,
-      layout: {
-        width: defaultWidth,
-        height: defaultHeight,
-        offsetX: 0,
-        offsetY: 0,
-        anchorX: 0,
-        anchorY: 0,
-        clipPath: ""
-      },
-      scaleMode: "stretch",
-      slice: { top: 0, right: 0, bottom: 0, left: 0 },
-      textPadding: { top: 0, right: 0, bottom: 0, left: 0 },
-      meta: {}
+      widthRatio: clamp01(snapshot.box.width, 0),
+      offsetXRatio: 0,
+      offsetYRatio: 0,
+      anchorXRatio: 0,
+      anchorYRatio: 0
     };
   }
-  function clearWesternSkinRuntime() {
-    const overlayEl = $2("#gal-global-overlay").get(0);
-    if (!overlayEl) return;
-    clearWesternCssVars(overlayEl);
-    overlayEl.classList.remove("skin-western-image-mode");
-    revokeRuntimeBlobUrls();
+  var FOOTER_RUNTIME_LAYOUT_ELEMENT_IDS = /* @__PURE__ */ new Set([
+    ...CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS,
+    "footer_btn_choices",
+    "footer_btn_next"
+  ]);
+  function getFooterElementIdFromNode(node) {
+    if (!node?.matches) return "";
+    if (node.matches(".gal-pending-choices-btn")) return "footer_btn_choices";
+    if (node.matches(".gal-footer-btn-next")) return "footer_btn_next";
+    if (!node.matches(".gal-footer-btn")) return "";
+    switch (String(node.getAttribute("data-action") || "").trim()) {
+      case "log":
+        return "footer_btn_log";
+      case "close-mode":
+        return "footer_btn_close";
+      case "view-original":
+        return "footer_btn_view";
+      case "config":
+        return "footer_btn_config";
+      case "save":
+        return "footer_btn_save";
+      case "load":
+        return "footer_btn_load";
+      case "timeline":
+        return "footer_btn_timeline";
+      case "prev":
+        return "footer_btn_prev";
+      case "auto":
+        return "footer_btn_auto";
+      case "skip":
+        return "footer_btn_skip";
+      default:
+        return "";
+    }
   }
-  async function applyWesternSkinRuntime() {
-    const settings = getSettings();
-    const $overlay = $2("#gal-global-overlay");
-    const overlayEl = $overlay.get(0);
-    if (!overlayEl) return;
-    const shouldApply = settings && settings.skin === WESTERN_SKIN_ID && $overlay.hasClass(WESTERN_SKIN_ID);
-    if (!shouldApply) {
-      clearWesternSkinRuntime();
-      return;
-    }
-    const device = getRuntimeDevice();
-    const currentPackId = getCurrentPackId() || DEFAULT_PACK_ID;
-    let assets = [];
-    try {
-      assets = await getUiSkinAssetsByPackSkin(currentPackId, WESTERN_SKIN_ID);
-    } catch (error3) {
-      console.warn(`[${SCRIPT_NAME}] 读取 western 皮肤资源失败:`, error3);
-      assets = [];
-    }
-    revokeRuntimeBlobUrls();
-    clearWesternCssVars(overlayEl);
-    overlayEl.classList.add("skin-western-image-mode");
-    setCssVar(
-      overlayEl,
-      "--western-scene-clip",
-      device === "mobile" ? DEFAULT_SCENE_CLIP_MOBILE : DEFAULT_SCENE_CLIP_DESKTOP
-    );
-    setCssVar(
-      overlayEl,
-      "--western-control-top",
-      device === "mobile" ? DEFAULT_CONTROL_TOP_MOBILE : DEFAULT_CONTROL_TOP_DESKTOP
-    );
-    const bestMap = pickBestAssetMap(assets, device);
-    const getAsset = (elementId, state) => bestMap.get(`${elementId}::${state}`)?.asset || null;
-    WESTERN_SKIN_ELEMENTS.forEach((def) => {
-      const supportedStates = Array.isArray(def.supportsStates) && def.supportsStates.length ? def.supportsStates : ["normal"];
-      const normalAsset = getAsset(def.id, "normal");
-      const layout4 = normalAsset?.layout || {};
-      const slice2 = normalAsset?.slice || {};
-      const textPadding = normalAsset?.textPadding || {};
-      const scaleMode = normalizeString(normalAsset?.scaleMode, "stretch");
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "width"), toPx(layout4.width, null));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "height"), toPx(layout4.height, null));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "offset-x"), toPx(layout4.offsetX, "0px"));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "offset-y"), toPx(layout4.offsetY, "0px"));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "anchor-x"), toPx(layout4.anchorX, "0px"));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "anchor-y"), toPx(layout4.anchorY, "0px"));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "scale-mode"), scaleMode);
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "bg-size"), resolveBackgroundSize(scaleMode));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "slice-top"), toPx(slice2.top, null));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "slice-right"), toPx(slice2.right, null));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "slice-bottom"), toPx(slice2.bottom, null));
-      setCssVar(overlayEl, cssLayoutVarKey(def.id, "slice-left"), toPx(slice2.left, null));
-      if (def.id === "dialog_panel") {
-        setCssVar(overlayEl, "--western-dialog-panel-padding-top", toPx(textPadding.top, null));
-        setCssVar(overlayEl, "--western-dialog-panel-padding-right", toPx(textPadding.right, null));
-        setCssVar(overlayEl, "--western-dialog-panel-padding-bottom", toPx(textPadding.bottom, null));
-        setCssVar(overlayEl, "--western-dialog-panel-padding-left", toPx(textPadding.left, null));
+  function getFooterToolbarAutoScale(overlay, footerMetrics = /* @__PURE__ */ new Map(), scalableElementIds = /* @__PURE__ */ new Set()) {
+    const toolbar = overlay?.querySelector?.(".gal-bottom-toolbar");
+    if (!toolbar || !(footerMetrics instanceof Map) || footerMetrics.size === 0) return 1;
+    const win = getWindowObject();
+    const toolbarStyle = win.getComputedStyle(toolbar);
+    const paddingLeft = Number.parseFloat(toolbarStyle.paddingLeft) || 0;
+    const paddingRight = Number.parseFloat(toolbarStyle.paddingRight) || 0;
+    const gapValue = toolbarStyle.columnGap && toolbarStyle.columnGap !== "normal" ? toolbarStyle.columnGap : toolbarStyle.gap;
+    const gap = Number.parseFloat(gapValue) || 0;
+    const nodes3 = Array.from(toolbar.children || []).filter((node) => {
+      const elementId = getFooterElementIdFromNode(node);
+      if (!elementId) return false;
+      return win.getComputedStyle(node).display !== "none";
+    });
+    if (!nodes3.length) return 1;
+    const availableWidth = Math.max(0, toolbar.clientWidth - paddingLeft - paddingRight);
+    if (availableWidth <= 0) return 1;
+    const totalGapWidth = gap * Math.max(0, nodes3.length - 1);
+    const widthBudget = Math.max(0, availableWidth - totalGapWidth);
+    if (widthBudget <= 0) return 1;
+    let fixedWidth = 0;
+    let scalableWidth = 0;
+    nodes3.forEach((node) => {
+      const elementId = getFooterElementIdFromNode(node);
+      const metric = footerMetrics.get(elementId);
+      const desiredWidth = metric?.width > 0 ? metric.width : node.getBoundingClientRect?.().width || 0;
+      if (desiredWidth <= 0) return;
+      if (scalableElementIds.has(elementId)) {
+        scalableWidth += desiredWidth;
+      } else {
+        fixedWidth += desiredWidth;
       }
-      if (def.id === "main_frame_scene") {
-        const clipPathText = normalizeString(layout4.clipPath, "");
-        if (clipPathText) {
-          setCssVar(overlayEl, "--western-scene-clip", clipPathText);
-        }
+    });
+    if (scalableWidth <= 0) return 1;
+    const remainingWidth = widthBudget - fixedWidth;
+    if (remainingWidth <= 0) return 0.35;
+    return Math.max(0.35, Math.min(1, remainingWidth / scalableWidth));
+  }
+  function getCustomSkinElementById(elementId) {
+    return RUNTIME_ELEMENT_MAP.get(String(elementId || "").trim()) || null;
+  }
+  function buildDefaultCustomSkinAssetPayload({ packId, skinId, elementId, device = "desktop", state = "normal" } = {}) {
+    const def = getCustomSkinElementById(elementId) || CUSTOM_SKIN_ELEMENTS[0] || null;
+    const safeDevice = device === "mobile" ? "mobile" : "desktop";
+    const safeState = Array.isArray(def?.supportsStates) && def.supportsStates.includes(state) ? state : "normal";
+    const defaults3 = getDeviceDefaults(def?.id, safeDevice) || {};
+    const layoutDefaults = {
+      ...defaults3,
+      ...getLiveRuntimeLayoutDefaults(def?.id) || {}
+    };
+    return {
+      packId: String(packId || GLOBAL_CUSTOM_SKIN_PACK_ID).trim() || GLOBAL_CUSTOM_SKIN_PACK_ID,
+      skinId: String(skinId || CUSTOM_SKIN_ID).trim() || CUSTOM_SKIN_ID,
+      elementId: def?.id || "",
+      device: safeDevice,
+      state: safeState,
+      scaleMode: String(defaults3.scaleMode || def?.defaultScaleMode || "stretch").trim() || "stretch",
+      layout: normalizeLayout(layoutDefaults, layoutDefaults),
+      slice: defaults3.slice && typeof defaults3.slice === "object" ? { ...defaults3.slice } : { top: 0, right: 0, bottom: 0, left: 0 },
+      textPadding: normalizeTextPadding(defaults3.textPaddingRatio, defaults3.textPaddingRatio),
+      meta: {
+        showText: def?.supportsTextToggle === true ? true : void 0,
+        ...def?.interactive ? {
+          hitArea: normalizeHitArea(defaults3.hitArea, { type: "polygon", points: FULL_RECT_POINTS })
+        } : {}
       }
-      WESTERN_SKIN_STATES.forEach((state) => {
-        if (!supportedStates.includes(state)) {
-          setCssVar(overlayEl, cssVarKey(def.id, state), null);
-          return;
-        }
-        const asset = getAsset(def.id, state);
-        const url = resolveAssetUrl(asset);
-        if (!url) {
-          setCssVar(overlayEl, cssVarKey(def.id, state), null);
-          return;
-        }
-        const safeUrl2 = String(url).replace(/"/g, "%22");
-        setCssVar(overlayEl, cssVarKey(def.id, state), `url("${safeUrl2}")`);
+    };
+  }
+  function getCustomSkinRuntimeElementRects(device = null) {
+    const overlay = getOverlayElement();
+    const host = getHostElement(overlay);
+    if (!overlay || !host) return [];
+    const hostRect = host.getBoundingClientRect();
+    if (!hostRect || hostRect.width <= 0 || hostRect.height <= 0) return [];
+    const runtimeDevice = device === "mobile" || device === "desktop" ? device : runtimePreviewDevice || (hostRect.width <= MOBILE_BREAKPOINT ? "mobile" : "desktop");
+    return CUSTOM_SKIN_ELEMENTS.map((def) => {
+      const mergedRect = mergeRuntimeNodeRects(getRuntimeNodesForElement(overlay, def.id, { forDetection: true }));
+      const box = normalizeRuntimeRect(mergedRect, hostRect);
+      if (!box) return null;
+      return {
+        elementId: def.id,
+        label: def.label,
+        device: runtimeDevice,
+        box,
+        centerX: box.centerX,
+        centerY: box.centerY,
+        areaRatio: box.areaRatio,
+        aspectRatio: box.aspectRatio
+      };
+    }).filter(Boolean);
+  }
+  function buildMergedRuntimePayload(def, device, normalAsset = null) {
+    const base = buildDefaultCustomSkinAssetPayload({
+      elementId: def.id,
+      device,
+      state: "normal"
+    });
+    return {
+      scaleMode: String(normalAsset?.scaleMode || base.scaleMode || def.defaultScaleMode || "stretch").trim() || "stretch",
+      layout: normalizeLayout(normalAsset?.layout, base.layout),
+      textPadding: normalizeTextPadding(normalAsset?.textPadding, base.textPadding),
+      meta: {
+        ...base.meta || {},
+        ...normalAsset?.meta && typeof normalAsset.meta === "object" ? normalAsset.meta : {}
+      }
+    };
+  }
+  function ensureObserverDisconnected() {
+    if (runtimeResizeObserver && runtimeObservedHost) {
+      try {
+        runtimeResizeObserver.unobserve(runtimeObservedHost);
+      } catch (error3) {
+      }
+    }
+    if (runtimeResizeObserver) {
+      try {
+        runtimeResizeObserver.disconnect();
+      } catch (error3) {
+      }
+    }
+    runtimeResizeObserver = null;
+    runtimeObservedHost = null;
+    if (runtimeResizeWindow) {
+      runtimeResizeWindow.removeEventListener("resize", scheduleCustomSkinRuntimeRefresh);
+    }
+    runtimeResizeWindow = null;
+    if (runtimeResizeRaf) {
+      getWindowObject().cancelAnimationFrame(runtimeResizeRaf);
+      runtimeResizeRaf = 0;
+    }
+  }
+  function scheduleCustomSkinRuntimeRefresh() {
+    const win = getWindowObject();
+    if (runtimeResizeRaf) {
+      win.cancelAnimationFrame(runtimeResizeRaf);
+    }
+    runtimeResizeRaf = win.requestAnimationFrame(() => {
+      runtimeResizeRaf = 0;
+      applyCustomSkinRuntime().catch((error3) => {
+        console.warn(`[${SCRIPT_NAME}] custom-skin runtime refresh failed:`, error3);
       });
     });
+  }
+  function ensureRuntimeObserver(host) {
+    if (!host) {
+      ensureObserverDisconnected();
+      return;
+    }
+    const win = getWindowObject();
+    const ResizeObserverCtor = win.ResizeObserver || ResizeObserver;
+    if (!ResizeObserverCtor) return;
+    if (!runtimeResizeObserver) {
+      runtimeResizeObserver = new ResizeObserverCtor(() => {
+        scheduleCustomSkinRuntimeRefresh();
+      });
+    }
+    if (runtimeObservedHost !== host) {
+      if (runtimeObservedHost) {
+        try {
+          runtimeResizeObserver.unobserve(runtimeObservedHost);
+        } catch (error3) {
+        }
+      }
+      runtimeResizeObserver.observe(host);
+      runtimeObservedHost = host;
+    }
+    if (runtimeResizeWindow !== win) {
+      if (runtimeResizeWindow) {
+        runtimeResizeWindow.removeEventListener("resize", scheduleCustomSkinRuntimeRefresh);
+      }
+      runtimeResizeWindow = win;
+      runtimeResizeWindow.addEventListener("resize", scheduleCustomSkinRuntimeRefresh);
+    }
+  }
+  function removeRuntimeStyleProperties(overlay) {
+    if (!overlay || !overlay.style) return;
+    clearFooterButtonRuntimeNodeStyles(overlay);
+    overlay.style.removeProperty("--custom-skin-control-top");
+    overlay.style.removeProperty("--custom-skin-footer-auto-scale");
+    overlay.style.removeProperty("--custom-skin-dialog-panel-padding-top");
+    overlay.style.removeProperty("--custom-skin-dialog-panel-padding-right");
+    overlay.style.removeProperty("--custom-skin-dialog-panel-padding-bottom");
+    overlay.style.removeProperty("--custom-skin-dialog-panel-padding-left");
+    CUSTOM_SKIN_ELEMENTS.forEach((def) => {
+      RUNTIME_STYLE_SUFFIXES.forEach((suffix) => {
+        overlay.style.removeProperty(`--custom-skin-${def.id}-${suffix}`);
+      });
+      CUSTOM_SKIN_STATES.forEach((state) => {
+        overlay.style.removeProperty(`--custom-skin-${def.id}-${state}-image`);
+        overlay.style.removeProperty(`--custom-skin-${def.id}-${state}-hit-clip`);
+      });
+    });
+  }
+  function clearCustomSkinRuntime() {
+    const overlay = getOverlayElement();
+    if (overlay) {
+      removeRuntimeStyleProperties(overlay);
+      updateRuntimeElementActivationClasses(overlay, /* @__PURE__ */ new Set());
+      overlay.classList.remove(CUSTOM_SKIN_ID);
+      overlay.classList.remove("custom-skin-image-mode");
+    }
+    revokeRuntimeBlobUrls();
+    ensureObserverDisconnected();
+  }
+  function setCustomSkinRuntimePreviewDevice(device) {
+    runtimePreviewDevice = device === "mobile" || device === "desktop" ? device : null;
+  }
+  async function applyCustomSkinRuntime() {
+    const token = ++runtimeApplyToken;
+    const overlay = getOverlayElement();
+    if (!overlay) {
+      ensureObserverDisconnected();
+      revokeRuntimeBlobUrls();
+      return;
+    }
+    const settings2 = getSettings();
+    const activeProfileId = hasUiSkinProfileId(String(settings2?.skin || "").trim()) ? String(settings2.skin).trim() : "";
+    if (!activeProfileId) {
+      removeRuntimeStyleProperties(overlay);
+      updateRuntimeElementActivationClasses(overlay, /* @__PURE__ */ new Set());
+      overlay.classList.remove("custom-skin-image-mode");
+      revokeRuntimeBlobUrls();
+      ensureObserverDisconnected();
+      return;
+    }
+    const host = getHostElement(overlay);
+    if (!host) return;
+    ensureRuntimeObserver(host);
+    const hostRect = host.getBoundingClientRect();
+    const runtimeDevice = runtimePreviewDevice || (hostRect.width <= MOBILE_BREAKPOINT ? "mobile" : "desktop");
+    const assets = await getUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, activeProfileId);
+    if (token !== runtimeApplyToken) return;
+    const assetLookup = createAssetLookup(assets);
+    removeRuntimeStyleProperties(overlay);
+    updateRuntimeElementActivationClasses(overlay, /* @__PURE__ */ new Set());
+    overlay.classList.remove("custom-skin-image-mode");
+    const nextBlobUrls = [];
+    const nextStyleEntries = /* @__PURE__ */ new Map();
+    const activeElementIds = /* @__PURE__ */ new Set();
+    const imageStateLookup = /* @__PURE__ */ new Map();
+    const textVisibilityLookup = /* @__PURE__ */ new Map();
+    const footerMetrics = /* @__PURE__ */ new Map();
+    const scalableFooterElementIds = /* @__PURE__ */ new Set();
+    let hasVisualImage = false;
+    let controlTop = runtimeDevice === "mobile" ? "clamp(4.7rem, 10vh, 6rem)" : "clamp(5.2rem, 10vh, 7.2rem)";
+    CUSTOM_SKIN_ELEMENTS.forEach((def) => {
+      const usesFooterCommonFallback = FOOTER_FALLBACK_ELEMENT_ID_SET.has(def.id);
+      const fallbackSourceId = usesFooterCommonFallback ? CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID : "";
+      const baseRuntimePayload = buildDefaultCustomSkinAssetPayload({
+        elementId: def.id,
+        device: runtimeDevice,
+        state: "normal"
+      });
+      const normalAsset = usesFooterCommonFallback ? resolveNormalAssetWithFallback(assetLookup, def.id, fallbackSourceId, runtimeDevice) : resolveNormalAsset(assetLookup, def.id, runtimeDevice);
+      const merged = buildMergedRuntimePayload(def, runtimeDevice, normalAsset);
+      const runtimeStyleId = usesFooterCommonFallback ? CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID : def.id;
+      const runtimeStyleEntries = /* @__PURE__ */ new Map();
+      const showText = def.supportsTextToggle === true ? merged.meta?.showText !== false : true;
+      let hasElementImage = false;
+      let hasElementCustomization = hasRuntimeCustomization(def, normalAsset, baseRuntimePayload, { state: "normal" });
+      const imageStates = {
+        normal: false,
+        hover: false,
+        active: false
+      };
+      const liveRuntimeLayout = customSkinElementUsesRuntimeLayout(def.id) ? getRuntimeElementLayoutSnapshot(def.id, overlay, host, hostRect) : null;
+      let actualWidth = 0;
+      let actualHeight = 0;
+      let actualOffsetX = 0;
+      let actualOffsetY = 0;
+      let actualAnchorX = 0;
+      let actualAnchorY = 0;
+      if (liveRuntimeLayout?.rect) {
+        actualWidth = liveRuntimeLayout.rect.width;
+        actualHeight = liveRuntimeLayout.rect.height;
+      } else {
+        const widthRatio = Math.max(0.01, Number(merged.layout.widthRatio || 0));
+        const effectiveAspectRatio = Math.max(0.01, Number(merged.layout.aspectRatioOverride || def.aspectRatio || 1));
+        actualWidth = hostRect.width * widthRatio;
+        actualHeight = actualWidth / effectiveAspectRatio;
+        if (def.interactive) {
+          const minSide = Math.min(actualWidth, actualHeight);
+          if (minSide < INTERACTIVE_MIN_SIZE) {
+            const scale2 = INTERACTIVE_MIN_SIZE / Math.max(minSide, 1);
+            actualWidth *= scale2;
+            actualHeight *= scale2;
+          }
+        }
+        actualOffsetX = hostRect.width * Number(merged.layout.offsetXRatio || 0);
+        actualOffsetY = hostRect.height * Number(merged.layout.offsetYRatio || 0);
+        actualAnchorX = actualWidth * clamp01(merged.layout.anchorXRatio, 0);
+        actualAnchorY = actualHeight * clamp01(merged.layout.anchorYRatio, 0);
+      }
+      runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-width`, `${actualWidth.toFixed(3)}px`);
+      runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-height`, `${actualHeight.toFixed(3)}px`);
+      runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-offset-x`, `${actualOffsetX.toFixed(3)}px`);
+      runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-offset-y`, `${actualOffsetY.toFixed(3)}px`);
+      runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-anchor-x`, `${actualAnchorX.toFixed(3)}px`);
+      runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-anchor-y`, `${actualAnchorY.toFixed(3)}px`);
+      runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-bg-size`, resolveScaleMode(merged.scaleMode, def.defaultScaleMode));
+      if (def.id === "dialog_panel") {
+        nextStyleEntries.set("--custom-skin-dialog-panel-padding-top", `${(actualHeight * clamp01(merged.textPadding.top, 0)).toFixed(3)}px`);
+        nextStyleEntries.set("--custom-skin-dialog-panel-padding-right", `${(actualWidth * clamp01(merged.textPadding.right, 0)).toFixed(3)}px`);
+        nextStyleEntries.set("--custom-skin-dialog-panel-padding-bottom", `${(actualHeight * clamp01(merged.textPadding.bottom, 0)).toFixed(3)}px`);
+        nextStyleEntries.set("--custom-skin-dialog-panel-padding-left", `${(actualWidth * clamp01(merged.textPadding.left, 0)).toFixed(3)}px`);
+      }
+      const normalHitArea = def.interactive ? normalizeHitArea(merged.meta?.hitArea, { type: "polygon", points: FULL_RECT_POINTS }) : null;
+      CUSTOM_SKIN_STATES.forEach((state) => {
+        const stateAsset = usesFooterCommonFallback ? resolveStateAssetWithFallback(assetLookup, def.id, fallbackSourceId, runtimeDevice, state) : resolveStateAsset(assetLookup, def.id, runtimeDevice, state);
+        const imageValue = resolveAssetImageUrl(stateAsset, nextBlobUrls);
+        if (imageValue !== "none") {
+          hasVisualImage = true;
+          hasElementImage = true;
+          imageStates[state] = true;
+        }
+        if (!hasElementCustomization) {
+          hasElementCustomization = hasRuntimeCustomization(def, stateAsset, baseRuntimePayload, { state });
+        }
+        runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-${state}-image`, imageValue);
+        if (def.interactive) {
+          const allowOverride = stateAsset?.meta && typeof stateAsset.meta === "object" && stateAsset.meta.hitAreaOverride === true;
+          const stateHitArea = state === "normal" ? normalHitArea : allowOverride ? normalizeHitArea(stateAsset?.meta?.hitArea, normalHitArea) : normalHitArea;
+          runtimeStyleEntries.set(`--custom-skin-${runtimeStyleId}-${state}-hit-clip`, toCssPolygon(stateHitArea));
+        }
+      });
+      if (usesFooterCommonFallback) {
+        getRuntimeNodesForElement(overlay, def.id).forEach((node) => {
+          setStyleEntriesOnTarget(node, runtimeStyleEntries);
+        });
+      } else {
+        runtimeStyleEntries.forEach((value, key) => {
+          nextStyleEntries.set(key, value);
+        });
+      }
+      if (hasElementImage || hasElementCustomization) {
+        activeElementIds.add(def.id);
+      }
+      if (FOOTER_RUNTIME_LAYOUT_ELEMENT_IDS.has(def.id)) {
+        footerMetrics.set(def.id, {
+          width: actualWidth,
+          height: actualHeight
+        });
+        if (hasElementImage || hasElementCustomization) {
+          scalableFooterElementIds.add(def.id);
+        }
+      }
+      imageStateLookup.set(def.id, imageStates);
+      textVisibilityLookup.set(def.id, showText);
+    });
+    nextStyleEntries.set("--custom-skin-footer-auto-scale", String(getFooterToolbarAutoScale(
+      overlay,
+      footerMetrics,
+      scalableFooterElementIds
+    )));
+    updateRuntimeElementActivationClasses(overlay, activeElementIds, imageStateLookup, textVisibilityLookup);
+    nextStyleEntries.forEach((value, key) => {
+      overlay.style.setProperty(key, value);
+    });
+    overlay.style.setProperty("--custom-skin-control-top", controlTop);
+    overlay.classList.toggle("custom-skin-image-mode", hasVisualImage);
+    revokeRuntimeBlobUrls();
+    runtimeBlobUrls = nextBlobUrls;
+  }
+
+  // src/ui/settings-panel.js
+  var enhancedModeState3 = GalgameStore.enhancedMode;
+  function getLive2DManagerRef() {
+    return topWindow?.galgame?.Live2DManager || topWindow?.Live2DManager || null;
+  }
+  var _buildAssetsPaneRef = null;
+  var _bindAssetsPaneRef = null;
+  var _assetStylesRef = null;
+  function setSettingsPanelRefs({ buildAssetsPane, bindAssetsPane, assetStyles }) {
+    if (buildAssetsPane) _buildAssetsPaneRef = buildAssetsPane;
+    if (bindAssetsPane) _bindAssetsPaneRef = bindAssetsPane;
+    if (assetStyles) _assetStylesRef = assetStyles;
+  }
+  function buildAboutPane() {
+    return `
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-bullhorn"></i> 插件发布地址</h3>
+      <p>
+        <a href="https://discord.com/channels/1134557553011998840/1464262276583395359" target="_blank" rel="noopener noreferrer">
+          Discord 发布帖（点击打开）
+        </a>
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-copyright"></i> Live2D 版权与使用声明</h3>
+      <p>
+        Live2D 模型及其相关素材的版权归原作者或权利人所有。除原始授权另有明确许可外，本插件中的模型与资源仅供学习、研究与技术交流使用。
+      </p>
+      <p class="gal-about-warning">
+        禁止将 Live2D 模型或相关素材用于任何商业用途。
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-scale-balanced"></i> 许可协议（CC BY-NC-SA 4.0）</h3>
+      <p>
+        本插件相关内容遵循
+        <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
+        声明。你可以在署名并以相同方式共享的前提下进行非商业使用与修改。
+      </p>
+      <p class="gal-about-warning">
+        明确禁止商用，包括但不限于售卖、付费分发、商业引流、商业服务集成。
+      </p>
+    </div>
+
+    <div class="gal-about-card">
+      <h3><i class="fa-solid fa-gavel"></i> 法律合规声明</h3>
+      <p>
+        使用者必须遵守所在地以及资源来源地的法律法规，禁止将本插件用于违法、侵权、规避监管或其他不当用途。因违规使用产生的风险与责任由使用者自行承担。
+      </p>
+    </div>
+  `;
+  }
+  var BUILTIN_SKIN_LIST = [
+    { value: "none", label: "默认" },
+    { value: "skin-ancient", label: "墨染千秋（中国古风）" },
+    { value: "skin-persona", label: "心之怪盗（女神异闻录）" },
+    { value: "skin-jrpg", label: "苍穹之庭（日式奇幻）" },
+    { value: "skin-classic", label: "樱色物语（经典Galgame）" }
+  ];
+  function getEffectiveSkinList() {
+    const profileItems = getCachedUiSkinProfiles().map((profile) => ({
+      value: profile.id,
+      label: `自定义 · ${profile.displayName}`
+    }));
+    return [...BUILTIN_SKIN_LIST, ...profileItems];
+  }
+  function getSkinOptionHtml(currentSkin) {
+    return getEffectiveSkinList().map((item) => `<option value="${item.value}" ${normalizeSkinValue(currentSkin) === item.value ? "selected" : ""}>${item.label}</option>`).join("");
+  }
+  function refreshSkinSelectElement($root = null) {
+    const $scope = $root && typeof $root.find === "function" ? $root : $2(topWindow.document || document);
+    const $select = $scope.find("#gal-skin-select");
+    if (!$select.length) return;
+    $select.html(getSkinOptionHtml(getSettings().skin));
+  }
+  function normalizeSkinValue(rawSkin) {
+    const skin = String(rawSkin || "none").trim();
+    if (skin === "skin-western" || skin === CUSTOM_SKIN_ID) return "none";
+    if (BUILTIN_SKIN_LIST.some((item) => item.value === skin)) return skin;
+    if (hasUiSkinProfileId(skin)) return skin;
+    return "none";
+  }
+  var DIALOG_FONT_PRESETS = [
+    {
+      value: "sans",
+      label: "现代黑体（默认）",
+      stack: '"Noto Sans SC","PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif'
+    },
+    {
+      value: "serif",
+      label: "思源宋体",
+      stack: '"Noto Serif SC","Songti SC","SimSun","STSong",serif'
+    },
+    {
+      value: "wenkai",
+      label: "霞鹜文楷",
+      stack: '"LXGW WenKai Screen","LXGW WenKai","KaiTi","STKaiti",serif'
+    },
+    {
+      value: "kaiti",
+      label: "经典楷体",
+      stack: '"KaiTi","STKaiti","Kaiti SC","DFKai-SB","Noto Serif SC",serif'
+    },
+    {
+      value: "mono",
+      label: "等宽字体",
+      stack: '"Sarasa Mono SC","Cascadia Mono","JetBrains Mono","SFMono-Regular","Consolas","Liberation Mono",monospace'
+    }
+  ];
+  function getDialogFontStack(fontKey) {
+    const normalizedKey = String(fontKey || "").trim().toLowerCase();
+    const matched = DIALOG_FONT_PRESETS.find((item) => item.value === normalizedKey);
+    return matched ? matched.stack : DIALOG_FONT_PRESETS[0].stack;
+  }
+  function normalizeVoiceNameList(rawList) {
+    return Array.from(
+      new Set(
+        (Array.isArray(rawList) ? rawList : []).map((name) => String(name || "").trim()).filter(Boolean)
+      )
+    );
+  }
+  function escapeHtml2(value) {
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function applySkin() {
+    const settings2 = getSettings();
+    const skin = normalizeSkinValue(settings2.skin);
+    const $overlay = $2("#gal-global-overlay");
+    BUILTIN_SKIN_LIST.forEach((s) => {
+      if (s.value !== "none") $overlay.removeClass(s.value);
+    });
+    getCachedUiSkinProfiles().forEach((profile) => $overlay.removeClass(profile.id));
+    $overlay.removeClass(CUSTOM_SKIN_ID);
+    $overlay.removeClass("skin-western");
+    if (skin !== "none") {
+      $overlay.addClass(hasUiSkinProfileId(skin) ? CUSTOM_SKIN_ID : skin);
+    }
+  }
+  function applySettingsToUI() {
+    const settings2 = getSettings();
+    const activeSkin = normalizeSkinValue(settings2.skin);
+    const fontScale = 0.5 + settings2.fontSize / 30 * 1;
+    const dialogScalePercent = normalizeUiScalePercent(settings2.dialogScalePercent);
+    const toolbarScalePercent = normalizeUiScalePercent(settings2.toolbarScalePercent);
+    settings2.dialogScalePercent = dialogScalePercent;
+    settings2.toolbarScalePercent = toolbarScalePercent;
+    const dialogFontStack = getDialogFontStack(settings2.dialogFontFamily);
+    $2("#gal-global-overlay").css({
+      "--gal-dialog-scale-user": dialogScalePercent / 100,
+      "--gal-toolbar-scale-user": toolbarScalePercent / 100,
+      "--font-scale": fontScale,
+      "--gal-dialog-font-family": dialogFontStack
+    });
+    const opacity = settings2.dialogOpacity;
+    if (activeSkin === "none") {
+      $2(".gal-text-panel").css({
+        "background-color": `rgba(255, 255, 255, ${opacity})`,
+        "background-image": `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
+      });
+    } else {
+      $2("#gal-global-overlay").css("--panel-opacity", opacity);
+      $2(".gal-text-panel").css({ "background-color": "", "background-image": "" });
+    }
+    if (settings2.showSprites) {
+      $2(".gal-layer-character").show();
+    } else {
+      $2(".gal-layer-character").hide();
+    }
+    if (!settings2.showMissingSpritePlaceholder) {
+      $2("#gal-global-overlay .gal-char-placeholder").remove();
+    }
+    const $charLayer = $2(".gal-layer-character");
+    $charLayer.css({
+      bottom: settings2.spriteBottomOffset + "%",
+      gap: settings2.spriteSpacing + "%"
+    });
+    const el = $charLayer.get(0);
+    if (el) {
+      el.style.setProperty("--base-scale", settings2.spriteScale / 100);
+    }
+    if (settings2.speakerGlow) {
+      $2(".gal-layer-character").addClass("glow-enabled");
+    } else {
+      $2(".gal-layer-character").removeClass("glow-enabled");
+    }
+    if (settings2.speakerBubble) {
+      $2(".gal-layer-character").addClass("bubble-enabled");
+    } else {
+      $2(".gal-layer-character").removeClass("bubble-enabled");
+    }
+    applyBgFillMode();
+    applySkin();
+    applyTextEffect();
+    applyCustomSkinRuntime().catch((error3) => {
+      console.warn(`[${SCRIPT_NAME}] custom-skin runtime apply failed:`, error3);
+    });
+    syncPixiEffectsSettings();
+  }
+  function applyBgFillMode() {
+    const settings2 = getSettings();
+    const fillMode = settings2.bgFillMode || "cover";
+    const $bgLayers = $2(".gal-bg-layer");
+    $bgLayers.css("background-size", fillMode);
+    if (fillMode === "contain") {
+      $bgLayers.css("background-position", "center top");
+    } else {
+      $bgLayers.css("background-position", "center");
+    }
+  }
+  function applyTextEffect() {
+    const settings2 = getSettings();
+    const effect = settings2.textEffect || "none";
+    const $textPanel = $2(".gal-text-panel");
+    const $dialogText = $2(".gal-dialog-text");
+    const $nameBadge = $2(".gal-name-badge");
+    const setInlineStyles = ($els, styles, forceImportant = false) => {
+      const priority3 = forceImportant ? "important" : "";
+      $els.each(function() {
+        const el = this;
+        if (!el || !el.style) return;
+        Object.entries(styles).forEach(([prop, value]) => {
+          if (value === "" || value === null || value === void 0) {
+            el.style.removeProperty(prop);
+          } else {
+            el.style.setProperty(prop, String(value), priority3);
+          }
+        });
+      });
+    };
+    $textPanel.removeClass("text-effect-glass text-effect-gradient text-effect-text-bg");
+    setInlineStyles($dialogText, {
+      "text-shadow": "",
+      "-webkit-text-stroke": "",
+      "background-color": "",
+      "padding": "",
+      "border-radius": "",
+      "color": ""
+    });
+    setInlineStyles($nameBadge, {
+      "text-shadow": "",
+      "-webkit-text-stroke": ""
+    });
+    switch (effect) {
+      case "shadow":
+        setInlineStyles($dialogText, {
+          "text-shadow": "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5)",
+          "color": "#fff"
+        }, true);
+        setInlineStyles($nameBadge, {
+          "text-shadow": "0 0 4px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.5)"
+        }, true);
+        break;
+      case "glow":
+        setInlineStyles($dialogText, {
+          "text-shadow": "0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(0,210,255,0.4)",
+          "color": "#fff"
+        }, true);
+        setInlineStyles($nameBadge, {
+          "text-shadow": "0 0 5px rgba(0,210,255,0.8), 0 0 10px rgba(0,210,255,0.5)"
+        }, true);
+        break;
+      case "stroke":
+        setInlineStyles($dialogText, {
+          "-webkit-text-stroke": "1.5px rgba(0,0,0,0.8)",
+          "text-shadow": "0 2px 4px rgba(0,0,0,0.3)",
+          "color": "#fff"
+        }, true);
+        setInlineStyles($nameBadge, {
+          "-webkit-text-stroke": "1px rgba(0,0,0,0.6)",
+          "text-shadow": "0 1px 2px rgba(0,0,0,0.3)"
+        }, true);
+        break;
+      case "glass":
+        $textPanel.addClass("text-effect-glass");
+        setInlineStyles($dialogText, { "color": "#333" }, true);
+        break;
+      case "gradient":
+        $textPanel.addClass("text-effect-gradient");
+        setInlineStyles($dialogText, {
+          "text-shadow": "0 1px 2px rgba(0,0,0,0.3)",
+          "color": "#fff"
+        }, true);
+        break;
+      case "text-bg":
+        $textPanel.addClass("text-effect-text-bg");
+        setInlineStyles($dialogText, {
+          "background-color": "rgba(0,0,0,0.6)",
+          "padding": "8px 12px",
+          "border-radius": "8px",
+          "color": "#fff",
+          "text-shadow": "0 1px 2px rgba(0,0,0,0.3)"
+        }, true);
+        break;
+      default:
+        break;
+    }
+  }
+  async function showSettingsPanel(topTab, subTab) {
+    await refreshUiSkinProfilesCache();
+    const $existing = $2("#gal-unified-panel");
+    if ($existing.length) {
+      if (topTab === void 0) {
+        $existing.remove();
+        return;
+      }
+      $existing.remove();
+    }
+    topTab = topTab || "settings";
+    const settings2 = getSettings();
+    ensureTitleScreenSettings();
+    settings2.ttsDefaultMaleVoices = normalizeVoiceNameList(settings2.ttsDefaultMaleVoices);
+    settings2.ttsDefaultFemaleVoices = normalizeVoiceNameList(settings2.ttsDefaultFemaleVoices);
+    const effectQuality = ["mobile", "balanced", "high"].includes(settings2.effectsQuality) ? settings2.effectsQuality : "balanced";
+    const effectMaxActiveParsed = parseInt(settings2.effectsMaxActive, 10);
+    const effectMaxActive = Number.isFinite(effectMaxActiveParsed) ? Math.max(1, Math.min(effectMaxActiveParsed, 6)) : 2;
+    settings2.effectsQuality = effectQuality;
+    settings2.effectsMaxActive = effectMaxActive;
+    settings2.effectsEnabled = settings2.effectsEnabled !== false;
+    settings2.effectsAutoClearOnSceneChange = settings2.effectsAutoClearOnSceneChange !== false;
+    settings2.dialogScalePercent = normalizeUiScalePercent(settings2.dialogScalePercent);
+    settings2.toolbarScalePercent = normalizeUiScalePercent(settings2.toolbarScalePercent);
+    const typewriterSpeedParsed = parseInt(settings2.typewriterSpeed, 10);
+    const typewriterSoundVolumeParsed = parseInt(settings2.typewriterSoundVolume, 10);
+    settings2.typewriterEnabled = settings2.typewriterEnabled !== false;
+    settings2.typewriterSpeed = Number.isFinite(typewriterSpeedParsed) ? Math.max(5, Math.min(typewriterSpeedParsed, 60)) : 30;
+    settings2.typewriterSoundEnabled = settings2.typewriterSoundEnabled !== false;
+    settings2.typewriterSoundVolume = Number.isFinite(typewriterSoundVolumeParsed) ? Math.max(0, Math.min(typewriterSoundVolumeParsed, 100)) : 35;
+    const live2dManager = getLive2DManagerRef();
+    if (live2dManager) {
+      live2dManager.debug = !!settings2.globalDebug;
+    }
+    const isEnabled = getIsEnabled();
+    const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
+      getAvailablePresets(),
+      getAvailableProfiles(),
+      getAvailableModels(),
+      getAvailableWorldbooks()
+    ]);
+    const savedWorldbooks = settings2.enhancedMode?.secondGenerate?.worldbooks || [];
+    const presetOptions = [
+      '<option value="">使用当前预设</option>',
+      ...presetNames.map((p2) => `<option value="${p2}" ${settings2.enhancedMode?.secondGenerate?.presetName === p2 ? "selected" : ""}>${p2}</option>`)
+    ].join("");
+    const profileOptions = [
+      '<option value="">使用当前连接配置</option>',
+      ...profileNames.map((p2) => `<option value="${p2}" ${settings2.enhancedMode?.secondGenerate?.profileName === p2 ? "selected" : ""}>${p2}</option>`)
+    ].join("");
+    const modelOptions = [
+      '<option value="">使用当前模型</option>',
+      ...modelNames.map((m) => `<option value="${m}" ${settings2.enhancedMode?.secondGenerate?.modelName === m ? "selected" : ""}>${m}</option>`)
+    ].join("");
+    const worldbookListHtml = worldbookNames.length === 0 ? '<div style="font-size: 0.85rem; color: #333; margin-left: 24px; font-weight: 500;">暂无可用的世界书</div>' : `<div style="margin-left: 24px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background: var(--SmartThemeFormBg, #fff); color: var(--SmartThemeBodyColor, #333);">
+        ${worldbookNames.map((wb) => `
+          <label style="display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; font-size: 0.9rem; color: #222; font-weight: 500;">
+            <input type="checkbox" class="gal-enhanced-worldbook-item" value="${wb}" ${savedWorldbooks.includes(wb) ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
+            <span style="color: #333;">${wb}</span>
+          </label>
+        `).join("")}
+      </div>`;
+    const dialogFontOptions = DIALOG_FONT_PRESETS.map((item) => `<option value="${item.value}" ${settings2.dialogFontFamily === item.value ? "selected" : ""}>${item.label}</option>`).join("");
+    let assetsHtml = "";
+    if (_buildAssetsPaneRef) {
+      assetsHtml = await _buildAssetsPaneRef(subTab);
+    }
+    const assetStyles = _assetStylesRef ? _assetStylesRef() : "";
+    const panelHtml = `
+    <div class="gal-config-modal" id="gal-unified-panel">
+      <div class="gal-config-panel">
+        <!-- L1 Tab Header -->
+        <div class="gal-l1-tab-header">
+          <div class="gal-l1-tab-btn ${topTab === "settings" ? "active" : ""}" data-l1-tab="settings"><i class="fa-solid fa-gear"></i> <span>基础设置</span></div>
+          <div class="gal-l1-tab-btn ${topTab === "assets" ? "active" : ""}" data-l1-tab="assets"><i class="fa-solid fa-folder-open"></i> <span>资源管理</span></div>
+          <div class="gal-l1-tab-btn ${topTab === "about" ? "active" : ""}" data-l1-tab="about"><i class="fa-solid fa-circle-info"></i> <span>关于</span></div>
+          <div style="flex:1;"></div>
+          <button class="gal-config-close" id="gal-settings-close"><i class="fa-solid fa-times"></i></button>
+        </div>
+
+        <!-- L1 Pane: 基础设置 -->
+        <div class="gal-config-body" data-l1-pane="settings" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "settings" ? "display: none;" : ""}">
+          <!-- 主开关 -->
+          <div style="text-align: center; margin-bottom: 24px;">
+            <button id="gal-main-toggle" class="${isEnabled ? "gal-toggle-on" : "gal-toggle-off"}"
+                    style="padding: 14px 40px; font-size: 1.1rem; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; gap: 10px;">
+              <i class="fa-solid ${isEnabled ? "fa-toggle-on" : "fa-toggle-off"}" style="font-size: 1.3rem;"></i>
+              <span>${isEnabled ? "Galgame 模式已开启" : "Galgame 模式已关闭"}</span>
+            </button>
+            <p style="margin-top: 8px; font-size: 0.8rem; color: #999;">当前角色卡独立设置</p>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 文本显示 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-font"></i> 文本显示</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">字体大小</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${settings2.fontSize}">
+                <span class="gal-range-value" id="gal-font-size-value">${settings2.fontSize}</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">对话框缩放</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-dialog-scale-percent" min="70" max="130" step="1" value="${settings2.dialogScalePercent}">
+                <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings2.dialogScalePercent}%</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">底栏缩放</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-toolbar-scale-percent" min="70" max="130" step="1" value="${settings2.toolbarScalePercent}">
+                <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings2.toolbarScalePercent}%</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">对话字体</span>
+              <div class="gal-settings-control">
+                <select id="gal-dialog-font-family" class="gal-select">
+                  ${dialogFontOptions}
+                </select>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">对话框透明度</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-dialog-opacity" min="0" max="100" step="5" value="${Math.round((1 - settings2.dialogOpacity) * 100)}">
+                <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round((1 - settings2.dialogOpacity) * 100)}%</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">文字特效</span>
+              <div class="gal-settings-control">
+                <select id="gal-text-effect" class="gal-select">
+                  <option value="none" ${settings2.textEffect === "none" ? "selected" : ""}>无</option>
+                  <option value="shadow" ${settings2.textEffect === "shadow" ? "selected" : ""}>阴影增强</option>
+                  <option value="glow" ${settings2.textEffect === "glow" ? "selected" : ""}>发光效果</option>
+                  <option value="stroke" ${settings2.textEffect === "stroke" ? "selected" : ""}>文字描边</option>
+                  <option value="glass" ${settings2.textEffect === "glass" ? "selected" : ""}>毛玻璃背景</option>
+                  <option value="gradient" ${settings2.textEffect === "gradient" ? "selected" : ""}>底部渐变遮罩</option>
+                  <option value="text-bg" ${settings2.textEffect === "text-bg" ? "selected" : ""}>独立文字背景</option>
+                </select>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">打字机显示</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-enabled" ${settings2.typewriterEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">打字速度</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-typewriter-speed" min="5" max="60" step="1" value="${settings2.typewriterSpeed}">
+                <span class="gal-range-value" id="gal-typewriter-speed-value">${settings2.typewriterSpeed}字/秒</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">打字音效</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-sound-enabled" ${settings2.typewriterSoundEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">音效音量</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-typewriter-sound-volume" min="0" max="100" step="1" value="${settings2.typewriterSoundVolume}">
+                <span class="gal-range-value" id="gal-typewriter-sound-volume-value">${settings2.typewriterSoundVolume}%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 自动播放 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-play"></i> 自动播放</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">播放间隔</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-auto-speed" min="1" max="8" step="0.5" value="${settings2.autoPlaySpeed}">
+                <span class="gal-range-value" id="gal-auto-speed-value">${settings2.autoPlaySpeed}秒</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 显示设置 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-display"></i> 显示设置</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">显示立绘</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-show-sprites" ${settings2.showSprites ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">沉浸模式 <small style="color:#999;">(隐藏其他楼层)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-hide-floors" ${settings2.hideOtherFloors ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">背景图填充 <small style="color:#999;">(cover填满/contain完整)</small></span>
+              <select id="gal-bg-fill-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                <option value="cover" ${settings2.bgFillMode === "cover" ? "selected" : ""}>Cover (填满裁剪)</option>
+                <option value="contain" ${settings2.bgFillMode === "contain" ? "selected" : ""}>Contain (完整显示)</option>
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">界面皮肤</span>
+              <select id="gal-skin-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 200px;">
+                ${getSkinOptionHtml(settings2.skin)}
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">情境样式 <small style="color:#999;">(控制 COT 是否包含 &lt;styled&gt; 规范)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-situational-style-enabled" ${settings2.situationalStyleEnabled !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- Pixi 特效 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Pixi特效</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">启用特效</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-effects-enabled" ${settings2.effectsEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">质量档位</span>
+              <select id="gal-effects-quality" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+                <option value="mobile" ${effectQuality === "mobile" ? "selected" : ""}>Mobile（省电）</option>
+                <option value="balanced" ${effectQuality === "balanced" ? "selected" : ""}>Balanced（默认）</option>
+                <option value="high" ${effectQuality === "high" ? "selected" : ""}>High（高画质）</option>
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">切场景自动清空</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-effects-autoclear" ${settings2.effectsAutoClearOnSceneChange ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">并发上限</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-effects-max-active" min="1" max="6" step="1" value="${effectMaxActive}">
+                <span class="gal-range-value" id="gal-effects-max-active-value">${effectMaxActive}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 立绘设置 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-user"></i> 立绘设置</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">立绘大小</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-sprite-scale" min="50" max="150" step="5" value="${settings2.spriteScale}">
+                <span class="gal-range-value" id="gal-sprite-scale-value">${settings2.spriteScale}%</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">垂直位置 <small style="color:#999;">(底部偏移)</small></span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${settings2.spriteBottomOffset}">
+                <span class="gal-range-value" id="gal-sprite-bottom-value">${settings2.spriteBottomOffset}%</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">立绘间距 <small style="color:#999;">(左右距离)</small></span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings2.spriteSpacing}">
+                <span class="gal-range-value" id="gal-sprite-spacing-value">${settings2.spriteSpacing}%</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">无立绘时显示添加框 <small style="color:#999;">(关闭后不可点击上传)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings2.showMissingSpritePlaceholder ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">说话者光晕 <small style="color:#999;">(轮廓发光)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-speaker-glow" ${settings2.speakerGlow ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">气泡指示器 <small style="color:#999;">(漫画风格)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-speaker-bubble" ${settings2.speakerBubble ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- TTS配音 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-volume-high"></i> TTS配音</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">启用TTS配音</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-enabled" ${getTTSEnabled() ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">开启：对话格式含TTS属性，表情在开头<br>关闭：简单对话格式，表情在结尾</p>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">TTS引擎</span>
+              <select id="gal-tts-provider" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
+                <option value="littlewhitebox" ${settings2.ttsProvider === "littlewhitebox" ? "selected" : ""}>小白X（豆包火山）</option>
+                <option value="gpt_sovits_v2" ${settings2.ttsProvider === "gpt_sovits_v2" ? "selected" : ""}>GPT-SoVITS v2ProPlus</option>
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">自动播放 <small style="color:#999;">(切段自动朗读)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings2.ttsAutoPlay ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">中日双语模式 <small style="color:#999;">(显示中文，TTS发送日文)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings2.ttsBilingualZhJaEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">按“中文文本[JP]日文文本”输出（兼容【JP】）；未命中时自动回退原文朗读。</p>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">默认音色</span>
+              <select id="gal-tts-default-speaker" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
+                <option value="">（不指定）</option>
+              </select>
+            </div>
+            <p id="gal-tts-default-speaker-hint" style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;"></p>
+            <div class="gal-settings-row" style="align-items: flex-start;">
+              <span class="gal-settings-label">默认男声列表</span>
+              <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 480px); gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <select id="gal-tts-default-male-candidate" class="gal-voice-pool-select" style="flex: 1;">
+                    <option value="">选择后立即加入列表</option>
+                  </select>
+                </div>
+                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
+                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
+                <div id="gal-tts-default-male-list" class="gal-voice-chip-list"></div>
+              </div>
+            </div>
+            <div class="gal-settings-row" style="align-items: flex-start;">
+              <span class="gal-settings-label">默认女声列表</span>
+              <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 480px); gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <select id="gal-tts-default-female-candidate" class="gal-voice-pool-select" style="flex: 1;">
+                    <option value="">选择后立即加入列表</option>
+                  </select>
+                </div>
+                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
+                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
+                <div id="gal-tts-default-female-list" class="gal-voice-chip-list"></div>
+              </div>
+            </div>
+            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
+              当 COT 使用 <code>男声/女声</code> 标签且角色未绑定时，将从对应列表随机分配并自动绑定。
+            </p>
+
+            <div id="gal-gpt-sovits-config" style="margin-top: 10px; padding: 12px; border: 1px dashed #ddd; border-radius: 8px; background: #fafafa; ${settings2.ttsProvider === "gpt_sovits_v2" ? "" : "display: none;"}">
+              <div style="font-weight: 700; margin-bottom: 10px; color: ${THEME.dark}; display:flex; align-items:center; gap:8px;">
+                <i class="fa-solid fa-microchip" style="color:${THEME.accent};"></i>
+                <span>GPT-SoVITS（api_v2.py）设置</span>
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">API地址</span>
+                <input type="text" id="gal-gpt-sovits-url" value="${settings2.gptSoVits?.apiUrl || ""}" placeholder="http://127.0.0.1:9880" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">使用酒馆代理</span>
+                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-proxy" ${settings2.gptSoVits?.useCorsProxy ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">模型切换模式</span>
+                <select id="gal-gpt-sovits-switch-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 210px;">
+                  <option value="set_weights" ${(settings2.gptSoVits?.modelSwitchMode || "set_weights") === "set_weights" ? "selected" : ""}>set_weights (api_v2.py)</option>
+                  <option value="set_model" ${(settings2.gptSoVits?.modelSwitchMode || "") === "set_model" ? "selected" : ""}>set_model (api.py)</option>
+                  <option value="none" ${(settings2.gptSoVits?.modelSwitchMode || "") === "none" ? "selected" : ""}>none（不自动切换）</option>
+                </select>
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">set_model 接口</span>
+                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${settings2.gptSoVits?.setModelEndpoint || "/set_model"}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">严格切换 <small style="color:#999;">(失败不回退)</small></span>
+                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-strict-switch" ${settings2.gptSoVits?.strictWeightSwitch ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              </div>
+              <div class="gal-settings-row">
+                <span class="gal-settings-label">模型管理</span>
+                <button class="gal-action-btn" id="gal-gpt-sovits-open-model-manager" style="min-width: 180px; padding: 8px 14px;">
+                  <i class="fa-solid fa-layer-group"></i> 打开管理面板
+                </button>
+              </div>
+              <div style="margin-top: 10px;">
+                <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">音色列表（JSON）</div>
+                <textarea id="gal-gpt-sovits-voices-json" rows="6" placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh"}]' style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8rem;"></textarea>
+                <div style="display:flex; gap:10px; margin-top: 10px;">
+                  <button class="gal-panel-btn secondary" id="gal-gpt-sovits-voices-save" style="flex: 1; padding: 10px;"><i class="fa-solid fa-floppy-disk"></i><span>保存音色列表</span></button>
+                  <button class="gal-panel-btn" id="gal-gpt-sovits-test" style="flex: 1; padding: 10px;"><i class="fa-solid fa-play"></i><span>试听</span></button>
+                </div>
+                <input type="text" id="gal-gpt-sovits-test-text" value="你好，这是一段 GPT-SoVITS 配音测试。" style="width: 100%; margin-top: 10px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem;" placeholder="试听文本">
+              </div>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 快捷键 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-keyboard"></i> 快捷键</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">空格键 -> 下一句</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-space-next" ${settings2.spaceKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">回车键 -> 下一句</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-enter-next" ${settings2.enterKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">Ctrl长按 -> 快进</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-ctrl-skip" ${settings2.ctrlKeySkip ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 快进设置 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-forward"></i> 快进设置</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label" title="开启后，只有检测到Galgame标签才会显示界面；关闭则总是显示">智能判断主界面显示</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings2.smartDetection ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">全局Debug日志</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings2.globalDebug ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">快进速度</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-skip-speed" min="0.01" max="0.2" step="0.01" value="${settings2.skipSpeed}">
+                <span class="gal-range-value" id="gal-skip-speed-value">${settings2.skipSpeed}s</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 加强模式 -->
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-bolt" style="color: #ff9800;"></i> 加强模式</div>
+            <div class="gal-settings-row" style="margin-bottom: 12px;">
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span class="gal-settings-label" style="font-weight: 600;">启用加强模式</span>
+                <small style="color: #888; font-size: 0.75rem;">两次生成策略：内容创作 + COT格式化</small>
+              </div>
+              <label class="gal-switch"><input type="checkbox" id="gal-enhanced-mode" ${settings2.enhancedMode?.enabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div id="gal-enhanced-hint" style="${settings2.enhancedMode?.enabled ? "" : "display: none;"} padding: 12px; background: #fff8e1; border-radius: 6px; margin-bottom: 16px; font-size: 0.8rem; color: #666; line-height: 1.5;">
+              <i class="fa-solid fa-lightbulb" style="color: #ff9800;"></i>
+              第一次生成专注内容，第二次切换API进行COT格式化。
+            </div>
+            <div id="gal-enhanced-config" style="${settings2.enhancedMode?.enabled ? "" : "display: none;"} padding-left: 12px; border-left: 2px solid #ffe0b2;">
+              <div style="font-weight: 600; margin-bottom: 12px; color: #e65100; font-size: 0.9rem;">第二次生成配置</div>
+              <div style="margin-bottom: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
+                  <input type="checkbox" id="gal-enhanced-use-profile" ${settings2.enhancedMode?.secondGenerate?.useProfile ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
+                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">连接配置</span>
+                </label>
+                <select id="gal-enhanced-profile-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${profileOptions}</select>
+              </div>
+              <div style="margin-bottom: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
+                  <input type="checkbox" id="gal-enhanced-use-model" ${settings2.enhancedMode?.secondGenerate?.useModel ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
+                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">模型</span>
+                </label>
+                <select id="gal-enhanced-model-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${modelOptions}</select>
+              </div>
+              <div style="margin-bottom: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
+                  <input type="checkbox" id="gal-enhanced-use-preset" ${settings2.enhancedMode?.secondGenerate?.usePreset ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
+                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">预设</span>
+                </label>
+                <select id="gal-enhanced-preset-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${presetOptions}</select>
+              </div>
+              <div style="margin-bottom: 10px;">
+                <div style="font-size: 0.9rem; font-weight: 600; color: #222; margin-bottom: 8px;">世界书设置</div>
+                <div style="margin-left: 24px;">
+                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="default" ${!settings2.enhancedMode?.secondGenerate?.useWorldbooks && (!settings2.enhancedMode?.secondGenerate?.worldbooks || settings2.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
+                    <span>不使用自定义世界书(默认选择)</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="none" ${settings2.enhancedMode?.secondGenerate?.useWorldbooks && (!settings2.enhancedMode?.secondGenerate?.worldbooks || settings2.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
+                    <span>不使用任何世界书</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="custom" ${settings2.enhancedMode?.secondGenerate?.useWorldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "checked" : ""} style="cursor: pointer;">
+                    <span>使用以下世界书：</span>
+                  </label>
+                  <div id="gal-enhanced-worldbooks-list" style="margin-left: 24px; ${settings2.enhancedMode?.secondGenerate?.useWorldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "" : "display: none;"}">${worldbookListHtml}</div>
+                </div>
+              </div>
+              <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #ffe0b2;">
+                <button id="gal-enhanced-view-prompts" class="gal-panel-btn secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  <i class="fa-solid fa-eye"></i><span>查看提示词</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="gal-settings-divider"></div>
+
+          <!-- 刷新视图 -->
+          <div style="margin-top: 16px;">
+            <button class="gal-panel-btn secondary" id="gal-refresh-views" style="width: 100%;"><i class="fa-solid fa-sync"></i><span>刷新视图</span></button>
+          </div>
+        </div>
+
+        <!-- L1 Pane: 资源管理 -->
+        <div data-l1-pane="assets" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "assets" ? "display: none;" : ""}">
+          ${assetsHtml}
+        </div>
+
+        <!-- L1 Pane: 关于 -->
+        <div data-l1-pane="about" class="gal-about-pane" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "about" ? "display: none;" : ""}">
+          ${buildAboutPane()}
+        </div>
+      </div>
+    </div>
+
+    <style>
+      .gal-toggle-on { background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); color: #fff; box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4); }
+      .gal-toggle-off { background: #e0e0e0; color: #666; }
+      .gal-toggle-on:hover, .gal-toggle-off:hover { transform: scale(1.02); }
+      .gal-settings-divider { border-top: 1px solid #e0e0e0; margin: 16px 0; }
+      .gal-settings-section { margin-bottom: 8px; }
+      .gal-settings-section-title { font-weight: 700; font-size: 0.95rem; color: ${THEME.dark}; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+      .gal-settings-section-title i { color: ${THEME.accent}; }
+      .gal-settings-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+      .gal-settings-row:last-child { border-bottom: none; }
+      .gal-settings-label { font-size: 0.9rem; color: #444; }
+      .gal-settings-control { display: flex; align-items: center; gap: 10px; }
+      .gal-settings-control input[type="range"] { width: 120px; accent-color: ${THEME.accent}; }
+      .gal-range-value { min-width: 45px; text-align: right; font-weight: 600; font-size: 0.85rem; color: ${THEME.accent}; }
+      .gal-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
+      .gal-switch input { opacity: 0; width: 0; height: 0; }
+      .gal-switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: 0.3s; border-radius: 26px; }
+      .gal-switch-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+      .gal-switch input:checked + .gal-switch-slider { background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); }
+      .gal-switch input:checked + .gal-switch-slider:before { transform: translateX(22px); }
+      .gal-panel-btn { padding: 14px; background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all 0.2s; }
+      .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
+      .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+      .gal-panel-btn i { font-size: 1.3rem; }
+      .gal-title-settings-input,
+      .gal-title-settings-select {
+        width: min(100%, 460px);
+        min-height: 36px;
+        border-radius: 8px;
+        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        padding: 7px 10px;
+        box-sizing: border-box;
+        outline: none;
+      }
+      .gal-title-settings-input::placeholder {
+        color: rgba(245, 247, 250, 0.74);
+      }
+      .gal-title-settings-input:focus,
+      .gal-title-settings-select:focus {
+        border-color: var(--SmartThemeEmColor, #9ac7ff);
+        box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
+      }
+      .gal-title-settings-input:disabled,
+      .gal-title-settings-select:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .gal-voice-pool-select {
+        padding: 8px 10px;
+        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+      }
+      .gal-voice-pool-select:focus {
+        outline: none;
+        border-color: var(--SmartThemeEmColor, #9ac7ff);
+        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
+      }
+      .gal-voice-chip-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 28px; }
+      .gal-voice-chip-empty { font-size: 0.78rem; color: #888; }
+      .gal-voice-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        font-size: 0.8rem;
+        max-width: 100%;
+      }
+      .gal-voice-chip-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gal-voice-chip-remove {
+        border: none;
+        border-radius: 999px;
+        width: 18px;
+        height: 18px;
+        line-height: 18px;
+        padding: 0;
+        cursor: pointer;
+        background: rgba(220, 53, 69, 0.2);
+        color: var(--SmartThemeBodyColor, #f5f7fa);
+        font-weight: 700;
+      }
+      .gal-voice-chip-remove:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
+      }
+
+      /* L1 Tab Header */
+      .gal-l1-tab-header { display:flex; align-items:center; background:var(--SmartThemeBotMesBlurTintColor, #1a1a2e); padding:0; border-bottom:2px solid ${THEME.accent}; }
+      .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
+      .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
+      .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
+      .gal-about-pane { display: flex; flex-direction: column; gap: 14px; }
+      .gal-about-card { background: #f8fbff; border: 1px solid #dce9ff; border-radius: 10px; padding: 16px; color: #2f3a4a; line-height: 1.7; }
+      .gal-about-card h3 { margin: 0 0 8px 0; color: ${THEME.dark}; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+      .gal-about-card h3 i { color: ${THEME.accent}; }
+      .gal-about-card p { margin: 0 0 8px 0; }
+      .gal-about-card p:last-child { margin-bottom: 0; }
+      .gal-about-card a { color: #2563eb; text-decoration: underline; word-break: break-all; }
+      .gal-about-warning { color: #b42318; font-weight: 700; }
+
+      ${assetStyles}
+    </style>
+  `;
+    $2(getModalMountRoot()).append(panelHtml);
+    const $panel = $2("#gal-unified-panel");
+    const renderVoicePoolChips = (containerSelector, poolKey) => {
+      const $container = $2(containerSelector);
+      if (!$container.length) return;
+      const normalizedList = normalizeVoiceNameList(settings2[poolKey]);
+      settings2[poolKey] = normalizedList;
+      if (normalizedList.length === 0) {
+        $container.html('<span class="gal-voice-chip-empty">当前为空（从上方选择音色即可加入）。</span>');
+        return;
+      }
+      const html = normalizedList.map((voiceName) => `
+        <span class="gal-voice-chip">
+          <span class="gal-voice-chip-name" title="${escapeHtml2(voiceName)}">${escapeHtml2(voiceName)}</span>
+          <button type="button" class="gal-voice-chip-remove" data-pool="${poolKey}" data-voice="${escapeHtml2(voiceName)}">×</button>
+        </span>
+      `).join("");
+      $container.html(html);
+    };
+    const refreshTtsVoicePoolCandidates = (voiceList) => {
+      const optionHtml = ['<option value="">选择后立即加入列表</option>'].concat(
+        voiceList.map((v) => {
+          const name = String(v?.name || "").trim();
+          if (!name) return "";
+          const desc = String(v?.desc || "").trim();
+          const label = desc ? `${name} (${desc})` : name;
+          return `<option value="${escapeHtml2(name)}">${escapeHtml2(label)}</option>`;
+        }).filter(Boolean)
+      ).join("");
+      const $maleCandidate = $2("#gal-tts-default-male-candidate");
+      const $femaleCandidate = $2("#gal-tts-default-female-candidate");
+      if ($maleCandidate.length) {
+        $maleCandidate.html(optionHtml);
+        $maleCandidate.val("");
+      }
+      if ($femaleCandidate.length) {
+        $femaleCandidate.html(optionHtml);
+        $femaleCandidate.val("");
+      }
+      renderVoicePoolChips("#gal-tts-default-male-list", "ttsDefaultMaleVoices");
+      renderVoicePoolChips("#gal-tts-default-female-list", "ttsDefaultFemaleVoices");
+    };
+    const refreshTtsVoiceOptions = async () => {
+      const $sel = $2("#gal-tts-default-speaker");
+      const $hint = $2("#gal-tts-default-speaker-hint");
+      if (!$sel.length) return;
+      let voiceList = [];
+      try {
+        voiceList = await getTTSVoiceListAsync();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 获取TTS音色列表失败:`, e);
+      }
+      const current = settings2.ttsDefaultSpeaker || "";
+      $sel.empty().append('<option value="">（不指定）</option>');
+      voiceList.forEach((v) => {
+        const name = String(v?.name || "").trim();
+        if (!name) return;
+        const desc = String(v?.desc || "").trim();
+        const label = desc ? `${name} (${desc})` : name;
+        $sel.append(`<option value="${escapeHtml2(name)}">${escapeHtml2(label)}</option>`);
+      });
+      $sel.val(current);
+      refreshTtsVoicePoolCandidates(voiceList);
+      const provider = getTTSProvider();
+      const providerHint = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? "GPT-SoVITS：建议把音色 name 设为角色名。" : "LittleWhiteBox：未指定/未绑定时使用此默认音色。";
+      if ($hint.length) $hint.text(providerHint + (voiceList.length === 0 ? "（当前音色列表为空）" : ""));
+    };
+    if ($2("#gal-gpt-sovits-voices-json").length) {
+      try {
+        $2("#gal-gpt-sovits-voices-json").val(JSON.stringify(settings2.gptSoVits?.voices || [], null, 2));
+      } catch (e) {
+        $2("#gal-gpt-sovits-voices-json").val("[]");
+      }
+    }
+    refreshTtsVoiceOptions();
+    $panel.find(".gal-l1-tab-btn").on("click", function() {
+      const tab = $2(this).data("l1-tab");
+      $panel.find(".gal-l1-tab-btn").removeClass("active");
+      $2(this).addClass("active");
+      $panel.find("[data-l1-pane]").hide();
+      $panel.find(`[data-l1-pane="${tab}"]`).show();
+    });
+    $2("#gal-settings-close").on("click", () => $panel.remove());
+    $panel.on("click", function(e) {
+      if (e.target === this) $panel.remove();
+    });
+    $2("#gal-main-toggle").on("click", async function() {
+      const newEnabled = !getIsEnabled();
+      setIsEnabled(newEnabled);
+      setCurrentCharEnabled(newEnabled);
+      updateButtonState();
+      if (newEnabled) {
+        $2(this).removeClass("gal-toggle-off").addClass("gal-toggle-on").html('<i class="fa-solid fa-toggle-on" style="font-size: 1.3rem;"></i><span>Galgame 模式已开启</span>');
+        await injectCOTToWorldbook();
+        applyGalgameMode();
+        if (settings2.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
+        showToast4("Galgame 模式已开启");
+      } else {
+        $2(this).removeClass("gal-toggle-on").addClass("gal-toggle-off").html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame 模式已关闭</span>');
+        await disableWorldbookGlobally();
+        restoreOriginalViews();
+        setTimeout(() => {
+          const $lastMes = $2("#chat > .mes").last();
+          if ($lastMes.length) $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
+        }, 150);
+        showToast4("Galgame 模式已关闭");
+      }
+    });
+    $2("#gal-font-size").on("input", function() {
+      settings2.fontSize = parseInt($2(this).val());
+      $2("#gal-font-size-value").text(settings2.fontSize);
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-dialog-scale-percent").on("input", function() {
+      settings2.dialogScalePercent = normalizeUiScalePercent($2(this).val());
+      $2("#gal-dialog-scale-percent-value").text(`${settings2.dialogScalePercent}%`);
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-toolbar-scale-percent").on("input", function() {
+      settings2.toolbarScalePercent = normalizeUiScalePercent($2(this).val());
+      $2("#gal-toolbar-scale-percent-value").text(`${settings2.toolbarScalePercent}%`);
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-dialog-font-family").on("change", function() {
+      settings2.dialogFontFamily = $2(this).val();
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-dialog-opacity").on("input", function() {
+      const t = parseInt($2(this).val());
+      settings2.dialogOpacity = 1 - t / 100;
+      $2("#gal-dialog-opacity-value").text(t + "%");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-text-effect").on("change", function() {
+      settings2.textEffect = $2(this).val();
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-typewriter-enabled").on("change", function() {
+      settings2.typewriterEnabled = $2(this).is(":checked");
+      if (!settings2.typewriterEnabled && isTypewriterActive()) {
+        finishActiveTypewriter();
+      }
+      saveSettings();
+    });
+    $2("#gal-typewriter-speed").on("input", function() {
+      const parsed = parseInt($2(this).val(), 10);
+      settings2.typewriterSpeed = Number.isFinite(parsed) ? Math.max(5, Math.min(parsed, 60)) : 30;
+      $2("#gal-typewriter-speed-value").text(settings2.typewriterSpeed + "字/秒");
+      saveSettings();
+    });
+    $2("#gal-typewriter-sound-enabled").on("change", function() {
+      settings2.typewriterSoundEnabled = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-typewriter-sound-volume").on("input", function() {
+      const parsed = parseInt($2(this).val(), 10);
+      settings2.typewriterSoundVolume = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 100)) : 35;
+      $2("#gal-typewriter-sound-volume-value").text(settings2.typewriterSoundVolume + "%");
+      saveSettings();
+    });
+    $2("#gal-auto-speed").on("input", function() {
+      settings2.autoPlaySpeed = parseFloat($2(this).val());
+      $2("#gal-auto-speed-value").text(settings2.autoPlaySpeed + "秒");
+      saveSettings();
+    });
+    $2("#gal-show-sprites").on("change", function() {
+      settings2.showSprites = $2(this).is(":checked");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-hide-floors").on("change", function() {
+      settings2.hideOtherFloors = $2(this).is(":checked");
+      setHideOtherFloors(settings2.hideOtherFloors);
+      if (getIsEnabled()) {
+        if (settings2.hideOtherFloors) hideNonLastFloors();
+        else showAllFloors();
+      }
+      saveSettings();
+    });
+    $2("#gal-bg-fill-mode").on("change", function() {
+      settings2.bgFillMode = $2(this).val();
+      applyBgFillMode();
+      saveSettings();
+    });
+    $2("#gal-skin-select").on("change", function() {
+      settings2.skin = normalizeSkinValue($2(this).val());
+      applySkin();
+      applySettingsToUI();
+      saveSettings();
+    });
+    const getTitleSettingsState = () => {
+      const normalized = ensureTitleScreenSettings();
+      settings2.titleScreen = normalized;
+      return normalized;
+    };
+    const normalizeTitleSourceChoice = (ts) => {
+      const source = String(ts?.backgroundSource || "").trim().toLowerCase();
+      if (source === "url" || source === "upload") return source;
+      return String(ts?.backgroundUrl || "").trim() ? "url" : "upload";
+    };
+    const getTitleSceneName = () => {
+      const ts = getTitleSettingsState();
+      return String(ts.backgroundSceneName || "__title__").trim() || "__title__";
+    };
+    const syncTitleSourceInputs = () => {
+      const ts = getTitleSettingsState();
+      const source = normalizeTitleSourceChoice(ts);
+      if (String(ts.backgroundSource || "").trim().toLowerCase() !== source) {
+        ts.backgroundSource = source;
+        saveSettings();
+      }
+      $2("#gal-title-bg-source").val(source);
+      const useUrl = source === "url";
+      const useUpload = source === "upload";
+      $2("#gal-title-bg-upload-row").css("display", useUpload ? "flex" : "none");
+      $2("#gal-title-bg-url-row").css("display", useUrl ? "flex" : "none");
+      $2("#gal-title-bg-url").prop("disabled", !useUrl);
+      $2("#gal-title-bg-upload-btn").prop("disabled", !useUpload).css("opacity", useUpload ? 1 : 0.6).css("pointer-events", useUpload ? "auto" : "none");
+      $2("#gal-title-bg-file").prop("disabled", !useUpload);
+    };
+    $2("#gal-title-enabled").on("change", function() {
+      const ts = getTitleSettingsState();
+      const enabled = $2(this).is(":checked");
+      ts.enabled = enabled;
+      if (enabled) {
+        setIsEnabled(true);
+        setCurrentCharEnabled(true);
+        updateButtonState();
+      }
+      saveSettings();
+    });
+    $2("#gal-title-text").on("input change", function() {
+      const ts = getTitleSettingsState();
+      ts.titleText = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2("#gal-title-subtitle").on("input change", function() {
+      const ts = getTitleSettingsState();
+      ts.subtitleText = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2("#gal-title-bg-source").on("change", function() {
+      const ts = getTitleSettingsState();
+      const nextSource = String($2(this).val() || "upload").trim().toLowerCase() === "url" ? "url" : "upload";
+      ts.backgroundSource = nextSource;
+      saveSettings();
+      syncTitleSourceInputs();
+    });
+    $2("#gal-title-bg-fit").on("change", function() {
+      const ts = getTitleSettingsState();
+      ts.backgroundFit = String($2(this).val() || "cover").trim();
+      saveSettings();
+    });
+    $2("#gal-title-mask-enabled").on("change", function() {
+      const ts = getTitleSettingsState();
+      ts.enableBackdropMask = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-title-bg-url").on("input change", function() {
+      const ts = getTitleSettingsState();
+      const nextUrl = String($2(this).val() || "").trim();
+      ts.backgroundUrl = nextUrl;
+      saveSettings();
+    });
+    $2("#gal-title-bg-upload-btn").on("click", function() {
+      if ($2(this).prop("disabled")) return;
+      $2("#gal-title-bg-file").trigger("click");
+    });
+    $2("#gal-title-bg-file").on("change", async function() {
+      const file = this.files && this.files[0] ? this.files[0] : null;
+      if (!file) return;
+      const sceneName = getTitleSceneName();
+      const $hint = $2("#gal-title-bg-upload-hint");
+      try {
+        await saveBackground(sceneName, file);
+        const ts = getTitleSettingsState();
+        ts.backgroundSource = "upload";
+        $hint.text(`已保存：${sceneName}（${file.name}）`);
+        showToast4("标题背景上传成功");
+        saveSettings();
+        syncTitleSourceInputs();
+      } catch (error3) {
+        console.error(`[${SCRIPT_NAME}] 标题背景上传失败:`, error3);
+        showToast4("标题背景上传失败");
+      } finally {
+        this.value = "";
+      }
+    });
+    syncTitleSourceInputs();
+    $2("#gal-effects-enabled").on("change", function() {
+      settings2.effectsEnabled = $2(this).is(":checked");
+      if (!settings2.effectsEnabled) {
+        clearAllPixiEffects();
+      }
+      syncPixiEffectsSettings();
+      saveSettings();
+      injectCOTToWorldbook().catch(() => {
+      });
+    });
+    $2("#gal-effects-quality").on("change", function() {
+      const nextQuality = String($2(this).val() || "").trim();
+      settings2.effectsQuality = ["mobile", "balanced", "high"].includes(nextQuality) ? nextQuality : "balanced";
+      syncPixiEffectsSettings();
+      saveSettings();
+    });
+    $2("#gal-effects-autoclear").on("change", function() {
+      settings2.effectsAutoClearOnSceneChange = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-effects-max-active").on("input change", function() {
+      const parsed = parseInt($2(this).val(), 10);
+      settings2.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
+      $2("#gal-effects-max-active-value").text(settings2.effectsMaxActive);
+      syncPixiEffectsSettings();
+      saveSettings();
+    });
+    $2("#gal-space-next").on("change", function() {
+      settings2.spaceKeyNext = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-enter-next").on("change", function() {
+      settings2.enterKeyNext = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-ctrl-skip").on("change", function() {
+      settings2.ctrlKeySkip = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-enhanced-mode").on("change", function() {
+      const enabled = $2(this).is(":checked");
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.enabled = enabled;
+      saveSettings();
+      $2("#gal-enhanced-hint, #gal-enhanced-config").toggle(enabled);
+      showToast4(enabled ? "已启用加强模式" : "已禁用加强模式");
+    });
+    $2("#gal-enhanced-use-profile").on("change", function() {
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.secondGenerate.useProfile = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-enhanced-profile-name").on("change", function() {
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.secondGenerate.profileName = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2("#gal-enhanced-use-model").on("change", function() {
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.secondGenerate.useModel = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-enhanced-model-name").on("change", function() {
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.secondGenerate.modelName = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2("#gal-enhanced-use-preset").on("change", function() {
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.secondGenerate.usePreset = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-enhanced-preset-name").on("change", function() {
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.secondGenerate.presetName = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2('input[name="gal-enhanced-worldbook-mode"]').on("change", function() {
+      const mode = $2(this).val();
+      const enhancedConfig = ensureEnhancedModeSettings();
+      if (mode === "default") {
+        enhancedConfig.secondGenerate.useWorldbooks = false;
+        enhancedConfig.secondGenerate.worldbooks = [];
+        $2("#gal-enhanced-worldbooks-list").hide();
+        $2(".gal-enhanced-worldbook-item").prop("checked", false);
+      } else if (mode === "none") {
+        enhancedConfig.secondGenerate.useWorldbooks = true;
+        enhancedConfig.secondGenerate.worldbooks = [];
+        $2("#gal-enhanced-worldbooks-list").hide();
+        $2(".gal-enhanced-worldbook-item").prop("checked", false);
+      } else if (mode === "custom") {
+        enhancedConfig.secondGenerate.useWorldbooks = true;
+        $2("#gal-enhanced-worldbooks-list").show();
+      }
+      saveSettings();
+    });
+    $2(document).on("change", ".gal-enhanced-worldbook-item", function() {
+      const selected = [];
+      $2(".gal-enhanced-worldbook-item:checked").each(function() {
+        selected.push($2(this).val());
+      });
+      const enhancedConfig = ensureEnhancedModeSettings();
+      enhancedConfig.secondGenerate.worldbooks = Array.from(new Set(selected.map((name) => String(name || "").trim()).filter(Boolean)));
+      if (selected.length === 0) {
+        $2('input[name="gal-enhanced-worldbook-mode"][value="none"]').prop("checked", true);
+        $2("#gal-enhanced-worldbooks-list").hide();
+      }
+      saveSettings();
+    });
+    $2("#gal-enhanced-view-prompts").on("click", function() {
+      const prompts = enhancedModeState3.lastPrompts;
+      if (!prompts) {
+        showToast4("暂无提示词记录");
+        return;
+      }
+      const esc = (str) => (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const html = `<div id="gal-prompts-modal" class="gal-z-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+      <div style="background:var(--SmartThemeFormBg,#fff);border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+        <div style="padding:16px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#ff9800,#ff5722);color:#fff;border-radius:12px 12px 0 0;">
+          <div style="font-weight:700;font-size:1.1rem;"><i class="fa-solid fa-eye"></i> 加强模式提示词</div>
+          <button id="gal-prompts-modal-close" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1rem;"><i class="fa-solid fa-times"></i></button>
+        </div>
+        <div style="padding:20px;overflow-y:auto;flex:1;">
+          <div style="margin-bottom:8px;color:#888;font-size:0.85rem;"><i class="fa-solid fa-clock"></i> ${prompts.timestamp}</div>
+          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:#e65100;">System Prompt</div><pre style="background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.systemPrompt)}</pre></div>
+          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:#1976d2;">First Result</div><pre style="background:#e3f2fd;border:1px solid #bbdefb;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.firstResult)}</pre></div>
+          <div><div style="font-weight:600;margin-bottom:8px;color:#388e3c;">User Prompt</div><pre style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.userPrompt)}</pre></div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid #e0e0e0;text-align:right;">
+          <button id="gal-prompts-modal-copy" style="background:#2196f3;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;margin-right:8px;"><i class="fa-solid fa-copy"></i> 复制全部</button>
+          <button id="gal-prompts-modal-ok" style="background:#4caf50;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-check"></i> 确定</button>
+        </div>
+      </div>
+    </div>`;
+      const mountRoot = getModalMountRoot();
+      $2(mountRoot).append(html);
+      const $m = $2(mountRoot).find("#gal-prompts-modal");
+      $m.find("#gal-prompts-modal-close, #gal-prompts-modal-ok").on("click", () => $m.remove());
+      $m.on("click", (e) => {
+        if (e.target === $m[0]) $m.remove();
+      });
+      $m.find("#gal-prompts-modal-copy").on("click", () => {
+        navigator.clipboard.writeText(`=== 加强模式提示词 (${prompts.timestamp}) ===
+
+【System Prompt】
+${prompts.systemPrompt}
+
+【第一次生成结果】
+${prompts.firstResult}
+
+【User Prompt】
+${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(() => showToast4("复制失败"));
+      });
+    });
+    $2("#gal-skip-speed").on("input", function() {
+      settings2.skipSpeed = parseFloat($2(this).val());
+      $2("#gal-skip-speed-value").text(settings2.skipSpeed + "s");
+      saveSettings();
+    });
+    $2("#gal-smart-detection").on("change", function() {
+      settings2.smartDetection = $2(this).is(":checked");
+      saveSettings();
+      if (getIsEnabled()) applyGalgameMode();
+    });
+    $2("#gal-global-debug").on("change", function() {
+      settings2.globalDebug = $2(this).is(":checked");
+      setGlobalDebugEnabled(settings2.globalDebug);
+      const manager = getLive2DManagerRef();
+      if (manager) {
+        manager.debug = !!settings2.globalDebug;
+      }
+      saveSettings();
+      showToast4(settings2.globalDebug ? "全局 Debug 日志已开启" : "全局 Debug 日志已关闭，仅显示错误日志");
+    });
+    $2("#gal-sprite-scale").on("input", function() {
+      settings2.spriteScale = parseInt($2(this).val());
+      $2("#gal-sprite-scale-value").text(settings2.spriteScale + "%");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-sprite-bottom").on("input", function() {
+      settings2.spriteBottomOffset = parseInt($2(this).val());
+      $2("#gal-sprite-bottom-value").text(settings2.spriteBottomOffset + "%");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-sprite-spacing").on("input", function() {
+      settings2.spriteSpacing = parseInt($2(this).val());
+      $2("#gal-sprite-spacing-value").text(settings2.spriteSpacing + "%");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-show-missing-sprite-placeholder").on("change", function() {
+      settings2.showMissingSpritePlaceholder = $2(this).is(":checked");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-speaker-glow").on("change", function() {
+      settings2.speakerGlow = $2(this).is(":checked");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-speaker-bubble").on("change", function() {
+      settings2.speakerBubble = $2(this).is(":checked");
+      applySettingsToUI();
+      saveSettings();
+    });
+    $2("#gal-tts-enabled").on("change", function() {
+      const enabled = $2(this).is(":checked");
+      setTTSEnabled(enabled);
+      const $charLayer = $2(".gal-layer-character");
+      if (enabled) $charLayer.addClass("tts-mode-enabled");
+      else $charLayer.removeClass("tts-mode-enabled");
+      injectCOTToWorldbook().then(() => showToast4(enabled ? "TTS已启用，COT已更新" : "TTS已关闭，COT已更新"));
+    });
+    $2("#gal-tts-provider").on("change", async function() {
+      settings2.ttsProvider = $2(this).val();
+      saveSettings();
+      $2("#gal-gpt-sovits-config").toggle(settings2.ttsProvider === TTS_PROVIDER.GPT_SOVITS_V2);
+      try {
+        TTSManager._refreshProviderState();
+      } catch (e) {
+      }
+      await refreshTtsVoiceOptions();
+      injectCOTToWorldbook().then(() => showToast4("TTS引擎已切换，COT已更新")).catch(() => showToast4("TTS引擎已切换"));
+    });
+    $2("#gal-tts-autoplay").on("change", function() {
+      settings2.ttsAutoPlay = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-tts-bilingual-zh-ja-enabled").on("change", function() {
+      settings2.ttsBilingualZhJaEnabled = $2(this).is(":checked");
+      saveSettings();
+      injectCOTToWorldbook().then(() => showToast4(settings2.ttsBilingualZhJaEnabled ? "中日双语模式已开启，COT已更新" : "中日双语模式已关闭，COT已更新")).catch(() => showToast4(settings2.ttsBilingualZhJaEnabled ? "中日双语模式已开启" : "中日双语模式已关闭"));
+    });
+    $2("#gal-situational-style-enabled").on("change", function() {
+      settings2.situationalStyleEnabled = $2(this).is(":checked");
+      saveSettings();
+      injectCOTToWorldbook().then(() => showToast4(settings2.situationalStyleEnabled ? "情境样式已开启，COT已更新" : "情境样式已关闭，COT已更新")).catch(() => showToast4(settings2.situationalStyleEnabled ? "情境样式已开启" : "情境样式已关闭"));
+    });
+    $2("#gal-tts-default-speaker").on("change", function() {
+      settings2.ttsDefaultSpeaker = $2(this).val();
+      saveSettings();
+    });
+    const addVoiceToGenderPool = (poolKey, candidateSelector) => {
+      const $candidate = $2(candidateSelector);
+      if (!$candidate.length) return;
+      const selectedVoice = String($candidate.val() || "").trim();
+      if (!selectedVoice) return;
+      const nextList = normalizeVoiceNameList([...settings2[poolKey] || [], selectedVoice]);
+      if (nextList.length === (settings2[poolKey] || []).length) {
+        showToast4("该音色已在列表中");
+        return;
+      }
+      settings2[poolKey] = nextList;
+      saveSettings();
+      renderVoicePoolChips(poolKey === "ttsDefaultMaleVoices" ? "#gal-tts-default-male-list" : "#gal-tts-default-female-list", poolKey);
+      $candidate.val("");
+    };
+    $2("#gal-tts-default-male-candidate").on("change", () => addVoiceToGenderPool("ttsDefaultMaleVoices", "#gal-tts-default-male-candidate"));
+    $2("#gal-tts-default-female-candidate").on("change", () => addVoiceToGenderPool("ttsDefaultFemaleVoices", "#gal-tts-default-female-candidate"));
+    $panel.on("click", ".gal-voice-chip-remove", function() {
+      const poolKey = String($2(this).data("pool") || "").trim();
+      const voiceName = String($2(this).data("voice") || "").trim();
+      if (!poolKey || !voiceName || !Array.isArray(settings2[poolKey])) return;
+      settings2[poolKey] = normalizeVoiceNameList(settings2[poolKey].filter((item) => String(item || "").trim() !== voiceName));
+      saveSettings();
+      renderVoicePoolChips(poolKey === "ttsDefaultMaleVoices" ? "#gal-tts-default-male-list" : "#gal-tts-default-female-list", poolKey);
+    });
+    $2("#gal-gpt-sovits-url").on("change", function() {
+      settings2.gptSoVits = settings2.gptSoVits || {};
+      settings2.gptSoVits.apiUrl = $2(this).val().trim();
+      saveSettings();
+    });
+    $2("#gal-gpt-sovits-proxy").on("change", function() {
+      settings2.gptSoVits = settings2.gptSoVits || {};
+      settings2.gptSoVits.useCorsProxy = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-gpt-sovits-switch-mode").on("change", function() {
+      settings2.gptSoVits = settings2.gptSoVits || {};
+      settings2.gptSoVits.modelSwitchMode = $2(this).val();
+      saveSettings();
+    });
+    $2("#gal-gpt-sovits-set-model-endpoint").on("change", function() {
+      settings2.gptSoVits = settings2.gptSoVits || {};
+      const endpoint = String($2(this).val() || "").trim();
+      settings2.gptSoVits.setModelEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint || "set_model"}`;
+      saveSettings();
+    });
+    $2("#gal-gpt-sovits-strict-switch").on("change", function() {
+      settings2.gptSoVits = settings2.gptSoVits || {};
+      settings2.gptSoVits.strictWeightSwitch = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-gpt-sovits-open-model-manager").on("click", function() {
+      openGptSoVitsModelManager({
+        onChanged: async () => {
+          await refreshTtsVoiceOptions();
+          if ($2("#gal-gpt-sovits-voices-json").length) {
+            try {
+              $2("#gal-gpt-sovits-voices-json").val(JSON.stringify(getSettings().gptSoVits?.voices || [], null, 2));
+            } catch (e) {
+            }
+          }
+          injectCOTToWorldbook().catch(() => {
+          });
+        }
+      });
+    });
+    $2("#gal-gpt-sovits-voices-save").on("click", async function() {
+      settings2.gptSoVits = settings2.gptSoVits || {};
+      let parsed = null;
+      try {
+        parsed = JSON.parse($2("#gal-gpt-sovits-voices-json").val() || "[]");
+      } catch (e) {
+        showToast4("音色列表 JSON 解析失败");
+        return;
+      }
+      if (!Array.isArray(parsed)) {
+        showToast4("音色列表必须是数组");
+        return;
+      }
+      const normalized = normalizeGptSoVitsVoicesForStore(parsed);
+      settings2.gptSoVits.voices = normalized.voices;
+      const firstUsable = pickFirstUsableGptSoVitsVoice(getGptSoVitsVoiceList());
+      if (!settings2.ttsDefaultSpeaker && firstUsable?.name) {
+        settings2.ttsDefaultSpeaker = firstUsable.name;
+      }
+      saveSettings();
+      await refreshTtsVoiceOptions();
+      let msg = `GPT-SoVITS 音色列表已保存：${normalized.voices.length} 条`;
+      if (normalized.ignoredCount > 0) msg += `（忽略无效条目 ${normalized.ignoredCount} 条）`;
+      if (normalized.missingRefCount > 0) msg += `（${normalized.missingRefCount} 条缺 refAudioPath）`;
+      injectCOTToWorldbook().then(() => showToast4(`${msg}，COT已更新`)).catch(() => showToast4(msg));
+    });
+    $2("#gal-gpt-sovits-test").on("click", () => {
+      if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) {
+        showToast4("请先切换为 GPT-SoVITS");
+        return;
+      }
+      const text = ($2("#gal-gpt-sovits-test-text").val() || "").trim() || "你好，这是一段 GPT-SoVITS 配音测试。";
+      const selectedVoiceName = String($2("#gal-tts-default-speaker").val() || "").trim();
+      const gptVoices = getGptSoVitsVoiceList();
+      const selectedVoice = gptVoices.find((v) => v.name === selectedVoiceName) || null;
+      const selectedUsable = !!String(selectedVoice?.gptSoVits?.refAudioPath || "").trim();
+      const fallbackVoice = pickFirstUsableGptSoVitsVoice(gptVoices);
+      const targetVoice = selectedUsable ? selectedVoice : fallbackVoice;
+      const voiceName = targetVoice?.name || "";
+      if (!voiceName) {
+        showToast4("请先配置至少一个可用音色（refAudioPath 不能为空）");
+        return;
+      }
+      if (selectedVoiceName !== voiceName) {
+        settings2.ttsDefaultSpeaker = voiceName;
+        saveSettings();
+        $2("#gal-tts-default-speaker").val(voiceName);
+        showToast4(`已自动切换试听音色：${voiceName}`);
+      }
+      TTSManager.stop();
+      TTSManager.speak({ type: "dialogue", speaker: "", text, tts: { speaker: voiceName } }, `gpt_sovits_test_${Date.now()}`);
+    });
+    $2("#gal-refresh-views").on("click", () => {
+      if (getIsEnabled()) {
+        applyGalgameMode();
+        if (settings2.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
+        showToast4("视图已刷新");
+      } else {
+        showToast4("请先开启 Galgame 模式");
+      }
+    });
+    if (_bindAssetsPaneRef) {
+      _bindAssetsPaneRef($panel, subTab);
+    }
   }
 
   // src/ui/asset-io.js
@@ -66498,6 +70746,128 @@ ${normalizedSource}`;
     }
     return `${ensureTrailingSlash(raw)}${encodedChar}/model3.json`;
   }
+  async function buildCustomSkinProfileExportBundle(profileIds = [], activeProfileId = "") {
+    const idSet = new Set(
+      (Array.isArray(profileIds) ? profileIds : []).map((id2) => String(id2 || "").trim()).filter((id2) => isCustomSkinProfileId(id2))
+    );
+    if (idSet.size === 0) {
+      return {
+        profiles: [],
+        assets: [],
+        activeProfileId: ""
+      };
+    }
+    const allProfiles = await listUiSkinProfiles();
+    const profiles = allProfiles.filter((profile) => idSet.has(String(profile?.id || "").trim()));
+    const availableProfileIds = new Set(profiles.map((profile) => profile.id));
+    const allAssets = await getAllUiSkinAssets();
+    const assets = allAssets.filter((asset) => {
+      const packId = String(asset?.packId || "").trim();
+      const skinId = String(asset?.skinId || "").trim();
+      return packId === GLOBAL_CUSTOM_SKIN_PACK_ID && availableProfileIds.has(skinId);
+    });
+    return {
+      profiles,
+      assets,
+      activeProfileId: availableProfileIds.has(String(activeProfileId || "").trim()) ? String(activeProfileId || "").trim() : ""
+    };
+  }
+  async function exportCustomSkinBundleArchive(loadJSZip, {
+    profileIds = [],
+    packageName = null,
+    activeProfileId = "",
+    scope = "custom-skin-library",
+    preparingMessage = "正在准备导出自定义皮肤...",
+    compressMessage = "正在压缩自定义皮肤...",
+    emptyMessage = "当前还没有可导出的自定义皮肤",
+    defaultPackageName = "自定义皮肤",
+    successMessageBuilder = null
+  } = {}) {
+    showToast4(preparingMessage);
+    const zip = new (await loadJSZip())();
+    const {
+      profiles: exportedProfiles,
+      assets: uiSkinAssets,
+      activeProfileId: safeActiveProfileId
+    } = await buildCustomSkinProfileExportBundle(profileIds, activeProfileId);
+    if (exportedProfiles.length === 0) {
+      showToast4(emptyMessage);
+      return false;
+    }
+    const resolvedPackageName = String(
+      packageName || exportedProfiles[0]?.displayName || defaultPackageName
+    ).trim() || defaultPackageName;
+    zip.file("ui-skin-profiles/manifest.json", JSON.stringify({
+      version: "1.0",
+      profiles: exportedProfiles,
+      activeProfileId: safeActiveProfileId
+    }, null, 2));
+    const uiSkinManifest = [];
+    if (uiSkinAssets.length > 0) {
+      const uiSkinFolder = zip.folder("ui-skins");
+      for (const rawAsset of uiSkinAssets) {
+        const meta3 = normalizeUiSkinMetaRecord(rawAsset);
+        if (!meta3) continue;
+        const manifestRecord = {
+          skinId: meta3.skinId,
+          elementId: meta3.elementId,
+          device: meta3.device,
+          state: meta3.state,
+          scaleMode: meta3.scaleMode,
+          layout: meta3.layout,
+          slice: meta3.slice,
+          textPadding: meta3.textPadding,
+          meta: meta3.meta
+        };
+        if (rawAsset.imageBlob) {
+          const ext = rawAsset.imageBlob.type.split("/")[1] || "png";
+          const fileName = buildUiSkinZipFilename(meta3, ext);
+          uiSkinFolder.file(fileName, rawAsset.imageBlob);
+          manifestRecord.file = fileName;
+        } else if (rawAsset.imageUrl) {
+          manifestRecord.imageUrl = rawAsset.imageUrl;
+        }
+        uiSkinManifest.push(manifestRecord);
+      }
+      zip.file("ui-skins/manifest.json", JSON.stringify({ version: "1.0", assets: uiSkinManifest }, null, 2));
+    }
+    zip.file("package_info.json", JSON.stringify({
+      packageName: resolvedPackageName,
+      exportDate: (/* @__PURE__ */ new Date()).toISOString(),
+      version: "1.0",
+      scope: String(scope || "custom-skin-library").trim() || "custom-skin-library",
+      uiSkinProfileCount: exportedProfiles.length,
+      uiSkinCount: uiSkinAssets.length
+    }, null, 2));
+    showToast4(compressMessage);
+    const content = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(content);
+    const a = document.createElement("a");
+    a.href = url;
+    const safePackageName = sanitizeFileName(resolvedPackageName);
+    const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    a.download = `${safePackageName}_${date}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (typeof successMessageBuilder === "function") {
+      showToast4(successMessageBuilder({
+        exportedProfiles,
+        uiSkinAssets,
+        packageName: resolvedPackageName
+      }));
+    }
+    return true;
+  }
+  function resolveImportedCustomSkinActiveProfileId(rawActiveProfileId, profiles = []) {
+    const safeProfiles = (Array.isArray(profiles) ? profiles : []).map((profile) => normalizeUiSkinProfileRecord(profile)).filter(Boolean);
+    const safeActiveProfileId = String(rawActiveProfileId || "").trim();
+    if (safeActiveProfileId && safeProfiles.some((profile) => profile.id === safeActiveProfileId)) {
+      return safeActiveProfileId;
+    }
+    return safeProfiles.length === 1 ? safeProfiles[0].id : "";
+  }
   function normalizeRemoteMode(value, options2 = {}) {
     const allowSkipExport = !!options2.allowSkipExport;
     const mode = String(value || "").trim().toLowerCase();
@@ -66530,12 +70900,25 @@ ${normalizedSource}`;
   function sanitizeFileName(name) {
     return String(name || "character").replace(/[\\/:*?"<>|]/g, "_").trim() || "character";
   }
+  function normalizeUiSkinProfileRecord(raw = {}) {
+    const safe = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const id2 = String(safe.id || safe.profileId || safe.skinId || "").trim();
+    if (!isCustomSkinProfileId(id2)) return null;
+    return {
+      id: id2,
+      displayName: String(safe.displayName || safe.name || safe.label || "").trim() || id2,
+      createdAt: String(safe.createdAt || "").trim(),
+      updatedAt: String(safe.updatedAt || "").trim(),
+      sortOrder: Number.isFinite(Number(safe.sortOrder)) ? Number(safe.sortOrder) : null
+    };
+  }
   function normalizeUiSkinMetaRecord(raw = {}) {
-    const skinId = String(raw.skinId || WESTERN_SKIN_ID).trim() || WESTERN_SKIN_ID;
+    const rawSkinId = String(raw.skinId || "").trim();
+    const skinId = rawSkinId === "skin-western" || rawSkinId === CUSTOM_SKIN_ID ? "" : rawSkinId;
     const elementId = String(raw.elementId || "").trim();
     const device = String(raw.device || "desktop").trim() || "desktop";
     const state = String(raw.state || "normal").trim() || "normal";
-    if (!elementId) return null;
+    if (!elementId || !isCustomSkinProfileId(skinId)) return null;
     return {
       skinId,
       elementId,
@@ -66549,7 +70932,7 @@ ${normalizedSource}`;
     };
   }
   function buildUiSkinZipFilename(record, ext = "png") {
-    const safeSkin = sanitizeFileName(record.skinId || WESTERN_SKIN_ID);
+    const safeSkin = sanitizeFileName(record.skinId || "skin");
     const safeElement = sanitizeFileName(record.elementId || "element");
     const safeDevice = sanitizeFileName(record.device || "desktop");
     const safeState = sanitizeFileName(record.state || "normal");
@@ -66566,6 +70949,44 @@ ${normalizedSource}`;
       device: parts[2],
       state: parts.slice(3).join("__") || "normal"
     });
+  }
+  async function importUiSkinProfilesIntoGlobalLibrary(rawProfiles = []) {
+    const existingProfiles = await listUiSkinProfiles();
+    const existingById = new Map(existingProfiles.map((profile) => [profile.id, profile]));
+    const resolvedProfiles = [];
+    const nameScope = [...existingProfiles];
+    for (const rawProfile of Array.isArray(rawProfiles) ? rawProfiles : []) {
+      const profile = normalizeUiSkinProfileRecord(rawProfile);
+      if (!profile) continue;
+      const existing = existingById.get(profile.id) || null;
+      let displayName = profile.displayName;
+      if (!existing) {
+        displayName = getAvailableUiSkinProfileDisplayName(displayName, nameScope);
+      }
+      const savedProfile = await saveUiSkinProfile({
+        ...existing,
+        ...profile,
+        displayName,
+        createdAt: profile.createdAt || existing?.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+        updatedAt: profile.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+        sortOrder: Number.isFinite(profile.sortOrder) ? profile.sortOrder : existing?.sortOrder || Date.now()
+      });
+      existingById.set(savedProfile.id, savedProfile);
+      nameScope.push(savedProfile);
+      resolvedProfiles.push(savedProfile);
+    }
+    await refreshUiSkinProfilesCache();
+    return resolvedProfiles;
+  }
+  async function switchToImportedCustomSkinProfile(activeProfileId = "") {
+    const safeProfileId = String(activeProfileId || "").trim();
+    if (!hasUiSkinProfileId(safeProfileId)) return false;
+    const settings2 = getSettings();
+    settings2.skin = safeProfileId;
+    saveSettings();
+    refreshSkinSelectElement();
+    applySettingsToUI();
+    return true;
   }
   function normalizeSpecialCgMetaRecord(raw = {}) {
     const safe = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
@@ -66845,8 +71266,8 @@ ${normalizedSource}`;
   function restoreImportedTitleScreenSettings(rawTitleScreenConfig, options2 = {}) {
     const titleScreenConfig = rawTitleScreenConfig && typeof rawTitleScreenConfig === "object" && !Array.isArray(rawTitleScreenConfig) ? rawTitleScreenConfig : null;
     if (!titleScreenConfig) return { restored: false, charIds: [] };
-    const settings = getSettings();
-    if (!settings || typeof settings !== "object") {
+    const settings2 = getSettings();
+    if (!settings2 || typeof settings2 !== "object") {
       return { restored: false, charIds: [] };
     }
     const currentCharId = normalizeCharacterCardId(getCurrentCharId());
@@ -66865,7 +71286,7 @@ ${normalizedSource}`;
     if (targetCharIds.size === 0) {
       targetCharIds.add(currentCharId || "default");
     }
-    const currentMap = settings.titleScreenByChar && typeof settings.titleScreenByChar === "object" && !Array.isArray(settings.titleScreenByChar) ? settings.titleScreenByChar : {};
+    const currentMap = settings2.titleScreenByChar && typeof settings2.titleScreenByChar === "object" && !Array.isArray(settings2.titleScreenByChar) ? settings2.titleScreenByChar : {};
     const nextMap = { ...currentMap };
     logTitleScreenDiag2("restoreImportedTitleScreenSettings:begin", {
       currentCharId,
@@ -66879,21 +71300,21 @@ ${normalizedSource}`;
       nextMap[charId] = buildExportableTitleScreenSettings(titleScreenConfig, charId);
     });
     const primaryCharId = targetCharIds.has(currentCharId) ? currentCharId : Array.from(targetCharIds)[0];
-    settings.titleScreenByChar = nextMap;
-    settings.titleScreen = nextMap[primaryCharId] || buildExportableTitleScreenSettings(titleScreenConfig, primaryCharId);
+    settings2.titleScreenByChar = nextMap;
+    settings2.titleScreen = nextMap[primaryCharId] || buildExportableTitleScreenSettings(titleScreenConfig, primaryCharId);
     saveSettings();
     logTitleScreenDiag2("restoreImportedTitleScreenSettings:end", {
       primaryCharId,
-      afterMapKeys: Object.keys(settings.titleScreenByChar || {}),
-      activeTitleScreen: summarizeTitleScreenConfigForLog2(settings.titleScreen)
+      afterMapKeys: Object.keys(settings2.titleScreenByChar || {}),
+      activeTitleScreen: summarizeTitleScreenConfigForLog2(settings2.titleScreen)
     });
     return { restored: true, charIds: Array.from(targetCharIds) };
   }
   function restoreImportedSpecialCgSettings(rawSpecialCgConfig, options2 = {}) {
     const specialCgConfig = rawSpecialCgConfig && typeof rawSpecialCgConfig === "object" && !Array.isArray(rawSpecialCgConfig) ? rawSpecialCgConfig : null;
     if (!specialCgConfig) return { restored: false, charIds: [] };
-    const settings = getSettings();
-    if (!settings || typeof settings !== "object") {
+    const settings2 = getSettings();
+    if (!settings2 || typeof settings2 !== "object") {
       return { restored: false, charIds: [] };
     }
     const currentCharId = normalizeCharacterCardId(getCurrentCharId());
@@ -66912,15 +71333,15 @@ ${normalizedSource}`;
     if (targetCharIds.size === 0) {
       targetCharIds.add(currentCharId || "default");
     }
-    const currentMap = settings.specialCgByChar && typeof settings.specialCgByChar === "object" && !Array.isArray(settings.specialCgByChar) ? settings.specialCgByChar : {};
+    const currentMap = settings2.specialCgByChar && typeof settings2.specialCgByChar === "object" && !Array.isArray(settings2.specialCgByChar) ? settings2.specialCgByChar : {};
     const nextMap = { ...currentMap };
     targetCharIds.forEach((charId) => {
       nextMap[charId] = buildExportableSpecialCgSettings(specialCgConfig);
     });
     const primaryCharId = targetCharIds.has(currentCharId) ? currentCharId : Array.from(targetCharIds)[0];
     const fallbackSettings = buildExportableSpecialCgSettings(specialCgConfig);
-    settings.specialCgByChar = nextMap;
-    settings.specialCg = nextMap[primaryCharId] || fallbackSettings;
+    settings2.specialCgByChar = nextMap;
+    settings2.specialCg = nextMap[primaryCharId] || fallbackSettings;
     saveSettings();
     return { restored: true, charIds: Array.from(targetCharIds) };
   }
@@ -66929,16 +71350,16 @@ ${normalizedSource}`;
     if (!bgmConfig || !Object.prototype.hasOwnProperty.call(bgmConfig, "whitelist")) {
       return { restored: false, count: 0 };
     }
-    const settings = getSettings();
-    settings.bgmWhitelist = normalizeStringList(bgmConfig.whitelist);
+    const settings2 = getSettings();
+    settings2.bgmWhitelist = normalizeStringList(bgmConfig.whitelist);
     saveSettings();
-    return { restored: true, count: settings.bgmWhitelist.length };
+    return { restored: true, count: settings2.bgmWhitelist.length };
   }
-  function escapeHtml2(input) {
+  function escapeHtml3(input) {
     return String(input || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function formatDialogText(input) {
-    return escapeHtml2(input).replace(/\r?\n/g, "<br>");
+    return escapeHtml3(input).replace(/\r?\n/g, "<br>");
   }
   var inAppDialogCounter = 0;
   function nextInAppDialogId(prefix = "gal-inline-dialog") {
@@ -66971,13 +71392,13 @@ ${normalizedSource}`;
     const inputId = `${dialogId}-input`;
     const messageHtml = message ? `<div style="margin-bottom: 12px; color: #555; font-size: 0.92rem; line-height: 1.6;">${formatDialogText(message)}</div>` : "";
     const hintHtml = hint ? `<div style="margin-top: 8px; color: #7a7a7a; font-size: 0.82rem; line-height: 1.5;">${formatDialogText(hint)}</div>` : "";
-    const labelHtml = label ? `<label for="${inputId}" style="display: block; margin-bottom: 8px; color: #444; font-size: 0.9rem; font-weight: 600;">${escapeHtml2(label)}</label>` : "";
-    const inputHtml = multiline ? `<textarea id="${inputId}" placeholder="${escapeHtml2(placeholder)}" style="width: 100%; min-height: 110px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box; resize: vertical;">${escapeHtml2(defaultValue)}</textarea>` : `<input id="${inputId}" type="${escapeHtml2(inputType)}" value="${escapeHtml2(defaultValue)}" placeholder="${escapeHtml2(placeholder)}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />`;
+    const labelHtml = label ? `<label for="${inputId}" style="display: block; margin-bottom: 8px; color: #444; font-size: 0.9rem; font-weight: 600;">${escapeHtml3(label)}</label>` : "";
+    const inputHtml = multiline ? `<textarea id="${inputId}" placeholder="${escapeHtml3(placeholder)}" style="width: 100%; min-height: 110px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box; resize: vertical;">${escapeHtml3(defaultValue)}</textarea>` : `<input id="${inputId}" type="${escapeHtml3(inputType)}" value="${escapeHtml3(defaultValue)}" placeholder="${escapeHtml3(placeholder)}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />`;
     const html = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
-      <div class="gal-input-box" style="max-width: ${escapeHtml2(width2)}; width: 92%; padding: 24px;">
+      <div class="gal-input-box" style="max-width: ${escapeHtml3(width2)}; width: 92%; padding: 24px;">
         <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="${escapeHtml2(iconClass)}" style="color: ${escapeHtml2(accent)};"></i> ${escapeHtml2(title)}</span>
+          <span><i class="${escapeHtml3(iconClass)}" style="color: ${escapeHtml3(accent)};"></i> ${escapeHtml3(title)}</span>
           <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s;">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -66990,10 +71411,10 @@ ${normalizedSource}`;
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 10px;">
           <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
-            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml2(cancelText)}</span>
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml3(cancelText)}</span>
           </button>
-          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml2(accent)}; color: #fff; border-color: ${escapeHtml2(accent)};">
-            <i class="fa-solid fa-check"></i> <span>${escapeHtml2(confirmText)}</span>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml3(accent)}; color: #fff; border-color: ${escapeHtml3(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml3(confirmText)}</span>
           </button>
         </div>
       </div>
@@ -67073,23 +71494,23 @@ ${normalizedSource}`;
     const confirmColor = danger ? "#dc3545" : accent;
     const html = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
-      <div class="gal-input-box" style="max-width: ${escapeHtml2(width2)}; width: 90%; padding: 24px;">
+      <div class="gal-input-box" style="max-width: ${escapeHtml3(width2)}; width: 90%; padding: 24px;">
         <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="${escapeHtml2(iconClass)}" style="color: ${escapeHtml2(confirmColor)};"></i> ${escapeHtml2(title)}</span>
+          <span><i class="${escapeHtml3(iconClass)}" style="color: ${escapeHtml3(confirmColor)};"></i> ${escapeHtml3(title)}</span>
           <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
-        <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid ${escapeHtml2(confirmColor)};">
+        <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid ${escapeHtml3(confirmColor)};">
           ${messageHtml}
           ${hintHtml}
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 10px;">
           <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
-            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml2(cancelText)}</span>
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml3(cancelText)}</span>
           </button>
-          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml2(confirmColor)}; color: #fff; border-color: ${escapeHtml2(confirmColor)};">
-            <i class="fa-solid fa-check"></i> <span>${escapeHtml2(confirmText)}</span>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml3(confirmColor)}; color: #fff; border-color: ${escapeHtml3(confirmColor)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml3(confirmText)}</span>
           </button>
         </div>
       </div>
@@ -67149,9 +71570,9 @@ ${normalizedSource}`;
     const okId = `${dialogId}-ok`;
     const html = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
-      <div class="gal-input-box" style="max-width: ${escapeHtml2(width2)}; width: 92%; padding: 24px;">
+      <div class="gal-input-box" style="max-width: ${escapeHtml3(width2)}; width: 92%; padding: 24px;">
         <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="${escapeHtml2(iconClass)}" style="color: ${escapeHtml2(accent)};"></i> ${escapeHtml2(title)}</span>
+          <span><i class="${escapeHtml3(iconClass)}" style="color: ${escapeHtml3(accent)};"></i> ${escapeHtml3(title)}</span>
           <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -67161,8 +71582,8 @@ ${normalizedSource}`;
           ${detailHtml}
         </div>
         <div class="gal-input-actions" style="display: flex; justify-content: flex-end;">
-          <button class="gal-action-btn" id="${okId}" style="min-width: 130px; min-height: 42px; justify-content: center; background: ${escapeHtml2(accent)}; color: #fff; border-color: ${escapeHtml2(accent)};">
-            <i class="fa-solid fa-check"></i> <span>${escapeHtml2(buttonText)}</span>
+          <button class="gal-action-btn" id="${okId}" style="min-width: 130px; min-height: 42px; justify-content: center; background: ${escapeHtml3(accent)}; color: #fff; border-color: ${escapeHtml3(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml3(buttonText)}</span>
           </button>
         </div>
       </div>
@@ -67396,7 +71817,7 @@ ${normalizedSource}`;
     const pickFileId = `${dialogId}-pick-file`;
     const fileInputId = `${dialogId}-file`;
     const fileNameId = `${dialogId}-file-name`;
-    const reasonHtml = reason ? `<div style="margin-bottom: 10px; font-size: 0.84rem; color: #b45309; line-height: 1.5;">自动头像失败：${escapeHtml2(reason)}</div>` : "";
+    const reasonHtml = reason ? `<div style="margin-bottom: 10px; font-size: 0.84rem; color: #b45309; line-height: 1.5;">自动头像失败：${escapeHtml3(reason)}</div>` : "";
     const dialogHtml = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
       <div class="gal-input-box" style="max-width: 520px; width: 92%; padding: 22px;">
@@ -67757,15 +72178,15 @@ ${normalizedSource}`;
     const ttsEnabled = !!getTTSEnabled();
     const characterVoice = getAllCharacterTTSVoices() || {};
     const characterKeywords = getAllCharacterNameKeywords() || {};
-    const settings = getSettings();
+    const settings2 = getSettings();
     const targetTitleCharId = normalizeCharacterCardId(
       exportCharacterId || getCurrentCharId()
     );
-    const titleScreenByCharMap = settings?.titleScreenByChar && typeof settings.titleScreenByChar === "object" && !Array.isArray(settings.titleScreenByChar) ? settings.titleScreenByChar : {};
-    const rawTitleScreenSettings = titleScreenByCharMap[targetTitleCharId] || settings?.titleScreen;
+    const titleScreenByCharMap = settings2?.titleScreenByChar && typeof settings2.titleScreenByChar === "object" && !Array.isArray(settings2.titleScreenByChar) ? settings2.titleScreenByChar : {};
+    const rawTitleScreenSettings = titleScreenByCharMap[targetTitleCharId] || settings2?.titleScreen;
     const exportTitleScreenSettings = buildTitleScreenExportPayload(rawTitleScreenSettings, targetTitleCharId);
-    const specialCgByCharMap = settings?.specialCgByChar && typeof settings.specialCgByChar === "object" && !Array.isArray(settings.specialCgByChar) ? settings.specialCgByChar : {};
-    const rawSpecialCgSettings = specialCgByCharMap[targetTitleCharId] || settings?.specialCg;
+    const specialCgByCharMap = settings2?.specialCgByChar && typeof settings2.specialCgByChar === "object" && !Array.isArray(settings2.specialCgByChar) ? settings2.specialCgByChar : {};
+    const rawSpecialCgSettings = specialCgByCharMap[targetTitleCharId] || settings2?.specialCg;
     const exportSpecialCgSettings = buildSpecialCgExportPayload(rawSpecialCgSettings, targetTitleCharId);
     logTitleScreenDiag2("buildGalgameCardConfig:title-export", {
       exportCharacterId: String(exportCharacterId || "").trim(),
@@ -68132,7 +72553,7 @@ ${normalizedSource}`;
     }
     if (includeBgmSettings) {
       out.bgm = {
-        whitelist: normalizeStringList(settings?.bgmWhitelist)
+        whitelist: normalizeStringList(settings2?.bgmWhitelist)
       };
     }
     return out;
@@ -68222,7 +72643,7 @@ ${normalizedSource}`;
     const hasSuggested = suggested && names.some((n) => n.toLowerCase() === suggested.toLowerCase());
     const defaultName = hasSuggested ? names.find((n) => n.toLowerCase() === suggested.toLowerCase()) : names[0];
     return new Promise((resolve2) => {
-      const optionsHtml = names.map((name) => `<option value="${escapeHtml2(name)}"${name === defaultName ? " selected" : ""}>${escapeHtml2(name)}</option>`).join("");
+      const optionsHtml = names.map((name) => `<option value="${escapeHtml3(name)}"${name === defaultName ? " selected" : ""}>${escapeHtml3(name)}</option>`).join("");
       const dialogHtml = `
       <div class="gal-input-modal gal-z-critical" id="gal-export-char-selector">
         <div class="gal-input-box" style="max-width: 460px; width: 90%; padding: 25px;">
@@ -68354,13 +72775,13 @@ ${normalizedSource}`;
     const characterFieldHtml = characterNames.length > 0 ? `
       <select id="${characterSelectId}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;">
         <option value="">自动选择（当前会话）</option>
-        ${characterNames.map((name) => `<option value="${escapeHtml2(name)}"${name === suggestedCharacterName ? " selected" : ""}>${escapeHtml2(name)}</option>`).join("")}
+        ${characterNames.map((name) => `<option value="${escapeHtml3(name)}"${name === suggestedCharacterName ? " selected" : ""}>${escapeHtml3(name)}</option>`).join("")}
       </select>
       <div style="margin-top: 6px; font-size: 0.82rem; color: #7a7a7a;">
         未手动选择时，会优先尝试 current 与当前会话角色。
       </div>
     ` : `
-      <input id="${characterInputId}" type="text" value="${escapeHtml2(preferredCharacterName)}" placeholder="留空则自动选择 current"
+      <input id="${characterInputId}" type="text" value="${escapeHtml3(preferredCharacterName)}" placeholder="留空则自动选择 current"
              style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />
       <div style="margin-top: 6px; font-size: 0.82rem; color: #7a7a7a;">
         未能读取角色列表时可手动输入角色卡名称。
@@ -68370,14 +72791,14 @@ ${normalizedSource}`;
       const packId = String(pack.id || "");
       const packName = String(pack.name || packId || "未命名图包");
       const suffix = packId === String(currentPackId) ? "（当前）" : "";
-      return `<option value="${escapeHtml2(packId)}">${escapeHtml2(packName)}${escapeHtml2(suffix)}</option>`;
+      return `<option value="${escapeHtml3(packId)}">${escapeHtml3(packName)}${escapeHtml3(suffix)}</option>`;
     }).join("");
     const uiAccessTabOptionsHtml = ASSET_TAB_ACCESS_OPTIONS.map((tab) => {
       const checked = hiddenAssetTabsDefault.includes(tab.id);
       return `
         <label class="gal-card-export-access-tab-item">
-          <input type="checkbox" class="gal-card-export-hidden-tab" value="${escapeHtml2(tab.id)}" ${checked ? "checked" : ""}>
-          <span>${escapeHtml2(tab.label)}</span>
+          <input type="checkbox" class="gal-card-export-hidden-tab" value="${escapeHtml3(tab.id)}" ${checked ? "checked" : ""}>
+          <span>${escapeHtml3(tab.label)}</span>
         </label>
       `;
     }).join("");
@@ -68393,7 +72814,7 @@ ${normalizedSource}`;
         <div class="gal-modal-scroll-body" style="padding: 14px 22px 12px 22px;">
 
         <div style="margin-bottom: 14px; padding: 10px 12px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #0d6efd; color: #555; font-size: 0.9rem; line-height: 1.6;">
-          当前图包：<strong>${escapeHtml2(currentPackName)}</strong>（${escapeHtml2(String(currentPackId))}）<br>
+          当前图包：<strong>${escapeHtml3(currentPackName)}</strong>（${escapeHtml3(String(currentPackId))}）<br>
           一次设置完成后直接导出，可自由切换本地/远程导出。
         </div>
 
@@ -68450,7 +72871,7 @@ ${normalizedSource}`;
                 </label>
               </div>
               <div id="${spriteRemoteWrapId}">
-                <input id="${spriteRemoteInputId}" type="text" value="${escapeHtml2(spriteRemoteInputDefault)}"
+                <input id="${spriteRemoteInputId}" type="text" value="${escapeHtml3(spriteRemoteInputDefault)}"
                        placeholder="例如 user/repo@main/sprites/ 或 https://.../remote_assets.json"
                        style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               </div>
@@ -68473,7 +72894,7 @@ ${normalizedSource}`;
                 </label>
               </div>
               <div id="${backgroundRemoteWrapId}">
-                <input id="${backgroundRemoteInputId}" type="text" value="${escapeHtml2(backgroundRemoteInputDefault)}"
+                <input id="${backgroundRemoteInputId}" type="text" value="${escapeHtml3(backgroundRemoteInputDefault)}"
                        placeholder="例如 user/repo@main/backgrounds/ 或 https://.../remote_assets.json"
                        style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               </div>
@@ -68496,7 +72917,7 @@ ${normalizedSource}`;
                 </label>
               </div>
               <div id="${specialCgRemoteWrapId}">
-                <input id="${specialCgRemoteInputId}" type="text" value="${escapeHtml2(specialCgRemoteInputDefault)}"
+                <input id="${specialCgRemoteInputId}" type="text" value="${escapeHtml3(specialCgRemoteInputDefault)}"
                        placeholder="例如 user/repo@main/special-cgs/ 或 https://.../remote_assets.json"
                        style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               </div>
@@ -68516,7 +72937,7 @@ ${normalizedSource}`;
               </label>
             </div>
             <div id="${live2dRemoteWrapId}" style="margin-bottom: 10px;">
-              <input id="${live2dRemoteInputId}" type="text" value="${escapeHtml2(live2dRemoteInputDefault)}"
+              <input id="${live2dRemoteInputId}" type="text" value="${escapeHtml3(live2dRemoteInputDefault)}"
                      placeholder="例如 user/repo@main/live2d/ 或 https://cdn.../{character}/model3.json"
                      style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               <div style="margin-top: 6px; font-size: 0.82rem; color: #6b7280; line-height: 1.5;">
@@ -68588,7 +73009,7 @@ ${normalizedSource}`;
                   id="${uiAccessPasswordId}"
                   type="password"
                   class="gal-card-export-access-input"
-                  value="${escapeHtml2(unlockPasswordDefault)}"
+                  value="${escapeHtml3(unlockPasswordDefault)}"
                   placeholder="请输入解锁口令"
                   autocomplete="off"
                 />
@@ -69464,6 +73885,10 @@ ${normalizedSource}`;
       const json2 = JSON.parse(text);
       const { rawJson, pluginConfig, cardObject } = extractImportPayloadFromJson(json2);
       const payload = pluginConfig && typeof pluginConfig === "object" ? pluginConfig : rawJson;
+      const importedUiSkinProfiles = [
+        ...Array.isArray(payload?.uiSkinProfiles) ? payload.uiSkinProfiles : [],
+        ...payload !== rawJson && Array.isArray(rawJson?.uiSkinProfiles) ? rawJson.uiSkinProfiles : []
+      ];
       logTitleScreenDiag2("importAssetsFromJson:payload-detected", {
         hasPluginConfig: !!pluginConfig,
         payloadSchema: String(payload?.schema || ""),
@@ -69480,6 +73905,12 @@ ${normalizedSource}`;
         }
       }
       let count = 0;
+      const savedUiSkinProfiles = importedUiSkinProfiles.length > 0 ? await importUiSkinProfilesIntoGlobalLibrary(importedUiSkinProfiles) : [];
+      const importedUiSkinProfileIds = new Set(savedUiSkinProfiles.map((profile) => profile.id));
+      const importedActiveCustomSkinProfileId = resolveImportedCustomSkinActiveProfileId(
+        payload?.activeCustomSkinProfileId || payload?.activeProfileId || rawJson?.activeCustomSkinProfileId || rawJson?.activeProfileId,
+        savedUiSkinProfiles
+      );
       const importedSpriteKeys = /* @__PURE__ */ new Set();
       const importedBackgroundKeys = /* @__PURE__ */ new Set();
       const newExpressions = [];
@@ -69686,7 +74117,7 @@ ${normalizedSource}`;
         if (!meta3) continue;
         const remoteUrl = String(rawItem.url || rawItem.imageUrl || "").trim();
         const payloadRecord = {
-          packId: targetPackId,
+          packId: importedUiSkinProfileIds.has(meta3.skinId) || isCustomSkinProfileId(meta3.skinId) ? GLOBAL_CUSTOM_SKIN_PACK_ID : targetPackId,
           skinId: meta3.skinId,
           elementId: meta3.elementId,
           device: meta3.device,
@@ -69759,6 +74190,16 @@ ${normalizedSource}`;
       if (restoredTts.restoredEnabled || restoredTts.restoredVoiceCount > 0 || restoredTts.restoredKeywordCount > 0) {
         summaryParts.push(`TTS 音色 ${restoredTts.restoredVoiceCount}，关键字 ${restoredTts.restoredKeywordCount}`);
       }
+      if (savedUiSkinProfiles.length > 0) {
+        summaryParts.push(`自定义皮肤 ${savedUiSkinProfiles.length} 套`);
+      }
+      if (importedActiveCustomSkinProfileId) {
+        const switched = await switchToImportedCustomSkinProfile(importedActiveCustomSkinProfileId);
+        if (switched) {
+          const switchedProfile = savedUiSkinProfiles.find((profile) => profile.id === importedActiveCustomSkinProfileId);
+          summaryParts.push(`已切换到 ${switchedProfile?.displayName || importedActiveCustomSkinProfileId}`);
+        }
+      }
       showToast4(summaryParts.join("，"));
       const hasUiAccessConfig = !!(pluginConfig?.custom?.uiAccess && pluginConfig.custom.uiAccess.enabled);
       if (hasUiAccessConfig) {
@@ -69795,7 +74236,7 @@ ${normalizedSource}`;
         document.head.appendChild(script);
       });
     },
-    async exportAllAssets(remoteBaseUrl = null, packageName = null) {
+    async exportAllAssets(remoteBaseUrl = null, packageName = null, options2 = {}) {
       try {
         showToast4("正在准备导出...");
         const zip = new (await this.loadJSZip())();
@@ -69803,6 +74244,7 @@ ${normalizedSource}`;
         const allPacks = await getAllImagePacks();
         const currentPack = allPacks.find((p2) => p2.id === currentPackId);
         const currentPackName = currentPack ? currentPack.name : "未命名包";
+        const attachedCustomSkinProfileId = isCustomSkinProfileId(options2?.attachedCustomSkinProfileId) ? String(options2.attachedCustomSkinProfileId).trim() : "";
         const remoteConfig = {
           packageName: packageName || currentPackName,
           exportDate: (/* @__PURE__ */ new Date()).toISOString(),
@@ -69812,6 +74254,8 @@ ${normalizedSource}`;
           specialCgs: [],
           maps: [],
           uiSkins: [],
+          uiSkinProfiles: [],
+          activeCustomSkinProfileId: "",
           mapSettings: buildExportableMapSettings()
         };
         const baseUrl = remoteBaseUrl ? remoteBaseUrl.endsWith("/") ? remoteBaseUrl : remoteBaseUrl + "/" : "";
@@ -69947,12 +74391,32 @@ ${normalizedSource}`;
         if (mapManifest.length > 0) {
           zip.file("maps/manifest.json", JSON.stringify({ version: "1.0", assets: mapManifest }, null, 2));
         }
-        const allUiSkinAssets = await getAllUiSkinAssets();
-        const uiSkinAssets = allUiSkinAssets.filter((asset) => {
-          const assetPackId = String(asset?.packId || DEFAULT_PACK_ID).trim() || DEFAULT_PACK_ID;
-          return assetPackId === currentPackId;
-        });
+        const {
+          profiles: exportedUiSkinProfiles,
+          assets: uiSkinAssets,
+          activeProfileId: exportedActiveProfileId
+        } = await buildCustomSkinProfileExportBundle(
+          attachedCustomSkinProfileId ? [attachedCustomSkinProfileId] : [],
+          attachedCustomSkinProfileId
+        );
         const uiSkinManifest = [];
+        if (exportedUiSkinProfiles.length > 0) {
+          zip.file("ui-skin-profiles/manifest.json", JSON.stringify({
+            version: "1.0",
+            profiles: exportedUiSkinProfiles,
+            activeProfileId: exportedActiveProfileId
+          }, null, 2));
+          if (remoteBaseUrl) {
+            remoteConfig.uiSkinProfiles = exportedUiSkinProfiles.map((profile) => ({
+              id: profile.id,
+              displayName: profile.displayName,
+              createdAt: profile.createdAt,
+              updatedAt: profile.updatedAt,
+              sortOrder: profile.sortOrder
+            }));
+            remoteConfig.activeCustomSkinProfileId = exportedActiveProfileId;
+          }
+        }
         if (uiSkinAssets.length > 0) {
           const uiSkinFolder = zip.folder("ui-skins");
           for (const rawAsset of uiSkinAssets) {
@@ -70005,6 +74469,8 @@ ${normalizedSource}`;
           specialCgCount: specialCgs.length,
           mapCount: maps.length,
           uiSkinCount: uiSkinAssets.length,
+          uiSkinProfileCount: exportedUiSkinProfiles.length,
+          attachedCustomSkinProfileId: exportedActiveProfileId,
           mapSettings: remoteConfig.mapSettings
         };
         zip.file("package_info.json", JSON.stringify(packageInfo, null, 2));
@@ -70023,10 +74489,54 @@ ${normalizedSource}`;
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showToast4(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${specialCgs.length} 个 CG，${maps.length} 张地图，${uiSkinAssets.length} 个皮肤元素`);
+        const skinSummary = exportedUiSkinProfiles.length > 0 ? `，附带 ${exportedUiSkinProfiles.length} 套自定义皮肤（${uiSkinAssets.length} 个皮肤元素）` : "";
+        showToast4(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${specialCgs.length} 个 CG，${maps.length} 张地图${skinSummary}`);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
         showToast4("导出失败: " + e.message);
+      }
+    },
+    async exportCustomSkinLibrary(packageName = null) {
+      try {
+        const exportedProfiles = await listUiSkinProfiles();
+        const profileIds = exportedProfiles.map((profile) => profile.id);
+        return await exportCustomSkinBundleArchive(() => this.loadJSZip(), {
+          profileIds,
+          packageName,
+          scope: "custom-skin-library",
+          preparingMessage: "正在准备导出自定义皮肤库...",
+          compressMessage: "正在压缩皮肤库...",
+          emptyMessage: "当前还没有可导出的自定义皮肤",
+          defaultPackageName: "自定义皮肤库",
+          successMessageBuilder: ({ exportedProfiles: profiles, uiSkinAssets }) => `已导出 ${profiles.length} 套自定义皮肤（${uiSkinAssets.length} 个皮肤元素）`
+        });
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 导出自定义皮肤库失败:`, e);
+        showToast4("导出自定义皮肤库失败: " + e.message);
+        return false;
+      }
+    },
+    async exportCustomSkinProfile(profileId, packageName = null) {
+      try {
+        const safeProfileId = String(profileId || "").trim();
+        return await exportCustomSkinBundleArchive(() => this.loadJSZip(), {
+          profileIds: safeProfileId ? [safeProfileId] : [],
+          packageName,
+          activeProfileId: safeProfileId,
+          scope: "custom-skin-profile",
+          preparingMessage: "正在准备导出当前自定义皮肤...",
+          compressMessage: "正在压缩当前自定义皮肤...",
+          emptyMessage: "当前皮肤不存在或没有可导出的内容",
+          defaultPackageName: "自定义皮肤",
+          successMessageBuilder: ({ exportedProfiles, uiSkinAssets }) => {
+            const profileLabel = exportedProfiles[0]?.displayName || "当前皮肤";
+            return `已导出自定义皮肤“${profileLabel}”（${uiSkinAssets.length} 个皮肤元素）`;
+          }
+        });
+      } catch (e) {
+        console.error(`[${SCRIPT_NAME}] 导出当前自定义皮肤失败:`, e);
+        showToast4("导出当前自定义皮肤失败: " + e.message);
+        return false;
       }
     },
     async importFiles(fileList, targetPackId = null) {
@@ -70371,10 +74881,12 @@ ${normalizedSource}`;
         const currentPackId = getCurrentPackId();
         const currentPack = packs.find((p2) => p2.id === currentPackId);
         const currentPackName = currentPack ? currentPack.name : "当前图包";
+        const safeCurrentPackName = escapeHtml3(currentPackName);
         const packOptions = packs.map(
-          (p2) => `<option value="${p2.id}">${p2.name}${p2.id === currentPackId ? " (当前)" : ""}</option>`
+          (p2) => `<option value="${escapeHtml3(p2.id)}">${escapeHtml3(p2.name)}${p2.id === currentPackId ? " (当前)" : ""}</option>`
         ).join("");
         const defaultNewName = suggestedName || `导入包_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
+        const safeDefaultNewName = escapeHtml3(defaultNewName);
         const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
@@ -70388,7 +74900,7 @@ ${normalizedSource}`;
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #3498db; border-radius: 6px; background: #f8f9fa;">
                 <input type="radio" name="import-target" value="current" checked style="width: 18px; height: 18px;">
                 <span style="font-weight: 600; color: #2b2e38;">导入到当前图包</span>
-                <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${currentPackName}</span>
+                <span style="color: #666; font-size: 0.85rem; margin-left: auto;">${safeCurrentPackName}</span>
               </label>
               <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; padding: 10px; border: 2px solid #ddd; border-radius: 6px;">
                 <input type="radio" name="import-target" value="existing" style="width: 18px; height: 18px;">
@@ -70401,7 +74913,7 @@ ${normalizedSource}`;
                 <input type="radio" name="import-target" value="new" style="width: 18px; height: 18px;">
                 <span style="font-weight: 600; color: #2b2e38;">创建新图包</span>
               </label>
-              <input type="text" id="gal-import-new-pack-name" disabled placeholder="输入新图包名称" value="${defaultNewName}"
+              <input type="text" id="gal-import-new-pack-name" disabled placeholder="输入新图包名称" value="${safeDefaultNewName}"
                      style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 4px; margin-left: 26px; opacity: 0.6; box-sizing: border-box;">
             </div>
             <div class="gal-input-actions" style="display: flex; gap: 12px;">
@@ -70471,6 +74983,7 @@ ${normalizedSource}`;
     const hasBackgroundsDir = zipPaths.some((path) => path.startsWith("backgrounds/"));
     const hasMapsDir = zipPaths.some((path) => path.startsWith("maps/"));
     const hasUiSkinsDir = zipPaths.some((path) => path.startsWith("ui-skins/"));
+    const hasUiSkinProfilesDir = zipPaths.some((path) => path.startsWith("ui-skin-profiles/"));
     const hasSpecialCgsDir = zipPaths.some((path) => path.startsWith("special-cgs/"));
     let packageInfo = null;
     const infoFile = zip.file("package_info.json");
@@ -70481,6 +74994,21 @@ ${normalizedSource}`;
         console.log(`[${SCRIPT_NAME}] 读取到包信息:`, packageInfo);
       } catch (e) {
         console.warn(`[${SCRIPT_NAME}] 读取 package_info.json 失败:`, e);
+      }
+    }
+    let uiSkinProfileManifestProfiles = [];
+    let uiSkinProfileManifestActiveProfileId = "";
+    const uiSkinProfileManifestFile = zip.file("ui-skin-profiles/manifest.json");
+    if (uiSkinProfileManifestFile) {
+      try {
+        const manifestText = await uiSkinProfileManifestFile.async("text");
+        const manifestJson = JSON.parse(manifestText);
+        if (Array.isArray(manifestJson?.profiles)) {
+          uiSkinProfileManifestProfiles = manifestJson.profiles;
+        }
+        uiSkinProfileManifestActiveProfileId = String(manifestJson?.activeProfileId || "").trim();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 读取 ui-skin-profiles/manifest.json 失败:`, e);
       }
     }
     let uiSkinManifestAssets = [];
@@ -70577,10 +75105,17 @@ ${normalizedSource}`;
         specialCgManifestUrlOnly.push(payload);
       }
     });
-    if (!hasSpritesDir && !hasBackgroundsDir && !hasMapsDir && !hasUiSkinsDir && !hasSpecialCgsDir && uiSkinManifestUrlOnly.length === 0 && mapManifestUrlOnly.length === 0 && specialCgManifestUrlOnly.length === 0) {
-      throw new Error("ZIP 包格式错误：需包含 sprites/、backgrounds/、special-cgs/、maps/ 或 ui-skins/ 目录");
+    const importedUiSkinProfiles = uiSkinProfileManifestProfiles.length > 0 ? await importUiSkinProfilesIntoGlobalLibrary(uiSkinProfileManifestProfiles) : [];
+    const importedUiSkinProfileIds = new Set(importedUiSkinProfiles.map((profile) => profile.id));
+    const importedActiveCustomSkinProfileId = resolveImportedCustomSkinActiveProfileId(
+      uiSkinProfileManifestActiveProfileId,
+      importedUiSkinProfiles
+    );
+    if (!hasSpritesDir && !hasBackgroundsDir && !hasMapsDir && !hasUiSkinsDir && !hasUiSkinProfilesDir && !hasSpecialCgsDir && uiSkinManifestUrlOnly.length === 0 && mapManifestUrlOnly.length === 0 && specialCgManifestUrlOnly.length === 0 && importedUiSkinProfiles.length === 0) {
+      throw new Error("ZIP 包格式错误：需包含 sprites/、backgrounds/、special-cgs/、maps/、ui-skins/ 或 ui-skin-profiles/ 目录");
     }
-    if (!targetPackId) {
+    const requiresPackTarget = hasSpritesDir || hasBackgroundsDir || hasMapsDir || hasSpecialCgsDir || mapManifestUrlOnly.length > 0 || specialCgManifestUrlOnly.length > 0;
+    if (!targetPackId && requiresPackTarget) {
       const suggestedName = packageInfo?.packageName || packageInfo?.name;
       targetPackId = await showImportPackSelector(suggestedName);
       if (!targetPackId) {
@@ -70605,13 +75140,17 @@ ${normalizedSource}`;
         type: isSprite ? "sprite" : isBackground ? "background" : isSpecialCg ? "special-cg" : isMap ? "map" : "ui-skin"
       });
     });
-    const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
+    const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length + importedUiSkinProfiles.length;
     if (totalItems === 0) {
       throw new Error("ZIP 包中未找到有效资源文件");
     }
-    progressController.update(0, `准备导入 ${totalItems} 个资源...`);
+    const importedProfileCount = importedUiSkinProfiles.length;
+    progressController.update(
+      importedProfileCount > 0 ? Math.round(importedProfileCount / totalItems * 100) : 0,
+      importedProfileCount > 0 ? `已恢复 ${importedProfileCount} 套自定义皮肤，继续导入其余 ${totalItems - importedProfileCount} 个资源...` : `准备导入 ${totalItems} 个资源...`
+    );
     const BATCH_SIZE = 50;
-    let successCount = 0;
+    let successCount = importedUiSkinProfiles.length;
     const failedItems = [];
     for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
       if (isCancelledCheck && isCancelledCheck()) {
@@ -70735,7 +75274,7 @@ ${normalizedSource}`;
         await Promise.all(
           uiSkinBatch.map(
             (asset) => saveUiSkinAsset({
-              packId: targetPackId,
+              packId: importedUiSkinProfileIds.has(asset.skinId) || isCustomSkinProfileId(asset.skinId) ? GLOBAL_CUSTOM_SKIN_PACK_ID : targetPackId,
               skinId: asset.skinId,
               elementId: asset.elementId,
               device: asset.device,
@@ -70752,7 +75291,7 @@ ${normalizedSource}`;
         );
       }
       successCount += spriteBatch.length + backgroundBatch.length + specialCgBatch.length + (mapBatch.length > 0 ? 1 : 0) + uiSkinBatch.length;
-      const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
+      const processed = importedProfileCount + Math.min(i + BATCH_SIZE, imageFiles.length);
       const percent = Math.round(processed / totalItems * 100);
       progressController.update(percent, `导入中... ${processed}/${totalItems} (文件资源)`);
     }
@@ -70765,7 +75304,7 @@ ${normalizedSource}`;
         const item = uiSkinManifestUrlOnly[i];
         try {
           await saveUiSkinAsset({
-            packId: targetPackId,
+            packId: importedUiSkinProfileIds.has(item.skinId) || isCustomSkinProfileId(item.skinId) ? GLOBAL_CUSTOM_SKIN_PACK_ID : targetPackId,
             skinId: item.skinId,
             elementId: item.elementId,
             device: item.device,
@@ -70782,7 +75321,7 @@ ${normalizedSource}`;
         } catch (e) {
           failedItems.push({ path: `${item.skinId}/${item.elementId}/${item.device}/${item.state}`, error: e.message });
         }
-        const processed = imageFiles.length + i + 1;
+        const processed = importedProfileCount + imageFiles.length + i + 1;
         const percent = Math.round(processed / totalItems * 100);
         progressController.update(percent, `导入中... ${processed}/${totalItems} (皮肤链接)`);
       }
@@ -70811,7 +75350,7 @@ ${normalizedSource}`;
         } catch (e) {
           failedItems.push({ path: `special-cgs/${item.cgId}`, error: e.message });
         }
-        const processed = imageFiles.length + uiSkinManifestUrlOnly.length + i + 1;
+        const processed = importedProfileCount + imageFiles.length + uiSkinManifestUrlOnly.length + i + 1;
         const percent = Math.round(processed / totalItems * 100);
         progressController.update(percent, `导入中... ${processed}/${totalItems} (CG链接)`);
       }
@@ -70829,19 +75368,27 @@ ${normalizedSource}`;
         } catch (e) {
           failedItems.push({ path: `maps/${preferredMap.regionKey || GLOBAL_MAP_REGION_KEY}`, error: e.message });
         }
-        const processed = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
+        const processed = importedProfileCount + imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
         const percent = Math.round(processed / totalItems * 100);
         progressController.update(percent, `导入中... ${processed}/${totalItems} (地图链接)`);
       }
     }
     const mapSettingsApplied = applyImportedMapSettings(packageInfo?.mapSettings);
+    let switchedCustomSkin = false;
+    if (importedActiveCustomSkinProfileId) {
+      switchedCustomSkin = await switchToImportedCustomSkinProfile(importedActiveCustomSkinProfileId);
+    }
     if (failedItems.length > 0) {
       showImportError([
         `成功: ${successCount} 个, 失败: ${failedItems.length} 个`,
         "部分文件导入失败，请检查详情。"
       ]);
     }
-    console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}, 地图设置同步=${mapSettingsApplied}`);
+    if (switchedCustomSkin) {
+      const switchedProfile = importedUiSkinProfiles.find((profile) => profile.id === importedActiveCustomSkinProfileId);
+      showToast4(`已切换到导入的自定义皮肤：${switchedProfile?.displayName || importedActiveCustomSkinProfileId}`);
+    }
+    console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}, 自定义皮肤=${importedUiSkinProfiles.length}, 自动切换=${switchedCustomSkin}, 地图设置同步=${mapSettingsApplied}`);
   }
   function showImportProgress(initialText, onCancel, options2 = {}) {
     $2(".gal-import-progress-overlay").remove();
@@ -71250,7 +75797,7 @@ ${normalizedSource}`;
     (0, import_cytoscape_dagre.default)(cytoscape2);
     dagreRegistered = true;
   }
-  function escapeHtml3(value) {
+  function escapeHtml4(value) {
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function closeTimelineModal() {
@@ -71357,7 +75904,7 @@ ${normalizedSource}`;
     setTimelineZoom(nextZoom);
   }
   function showEmptyState(text) {
-    const safeText = escapeHtml3(text || "暂无时间线数据");
+    const safeText = escapeHtml4(text || "暂无时间线数据");
     modalState.$modal?.find("#gal-timeline-empty").html(`<div class="gal-timeline-empty-inner"><i class="fa-regular fa-folder-open"></i><span>${safeText}</span></div>`).show();
     modalState.$modal?.find("#gal-timeline-graph").hide();
   }
@@ -71422,30 +75969,30 @@ ${normalizedSource}`;
     const targetNode = node || getSelectedNode();
     if (!targetNode) return;
     const selectedSession = getSelectedSession(targetNode);
-    const checkpointBadges = targetNode.checkpointInfo?.names?.length ? `<div class="gal-timeline-checkpoints">${targetNode.checkpointInfo.names.map((name) => `<span class="gal-timeline-chip checkpoint">${escapeHtml3(name)}</span>`).join("")}</div>` : "";
+    const checkpointBadges = targetNode.checkpointInfo?.names?.length ? `<div class="gal-timeline-checkpoints">${targetNode.checkpointInfo.names.map((name) => `<span class="gal-timeline-chip checkpoint">${escapeHtml4(name)}</span>`).join("")}</div>` : "";
     const sessionButtons = Array.isArray(targetNode.sessions) ? targetNode.sessions.map((session, index) => {
       const active = selectedSession && isSameChatId(session.chatId, selectedSession.chatId) && session.messageId === selectedSession.messageId && session.swipeId === selectedSession.swipeId;
       const current = modalState.data?.current?.chatId && isSameChatId(session.chatId, modalState.data.current.chatId);
       const badgeText = session.swipeId != null ? `Swipe ${session.swipeId + 1}` : `楼层 ${session.messageId + 1}`;
       return `
           <button class="gal-timeline-session-btn ${active ? "active" : ""} ${current ? "is-current" : ""}" data-role="timeline-select-session" data-session-index="${index}">
-            <span class="gal-timeline-session-file">${escapeHtml3(session.chatFile || session.chatId)}</span>
-            <span class="gal-timeline-session-meta">${escapeHtml3(badgeText)}</span>
+            <span class="gal-timeline-session-file">${escapeHtml4(session.chatFile || session.chatId)}</span>
+            <span class="gal-timeline-session-meta">${escapeHtml4(badgeText)}</span>
           </button>
         `;
     }).join("") : "";
     const drawerHtml = `
     <div class="gal-timeline-drawer-header">
       <div class="gal-timeline-drawer-title-row">
-        <span class="gal-timeline-node-type ${escapeHtml3(targetNode.type)}">${escapeHtml3(targetNode.type === "swipe" ? "Swipe" : targetNode.role || targetNode.type)}</span>
+        <span class="gal-timeline-node-type ${escapeHtml4(targetNode.type)}">${escapeHtml4(targetNode.type === "swipe" ? "Swipe" : targetNode.role || targetNode.type)}</span>
         <span class="gal-timeline-node-depth">深度 ${targetNode.depth + 1}</span>
       </div>
-      <div class="gal-timeline-node-label">${escapeHtml3(targetNode.label || targetNode.preview)}</div>
+      <div class="gal-timeline-node-label">${escapeHtml4(targetNode.label || targetNode.preview)}</div>
       ${checkpointBadges}
     </div>
     <div class="gal-timeline-drawer-body">
       <div class="gal-timeline-preview-label">消息预览</div>
-      <div class="gal-timeline-preview">${escapeHtml3(targetNode.preview || "（空消息）")}</div>
+      <div class="gal-timeline-preview">${escapeHtml4(targetNode.preview || "（空消息）")}</div>
       <div class="gal-timeline-preview-label">所属聊天</div>
       <div class="gal-timeline-session-list">${sessionButtons || '<div class="gal-timeline-drawer-hint">没有可用的聊天会话</div>'}</div>
       <div class="gal-timeline-preview-label">操作</div>
@@ -71759,2119 +76306,6 @@ ${normalizedSource}`;
     await loadTimelineData(!!options2.forceRefresh);
   }
 
-  // src/core/debug.js
-  var SCRIPT_LOG_PREFIX = `[${SCRIPT_NAME}]`;
-  var EXTRA_LOG_PREFIXES = ["[Live2DManager]"];
-  var PLUGIN_STACK_HINTS = ["数据库界面插件.dist.js", "galgame通用生成器/src/"];
-  var globalDebugEnabled = true;
-  var patchedConsoles = /* @__PURE__ */ new WeakSet();
-  function isPluginLog(args) {
-    if (!Array.isArray(args) || args.length === 0) return false;
-    const first2 = args[0];
-    if (typeof first2 === "string") {
-      if (first2.startsWith(SCRIPT_LOG_PREFIX)) return true;
-      if (EXTRA_LOG_PREFIXES.some((prefix) => first2.startsWith(prefix))) return true;
-    }
-    return isPluginCallsite();
-  }
-  function isPluginCallsite() {
-    try {
-      const stack = new Error().stack;
-      if (!stack) return false;
-      const stackLines = stack.split("\n").slice(3);
-      return stackLines.some((line) => PLUGIN_STACK_HINTS.some((hint) => line.includes(hint)));
-    } catch (e) {
-      return false;
-    }
-  }
-  function shouldSuppress(level, args) {
-    if (globalDebugEnabled) return false;
-    if (level === "error") return false;
-    return isPluginLog(args);
-  }
-  function getConsoleTargets() {
-    const targets = [];
-    if (typeof console !== "undefined") targets.push(console);
-    if (typeof window !== "undefined" && window?.console) targets.push(window.console);
-    if (topWindow?.console) targets.push(topWindow.console);
-    return Array.from(new Set(targets));
-  }
-  function patchSingleConsole(targetConsole) {
-    if (!targetConsole || patchedConsoles.has(targetConsole)) return;
-    patchedConsoles.add(targetConsole);
-    const original = {
-      log: targetConsole.log?.bind(targetConsole),
-      info: targetConsole.info?.bind(targetConsole),
-      warn: targetConsole.warn?.bind(targetConsole),
-      debug: (targetConsole.debug || targetConsole.log)?.bind(targetConsole),
-      error: targetConsole.error?.bind(targetConsole)
-    };
-    const wrap = (level, raw) => (...args) => {
-      if (typeof raw !== "function") return;
-      if (shouldSuppress(level, args)) return;
-      raw(...args);
-    };
-    targetConsole.log = wrap("log", original.log);
-    targetConsole.info = wrap("info", original.info);
-    targetConsole.warn = wrap("warn", original.warn);
-    targetConsole.debug = wrap("debug", original.debug);
-    targetConsole.error = wrap("error", original.error);
-  }
-  function patchConsole() {
-    const targets = getConsoleTargets();
-    for (const targetConsole of targets) {
-      patchSingleConsole(targetConsole);
-    }
-  }
-  function setGlobalDebugEnabled(enabled) {
-    patchConsole();
-    globalDebugEnabled = !!enabled;
-  }
-  function getGlobalDebugEnabled() {
-    return globalDebugEnabled;
-  }
-
-  // src/ui/gpt-sovits-model-manager.js
-  function _safeArray4(value) {
-    return Array.isArray(value) ? value : [];
-  }
-  function _safeObject4(value) {
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  }
-  function _toFiniteNumber3(value, fallback = 0) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-  }
-  function _escapeHtmlLite(text) {
-    return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  }
-  function _normalizePathSep3(path) {
-    let s = String(path || "");
-    if (!s) return "";
-    s = s.trim();
-    if (s.startsWith('"') && s.endsWith('"') || s.startsWith("'") && s.endsWith("'")) {
-      s = s.slice(1, -1).trim();
-    }
-    try {
-      s = s.normalize("NFC");
-    } catch (e) {
-    }
-    return s.replace(/\\+/g, "/");
-  }
-  function _normalizeImportRootPath(path) {
-    let s = _normalizePathSep3(path).replace(/[\\/]+$/g, "");
-    if (/^[a-zA-Z]:$/.test(s)) s = `${s}/`;
-    return s;
-  }
-  function _normalizeModelMatchKey2(value) {
-    let s = String(value || "").trim();
-    if (!s) return "";
-    try {
-      s = s.normalize("NFKC");
-    } catch (e) {
-    }
-    return s.toLowerCase();
-  }
-  function _pickDefaultRef(model) {
-    const refs = _safeArray4(model?.refAudios);
-    const path = String(model?.paths?.defaultRefAudioPath || "").trim();
-    const id2 = String(model?.defaultRefId || "").trim();
-    return refs.find((item) => item.path === path) || refs.find((item) => item.id === id2) || refs[0] || null;
-  }
-  function _clearLegacyImportPathSettings() {
-    const settings = getSettings();
-    settings.gptSoVits = settings.gptSoVits || {};
-    let changed = false;
-    if (String(settings.gptSoVits.rootDir || "").trim()) {
-      settings.gptSoVits.rootDir = "";
-      changed = true;
-    }
-    if (String(settings.gptSoVits.importPathPrefix || "").trim()) {
-      settings.gptSoVits.importPathPrefix = "";
-      changed = true;
-    }
-    if (changed) saveSettings();
-  }
-  function _modelToLegacyVoice(model) {
-    if (!model) return null;
-    const defRef = _pickDefaultRef(model);
-    const params = _safeObject4(model.params);
-    return {
-      name: String(model.name || "").trim(),
-      desc: String(model.desc || "").trim(),
-      refAudioPath: String(defRef?.path || model?.paths?.defaultRefAudioPath || "").trim(),
-      promptText: String(defRef?.promptText || params.promptText || "").trim(),
-      promptLang: String(defRef?.promptLang || params.promptLang || "zh").trim() || "zh",
-      textLang: String(defRef?.textLang || params.textLang || "auto").trim() || "auto",
-      gptWeightsPath: String(model?.paths?.gptWeightsPath || "").trim(),
-      sovitsWeightsPath: String(model?.paths?.sovitsWeightsPath || "").trim()
-    };
-  }
-  function _saveModelsToSettings(models) {
-    const settings = getSettings();
-    settings.gptSoVits = settings.gptSoVits || {};
-    const cfg = getGptSoVitsConfig();
-    const normalized = normalizeGptSoVitsModelsForStore(models, cfg);
-    settings.gptSoVits.models = normalized;
-    settings.gptSoVits.voices = normalized.map(_modelToLegacyVoice).filter(Boolean);
-    saveSettings();
-    return normalized;
-  }
-  function _getModelsFromSettings() {
-    const cfg = getGptSoVitsConfig();
-    return normalizeGptSoVitsModelsForStore(cfg.models, cfg);
-  }
-  function _buildDefaultModel() {
-    const cfg = getGptSoVitsConfig();
-    return normalizeGptSoVitsModelForStore(
-      {
-        id: buildGptSoVitsModelId("model"),
-        name: "新模型",
-        enabled: true,
-        desc: "",
-        paths: { gptWeightsPath: "", sovitsWeightsPath: "", defaultRefAudioPath: "" },
-        params: {
-          promptText: "",
-          promptLang: "zh",
-          textLang: cfg.textLang || "auto",
-          textSplitMethod: cfg.textSplitMethod || "cut5",
-          speedFactor: _toFiniteNumber3(cfg.speedFactor, 1),
-          mediaType: cfg.mediaType || "wav",
-          streamingMode: !!cfg.streamingMode,
-          modelSwitchMode: normalizeGptSoVitsSwitchMode(cfg.modelSwitchMode || "set_weights"),
-          setModelEndpoint: normalizeSetModelEndpoint(cfg.setModelEndpoint || "/set_model"),
-          strictWeightSwitch: !!cfg.strictWeightSwitch
-        },
-        refAudios: [],
-        defaultRefId: "",
-        expressionRefMap: {}
-      },
-      cfg
-    ) || null;
-  }
-  async function _previewModel(model, sampleText = "") {
-    const cfg = getGptSoVitsConfig();
-    const normalized = normalizeGptSoVitsModelForStore(model, cfg);
-    if (!normalized) {
-      showToast4("试听失败：模型配置无效");
-      return false;
-    }
-    const runtimeVoice = buildRuntimeVoiceFromGptSoVitsModel(normalized, cfg);
-    if (!runtimeVoice) {
-      showToast4("试听失败：请先配置参考音频");
-      return false;
-    }
-    if (!String(cfg.apiUrl || "").trim()) {
-      showToast4("试听失败：请先填写 GPT-SoVITS API 地址");
-      return false;
-    }
-    const segment = {
-      type: "dialogue",
-      speaker: "",
-      text: String(sampleText || normalized?.params?.promptText || "").trim() || "你好，这是模型试听。",
-      expression: "默认",
-      tts: { emotion: "默认" }
-    };
-    try {
-      TTSManager.stop();
-      const playbackSessionId = Number(TTSManager._activePlaybackSessionId || 0) + 1;
-      TTSManager._activePlaybackSessionId = playbackSessionId;
-      TTSManager._abortGptSoVitsFetch("model-preview");
-      const ok = await TTSManager._speakWithGptSoVits(segment, `model_preview_${Date.now()}`, runtimeVoice, playbackSessionId);
-      if (!ok) showToast4("试听失败：请检查 API、模型路径和参考音频");
-      return !!ok;
-    } catch (e) {
-      const msg = String(e?.message || e || "").trim();
-      showToast4(`试听失败：${msg || "unknown error"}`);
-      return false;
-    }
-  }
-  async function _openModelEditor(modelInput, onSave) {
-    const cfg = getGptSoVitsConfig();
-    const working = normalizeGptSoVitsModelForStore(modelInput || _buildDefaultModel(), cfg) || _buildDefaultModel();
-    if (!working) {
-      showToast4("模型初始化失败");
-      return;
-    }
-    const refsText = JSON.stringify(_safeArray4(working.refAudios), null, 2);
-    const mapText = JSON.stringify(_safeObject4(working.expressionRefMap), null, 2);
-    const current = Object.assign({}, working, {
-      refAudiosJson: refsText,
-      expressionRefMapJson: mapText
-    });
-    const modalHtml = `
-    <div class="gal-input-modal" id="gal-gpt-model-editor-modal">
-      <div class="gal-input-box gal-modal-layout-fixed" style="width:min(1100px,95vw);max-width:none !important;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
-        <div class="gal-input-title gal-modal-fixed-header" style="margin:0;padding:12px 14px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;transform:none;">
-          <span style="transform:none;color:${THEME.dark};font-weight:700;font-size:1.15rem;">GPT-SoVITS 模型编辑</span>
-        </div>
-        <div class="gal-modal-scroll-body" style="padding:12px 14px 8px 14px;">
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:10px;">
-          <label>模型名<input id="gal-gpt-edit-name" value="${_escapeHtmlLite(current.name || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>备注<input id="gal-gpt-edit-desc" value="${_escapeHtmlLite(current.desc || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>gpt权重<input id="gal-gpt-edit-gpt" value="${_escapeHtmlLite(current.paths?.gptWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>sovits权重<input id="gal-gpt-edit-sovits" value="${_escapeHtmlLite(current.paths?.sovitsWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>默认参考音频<input id="gal-gpt-edit-ref" value="${_escapeHtmlLite(current.paths?.defaultRefAudioPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>prompt_text<input id="gal-gpt-edit-prompt" value="${_escapeHtmlLite(current.params?.promptText || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>prompt_lang<input id="gal-gpt-edit-plang" value="${_escapeHtmlLite(current.params?.promptLang || "zh")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>text_lang<input id="gal-gpt-edit-tlang" value="${_escapeHtmlLite(current.params?.textLang || "auto")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-        </div>
-        <div style="margin-top:10px;">
-          <label>参考音频列表 JSON<textarea id="gal-gpt-edit-refs" rows="8" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current.refAudiosJson)}</textarea></label>
-        </div>
-        <div style="margin-top:10px;">
-          <label>表情映射 JSON<textarea id="gal-gpt-edit-map" rows="6" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current.expressionRefMapJson)}</textarea></label>
-        </div>
-        </div>
-        <div class="gal-input-actions gal-modal-fixed-actions" style="display:flex;justify-content:flex-end;gap:8px;margin:0;padding:12px 14px;border-top:1px solid #e5e7eb;">
-          <button class="gal-action-btn" id="gal-gpt-edit-preview"><i class="fa-solid fa-play"></i> 试听</button>
-          <button class="gal-action-btn" id="gal-gpt-edit-cancel">取消</button>
-          <button class="gal-action-btn primary" id="gal-gpt-edit-save"><i class="fa-solid fa-save"></i> 保存</button>
-        </div>
-      </div>
-    </div>
-  `;
-    const mountRoot = getModalMountRoot();
-    $2(mountRoot).find("#gal-gpt-model-editor-modal").remove();
-    $2(mountRoot).append(modalHtml);
-    const $modal = $2(mountRoot).find("#gal-gpt-model-editor-modal");
-    const close = () => $modal.remove();
-    $modal.on("click", (e) => {
-      if (e.target === $modal[0]) close();
-    });
-    $modal.find("#gal-gpt-edit-cancel").on("click", close);
-    $modal.find("#gal-gpt-edit-preview").on("click", async () => {
-      let refs = [];
-      try {
-        refs = JSON.parse($modal.find("#gal-gpt-edit-refs").val() || "[]");
-      } catch (e) {
-        showToast4("参考音频 JSON 无法解析");
-        return;
-      }
-      const draft = {
-        id: working.id || buildGptSoVitsModelId("model"),
-        name: String($modal.find("#gal-gpt-edit-name").val() || "").trim(),
-        desc: String($modal.find("#gal-gpt-edit-desc").val() || "").trim(),
-        enabled: true,
-        paths: {
-          gptWeightsPath: String($modal.find("#gal-gpt-edit-gpt").val() || "").trim(),
-          sovitsWeightsPath: String($modal.find("#gal-gpt-edit-sovits").val() || "").trim(),
-          defaultRefAudioPath: String($modal.find("#gal-gpt-edit-ref").val() || "").trim()
-        },
-        params: {
-          promptText: String($modal.find("#gal-gpt-edit-prompt").val() || "").trim(),
-          promptLang: String($modal.find("#gal-gpt-edit-plang").val() || "zh").trim() || "zh",
-          textLang: String($modal.find("#gal-gpt-edit-tlang").val() || "auto").trim() || "auto"
-        },
-        refAudios: _safeArray4(refs),
-        expressionRefMap: {},
-        defaultRefId: ""
-      };
-      await _previewModel(draft);
-    });
-    $modal.find("#gal-gpt-edit-save").on("click", async () => {
-      let refs = [];
-      let exprMap = {};
-      try {
-        refs = JSON.parse($modal.find("#gal-gpt-edit-refs").val() || "[]");
-      } catch (e) {
-        showToast4("参考音频 JSON 无法解析");
-        return;
-      }
-      try {
-        exprMap = JSON.parse($modal.find("#gal-gpt-edit-map").val() || "{}");
-      } catch (e) {
-        showToast4("表情映射 JSON 无法解析");
-        return;
-      }
-      const draft = {
-        id: working.id || buildGptSoVitsModelId("model"),
-        name: String($modal.find("#gal-gpt-edit-name").val() || "").trim(),
-        desc: String($modal.find("#gal-gpt-edit-desc").val() || "").trim(),
-        enabled: true,
-        paths: {
-          gptWeightsPath: String($modal.find("#gal-gpt-edit-gpt").val() || "").trim(),
-          sovitsWeightsPath: String($modal.find("#gal-gpt-edit-sovits").val() || "").trim(),
-          defaultRefAudioPath: String($modal.find("#gal-gpt-edit-ref").val() || "").trim()
-        },
-        params: {
-          promptText: String($modal.find("#gal-gpt-edit-prompt").val() || "").trim(),
-          promptLang: String($modal.find("#gal-gpt-edit-plang").val() || "zh").trim() || "zh",
-          textLang: String($modal.find("#gal-gpt-edit-tlang").val() || "auto").trim() || "auto"
-        },
-        refAudios: _safeArray4(refs),
-        expressionRefMap: _safeObject4(exprMap),
-        defaultRefId: ""
-      };
-      const normalized = normalizeGptSoVitsModelForStore(draft, cfg);
-      if (!normalized || !String(normalized.name || "").trim()) {
-        showToast4("模型保存失败：模型名不能为空");
-        return;
-      }
-      if (typeof onSave === "function") await onSave(normalized);
-      close();
-    });
-  }
-  function openGptSoVitsModelManager(options2 = {}) {
-    const onChanged = typeof options2.onChanged === "function" ? options2.onChanged : null;
-    const mountRoot = getModalMountRoot();
-    $2(mountRoot).find("#gal-gpt-model-manager-modal").remove();
-    _clearLegacyImportPathSettings();
-    $2(mountRoot).append(`
-    <div class="gal-input-modal" id="gal-gpt-model-manager-modal">
-      <div class="gal-input-box" style="width:min(1500px,96vw);max-width:none !important;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;padding:0;">
-        <div style="padding:12px 14px;border-bottom:1px solid #ddd;background:linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%);color:#fff;display:flex;justify-content:space-between;align-items:center;">
-          <div style="font-weight:700;">GPT-SoVITS 模型管理</div>
-          <button class="gal-action-btn" id="gal-gpt-model-manager-close" style="padding:6px 10px;background:rgba(255,255,255,0.2);"><i class="fa-solid fa-times"></i></button>
-        </div>
-        <div style="padding:10px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;flex-wrap:wrap;background:#f8fafc;">
-          <button class="gal-action-btn primary" id="gal-gpt-model-add"><i class="fa-solid fa-plus"></i> 新增模型</button>
-          <button class="gal-action-btn" id="gal-gpt-model-import-folder"><i class="fa-solid fa-folder-open"></i> 文件夹导入</button>
-          <input type="file" id="gal-gpt-model-import-folder-file" webkitdirectory directory multiple style="display:none;">
-          <input type="text" id="gal-gpt-model-search" placeholder="搜索模型名..." style="flex:1;min-width:260px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;">
-        </div>
-        <div id="gal-gpt-model-list" style="padding:12px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;background:var(--SmartThemeFormBg,#fff);"></div>
-      </div>
-    </div>
-  `);
-    const $modal = $2(mountRoot).find("#gal-gpt-model-manager-modal");
-    let models = _getModelsFromSettings();
-    const close = () => $modal.remove();
-    $modal.on("click", (e) => {
-      if (e.target === $modal[0]) close();
-    });
-    $modal.find("#gal-gpt-model-manager-close").on("click", close);
-    const saveModels = async (next) => {
-      models = _saveModelsToSettings(next);
-      if (typeof onChanged === "function") await onChanged(models);
-      renderList();
-    };
-    const getLegacyImportPrefix = () => {
-      const settings = getSettings();
-      return String(settings.gptSoVits?.importPathPrefix || settings.gptSoVits?.rootDir || "").trim();
-    };
-    const renderList = () => {
-      const keyword = String($modal.find("#gal-gpt-model-search").val() || "").trim().toLowerCase();
-      const filtered = models.filter((model) => String(model.name || "").toLowerCase().includes(keyword));
-      const $list = $modal.find("#gal-gpt-model-list");
-      $list.empty();
-      if (!filtered.length) {
-        $list.html('<div style="color:#94a3b8;">暂无模型，可点击「新增模型」或「文件夹导入」。</div>');
-        return;
-      }
-      filtered.forEach((model) => {
-        const refCount = _safeArray4(model.refAudios).length;
-        const gptPath = String(model?.paths?.gptWeightsPath || "").trim();
-        const sovitsPath = String(model?.paths?.sovitsWeightsPath || "").trim();
-        const activeRef = _pickDefaultRef(model);
-        const refPath = String(activeRef?.path || model?.paths?.defaultRefAudioPath || "").trim();
-        $list.append(`
-        <div style="border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,#fff,#f8fbff);" data-model-id="${_escapeHtmlLite(model.id)}">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
-            <div style="font-weight:700;color:#0f172a;">${_escapeHtmlLite(model.name)}</div>
-            <span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${model.enabled !== false ? "#dcfce7" : "#fee2e2"};color:${model.enabled !== false ? "#166534" : "#991b1b"};">${model.enabled !== false ? "已启用" : "已停用"}</span>
-          </div>
-          <div style="font-size:0.78rem;color:#475569;">${_escapeHtmlLite(model.desc || "无备注")}</div>
-          <div style="font-size:0.78rem;color:#64748b;">参考音频 ${refCount} 条</div>
-          <div style="font-size:0.78rem;color:#64748b;">CKPT: ${_escapeHtmlLite(gptPath || "(未设置)")}</div>
-          <div style="font-size:0.78rem;color:#64748b;">PTH: ${_escapeHtmlLite(sovitsPath || "(未设置)")}</div>
-          <div style="font-size:0.78rem;color:#64748b;">默认参考: ${_escapeHtmlLite(refPath || "(未设置)")}</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="gal-action-btn primary" data-action="edit"><i class="fa-solid fa-pen"></i> 编辑</button>
-            <button class="gal-action-btn" data-action="preview"><i class="fa-solid fa-play"></i> 试听</button>
-            <button class="gal-action-btn" data-action="copy"><i class="fa-solid fa-copy"></i> 复制</button>
-            <button class="gal-action-btn" data-action="set-default"><i class="fa-solid fa-star"></i> 设为默认</button>
-            <button class="gal-action-btn" data-action="delete"><i class="fa-solid fa-trash"></i> 删除</button>
-          </div>
-        </div>
-      `);
-      });
-    };
-    $modal.find("#gal-gpt-model-search").on("input", renderList);
-    $modal.find("#gal-gpt-model-add").on("click", () => {
-      _openModelEditor(_buildDefaultModel(), async (model) => {
-        await saveModels(models.concat([model]));
-        showToast4(`已新增模型：${model.name}`);
-      });
-    });
-    $modal.find("#gal-gpt-model-import-folder").on("click", () => {
-      $modal.find("#gal-gpt-model-import-folder-file").trigger("click");
-    });
-    $modal.find("#gal-gpt-model-import-folder-file").on("change", async function() {
-      try {
-        const list = this.files;
-        if (!list || list.length === 0) return;
-        const files = Array.from(list);
-        const legacyPrefix = _normalizePathSep3(getLegacyImportPrefix());
-        const manualPrefix = window.prompt(
-          "请输入导入根路径（绝对路径）。\n例如你选的是 I:/Downloads/GPT-SoVITS v2 pro plus/MyGO!!!!!/高松灯\n可填写 I:/Downloads/GPT-SoVITS v2 pro plus/MyGO!!!!!\n也可填写 I:/Downloads/GPT-SoVITS v2 pro plus/MyGO!!!!!/高松灯（末尾有无 / 或 \\ 都可）",
-          legacyPrefix || ""
-        );
-        const importPrefix = _normalizeImportRootPath(String(manualPrefix || "").trim());
-        if (!importPrefix) {
-          showToast4("已取消导入：未填写导入根路径。");
-          return;
-        }
-        showToast4(`本次导入路径：${importPrefix}`);
-        let rootName = "";
-        for (const file of files) {
-          const rel = String(file?.webkitRelativePath || "").trim().replace(/\\/g, "/");
-          const first2 = String(rel.split("/")[0] || "").trim();
-          if (first2) {
-            rootName = first2;
-            break;
-          }
-        }
-        const imported = inferGptSoVitsModelsFromFolderFiles(files, importPrefix, { relativeRootName: rootName });
-        if (!imported.length) {
-          showToast4("未识别到可导入模型（至少需要参考音频）");
-          return;
-        }
-        if (!window.confirm(`识别到 ${imported.length} 个模型，是否导入？`)) return;
-        const next = models.slice();
-        let replaced = 0;
-        imported.forEach((model) => {
-          const incomingName = _normalizeModelMatchKey2(model?.name);
-          const incomingId = _normalizeModelMatchKey2(model?.id);
-          const idx = next.findIndex((item) => {
-            const currentName = _normalizeModelMatchKey2(item?.name);
-            const currentId = _normalizeModelMatchKey2(item?.id);
-            if (incomingName && currentName === incomingName) return true;
-            if (incomingId && currentId === incomingId) return true;
-            return false;
-          });
-          if (idx >= 0) {
-            next[idx] = model;
-            replaced += 1;
-          } else {
-            next.push(model);
-          }
-        });
-        await saveModels(next);
-        showToast4(replaced > 0 ? `已导入 ${imported.length} 条，覆盖同名 ${replaced} 条` : `已导入模型 ${imported.length} 条`);
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS 模型导入失败:`, e);
-        showToast4("模型导入失败，请检查目录结构");
-      } finally {
-        $2(this).val("");
-      }
-    });
-    $modal.on("click", "[data-model-id] [data-action]", function() {
-      const id2 = String($2(this).closest("[data-model-id]").attr("data-model-id") || "").trim();
-      const action = String($2(this).attr("data-action") || "").trim();
-      const index = models.findIndex((item) => item.id === id2);
-      if (index < 0) return;
-      const target = models[index];
-      if (action === "edit") {
-        _openModelEditor(target, async (model) => {
-          const next = models.slice();
-          next[index] = model;
-          await saveModels(next);
-          showToast4(`已更新模型：${model.name}`);
-        });
-        return;
-      }
-      if (action === "preview") {
-        void _previewModel(target, String(target?.params?.promptText || "").trim() || "你好，这是模型试听。");
-        return;
-      }
-      if (action === "copy") {
-        const copied = Object.assign({}, JSON.parse(JSON.stringify(target || {})), {
-          id: buildGptSoVitsModelId(target.name || "model"),
-          name: `${target.name}_副本`
-        });
-        void saveModels(models.concat([copied])).then(() => showToast4(`已复制模型：${copied.name}`));
-        return;
-      }
-      if (action === "set-default") {
-        const settings = getSettings();
-        settings.ttsDefaultSpeaker = target.name;
-        saveSettings();
-        showToast4(`默认音色已切换为：${target.name}`);
-        if (typeof onChanged === "function") void onChanged(models);
-        return;
-      }
-      if (action === "delete") {
-        if (!window.confirm(`确定删除模型「${target.name}」吗？`)) return;
-        const next = models.filter((item) => item.id !== id2);
-        void saveModels(next).then(() => showToast4(`已删除模型：${target.name}`));
-      }
-    });
-    renderList();
-  }
-
-  // src/ui/settings-panel.js
-  var enhancedModeState3 = GalgameStore.enhancedMode;
-  function getLive2DManagerRef() {
-    return topWindow?.galgame?.Live2DManager || topWindow?.Live2DManager || null;
-  }
-  var _buildAssetsPaneRef = null;
-  var _bindAssetsPaneRef = null;
-  var _assetStylesRef = null;
-  function setSettingsPanelRefs({ buildAssetsPane, bindAssetsPane, assetStyles }) {
-    if (buildAssetsPane) _buildAssetsPaneRef = buildAssetsPane;
-    if (bindAssetsPane) _bindAssetsPaneRef = bindAssetsPane;
-    if (assetStyles) _assetStylesRef = assetStyles;
-  }
-  function buildAboutPane() {
-    return `
-    <div class="gal-about-card">
-      <h3><i class="fa-solid fa-bullhorn"></i> 插件发布地址</h3>
-      <p>
-        <a href="https://discord.com/channels/1134557553011998840/1464262276583395359" target="_blank" rel="noopener noreferrer">
-          Discord 发布帖（点击打开）
-        </a>
-      </p>
-    </div>
-
-    <div class="gal-about-card">
-      <h3><i class="fa-solid fa-copyright"></i> Live2D 版权与使用声明</h3>
-      <p>
-        Live2D 模型及其相关素材的版权归原作者或权利人所有。除原始授权另有明确许可外，本插件中的模型与资源仅供学习、研究与技术交流使用。
-      </p>
-      <p class="gal-about-warning">
-        禁止将 Live2D 模型或相关素材用于任何商业用途。
-      </p>
-    </div>
-
-    <div class="gal-about-card">
-      <h3><i class="fa-solid fa-scale-balanced"></i> 许可协议（CC BY-NC-SA 4.0）</h3>
-      <p>
-        本插件相关内容遵循
-        <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
-        声明。你可以在署名并以相同方式共享的前提下进行非商业使用与修改。
-      </p>
-      <p class="gal-about-warning">
-        明确禁止商用，包括但不限于售卖、付费分发、商业引流、商业服务集成。
-      </p>
-    </div>
-
-    <div class="gal-about-card">
-      <h3><i class="fa-solid fa-gavel"></i> 法律合规声明</h3>
-      <p>
-        使用者必须遵守所在地以及资源来源地的法律法规，禁止将本插件用于违法、侵权、规避监管或其他不当用途。因违规使用产生的风险与责任由使用者自行承担。
-      </p>
-    </div>
-  `;
-  }
-  var SKIN_LIST = [
-    { value: "none", label: "默认" },
-    { value: "skin-ancient", label: "墨染千秋（中国古风）" },
-    { value: "skin-western", label: "冒险者酒馆（西方奇幻）" },
-    { value: "skin-persona", label: "心之怪盗（女神异闻录）" },
-    { value: "skin-jrpg", label: "苍穹之庭（日式奇幻）" },
-    { value: "skin-classic", label: "樱色物语（经典Galgame）" }
-  ];
-  var DIALOG_FONT_PRESETS = [
-    {
-      value: "sans",
-      label: "现代黑体（默认）",
-      stack: '"Noto Sans SC","PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif'
-    },
-    {
-      value: "serif",
-      label: "思源宋体",
-      stack: '"Noto Serif SC","Songti SC","SimSun","STSong",serif'
-    },
-    {
-      value: "wenkai",
-      label: "霞鹜文楷",
-      stack: '"LXGW WenKai Screen","LXGW WenKai","KaiTi","STKaiti",serif'
-    },
-    {
-      value: "kaiti",
-      label: "经典楷体",
-      stack: '"KaiTi","STKaiti","Kaiti SC","DFKai-SB","Noto Serif SC",serif'
-    },
-    {
-      value: "mono",
-      label: "等宽字体",
-      stack: '"Sarasa Mono SC","Cascadia Mono","JetBrains Mono","SFMono-Regular","Consolas","Liberation Mono",monospace'
-    }
-  ];
-  function getDialogFontStack(fontKey) {
-    const normalizedKey = String(fontKey || "").trim().toLowerCase();
-    const matched = DIALOG_FONT_PRESETS.find((item) => item.value === normalizedKey);
-    return matched ? matched.stack : DIALOG_FONT_PRESETS[0].stack;
-  }
-  function normalizeVoiceNameList(rawList) {
-    return Array.from(
-      new Set(
-        (Array.isArray(rawList) ? rawList : []).map((name) => String(name || "").trim()).filter(Boolean)
-      )
-    );
-  }
-  function escapeHtml4(value) {
-    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  }
-  function applySkin() {
-    const settings = getSettings();
-    const skin = settings.skin || "none";
-    const $overlay = $2("#gal-global-overlay");
-    SKIN_LIST.forEach((s) => {
-      if (s.value !== "none") $overlay.removeClass(s.value);
-    });
-    if (skin !== "none") $overlay.addClass(skin);
-  }
-  function applySettingsToUI() {
-    const settings = getSettings();
-    const fontScale = 0.5 + settings.fontSize / 30 * 1;
-    const dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
-    const toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
-    settings.dialogScalePercent = dialogScalePercent;
-    settings.toolbarScalePercent = toolbarScalePercent;
-    const dialogFontStack = getDialogFontStack(settings.dialogFontFamily);
-    $2("#gal-global-overlay").css({
-      "--gal-dialog-scale-user": dialogScalePercent / 100,
-      "--gal-toolbar-scale-user": toolbarScalePercent / 100,
-      "--font-scale": fontScale,
-      "--gal-dialog-font-family": dialogFontStack
-    });
-    const opacity = settings.dialogOpacity;
-    if (!settings.skin || settings.skin === "none") {
-      $2(".gal-text-panel").css({
-        "background-color": `rgba(255, 255, 255, ${opacity})`,
-        "background-image": `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
-      });
-    } else {
-      $2("#gal-global-overlay").css("--panel-opacity", opacity);
-      $2(".gal-text-panel").css({ "background-color": "", "background-image": "" });
-    }
-    if (settings.showSprites) {
-      $2(".gal-layer-character").show();
-    } else {
-      $2(".gal-layer-character").hide();
-    }
-    if (!settings.showMissingSpritePlaceholder) {
-      $2("#gal-global-overlay .gal-char-placeholder").remove();
-    }
-    const $charLayer = $2(".gal-layer-character");
-    $charLayer.css({
-      bottom: settings.spriteBottomOffset + "%",
-      gap: settings.spriteSpacing + "%"
-    });
-    const el = $charLayer.get(0);
-    if (el) {
-      el.style.setProperty("--base-scale", settings.spriteScale / 100);
-    }
-    if (settings.speakerGlow) {
-      $2(".gal-layer-character").addClass("glow-enabled");
-    } else {
-      $2(".gal-layer-character").removeClass("glow-enabled");
-    }
-    if (settings.speakerBubble) {
-      $2(".gal-layer-character").addClass("bubble-enabled");
-    } else {
-      $2(".gal-layer-character").removeClass("bubble-enabled");
-    }
-    applyBgFillMode();
-    applySkin();
-    applyTextEffect();
-    syncPixiEffectsSettings();
-  }
-  function applyBgFillMode() {
-    const settings = getSettings();
-    const fillMode = settings.bgFillMode || "cover";
-    const $bgLayers = $2(".gal-bg-layer");
-    $bgLayers.css("background-size", fillMode);
-    if (fillMode === "contain") {
-      $bgLayers.css("background-position", "center top");
-    } else {
-      $bgLayers.css("background-position", "center");
-    }
-  }
-  function applyTextEffect() {
-    const settings = getSettings();
-    const effect = settings.textEffect || "none";
-    const $textPanel = $2(".gal-text-panel");
-    const $dialogText = $2(".gal-dialog-text");
-    const $nameBadge = $2(".gal-name-badge");
-    const setInlineStyles = ($els, styles, forceImportant = false) => {
-      const priority3 = forceImportant ? "important" : "";
-      $els.each(function() {
-        const el = this;
-        if (!el || !el.style) return;
-        Object.entries(styles).forEach(([prop, value]) => {
-          if (value === "" || value === null || value === void 0) {
-            el.style.removeProperty(prop);
-          } else {
-            el.style.setProperty(prop, String(value), priority3);
-          }
-        });
-      });
-    };
-    $textPanel.removeClass("text-effect-glass text-effect-gradient text-effect-text-bg");
-    setInlineStyles($dialogText, {
-      "text-shadow": "",
-      "-webkit-text-stroke": "",
-      "background-color": "",
-      "padding": "",
-      "border-radius": "",
-      "color": ""
-    });
-    setInlineStyles($nameBadge, {
-      "text-shadow": "",
-      "-webkit-text-stroke": ""
-    });
-    switch (effect) {
-      case "shadow":
-        setInlineStyles($dialogText, {
-          "text-shadow": "0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5)",
-          "color": "#fff"
-        }, true);
-        setInlineStyles($nameBadge, {
-          "text-shadow": "0 0 4px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.5)"
-        }, true);
-        break;
-      case "glow":
-        setInlineStyles($dialogText, {
-          "text-shadow": "0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(0,210,255,0.4)",
-          "color": "#fff"
-        }, true);
-        setInlineStyles($nameBadge, {
-          "text-shadow": "0 0 5px rgba(0,210,255,0.8), 0 0 10px rgba(0,210,255,0.5)"
-        }, true);
-        break;
-      case "stroke":
-        setInlineStyles($dialogText, {
-          "-webkit-text-stroke": "1.5px rgba(0,0,0,0.8)",
-          "text-shadow": "0 2px 4px rgba(0,0,0,0.3)",
-          "color": "#fff"
-        }, true);
-        setInlineStyles($nameBadge, {
-          "-webkit-text-stroke": "1px rgba(0,0,0,0.6)",
-          "text-shadow": "0 1px 2px rgba(0,0,0,0.3)"
-        }, true);
-        break;
-      case "glass":
-        $textPanel.addClass("text-effect-glass");
-        setInlineStyles($dialogText, { "color": "#333" }, true);
-        break;
-      case "gradient":
-        $textPanel.addClass("text-effect-gradient");
-        setInlineStyles($dialogText, {
-          "text-shadow": "0 1px 2px rgba(0,0,0,0.3)",
-          "color": "#fff"
-        }, true);
-        break;
-      case "text-bg":
-        $textPanel.addClass("text-effect-text-bg");
-        setInlineStyles($dialogText, {
-          "background-color": "rgba(0,0,0,0.6)",
-          "padding": "8px 12px",
-          "border-radius": "8px",
-          "color": "#fff",
-          "text-shadow": "0 1px 2px rgba(0,0,0,0.3)"
-        }, true);
-        break;
-      default:
-        break;
-    }
-  }
-  async function showSettingsPanel(topTab, subTab) {
-    const $existing = $2("#gal-unified-panel");
-    if ($existing.length) {
-      if (topTab === void 0) {
-        $existing.remove();
-        return;
-      }
-      $existing.remove();
-    }
-    topTab = topTab || "settings";
-    const settings = getSettings();
-    ensureTitleScreenSettings();
-    settings.ttsDefaultMaleVoices = normalizeVoiceNameList(settings.ttsDefaultMaleVoices);
-    settings.ttsDefaultFemaleVoices = normalizeVoiceNameList(settings.ttsDefaultFemaleVoices);
-    const effectQuality = ["mobile", "balanced", "high"].includes(settings.effectsQuality) ? settings.effectsQuality : "balanced";
-    const effectMaxActiveParsed = parseInt(settings.effectsMaxActive, 10);
-    const effectMaxActive = Number.isFinite(effectMaxActiveParsed) ? Math.max(1, Math.min(effectMaxActiveParsed, 6)) : 2;
-    settings.effectsQuality = effectQuality;
-    settings.effectsMaxActive = effectMaxActive;
-    settings.effectsEnabled = settings.effectsEnabled !== false;
-    settings.effectsAutoClearOnSceneChange = settings.effectsAutoClearOnSceneChange !== false;
-    settings.dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
-    settings.toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
-    const typewriterSpeedParsed = parseInt(settings.typewriterSpeed, 10);
-    const typewriterSoundVolumeParsed = parseInt(settings.typewriterSoundVolume, 10);
-    settings.typewriterEnabled = settings.typewriterEnabled !== false;
-    settings.typewriterSpeed = Number.isFinite(typewriterSpeedParsed) ? Math.max(5, Math.min(typewriterSpeedParsed, 60)) : 30;
-    settings.typewriterSoundEnabled = settings.typewriterSoundEnabled !== false;
-    settings.typewriterSoundVolume = Number.isFinite(typewriterSoundVolumeParsed) ? Math.max(0, Math.min(typewriterSoundVolumeParsed, 100)) : 35;
-    const live2dManager = getLive2DManagerRef();
-    if (live2dManager) {
-      live2dManager.debug = !!settings.globalDebug;
-    }
-    const isEnabled = getIsEnabled();
-    const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
-      getAvailablePresets(),
-      getAvailableProfiles(),
-      getAvailableModels(),
-      getAvailableWorldbooks()
-    ]);
-    const savedWorldbooks = settings.enhancedMode?.secondGenerate?.worldbooks || [];
-    const presetOptions = [
-      '<option value="">使用当前预设</option>',
-      ...presetNames.map((p2) => `<option value="${p2}" ${settings.enhancedMode?.secondGenerate?.presetName === p2 ? "selected" : ""}>${p2}</option>`)
-    ].join("");
-    const profileOptions = [
-      '<option value="">使用当前连接配置</option>',
-      ...profileNames.map((p2) => `<option value="${p2}" ${settings.enhancedMode?.secondGenerate?.profileName === p2 ? "selected" : ""}>${p2}</option>`)
-    ].join("");
-    const modelOptions = [
-      '<option value="">使用当前模型</option>',
-      ...modelNames.map((m) => `<option value="${m}" ${settings.enhancedMode?.secondGenerate?.modelName === m ? "selected" : ""}>${m}</option>`)
-    ].join("");
-    const worldbookListHtml = worldbookNames.length === 0 ? '<div style="font-size: 0.85rem; color: #333; margin-left: 24px; font-weight: 500;">暂无可用的世界书</div>' : `<div style="margin-left: 24px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background: var(--SmartThemeFormBg, #fff); color: var(--SmartThemeBodyColor, #333);">
-        ${worldbookNames.map((wb) => `
-          <label style="display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; font-size: 0.9rem; color: #222; font-weight: 500;">
-            <input type="checkbox" class="gal-enhanced-worldbook-item" value="${wb}" ${savedWorldbooks.includes(wb) ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
-            <span style="color: #333;">${wb}</span>
-          </label>
-        `).join("")}
-      </div>`;
-    const dialogFontOptions = DIALOG_FONT_PRESETS.map((item) => `<option value="${item.value}" ${settings.dialogFontFamily === item.value ? "selected" : ""}>${item.label}</option>`).join("");
-    let assetsHtml = "";
-    if (_buildAssetsPaneRef) {
-      assetsHtml = await _buildAssetsPaneRef(subTab);
-    }
-    const assetStyles = _assetStylesRef ? _assetStylesRef() : "";
-    const panelHtml = `
-    <div class="gal-config-modal" id="gal-unified-panel">
-      <div class="gal-config-panel">
-        <!-- L1 Tab Header -->
-        <div class="gal-l1-tab-header">
-          <div class="gal-l1-tab-btn ${topTab === "settings" ? "active" : ""}" data-l1-tab="settings"><i class="fa-solid fa-gear"></i> <span>基础设置</span></div>
-          <div class="gal-l1-tab-btn ${topTab === "assets" ? "active" : ""}" data-l1-tab="assets"><i class="fa-solid fa-folder-open"></i> <span>资源管理</span></div>
-          <div class="gal-l1-tab-btn ${topTab === "about" ? "active" : ""}" data-l1-tab="about"><i class="fa-solid fa-circle-info"></i> <span>关于</span></div>
-          <div style="flex:1;"></div>
-          <button class="gal-config-close" id="gal-settings-close"><i class="fa-solid fa-times"></i></button>
-        </div>
-
-        <!-- L1 Pane: 基础设置 -->
-        <div class="gal-config-body" data-l1-pane="settings" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "settings" ? "display: none;" : ""}">
-          <!-- 主开关 -->
-          <div style="text-align: center; margin-bottom: 24px;">
-            <button id="gal-main-toggle" class="${isEnabled ? "gal-toggle-on" : "gal-toggle-off"}"
-                    style="padding: 14px 40px; font-size: 1.1rem; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; gap: 10px;">
-              <i class="fa-solid ${isEnabled ? "fa-toggle-on" : "fa-toggle-off"}" style="font-size: 1.3rem;"></i>
-              <span>${isEnabled ? "Galgame 模式已开启" : "Galgame 模式已关闭"}</span>
-            </button>
-            <p style="margin-top: 8px; font-size: 0.8rem; color: #999;">当前角色卡独立设置</p>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 文本显示 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-font"></i> 文本显示</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">字体大小</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${settings.fontSize}">
-                <span class="gal-range-value" id="gal-font-size-value">${settings.fontSize}</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">对话框缩放</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-scale-percent" min="70" max="130" step="1" value="${settings.dialogScalePercent}">
-                <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings.dialogScalePercent}%</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">底栏缩放</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-toolbar-scale-percent" min="70" max="130" step="1" value="${settings.toolbarScalePercent}">
-                <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings.toolbarScalePercent}%</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">对话字体</span>
-              <div class="gal-settings-control">
-                <select id="gal-dialog-font-family" class="gal-select">
-                  ${dialogFontOptions}
-                </select>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">对话框透明度</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-opacity" min="0" max="100" step="5" value="${Math.round((1 - settings.dialogOpacity) * 100)}">
-                <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round((1 - settings.dialogOpacity) * 100)}%</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">文字特效</span>
-              <div class="gal-settings-control">
-                <select id="gal-text-effect" class="gal-select">
-                  <option value="none" ${settings.textEffect === "none" ? "selected" : ""}>无</option>
-                  <option value="shadow" ${settings.textEffect === "shadow" ? "selected" : ""}>阴影增强</option>
-                  <option value="glow" ${settings.textEffect === "glow" ? "selected" : ""}>发光效果</option>
-                  <option value="stroke" ${settings.textEffect === "stroke" ? "selected" : ""}>文字描边</option>
-                  <option value="glass" ${settings.textEffect === "glass" ? "selected" : ""}>毛玻璃背景</option>
-                  <option value="gradient" ${settings.textEffect === "gradient" ? "selected" : ""}>底部渐变遮罩</option>
-                  <option value="text-bg" ${settings.textEffect === "text-bg" ? "selected" : ""}>独立文字背景</option>
-                </select>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">打字机显示</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-enabled" ${settings.typewriterEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">打字速度</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-typewriter-speed" min="5" max="60" step="1" value="${settings.typewriterSpeed}">
-                <span class="gal-range-value" id="gal-typewriter-speed-value">${settings.typewriterSpeed}字/秒</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">打字音效</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-sound-enabled" ${settings.typewriterSoundEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">音效音量</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-typewriter-sound-volume" min="0" max="100" step="1" value="${settings.typewriterSoundVolume}">
-                <span class="gal-range-value" id="gal-typewriter-sound-volume-value">${settings.typewriterSoundVolume}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 自动播放 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-play"></i> 自动播放</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">播放间隔</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-auto-speed" min="1" max="8" step="0.5" value="${settings.autoPlaySpeed}">
-                <span class="gal-range-value" id="gal-auto-speed-value">${settings.autoPlaySpeed}秒</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 显示设置 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-display"></i> 显示设置</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">显示立绘</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-show-sprites" ${settings.showSprites ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">沉浸模式 <small style="color:#999;">(隐藏其他楼层)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-hide-floors" ${settings.hideOtherFloors ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">背景图填充 <small style="color:#999;">(cover填满/contain完整)</small></span>
-              <select id="gal-bg-fill-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
-                <option value="cover" ${settings.bgFillMode === "cover" ? "selected" : ""}>Cover (填满裁剪)</option>
-                <option value="contain" ${settings.bgFillMode === "contain" ? "selected" : ""}>Contain (完整显示)</option>
-              </select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">界面皮肤</span>
-              <select id="gal-skin-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 200px;">
-                ${SKIN_LIST.map((s) => `<option value="${s.value}" ${settings.skin === s.value ? "selected" : ""}>${s.label}</option>`).join("")}
-              </select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">情境样式 <small style="color:#999;">(控制 COT 是否包含 &lt;styled&gt; 规范)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-situational-style-enabled" ${settings.situationalStyleEnabled !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- Pixi 特效 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Pixi特效</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">启用特效</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-effects-enabled" ${settings.effectsEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">质量档位</span>
-              <select id="gal-effects-quality" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
-                <option value="mobile" ${effectQuality === "mobile" ? "selected" : ""}>Mobile（省电）</option>
-                <option value="balanced" ${effectQuality === "balanced" ? "selected" : ""}>Balanced（默认）</option>
-                <option value="high" ${effectQuality === "high" ? "selected" : ""}>High（高画质）</option>
-              </select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">切场景自动清空</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-effects-autoclear" ${settings.effectsAutoClearOnSceneChange ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">并发上限</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-effects-max-active" min="1" max="6" step="1" value="${effectMaxActive}">
-                <span class="gal-range-value" id="gal-effects-max-active-value">${effectMaxActive}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 立绘设置 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-user"></i> 立绘设置</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">立绘大小</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-scale" min="50" max="150" step="5" value="${settings.spriteScale}">
-                <span class="gal-range-value" id="gal-sprite-scale-value">${settings.spriteScale}%</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">垂直位置 <small style="color:#999;">(底部偏移)</small></span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${settings.spriteBottomOffset}">
-                <span class="gal-range-value" id="gal-sprite-bottom-value">${settings.spriteBottomOffset}%</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">立绘间距 <small style="color:#999;">(左右距离)</small></span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings.spriteSpacing}">
-                <span class="gal-range-value" id="gal-sprite-spacing-value">${settings.spriteSpacing}%</span>
-              </div>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">无立绘时显示添加框 <small style="color:#999;">(关闭后不可点击上传)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings.showMissingSpritePlaceholder ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">说话者光晕 <small style="color:#999;">(轮廓发光)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-speaker-glow" ${settings.speakerGlow ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">气泡指示器 <small style="color:#999;">(漫画风格)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-speaker-bubble" ${settings.speakerBubble ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- TTS配音 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-volume-high"></i> TTS配音</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">启用TTS配音</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-tts-enabled" ${getTTSEnabled() ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">开启：对话格式含TTS属性，表情在开头<br>关闭：简单对话格式，表情在结尾</p>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">TTS引擎</span>
-              <select id="gal-tts-provider" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
-                <option value="littlewhitebox" ${settings.ttsProvider === "littlewhitebox" ? "selected" : ""}>小白X（豆包火山）</option>
-                <option value="gpt_sovits_v2" ${settings.ttsProvider === "gpt_sovits_v2" ? "selected" : ""}>GPT-SoVITS v2ProPlus</option>
-              </select>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">自动播放 <small style="color:#999;">(切段自动朗读)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings.ttsAutoPlay ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">中日双语模式 <small style="color:#999;">(显示中文，TTS发送日文)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings.ttsBilingualZhJaEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">按“中文文本[JP]日文文本”输出（兼容【JP】）；未命中时自动回退原文朗读。</p>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">默认音色</span>
-              <select id="gal-tts-default-speaker" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
-                <option value="">（不指定）</option>
-              </select>
-            </div>
-            <p id="gal-tts-default-speaker-hint" style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;"></p>
-            <div class="gal-settings-row" style="align-items: flex-start;">
-              <span class="gal-settings-label">默认男声列表</span>
-              <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 480px); gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <select id="gal-tts-default-male-candidate" class="gal-voice-pool-select" style="flex: 1;">
-                    <option value="">选择后立即加入列表</option>
-                  </select>
-                </div>
-                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
-                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
-                <div id="gal-tts-default-male-list" class="gal-voice-chip-list"></div>
-              </div>
-            </div>
-            <div class="gal-settings-row" style="align-items: flex-start;">
-              <span class="gal-settings-label">默认女声列表</span>
-              <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 480px); gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <select id="gal-tts-default-female-candidate" class="gal-voice-pool-select" style="flex: 1;">
-                    <option value="">选择后立即加入列表</option>
-                  </select>
-                </div>
-                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
-                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
-                <div id="gal-tts-default-female-list" class="gal-voice-chip-list"></div>
-              </div>
-            </div>
-            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
-              当 COT 使用 <code>男声/女声</code> 标签且角色未绑定时，将从对应列表随机分配并自动绑定。
-            </p>
-
-            <div id="gal-gpt-sovits-config" style="margin-top: 10px; padding: 12px; border: 1px dashed #ddd; border-radius: 8px; background: #fafafa; ${settings.ttsProvider === "gpt_sovits_v2" ? "" : "display: none;"}">
-              <div style="font-weight: 700; margin-bottom: 10px; color: ${THEME.dark}; display:flex; align-items:center; gap:8px;">
-                <i class="fa-solid fa-microchip" style="color:${THEME.accent};"></i>
-                <span>GPT-SoVITS（api_v2.py）设置</span>
-              </div>
-              <div class="gal-settings-row">
-                <span class="gal-settings-label">API地址</span>
-                <input type="text" id="gal-gpt-sovits-url" value="${settings.gptSoVits?.apiUrl || ""}" placeholder="http://127.0.0.1:9880" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
-              </div>
-              <div class="gal-settings-row">
-                <span class="gal-settings-label">使用酒馆代理</span>
-                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-proxy" ${settings.gptSoVits?.useCorsProxy ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-              </div>
-              <div class="gal-settings-row">
-                <span class="gal-settings-label">模型切换模式</span>
-                <select id="gal-gpt-sovits-switch-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 210px;">
-                  <option value="set_weights" ${(settings.gptSoVits?.modelSwitchMode || "set_weights") === "set_weights" ? "selected" : ""}>set_weights (api_v2.py)</option>
-                  <option value="set_model" ${(settings.gptSoVits?.modelSwitchMode || "") === "set_model" ? "selected" : ""}>set_model (api.py)</option>
-                  <option value="none" ${(settings.gptSoVits?.modelSwitchMode || "") === "none" ? "selected" : ""}>none（不自动切换）</option>
-                </select>
-              </div>
-              <div class="gal-settings-row">
-                <span class="gal-settings-label">set_model 接口</span>
-                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${settings.gptSoVits?.setModelEndpoint || "/set_model"}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
-              </div>
-              <div class="gal-settings-row">
-                <span class="gal-settings-label">严格切换 <small style="color:#999;">(失败不回退)</small></span>
-                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-strict-switch" ${settings.gptSoVits?.strictWeightSwitch ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-              </div>
-              <div class="gal-settings-row">
-                <span class="gal-settings-label">模型管理</span>
-                <button class="gal-action-btn" id="gal-gpt-sovits-open-model-manager" style="min-width: 180px; padding: 8px 14px;">
-                  <i class="fa-solid fa-layer-group"></i> 打开管理面板
-                </button>
-              </div>
-              <div style="margin-top: 10px;">
-                <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">音色列表（JSON）</div>
-                <textarea id="gal-gpt-sovits-voices-json" rows="6" placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh"}]' style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8rem;"></textarea>
-                <div style="display:flex; gap:10px; margin-top: 10px;">
-                  <button class="gal-panel-btn secondary" id="gal-gpt-sovits-voices-save" style="flex: 1; padding: 10px;"><i class="fa-solid fa-floppy-disk"></i><span>保存音色列表</span></button>
-                  <button class="gal-panel-btn" id="gal-gpt-sovits-test" style="flex: 1; padding: 10px;"><i class="fa-solid fa-play"></i><span>试听</span></button>
-                </div>
-                <input type="text" id="gal-gpt-sovits-test-text" value="你好，这是一段 GPT-SoVITS 配音测试。" style="width: 100%; margin-top: 10px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem;" placeholder="试听文本">
-              </div>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 快捷键 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-keyboard"></i> 快捷键</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">空格键 -> 下一句</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-space-next" ${settings.spaceKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">回车键 -> 下一句</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-enter-next" ${settings.enterKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">Ctrl长按 -> 快进</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-ctrl-skip" ${settings.ctrlKeySkip ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 快进设置 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-forward"></i> 快进设置</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label" title="开启后，只有检测到Galgame标签才会显示界面；关闭则总是显示">智能判断主界面显示</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings.smartDetection ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">全局Debug日志</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings.globalDebug ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">快进速度</span>
-              <div class="gal-settings-control">
-                <input type="range" id="gal-skip-speed" min="0.01" max="0.2" step="0.01" value="${settings.skipSpeed}">
-                <span class="gal-range-value" id="gal-skip-speed-value">${settings.skipSpeed}s</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 加强模式 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-bolt" style="color: #ff9800;"></i> 加强模式</div>
-            <div class="gal-settings-row" style="margin-bottom: 12px;">
-              <div style="display: flex; flex-direction: column; gap: 4px;">
-                <span class="gal-settings-label" style="font-weight: 600;">启用加强模式</span>
-                <small style="color: #888; font-size: 0.75rem;">两次生成策略：内容创作 + COT格式化</small>
-              </div>
-              <label class="gal-switch"><input type="checkbox" id="gal-enhanced-mode" ${settings.enhancedMode?.enabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div id="gal-enhanced-hint" style="${settings.enhancedMode?.enabled ? "" : "display: none;"} padding: 12px; background: #fff8e1; border-radius: 6px; margin-bottom: 16px; font-size: 0.8rem; color: #666; line-height: 1.5;">
-              <i class="fa-solid fa-lightbulb" style="color: #ff9800;"></i>
-              第一次生成专注内容，第二次切换API进行COT格式化。
-            </div>
-            <div id="gal-enhanced-config" style="${settings.enhancedMode?.enabled ? "" : "display: none;"} padding-left: 12px; border-left: 2px solid #ffe0b2;">
-              <div style="font-weight: 600; margin-bottom: 12px; color: #e65100; font-size: 0.9rem;">第二次生成配置</div>
-              <div style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-profile" ${settings.enhancedMode?.secondGenerate?.useProfile ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
-                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">连接配置</span>
-                </label>
-                <select id="gal-enhanced-profile-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${profileOptions}</select>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-model" ${settings.enhancedMode?.secondGenerate?.useModel ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
-                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">模型</span>
-                </label>
-                <select id="gal-enhanced-model-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${modelOptions}</select>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-preset" ${settings.enhancedMode?.secondGenerate?.usePreset ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
-                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">预设</span>
-                </label>
-                <select id="gal-enhanced-preset-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${presetOptions}</select>
-              </div>
-              <div style="margin-bottom: 10px;">
-                <div style="font-size: 0.9rem; font-weight: 600; color: #222; margin-bottom: 8px;">世界书设置</div>
-                <div style="margin-left: 24px;">
-                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="default" ${!settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
-                    <span>不使用自定义世界书(默认选择)</span>
-                  </label>
-                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="none" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
-                    <span>不使用任何世界书</span>
-                  </label>
-                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="custom" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "checked" : ""} style="cursor: pointer;">
-                    <span>使用以下世界书：</span>
-                  </label>
-                  <div id="gal-enhanced-worldbooks-list" style="margin-left: 24px; ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "" : "display: none;"}">${worldbookListHtml}</div>
-                </div>
-              </div>
-              <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #ffe0b2;">
-                <button id="gal-enhanced-view-prompts" class="gal-panel-btn secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                  <i class="fa-solid fa-eye"></i><span>查看提示词</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 刷新视图 -->
-          <div style="margin-top: 16px;">
-            <button class="gal-panel-btn secondary" id="gal-refresh-views" style="width: 100%;"><i class="fa-solid fa-sync"></i><span>刷新视图</span></button>
-          </div>
-        </div>
-
-        <!-- L1 Pane: 资源管理 -->
-        <div data-l1-pane="assets" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "assets" ? "display: none;" : ""}">
-          ${assetsHtml}
-        </div>
-
-        <!-- L1 Pane: 关于 -->
-        <div data-l1-pane="about" class="gal-about-pane" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== "about" ? "display: none;" : ""}">
-          ${buildAboutPane()}
-        </div>
-      </div>
-    </div>
-
-    <style>
-      .gal-toggle-on { background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); color: #fff; box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4); }
-      .gal-toggle-off { background: #e0e0e0; color: #666; }
-      .gal-toggle-on:hover, .gal-toggle-off:hover { transform: scale(1.02); }
-      .gal-settings-divider { border-top: 1px solid #e0e0e0; margin: 16px 0; }
-      .gal-settings-section { margin-bottom: 8px; }
-      .gal-settings-section-title { font-weight: 700; font-size: 0.95rem; color: ${THEME.dark}; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-      .gal-settings-section-title i { color: ${THEME.accent}; }
-      .gal-settings-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-      .gal-settings-row:last-child { border-bottom: none; }
-      .gal-settings-label { font-size: 0.9rem; color: #444; }
-      .gal-settings-control { display: flex; align-items: center; gap: 10px; }
-      .gal-settings-control input[type="range"] { width: 120px; accent-color: ${THEME.accent}; }
-      .gal-range-value { min-width: 45px; text-align: right; font-weight: 600; font-size: 0.85rem; color: ${THEME.accent}; }
-      .gal-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
-      .gal-switch input { opacity: 0; width: 0; height: 0; }
-      .gal-switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: 0.3s; border-radius: 26px; }
-      .gal-switch-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-      .gal-switch input:checked + .gal-switch-slider { background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); }
-      .gal-switch input:checked + .gal-switch-slider:before { transform: translateX(22px); }
-      .gal-panel-btn { padding: 14px; background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all 0.2s; }
-      .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
-      .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-      .gal-panel-btn i { font-size: 1.3rem; }
-      .gal-title-settings-input,
-      .gal-title-settings-select {
-        width: min(100%, 460px);
-        min-height: 36px;
-        border-radius: 8px;
-        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-        color: var(--SmartThemeBodyColor, #f5f7fa);
-        padding: 7px 10px;
-        box-sizing: border-box;
-        outline: none;
-      }
-      .gal-title-settings-input::placeholder {
-        color: rgba(245, 247, 250, 0.74);
-      }
-      .gal-title-settings-input:focus,
-      .gal-title-settings-select:focus {
-        border-color: var(--SmartThemeEmColor, #9ac7ff);
-        box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
-      }
-      .gal-title-settings-input:disabled,
-      .gal-title-settings-select:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      .gal-voice-pool-select {
-        padding: 8px 10px;
-        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-        border-radius: 6px;
-        font-size: 0.85rem;
-        color: var(--SmartThemeBodyColor, #f5f7fa);
-        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-      }
-      .gal-voice-pool-select:focus {
-        outline: none;
-        border-color: var(--SmartThemeEmColor, #9ac7ff);
-        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
-      }
-      .gal-voice-chip-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 28px; }
-      .gal-voice-chip-empty { font-size: 0.78rem; color: #888; }
-      .gal-voice-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 4px 10px;
-        border-radius: 999px;
-        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-        color: var(--SmartThemeBodyColor, #f5f7fa);
-        font-size: 0.8rem;
-        max-width: 100%;
-      }
-      .gal-voice-chip-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .gal-voice-chip-remove {
-        border: none;
-        border-radius: 999px;
-        width: 18px;
-        height: 18px;
-        line-height: 18px;
-        padding: 0;
-        cursor: pointer;
-        background: rgba(220, 53, 69, 0.2);
-        color: var(--SmartThemeBodyColor, #f5f7fa);
-        font-weight: 700;
-      }
-      .gal-voice-chip-remove:focus {
-        outline: none;
-        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
-      }
-
-      /* L1 Tab Header */
-      .gal-l1-tab-header { display:flex; align-items:center; background:var(--SmartThemeBotMesBlurTintColor, #1a1a2e); padding:0; border-bottom:2px solid ${THEME.accent}; }
-      .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
-      .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
-      .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
-      .gal-about-pane { display: flex; flex-direction: column; gap: 14px; }
-      .gal-about-card { background: #f8fbff; border: 1px solid #dce9ff; border-radius: 10px; padding: 16px; color: #2f3a4a; line-height: 1.7; }
-      .gal-about-card h3 { margin: 0 0 8px 0; color: ${THEME.dark}; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
-      .gal-about-card h3 i { color: ${THEME.accent}; }
-      .gal-about-card p { margin: 0 0 8px 0; }
-      .gal-about-card p:last-child { margin-bottom: 0; }
-      .gal-about-card a { color: #2563eb; text-decoration: underline; word-break: break-all; }
-      .gal-about-warning { color: #b42318; font-weight: 700; }
-
-      ${assetStyles}
-    </style>
-  `;
-    $2(getModalMountRoot()).append(panelHtml);
-    const $panel = $2("#gal-unified-panel");
-    const renderVoicePoolChips = (containerSelector, poolKey) => {
-      const $container = $2(containerSelector);
-      if (!$container.length) return;
-      const normalizedList = normalizeVoiceNameList(settings[poolKey]);
-      settings[poolKey] = normalizedList;
-      if (normalizedList.length === 0) {
-        $container.html('<span class="gal-voice-chip-empty">当前为空（从上方选择音色即可加入）。</span>');
-        return;
-      }
-      const html = normalizedList.map((voiceName) => `
-        <span class="gal-voice-chip">
-          <span class="gal-voice-chip-name" title="${escapeHtml4(voiceName)}">${escapeHtml4(voiceName)}</span>
-          <button type="button" class="gal-voice-chip-remove" data-pool="${poolKey}" data-voice="${escapeHtml4(voiceName)}">×</button>
-        </span>
-      `).join("");
-      $container.html(html);
-    };
-    const refreshTtsVoicePoolCandidates = (voiceList) => {
-      const optionHtml = ['<option value="">选择后立即加入列表</option>'].concat(
-        voiceList.map((v) => {
-          const name = String(v?.name || "").trim();
-          if (!name) return "";
-          const desc = String(v?.desc || "").trim();
-          const label = desc ? `${name} (${desc})` : name;
-          return `<option value="${escapeHtml4(name)}">${escapeHtml4(label)}</option>`;
-        }).filter(Boolean)
-      ).join("");
-      const $maleCandidate = $2("#gal-tts-default-male-candidate");
-      const $femaleCandidate = $2("#gal-tts-default-female-candidate");
-      if ($maleCandidate.length) {
-        $maleCandidate.html(optionHtml);
-        $maleCandidate.val("");
-      }
-      if ($femaleCandidate.length) {
-        $femaleCandidate.html(optionHtml);
-        $femaleCandidate.val("");
-      }
-      renderVoicePoolChips("#gal-tts-default-male-list", "ttsDefaultMaleVoices");
-      renderVoicePoolChips("#gal-tts-default-female-list", "ttsDefaultFemaleVoices");
-    };
-    const refreshTtsVoiceOptions = async () => {
-      const $sel = $2("#gal-tts-default-speaker");
-      const $hint = $2("#gal-tts-default-speaker-hint");
-      if (!$sel.length) return;
-      let voiceList = [];
-      try {
-        voiceList = await getTTSVoiceListAsync();
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] 获取TTS音色列表失败:`, e);
-      }
-      const current = settings.ttsDefaultSpeaker || "";
-      $sel.empty().append('<option value="">（不指定）</option>');
-      voiceList.forEach((v) => {
-        const name = String(v?.name || "").trim();
-        if (!name) return;
-        const desc = String(v?.desc || "").trim();
-        const label = desc ? `${name} (${desc})` : name;
-        $sel.append(`<option value="${escapeHtml4(name)}">${escapeHtml4(label)}</option>`);
-      });
-      $sel.val(current);
-      refreshTtsVoicePoolCandidates(voiceList);
-      const provider = getTTSProvider();
-      const providerHint = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? "GPT-SoVITS：建议把音色 name 设为角色名。" : "LittleWhiteBox：未指定/未绑定时使用此默认音色。";
-      if ($hint.length) $hint.text(providerHint + (voiceList.length === 0 ? "（当前音色列表为空）" : ""));
-    };
-    if ($2("#gal-gpt-sovits-voices-json").length) {
-      try {
-        $2("#gal-gpt-sovits-voices-json").val(JSON.stringify(settings.gptSoVits?.voices || [], null, 2));
-      } catch (e) {
-        $2("#gal-gpt-sovits-voices-json").val("[]");
-      }
-    }
-    refreshTtsVoiceOptions();
-    $panel.find(".gal-l1-tab-btn").on("click", function() {
-      const tab = $2(this).data("l1-tab");
-      $panel.find(".gal-l1-tab-btn").removeClass("active");
-      $2(this).addClass("active");
-      $panel.find("[data-l1-pane]").hide();
-      $panel.find(`[data-l1-pane="${tab}"]`).show();
-    });
-    $2("#gal-settings-close").on("click", () => $panel.remove());
-    $panel.on("click", function(e) {
-      if (e.target === this) $panel.remove();
-    });
-    $2("#gal-main-toggle").on("click", async function() {
-      const newEnabled = !getIsEnabled();
-      setIsEnabled(newEnabled);
-      setCurrentCharEnabled(newEnabled);
-      updateButtonState();
-      if (newEnabled) {
-        $2(this).removeClass("gal-toggle-off").addClass("gal-toggle-on").html('<i class="fa-solid fa-toggle-on" style="font-size: 1.3rem;"></i><span>Galgame 模式已开启</span>');
-        await injectCOTToWorldbook();
-        applyGalgameMode();
-        if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
-        showToast4("Galgame 模式已开启");
-      } else {
-        $2(this).removeClass("gal-toggle-on").addClass("gal-toggle-off").html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame 模式已关闭</span>');
-        await disableWorldbookGlobally();
-        restoreOriginalViews();
-        setTimeout(() => {
-          const $lastMes = $2("#chat > .mes").last();
-          if ($lastMes.length) $lastMes[0].scrollIntoView({ behavior: "smooth", block: "end" });
-        }, 150);
-        showToast4("Galgame 模式已关闭");
-      }
-    });
-    $2("#gal-font-size").on("input", function() {
-      settings.fontSize = parseInt($2(this).val());
-      $2("#gal-font-size-value").text(settings.fontSize);
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-dialog-scale-percent").on("input", function() {
-      settings.dialogScalePercent = normalizeUiScalePercent($2(this).val());
-      $2("#gal-dialog-scale-percent-value").text(`${settings.dialogScalePercent}%`);
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-toolbar-scale-percent").on("input", function() {
-      settings.toolbarScalePercent = normalizeUiScalePercent($2(this).val());
-      $2("#gal-toolbar-scale-percent-value").text(`${settings.toolbarScalePercent}%`);
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-dialog-font-family").on("change", function() {
-      settings.dialogFontFamily = $2(this).val();
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-dialog-opacity").on("input", function() {
-      const t = parseInt($2(this).val());
-      settings.dialogOpacity = 1 - t / 100;
-      $2("#gal-dialog-opacity-value").text(t + "%");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-text-effect").on("change", function() {
-      settings.textEffect = $2(this).val();
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-typewriter-enabled").on("change", function() {
-      settings.typewriterEnabled = $2(this).is(":checked");
-      if (!settings.typewriterEnabled && isTypewriterActive()) {
-        finishActiveTypewriter();
-      }
-      saveSettings();
-    });
-    $2("#gal-typewriter-speed").on("input", function() {
-      const parsed = parseInt($2(this).val(), 10);
-      settings.typewriterSpeed = Number.isFinite(parsed) ? Math.max(5, Math.min(parsed, 60)) : 30;
-      $2("#gal-typewriter-speed-value").text(settings.typewriterSpeed + "字/秒");
-      saveSettings();
-    });
-    $2("#gal-typewriter-sound-enabled").on("change", function() {
-      settings.typewriterSoundEnabled = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-typewriter-sound-volume").on("input", function() {
-      const parsed = parseInt($2(this).val(), 10);
-      settings.typewriterSoundVolume = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 100)) : 35;
-      $2("#gal-typewriter-sound-volume-value").text(settings.typewriterSoundVolume + "%");
-      saveSettings();
-    });
-    $2("#gal-auto-speed").on("input", function() {
-      settings.autoPlaySpeed = parseFloat($2(this).val());
-      $2("#gal-auto-speed-value").text(settings.autoPlaySpeed + "秒");
-      saveSettings();
-    });
-    $2("#gal-show-sprites").on("change", function() {
-      settings.showSprites = $2(this).is(":checked");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-hide-floors").on("change", function() {
-      settings.hideOtherFloors = $2(this).is(":checked");
-      setHideOtherFloors(settings.hideOtherFloors);
-      if (getIsEnabled()) {
-        if (settings.hideOtherFloors) hideNonLastFloors();
-        else showAllFloors();
-      }
-      saveSettings();
-    });
-    $2("#gal-bg-fill-mode").on("change", function() {
-      settings.bgFillMode = $2(this).val();
-      applyBgFillMode();
-      saveSettings();
-    });
-    $2("#gal-skin-select").on("change", function() {
-      settings.skin = $2(this).val();
-      applySkin();
-      applySettingsToUI();
-      saveSettings();
-    });
-    const getTitleSettingsState = () => {
-      const normalized = ensureTitleScreenSettings();
-      settings.titleScreen = normalized;
-      return normalized;
-    };
-    const normalizeTitleSourceChoice = (ts) => {
-      const source = String(ts?.backgroundSource || "").trim().toLowerCase();
-      if (source === "url" || source === "upload") return source;
-      return String(ts?.backgroundUrl || "").trim() ? "url" : "upload";
-    };
-    const getTitleSceneName = () => {
-      const ts = getTitleSettingsState();
-      return String(ts.backgroundSceneName || "__title__").trim() || "__title__";
-    };
-    const syncTitleSourceInputs = () => {
-      const ts = getTitleSettingsState();
-      const source = normalizeTitleSourceChoice(ts);
-      if (String(ts.backgroundSource || "").trim().toLowerCase() !== source) {
-        ts.backgroundSource = source;
-        saveSettings();
-      }
-      $2("#gal-title-bg-source").val(source);
-      const useUrl = source === "url";
-      const useUpload = source === "upload";
-      $2("#gal-title-bg-upload-row").css("display", useUpload ? "flex" : "none");
-      $2("#gal-title-bg-url-row").css("display", useUrl ? "flex" : "none");
-      $2("#gal-title-bg-url").prop("disabled", !useUrl);
-      $2("#gal-title-bg-upload-btn").prop("disabled", !useUpload).css("opacity", useUpload ? 1 : 0.6).css("pointer-events", useUpload ? "auto" : "none");
-      $2("#gal-title-bg-file").prop("disabled", !useUpload);
-    };
-    $2("#gal-title-enabled").on("change", function() {
-      const ts = getTitleSettingsState();
-      const enabled = $2(this).is(":checked");
-      ts.enabled = enabled;
-      if (enabled) {
-        setIsEnabled(true);
-        setCurrentCharEnabled(true);
-        updateButtonState();
-      }
-      saveSettings();
-    });
-    $2("#gal-title-text").on("input change", function() {
-      const ts = getTitleSettingsState();
-      ts.titleText = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2("#gal-title-subtitle").on("input change", function() {
-      const ts = getTitleSettingsState();
-      ts.subtitleText = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2("#gal-title-bg-source").on("change", function() {
-      const ts = getTitleSettingsState();
-      const nextSource = String($2(this).val() || "upload").trim().toLowerCase() === "url" ? "url" : "upload";
-      ts.backgroundSource = nextSource;
-      saveSettings();
-      syncTitleSourceInputs();
-    });
-    $2("#gal-title-bg-fit").on("change", function() {
-      const ts = getTitleSettingsState();
-      ts.backgroundFit = String($2(this).val() || "cover").trim();
-      saveSettings();
-    });
-    $2("#gal-title-mask-enabled").on("change", function() {
-      const ts = getTitleSettingsState();
-      ts.enableBackdropMask = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-title-bg-url").on("input change", function() {
-      const ts = getTitleSettingsState();
-      const nextUrl = String($2(this).val() || "").trim();
-      ts.backgroundUrl = nextUrl;
-      saveSettings();
-    });
-    $2("#gal-title-bg-upload-btn").on("click", function() {
-      if ($2(this).prop("disabled")) return;
-      $2("#gal-title-bg-file").trigger("click");
-    });
-    $2("#gal-title-bg-file").on("change", async function() {
-      const file = this.files && this.files[0] ? this.files[0] : null;
-      if (!file) return;
-      const sceneName = getTitleSceneName();
-      const $hint = $2("#gal-title-bg-upload-hint");
-      try {
-        await saveBackground(sceneName, file);
-        const ts = getTitleSettingsState();
-        ts.backgroundSource = "upload";
-        $hint.text(`已保存：${sceneName}（${file.name}）`);
-        showToast4("标题背景上传成功");
-        saveSettings();
-        syncTitleSourceInputs();
-      } catch (error3) {
-        console.error(`[${SCRIPT_NAME}] 标题背景上传失败:`, error3);
-        showToast4("标题背景上传失败");
-      } finally {
-        this.value = "";
-      }
-    });
-    syncTitleSourceInputs();
-    $2("#gal-effects-enabled").on("change", function() {
-      settings.effectsEnabled = $2(this).is(":checked");
-      if (!settings.effectsEnabled) {
-        clearAllPixiEffects();
-      }
-      syncPixiEffectsSettings();
-      saveSettings();
-      injectCOTToWorldbook().catch(() => {
-      });
-    });
-    $2("#gal-effects-quality").on("change", function() {
-      const nextQuality = String($2(this).val() || "").trim();
-      settings.effectsQuality = ["mobile", "balanced", "high"].includes(nextQuality) ? nextQuality : "balanced";
-      syncPixiEffectsSettings();
-      saveSettings();
-    });
-    $2("#gal-effects-autoclear").on("change", function() {
-      settings.effectsAutoClearOnSceneChange = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-effects-max-active").on("input change", function() {
-      const parsed = parseInt($2(this).val(), 10);
-      settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
-      $2("#gal-effects-max-active-value").text(settings.effectsMaxActive);
-      syncPixiEffectsSettings();
-      saveSettings();
-    });
-    $2("#gal-space-next").on("change", function() {
-      settings.spaceKeyNext = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-enter-next").on("change", function() {
-      settings.enterKeyNext = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-ctrl-skip").on("change", function() {
-      settings.ctrlKeySkip = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-enhanced-mode").on("change", function() {
-      const enabled = $2(this).is(":checked");
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.enabled = enabled;
-      saveSettings();
-      $2("#gal-enhanced-hint, #gal-enhanced-config").toggle(enabled);
-      showToast4(enabled ? "已启用加强模式" : "已禁用加强模式");
-    });
-    $2("#gal-enhanced-use-profile").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.useProfile = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-enhanced-profile-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.profileName = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2("#gal-enhanced-use-model").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.useModel = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-enhanced-model-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.modelName = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2("#gal-enhanced-use-preset").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.usePreset = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-enhanced-preset-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.presetName = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2('input[name="gal-enhanced-worldbook-mode"]').on("change", function() {
-      const mode = $2(this).val();
-      const enhancedConfig = ensureEnhancedModeSettings();
-      if (mode === "default") {
-        enhancedConfig.secondGenerate.useWorldbooks = false;
-        enhancedConfig.secondGenerate.worldbooks = [];
-        $2("#gal-enhanced-worldbooks-list").hide();
-        $2(".gal-enhanced-worldbook-item").prop("checked", false);
-      } else if (mode === "none") {
-        enhancedConfig.secondGenerate.useWorldbooks = true;
-        enhancedConfig.secondGenerate.worldbooks = [];
-        $2("#gal-enhanced-worldbooks-list").hide();
-        $2(".gal-enhanced-worldbook-item").prop("checked", false);
-      } else if (mode === "custom") {
-        enhancedConfig.secondGenerate.useWorldbooks = true;
-        $2("#gal-enhanced-worldbooks-list").show();
-      }
-      saveSettings();
-    });
-    $2(document).on("change", ".gal-enhanced-worldbook-item", function() {
-      const selected = [];
-      $2(".gal-enhanced-worldbook-item:checked").each(function() {
-        selected.push($2(this).val());
-      });
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.worldbooks = Array.from(new Set(selected.map((name) => String(name || "").trim()).filter(Boolean)));
-      if (selected.length === 0) {
-        $2('input[name="gal-enhanced-worldbook-mode"][value="none"]').prop("checked", true);
-        $2("#gal-enhanced-worldbooks-list").hide();
-      }
-      saveSettings();
-    });
-    $2("#gal-enhanced-view-prompts").on("click", function() {
-      const prompts = enhancedModeState3.lastPrompts;
-      if (!prompts) {
-        showToast4("暂无提示词记录");
-        return;
-      }
-      const esc = (str) => (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-      const html = `<div id="gal-prompts-modal" class="gal-z-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
-      <div style="background:var(--SmartThemeFormBg,#fff);border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
-        <div style="padding:16px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#ff9800,#ff5722);color:#fff;border-radius:12px 12px 0 0;">
-          <div style="font-weight:700;font-size:1.1rem;"><i class="fa-solid fa-eye"></i> 加强模式提示词</div>
-          <button id="gal-prompts-modal-close" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1rem;"><i class="fa-solid fa-times"></i></button>
-        </div>
-        <div style="padding:20px;overflow-y:auto;flex:1;">
-          <div style="margin-bottom:8px;color:#888;font-size:0.85rem;"><i class="fa-solid fa-clock"></i> ${prompts.timestamp}</div>
-          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:#e65100;">System Prompt</div><pre style="background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.systemPrompt)}</pre></div>
-          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:#1976d2;">First Result</div><pre style="background:#e3f2fd;border:1px solid #bbdefb;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.firstResult)}</pre></div>
-          <div><div style="font-weight:600;margin-bottom:8px;color:#388e3c;">User Prompt</div><pre style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.userPrompt)}</pre></div>
-        </div>
-        <div style="padding:12px 20px;border-top:1px solid #e0e0e0;text-align:right;">
-          <button id="gal-prompts-modal-copy" style="background:#2196f3;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;margin-right:8px;"><i class="fa-solid fa-copy"></i> 复制全部</button>
-          <button id="gal-prompts-modal-ok" style="background:#4caf50;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-check"></i> 确定</button>
-        </div>
-      </div>
-    </div>`;
-      const mountRoot = getModalMountRoot();
-      $2(mountRoot).append(html);
-      const $m = $2(mountRoot).find("#gal-prompts-modal");
-      $m.find("#gal-prompts-modal-close, #gal-prompts-modal-ok").on("click", () => $m.remove());
-      $m.on("click", (e) => {
-        if (e.target === $m[0]) $m.remove();
-      });
-      $m.find("#gal-prompts-modal-copy").on("click", () => {
-        navigator.clipboard.writeText(`=== 加强模式提示词 (${prompts.timestamp}) ===
-
-【System Prompt】
-${prompts.systemPrompt}
-
-【第一次生成结果】
-${prompts.firstResult}
-
-【User Prompt】
-${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(() => showToast4("复制失败"));
-      });
-    });
-    $2("#gal-skip-speed").on("input", function() {
-      settings.skipSpeed = parseFloat($2(this).val());
-      $2("#gal-skip-speed-value").text(settings.skipSpeed + "s");
-      saveSettings();
-    });
-    $2("#gal-smart-detection").on("change", function() {
-      settings.smartDetection = $2(this).is(":checked");
-      saveSettings();
-      if (getIsEnabled()) applyGalgameMode();
-    });
-    $2("#gal-global-debug").on("change", function() {
-      settings.globalDebug = $2(this).is(":checked");
-      setGlobalDebugEnabled(settings.globalDebug);
-      const manager = getLive2DManagerRef();
-      if (manager) {
-        manager.debug = !!settings.globalDebug;
-      }
-      saveSettings();
-      showToast4(settings.globalDebug ? "全局 Debug 日志已开启" : "全局 Debug 日志已关闭，仅显示错误日志");
-    });
-    $2("#gal-sprite-scale").on("input", function() {
-      settings.spriteScale = parseInt($2(this).val());
-      $2("#gal-sprite-scale-value").text(settings.spriteScale + "%");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-sprite-bottom").on("input", function() {
-      settings.spriteBottomOffset = parseInt($2(this).val());
-      $2("#gal-sprite-bottom-value").text(settings.spriteBottomOffset + "%");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-sprite-spacing").on("input", function() {
-      settings.spriteSpacing = parseInt($2(this).val());
-      $2("#gal-sprite-spacing-value").text(settings.spriteSpacing + "%");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-show-missing-sprite-placeholder").on("change", function() {
-      settings.showMissingSpritePlaceholder = $2(this).is(":checked");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-speaker-glow").on("change", function() {
-      settings.speakerGlow = $2(this).is(":checked");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-speaker-bubble").on("change", function() {
-      settings.speakerBubble = $2(this).is(":checked");
-      applySettingsToUI();
-      saveSettings();
-    });
-    $2("#gal-tts-enabled").on("change", function() {
-      const enabled = $2(this).is(":checked");
-      setTTSEnabled(enabled);
-      const $charLayer = $2(".gal-layer-character");
-      if (enabled) $charLayer.addClass("tts-mode-enabled");
-      else $charLayer.removeClass("tts-mode-enabled");
-      injectCOTToWorldbook().then(() => showToast4(enabled ? "TTS已启用，COT已更新" : "TTS已关闭，COT已更新"));
-    });
-    $2("#gal-tts-provider").on("change", async function() {
-      settings.ttsProvider = $2(this).val();
-      saveSettings();
-      $2("#gal-gpt-sovits-config").toggle(settings.ttsProvider === TTS_PROVIDER.GPT_SOVITS_V2);
-      try {
-        TTSManager._refreshProviderState();
-      } catch (e) {
-      }
-      await refreshTtsVoiceOptions();
-      injectCOTToWorldbook().then(() => showToast4("TTS引擎已切换，COT已更新")).catch(() => showToast4("TTS引擎已切换"));
-    });
-    $2("#gal-tts-autoplay").on("change", function() {
-      settings.ttsAutoPlay = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-tts-bilingual-zh-ja-enabled").on("change", function() {
-      settings.ttsBilingualZhJaEnabled = $2(this).is(":checked");
-      saveSettings();
-      injectCOTToWorldbook().then(() => showToast4(settings.ttsBilingualZhJaEnabled ? "中日双语模式已开启，COT已更新" : "中日双语模式已关闭，COT已更新")).catch(() => showToast4(settings.ttsBilingualZhJaEnabled ? "中日双语模式已开启" : "中日双语模式已关闭"));
-    });
-    $2("#gal-situational-style-enabled").on("change", function() {
-      settings.situationalStyleEnabled = $2(this).is(":checked");
-      saveSettings();
-      injectCOTToWorldbook().then(() => showToast4(settings.situationalStyleEnabled ? "情境样式已开启，COT已更新" : "情境样式已关闭，COT已更新")).catch(() => showToast4(settings.situationalStyleEnabled ? "情境样式已开启" : "情境样式已关闭"));
-    });
-    $2("#gal-tts-default-speaker").on("change", function() {
-      settings.ttsDefaultSpeaker = $2(this).val();
-      saveSettings();
-    });
-    const addVoiceToGenderPool = (poolKey, candidateSelector) => {
-      const $candidate = $2(candidateSelector);
-      if (!$candidate.length) return;
-      const selectedVoice = String($candidate.val() || "").trim();
-      if (!selectedVoice) return;
-      const nextList = normalizeVoiceNameList([...settings[poolKey] || [], selectedVoice]);
-      if (nextList.length === (settings[poolKey] || []).length) {
-        showToast4("该音色已在列表中");
-        return;
-      }
-      settings[poolKey] = nextList;
-      saveSettings();
-      renderVoicePoolChips(poolKey === "ttsDefaultMaleVoices" ? "#gal-tts-default-male-list" : "#gal-tts-default-female-list", poolKey);
-      $candidate.val("");
-    };
-    $2("#gal-tts-default-male-candidate").on("change", () => addVoiceToGenderPool("ttsDefaultMaleVoices", "#gal-tts-default-male-candidate"));
-    $2("#gal-tts-default-female-candidate").on("change", () => addVoiceToGenderPool("ttsDefaultFemaleVoices", "#gal-tts-default-female-candidate"));
-    $panel.on("click", ".gal-voice-chip-remove", function() {
-      const poolKey = String($2(this).data("pool") || "").trim();
-      const voiceName = String($2(this).data("voice") || "").trim();
-      if (!poolKey || !voiceName || !Array.isArray(settings[poolKey])) return;
-      settings[poolKey] = normalizeVoiceNameList(settings[poolKey].filter((item) => String(item || "").trim() !== voiceName));
-      saveSettings();
-      renderVoicePoolChips(poolKey === "ttsDefaultMaleVoices" ? "#gal-tts-default-male-list" : "#gal-tts-default-female-list", poolKey);
-    });
-    $2("#gal-gpt-sovits-url").on("change", function() {
-      settings.gptSoVits = settings.gptSoVits || {};
-      settings.gptSoVits.apiUrl = $2(this).val().trim();
-      saveSettings();
-    });
-    $2("#gal-gpt-sovits-proxy").on("change", function() {
-      settings.gptSoVits = settings.gptSoVits || {};
-      settings.gptSoVits.useCorsProxy = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-gpt-sovits-switch-mode").on("change", function() {
-      settings.gptSoVits = settings.gptSoVits || {};
-      settings.gptSoVits.modelSwitchMode = $2(this).val();
-      saveSettings();
-    });
-    $2("#gal-gpt-sovits-set-model-endpoint").on("change", function() {
-      settings.gptSoVits = settings.gptSoVits || {};
-      const endpoint = String($2(this).val() || "").trim();
-      settings.gptSoVits.setModelEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint || "set_model"}`;
-      saveSettings();
-    });
-    $2("#gal-gpt-sovits-strict-switch").on("change", function() {
-      settings.gptSoVits = settings.gptSoVits || {};
-      settings.gptSoVits.strictWeightSwitch = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-gpt-sovits-open-model-manager").on("click", function() {
-      openGptSoVitsModelManager({
-        onChanged: async () => {
-          await refreshTtsVoiceOptions();
-          if ($2("#gal-gpt-sovits-voices-json").length) {
-            try {
-              $2("#gal-gpt-sovits-voices-json").val(JSON.stringify(getSettings().gptSoVits?.voices || [], null, 2));
-            } catch (e) {
-            }
-          }
-          injectCOTToWorldbook().catch(() => {
-          });
-        }
-      });
-    });
-    $2("#gal-gpt-sovits-voices-save").on("click", async function() {
-      settings.gptSoVits = settings.gptSoVits || {};
-      let parsed = null;
-      try {
-        parsed = JSON.parse($2("#gal-gpt-sovits-voices-json").val() || "[]");
-      } catch (e) {
-        showToast4("音色列表 JSON 解析失败");
-        return;
-      }
-      if (!Array.isArray(parsed)) {
-        showToast4("音色列表必须是数组");
-        return;
-      }
-      const normalized = normalizeGptSoVitsVoicesForStore(parsed);
-      settings.gptSoVits.voices = normalized.voices;
-      const firstUsable = pickFirstUsableGptSoVitsVoice(getGptSoVitsVoiceList());
-      if (!settings.ttsDefaultSpeaker && firstUsable?.name) {
-        settings.ttsDefaultSpeaker = firstUsable.name;
-      }
-      saveSettings();
-      await refreshTtsVoiceOptions();
-      let msg = `GPT-SoVITS 音色列表已保存：${normalized.voices.length} 条`;
-      if (normalized.ignoredCount > 0) msg += `（忽略无效条目 ${normalized.ignoredCount} 条）`;
-      if (normalized.missingRefCount > 0) msg += `（${normalized.missingRefCount} 条缺 refAudioPath）`;
-      injectCOTToWorldbook().then(() => showToast4(`${msg}，COT已更新`)).catch(() => showToast4(msg));
-    });
-    $2("#gal-gpt-sovits-test").on("click", () => {
-      if (getTTSProvider() !== TTS_PROVIDER.GPT_SOVITS_V2) {
-        showToast4("请先切换为 GPT-SoVITS");
-        return;
-      }
-      const text = ($2("#gal-gpt-sovits-test-text").val() || "").trim() || "你好，这是一段 GPT-SoVITS 配音测试。";
-      const selectedVoiceName = String($2("#gal-tts-default-speaker").val() || "").trim();
-      const gptVoices = getGptSoVitsVoiceList();
-      const selectedVoice = gptVoices.find((v) => v.name === selectedVoiceName) || null;
-      const selectedUsable = !!String(selectedVoice?.gptSoVits?.refAudioPath || "").trim();
-      const fallbackVoice = pickFirstUsableGptSoVitsVoice(gptVoices);
-      const targetVoice = selectedUsable ? selectedVoice : fallbackVoice;
-      const voiceName = targetVoice?.name || "";
-      if (!voiceName) {
-        showToast4("请先配置至少一个可用音色（refAudioPath 不能为空）");
-        return;
-      }
-      if (selectedVoiceName !== voiceName) {
-        settings.ttsDefaultSpeaker = voiceName;
-        saveSettings();
-        $2("#gal-tts-default-speaker").val(voiceName);
-        showToast4(`已自动切换试听音色：${voiceName}`);
-      }
-      TTSManager.stop();
-      TTSManager.speak({ type: "dialogue", speaker: "", text, tts: { speaker: voiceName } }, `gpt_sovits_test_${Date.now()}`);
-    });
-    $2("#gal-refresh-views").on("click", () => {
-      if (getIsEnabled()) {
-        applyGalgameMode();
-        if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
-        showToast4("视图已刷新");
-      } else {
-        showToast4("请先开启 Galgame 模式");
-      }
-    });
-    if (_bindAssetsPaneRef) {
-      _bindAssetsPaneRef($panel, subTab);
-    }
-  }
-
   // src/ui/title-screen.js
   var TITLE_SCREEN_ID = "gal-title-screen";
   var DEFAULT_TITLE_SCENE = "__title__";
@@ -73929,6 +76363,15 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         </div>
       </div>
     </div>
+    <div class="gal-title-cg-lightbox" aria-hidden="true">
+      <button type="button" class="gal-title-cg-lightbox-close" aria-label="关闭查看">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="gal-title-cg-lightbox-frame">
+        <img class="gal-title-cg-lightbox-image" alt="CG大图预览">
+        <div class="gal-title-cg-lightbox-caption"></div>
+      </div>
+    </div>
   `;
     root.addEventListener("click", (event3) => {
       event3.stopPropagation();
@@ -73954,6 +76397,15 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const galleryLayer = root.querySelector(".gal-title-cg-gallery");
     galleryLayer?.addEventListener("click", (event3) => {
       event3.stopPropagation();
+      const card = event3.target.closest(".gal-title-cg-gallery-card");
+      if (card) {
+        openTitleCgLightbox(root, {
+          imageUrl: card.getAttribute("data-image-url") || "",
+          name: card.getAttribute("data-name") || "",
+          description: card.getAttribute("data-description") || ""
+        });
+        return;
+      }
       if (event3.target === galleryLayer) {
         closeTitleCgGallery(root);
       }
@@ -73961,6 +76413,17 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     root.querySelector(".gal-title-cg-gallery-close")?.addEventListener("click", (event3) => {
       event3.stopPropagation();
       closeTitleCgGallery(root);
+    });
+    const lightboxLayer = root.querySelector(".gal-title-cg-lightbox");
+    lightboxLayer?.addEventListener("click", (event3) => {
+      event3.stopPropagation();
+      if (event3.target === lightboxLayer) {
+        closeTitleCgLightbox(root);
+      }
+    });
+    root.querySelector(".gal-title-cg-lightbox-close")?.addEventListener("click", (event3) => {
+      event3.stopPropagation();
+      closeTitleCgLightbox(root);
     });
     $overlay[0].appendChild(root);
     return root;
@@ -73984,9 +76447,38 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       startButton.textContent = "开始游戏";
     }
   }
+  function closeTitleCgLightbox(root) {
+    const lightboxLayer = root?.querySelector(".gal-title-cg-lightbox");
+    const imageNode = lightboxLayer?.querySelector(".gal-title-cg-lightbox-image");
+    const captionNode = lightboxLayer?.querySelector(".gal-title-cg-lightbox-caption");
+    if (!lightboxLayer || !imageNode || !captionNode) return;
+    lightboxLayer.classList.remove("active");
+    lightboxLayer.setAttribute("aria-hidden", "true");
+    imageNode.setAttribute("src", "");
+    imageNode.setAttribute("alt", "CG大图预览");
+    captionNode.innerHTML = "";
+  }
+  function openTitleCgLightbox(root, item) {
+    const lightboxLayer = root?.querySelector(".gal-title-cg-lightbox");
+    const imageNode = lightboxLayer?.querySelector(".gal-title-cg-lightbox-image");
+    const captionNode = lightboxLayer?.querySelector(".gal-title-cg-lightbox-caption");
+    const imageUrl = String(item?.imageUrl || "").trim();
+    const name = String(item?.name || "").trim() || "CG预览";
+    const description = String(item?.description || "").trim();
+    if (!lightboxLayer || !imageNode || !captionNode || !imageUrl) return;
+    imageNode.setAttribute("src", imageUrl);
+    imageNode.setAttribute("alt", name);
+    captionNode.innerHTML = `
+    <div class="gal-title-cg-lightbox-title">${escapeHtml5(name)}</div>
+    ${description ? `<div class="gal-title-cg-lightbox-desc">${escapeHtml5(description)}</div>` : ""}
+  `;
+    lightboxLayer.classList.add("active");
+    lightboxLayer.setAttribute("aria-hidden", "false");
+  }
   function closeTitleCgGallery(root) {
     const galleryLayer = root?.querySelector(".gal-title-cg-gallery");
     if (!galleryLayer) return;
+    closeTitleCgLightbox(root);
     galleryLayer.classList.remove("active");
     galleryLayer.setAttribute("aria-hidden", "true");
   }
@@ -74021,15 +76513,24 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       emptyNode.style.display = "";
       return;
     }
-    gridNode.innerHTML = items.map((item) => `
-      <div class="gal-title-cg-gallery-card" title="${escapeHtml5(item.name)}">
+    gridNode.innerHTML = items.map(
+      (item) => `
+      <button
+        type="button"
+        class="gal-title-cg-gallery-card"
+        title="${escapeHtml5(item.name)}"
+        data-image-url="${escapeHtml5(item.imageUrl)}"
+        data-name="${escapeHtml5(item.name)}"
+        data-description="${escapeHtml5(item.description || "")}"
+      >
         <div class="gal-title-cg-gallery-preview">
           <img src="${escapeHtml5(item.imageUrl)}" alt="${escapeHtml5(item.name)}">
         </div>
         <div class="gal-title-cg-gallery-name">${escapeHtml5(item.name)}</div>
         ${item.description ? `<div class="gal-title-cg-gallery-desc">${escapeHtml5(item.description)}</div>` : ""}
-      </div>
-    `).join("");
+      </button>
+    `
+    ).join("");
     emptyNode.style.display = "none";
   }
   async function openTitleCgGallery(root) {
@@ -74132,7 +76633,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
 
   // src/map/layout.js
-  function clamp01(value) {
+  function clamp012(value) {
     return Math.max(0, Math.min(1, value));
   }
   function hashToUnit(value) {
@@ -74205,14 +76706,14 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           const angle2 = hashToUnit(`${baseSeed}:a:${attempt}`) * Math.PI * 2;
           const radius2 = Math.min(0.12, 0.012 * attempt);
           candidate = {
-            x: clamp01(candidate.x + Math.cos(angle2) * radius2),
-            y: clamp01(candidate.y + Math.sin(angle2) * radius2)
+            x: clamp012(candidate.x + Math.cos(angle2) * radius2),
+            y: clamp012(candidate.y + Math.sin(angle2) * radius2)
           };
         }
         placed.push(candidate);
         coords[location] = {
-          x: clamp01(candidate.x),
-          y: clamp01(candidate.y),
+          x: clamp012(candidate.x),
+          y: clamp012(candidate.y),
           anchor: ""
         };
       });
@@ -75065,7 +77566,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   `;
     (doc.head || doc.documentElement).appendChild(style3);
   }
-  function clamp012(v) {
+  function clamp013(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return 0;
     return Math.max(0, Math.min(1, n));
@@ -75084,11 +77585,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }
     const currentRegionKey = String(options2.regionKey || viewModel.regionKey || "default-region").trim() || "default-region";
     const coordScopeKey = GLOBAL_MAP_REGION_KEY;
-    const settings = getMapSettings();
-    const markerIconClass = buildMarkerIconClass(settings.mapMarkerStyle);
+    const settings2 = getMapSettings();
+    const markerIconClass = buildMarkerIconClass(settings2.mapMarkerStyle);
     const points = Array.isArray(viewModel.points) ? viewModel.points : [];
     const manualCoords = Object.assign({}, getMapCoords(coordScopeKey));
-    const autoCoords = generateAutoLayout(points, coordScopeKey, settings.mapLayoutSeed);
+    const autoCoords = generateAutoLayout(points, coordScopeKey, settings2.mapLayoutSeed);
     const draftCoords = Object.assign({}, manualCoords);
     const mapRecord = await getUnifiedMapImage();
     let mapImageUrl = "";
@@ -75138,11 +77639,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       if (!key) return { x: 0.5, y: 0.5 };
       const manual = draftCoords[key];
       if (manual && Number.isFinite(Number(manual.x)) && Number.isFinite(Number(manual.y))) {
-        return { x: clamp012(manual.x), y: clamp012(manual.y) };
+        return { x: clamp013(manual.x), y: clamp013(manual.y) };
       }
       const auto = autoCoords[key];
       if (auto && Number.isFinite(Number(auto.x)) && Number.isFinite(Number(auto.y))) {
-        return { x: clamp012(auto.x), y: clamp012(auto.y) };
+        return { x: clamp013(auto.x), y: clamp013(auto.y) };
       }
       return { x: 0.5, y: 0.5 };
     };
@@ -75455,8 +77956,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       if (!editMode || !placingLocation) return false;
       const rect = getDisplayedImageRect();
       if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-      const x2 = clamp012((clientX - rect.left) / rect.width);
-      const y2 = clamp012((clientY - rect.top) / rect.height);
+      const x2 = clamp013((clientX - rect.left) / rect.width);
+      const y2 = clamp013((clientY - rect.top) / rect.height);
       const targetLocation = placingLocation;
       draftCoords[targetLocation] = { x: x2, y: y2, anchor: "" };
       dirty = true;
@@ -75788,7 +78289,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     topWindow[GLOBAL_EVENT_DELEGATION_BOUND_FLAG] = true;
     console.log(`[${SCRIPT_NAME}] 设置全局事件委托...`);
     const doc = topWindow.document;
-    const settings = getSettings();
+    const settings2 = getSettings();
     function normalizeStatusPopupHtml(value) {
       if (typeof value !== "string") return "";
       const trimmed = value.trim();
@@ -75821,7 +78322,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const nextSegment = state.segments[state.currentIndex + 1];
       if (nextSegment) {
         const nextSpeakText = String(nextSegment.ttsText ?? nextSegment.text ?? "").trim();
-        const nextWillSpeak = nextSegment.type === "dialogue" && settings.ttsEnabled && nextSpeakText.length > 0;
+        const nextWillSpeak = nextSegment.type === "dialogue" && settings2.ttsEnabled && nextSpeakText.length > 0;
         if (nextWillSpeak) {
           TTSManager.stop();
         }
@@ -76220,7 +78721,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         $btn.addClass("gal-auto-playing");
         TTSManager.stop();
         const state = messageSegmentState7.get(String(mesId));
-        if (state && settings.ttsEnabled) {
+        if (state && settings2.ttsEnabled) {
           const currentSegment = state.segments[state.currentIndex];
           if (currentSegment && currentSegment.type === "dialogue") {
             const segmentId = `${mesId}_${state.currentIndex}`;
@@ -76244,7 +78745,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
               TTSManager.stop();
               state2.currentIndex++;
               await scheduleOverlaySegmentDisplay(state2, "auto-play");
-              if (settings.ttsEnabled) {
+              if (settings2.ttsEnabled) {
                 const currentSegment = state2.segments[state2.currentIndex];
                 if (currentSegment && currentSegment.type === "dialogue") {
                   const segmentId = `${mesId}_${state2.currentIndex}`;
@@ -76261,12 +78762,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           } finally {
             autoTickInFlight = false;
           }
-        }, settings.autoPlaySpeed * 1e3);
+        }, settings2.autoPlaySpeed * 1e3);
         $btn.data("auto-timer", timer);
       }
     });
     $2(doc).on("click", "#gal-global-overlay .gal-char-placeholder", async function(e) {
-      if (!settings.showMissingSpritePlaceholder) return;
+      if (!settings2.showMissingSpritePlaceholder) return;
       e.stopPropagation();
       const $container = $2(this).closest(".gal-char-container");
       const character = $container.data("character") || "default";
@@ -78141,42 +80642,44 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function showSpecialCgUploadDialog(onCloseCallback) {
     const modalHtml = `
-    <div class="gal-input-modal" id="gal-special-cg-upload-modal">
-      <div class="gal-input-box" style="max-width: 620px; width: 92%; padding: 24px;">
-        <div class="gal-input-title" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
-          <span><i class="fa-solid fa-photo-film"></i> 添加特殊CG</span>
-          <button id="gal-special-cg-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px;">
+    <div class="gal-input-modal gal-cg-upload-modal" id="gal-special-cg-upload-modal">
+      <div class="gal-cg-upload-shell gal-cg-upload-shell-single">
+        <div class="gal-cg-upload-header">
+          <div class="gal-cg-upload-title"><i class="fa-solid fa-photo-film"></i> 添加特殊CG</div>
+          <button id="gal-special-cg-close-x" class="gal-cg-upload-close" title="关闭">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
-          <div>
-            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">CG ID</label>
-            <input type="text" id="gal-special-cg-id" placeholder="例如：cg_elly_confession" style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+        <div class="gal-cg-upload-body">
+          <div class="gal-cg-upload-form-grid">
+            <label class="gal-cg-upload-field">
+              <span class="gal-cg-upload-label">CG ID</span>
+              <input type="text" class="gal-cg-upload-input" id="gal-special-cg-id" placeholder="例如：cg_elly_confession">
+            </label>
+            <label class="gal-cg-upload-field">
+              <span class="gal-cg-upload-label">显示名称（可选）</span>
+              <input type="text" class="gal-cg-upload-input" id="gal-special-cg-name" placeholder="例如：艾莉告白CG">
+            </label>
           </div>
-          <div>
-            <label style="display: block; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">显示名称（可选）</label>
-            <input type="text" id="gal-special-cg-name" placeholder="例如：艾莉告白CG" style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px;">
+
+          <input type="file" id="gal-special-cg-file-input" accept="image/*" style="display:none;">
+          <div class="gal-cg-upload-dropzone" id="gal-special-cg-upload-trigger">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <span>点击选择CG图片</span>
+            <small>支持 png / jpg / webp</small>
           </div>
-        </div>
 
-        <input type="file" id="gal-special-cg-file-input" accept="image/*" style="display:none;">
-        <div class="gal-upload-card" id="gal-special-cg-upload-trigger" style="margin-bottom: 14px; min-height: 180px; border: 2px dashed #d1d5db; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;">
-          <i class="fa-solid fa-cloud-arrow-up" style="font-size: 2.6rem; color: #c0c7d2;"></i>
-          <span style="margin-top: 10px; color: #6b7280;">点击选择CG图片</span>
-          <small style="color: #9ca3af; margin-top: 4px;">支持 png/jpg/webp</small>
-        </div>
+          <div class="gal-cg-upload-preview" id="gal-special-cg-preview-container" style="display: none;">
+            <img id="gal-special-cg-preview-img" class="gal-cg-upload-preview-img" alt="CG预览">
+          </div>
 
-        <div id="gal-special-cg-preview-container" style="display: none; margin-bottom: 14px;">
-          <img id="gal-special-cg-preview-img" alt="CG预览" style="width: 100%; max-height: 320px; object-fit: contain; border: 1px solid #d1d5db; border-radius: 8px; background: #f8fafc;">
-        </div>
-
-        <div class="gal-input-actions" style="display: flex; gap: 10px;">
-          <button class="gal-action-btn primary" id="gal-special-cg-confirm-btn" style="flex: 1; min-height: 42px; justify-content: center;" disabled>
-            <i class="fa-solid fa-save"></i>
-            <span>保存CG</span>
-          </button>
+          <div class="gal-cg-upload-actions">
+            <button class="gal-action-btn primary gal-cg-upload-primary-btn" id="gal-special-cg-confirm-btn" disabled>
+              <i class="fa-solid fa-save"></i>
+              <span>保存CG</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -78184,7 +80687,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const mountRoot = getModalMountRoot();
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find("#gal-special-cg-upload-modal");
-    makeDraggable($modal.find(".gal-input-box"), $modal.find(".gal-input-title"));
+    makeDraggable($modal.find(".gal-cg-upload-shell"), $modal.find(".gal-cg-upload-header"));
     const $fileInput = $modal.find("#gal-special-cg-file-input");
     const $uploadArea = $modal.find("#gal-special-cg-upload-trigger");
     const $previewContainer = $modal.find("#gal-special-cg-preview-container");
@@ -78250,30 +80753,30 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function showBatchSpecialCgUploadDialog(onCloseCallback) {
     const modalHtml = `
-    <div class="gal-input-modal" id="gal-batch-special-cg-upload-modal">
-      <div class="gal-input-box" style="max-width: 1100px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-        <div class="gal-input-title" style="padding: 14px 20px; border-bottom: 1px solid #e5e7eb; margin: 0; display: flex; justify-content: space-between; align-items: center;">
-          <span><i class="fa-solid fa-images"></i> 批量上传特殊CG</span>
-          <button id="gal-batch-special-cg-close-x" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px;">
+    <div class="gal-input-modal gal-cg-upload-modal" id="gal-batch-special-cg-upload-modal">
+      <div class="gal-cg-upload-shell gal-cg-upload-shell-batch">
+        <div class="gal-cg-upload-header">
+          <div class="gal-cg-upload-title"><i class="fa-solid fa-images"></i> 批量上传特殊CG</div>
+          <button id="gal-batch-special-cg-close-x" class="gal-cg-upload-close" title="关闭">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
 
-        <div style="padding: 16px 20px; border-bottom: 1px solid #eef2f7;">
+        <div class="gal-cg-upload-toolbar">
           <input type="file" id="gal-batch-special-cg-file-input" accept="image/*" multiple style="display:none;">
-          <button class="gal-action-btn" id="gal-batch-special-cg-upload-trigger">
+          <button class="gal-action-btn gal-cg-upload-trigger-btn" id="gal-batch-special-cg-upload-trigger">
             <i class="fa-solid fa-cloud-arrow-up"></i>
             <span>选择多张CG图片</span>
           </button>
-          <span style="margin-left: 10px; color: #6b7280; font-size: 0.82rem;">上传后可逐条编辑 CG ID 与名称</span>
+          <span class="gal-cg-upload-toolbar-hint">上传后可逐条编辑 CG ID 与名称</span>
         </div>
 
-        <div id="gal-batch-special-cg-grid" style="flex: 1; overflow-y: auto; padding: 16px 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;">
-          <div style="color: #9ca3af; text-align: center; grid-column: 1 / -1; padding: 20px;">请选择图片开始上传</div>
+        <div id="gal-batch-special-cg-grid" class="gal-cg-upload-gallery-grid">
+          <div class="gal-cg-upload-gallery-empty">请选择图片开始上传</div>
         </div>
 
-        <div style="padding: 14px 20px; border-top: 1px solid #e5e7eb;">
-          <button class="gal-action-btn primary" id="gal-batch-special-cg-save-btn" style="width: 100%; justify-content: center;" disabled>
+        <div class="gal-cg-upload-footer">
+          <button class="gal-action-btn primary gal-cg-upload-primary-btn" id="gal-batch-special-cg-save-btn" disabled>
             <i class="fa-solid fa-save"></i>
             <span>保存全部CG</span>
           </button>
@@ -78284,7 +80787,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const mountRoot = getModalMountRoot();
     $(mountRoot).append(modalHtml);
     const $modal = $(mountRoot).find("#gal-batch-special-cg-upload-modal");
-    makeDraggable($modal.find(".gal-input-box"), $modal.find(".gal-input-title"));
+    makeDraggable($modal.find(".gal-cg-upload-shell"), $modal.find(".gal-cg-upload-header"));
     const $fileInput = $modal.find("#gal-batch-special-cg-file-input");
     const $grid = $modal.find("#gal-batch-special-cg-grid");
     const $saveBtn = $modal.find("#gal-batch-special-cg-save-btn");
@@ -78296,24 +80799,28 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     };
     const renderGrid = () => {
       if (items.length === 0) {
-        $grid.html('<div style="color: #9ca3af; text-align: center; grid-column: 1 / -1; padding: 20px;">请选择图片开始上传</div>');
+        $grid.html('<div class="gal-cg-upload-gallery-empty">请选择图片开始上传</div>');
         updateSaveButton();
         return;
       }
       $grid.html(
         items.map((item, index) => `
-          <div class="gal-batch-special-cg-item" data-index="${index}" style="border: 1px solid #dbe2ea; border-radius: 8px; overflow: hidden; background: #fff;">
-            <div style="position: relative; aspect-ratio: 16 / 9; background: #0f172a;">
-              <img src="${item.url}" alt="${item.cgId}" style="width: 100%; height: 100%; object-fit: cover;">
-              <button class="gal-batch-special-cg-remove" data-index="${index}" style="position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220,53,69,0.95); color: #fff; cursor: pointer;">
+          <div class="gal-batch-special-cg-item" data-index="${index}">
+            <div class="gal-batch-special-cg-preview">
+              <img src="${item.url}" alt="${item.cgId}">
+              <button class="gal-batch-special-cg-remove" data-index="${index}" title="移除这一张CG">
                 <i class="fa-solid fa-trash"></i>
               </button>
             </div>
-            <div style="padding: 10px;">
-              <label style="display:block;font-size:0.78rem;color:#475569;margin-bottom:4px;">CG ID</label>
-              <input type="text" class="gal-batch-special-cg-id" data-index="${index}" value="${item.cgId}" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:8px;">
-              <label style="display:block;font-size:0.78rem;color:#475569;margin-bottom:4px;">名称（可选）</label>
-              <input type="text" class="gal-batch-special-cg-name" data-index="${index}" value="${item.name}" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #cbd5e1;border-radius:6px;">
+            <div class="gal-batch-special-cg-fields">
+              <label class="gal-cg-upload-field">
+                <span class="gal-cg-upload-label">CG ID</span>
+                <input type="text" class="gal-batch-special-cg-id gal-cg-upload-input" data-index="${index}" value="${item.cgId}">
+              </label>
+              <label class="gal-cg-upload-field">
+                <span class="gal-cg-upload-label">名称（可选）</span>
+                <input type="text" class="gal-batch-special-cg-name gal-cg-upload-input" data-index="${index}" value="${item.name}">
+              </label>
             </div>
           </div>
         `).join("")
@@ -78326,6 +80833,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           try {
             URL.revokeObjectURL(item.url);
           } catch (error3) {
+            console.debug(`[${SCRIPT_NAME}] 释放CG预览URL失败:`, error3);
           }
         }
       });
@@ -78364,6 +80872,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         try {
           URL.revokeObjectURL(removed.url);
         } catch (error3) {
+          console.debug(`[${SCRIPT_NAME}] 释放已移除CG预览URL失败:`, error3);
         }
       }
       renderGrid();
@@ -78403,6 +80912,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   var DEFAULT_SPRITE_ASPECT_RATIO = 2 / 3;
   var DEFAULT_SPRITE_UPLOAD_RATIO_LABEL = "2:3";
   var CROPPER_MIN_SCALE = 0.01;
+  var CROPPER_HIT_POINT_RADIUS = 9;
+  var CROPPER_HIT_POINT_TOUCH_RADIUS = 18;
   function parseAspectRatioLabel(ratioLabel) {
     const [widthRaw, heightRaw] = String(ratioLabel || "").split(":");
     const width2 = Number(widthRaw);
@@ -78422,9 +80933,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     return `${width2} / ${height2}`;
   }
   function resolveSpriteUploadAspectRatio() {
-    const settings = getSettings();
+    const settings2 = getSettings();
     const ratioLabel = normalizeSpriteUploadAspectRatio(
-      settings?.spriteUploadAspectRatio || DEFAULT_SPRITE_UPLOAD_RATIO_LABEL
+      settings2?.spriteUploadAspectRatio || DEFAULT_SPRITE_UPLOAD_RATIO_LABEL
     );
     return {
       ratioLabel,
@@ -78807,7 +81318,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       (e) => `<option value="${e}" ${e === expression || expression === "neutral" && e === "默认" ? "selected" : ""}>${e}</option>`
     ).join("");
     const ttsVoiceList = await getTTSVoiceListAsync();
-    const settings = getSettings();
+    const settings2 = getSettings();
     let { ratioLabel: spriteUploadRatioLabel, aspectRatio: spriteAspectRatio } = resolveSpriteUploadAspectRatio();
     const cropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS.map((item) => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? "selected" : ""}>${item.label}</option>`).join("");
     const ttsVoiceOptions = ttsVoiceList.map((v) => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? "selected" : ""}>${v.name} (${v.desc})</option>`).join("");
@@ -79043,7 +81554,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio(nextRatioLabel);
       spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
       if (persist) {
-        settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
+        settings2.spriteUploadAspectRatio = spriteUploadRatioLabel;
         saveSettings();
       }
       $2("#gal-sprite-ratio-label").text(spriteUploadRatioLabel);
@@ -79412,7 +81923,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function showBatchUploadDialog(characterId, onCloseCallback) {
     const allExpressions = getAllExpressions();
-    const settings = getSettings();
+    const settings2 = getSettings();
     let {
       ratioLabel: spriteUploadRatioLabel,
       aspectRatio: spriteAspectRatio,
@@ -79574,7 +82085,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $modal.find("#gal-batch-crop-ratio").on("change", function() {
       spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio($2(this).val());
       spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
-      settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
+      settings2.spriteUploadAspectRatio = spriteUploadRatioLabel;
       saveSettings();
       applyBatchCropRatioUI();
     });
@@ -81117,7 +83628,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           </div>
           <div class="gal-pack-list" style="display: flex; flex-direction: column; gap: 10px;">
             ${allPacks.map((pack) => {
-      const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0, cgs: 0 };
+      const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0, cgs: 0, uiSkins: 0 };
       const isDefault = pack.id === DEFAULT_PACK_ID;
       const isCurrent = pack.id === currentPackId;
       return `
@@ -81134,7 +83645,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                         <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘&nbsp;|&nbsp;
                         <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景&nbsp;|&nbsp;
                         <i class="fa-solid fa-map-location-dot"></i> ${stats.maps || 0} 张地图&nbsp;|&nbsp;
-                        <i class="fa-solid fa-photo-film"></i> ${stats.cgs || 0} 张CG
+                        <i class="fa-solid fa-photo-film"></i> ${stats.cgs || 0} 张CG&nbsp;|&nbsp;
+                        <i class="fa-solid fa-palette"></i> ${stats.uiSkins || 0} 组皮肤
                       </div>
                     </div>
                   </div>
@@ -81281,8 +83793,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   function setImageGenConfigRefs({ showBananaAppearancePicker: showBananaAppearancePicker2 }) {
     if (showBananaAppearancePicker2) _showBananaAppearancePickerRef2 = showBananaAppearancePicker2;
   }
-  function buildImageGenConfigPane(settings) {
-    const src = settings.bgImageSource || "none";
+  function buildImageGenConfigPane(settings2) {
+    const src = settings2.bgImageSource || "none";
     const activeEngine = src !== "none" && ["comfyui", "banana", "novelai", "wallhaven"].includes(src) ? src : "comfyui";
     return `
     <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(15,23,42,0.08); border: 1px solid rgba(71,85,105,0.35); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
@@ -81300,9 +83812,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       <button class="gal-pill ${activeEngine === "wallhaven" ? "active" : ""}" data-engine="wallhaven"><i class="fa-solid fa-images"></i> Wallhaven</button>
     </div>
     <div data-engine-pane="comfyui" ${activeEngine !== "comfyui" ? 'style="display:none;"' : ""}>${buildComfyUIPane()}</div>
-    <div data-engine-pane="banana" ${activeEngine !== "banana" ? 'style="display:none;"' : ""}>${buildBananaPane(settings)}</div>
-    <div data-engine-pane="novelai" ${activeEngine !== "novelai" ? 'style="display:none;"' : ""}>${buildNovelAIPane(settings)}</div>
-    <div data-engine-pane="wallhaven" ${activeEngine !== "wallhaven" ? 'style="display:none;"' : ""}>${buildWallhavenPane(settings)}</div>
+    <div data-engine-pane="banana" ${activeEngine !== "banana" ? 'style="display:none;"' : ""}>${buildBananaPane(settings2)}</div>
+    <div data-engine-pane="novelai" ${activeEngine !== "novelai" ? 'style="display:none;"' : ""}>${buildNovelAIPane(settings2)}</div>
+    <div data-engine-pane="wallhaven" ${activeEngine !== "wallhaven" ? 'style="display:none;"' : ""}>${buildWallhavenPane(settings2)}</div>
   `;
   }
   function buildComfyUIPane() {
@@ -81329,28 +83841,28 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">负面提示词</label><textarea id="gal-comfyui-negative" placeholder="lowres, bad anatomy..." style="width: 100%; height: 60px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea></div>
   </div>`;
   }
-  function buildBananaPane(settings) {
+  function buildBananaPane(settings2) {
     return `
   <div style="padding: 15px; background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #6b21a8; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-wand-magic-sparkles" style="color: #fbbf24; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">大香蕉生图模块</span></div>
     </div>
     <div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 15px; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 6px;">通过反代 API 生成背景图片，生成后自动保存到背景库。</div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API 地址</label><input type="text" id="gal-banana-proxy-url" placeholder="http://localhost:8045" value="${settings.bananaImageGen?.proxyUrl || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings.bananaImageGen?.proxyApiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-banana-proxy-key" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #6b21a8; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片生成模型</label><div style="display: flex; gap: 8px;"><select id="gal-banana-model" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">${settings.bananaImageGen?.model ? `<option value="${settings.bananaImageGen.model}" selected>${settings.bananaImageGen.model}</option>` : '<option value="">点击刷新获取模型列表</option>'}</select><button id="gal-banana-refresh-models" style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer;" title="刷新模型列表"><i class="fa-solid fa-sync"></i></button></div></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生图COT自定义</label><textarea id="gal-banana-cot" placeholder="可填写额外规则" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 80px; resize: vertical;">${settings.bananaImageGen?.cotTemplate || ""}</textarea></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词前缀</label><input type="text" id="gal-banana-prompt-prefix" placeholder="masterpiece, best quality, highres, " value="${settings.bananaImageGen?.defaultPromptPrefix || "masterpiece, best quality, highres, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词后缀</label><input type="text" id="gal-banana-prompt-suffix" placeholder=", no humans, scenery, background" value="${settings.bananaImageGen?.defaultPromptSuffix || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
-    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：生成包含人物的剧情CG | 关闭：生成纯场景背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-cgmode" ${settings.bananaImageGen?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
-    <div id="gal-banana-size-section" style="margin-bottom: 12px; display: ${settings.bananaImageGen?.cgMode ? "block" : "none"};"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生成图片比例</label><select id="gal-banana-image-size" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; cursor: pointer;"><option value="1:1" ${settings.bananaImageGen?.cgImageSize === "1:1" || !settings.bananaImageGen?.cgImageSize ? "selected" : ""}>1:1 (正方形)</option><option value="16:9" ${settings.bananaImageGen?.cgImageSize === "16:9" ? "selected" : ""}>16:9 (横屏)</option><option value="9:16" ${settings.bananaImageGen?.cgImageSize === "9:16" ? "selected" : ""}>9:16 (竖屏)</option><option value="4:3" ${settings.bananaImageGen?.cgImageSize === "4:3" ? "selected" : ""}>4:3 (横屏)</option><option value="3:4" ${settings.bananaImageGen?.cgImageSize === "3:4" ? "selected" : ""}>3:4 (竖屏)</option><option value="21:9" ${settings.bananaImageGen?.cgImageSize === "21:9" ? "selected" : ""}>21:9 (宽银幕)</option><option value="3:2" ${settings.bananaImageGen?.cgImageSize === "3:2" ? "selected" : ""}>3:2 (横屏)</option><option value="2:3" ${settings.bananaImageGen?.cgImageSize === "2:3" ? "selected" : ""}>2:3 (竖屏)</option></select><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">选择生成CG图片的比例</div></div>
-    <div id="gal-banana-appearance-section" style="margin-bottom: 12px; display: ${settings.bananaImageGen?.cgMode ? "block" : "none"};"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;"><label style="color: #ccd6f6; font-size: 0.9rem;">指定人物外观（最多3个）</label><button id="gal-banana-appearance-add" style="padding: 6px 10px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer; font-size: 0.8rem;"><i class="fa-solid fa-plus"></i> 添加角色</button></div><div id="gal-banana-appearance-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div><div id="gal-banana-appearance-empty" style="font-size: 0.75rem; color: #8892b0;">暂无已指定角色</div></div>
-    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">自动保存到背景库</label><div style="font-size: 0.75rem; color: #8892b0;">生成成功后自动添加到背景资源库</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-autosave" ${settings.bananaImageGen?.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API 地址</label><input type="text" id="gal-banana-proxy-url" placeholder="http://localhost:8045" value="${settings2.bananaImageGen?.proxyUrl || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings2.bananaImageGen?.proxyApiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-banana-proxy-key" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #6b21a8; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片生成模型</label><div style="display: flex; gap: 8px;"><select id="gal-banana-model" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">${settings2.bananaImageGen?.model ? `<option value="${settings2.bananaImageGen.model}" selected>${settings2.bananaImageGen.model}</option>` : '<option value="">点击刷新获取模型列表</option>'}</select><button id="gal-banana-refresh-models" style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer;" title="刷新模型列表"><i class="fa-solid fa-sync"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生图COT自定义</label><textarea id="gal-banana-cot" placeholder="可填写额外规则" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 80px; resize: vertical;">${settings2.bananaImageGen?.cotTemplate || ""}</textarea></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词前缀</label><input type="text" id="gal-banana-prompt-prefix" placeholder="masterpiece, best quality, highres, " value="${settings2.bananaImageGen?.defaultPromptPrefix || "masterpiece, best quality, highres, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词后缀</label><input type="text" id="gal-banana-prompt-suffix" placeholder=", no humans, scenery, background" value="${settings2.bananaImageGen?.defaultPromptSuffix || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：生成包含人物的剧情CG | 关闭：生成纯场景背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-cgmode" ${settings2.bananaImageGen?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+    <div id="gal-banana-size-section" style="margin-bottom: 12px; display: ${settings2.bananaImageGen?.cgMode ? "block" : "none"};"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生成图片比例</label><select id="gal-banana-image-size" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; cursor: pointer;"><option value="1:1" ${settings2.bananaImageGen?.cgImageSize === "1:1" || !settings2.bananaImageGen?.cgImageSize ? "selected" : ""}>1:1 (正方形)</option><option value="16:9" ${settings2.bananaImageGen?.cgImageSize === "16:9" ? "selected" : ""}>16:9 (横屏)</option><option value="9:16" ${settings2.bananaImageGen?.cgImageSize === "9:16" ? "selected" : ""}>9:16 (竖屏)</option><option value="4:3" ${settings2.bananaImageGen?.cgImageSize === "4:3" ? "selected" : ""}>4:3 (横屏)</option><option value="3:4" ${settings2.bananaImageGen?.cgImageSize === "3:4" ? "selected" : ""}>3:4 (竖屏)</option><option value="21:9" ${settings2.bananaImageGen?.cgImageSize === "21:9" ? "selected" : ""}>21:9 (宽银幕)</option><option value="3:2" ${settings2.bananaImageGen?.cgImageSize === "3:2" ? "selected" : ""}>3:2 (横屏)</option><option value="2:3" ${settings2.bananaImageGen?.cgImageSize === "2:3" ? "selected" : ""}>2:3 (竖屏)</option></select><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">选择生成CG图片的比例</div></div>
+    <div id="gal-banana-appearance-section" style="margin-bottom: 12px; display: ${settings2.bananaImageGen?.cgMode ? "block" : "none"};"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;"><label style="color: #ccd6f6; font-size: 0.9rem;">指定人物外观（最多3个）</label><button id="gal-banana-appearance-add" style="padding: 6px 10px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer; font-size: 0.8rem;"><i class="fa-solid fa-plus"></i> 添加角色</button></div><div id="gal-banana-appearance-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div><div id="gal-banana-appearance-empty" style="font-size: 0.75rem; color: #8892b0;">暂无已指定角色</div></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">自动保存到背景库</label><div style="font-size: 0.75rem; color: #8892b0;">生成成功后自动添加到背景资源库</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-autosave" ${settings2.bananaImageGen?.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
     <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(139,92,246,0.3);"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">手动生成背景</label><div style="display: flex; gap: 8px; margin-bottom: 8px;"><input type="text" id="gal-banana-scene-name" placeholder="场景名称（如：教室、森林）" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div><div style="display: flex; gap: 8px; margin-bottom: 8px;"><textarea id="gal-banana-custom-prompt" placeholder="自定义提示词（可选）" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 60px; resize: vertical;"></textarea></div><button id="gal-banana-generate-btn" style="width: 100%; padding: 10px; border-radius: 6px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #1a1a2e; border: none; cursor: pointer; font-weight: 700; font-size: 0.95rem;"><i class="fa-solid fa-wand-magic-sparkles"></i> 生成背景图片</button><div id="gal-banana-preview" style="margin-top: 10px; display: none;"><div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 5px;">生成预览：</div><img id="gal-banana-preview-img" style="max-width: 100%; border-radius: 6px; border: 1px solid #6b21a8;"><button id="gal-banana-save-to-library" style="width: 100%; margin-top: 8px; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem;"><i class="fa-solid fa-save"></i> 保存到背景库</button></div></div>
   </div>`;
   }
-  function buildNovelAIPane(settings) {
-    const ns = settings.novelai || {};
+  function buildNovelAIPane(settings2) {
+    const ns = settings2.novelai || {};
     return `
   <div style="padding: 15px; background: linear-gradient(135deg, #1a2e1a 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #2d6a4f; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -81369,30 +83881,30 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">自动保存到背景库</label><div style="font-size: 0.75rem; color: #8892b0;">生成成功后自动添加到背景资源库</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-novelai-autosave" ${ns.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
   </div>`;
   }
-  function buildWallhavenPane(settings) {
+  function buildWallhavenPane(settings2) {
     return `
   <div style="padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-images" style="color: #00d9ff; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">Wallhaven 壁纸搜索</span></div>
     </div>
     <div style="font-size: 0.8rem; color: #8892b0; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">仅供学习研究使用。所有图片版权归原作者及 Wallhaven 所有。</div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片分类</label><select id="gal-wallhaven-category" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="anime" ${settings.wallhaven?.category === "anime" ? "selected" : ""}>动漫漫画</option><option value="all" ${settings.wallhaven?.category === "all" ? "selected" : ""}>全部类型</option><option value="people" ${settings.wallhaven?.category === "people" ? "selected" : ""}>人物写真</option><option value="general" ${settings.wallhaven?.category === "general" ? "selected" : ""}>综合壁纸</option></select></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">安全级别</label><select id="gal-wallhaven-purity" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="sfw" ${settings.wallhaven?.purity === "sfw" ? "selected" : ""}>SFW (安全)</option><option value="sketchy" ${settings.wallhaven?.purity === "sketchy" ? "selected" : ""}>Sketchy (略敏感)</option></select></div>
-    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：允许人物关键词 | 关闭：只搜环境背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-wallhaven-cgmode" ${settings.wallhaven?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">自定义标签</label><input type="text" id="gal-wallhaven-customtags" placeholder="例如: cosplay, landscape, 4k" value="${(settings.wallhaven?.customTags || []).join(", ")}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">多个标签用逗号分隔</div></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排序方式</label><select id="gal-wallhaven-sorting" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="favorites" ${settings.wallhaven?.sorting === "favorites" || !settings.wallhaven?.sorting ? "selected" : ""}>收藏量</option><option value="relevance" ${settings.wallhaven?.sorting === "relevance" ? "selected" : ""}>相关度</option><option value="views" ${settings.wallhaven?.sorting === "views" ? "selected" : ""}>浏览量</option><option value="date_added" ${settings.wallhaven?.sorting === "date_added" ? "selected" : ""}>最新上传</option><option value="toplist" ${settings.wallhaven?.sorting === "toplist" ? "selected" : ""}>排行榜</option><option value="random" ${settings.wallhaven?.sorting === "random" ? "selected" : ""}>随机</option></select></div>
-    <div style="margin-bottom: 12px; ${settings.wallhaven?.sorting === "toplist" ? "" : "display: none;"}" id="gal-wallhaven-toprange-container"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排行榜时间范围</label><select id="gal-wallhaven-toprange" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="1d" ${settings.wallhaven?.topRange === "1d" ? "selected" : ""}>1天</option><option value="3d" ${settings.wallhaven?.topRange === "3d" ? "selected" : ""}>3天</option><option value="1w" ${settings.wallhaven?.topRange === "1w" ? "selected" : ""}>1周</option><option value="1M" ${settings.wallhaven?.topRange === "1M" || !settings.wallhaven?.topRange ? "selected" : ""}>1个月</option><option value="3M" ${settings.wallhaven?.topRange === "3M" ? "selected" : ""}>3个月</option><option value="6M" ${settings.wallhaven?.topRange === "6M" ? "selected" : ""}>6个月</option><option value="1y" ${settings.wallhaven?.topRange === "1y" ? "selected" : ""}>1年</option></select></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key（可选）</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-wallhaven-apikey" placeholder="留空使用公开 API" value="${settings.wallhaven?.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><button type="button" class="gal-key-toggle" data-target="gal-wallhaven-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #0f3460; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片分类</label><select id="gal-wallhaven-category" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="anime" ${settings2.wallhaven?.category === "anime" ? "selected" : ""}>动漫漫画</option><option value="all" ${settings2.wallhaven?.category === "all" ? "selected" : ""}>全部类型</option><option value="people" ${settings2.wallhaven?.category === "people" ? "selected" : ""}>人物写真</option><option value="general" ${settings2.wallhaven?.category === "general" ? "selected" : ""}>综合壁纸</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">安全级别</label><select id="gal-wallhaven-purity" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="sfw" ${settings2.wallhaven?.purity === "sfw" ? "selected" : ""}>SFW (安全)</option><option value="sketchy" ${settings2.wallhaven?.purity === "sketchy" ? "selected" : ""}>Sketchy (略敏感)</option></select></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：允许人物关键词 | 关闭：只搜环境背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-wallhaven-cgmode" ${settings2.wallhaven?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">自定义标签</label><input type="text" id="gal-wallhaven-customtags" placeholder="例如: cosplay, landscape, 4k" value="${(settings2.wallhaven?.customTags || []).join(", ")}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">多个标签用逗号分隔</div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排序方式</label><select id="gal-wallhaven-sorting" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="favorites" ${settings2.wallhaven?.sorting === "favorites" || !settings2.wallhaven?.sorting ? "selected" : ""}>收藏量</option><option value="relevance" ${settings2.wallhaven?.sorting === "relevance" ? "selected" : ""}>相关度</option><option value="views" ${settings2.wallhaven?.sorting === "views" ? "selected" : ""}>浏览量</option><option value="date_added" ${settings2.wallhaven?.sorting === "date_added" ? "selected" : ""}>最新上传</option><option value="toplist" ${settings2.wallhaven?.sorting === "toplist" ? "selected" : ""}>排行榜</option><option value="random" ${settings2.wallhaven?.sorting === "random" ? "selected" : ""}>随机</option></select></div>
+    <div style="margin-bottom: 12px; ${settings2.wallhaven?.sorting === "toplist" ? "" : "display: none;"}" id="gal-wallhaven-toprange-container"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排行榜时间范围</label><select id="gal-wallhaven-toprange" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="1d" ${settings2.wallhaven?.topRange === "1d" ? "selected" : ""}>1天</option><option value="3d" ${settings2.wallhaven?.topRange === "3d" ? "selected" : ""}>3天</option><option value="1w" ${settings2.wallhaven?.topRange === "1w" ? "selected" : ""}>1周</option><option value="1M" ${settings2.wallhaven?.topRange === "1M" || !settings2.wallhaven?.topRange ? "selected" : ""}>1个月</option><option value="3M" ${settings2.wallhaven?.topRange === "3M" ? "selected" : ""}>3个月</option><option value="6M" ${settings2.wallhaven?.topRange === "6M" ? "selected" : ""}>6个月</option><option value="1y" ${settings2.wallhaven?.topRange === "1y" ? "selected" : ""}>1年</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key（可选）</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-wallhaven-apikey" placeholder="留空使用公开 API" value="${settings2.wallhaven?.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><button type="button" class="gal-key-toggle" data-target="gal-wallhaven-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #0f3460; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
   </div>`;
   }
-  function makeSettingsUpdater(settings, subKey) {
+  function makeSettingsUpdater(settings2, subKey) {
     return function update(field, value) {
-      if (!settings[subKey]) settings[subKey] = {};
-      settings[subKey][field] = value;
+      if (!settings2[subKey]) settings2[subKey] = {};
+      settings2[subKey][field] = value;
       saveSettings();
     };
   }
-  function bindImageGenConfigEvents($container, settings) {
+  function bindImageGenConfigEvents($container, settings2) {
     $container.find(".gal-pill").on("click", function() {
       const engine = $2(this).data("engine");
       $container.find(".gal-pill").removeClass("active");
@@ -81402,11 +83914,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     $container.find('input[name="gal-bg-source"]').on("change", async function() {
       const value = $2(this).val();
-      settings.bgImageSource = value;
-      settings.realTimeBackgroundGen = value === "comfyui";
-      if (settings.bananaImageGen) settings.bananaImageGen.enabled = value === "banana";
-      if (settings.novelai) settings.novelai.enabled = value === "novelai";
-      if (settings.wallhaven) settings.wallhaven.enabled = value === "wallhaven";
+      settings2.bgImageSource = value;
+      settings2.realTimeBackgroundGen = value === "comfyui";
+      if (settings2.bananaImageGen) settings2.bananaImageGen.enabled = value === "banana";
+      if (settings2.novelai) settings2.novelai.enabled = value === "novelai";
+      if (settings2.wallhaven) settings2.wallhaven.enabled = value === "wallhaven";
       saveSettings();
       if (getIsEnabled()) await injectCOTToWorldbook();
       $container.find(".gal-radio-label").css("color", BG_SOURCE_INACTIVE_COLOR);
@@ -81425,12 +83937,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       input.type = input.type === "password" ? "text" : "password";
       $2(this).find("i").toggleClass("fa-eye fa-eye-slash");
     });
-    bindComfyUIConfigEvents($container, settings);
-    bindBananaConfigEvents($container, settings);
-    bindNovelAIConfigEvents($container, settings);
-    bindWallhavenConfigEvents($container, settings);
+    bindComfyUIConfigEvents($container, settings2);
+    bindBananaConfigEvents($container, settings2);
+    bindNovelAIConfigEvents($container, settings2);
+    bindWallhavenConfigEvents($container, settings2);
   }
-  function bindComfyUIConfigEvents($container, settings) {
+  function bindComfyUIConfigEvents($container, settings2) {
     $container.find("#gal-comfyui-url").on("change", function() {
       const cs = getComfyUISettings();
       cs.apiUrl = $2(this).val().trim();
@@ -81492,7 +84004,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         $sel.html('<option value="">(加载失败)</option>');
       }
     }
-    if (settings.bgImageSource === "comfyui") loadCheckpointsToSelect();
+    if (settings2.bgImageSource === "comfyui") loadCheckpointsToSelect();
     $container.find("#gal-comfy-def-checkpoint").on("change", function() {
       const cs = getComfyUISettings();
       cs.defaultCheckpoint = $2(this).val();
@@ -81531,8 +84043,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       saveComfyUISettings(cs);
     });
   }
-  function bindBananaConfigEvents($container, settings) {
-    const update = makeSettingsUpdater(settings, "bananaImageGen");
+  function bindBananaConfigEvents($container, settings2) {
+    const update = makeSettingsUpdater(settings2, "bananaImageGen");
     $container.find("#gal-banana-proxy-url").on("change", function() {
       update("proxyUrl", $2(this).val().trim());
     });
@@ -81666,7 +84178,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         }
         const requestBody = { model, messages: [{ role: "user", content: messageContent }], stream: false };
         if (cgMode) {
-          const imageSizeRatio = settings.bananaImageGen?.cgImageSize || "1:1";
+          const imageSizeRatio = settings2.bananaImageGen?.cgImageSize || "1:1";
           const [ratioW, ratioH] = imageSizeRatio.split(":").map(Number);
           let width2, height2;
           if (ratioW >= ratioH) {
@@ -81731,8 +84243,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       }
     });
   }
-  function bindNovelAIConfigEvents($container, settings) {
-    const update = makeSettingsUpdater(settings, "novelai");
+  function bindNovelAIConfigEvents($container, settings2) {
+    const update = makeSettingsUpdater(settings2, "novelai");
     $container.find("#gal-novelai-apikey").on("input change", function() {
       update("apiKey", $2(this).val().trim());
     });
@@ -81740,10 +84252,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       update("model", $2(this).val());
     });
     $container.find("#gal-novelai-size").on("change", function() {
-      if (!settings.novelai) settings.novelai = {};
+      if (!settings2.novelai) settings2.novelai = {};
       const [w, h] = $2(this).val().split("x").map(Number);
-      settings.novelai.width = w;
-      settings.novelai.height = h;
+      settings2.novelai.width = w;
+      settings2.novelai.height = h;
       saveSettings();
     });
     $container.find("#gal-novelai-steps").on("input", function() {
@@ -81772,8 +84284,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       update("autoSaveToLibrary", $2(this).is(":checked"));
     });
   }
-  function bindWallhavenConfigEvents($container, settings) {
-    const update = makeSettingsUpdater(settings, "wallhaven");
+  function bindWallhavenConfigEvents($container, settings2) {
+    const update = makeSettingsUpdater(settings2, "wallhaven");
     $container.find("#gal-wallhaven-category").on("change", async function() {
       update("category", $2(this).val());
       if (getIsEnabled()) await injectCOTToWorldbook();
@@ -81803,206 +84315,2874 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
   }
 
-  // src/ui/skin-western-editor.js
+  // src/ui/custom-skin-cropper.js
+  var DEFAULT_ASPECT_RATIO = 16 / 9;
+  var MIN_SCALE = 0.01;
+  var POINT_RADIUS = 9;
+  var TOUCH_RADIUS = 18;
+  var CONTENT_ALPHA_THRESHOLD = 24;
+  var MIN_CONTENT_AREA_RATIO = 0.015;
+  var MIN_OPAQUE_AREA_RATIO = 8e-3;
+  var DEFAULT_HIT_AREA_POINT_COUNT = 16;
+  var CROP_HANDLE_RADIUS = 8;
+  var CROP_HANDLE_TOUCH_RADIUS = 18;
+  var CROP_BORDER_HIT_SIZE = 10;
+  var CROP_BORDER_TOUCH_SIZE = 18;
+  var MIN_CROP_SIZE = 32;
+  var DEFAULT_CHROMA_KEY_COLOR = "#00FF00";
+  var DEFAULT_CHROMA_KEY_TOLERANCE = 60;
+  var DEFAULT_MATTING_BRUSH_SIZE = 28;
+  var MIN_MATTING_BRUSH_SIZE = 4;
+  var MAX_MATTING_BRUSH_SIZE = 160;
+  var COMPONENT_CANDIDATE_HIT_PADDING = 10;
+  var COMPONENT_SELECTION_PADDING_RATIO = 0;
+  var TRANSPARENCY_GRID_SIZE = 12;
+  var TRANSPARENCY_GRID_LIGHT = "#f8fafc";
+  var TRANSPARENCY_GRID_DARK = "#cbd5e1";
+  var DEFAULT_POINTS = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 }
+  ];
+  var CustomSkinCropper = class {
+    constructor(aspectRatio = DEFAULT_ASPECT_RATIO) {
+      this.aspectRatio = aspectRatio;
+      this.baseAspectRatio = aspectRatio;
+      this.image = null;
+      this.imageLoaded = false;
+      this.sourceCanvas = null;
+      this.sourceCtx = null;
+      this.sourceImageData = null;
+      this.mattingCanvas = null;
+      this.mattingCtx = null;
+      this.mattingImageData = null;
+      this.canvas = null;
+      this.ctx = null;
+      this.scale = 1;
+      this.stretchX = 1;
+      this.stretchY = 1;
+      this.minScale = 0.1;
+      this.maxScale = 3;
+      this.offsetX = 0;
+      this.offsetY = 0;
+      this.isDragging = false;
+      this.dragMode = "";
+      this.lastX = 0;
+      this.lastY = 0;
+      this.dragStartX = 0;
+      this.dragStartY = 0;
+      this.dragStartCropFrame = null;
+      this.cropX = 0;
+      this.cropY = 0;
+      this.cropWidth = 0;
+      this.cropHeight = 0;
+      this.interactionMode = "crop";
+      this.cropFrameEditable = true;
+      this.activeCropHandle = "";
+      this.hoverCropHandle = "";
+      this.hoverCropBorder = false;
+      this.hitAreaPoints = DEFAULT_POINTS.map((point) => ({ ...point }));
+      this.activeHitPointIndex = -1;
+      this.hoverHitPointIndex = -1;
+      this.hoverMattingPoint = null;
+      this.hoverComponentCandidateId = "";
+      this.detectedContentBox = null;
+      this.detectedComponentCandidates = [];
+      this.componentCandidateLabels = {};
+      this.selectedComponentCandidateId = "";
+      this.componentCandidateOverlayEnabled = false;
+      this.mattingEnabled = false;
+      this.mattingApplied = false;
+      this.mattingKeyColor = DEFAULT_CHROMA_KEY_COLOR;
+      this.mattingKeyRgb = { r: 0, g: 255, b: 0 };
+      this.mattingTolerance = DEFAULT_CHROMA_KEY_TOLERANCE;
+      this.mattingBrushSize = DEFAULT_MATTING_BRUSH_SIZE;
+      this.mattingBrushMode = "erase";
+      this.transparencyPattern = null;
+      this.transparencyPatternContext = null;
+      this.listenersBound = false;
+      this.changeListener = null;
+    }
+    clampRatio(value, fallback = 0) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return fallback;
+      return Math.max(0, Math.min(1, num));
+    }
+    clampStretch(value, fallback = 1) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return fallback;
+      return Math.max(0.2, Math.min(3, num));
+    }
+    clampMattingBrushSize(value, fallback = DEFAULT_MATTING_BRUSH_SIZE) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return fallback;
+      return Math.max(MIN_MATTING_BRUSH_SIZE, Math.min(MAX_MATTING_BRUSH_SIZE, Math.round(num)));
+    }
+    clampMattingTolerance(value, fallback = DEFAULT_CHROMA_KEY_TOLERANCE) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return fallback;
+      return Math.max(0, Math.min(255, Math.round(num)));
+    }
+    normalizeHexColor(value, fallback = DEFAULT_CHROMA_KEY_COLOR) {
+      const raw = String(value || "").trim().replace(/^#/, "").toUpperCase();
+      const expanded = raw.length === 3 ? raw.split("").map((char) => `${char}${char}`).join("") : raw;
+      if (/^[0-9A-F]{6}$/.test(expanded)) {
+        return `#${expanded}`;
+      }
+      return fallback;
+    }
+    hexToRgb(value) {
+      const hex = this.normalizeHexColor(value);
+      return {
+        r: Number.parseInt(hex.slice(1, 3), 16),
+        g: Number.parseInt(hex.slice(3, 5), 16),
+        b: Number.parseInt(hex.slice(5, 7), 16)
+      };
+    }
+    createInternalCanvas(width2, height2) {
+      const doc = topWindow?.document || document;
+      const canvas = doc.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width2 || 1));
+      canvas.height = Math.max(1, Math.round(height2 || 1));
+      return canvas;
+    }
+    getTransparencyPattern() {
+      if (!this.ctx) return null;
+      if (this.transparencyPattern && this.transparencyPatternContext === this.ctx) {
+        return this.transparencyPattern;
+      }
+      const patternCanvas = this.createInternalCanvas(TRANSPARENCY_GRID_SIZE * 2, TRANSPARENCY_GRID_SIZE * 2);
+      const patternCtx = patternCanvas.getContext("2d");
+      if (!patternCtx) return null;
+      patternCtx.fillStyle = TRANSPARENCY_GRID_LIGHT;
+      patternCtx.fillRect(0, 0, patternCanvas.width, patternCanvas.height);
+      patternCtx.fillStyle = TRANSPARENCY_GRID_DARK;
+      patternCtx.fillRect(0, 0, TRANSPARENCY_GRID_SIZE, TRANSPARENCY_GRID_SIZE);
+      patternCtx.fillRect(
+        TRANSPARENCY_GRID_SIZE,
+        TRANSPARENCY_GRID_SIZE,
+        TRANSPARENCY_GRID_SIZE,
+        TRANSPARENCY_GRID_SIZE
+      );
+      this.transparencyPattern = this.ctx.createPattern(patternCanvas, "repeat");
+      this.transparencyPatternContext = this.ctx;
+      return this.transparencyPattern;
+    }
+    renderTransparencyBackground(width2, height2) {
+      if (!this.ctx) return;
+      const pattern = this.getTransparencyPattern();
+      this.ctx.save();
+      this.ctx.fillStyle = pattern || TRANSPARENCY_GRID_LIGHT;
+      this.ctx.fillRect(0, 0, width2, height2);
+      this.ctx.restore();
+    }
+    createRectHitArea() {
+      return DEFAULT_POINTS.map((point) => ({ ...point }));
+    }
+    sanitizeHitAreaPoints(points) {
+      const safePoints = (Array.isArray(points) ? points : []).map((point) => ({
+        x: this.clampRatio(point?.x, 0),
+        y: this.clampRatio(point?.y, 0)
+      })).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+      return safePoints.length >= 3 ? safePoints : this.createRectHitArea();
+    }
+    normalizeContentBox(raw) {
+      if (!raw || typeof raw !== "object") return null;
+      const x2 = this.clampRatio(raw.x, 0);
+      const y2 = this.clampRatio(raw.y, 0);
+      const width2 = Math.max(0, Math.min(1 - x2, this.clampRatio(raw.width, 0)));
+      const height2 = Math.max(0, Math.min(1 - y2, this.clampRatio(raw.height, 0)));
+      if (width2 <= 0 || height2 <= 0) return null;
+      return { x: x2, y: y2, width: width2, height: height2 };
+    }
+    clearDetectedContentBox(shouldRender = true) {
+      this.detectedContentBox = null;
+      if (shouldRender) this.render();
+    }
+    setDetectedContentBox(raw, shouldRender = true) {
+      this.detectedContentBox = this.normalizeContentBox(raw);
+      if (shouldRender) this.render();
+    }
+    getDetectedContentBox() {
+      return this.detectedContentBox ? { ...this.detectedContentBox } : null;
+    }
+    clearDetectedComponentCandidates(shouldRender = true) {
+      this.detectedComponentCandidates = [];
+      this.componentCandidateLabels = {};
+      this.selectedComponentCandidateId = "";
+      this.hoverComponentCandidateId = "";
+      if (shouldRender) this.render();
+    }
+    getDetectedComponentCandidates() {
+      return this.detectedComponentCandidates.map((candidate) => ({
+        ...candidate,
+        bounds: candidate?.bounds ? { ...candidate.bounds } : null,
+        box: candidate?.box ? { ...candidate.box } : null,
+        hitAreaPoints: Array.isArray(candidate?.hitAreaPoints) ? candidate.hitAreaPoints.map((point) => ({ ...point })) : this.createRectHitArea(),
+        label: String(this.componentCandidateLabels?.[candidate.id] || "").trim()
+      }));
+    }
+    getDetectedComponentCandidateById(candidateId) {
+      const safeId = String(candidateId || "").trim();
+      if (!safeId) return null;
+      return this.getDetectedComponentCandidates().find((candidate) => candidate.id === safeId) || null;
+    }
+    setComponentCandidateOverlayEnabled(enabled, shouldRender = true) {
+      this.componentCandidateOverlayEnabled = enabled === true;
+      if (!this.componentCandidateOverlayEnabled) {
+        this.hoverComponentCandidateId = "";
+      }
+      if (shouldRender) this.render();
+    }
+    setComponentCandidateLabels(labels, shouldRender = true) {
+      const nextLabels = {};
+      if (labels && typeof labels === "object") {
+        Object.entries(labels).forEach(([candidateId, label]) => {
+          const safeCandidateId = String(candidateId || "").trim();
+          const safeLabel = String(label || "").trim();
+          if (!safeCandidateId || !safeLabel) return;
+          nextLabels[safeCandidateId] = safeLabel;
+        });
+      }
+      this.componentCandidateLabels = nextLabels;
+      if (shouldRender) this.render();
+    }
+    setSelectedComponentCandidate(candidateId, options2 = {}) {
+      const safeId = String(candidateId || "").trim();
+      const exists = !!safeId && this.detectedComponentCandidates.some((candidate) => candidate.id === safeId);
+      this.selectedComponentCandidateId = exists ? safeId : "";
+      if (this.selectedComponentCandidateId && options2.syncCropFrame === true) {
+        this.applyComponentCandidateToCropFrame(this.selectedComponentCandidateId, {
+          paddingRatio: options2.paddingRatio,
+          shouldRender: false
+        });
+      }
+      if (options2.shouldRender !== false) {
+        this.render();
+      }
+    }
+    getSelectedComponentCandidate() {
+      return this.getDetectedComponentCandidateById(this.selectedComponentCandidateId);
+    }
+    setChangeListener(listener) {
+      this.changeListener = typeof listener === "function" ? listener : null;
+      this.notifyChange();
+    }
+    notifyChange(payload = null) {
+      if (typeof this.changeListener !== "function") return;
+      this.changeListener(payload);
+    }
+    getMattingState() {
+      return {
+        enabled: this.mattingEnabled,
+        applied: this.mattingApplied,
+        keyColor: this.mattingKeyColor,
+        tolerance: this.mattingTolerance,
+        brushSize: this.mattingBrushSize,
+        brushMode: this.mattingBrushMode,
+        colorPicking: this.interactionMode === "pick"
+      };
+    }
+    getMattingPreset() {
+      return {
+        color: this.mattingKeyColor,
+        tolerance: this.mattingTolerance
+      };
+    }
+    hasMattingPreview() {
+      return !!this.mattingCanvas && !!this.mattingApplied;
+    }
+    setMattingEnabled(enabled, options2 = {}) {
+      this.mattingEnabled = enabled === true;
+      if (!this.mattingEnabled && options2.keepPreview !== true) {
+        this.resetMattingPreview(false);
+      }
+      if (options2.shouldRender === false) {
+        this.notifyChange({ type: "matting-state", state: this.getMattingState() });
+        return;
+      }
+      this.render({ type: "matting-state", state: this.getMattingState() });
+    }
+    setMattingKeyColor(value, options2 = {}) {
+      const nextColor = this.normalizeHexColor(value, this.mattingKeyColor);
+      this.mattingKeyColor = nextColor;
+      this.mattingKeyRgb = this.hexToRgb(nextColor);
+      if (options2.shouldRender === false) {
+        this.notifyChange({ type: "matting-settings", state: this.getMattingState() });
+        return nextColor;
+      }
+      this.render({ type: "matting-settings", state: this.getMattingState() });
+      return nextColor;
+    }
+    setMattingTolerance(value, options2 = {}) {
+      this.mattingTolerance = this.clampMattingTolerance(value, this.mattingTolerance);
+      if (options2.shouldRender === false) {
+        this.notifyChange({ type: "matting-settings", state: this.getMattingState() });
+        return this.mattingTolerance;
+      }
+      this.render({ type: "matting-settings", state: this.getMattingState() });
+      return this.mattingTolerance;
+    }
+    setMattingBrushSize(value, options2 = {}) {
+      this.mattingBrushSize = this.clampMattingBrushSize(value, this.mattingBrushSize);
+      if (options2.shouldRender === false) {
+        this.notifyChange({ type: "matting-settings", state: this.getMattingState() });
+        return this.mattingBrushSize;
+      }
+      this.render({ type: "matting-settings", state: this.getMattingState() });
+      return this.mattingBrushSize;
+    }
+    setMattingBrushMode(mode, options2 = {}) {
+      this.mattingBrushMode = mode === "keep" ? "keep" : "erase";
+      if (options2.shouldRender === false) {
+        this.notifyChange({ type: "matting-settings", state: this.getMattingState() });
+        return this.mattingBrushMode;
+      }
+      this.render({ type: "matting-settings", state: this.getMattingState() });
+      return this.mattingBrushMode;
+    }
+    createSourceBuffer() {
+      if (!this.image || !this.imageLoaded) return false;
+      const canvas = this.createInternalCanvas(this.image.width, this.image.height);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(this.image, 0, 0);
+      this.sourceCanvas = canvas;
+      this.sourceCtx = ctx;
+      this.sourceImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      return true;
+    }
+    getOpaqueSourceBuffer() {
+      if (!this.image || !this.imageLoaded) return null;
+      if (this.hasMattingPreview() && this.mattingCanvas && this.mattingImageData) {
+        return {
+          canvas: this.mattingCanvas,
+          imageData: this.mattingImageData,
+          width: this.mattingImageData.width,
+          height: this.mattingImageData.height
+        };
+      }
+      if (!this.sourceImageData && !this.createSourceBuffer()) return null;
+      return {
+        canvas: this.sourceCanvas,
+        imageData: this.sourceImageData,
+        width: this.sourceImageData.width,
+        height: this.sourceImageData.height
+      };
+    }
+    resetMattingPreview(notify3 = true) {
+      this.mattingCanvas = null;
+      this.mattingCtx = null;
+      this.mattingImageData = null;
+      this.mattingApplied = false;
+      this.clearDetectedComponentCandidates(false);
+      if (notify3) {
+        this.notifyChange({ type: "matting-preview-reset", state: this.getMattingState() });
+      }
+    }
+    clearMatting(shouldRender = true) {
+      this.resetMattingPreview(false);
+      if (this.interactionMode === "pick" || this.interactionMode === "matting") {
+        this.interactionMode = "crop";
+      }
+      if (shouldRender) {
+        this.render({ type: "matting-cleared", state: this.getMattingState() });
+      } else {
+        this.notifyChange({ type: "matting-cleared", state: this.getMattingState() });
+      }
+    }
+    ensureMattingBuffer() {
+      if (!this.sourceImageData && !this.createSourceBuffer()) return false;
+      const width2 = this.sourceImageData?.width || this.image?.width || 0;
+      const height2 = this.sourceImageData?.height || this.image?.height || 0;
+      if (!width2 || !height2) return false;
+      if (this.mattingCanvas && this.mattingCtx && this.mattingImageData) return true;
+      const canvas = this.createInternalCanvas(width2, height2);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return false;
+      this.mattingCanvas = canvas;
+      this.mattingCtx = ctx;
+      this.mattingImageData = new ImageData(new Uint8ClampedArray(this.sourceImageData.data), width2, height2);
+      this.mattingCtx.putImageData(this.mattingImageData, 0, 0);
+      return true;
+    }
+    getRenderSource() {
+      return this.hasMattingPreview() ? this.mattingCanvas : this.image;
+    }
+    canvasPointToImagePoint(position3) {
+      const metrics = this.getDrawMetrics();
+      if (!metrics || !this.image || !this.imageLoaded) return null;
+      const x2 = Math.floor((position3.x - metrics.drawX) / metrics.effectiveScaleX);
+      const y2 = Math.floor((position3.y - metrics.drawY) / metrics.effectiveScaleY);
+      if (x2 < 0 || y2 < 0 || x2 >= this.image.width || y2 >= this.image.height) return null;
+      return { x: x2, y: y2 };
+    }
+    sampleColorAtCanvasPoint(position3) {
+      const point = this.canvasPointToImagePoint(position3);
+      if (!point) return null;
+      if (!this.sourceImageData && !this.createSourceBuffer()) return null;
+      const index = (point.y * this.sourceImageData.width + point.x) * 4;
+      const data4 = this.sourceImageData.data;
+      const hex = this.normalizeHexColor(
+        `#${data4[index].toString(16).padStart(2, "0")}${data4[index + 1].toString(16).padStart(2, "0")}${data4[index + 2].toString(16).padStart(2, "0")}`,
+        DEFAULT_CHROMA_KEY_COLOR
+      );
+      this.setMattingKeyColor(hex, { shouldRender: false });
+      return {
+        x: point.x,
+        y: point.y,
+        color: hex
+      };
+    }
+    getBaseAspectRatio() {
+      const ratio = Number(this.baseAspectRatio || this.aspectRatio || DEFAULT_ASPECT_RATIO);
+      return Number.isFinite(ratio) && ratio > 0 ? ratio : DEFAULT_ASPECT_RATIO;
+    }
+    getEditorAspectRatio() {
+      const ratio = Number(this.aspectRatio || this.getBaseAspectRatio());
+      return Number.isFinite(ratio) && ratio > 0 ? ratio : this.getBaseAspectRatio();
+    }
+    setBaseAspectRatio(nextAspectRatio) {
+      const safeAspectRatio = Number(nextAspectRatio);
+      if (!Number.isFinite(safeAspectRatio) || safeAspectRatio <= 0) return;
+      this.baseAspectRatio = safeAspectRatio;
+    }
+    getContainerSize() {
+      return {
+        width: this.canvas?.width || 500,
+        height: this.canvas?.height || 320
+      };
+    }
+    calculateCropSize(aspectRatio = this.getEditorAspectRatio()) {
+      const { width: containerWidth, height: containerHeight } = this.getContainerSize();
+      let cropHeight = containerHeight * 0.8;
+      let cropWidth = cropHeight * aspectRatio;
+      if (cropWidth > containerWidth * 0.8) {
+        cropWidth = containerWidth * 0.8;
+        cropHeight = cropWidth / aspectRatio;
+      }
+      return {
+        containerWidth,
+        containerHeight,
+        cropWidth,
+        cropHeight
+      };
+    }
+    hasCropFrame() {
+      return Number.isFinite(this.cropWidth) && this.cropWidth > 0 && Number.isFinite(this.cropHeight) && this.cropHeight > 0 && Number.isFinite(this.cropX) && Number.isFinite(this.cropY);
+    }
+    getDefaultCropFrame(aspectRatio = this.getEditorAspectRatio()) {
+      const { containerWidth, containerHeight, cropWidth, cropHeight } = this.calculateCropSize(aspectRatio);
+      return {
+        x: (containerWidth - cropWidth) / 2,
+        y: (containerHeight - cropHeight) / 2,
+        width: cropWidth,
+        height: cropHeight
+      };
+    }
+    ensureCropFrame() {
+      if (this.hasCropFrame()) return this.getCropFrame();
+      const frame = this.getDefaultCropFrame();
+      this.cropX = frame.x;
+      this.cropY = frame.y;
+      this.cropWidth = frame.width;
+      this.cropHeight = frame.height;
+      return frame;
+    }
+    getCropFrame() {
+      if (!this.hasCropFrame()) {
+        return this.getDefaultCropFrame();
+      }
+      return {
+        x: this.cropX,
+        y: this.cropY,
+        width: this.cropWidth,
+        height: this.cropHeight
+      };
+    }
+    getCropAspectRatio() {
+      const frame = this.getCropFrame();
+      return Math.max(0.01, frame.width / Math.max(frame.height, 1));
+    }
+    normalizeCropFrame(frame) {
+      const defaultFrame = this.getDefaultCropFrame();
+      const { width: containerWidth, height: containerHeight } = this.getContainerSize();
+      const minWidth = Math.min(Math.max(MIN_CROP_SIZE, 1), containerWidth);
+      const minHeight = Math.min(Math.max(MIN_CROP_SIZE, 1), containerHeight);
+      const safeWidth = Number.isFinite(Number(frame?.width)) ? Number(frame.width) : defaultFrame.width;
+      const safeHeight = Number.isFinite(Number(frame?.height)) ? Number(frame.height) : defaultFrame.height;
+      const width2 = Math.max(minWidth, Math.min(containerWidth, safeWidth));
+      const height2 = Math.max(minHeight, Math.min(containerHeight, safeHeight));
+      const safeX = Number.isFinite(Number(frame?.x)) ? Number(frame.x) : defaultFrame.x;
+      const safeY = Number.isFinite(Number(frame?.y)) ? Number(frame.y) : defaultFrame.y;
+      const x2 = Math.max(0, Math.min(containerWidth - width2, safeX));
+      const y2 = Math.max(0, Math.min(containerHeight - height2, safeY));
+      return { x: x2, y: y2, width: width2, height: height2 };
+    }
+    applyCropFrame(frame, options2 = {}) {
+      const preserveView = options2.preserveView === true;
+      const shouldRender = options2.shouldRender !== false;
+      const syncScaleToCover = options2.syncScaleToCover === true;
+      const shouldConstrainOffset = options2.constrainOffset !== false;
+      const previousFrame = this.getCropFrame();
+      const focusPoint = preserveView ? this.getFrameFocusPoint(previousFrame) : null;
+      const nextFrame = this.normalizeCropFrame(frame);
+      this.cropX = nextFrame.x;
+      this.cropY = nextFrame.y;
+      this.cropWidth = nextFrame.width;
+      this.cropHeight = nextFrame.height;
+      this.clearDetectedContentBox(false);
+      if (this.image && this.imageLoaded) {
+        const { coverScale, maxScale } = this.getScaleBounds();
+        this.minScale = MIN_SCALE;
+        this.maxScale = maxScale;
+        if (syncScaleToCover) {
+          this.scale = Math.max(this.minScale, Math.min(this.maxScale, Math.max(this.scale, coverScale)));
+        } else {
+          this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale));
+        }
+        if (focusPoint) {
+          this.setFocusPointAtFrameCenter(focusPoint, nextFrame);
+        }
+        if (shouldConstrainOffset) {
+          this.constrainOffset();
+        }
+      }
+      if (shouldRender) {
+        this.render();
+      } else {
+        this.notifyChange();
+      }
+    }
+    setCropFrame(frame, options2 = {}) {
+      this.applyCropFrame(frame, options2);
+    }
+    setCropFrameEditable(editable) {
+      const nextEditable = editable !== false;
+      if (this.cropFrameEditable === nextEditable) return;
+      this.cropFrameEditable = nextEditable;
+      this.activeCropHandle = "";
+      this.hoverCropHandle = "";
+      this.hoverCropBorder = false;
+      if (!nextEditable && (this.dragMode === "crop-resize" || this.dragMode === "crop-move")) {
+        this.dragMode = "";
+        this.isDragging = false;
+      }
+      this.updateCursor();
+      this.render();
+    }
+    getEventPosition(event3) {
+      if (!this.canvas) return { x: 0, y: 0 };
+      const rect = this.canvas.getBoundingClientRect();
+      const point = event3?.touches?.[0] || event3?.changedTouches?.[0] || event3;
+      const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1;
+      const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1;
+      return {
+        x: (point.clientX - rect.left) * scaleX,
+        y: (point.clientY - rect.top) * scaleY
+      };
+    }
+    cropPointToCanvas(point) {
+      const frame = this.getCropFrame();
+      return {
+        x: frame.x + this.clampRatio(point?.x, 0) * frame.width,
+        y: frame.y + this.clampRatio(point?.y, 0) * frame.height
+      };
+    }
+    canvasPointToCrop(point) {
+      const frame = this.getCropFrame();
+      return {
+        x: this.clampRatio((point.x - frame.x) / Math.max(frame.width, 1), 0),
+        y: this.clampRatio((point.y - frame.y) / Math.max(frame.height, 1), 0)
+      };
+    }
+    getComponentCandidateCanvasRect(candidate, metrics = this.getDrawMetrics()) {
+      if (!candidate || !metrics || !this.image || !this.imageLoaded) return null;
+      return {
+        x: metrics.drawX + candidate.box.x * this.image.width * metrics.effectiveScaleX,
+        y: metrics.drawY + candidate.box.y * this.image.height * metrics.effectiveScaleY,
+        width: candidate.box.width * this.image.width * metrics.effectiveScaleX,
+        height: candidate.box.height * this.image.height * metrics.effectiveScaleY
+      };
+    }
+    findComponentCandidateAtPosition(position3, padding = COMPONENT_CANDIDATE_HIT_PADDING) {
+      if (!this.componentCandidateOverlayEnabled || this.detectedComponentCandidates.length === 0) return null;
+      const metrics = this.getDrawMetrics();
+      if (!metrics) return null;
+      for (let index = this.detectedComponentCandidates.length - 1; index >= 0; index -= 1) {
+        const candidate = this.detectedComponentCandidates[index];
+        const rect = this.getComponentCandidateCanvasRect(candidate, metrics);
+        if (!rect) continue;
+        const withinX = position3.x >= rect.x - padding && position3.x <= rect.x + rect.width + padding;
+        const withinY = position3.y >= rect.y - padding && position3.y <= rect.y + rect.height + padding;
+        if (withinX && withinY) {
+          return candidate;
+        }
+      }
+      return null;
+    }
+    updateComponentCandidateHover(position3) {
+      const nextCandidate = this.findComponentCandidateAtPosition(position3);
+      const nextId = nextCandidate?.id || "";
+      if (nextId === this.hoverComponentCandidateId) return false;
+      this.hoverComponentCandidateId = nextId;
+      return true;
+    }
+    findHitPointIndex(position3, radius2 = POINT_RADIUS) {
+      for (let index = 0; index < this.hitAreaPoints.length; index += 1) {
+        const point = this.cropPointToCanvas(this.hitAreaPoints[index]);
+        const dx = point.x - position3.x;
+        const dy = point.y - position3.y;
+        if (Math.sqrt(dx * dx + dy * dy) <= radius2) {
+          return index;
+        }
+      }
+      return -1;
+    }
+    getCropHandleDefinitions(frame = this.getCropFrame()) {
+      const centerX = frame.x + frame.width / 2;
+      const centerY = frame.y + frame.height / 2;
+      return [
+        { name: "nw", x: frame.x, y: frame.y, cursor: "nwse-resize" },
+        { name: "n", x: centerX, y: frame.y, cursor: "ns-resize" },
+        { name: "ne", x: frame.x + frame.width, y: frame.y, cursor: "nesw-resize" },
+        { name: "e", x: frame.x + frame.width, y: centerY, cursor: "ew-resize" },
+        { name: "se", x: frame.x + frame.width, y: frame.y + frame.height, cursor: "nwse-resize" },
+        { name: "s", x: centerX, y: frame.y + frame.height, cursor: "ns-resize" },
+        { name: "sw", x: frame.x, y: frame.y + frame.height, cursor: "nesw-resize" },
+        { name: "w", x: frame.x, y: centerY, cursor: "ew-resize" }
+      ];
+    }
+    findCropHandle(position3, radius2 = CROP_HANDLE_RADIUS) {
+      const handles = this.getCropHandleDefinitions();
+      let matched = null;
+      let closestDistance = Infinity;
+      handles.forEach((handle) => {
+        const dx = handle.x - position3.x;
+        const dy = handle.y - position3.y;
+        const distance2 = Math.sqrt(dx * dx + dy * dy);
+        if (distance2 <= radius2 && distance2 < closestDistance) {
+          matched = handle;
+          closestDistance = distance2;
+        }
+      });
+      return matched;
+    }
+    isPointInsideFrame(position3, frame = this.getCropFrame()) {
+      return position3.x >= frame.x && position3.x <= frame.x + frame.width && position3.y >= frame.y && position3.y <= frame.y + frame.height;
+    }
+    isPointInsideImage(position3, metrics = this.getDrawMetrics()) {
+      if (!position3 || !metrics) return false;
+      return position3.x >= metrics.drawX && position3.x <= metrics.drawX + metrics.scaledWidth && position3.y >= metrics.drawY && position3.y <= metrics.drawY + metrics.scaledHeight;
+    }
+    isPointOnCropBorder(position3, threshold = CROP_BORDER_HIT_SIZE, frame = this.getCropFrame()) {
+      const withinOuter = position3.x >= frame.x - threshold && position3.x <= frame.x + frame.width + threshold && position3.y >= frame.y - threshold && position3.y <= frame.y + frame.height + threshold;
+      if (!withinOuter) return false;
+      const withinInner = position3.x >= frame.x + threshold && position3.x <= frame.x + frame.width - threshold && position3.y >= frame.y + threshold && position3.y <= frame.y + frame.height - threshold;
+      return !withinInner;
+    }
+    resizeCropFrame(handleName, deltaX, deltaY) {
+      const source = this.dragStartCropFrame || this.getCropFrame();
+      const { width: containerWidth, height: containerHeight } = this.getContainerSize();
+      const minWidth = Math.min(Math.max(MIN_CROP_SIZE, 1), containerWidth);
+      const minHeight = Math.min(Math.max(MIN_CROP_SIZE, 1), containerHeight);
+      let { x: x2, y: y2, width: width2, height: height2 } = source;
+      if (handleName.includes("w")) {
+        const right = source.x + source.width;
+        x2 = Math.max(0, Math.min(source.x + deltaX, right - minWidth));
+        width2 = right - x2;
+      } else if (handleName.includes("e")) {
+        width2 = Math.max(minWidth, Math.min(containerWidth - source.x, source.width + deltaX));
+      }
+      if (handleName.includes("n")) {
+        const bottom = source.y + source.height;
+        y2 = Math.max(0, Math.min(source.y + deltaY, bottom - minHeight));
+        height2 = bottom - y2;
+      } else if (handleName.includes("s")) {
+        height2 = Math.max(minHeight, Math.min(containerHeight - source.y, source.height + deltaY));
+      }
+      return { x: x2, y: y2, width: width2, height: height2 };
+    }
+    moveCropFrame(deltaX, deltaY) {
+      const source = this.dragStartCropFrame || this.getCropFrame();
+      const { width: containerWidth, height: containerHeight } = this.getContainerSize();
+      return {
+        x: Math.max(0, Math.min(containerWidth - source.width, source.x + deltaX)),
+        y: Math.max(0, Math.min(containerHeight - source.height, source.y + deltaY)),
+        width: source.width,
+        height: source.height
+      };
+    }
+    updateCropHoverState(position3, isTouch = false) {
+      if (this.interactionMode !== "crop" || !this.cropFrameEditable) {
+        const changed2 = !!this.hoverCropHandle || this.hoverCropBorder;
+        this.hoverCropHandle = "";
+        this.hoverCropBorder = false;
+        return changed2;
+      }
+      const radius2 = isTouch ? CROP_HANDLE_TOUCH_RADIUS : CROP_HANDLE_RADIUS;
+      const borderSize = isTouch ? CROP_BORDER_TOUCH_SIZE : CROP_BORDER_HIT_SIZE;
+      const handle = this.findCropHandle(position3, radius2);
+      const nextHandle = handle?.name || "";
+      const nextBorder = !nextHandle && this.isPointOnCropBorder(position3, borderSize);
+      const changed = this.hoverCropHandle !== nextHandle || this.hoverCropBorder !== nextBorder;
+      this.hoverCropHandle = nextHandle;
+      this.hoverCropBorder = nextBorder;
+      return changed;
+    }
+    updateCursor() {
+      const wrapper = this.canvas?.parentElement;
+      if (!wrapper) return;
+      if (this.interactionMode === "pick") {
+        wrapper.style.cursor = "crosshair";
+        return;
+      }
+      if (this.interactionMode === "matting") {
+        wrapper.style.cursor = "crosshair";
+        return;
+      }
+      if (this.interactionMode === "hit") {
+        if (this.isDragging && this.activeHitPointIndex >= 0) {
+          wrapper.style.cursor = "grabbing";
+        } else if (this.hoverHitPointIndex >= 0) {
+          wrapper.style.cursor = "grab";
+        } else {
+          wrapper.style.cursor = "crosshair";
+        }
+        return;
+      }
+      if (this.dragMode === "crop-resize" && this.activeCropHandle) {
+        const activeHandle = this.getCropHandleDefinitions().find((handle) => handle.name === this.activeCropHandle);
+        wrapper.style.cursor = activeHandle?.cursor || "move";
+        return;
+      }
+      if (this.dragMode === "crop-move") {
+        wrapper.style.cursor = "move";
+        return;
+      }
+      if (this.componentCandidateOverlayEnabled && this.hoverComponentCandidateId && this.hoverComponentCandidateId !== this.selectedComponentCandidateId) {
+        wrapper.style.cursor = "pointer";
+        return;
+      }
+      if (this.cropFrameEditable && this.hoverCropHandle) {
+        const hoverHandle = this.getCropHandleDefinitions().find((handle) => handle.name === this.hoverCropHandle);
+        wrapper.style.cursor = hoverHandle?.cursor || "move";
+        return;
+      }
+      if (this.cropFrameEditable && this.hoverCropBorder) {
+        wrapper.style.cursor = "move";
+        return;
+      }
+      wrapper.style.cursor = this.imageLoaded ? this.isDragging ? "grabbing" : "grab" : "default";
+    }
+    loadImage(source) {
+      return new Promise((resolve2, reject2) => {
+        const ImageCtor = topWindow?.Image || Image;
+        this.clearDetectedContentBox(false);
+        this.clearDetectedComponentCandidates(false);
+        this.resetMattingPreview(false);
+        this.hoverMattingPoint = null;
+        this.stretchX = 1;
+        this.stretchY = 1;
+        this.image = new ImageCtor();
+        this.image.onload = () => {
+          this.imageLoaded = true;
+          this.createSourceBuffer();
+          if (this.canvas) {
+            this.calculateInitialScale();
+            this.render();
+          }
+          resolve2(this.image);
+        };
+        this.image.onerror = reject2;
+        if (typeof source === "string") {
+          this.image.src = source;
+          return;
+        }
+        const isFileLike = !!source && typeof source === "object" && typeof source.size === "number" && typeof source.type === "string" && (typeof source.arrayBuffer === "function" || typeof source.slice === "function");
+        if (isFileLike) {
+          const ReaderCtor = topWindow?.FileReader || FileReader;
+          const reader = new ReaderCtor();
+          reader.onload = (event3) => {
+            this.image.src = event3.target.result;
+          };
+          reader.onerror = reject2;
+          reader.readAsDataURL(source);
+          return;
+        }
+        reject2(new Error("Unsupported image source"));
+      });
+    }
+    clearImage() {
+      this.image = null;
+      this.imageLoaded = false;
+      this.sourceCanvas = null;
+      this.sourceCtx = null;
+      this.sourceImageData = null;
+      this.scale = 1;
+      this.stretchX = 1;
+      this.stretchY = 1;
+      this.offsetX = 0;
+      this.offsetY = 0;
+      this.isDragging = false;
+      this.dragMode = "";
+      this.activeCropHandle = "";
+      this.hoverCropHandle = "";
+      this.hoverCropBorder = false;
+      this.hoverMattingPoint = null;
+      this.hoverComponentCandidateId = "";
+      this.dragStartCropFrame = null;
+      this.resetMattingPreview(false);
+      this.clearDetectedContentBox(false);
+      this.clearDetectedComponentCandidates(false);
+    }
+    getScaleBounds() {
+      if (!this.image || !this.imageLoaded) {
+        return {
+          containScale: 1,
+          coverScale: 1,
+          maxScale: 3
+        };
+      }
+      const frame = this.getCropFrame();
+      const scaleToFitWidth = frame.width / Math.max(this.image.width * this.stretchX, 1);
+      const scaleToFitHeight = frame.height / Math.max(this.image.height * this.stretchY, 1);
+      const containScale = Math.min(scaleToFitWidth, scaleToFitHeight);
+      const coverScale = Math.max(scaleToFitWidth, scaleToFitHeight);
+      return {
+        containScale,
+        coverScale,
+        maxScale: Math.max(coverScale * 5, 3)
+      };
+    }
+    getDrawMetrics(scale2 = this.scale, offsetX = this.offsetX, offsetY = this.offsetY, stretchX = this.stretchX, stretchY = this.stretchY) {
+      if (!this.image || !this.imageLoaded) return null;
+      const { width: containerWidth, height: containerHeight } = this.getContainerSize();
+      const effectiveScaleX = scale2 * stretchX;
+      const effectiveScaleY = scale2 * stretchY;
+      const scaledWidth = this.image.width * effectiveScaleX;
+      const scaledHeight = this.image.height * effectiveScaleY;
+      return {
+        containerWidth,
+        containerHeight,
+        effectiveScaleX,
+        effectiveScaleY,
+        scaledWidth,
+        scaledHeight,
+        drawX: (containerWidth - scaledWidth) / 2 + offsetX,
+        drawY: (containerHeight - scaledHeight) / 2 + offsetY
+      };
+    }
+    getFrameFocusPoint(frame = this.getCropFrame()) {
+      const metrics = this.getDrawMetrics();
+      if (!metrics || !metrics.effectiveScaleX || !metrics.effectiveScaleY) return null;
+      return {
+        x: Math.max(0, Math.min(this.image.width, (frame.x + frame.width / 2 - metrics.drawX) / metrics.effectiveScaleX)),
+        y: Math.max(0, Math.min(this.image.height, (frame.y + frame.height / 2 - metrics.drawY) / metrics.effectiveScaleY))
+      };
+    }
+    setFocusPointAtFrameCenter(point, frame = this.getCropFrame()) {
+      if (!this.image || !this.imageLoaded || !point) return;
+      const metrics = this.getDrawMetrics(this.scale, 0, 0, this.stretchX, this.stretchY);
+      if (!metrics) return;
+      const frameCenterX = frame.x + frame.width / 2;
+      const frameCenterY = frame.y + frame.height / 2;
+      this.offsetX = frameCenterX - point.x * metrics.effectiveScaleX - (metrics.containerWidth - metrics.scaledWidth) / 2;
+      this.offsetY = frameCenterY - point.y * metrics.effectiveScaleY - (metrics.containerHeight - metrics.scaledHeight) / 2;
+    }
+    calculateInitialScale() {
+      if (!this.canvas || !this.image || !this.imageLoaded) return;
+      this.clearDetectedContentBox(false);
+      this.ensureCropFrame();
+      const { coverScale, maxScale } = this.getScaleBounds();
+      this.minScale = MIN_SCALE;
+      this.maxScale = maxScale;
+      this.scale = Math.max(this.minScale, Math.min(this.maxScale, coverScale * 1.2));
+      this.offsetX = 0;
+      this.offsetY = 0;
+      this.constrainOffset();
+    }
+    attachToCanvas(canvasElement) {
+      this.canvas = canvasElement;
+      this.ctx = this.canvas.getContext("2d");
+      this.setupEventListeners();
+      if (this.imageLoaded) {
+        this.calculateInitialScale();
+        this.render();
+      }
+    }
+    setupEventListeners() {
+      if (!this.canvas || this.listenersBound) return;
+      const wrapper = this.canvas.parentElement;
+      if (!wrapper) return;
+      const win = topWindow || window;
+      const beginPointer = (event3, isTouch = false) => {
+        const position3 = this.getEventPosition(event3);
+        this.lastX = position3.x;
+        this.lastY = position3.y;
+        this.dragStartX = position3.x;
+        this.dragStartY = position3.y;
+        this.hoverMattingPoint = position3;
+        if (this.interactionMode === "pick") {
+          if (!this.imageLoaded) {
+            this.render();
+            return;
+          }
+          const sampled = this.sampleColorAtCanvasPoint(position3);
+          if (sampled) {
+            this.interactionMode = "matting";
+            this.updateCursor();
+            this.render({ type: "matting-color-picked", color: sampled.color, state: this.getMattingState() });
+          } else {
+            this.render();
+          }
+          if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+          return;
+        }
+        if (this.interactionMode === "matting") {
+          if (!this.imageLoaded || !this.hasMattingPreview()) {
+            this.isDragging = false;
+            this.updateCursor();
+            this.render();
+            return;
+          }
+          this.isDragging = true;
+          this.dragMode = "matting-paint";
+          this.paintMattingAtCanvasPoint(position3, this.mattingBrushMode, false);
+          this.updateCursor();
+          this.render({ type: "matting-paint", state: this.getMattingState() });
+          if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+          return;
+        }
+        if (this.interactionMode === "hit") {
+          const radius2 = isTouch ? TOUCH_RADIUS : POINT_RADIUS;
+          this.activeHitPointIndex = this.findHitPointIndex(position3, radius2);
+          this.hoverHitPointIndex = this.activeHitPointIndex;
+          this.isDragging = this.activeHitPointIndex >= 0;
+          this.updateCursor();
+          this.render();
+          return;
+        }
+        this.dragMode = "";
+        this.activeCropHandle = "";
+        this.dragStartCropFrame = null;
+        if (this.cropFrameEditable) {
+          const handle = this.findCropHandle(position3, isTouch ? CROP_HANDLE_TOUCH_RADIUS : CROP_HANDLE_RADIUS);
+          if (handle) {
+            this.isDragging = true;
+            this.dragMode = "crop-resize";
+            this.activeCropHandle = handle.name;
+            this.hoverCropHandle = handle.name;
+            this.hoverCropBorder = false;
+            this.dragStartCropFrame = this.getCropFrame();
+            this.updateCursor();
+            this.render();
+            if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+            return;
+          }
+          if (this.isPointOnCropBorder(position3, isTouch ? CROP_BORDER_TOUCH_SIZE : CROP_BORDER_HIT_SIZE)) {
+            this.isDragging = true;
+            this.dragMode = "crop-move";
+            this.hoverCropHandle = "";
+            this.hoverCropBorder = true;
+            this.dragStartCropFrame = this.getCropFrame();
+            this.updateCursor();
+            this.render();
+            if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+            return;
+          }
+        }
+        const hitCandidate = this.findComponentCandidateAtPosition(position3, isTouch ? TOUCH_RADIUS : COMPONENT_CANDIDATE_HIT_PADDING);
+        if (hitCandidate) {
+          this.hoverComponentCandidateId = hitCandidate.id;
+        }
+        if (hitCandidate && hitCandidate.id !== this.selectedComponentCandidateId) {
+          this.setSelectedComponentCandidate(hitCandidate.id, {
+            syncCropFrame: true,
+            paddingRatio: COMPONENT_SELECTION_PADDING_RATIO,
+            shouldRender: false
+          });
+          this.updateCursor();
+          this.render({ type: "component-candidate-selected", candidateId: hitCandidate.id, candidate: this.getSelectedComponentCandidate() });
+          if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+          return;
+        }
+        const canStartImageMove = this.imageLoaded && (this.isPointInsideFrame(position3) || this.isPointInsideImage(position3));
+        if (!canStartImageMove) {
+          this.isDragging = false;
+          this.updateCropHoverState(position3, isTouch);
+          this.updateCursor();
+          this.render();
+          return;
+        }
+        this.isDragging = true;
+        this.dragMode = "image-move";
+        this.updateCursor();
+        if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+      };
+      const movePointer = (event3, isTouch = false) => {
+        const position3 = this.getEventPosition(event3);
+        this.hoverMattingPoint = position3;
+        if (this.interactionMode === "pick") {
+          this.updateCursor();
+          this.render();
+          return;
+        }
+        if (this.interactionMode === "matting") {
+          if (this.isDragging && this.dragMode === "matting-paint") {
+            this.paintMattingAtCanvasPoint(position3, this.mattingBrushMode, false);
+            if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+            this.render({ type: "matting-paint", state: this.getMattingState() });
+          } else {
+            this.updateCursor();
+            this.render();
+          }
+          return;
+        }
+        if (this.interactionMode === "hit") {
+          this.hoverHitPointIndex = this.findHitPointIndex(position3, isTouch ? TOUCH_RADIUS : POINT_RADIUS);
+          if (this.isDragging && this.activeHitPointIndex >= 0) {
+            this.hitAreaPoints[this.activeHitPointIndex] = this.canvasPointToCrop(position3);
+            if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+            this.render();
+          } else {
+            this.updateCursor();
+            this.render();
+          }
+          return;
+        }
+        if (!this.isDragging) {
+          const candidateHoverChanged = this.updateComponentCandidateHover(position3);
+          if (this.updateCropHoverState(position3, isTouch) || candidateHoverChanged) {
+            this.updateCursor();
+            this.render();
+          } else {
+            this.updateCursor();
+          }
+          return;
+        }
+        if (this.dragMode === "crop-resize" && this.activeCropHandle) {
+          const nextFrame = this.resizeCropFrame(
+            this.activeCropHandle,
+            position3.x - this.dragStartX,
+            position3.y - this.dragStartY
+          );
+          if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+          this.applyCropFrame(nextFrame, { preserveView: false, constrainOffset: false });
+          return;
+        }
+        if (this.dragMode === "crop-move") {
+          const nextFrame = this.moveCropFrame(position3.x - this.dragStartX, position3.y - this.dragStartY);
+          if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+          this.applyCropFrame(nextFrame, { preserveView: false, constrainOffset: false });
+          return;
+        }
+        if (this.dragMode !== "image-move") {
+          return;
+        }
+        const dx = position3.x - this.lastX;
+        const dy = position3.y - this.lastY;
+        if (dx !== 0 || dy !== 0) this.clearDetectedContentBox(false);
+        this.offsetX += dx;
+        this.offsetY += dy;
+        this.lastX = position3.x;
+        this.lastY = position3.y;
+        if (isTouch && typeof event3.preventDefault === "function") event3.preventDefault();
+        this.render();
+      };
+      const endPointer = (event3) => {
+        const hadActiveDrag = this.isDragging || this.activeHitPointIndex >= 0 || this.dragMode === "matting-paint" || this.dragMode === "crop-resize" || this.dragMode === "crop-move" || this.dragMode === "image-move";
+        if (!hadActiveDrag) return;
+        this.isDragging = false;
+        if (this.interactionMode === "hit") {
+          this.activeHitPointIndex = -1;
+        } else if (this.interactionMode === "matting") {
+          this.dragMode = "";
+        } else {
+          this.dragMode = "";
+          this.activeCropHandle = "";
+          this.dragStartCropFrame = null;
+          if (event3) {
+            this.updateCropHoverState(this.getEventPosition(event3), false);
+          }
+        }
+        this.updateCursor();
+        this.render();
+      };
+      wrapper.addEventListener("mousedown", (event3) => beginPointer(event3, false));
+      win.addEventListener("mousemove", (event3) => movePointer(event3, false));
+      win.addEventListener("mouseup", (event3) => endPointer(event3));
+      wrapper.addEventListener("mouseleave", () => {
+        if (this.interactionMode === "hit") {
+          this.hoverHitPointIndex = -1;
+        } else if (this.interactionMode === "matting" || this.interactionMode === "pick") {
+          this.hoverMattingPoint = null;
+        } else {
+          this.hoverComponentCandidateId = "";
+          this.hoverCropHandle = "";
+          this.hoverCropBorder = false;
+        }
+        if (!this.isDragging) {
+          this.updateCursor();
+          this.render();
+        }
+      });
+      wrapper.addEventListener("touchstart", (event3) => {
+        if (event3.touches.length !== 1) return;
+        beginPointer(event3, true);
+      }, { passive: false });
+      wrapper.addEventListener("touchmove", (event3) => {
+        if (event3.touches.length !== 1) return;
+        movePointer(event3, true);
+      }, { passive: false });
+      wrapper.addEventListener("touchend", (event3) => {
+        this.hoverHitPointIndex = -1;
+        this.hoverComponentCandidateId = "";
+        this.hoverCropHandle = "";
+        this.hoverCropBorder = false;
+        this.hoverMattingPoint = null;
+        endPointer(event3);
+      });
+      wrapper.addEventListener("touchcancel", (event3) => {
+        this.hoverHitPointIndex = -1;
+        this.hoverComponentCandidateId = "";
+        this.hoverCropHandle = "";
+        this.hoverCropBorder = false;
+        this.hoverMattingPoint = null;
+        endPointer(event3);
+      });
+      this.listenersBound = true;
+      this.updateCursor();
+    }
+    setScale(newScale) {
+      this.clearDetectedContentBox(false);
+      const focusPoint = this.getFrameFocusPoint();
+      this.scale = Math.max(this.minScale, Math.min(this.maxScale, newScale));
+      if (focusPoint) {
+        this.setFocusPointAtFrameCenter(focusPoint);
+      }
+      this.constrainOffset();
+      this.render();
+    }
+    setStretch(stretchX = this.stretchX, stretchY = this.stretchY) {
+      this.clearDetectedContentBox(false);
+      const focusPoint = this.getFrameFocusPoint();
+      this.stretchX = this.clampStretch(stretchX, this.stretchX);
+      this.stretchY = this.clampStretch(stretchY, this.stretchY);
+      if (this.image && this.imageLoaded) {
+        const { coverScale, maxScale } = this.getScaleBounds();
+        this.minScale = MIN_SCALE;
+        this.maxScale = maxScale;
+        this.scale = Math.max(this.minScale, Math.min(this.maxScale, Math.max(this.scale, coverScale)));
+        if (focusPoint) {
+          this.setFocusPointAtFrameCenter(focusPoint);
+        }
+        this.constrainOffset();
+      }
+      this.render();
+    }
+    setStretchX(stretchX) {
+      this.setStretch(stretchX, this.stretchY);
+    }
+    setStretchY(stretchY) {
+      this.setStretch(this.stretchX, stretchY);
+    }
+    applyAspectRatio(nextAspectRatio, options2 = {}) {
+      const safeAspectRatio = Number(nextAspectRatio);
+      if (!Number.isFinite(safeAspectRatio) || safeAspectRatio <= 0) return;
+      const preserveView = options2.preserveView !== false;
+      const shouldRender = options2.shouldRender !== false;
+      this.aspectRatio = safeAspectRatio;
+      const nextFrame = this.getDefaultCropFrame(safeAspectRatio);
+      this.applyCropFrame(nextFrame, { preserveView, shouldRender });
+    }
+    setInteractionMode(mode) {
+      if (mode === "hit") {
+        this.interactionMode = "hit";
+      } else if (mode === "matting") {
+        this.interactionMode = "matting";
+      } else if (mode === "pick") {
+        this.interactionMode = "pick";
+      } else {
+        this.interactionMode = "crop";
+      }
+      this.isDragging = false;
+      this.dragMode = "";
+      this.activeHitPointIndex = -1;
+      this.hoverHitPointIndex = -1;
+      this.activeCropHandle = "";
+      this.hoverCropHandle = "";
+      this.hoverCropBorder = false;
+      this.hoverMattingPoint = null;
+      this.dragStartCropFrame = null;
+      this.updateCursor();
+      this.render();
+    }
+    setHitAreaPoints(points) {
+      this.hitAreaPoints = this.sanitizeHitAreaPoints(points);
+      this.activeHitPointIndex = -1;
+      this.hoverHitPointIndex = -1;
+      this.render();
+    }
+    getHitAreaPoints() {
+      return this.hitAreaPoints.map((point) => ({ x: point.x, y: point.y }));
+    }
+    resetHitAreaPoints() {
+      this.setHitAreaPoints(this.createRectHitArea());
+    }
+    addHitAreaPoint() {
+      let insertIndex = this.hitAreaPoints.length;
+      if (this.activeHitPointIndex >= 0 && this.activeHitPointIndex < this.hitAreaPoints.length) {
+        insertIndex = this.activeHitPointIndex + 1;
+      } else {
+        let longestIndex = 0;
+        let longestDistance = -1;
+        for (let index = 0; index < this.hitAreaPoints.length; index += 1) {
+          const current = this.hitAreaPoints[index];
+          const next2 = this.hitAreaPoints[(index + 1) % this.hitAreaPoints.length];
+          const dx = next2.x - current.x;
+          const dy = next2.y - current.y;
+          const distance2 = dx * dx + dy * dy;
+          if (distance2 > longestDistance) {
+            longestDistance = distance2;
+            longestIndex = index + 1;
+          }
+        }
+        insertIndex = longestIndex;
+      }
+      const previous = this.hitAreaPoints[(insertIndex - 1 + this.hitAreaPoints.length) % this.hitAreaPoints.length];
+      const next = this.hitAreaPoints[insertIndex % this.hitAreaPoints.length];
+      this.hitAreaPoints.splice(insertIndex, 0, {
+        x: this.clampRatio(((previous?.x ?? 0) + (next?.x ?? 1)) / 2, 0.5),
+        y: this.clampRatio(((previous?.y ?? 0) + (next?.y ?? 1)) / 2, 0.5)
+      });
+      this.activeHitPointIndex = insertIndex;
+      this.hoverHitPointIndex = insertIndex;
+      this.render();
+    }
+    removeSelectedHitAreaPoint() {
+      if (this.hitAreaPoints.length <= 3) return false;
+      const index = this.activeHitPointIndex >= 0 ? this.activeHitPointIndex : this.hoverHitPointIndex;
+      if (index < 0 || index >= this.hitAreaPoints.length) return false;
+      this.hitAreaPoints.splice(index, 1);
+      this.activeHitPointIndex = -1;
+      this.hoverHitPointIndex = -1;
+      this.render();
+      return true;
+    }
+    constrainOffset() {
+      if (!this.image) return;
+      const metrics = this.getDrawMetrics();
+      if (!metrics) return;
+      const frame = this.getCropFrame();
+      const baseDrawX = (metrics.containerWidth - metrics.scaledWidth) / 2;
+      const baseDrawY = (metrics.containerHeight - metrics.scaledHeight) / 2;
+      const minOffsetX = Math.min(
+        frame.x + frame.width - metrics.scaledWidth - baseDrawX,
+        frame.x - baseDrawX
+      );
+      const maxOffsetX = Math.max(
+        frame.x + frame.width - metrics.scaledWidth - baseDrawX,
+        frame.x - baseDrawX
+      );
+      const minOffsetY = Math.min(
+        frame.y + frame.height - metrics.scaledHeight - baseDrawY,
+        frame.y - baseDrawY
+      );
+      const maxOffsetY = Math.max(
+        frame.y + frame.height - metrics.scaledHeight - baseDrawY,
+        frame.y - baseDrawY
+      );
+      this.offsetX = Math.max(minOffsetX, Math.min(maxOffsetX, this.offsetX));
+      this.offsetY = Math.max(minOffsetY, Math.min(maxOffsetY, this.offsetY));
+    }
+    reset() {
+      this.clearDetectedContentBox(false);
+      this.hoverComponentCandidateId = "";
+      this.aspectRatio = this.getBaseAspectRatio();
+      this.stretchX = 1;
+      this.stretchY = 1;
+      const frame = this.getDefaultCropFrame(this.aspectRatio);
+      this.cropX = frame.x;
+      this.cropY = frame.y;
+      this.cropWidth = frame.width;
+      this.cropHeight = frame.height;
+      this.calculateInitialScale();
+      this.render();
+    }
+    createOutputCanvas(outputWidth = 400) {
+      if (!this.image || !this.imageLoaded || !this.canvas) return null;
+      const safeWidth = Math.max(64, Math.round(Number(outputWidth) || 400));
+      const safeHeight = Math.max(64, Math.round(safeWidth / Math.max(this.getCropAspectRatio(), 0.01)));
+      const doc = topWindow?.document || document;
+      const canvas = doc.createElement("canvas");
+      canvas.width = safeWidth;
+      canvas.height = safeHeight;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return null;
+      return {
+        canvas,
+        ctx,
+        width: safeWidth,
+        height: safeHeight
+      };
+    }
+    drawCurrentCropToContext(ctx, outputWidth, outputHeight) {
+      if (!ctx || !this.image || !this.imageLoaded || !this.canvas) return false;
+      const metrics = this.getDrawMetrics();
+      if (!metrics) return false;
+      const frame = this.getCropFrame();
+      const source = this.getRenderSource();
+      if (!source) return false;
+      const srcX = (frame.x - metrics.drawX) / metrics.effectiveScaleX;
+      const srcY = (frame.y - metrics.drawY) / metrics.effectiveScaleY;
+      const srcWidth = frame.width / metrics.effectiveScaleX;
+      const srcHeight = frame.height / metrics.effectiveScaleY;
+      ctx.clearRect(0, 0, outputWidth, outputHeight);
+      ctx.drawImage(source, srcX, srcY, srcWidth, srcHeight, 0, 0, outputWidth, outputHeight);
+      return true;
+    }
+    getCroppedImageData(outputWidth = 400) {
+      const target = this.createOutputCanvas(outputWidth);
+      if (!target) return null;
+      const drawn = this.drawCurrentCropToContext(target.ctx, target.width, target.height);
+      if (!drawn) return null;
+      return {
+        ...target,
+        imageData: target.ctx.getImageData(0, 0, target.width, target.height)
+      };
+    }
+    applyChromaKey(options2 = {}) {
+      if (!this.image || !this.imageLoaded) return null;
+      if (options2.color) {
+        this.setMattingKeyColor(options2.color, { shouldRender: false });
+      }
+      if (options2.tolerance !== void 0) {
+        this.setMattingTolerance(options2.tolerance, { shouldRender: false });
+      }
+      if (!this.ensureMattingBuffer()) return null;
+      const data4 = this.mattingImageData.data;
+      const source = this.sourceImageData.data;
+      const { r, g, b } = this.mattingKeyRgb;
+      const tolerance = this.mattingTolerance;
+      const toleranceSquared = tolerance * tolerance;
+      let transparentPixels = 0;
+      for (let index = 0; index < data4.length; index += 4) {
+        const dr = source[index] - r;
+        const dg = source[index + 1] - g;
+        const db = source[index + 2] - b;
+        data4[index] = source[index];
+        data4[index + 1] = source[index + 1];
+        data4[index + 2] = source[index + 2];
+        data4[index + 3] = dr * dr + dg * dg + db * db <= toleranceSquared ? 0 : source[index + 3];
+        if (data4[index + 3] === 0) transparentPixels += 1;
+      }
+      this.clearDetectedComponentCandidates(false);
+      this.mattingCtx.putImageData(this.mattingImageData, 0, 0);
+      this.mattingApplied = true;
+      this.mattingEnabled = true;
+      this.render({ type: "matting-applied", state: this.getMattingState() });
+      return {
+        transparentPixels,
+        width: this.mattingImageData.width,
+        height: this.mattingImageData.height
+      };
+    }
+    paintMattingAtCanvasPoint(position3, brushMode = this.mattingBrushMode, shouldRender = true) {
+      if (!this.hasMattingPreview() || !this.mattingImageData || !this.sourceImageData) return false;
+      const point = this.canvasPointToImagePoint(position3);
+      if (!point) return false;
+      const radius2 = Math.max(1, Math.round(this.mattingBrushSize / 2));
+      const radiusSquared = radius2 * radius2;
+      const width2 = this.mattingImageData.width;
+      const height2 = this.mattingImageData.height;
+      const minX = Math.max(0, point.x - radius2);
+      const maxX = Math.min(width2 - 1, point.x + radius2);
+      const minY = Math.max(0, point.y - radius2);
+      const maxY = Math.min(height2 - 1, point.y + radius2);
+      const nextMode = brushMode === "keep" ? "keep" : "erase";
+      const data4 = this.mattingImageData.data;
+      const source = this.sourceImageData.data;
+      let changed = false;
+      for (let y2 = minY; y2 <= maxY; y2 += 1) {
+        for (let x2 = minX; x2 <= maxX; x2 += 1) {
+          const dx = x2 - point.x;
+          const dy = y2 - point.y;
+          if (dx * dx + dy * dy > radiusSquared) continue;
+          const alphaIndex = (y2 * width2 + x2) * 4 + 3;
+          const nextAlpha = nextMode === "keep" ? source[alphaIndex] : 0;
+          if (data4[alphaIndex] === nextAlpha) continue;
+          data4[alphaIndex] = nextAlpha;
+          changed = true;
+        }
+      }
+      if (!changed) return false;
+      this.clearDetectedComponentCandidates(false);
+      this.mattingCtx.putImageData(
+        this.mattingImageData,
+        0,
+        0,
+        minX,
+        minY,
+        maxX - minX + 1,
+        maxY - minY + 1
+      );
+      if (shouldRender) {
+        this.render({ type: "matting-paint", state: this.getMattingState() });
+      }
+      return true;
+    }
+    getConnectedComponents(mask, width2, height2) {
+      const total = width2 * height2;
+      const visited = new Uint8Array(total);
+      const queue = new Int32Array(total);
+      const components2 = [];
+      const flood = (seedIndex) => {
+        let head = 0;
+        let tail = 0;
+        queue[0] = seedIndex;
+        visited[seedIndex] = 1;
+        const component2 = {
+          area: 0,
+          minX: width2,
+          maxX: 0,
+          minY: height2,
+          maxY: 0,
+          indices: []
+        };
+        while (head <= tail) {
+          const current = queue[head];
+          head += 1;
+          const x2 = current % width2;
+          const y2 = current / width2 | 0;
+          component2.indices.push(current);
+          component2.area += 1;
+          component2.minX = Math.min(component2.minX, x2);
+          component2.maxX = Math.max(component2.maxX, x2);
+          component2.minY = Math.min(component2.minY, y2);
+          component2.maxY = Math.max(component2.maxY, y2);
+          const tryPush = (nextIndex) => {
+            if (nextIndex < 0 || nextIndex >= total) return;
+            if (!mask[nextIndex] || visited[nextIndex]) return;
+            visited[nextIndex] = 1;
+            tail += 1;
+            queue[tail] = nextIndex;
+          };
+          if (x2 > 0) tryPush(current - 1);
+          if (x2 < width2 - 1) tryPush(current + 1);
+          if (y2 > 0) tryPush(current - width2);
+          if (y2 < height2 - 1) tryPush(current + width2);
+        }
+        return component2;
+      };
+      for (let index = 0; index < total; index += 1) {
+        if (!mask[index] || visited[index]) continue;
+        components2.push(flood(index));
+      }
+      return components2.sort((left, right) => right.area - left.area);
+    }
+    buildComponentMask(indices, total) {
+      const componentMask = new Uint8Array(total);
+      (Array.isArray(indices) ? indices : []).forEach((index) => {
+        if (index >= 0 && index < total) {
+          componentMask[index] = 1;
+        }
+      });
+      return componentMask;
+    }
+    getLargestConnectedComponent(mask, width2, height2) {
+      const total = width2 * height2;
+      const bestComponent = this.getConnectedComponents(mask, width2, height2)[0];
+      if (!bestComponent) return null;
+      return {
+        area: bestComponent.area,
+        bounds: {
+          minX: bestComponent.minX,
+          maxX: bestComponent.maxX,
+          minY: bestComponent.minY,
+          maxY: bestComponent.maxY
+        },
+        mask: this.buildComponentMask(bestComponent.indices, total)
+      };
+    }
+    getPolygonArea(points) {
+      if (!Array.isArray(points) || points.length < 3) return 0;
+      let area = 0;
+      for (let index = 0; index < points.length; index += 1) {
+        const current = points[index];
+        const next = points[(index + 1) % points.length];
+        area += current.x * next.y - next.x * current.y;
+      }
+      return area / 2;
+    }
+    traceBoundaryLoop(mask, width2, height2) {
+      const edges3 = [];
+      const edgeMap = /* @__PURE__ */ new Map();
+      const addEdge = (sx, sy, ex, ey) => {
+        const edgeIndex = edges3.push({ sx, sy, ex, ey }) - 1;
+        const key = `${sx},${sy}`;
+        const list = edgeMap.get(key);
+        if (list) {
+          list.push(edgeIndex);
+        } else {
+          edgeMap.set(key, [edgeIndex]);
+        }
+      };
+      for (let y2 = 0; y2 < height2; y2 += 1) {
+        for (let x2 = 0; x2 < width2; x2 += 1) {
+          const index = y2 * width2 + x2;
+          if (!mask[index]) continue;
+          if (y2 === 0 || !mask[index - width2]) addEdge(x2, y2, x2 + 1, y2);
+          if (x2 === width2 - 1 || !mask[index + 1]) addEdge(x2 + 1, y2, x2 + 1, y2 + 1);
+          if (y2 === height2 - 1 || !mask[index + width2]) addEdge(x2 + 1, y2 + 1, x2, y2 + 1);
+          if (x2 === 0 || !mask[index - 1]) addEdge(x2, y2 + 1, x2, y2);
+        }
+      }
+      if (!edges3.length) return null;
+      const used = new Uint8Array(edges3.length);
+      const loops = [];
+      for (let index = 0; index < edges3.length; index += 1) {
+        if (used[index]) continue;
+        const startEdge = edges3[index];
+        const startKey = `${startEdge.sx},${startEdge.sy}`;
+        const loop = [];
+        let currentIndex = index;
+        let safety = edges3.length + 4;
+        while (currentIndex >= 0 && safety > 0) {
+          safety -= 1;
+          if (used[currentIndex]) break;
+          const edge = edges3[currentIndex];
+          used[currentIndex] = 1;
+          loop.push({ x: edge.sx, y: edge.sy });
+          const endKey = `${edge.ex},${edge.ey}`;
+          if (endKey === startKey) {
+            break;
+          }
+          const nextList = edgeMap.get(endKey) || [];
+          const nextIndex = nextList.find((candidateIndex) => !used[candidateIndex]);
+          if (nextIndex === void 0) {
+            loop.push({ x: edge.ex, y: edge.ey });
+            break;
+          }
+          currentIndex = nextIndex;
+        }
+        if (loop.length >= 3) {
+          loops.push(loop);
+        }
+      }
+      if (!loops.length) return null;
+      loops.sort((left, right) => Math.abs(this.getPolygonArea(right)) - Math.abs(this.getPolygonArea(left)));
+      return loops[0];
+    }
+    removeDegeneratePolygonPoints(points) {
+      if (!Array.isArray(points) || points.length < 3) return [];
+      let working = points.map((point) => ({
+        x: Number(point?.x) || 0,
+        y: Number(point?.y) || 0
+      })).filter((point, index, list) => {
+        if (index === 0) return true;
+        const previous = list[index - 1];
+        return point.x !== previous.x || point.y !== previous.y;
+      });
+      if (working.length > 1) {
+        const first2 = working[0];
+        const last2 = working[working.length - 1];
+        if (first2.x === last2.x && first2.y === last2.y) {
+          working = working.slice(0, -1);
+        }
+      }
+      let changed = true;
+      while (changed && working.length > 3) {
+        changed = false;
+        const nextPoints = [];
+        for (let index = 0; index < working.length; index += 1) {
+          const previous = working[(index - 1 + working.length) % working.length];
+          const current = working[index];
+          const next = working[(index + 1) % working.length];
+          const cross = (current.x - previous.x) * (next.y - current.y) - (current.y - previous.y) * (next.x - current.x);
+          if (Math.abs(cross) <= 1e-6) {
+            changed = true;
+            continue;
+          }
+          nextPoints.push(current);
+        }
+        if (nextPoints.length >= 3) {
+          working = nextPoints;
+        } else {
+          break;
+        }
+      }
+      return working;
+    }
+    simplifyPolygonPoints(points, maxPoints = DEFAULT_HIT_AREA_POINT_COUNT) {
+      let working = this.removeDegeneratePolygonPoints(points);
+      const safeMaxPoints = Math.max(4, Math.min(32, Number(maxPoints) || DEFAULT_HIT_AREA_POINT_COUNT));
+      let safety = 2048;
+      while (working.length > safeMaxPoints && safety > 0) {
+        safety -= 1;
+        let removeIndex = -1;
+        let smallestArea = Infinity;
+        for (let index = 0; index < working.length; index += 1) {
+          const previous = working[(index - 1 + working.length) % working.length];
+          const current = working[index];
+          const next = working[(index + 1) % working.length];
+          const area = Math.abs(
+            (previous.x * (current.y - next.y) + current.x * (next.y - previous.y) + next.x * (previous.y - current.y)) / 2
+          );
+          if (area < smallestArea) {
+            smallestArea = area;
+            removeIndex = index;
+          }
+        }
+        if (removeIndex < 0) break;
+        working.splice(removeIndex, 1);
+        working = this.removeDegeneratePolygonPoints(working);
+      }
+      return working;
+    }
+    createBoundingHitArea(bounds2, width2, height2) {
+      if (!bounds2) return this.createRectHitArea();
+      return this.sanitizeHitAreaPoints([
+        { x: bounds2.minX / width2, y: bounds2.minY / height2 },
+        { x: (bounds2.maxX + 1) / width2, y: bounds2.minY / height2 },
+        { x: (bounds2.maxX + 1) / width2, y: (bounds2.maxY + 1) / height2 },
+        { x: bounds2.minX / width2, y: (bounds2.maxY + 1) / height2 }
+      ]);
+    }
+    createCandidateHitArea(componentMask, bounds2, width2, height2, maxPoints = DEFAULT_HIT_AREA_POINT_COUNT) {
+      if (!componentMask || !bounds2) {
+        return this.createRectHitArea();
+      }
+      const candidateWidth = Math.max(1, bounds2.maxX - bounds2.minX + 1);
+      const candidateHeight = Math.max(1, bounds2.maxY - bounds2.minY + 1);
+      const boundary = this.traceBoundaryLoop(componentMask, width2, height2);
+      const simplified = boundary ? this.simplifyPolygonPoints(boundary, maxPoints) : [];
+      if (simplified.length >= 3) {
+        return this.sanitizeHitAreaPoints(simplified.map((point) => ({
+          x: this.clampRatio((point.x - bounds2.minX) / candidateWidth, 0),
+          y: this.clampRatio((point.y - bounds2.minY) / candidateHeight, 0)
+        })));
+      }
+      return this.createRectHitArea();
+    }
+    normalizeDetectedComponentCandidate(raw, index = 0) {
+      const bounds2 = raw?.bounds && typeof raw.bounds === "object" ? {
+        minX: Math.max(0, Math.round(Number(raw.bounds.minX) || 0)),
+        minY: Math.max(0, Math.round(Number(raw.bounds.minY) || 0)),
+        maxX: Math.max(0, Math.round(Number(raw.bounds.maxX) || 0)),
+        maxY: Math.max(0, Math.round(Number(raw.bounds.maxY) || 0))
+      } : null;
+      const box = this.normalizeContentBox(raw?.box);
+      if (!bounds2 || !box) return null;
+      const width2 = Math.max(1, bounds2.maxX - bounds2.minX + 1);
+      const height2 = Math.max(1, bounds2.maxY - bounds2.minY + 1);
+      return {
+        id: String(raw?.id || `candidate-${index + 1}`).trim() || `candidate-${index + 1}`,
+        area: Math.max(1, Math.round(Number(raw?.area) || width2 * height2)),
+        areaRatio: Math.max(0, Number(raw?.areaRatio) || 0),
+        aspectRatio: width2 / Math.max(height2, 1),
+        suggestedElementId: String(raw?.suggestedElementId || "").trim(),
+        suggestedElementLabel: String(raw?.suggestedElementLabel || "").trim(),
+        bounds: {
+          ...bounds2,
+          width: width2,
+          height: height2
+        },
+        box,
+        centerX: box.x + box.width / 2,
+        centerY: box.y + box.height / 2,
+        hitAreaPoints: this.sanitizeHitAreaPoints(raw?.hitAreaPoints)
+      };
+    }
+    applyDetectedComponentCandidates(candidates, options2 = {}) {
+      const normalized = (Array.isArray(candidates) ? candidates : []).map((candidate, index) => this.normalizeDetectedComponentCandidate(candidate, index)).filter(Boolean);
+      const requestedSelectedId = String(options2.selectedCandidateId || "").trim();
+      const shouldSelectFirst = options2.selectFirstCandidate !== false;
+      const hasRequestedSelection = !!requestedSelectedId && normalized.some((candidate) => candidate.id === requestedSelectedId);
+      this.detectedComponentCandidates = normalized;
+      this.componentCandidateLabels = {};
+      this.hoverComponentCandidateId = "";
+      this.selectedComponentCandidateId = hasRequestedSelection ? requestedSelectedId : shouldSelectFirst ? normalized[0]?.id || "" : "";
+      if (this.selectedComponentCandidateId && options2.syncCropFrame === true) {
+        this.applyComponentCandidateToCropFrame(this.selectedComponentCandidateId, {
+          paddingRatio: options2.paddingRatio,
+          shouldRender: false,
+          syncAspectRatio: options2.syncAspectRatio
+        });
+      }
+      if (options2.shouldRender !== false) {
+        this.render();
+      }
+      return this.getDetectedComponentCandidates();
+    }
+    detectComponentCandidates(options2 = {}) {
+      const alphaThreshold = Math.max(0, Math.min(255, Number(options2.alphaThreshold) || CONTENT_ALPHA_THRESHOLD));
+      const minAreaRatio = Math.max(0, Math.min(1, Number(options2.minAreaRatio) || 1e-3));
+      const minAspectRatio = Math.max(0, Number(options2.minAspectRatio) || 0);
+      const maxAspectRatio = Number.isFinite(Number(options2.maxAspectRatio)) && Number(options2.maxAspectRatio) > 0 ? Number(options2.maxAspectRatio) : Number.POSITIVE_INFINITY;
+      const minWidthRatio = Math.max(0, Math.min(1, Number(options2.minWidthRatio) || 0));
+      const minHeightRatio = Math.max(0, Math.min(1, Number(options2.minHeightRatio) || 0));
+      const maxWidthRatio = Number.isFinite(Number(options2.maxWidthRatio)) && Number(options2.maxWidthRatio) > 0 ? Math.max(0, Math.min(1, Number(options2.maxWidthRatio))) : 1;
+      const maxHeightRatio = Number.isFinite(Number(options2.maxHeightRatio)) && Number(options2.maxHeightRatio) > 0 ? Math.max(0, Math.min(1, Number(options2.maxHeightRatio))) : 1;
+      const maxPoints = Math.max(4, Math.min(32, Number(options2.maxPoints) || DEFAULT_HIT_AREA_POINT_COUNT));
+      const maxCandidates = Math.max(0, Math.round(Number(options2.maxCandidates) || 0));
+      const source = this.getOpaqueSourceBuffer();
+      if (!source) {
+        this.clearDetectedComponentCandidates(false);
+        return [];
+      }
+      const { imageData, width: width2, height: height2 } = source;
+      const total = width2 * height2;
+      const opaqueMask = new Uint8Array(total);
+      for (let index = 0; index < total; index += 1) {
+        opaqueMask[index] = imageData.data[index * 4 + 3] > alphaThreshold ? 1 : 0;
+      }
+      let components2 = this.getConnectedComponents(opaqueMask, width2, height2).map((component2, index) => {
+        const bounds2 = {
+          minX: component2.minX,
+          minY: component2.minY,
+          maxX: component2.maxX,
+          maxY: component2.maxY
+        };
+        const candidateWidth = bounds2.maxX - bounds2.minX + 1;
+        const candidateHeight = bounds2.maxY - bounds2.minY + 1;
+        const box = {
+          x: bounds2.minX / width2,
+          y: bounds2.minY / height2,
+          width: candidateWidth / width2,
+          height: candidateHeight / height2
+        };
+        const componentMask = this.buildComponentMask(component2.indices, total);
+        return this.normalizeDetectedComponentCandidate({
+          id: `candidate-${index + 1}`,
+          area: component2.area,
+          areaRatio: component2.area / total,
+          bounds: bounds2,
+          box,
+          hitAreaPoints: this.createCandidateHitArea(componentMask, bounds2, width2, height2, maxPoints)
+        });
+      }).filter(Boolean).filter((candidate) => candidate.areaRatio >= minAreaRatio).filter((candidate) => candidate.aspectRatio >= minAspectRatio && candidate.aspectRatio <= maxAspectRatio).filter((candidate) => candidate.box.width >= minWidthRatio && candidate.box.width <= maxWidthRatio).filter((candidate) => candidate.box.height >= minHeightRatio && candidate.box.height <= maxHeightRatio).sort((left, right) => left.centerX - right.centerX || left.centerY - right.centerY);
+      if (maxCandidates > 0) {
+        components2 = components2.slice(0, maxCandidates);
+      }
+      return this.applyDetectedComponentCandidates(components2, {
+        shouldRender: options2.shouldRender !== false,
+        syncCropFrame: options2.syncCropFrame === true,
+        paddingRatio: options2.paddingRatio
+      });
+    }
+    applyComponentCandidateToCropFrame(candidateOrId, options2 = {}) {
+      const candidate = typeof candidateOrId === "string" ? this.getDetectedComponentCandidateById(candidateOrId) : this.normalizeDetectedComponentCandidate(candidateOrId);
+      if (!candidate || !this.imageLoaded) return false;
+      const metrics = this.getDrawMetrics();
+      if (!metrics) return false;
+      const rect = this.getComponentCandidateCanvasRect(candidate, metrics);
+      if (!rect) return false;
+      if (options2.syncAspectRatio !== false) {
+        this.aspectRatio = Math.max(0.01, Number(candidate.aspectRatio) || this.getEditorAspectRatio());
+      }
+      const paddingRatio = Math.max(0, Math.min(0.2, Number(options2.paddingRatio) || 0));
+      const padX = rect.width * paddingRatio;
+      const padY = rect.height * paddingRatio;
+      this.applyCropFrame({
+        x: rect.x - padX,
+        y: rect.y - padY,
+        width: rect.width + padX * 2,
+        height: rect.height + padY * 2
+      }, {
+        preserveView: false,
+        syncScaleToCover: options2.syncScaleToCover !== false,
+        shouldRender: options2.shouldRender !== false
+      });
+      return true;
+    }
+    exportDetectedComponentCandidateBlob(candidateOrId, outputWidth = 400) {
+      const candidate = typeof candidateOrId === "string" ? this.getDetectedComponentCandidateById(candidateOrId) : this.normalizeDetectedComponentCandidate(candidateOrId);
+      if (!candidate) {
+        return Promise.resolve(null);
+      }
+      const source = this.getOpaqueSourceBuffer();
+      if (!source?.canvas) {
+        return Promise.resolve(null);
+      }
+      const safeWidth = Math.max(64, Math.round(Number(outputWidth) || 400));
+      const safeHeight = Math.max(64, Math.round(safeWidth / Math.max(candidate.aspectRatio || 1, 0.01)));
+      const canvas = this.createInternalCanvas(safeWidth, safeHeight);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) {
+        return Promise.resolve(null);
+      }
+      ctx.clearRect(0, 0, safeWidth, safeHeight);
+      ctx.drawImage(
+        source.canvas,
+        candidate.bounds.minX,
+        candidate.bounds.minY,
+        candidate.bounds.width,
+        candidate.bounds.height,
+        0,
+        0,
+        safeWidth,
+        safeHeight
+      );
+      return new Promise((resolve2) => {
+        canvas.toBlob((blob) => resolve2(blob), "image/png", 1);
+      });
+    }
+    detectOpaqueComponent(options2 = {}) {
+      const outputWidth = Math.max(64, Math.round(Number(options2.outputWidth) || 512));
+      const alphaThreshold = Math.max(0, Math.min(255, Number(options2.alphaThreshold) || CONTENT_ALPHA_THRESHOLD));
+      const minAreaRatio = Math.max(0, Math.min(1, Number(options2.minAreaRatio) || MIN_OPAQUE_AREA_RATIO));
+      const cropped = this.getCroppedImageData(outputWidth);
+      if (!cropped) return null;
+      const { imageData, width: width2, height: height2 } = cropped;
+      const total = width2 * height2;
+      const opaqueMask = new Uint8Array(total);
+      for (let index = 0; index < total; index += 1) {
+        opaqueMask[index] = imageData.data[index * 4 + 3] > alphaThreshold ? 1 : 0;
+      }
+      const component2 = this.getLargestConnectedComponent(opaqueMask, width2, height2);
+      if (!component2 || component2.area < total * minAreaRatio) {
+        return null;
+      }
+      const box = {
+        x: component2.bounds.minX / width2,
+        y: component2.bounds.minY / height2,
+        width: (component2.bounds.maxX - component2.bounds.minX + 1) / width2,
+        height: (component2.bounds.maxY - component2.bounds.minY + 1) / height2
+      };
+      const insets = {
+        top: box.y,
+        right: Math.max(0, 1 - (box.x + box.width)),
+        bottom: Math.max(0, 1 - (box.y + box.height)),
+        left: box.x
+      };
+      return {
+        component: component2,
+        cropped,
+        box,
+        insets,
+        areaRatio: component2.area / total,
+        bounds: {
+          ...component2.bounds,
+          width: component2.bounds.maxX - component2.bounds.minX + 1,
+          height: component2.bounds.maxY - component2.bounds.minY + 1
+        }
+      };
+    }
+    detectOpaqueContentBox(options2 = {}) {
+      const detection = this.detectOpaqueComponent(options2);
+      if (!detection) {
+        this.clearDetectedContentBox(false);
+        return null;
+      }
+      this.setDetectedContentBox(detection.box, false);
+      this.render();
+      return detection;
+    }
+    applyContentBoxToCropFrame(rawBox, options2 = {}) {
+      const box = this.normalizeContentBox(rawBox);
+      if (!box) return false;
+      const frame = this.getCropFrame();
+      const paddingRatio = Math.max(0, Math.min(0.25, Number(options2.paddingRatio) || 0));
+      const nextX = Math.max(0, box.x - paddingRatio);
+      const nextY = Math.max(0, box.y - paddingRatio);
+      const nextRight = Math.min(1, box.x + box.width + paddingRatio);
+      const nextBottom = Math.min(1, box.y + box.height + paddingRatio);
+      const nextFrame = {
+        x: frame.x + nextX * frame.width,
+        y: frame.y + nextY * frame.height,
+        width: Math.max(1, (nextRight - nextX) * frame.width),
+        height: Math.max(1, (nextBottom - nextY) * frame.height)
+      };
+      this.applyCropFrame(nextFrame, {
+        preserveView: options2.preserveView === true,
+        shouldRender: options2.shouldRender !== false
+      });
+      return true;
+    }
+    detectOpaqueHitArea(options2 = {}) {
+      const maxPoints = Math.max(4, Math.min(32, Number(options2.maxPoints) || DEFAULT_HIT_AREA_POINT_COUNT));
+      const detection = this.detectOpaqueComponent(options2);
+      if (!detection) {
+        return null;
+      }
+      const { component: component2, cropped } = detection;
+      const { width: width2, height: height2 } = cropped;
+      const boundary = this.traceBoundaryLoop(component2.mask, width2, height2);
+      const simplified = boundary ? this.simplifyPolygonPoints(boundary, maxPoints) : [];
+      const hitAreaPoints = simplified.length >= 3 ? this.sanitizeHitAreaPoints(simplified.map((point) => ({
+        x: point.x / width2,
+        y: point.y / height2
+      }))) : this.createBoundingHitArea(component2.bounds, width2, height2);
+      this.setHitAreaPoints(hitAreaPoints);
+      return {
+        points: hitAreaPoints.map((point) => ({ ...point })),
+        bounds: detection.bounds,
+        box: detection.box,
+        insets: detection.insets,
+        areaRatio: detection.areaRatio
+      };
+    }
+    renderDetectedContentBox(frame) {
+      if (!this.ctx || !this.detectedContentBox) return;
+      const box = this.detectedContentBox;
+      const x2 = frame.x + box.x * frame.width;
+      const y2 = frame.y + box.y * frame.height;
+      const width2 = box.width * frame.width;
+      const height2 = box.height * frame.height;
+      this.ctx.save();
+      this.ctx.setLineDash([8, 6]);
+      this.ctx.strokeStyle = "#4ade80";
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeRect(x2, y2, width2, height2);
+      this.ctx.setLineDash([]);
+      this.ctx.restore();
+    }
+    renderComponentCandidates(metrics) {
+      if (!this.ctx || !this.componentCandidateOverlayEnabled || !metrics || this.detectedComponentCandidates.length === 0) return;
+      this.detectedComponentCandidates.forEach((candidate) => {
+        const rect = this.getComponentCandidateCanvasRect(candidate, metrics);
+        if (!rect) return;
+        const isSelected = candidate.id === this.selectedComponentCandidateId;
+        const isHover = candidate.id === this.hoverComponentCandidateId;
+        this.ctx.save();
+        this.ctx.strokeStyle = isSelected ? "#38bdf8" : isHover ? "#f59e0b" : "rgba(125, 211, 252, 0.82)";
+        this.ctx.lineWidth = isSelected ? 3 : 2;
+        this.ctx.setLineDash(isSelected ? [] : [6, 4]);
+        this.ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+        this.ctx.setLineDash([]);
+        this.ctx.restore();
+      });
+    }
+    renderModeLabel(frame) {
+      if (!this.ctx) return;
+    }
+    renderMattingOverlay(frame) {
+      if (!this.ctx || !["matting", "pick"].includes(this.interactionMode)) return;
+      this.ctx.save();
+      if (this.hoverMattingPoint && (this.interactionMode === "matting" || this.interactionMode === "pick")) {
+        const metrics = this.getDrawMetrics();
+        const scaleHint = metrics ? (Math.abs(metrics.effectiveScaleX) + Math.abs(metrics.effectiveScaleY)) / 2 : 1;
+        const radius2 = this.interactionMode === "pick" ? 10 : Math.max(6, this.mattingBrushSize / 2 * Math.max(scaleHint, 0.2));
+        this.ctx.beginPath();
+        this.ctx.arc(this.hoverMattingPoint.x, this.hoverMattingPoint.y, radius2, 0, Math.PI * 2);
+        this.ctx.strokeStyle = this.interactionMode === "pick" ? "#facc15" : this.mattingBrushMode === "keep" ? "#22c55e" : "#ef4444";
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+      }
+      this.ctx.restore();
+    }
+    renderCropFrameOverlay(frame) {
+      if (!this.ctx) return;
+      const borderActive = this.interactionMode === "crop" && (this.dragMode === "crop-move" || this.hoverCropBorder);
+      this.ctx.save();
+      this.ctx.strokeStyle = borderActive ? "#38bdf8" : "#00d2ff";
+      this.ctx.lineWidth = borderActive ? 4 : 3;
+      this.ctx.strokeRect(frame.x, frame.y, frame.width, frame.height);
+      const cornerSize = 15;
+      this.ctx.lineWidth = 4;
+      this.ctx.beginPath();
+      this.ctx.moveTo(frame.x, frame.y + cornerSize);
+      this.ctx.lineTo(frame.x, frame.y);
+      this.ctx.lineTo(frame.x + cornerSize, frame.y);
+      this.ctx.stroke();
+      this.ctx.beginPath();
+      this.ctx.moveTo(frame.x + frame.width - cornerSize, frame.y);
+      this.ctx.lineTo(frame.x + frame.width, frame.y);
+      this.ctx.lineTo(frame.x + frame.width, frame.y + cornerSize);
+      this.ctx.stroke();
+      this.ctx.beginPath();
+      this.ctx.moveTo(frame.x, frame.y + frame.height - cornerSize);
+      this.ctx.lineTo(frame.x, frame.y + frame.height);
+      this.ctx.lineTo(frame.x + cornerSize, frame.y + frame.height);
+      this.ctx.stroke();
+      this.ctx.beginPath();
+      this.ctx.moveTo(frame.x + frame.width - cornerSize, frame.y + frame.height);
+      this.ctx.lineTo(frame.x + frame.width, frame.y + frame.height);
+      this.ctx.lineTo(frame.x + frame.width, frame.y + frame.height - cornerSize);
+      this.ctx.stroke();
+      if (this.interactionMode === "crop" && this.cropFrameEditable) {
+        this.getCropHandleDefinitions(frame).forEach((handle) => {
+          const isActive = handle.name === this.activeCropHandle;
+          const isHover = handle.name === this.hoverCropHandle;
+          this.ctx.beginPath();
+          this.ctx.arc(handle.x, handle.y, CROP_HANDLE_RADIUS, 0, Math.PI * 2);
+          this.ctx.fillStyle = isActive ? "#f97316" : isHover ? "#fde047" : "#ffffff";
+          this.ctx.strokeStyle = "#0f172a";
+          this.ctx.lineWidth = 2;
+          this.ctx.fill();
+          this.ctx.stroke();
+        });
+      }
+      this.ctx.restore();
+    }
+    detectTransparentContentBox(options2 = {}) {
+      if (!this.image || !this.imageLoaded || !this.canvas) {
+        this.clearDetectedContentBox(false);
+        return null;
+      }
+      const alphaThreshold = Math.max(0, Math.min(255, Number(options2.alphaThreshold) || CONTENT_ALPHA_THRESHOLD));
+      const minAreaRatio = Math.max(0, Math.min(1, Number(options2.minAreaRatio) || MIN_CONTENT_AREA_RATIO));
+      const cropped = this.getCroppedImageData(options2.outputWidth || 512);
+      if (!cropped) return null;
+      const { imageData, width: outputWidth, height: outputHeight } = cropped;
+      const total = outputWidth * outputHeight;
+      const transparentMask = new Uint8Array(total);
+      for (let index = 0; index < total; index += 1) {
+        transparentMask[index] = imageData.data[index * 4 + 3] <= alphaThreshold ? 1 : 0;
+      }
+      const outside = new Uint8Array(total);
+      const visited = new Uint8Array(total);
+      const queue = new Int32Array(total);
+      const flood = (seedIndex, marker, component2 = null) => {
+        let head = 0;
+        let tail = 0;
+        queue[0] = seedIndex;
+        marker[seedIndex] = 1;
+        if (component2) {
+          const seedX = seedIndex % outputWidth;
+          const seedY = seedIndex / outputWidth | 0;
+          component2.area = 1;
+          component2.minX = seedX;
+          component2.maxX = seedX;
+          component2.minY = seedY;
+          component2.maxY = seedY;
+        }
+        while (head <= tail) {
+          const current = queue[head];
+          head += 1;
+          const x2 = current % outputWidth;
+          const y2 = current / outputWidth | 0;
+          const tryPush = (nextIndex) => {
+            if (nextIndex < 0 || nextIndex >= total) return;
+            if (!transparentMask[nextIndex] || marker[nextIndex]) return;
+            marker[nextIndex] = 1;
+            tail += 1;
+            queue[tail] = nextIndex;
+            if (!component2) return;
+            const nextX = nextIndex % outputWidth;
+            const nextY = nextIndex / outputWidth | 0;
+            component2.area += 1;
+            component2.minX = Math.min(component2.minX, nextX);
+            component2.maxX = Math.max(component2.maxX, nextX);
+            component2.minY = Math.min(component2.minY, nextY);
+            component2.maxY = Math.max(component2.maxY, nextY);
+          };
+          if (x2 > 0) tryPush(current - 1);
+          if (x2 < outputWidth - 1) tryPush(current + 1);
+          if (y2 > 0) tryPush(current - outputWidth);
+          if (y2 < outputHeight - 1) tryPush(current + outputWidth);
+        }
+      };
+      for (let x2 = 0; x2 < outputWidth; x2 += 1) {
+        const topIndex = x2;
+        const bottomIndex = (outputHeight - 1) * outputWidth + x2;
+        if (transparentMask[topIndex] && !outside[topIndex]) flood(topIndex, outside);
+        if (transparentMask[bottomIndex] && !outside[bottomIndex]) flood(bottomIndex, outside);
+      }
+      for (let y2 = 0; y2 < outputHeight; y2 += 1) {
+        const leftIndex = y2 * outputWidth;
+        const rightIndex = y2 * outputWidth + (outputWidth - 1);
+        if (transparentMask[leftIndex] && !outside[leftIndex]) flood(leftIndex, outside);
+        if (transparentMask[rightIndex] && !outside[rightIndex]) flood(rightIndex, outside);
+      }
+      let bestComponent = null;
+      for (let index = 0; index < total; index += 1) {
+        if (!transparentMask[index] || outside[index] || visited[index]) continue;
+        const component2 = { area: 0, minX: outputWidth, maxX: 0, minY: outputHeight, maxY: 0 };
+        flood(index, visited, component2);
+        if (!bestComponent || component2.area > bestComponent.area) {
+          bestComponent = component2;
+        }
+      }
+      if (!bestComponent || bestComponent.area < total * minAreaRatio) {
+        this.clearDetectedContentBox(false);
+        return null;
+      }
+      const box = {
+        x: bestComponent.minX / outputWidth,
+        y: bestComponent.minY / outputHeight,
+        width: (bestComponent.maxX - bestComponent.minX + 1) / outputWidth,
+        height: (bestComponent.maxY - bestComponent.minY + 1) / outputHeight
+      };
+      const insets = {
+        top: box.y,
+        right: Math.max(0, 1 - (box.x + box.width)),
+        bottom: Math.max(0, 1 - (box.y + box.height)),
+        left: box.x
+      };
+      this.setDetectedContentBox(box, false);
+      this.render();
+      return {
+        box,
+        insets,
+        areaRatio: bestComponent.area / total,
+        pixelBox: {
+          x: bestComponent.minX,
+          y: bestComponent.minY,
+          width: bestComponent.maxX - bestComponent.minX + 1,
+          height: bestComponent.maxY - bestComponent.minY + 1
+        }
+      };
+    }
+    renderHitAreaOverlay(frame) {
+      if (!this.ctx || this.interactionMode !== "hit") return;
+      const points = this.hitAreaPoints.map((point) => this.cropPointToCanvas(point));
+      if (points.length < 3) return;
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.moveTo(points[0].x, points[0].y);
+      for (let index = 1; index < points.length; index += 1) {
+        this.ctx.lineTo(points[index].x, points[index].y);
+      }
+      this.ctx.closePath();
+      this.ctx.fillStyle = "rgba(34, 211, 238, 0.20)";
+      this.ctx.strokeStyle = this.interactionMode === "hit" ? "#22d3ee" : "rgba(34, 211, 238, 0.7)";
+      this.ctx.lineWidth = 2;
+      this.ctx.fill();
+      this.ctx.stroke();
+      points.forEach((point, index) => {
+        const isActive = index === this.activeHitPointIndex;
+        const isHover = index === this.hoverHitPointIndex;
+        this.ctx.beginPath();
+        this.ctx.arc(point.x, point.y, POINT_RADIUS, 0, Math.PI * 2);
+        this.ctx.fillStyle = isActive ? "#f97316" : isHover ? "#fde047" : "#ffffff";
+        this.ctx.strokeStyle = "#0f172a";
+        this.ctx.lineWidth = 2;
+        this.ctx.fill();
+        this.ctx.stroke();
+      });
+      this.ctx.restore();
+    }
+    render(changePayload = null) {
+      if (!this.ctx || !this.canvas) return;
+      const { width: containerWidth, height: containerHeight } = this.getContainerSize();
+      if (!this.hasCropFrame()) {
+        if (this.imageLoaded) {
+          this.calculateInitialScale();
+        } else {
+          this.ensureCropFrame();
+        }
+      }
+      this.renderTransparencyBackground(containerWidth, containerHeight);
+      if (this.image && this.imageLoaded) {
+        const metrics = this.getDrawMetrics();
+        const source = this.getRenderSource();
+        if (metrics) {
+          this.ctx.drawImage(source, metrics.drawX, metrics.drawY, metrics.scaledWidth, metrics.scaledHeight);
+          this.renderComponentCandidates(metrics);
+        }
+      }
+      const frame = this.getCropFrame();
+      if (!(this.componentCandidateOverlayEnabled && this.detectedComponentCandidates.length > 0)) {
+        this.ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        this.ctx.fillRect(0, 0, containerWidth, frame.y);
+        this.ctx.fillRect(0, frame.y + frame.height, containerWidth, containerHeight - frame.y - frame.height);
+        this.ctx.fillRect(0, frame.y, frame.x, frame.height);
+        this.ctx.fillRect(frame.x + frame.width, frame.y, containerWidth - frame.x - frame.width, frame.height);
+      }
+      this.renderCropFrameOverlay(frame);
+      this.renderDetectedContentBox(frame);
+      this.renderModeLabel(frame);
+      this.renderMattingOverlay(frame);
+      this.renderHitAreaOverlay(frame);
+      this.notifyChange(changePayload);
+    }
+    getCroppedBlob(outputWidth = 400) {
+      return new Promise((resolve2) => {
+        const target = this.createOutputCanvas(outputWidth);
+        if (!target) {
+          resolve2(null);
+          return;
+        }
+        this.drawCurrentCropToContext(target.ctx, target.width, target.height);
+        target.canvas.toBlob((blob) => resolve2(blob), "image/png", 1);
+      });
+    }
+  };
+
+  // src/ui/custom-skin-editor.js
+  var EMPTY_BOX = { top: 0, right: 0, bottom: 0, left: 0 };
+  var RECT_HIT_AREA = {
+    type: "polygon",
+    points: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 }
+    ]
+  };
+  var DEFAULT_CHROMA_KEY_COLOR2 = "#00FF00";
+  var DEFAULT_CHROMA_KEY_TOLERANCE2 = 60;
+  var DEFAULT_MATTING_BRUSH_SIZE2 = 28;
+  var COMPONENT_SELECTION_PADDING_RATIO2 = 0;
+  var CHROMA_KEY_PRESETS = ["#00FF00", "#FF00FF", "#FFFFFF", "#000000"];
+  var FOOTER_BATCH_SLOT_META = [
+    { id: "footer_btn_log", shortLabel: "LOG" },
+    { id: "footer_btn_close", shortLabel: "CLOSE" },
+    { id: "footer_btn_view", shortLabel: "VIEW" },
+    { id: "footer_btn_config", shortLabel: "CONFIG" },
+    { id: "footer_btn_save", shortLabel: "SAVE" },
+    { id: "footer_btn_load", shortLabel: "LOAD" },
+    { id: "footer_btn_timeline", shortLabel: "TL" },
+    { id: "footer_btn_prev", shortLabel: "PREV" },
+    { id: "footer_btn_auto", shortLabel: "AUTO" },
+    { id: "footer_btn_skip", shortLabel: "SKIP" },
+    { id: "footer_btn_choices", shortLabel: "选项" },
+    { id: "footer_btn_next", shortLabel: "NEXT" }
+  ];
+  var FOOTER_BATCH_SLOT_META_MAP = new Map(FOOTER_BATCH_SLOT_META.map((item) => [item.id, item]));
+  var FOOTER_BATCH_FIXED_ORDER_TEXT = FOOTER_BATCH_SLOT_META.map((item) => item.shortLabel).join(" -> ");
+  function getPreviewPackId() {
+    return getCurrentPackId() || DEFAULT_PACK_ID;
+  }
+  function getAssetPackId() {
+    return GLOBAL_CUSTOM_SKIN_PACK_ID;
+  }
   function getNumberValue(raw, fallback = null) {
     const num = Number(raw);
     return Number.isFinite(num) ? num : fallback;
   }
-  function toInputValue(value) {
-    if (value === null || value === void 0) return "";
+  function clamp014(value, fallback = 0) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(0, Math.min(1, num));
+  }
+  function formatInputValue(value) {
+    if (value === null || value === void 0 || value === "") return "";
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(Number(value.toFixed(4)));
+    }
     return String(value);
   }
-  function getElementSupportsStates(elementId) {
-    const def = getWesternSkinElementById(elementId);
+  function normalizeHexColor(value, fallback = DEFAULT_CHROMA_KEY_COLOR2) {
+    const raw = String(value || "").trim().replace(/^#/, "").toUpperCase();
+    const expanded = raw.length === 3 ? raw.split("").map((char) => `${char}${char}`).join("") : raw;
+    if (/^[0-9A-F]{6}$/.test(expanded)) {
+      return `#${expanded}`;
+    }
+    return fallback;
+  }
+  function cloneBox(raw, fallback = EMPTY_BOX) {
+    const safe = raw && typeof raw === "object" ? raw : {};
+    return {
+      top: clamp014(safe.top, clamp014(fallback.top, 0)),
+      right: clamp014(safe.right, clamp014(fallback.right, 0)),
+      bottom: clamp014(safe.bottom, clamp014(fallback.bottom, 0)),
+      left: clamp014(safe.left, clamp014(fallback.left, 0))
+    };
+  }
+  function cloneHitArea(raw, fallback = RECT_HIT_AREA) {
+    const safe = raw && typeof raw === "object" ? raw : {};
+    const points = (Array.isArray(safe.points) ? safe.points : fallback.points).map((point) => ({
+      x: clamp014(point?.x, 0),
+      y: clamp014(point?.y, 0)
+    })).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+    return {
+      type: "polygon",
+      points: points.length >= 3 ? points : fallback.points.map((point) => ({ ...point }))
+    };
+  }
+  function mergePayload(base, asset) {
+    const safeAsset = asset && typeof asset === "object" ? asset : {};
+    return {
+      ...base,
+      ...safeAsset,
+      layout: {
+        ...base.layout || {},
+        ...safeAsset.layout || {}
+      },
+      textPadding: cloneBox(safeAsset.textPadding, base.textPadding || EMPTY_BOX),
+      slice: safeAsset.slice && typeof safeAsset.slice === "object" ? { ...safeAsset.slice } : base.slice && typeof base.slice === "object" ? { ...base.slice } : { ...EMPTY_BOX },
+      meta: {
+        ...base.meta || {},
+        ...safeAsset.meta && typeof safeAsset.meta === "object" ? safeAsset.meta : {}
+      }
+    };
+  }
+  function getElementStates(elementId) {
+    const def = getCustomSkinElementById(elementId);
     if (!def || !Array.isArray(def.supportsStates) || def.supportsStates.length === 0) {
       return ["normal"];
     }
     return def.supportsStates;
   }
-  function getPackId() {
-    return getCurrentPackId() || DEFAULT_PACK_ID;
+  function supportsTextToggle(elementId) {
+    return getCustomSkinElementById(elementId)?.supportsTextToggle === true;
   }
-  function createEmptySlice() {
-    return { top: 0, right: 0, bottom: 0, left: 0 };
+  function isFooterBatchEntryElementId(elementId) {
+    return String(elementId || "").trim() === CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID;
   }
-  function createEmptyPadding() {
-    return { top: 0, right: 0, bottom: 0, left: 0 };
+  function getFooterBatchSlotMeta(elementId) {
+    return FOOTER_BATCH_SLOT_META_MAP.get(String(elementId || "").trim()) || null;
   }
-  function buildWesternSkinEditorTab(activeTab, currentPackId) {
-    const firstElementId = WESTERN_SKIN_ELEMENTS[0]?.id || "dialog_panel";
-    const elementOptions = WESTERN_SKIN_ELEMENTS.map((def) => `<option value="${def.id}">${def.label}</option>`).join("");
-    const elementList = WESTERN_SKIN_ELEMENTS.map((def, idx) => `
+  function getNormalizedBoxArea(box) {
+    if (!box || typeof box !== "object") return 0;
+    return Math.max(0, Number(box.width) || 0) * Math.max(0, Number(box.height) || 0);
+  }
+  function getDistanceSimilarity(leftX, leftY, rightX, rightY, spread = 0.42) {
+    const distance2 = Math.hypot((Number(leftX) || 0) - (Number(rightX) || 0), (Number(leftY) || 0) - (Number(rightY) || 0));
+    if (spread <= 0) return 0;
+    return clamp014(1 - distance2 / spread, 0);
+  }
+  function getRatioSimilarity(currentValue, targetValue, spread = 4) {
+    const current = Math.max(1e-4, Number(currentValue) || 0);
+    const target = Math.max(1e-4, Number(targetValue) || 0);
+    const safeSpread = Math.max(1.01, Number(spread) || 4);
+    const delta = Math.abs(Math.log(current / target));
+    return clamp014(1 - delta / Math.log(safeSpread), 0);
+  }
+  function buildComponentCandidateDetectionOptions(templates = []) {
+    const areas = templates.map((template) => Number(template?.areaRatio) || 0).filter((value) => value > 0);
+    const widths = templates.map((template) => Number(template?.box?.width) || 0).filter((value) => value > 0);
+    const heights = templates.map((template) => Number(template?.box?.height) || 0).filter((value) => value > 0);
+    const minAreaRatio = areas.length ? Math.max(18e-5, Math.min(...areas) * 0.18) : 35e-5;
+    const minWidthRatio = widths.length ? Math.max(0.012, Math.min(...widths) * 0.45) : 0.018;
+    const minHeightRatio = heights.length ? Math.max(0.012, Math.min(...heights) * 0.45) : 0.018;
+    return {
+      minAreaRatio,
+      minWidthRatio,
+      minHeightRatio,
+      maxWidthRatio: 0.98,
+      maxHeightRatio: 0.98,
+      maxCandidates: Math.max(24, templates.length * 4, 48),
+      shouldRender: false,
+      selectFirstCandidate: false
+    };
+  }
+  function classifyComponentCandidates(candidates = [], templates = []) {
+    const safeTemplates = Array.isArray(templates) ? templates : [];
+    return (Array.isArray(candidates) ? candidates : []).map((candidate) => {
+      const candidateArea = getNormalizedBoxArea(candidate?.box);
+      let bestTemplate = null;
+      let bestScore = 0;
+      safeTemplates.forEach((template) => {
+        const positionScore = getDistanceSimilarity(candidate?.centerX, candidate?.centerY, template?.centerX, template?.centerY);
+        const aspectScore = getRatioSimilarity(candidate?.aspectRatio, template?.aspectRatio, 4);
+        const areaScore = getRatioSimilarity(candidateArea, template?.areaRatio, 7);
+        const score = positionScore * 0.5 + aspectScore * 0.3 + areaScore * 0.2;
+        if (score > bestScore) {
+          bestScore = score;
+          bestTemplate = template;
+        }
+      });
+      return {
+        ...candidate,
+        suggestedElementId: String(bestTemplate?.elementId || "").trim(),
+        suggestedElementLabel: String(bestTemplate?.label || getCustomSkinElementById(bestTemplate?.elementId)?.label || "").trim()
+      };
+    });
+  }
+  function buildComponentCandidateLabel(candidate, index = 0) {
+    const elementLabel = String(candidate?.suggestedElementLabel || getCustomSkinElementById(candidate?.suggestedElementId)?.label || "").trim();
+    if (!elementLabel) {
+      return `候选 ${index + 1}`;
+    }
+    return elementLabel;
+  }
+  function buildCustomSkinEditorTab(activeTab, currentPackId) {
+    const firstElementId = CUSTOM_SKIN_ELEMENTS[0]?.id || "dialog_panel";
+    const profileOptions = getCachedUiSkinProfiles().map((profile) => `<option value="${profile.id}">${profile.displayName}</option>`).join("");
+    const elementOptions = CUSTOM_SKIN_ELEMENTS.map((def) => `<option value="${def.id}">${def.label}</option>`).join("");
+    const elementList = CUSTOM_SKIN_ELEMENTS.map((def, index) => `
       <button
-        class="gal-western-element-item ${idx === 0 ? "active" : ""}"
+        type="button"
+        class="gal-custom-skin-element-item ${index === 0 ? "active" : ""}"
         data-element-id="${def.id}"
         title="${def.id}"
       >
-        <span class="gal-western-element-label">${def.label}</span>
-        <small class="gal-western-element-id">${def.id}</small>
+        <span class="gal-custom-skin-element-label">${def.label}</span>
+        <small class="gal-custom-skin-element-id">${def.id}</small>
       </button>
     `).join("");
-    const stateOptions = WESTERN_SKIN_STATES.map((state) => `<option value="${state}">${state}</option>`).join("");
+    const stateOptions = CUSTOM_SKIN_STATES.map((state) => `<option value="${state}">${state}</option>`).join("");
+    const chromaPresetButtons = CHROMA_KEY_PRESETS.map((color) => `
+      <button
+        type="button"
+        class="gal-custom-skin-color-chip"
+        data-color="${color}"
+        title="使用 ${color} 作为背景键色"
+        style="--gal-custom-skin-chip-color:${color};"
+      >${color}</button>
+    `).join("");
     return `
   <div class="gal-tab-pane ${activeTab === "skin" ? "active" : ""}" data-pane="skin" style="${activeTab !== "skin" ? "display: none;" : ""}">
     <div class="gal-pane-header">
-      <span class="gal-pane-stat">当前图包：${currentPackId || DEFAULT_PACK_ID} · 皮肤：${WESTERN_SKIN_ID}</span>
+      <span class="gal-pane-stat" id="gal-custom-skin-profile-status">当前预览图包：${currentPackId || getPreviewPackId()} · 全局自定义皮肤库</span>
       <div class="gal-pane-actions">
-        <button class="gal-action-btn gal-pane-btn teal" id="gal-western-reload-runtime"><i class="fa-solid fa-rotate"></i> <span>刷新预览</span></button>
+        <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-export-library"><i class="fa-solid fa-file-export"></i> <span>导出皮肤库</span></button>
+        <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-import-package"><i class="fa-solid fa-file-import"></i> <span>导入皮肤包</span></button>
+        <button type="button" class="gal-action-btn gal-pane-btn teal" id="gal-custom-skin-reload-runtime"><i class="fa-solid fa-rotate"></i> <span>刷新预览</span></button>
       </div>
     </div>
-    <div class="gal-western-device-switch" id="gal-western-device-switch">
-      <button type="button" class="gal-western-device-tab active" data-device="desktop">桌面皮肤</button>
-      <button type="button" class="gal-western-device-tab" data-device="mobile">移动端皮肤</button>
+    <div class="gal-custom-skin-profile-bar">
+      <label class="gal-custom-skin-profile-select-wrap">
+        <span>当前皮肤</span>
+        <select id="gal-custom-skin-profile-select">
+          ${profileOptions}
+        </select>
+      </label>
+      <div class="gal-custom-skin-profile-actions">
+        <button type="button" class="gal-action-btn gal-pane-btn primary" id="gal-custom-skin-profile-create"><i class="fa-solid fa-plus"></i> <span>新建</span></button>
+        <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-profile-rename"><i class="fa-solid fa-pen"></i> <span>重命名</span></button>
+        <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-profile-duplicate"><i class="fa-solid fa-copy"></i> <span>另存为</span></button>
+        <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-export-current"><i class="fa-solid fa-file-export"></i> <span>导出当前皮肤</span></button>
+        <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-profile-delete"><i class="fa-solid fa-trash"></i> <span>删除</span></button>
+      </div>
+    </div>
+    <input type="file" id="gal-custom-skin-import-zip-input" accept=".zip" style="display:none;">
+    <div class="gal-custom-skin-device-switch" id="gal-custom-skin-device-switch">
+      <button type="button" class="gal-custom-skin-device-tab active" data-device="desktop">桌面端</button>
+      <button type="button" class="gal-custom-skin-device-tab" data-device="mobile">移动端</button>
     </div>
 
-    <div class="gal-western-editor-layout">
-      <div class="gal-western-editor-col gal-western-editor-elements">
-        <div class="gal-western-editor-title"><i class="fa-solid fa-layer-group"></i> 元素列表</div>
-        <div class="gal-western-elements-list">
+    <div class="gal-custom-skin-editor-layout">
+      <div class="gal-custom-skin-editor-col gal-custom-skin-editor-elements">
+        <div class="gal-custom-skin-editor-title"><i class="fa-solid fa-layer-group"></i> 元素列表</div>
+        <div class="gal-custom-skin-elements-list">
           ${elementList}
         </div>
       </div>
 
-      <div class="gal-western-editor-col gal-western-editor-preview">
-        <div class="gal-western-editor-title"><i class="fa-solid fa-crop"></i> 图片裁剪预览</div>
-        <div class="gal-western-editor-hint" id="gal-western-editor-hint">选择元素后可上传图片并裁剪保存。</div>
-        <div class="gal-western-crop-wrapper" id="gal-western-crop-wrapper">
-          <canvas id="gal-western-skin-canvas" width="560" height="320"></canvas>
-        </div>
-        <input type="file" id="gal-western-image-input" accept="image/*" style="display:none;">
-        <div class="gal-western-preview-actions">
-          <button class="gal-action-btn gal-pane-btn primary" id="gal-western-select-image"><i class="fa-solid fa-upload"></i> <span>选择图片</span></button>
-          <button class="gal-action-btn gal-pane-btn" id="gal-western-reset-crop"><i class="fa-solid fa-arrows-rotate"></i> <span>重置裁剪</span></button>
-        </div>
-        <div class="gal-western-zoom-row">
-          <span>缩放</span>
-          <input type="range" id="gal-western-zoom" min="10" max="500" value="100">
-          <span id="gal-western-zoom-value">100%</span>
-        </div>
-        <label class="gal-western-check-row">
-          <input type="checkbox" id="gal-western-save-image">
-          <span>保存当前裁剪图像（仅改参数时可取消）</span>
-        </label>
-      </div>
+      <div class="gal-custom-skin-editor-col gal-custom-skin-editor-main">
+        <div class="gal-custom-skin-editor-title"><i class="fa-solid fa-crop"></i> 裁图与命中区</div>
+        <div class="gal-custom-skin-editor-hint" id="gal-custom-skin-editor-hint">裁图模式下可拖边/角改变控件框形状，框内拖动画面；命中区模式仅用于按钮类组件。</div>
+        <div class="gal-custom-skin-workbench">
+          <div class="gal-custom-skin-canvas-panel">
+            <div class="gal-custom-skin-canvas-toolbar">
+              <button type="button" class="gal-action-btn gal-pane-btn gal-custom-skin-preview-toggle-btn" id="gal-custom-skin-desktop-preview-toggle">
+                <i class="fa-solid fa-desktop"></i>
+                <span>预览主桌面</span>
+              </button>
+            </div>
+            <div class="gal-custom-skin-crop-wrapper" id="gal-custom-skin-crop-wrapper">
+              <canvas id="gal-custom-skin-skin-canvas" width="560" height="320"></canvas>
+            </div>
+          </div>
 
-      <div class="gal-western-editor-col gal-western-editor-form">
-        <div class="gal-western-editor-title"><i class="fa-solid fa-sliders"></i> 参数设置</div>
+          <div class="gal-custom-skin-side-tools">
+            <input type="file" id="gal-custom-skin-image-input" accept="image/*" style="display:none;">
 
-        <div class="gal-western-form-grid">
-          <label>
-            <span>元素</span>
-            <select id="gal-western-element-select">${elementOptions}</select>
-          </label>
-          <label>
-            <span>当前编辑端</span>
-            <input type="text" id="gal-western-device-display" value="desktop" readonly>
-          </label>
-          <select id="gal-western-device-select" style="display:none;">
-            <option value="desktop">desktop</option>
-            <option value="mobile">mobile</option>
-          </select>
-          <label>
-            <span>状态</span>
-            <select id="gal-western-state-select">${stateOptions}</select>
-          </label>
-          <label>
-            <span>缩放模式</span>
-            <select id="gal-western-scale-mode">
-              <option value="stretch">stretch</option>
-              <option value="cover">cover</option>
-              <option value="contain">contain</option>
-              <option value="nine-slice">nine-slice</option>
-            </select>
-          </label>
-          <label>
-            <span>宽度(px)</span>
-            <input type="number" id="gal-western-width" step="1" placeholder="留空=自动">
-          </label>
-          <label>
-            <span>高度(px)</span>
-            <input type="number" id="gal-western-height" step="1" placeholder="留空=自动">
-          </label>
-          <label>
-            <span>偏移X(px)</span>
-            <input type="number" id="gal-western-offset-x" step="1">
-          </label>
-          <label>
-            <span>偏移Y(px)</span>
-            <input type="number" id="gal-western-offset-y" step="1">
-          </label>
-          <label>
-            <span>锚点X(px)</span>
-            <input type="number" id="gal-western-anchor-x" step="1">
-          </label>
-          <label>
-            <span>锚点Y(px)</span>
-            <input type="number" id="gal-western-anchor-y" step="1">
-          </label>
-          <label class="gal-western-field-wide">
-            <span>clipPath（主画框可用）</span>
-            <input type="text" id="gal-western-clip-path" placeholder="例如: inset(14% 18% 54% 18%)">
-          </label>
+            <div class="gal-custom-skin-side-panel">
+              <div class="gal-custom-skin-form-grid gal-custom-skin-form-grid-core">
+                <label>
+                  <span>当前编辑端</span>
+                  <input type="text" id="gal-custom-skin-device-display" value="desktop" readonly>
+                </label>
+                <label>
+                  <span>状态</span>
+                  <select id="gal-custom-skin-state-select">${stateOptions}</select>
+                </label>
+                <select id="gal-custom-skin-device-select" style="display:none;">
+                  <option value="desktop">desktop</option>
+                  <option value="mobile">mobile</option>
+                </select>
+                <label class="gal-custom-skin-field-wide">
+                  <span>缩放模式</span>
+                  <select id="gal-custom-skin-scale-mode">
+                    <option value="stretch">stretch</option>
+                    <option value="cover">cover</option>
+                    <option value="contain">contain</option>
+                    <option value="nine-slice">nine-slice</option>
+                  </select>
+                </label>
+                <label class="gal-custom-skin-check-row gal-custom-skin-field-wide" id="gal-custom-skin-show-text-row">
+                  <input type="checkbox" id="gal-custom-skin-show-text" checked>
+                  <span>显示组件文字（图片自带文字时可关闭）</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="gal-custom-skin-preview-actions">
+              <button type="button" class="gal-action-btn gal-pane-btn primary" id="gal-custom-skin-select-image"><i class="fa-solid fa-upload"></i> <span>选择图片</span></button>
+              <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-reset-crop"><i class="fa-solid fa-arrows-rotate"></i> <span>重置裁图</span></button>
+              <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-auto-detect-content"><i class="fa-solid fa-wand-magic-sparkles"></i> <span>自动识别</span></button>
+            </div>
+
+            <div class="gal-custom-skin-side-panel">
+              <div class="gal-custom-skin-preview-actions gal-custom-skin-preview-actions-secondary">
+                <button type="button" class="gal-action-btn gal-pane-btn gal-custom-skin-mode-btn active" data-mode="crop"><i class="fa-solid fa-crop-simple"></i> <span>裁图模式</span></button>
+                <button type="button" class="gal-action-btn gal-pane-btn gal-custom-skin-mode-btn" data-mode="hit"><i class="fa-solid fa-vector-square"></i> <span>命中区模式</span></button>
+              </div>
+              <div class="gal-custom-skin-mode-help" id="gal-custom-skin-mode-help">裁图模式下可拖边/角改变控件框形状，框内拖动画面；只有异形按钮才需要添加命中点。</div>
+              <div class="gal-custom-skin-preview-actions gal-custom-skin-preview-actions-secondary" id="gal-custom-skin-hit-actions">
+                <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-add-hit-point"><i class="fa-solid fa-plus"></i> <span>添加命中点</span></button>
+                <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-remove-hit-point"><i class="fa-solid fa-minus"></i> <span>删除命中点</span></button>
+                <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-reset-hit-point"><i class="fa-solid fa-rotate-left"></i> <span>重置命中区</span></button>
+              </div>
+            </div>
+
+            <div class="gal-custom-skin-side-panel gal-custom-skin-footer-batch-panel" id="gal-custom-skin-footer-batch-panel">
+              <div class="gal-custom-skin-subtitle">底栏固定顺序导入</div>
+              <div class="gal-custom-skin-editor-note" id="gal-custom-skin-footer-batch-note">上传整条底栏图后，点击“识别底栏”，再点“按默认顺序保存”。系统会固定按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 保存 12 个底栏按钮。</div>
+              <div class="gal-custom-skin-preview-actions gal-custom-skin-preview-actions-secondary">
+                <button type="button" class="gal-action-btn gal-pane-btn primary" id="gal-custom-skin-footer-batch-save"><i class="fa-solid fa-layer-group"></i> <span>按默认顺序保存</span></button>
+              </div>
+            </div>
+
+            <div class="gal-custom-skin-side-panel">
+              <div class="gal-custom-skin-zoom-row">
+                <span>原图缩放</span>
+                <input type="range" id="gal-custom-skin-zoom" min="1" max="500" value="100">
+                <span id="gal-custom-skin-zoom-value">100%</span>
+              </div>
+              <div class="gal-custom-skin-zoom-row gal-custom-skin-zoom-row-metric">
+                <span>控件框比例</span>
+                <strong id="gal-custom-skin-crop-ratio-value">-</strong>
+              </div>
+              <label class="gal-custom-skin-check-row">
+                <input type="checkbox" id="gal-custom-skin-save-image">
+                <span>保存当前裁图后的图片</span>
+              </label>
+              <label class="gal-custom-skin-check-row" id="gal-custom-skin-hit-override-row">
+                <input type="checkbox" id="gal-custom-skin-hit-override">
+                <span>当前状态单独命中区（仅按钮类 hover / active 可用）</span>
+              </label>
+            </div>
+
+            <div class="gal-custom-skin-matting-panel">
+              <label class="gal-custom-skin-check-row gal-custom-skin-check-row-strong">
+                <input type="checkbox" id="gal-custom-skin-matting-enabled">
+                <span>启用纯色抠图（默认键色 #00FF00）</span>
+              </label>
+              <div class="gal-custom-skin-form-grid gal-custom-skin-matting-grid">
+                <label class="gal-custom-skin-field-wide">
+                  <span>背景键色</span>
+                  <div class="gal-custom-skin-color-row">
+                    <input type="color" id="gal-custom-skin-matting-color" value="${DEFAULT_CHROMA_KEY_COLOR2}">
+                    <input type="text" id="gal-custom-skin-matting-color-text" value="${DEFAULT_CHROMA_KEY_COLOR2}" placeholder="${DEFAULT_CHROMA_KEY_COLOR2}" spellcheck="false" autocomplete="off">
+                    <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-pick-matting-color"><i class="fa-solid fa-eye-dropper"></i> <span>从画面取色</span></button>
+                  </div>
+                </label>
+                <div class="gal-custom-skin-color-presets gal-custom-skin-field-wide">
+                  ${chromaPresetButtons}
+                </div>
+              </div>
+              <div class="gal-custom-skin-zoom-row">
+                <span>抠图容差</span>
+                <input type="range" id="gal-custom-skin-matting-tolerance" min="0" max="255" value="${DEFAULT_CHROMA_KEY_TOLERANCE2}">
+                <span id="gal-custom-skin-matting-tolerance-value">${DEFAULT_CHROMA_KEY_TOLERANCE2}</span>
+              </div>
+              <div class="gal-custom-skin-preview-actions gal-custom-skin-preview-actions-secondary">
+                <button type="button" class="gal-action-btn gal-pane-btn primary" id="gal-custom-skin-apply-matting"><i class="fa-solid fa-scissors"></i> <span>应用抠图</span></button>
+                <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-clear-matting"><i class="fa-solid fa-rotate-left"></i> <span>清除抠图</span></button>
+              </div>
+              <div class="gal-custom-skin-zoom-row">
+                <span>修补画笔</span>
+                <input type="range" id="gal-custom-skin-matting-brush" min="4" max="160" value="${DEFAULT_MATTING_BRUSH_SIZE2}">
+                <span id="gal-custom-skin-matting-brush-value">${DEFAULT_MATTING_BRUSH_SIZE2}px</span>
+              </div>
+              <div class="gal-custom-skin-preview-actions gal-custom-skin-preview-actions-secondary" id="gal-custom-skin-matting-actions">
+                <button type="button" class="gal-action-btn gal-pane-btn gal-custom-skin-matting-tool-btn" data-tool="keep"><i class="fa-solid fa-brush"></i> <span>保留画笔</span></button>
+                <button type="button" class="gal-action-btn gal-pane-btn gal-custom-skin-matting-tool-btn active" data-tool="erase"><i class="fa-solid fa-eraser"></i> <span>移除画笔</span></button>
+              </div>
+            </div>
+            <details class="gal-custom-skin-editor-section gal-custom-skin-parameters-panel" id="gal-custom-skin-parameters-panel">
+              <summary><i class="fa-solid fa-sliders"></i> 比例参数与元素选择</summary>
+              <div class="gal-custom-skin-parameters-body">
+                <div class="gal-custom-skin-editor-note">比例参数已收起到右侧底部；只有需要微调布局、锚点和文字区时再展开编辑。</div>
+
+                <div class="gal-custom-skin-editor-form-scroll">
+                  <div class="gal-custom-skin-form-grid gal-custom-skin-form-grid-core">
+                    <label class="gal-custom-skin-field-wide">
+                      <span>元素</span>
+                      <select id="gal-custom-skin-element-select">${elementOptions}</select>
+                    </label>
+                  </div>
+
+                  <details class="gal-custom-skin-editor-section" id="gal-custom-skin-text-padding-section" open>
+                    <summary id="gal-custom-skin-text-padding-summary">文本内边距（textPadding）</summary>
+                    <div class="gal-custom-skin-editor-note gal-custom-skin-editor-note-inline">对话框会使用这里的比例作为文字区域边距，也可结合透明区自动识别快速填充。</div>
+                    <div class="gal-custom-skin-form-grid gal-custom-skin-four-grid">
+                      <label><span>top</span><input type="number" id="gal-custom-skin-pad-top" step="0.001" min="0" max="1"></label>
+                      <label><span>right</span><input type="number" id="gal-custom-skin-pad-right" step="0.001" min="0" max="1"></label>
+                      <label><span>bottom</span><input type="number" id="gal-custom-skin-pad-bottom" step="0.001" min="0" max="1"></label>
+                      <label><span>left</span><input type="number" id="gal-custom-skin-pad-left" step="0.001" min="0" max="1"></label>
+                    </div>
+                  </details>
+
+                  <details class="gal-custom-skin-editor-section" id="gal-custom-skin-advanced-layout-section">
+                    <summary>高级比例参数</summary>
+                    <div class="gal-custom-skin-editor-note gal-custom-skin-editor-note-inline">只有遇到特殊布局、对齐偏差或跨端微调时，才需要改这些比例；对话框默认会跟随当前主题的真实大小与位置。</div>
+                    <div class="gal-custom-skin-form-grid">
+                      <label>
+                        <span>宽度比例</span>
+                        <input type="number" id="gal-custom-skin-width-ratio" step="0.001" min="0" max="1">
+                      </label>
+                      <label>
+                        <span>X 偏移比例</span>
+                        <input type="number" id="gal-custom-skin-offset-x-ratio" step="0.001">
+                      </label>
+                      <label>
+                        <span>Y 偏移比例</span>
+                        <input type="number" id="gal-custom-skin-offset-y-ratio" step="0.001">
+                      </label>
+                      <label>
+                        <span>X 锚点比例</span>
+                        <input type="number" id="gal-custom-skin-anchor-x-ratio" step="0.001" min="0" max="1">
+                      </label>
+                      <label>
+                        <span>Y 锚点比例</span>
+                        <input type="number" id="gal-custom-skin-anchor-y-ratio" step="0.001" min="0" max="1">
+                      </label>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
 
-        <div class="gal-western-subtitle">九宫格切片（slice）</div>
-        <div class="gal-western-form-grid gal-western-four-grid">
-          <label><span>top</span><input type="number" id="gal-western-slice-top" step="1"></label>
-          <label><span>right</span><input type="number" id="gal-western-slice-right" step="1"></label>
-          <label><span>bottom</span><input type="number" id="gal-western-slice-bottom" step="1"></label>
-          <label><span>left</span><input type="number" id="gal-western-slice-left" step="1"></label>
-        </div>
-
-        <div class="gal-western-subtitle">文本内边距（textPadding）</div>
-        <div class="gal-western-form-grid gal-western-four-grid">
-          <label><span>top</span><input type="number" id="gal-western-pad-top" step="1"></label>
-          <label><span>right</span><input type="number" id="gal-western-pad-right" step="1"></label>
-          <label><span>bottom</span><input type="number" id="gal-western-pad-bottom" step="1"></label>
-          <label><span>left</span><input type="number" id="gal-western-pad-left" step="1"></label>
-        </div>
-
-        <div class="gal-western-form-actions">
-          <button class="gal-action-btn gal-pane-btn primary" id="gal-western-save-current"><i class="fa-solid fa-floppy-disk"></i> <span>保存当前元素</span></button>
-          <button class="gal-action-btn gal-pane-btn purple" id="gal-western-reload-current"><i class="fa-solid fa-rotate-right"></i> <span>重新加载</span></button>
-          <button class="gal-action-btn gal-pane-btn" id="gal-western-reset-current"><i class="fa-solid fa-trash"></i> <span>重置当前元素</span></button>
+        <div class="gal-custom-skin-form-actions">
+          <button type="button" class="gal-action-btn gal-pane-btn primary" id="gal-custom-skin-save-current"><i class="fa-solid fa-floppy-disk"></i> <span>保存当前元素</span></button>
+          <button type="button" class="gal-action-btn gal-pane-btn purple" id="gal-custom-skin-reload-current"><i class="fa-solid fa-rotate-right"></i> <span>重新加载</span></button>
+          <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-reset-current"><i class="fa-solid fa-trash"></i> <span>重置当前状态</span></button>
         </div>
       </div>
     </div>
   </div>`;
   }
-  function bindWesternSkinEditorEvents($modal) {
+  function bindCustomSkinEditorEvents($modal) {
     const $pane = $modal.find('.gal-tab-pane[data-pane="skin"]');
     if (!$pane.length) return;
+    const initialProfiles = getCachedUiSkinProfiles();
+    const settings2 = getSettings();
+    const initialProfileId = hasUiSkinProfileId(settings2.skin) ? String(settings2.skin).trim() : initialProfiles[0]?.id || "";
     const state = {
-      elementId: WESTERN_SKIN_ELEMENTS[0]?.id || "dialog_panel",
+      profileId: initialProfileId,
+      profiles: initialProfiles,
+      elementId: CUSTOM_SKIN_ELEMENTS[0]?.id || "dialog_panel",
       device: "desktop",
       uiState: "normal",
+      editorMode: "crop",
+      overlayMode: "",
+      mattingTool: "erase",
+      lastMattingBrushTool: "erase",
       cropper: null,
       currentAsset: null,
+      normalAsset: null,
+      componentSessionActive: false,
+      componentSessionCandidates: [],
+      componentSessionSelectedCandidateId: "",
+      preserveUploadedImageOnSwitch: false,
+      footerBatchCandidates: [],
+      footerBatchAssignments: {},
+      footerBatchPendingTargetId: "",
+      footerBatchSelectedCandidateId: "",
+      desktopPreviewActive: false,
       objectUrls: /* @__PURE__ */ new Set(),
-      loadToken: 0
+      loadToken: 0,
+      pendingAssetLoad: null
     };
-    const $elementSelect = $pane.find("#gal-western-element-select");
-    const $deviceSelect = $pane.find("#gal-western-device-select");
-    const $deviceDisplay = $pane.find("#gal-western-device-display");
-    const $stateSelect = $pane.find("#gal-western-state-select");
-    const $hint = $pane.find("#gal-western-editor-hint");
-    const $zoom = $pane.find("#gal-western-zoom");
-    const $zoomValue = $pane.find("#gal-western-zoom-value");
-    const $saveImage = $pane.find("#gal-western-save-image");
-    const $imageInput = $pane.find("#gal-western-image-input");
-    const canvas = $pane.find("#gal-western-skin-canvas").get(0);
-    const markHint = (text, type = "normal") => {
+    const $profileStatus = $pane.find("#gal-custom-skin-profile-status");
+    const $profileSelect = $pane.find("#gal-custom-skin-profile-select");
+    const $profileImportZipInput = $pane.find("#gal-custom-skin-import-zip-input");
+    const $elementSelect = $pane.find("#gal-custom-skin-element-select");
+    const $deviceSelect = $pane.find("#gal-custom-skin-device-select");
+    const $deviceDisplay = $pane.find("#gal-custom-skin-device-display");
+    const $stateSelect = $pane.find("#gal-custom-skin-state-select");
+    const $scaleMode = $pane.find("#gal-custom-skin-scale-mode");
+    const $showText = $pane.find("#gal-custom-skin-show-text");
+    const $showTextRow = $pane.find("#gal-custom-skin-show-text-row");
+    const $hint = $pane.find("#gal-custom-skin-editor-hint");
+    const $modeHelp = $pane.find("#gal-custom-skin-mode-help");
+    const $zoom = $pane.find("#gal-custom-skin-zoom");
+    const $zoomValue = $pane.find("#gal-custom-skin-zoom-value");
+    const $cropRatioValue = $pane.find("#gal-custom-skin-crop-ratio-value");
+    const $desktopPreviewToggle = $pane.find("#gal-custom-skin-desktop-preview-toggle");
+    const $saveImage = $pane.find("#gal-custom-skin-save-image");
+    const $hitOverride = $pane.find("#gal-custom-skin-hit-override");
+    const $hitOverrideRow = $pane.find("#gal-custom-skin-hit-override-row");
+    const $imageInput = $pane.find("#gal-custom-skin-image-input");
+    const $autoDetectContent = $pane.find("#gal-custom-skin-auto-detect-content");
+    const $autoDetectContentLabel = $autoDetectContent.find("span");
+    const $mattingEnabled = $pane.find("#gal-custom-skin-matting-enabled");
+    const $mattingColor = $pane.find("#gal-custom-skin-matting-color");
+    const $mattingColorText = $pane.find("#gal-custom-skin-matting-color-text");
+    const $pickMattingColor = $pane.find("#gal-custom-skin-pick-matting-color");
+    const $mattingTolerance = $pane.find("#gal-custom-skin-matting-tolerance");
+    const $mattingToleranceValue = $pane.find("#gal-custom-skin-matting-tolerance-value");
+    const $applyMatting = $pane.find("#gal-custom-skin-apply-matting");
+    const $clearMatting = $pane.find("#gal-custom-skin-clear-matting");
+    const $mattingBrush = $pane.find("#gal-custom-skin-matting-brush");
+    const $mattingBrushValue = $pane.find("#gal-custom-skin-matting-brush-value");
+    const $mattingToolButtons = $pane.find(".gal-custom-skin-matting-tool-btn");
+    const $cropWrapper = $pane.find("#gal-custom-skin-crop-wrapper");
+    const $modeButtons = $pane.find(".gal-custom-skin-mode-btn");
+    const $hitModeButton = $pane.find('.gal-custom-skin-mode-btn[data-mode="hit"]');
+    const $hitActions = $pane.find("#gal-custom-skin-hit-actions");
+    const $footerBatchPanel = $pane.find("#gal-custom-skin-footer-batch-panel");
+    const $footerBatchNote = $pane.find("#gal-custom-skin-footer-batch-note");
+    const $footerBatchTargets = $pane.find("#gal-custom-skin-footer-batch-targets");
+    const $footerBatchClear = $pane.find("#gal-custom-skin-footer-batch-clear");
+    const $footerBatchSave = $pane.find("#gal-custom-skin-footer-batch-save");
+    const $saveCurrentButton = $pane.find("#gal-custom-skin-save-current");
+    const $saveCurrentButtonLabel = $saveCurrentButton.find("span");
+    const $textPaddingSection = $pane.find("#gal-custom-skin-text-padding-section");
+    const $advancedLayoutSection = $pane.find("#gal-custom-skin-advanced-layout-section");
+    const $addHitPoint = $pane.find("#gal-custom-skin-add-hit-point");
+    const $removeHitPoint = $pane.find("#gal-custom-skin-remove-hit-point");
+    const $resetHitPoint = $pane.find("#gal-custom-skin-reset-hit-point");
+    const $configPanel = $modal.find(".gal-config-panel").first();
+    const canvas = $pane.find("#gal-custom-skin-skin-canvas").get(0);
+    let $desktopPreviewFab = $configPanel.find(".gal-custom-skin-desktop-preview-fab");
+    if (!$desktopPreviewFab.length && $configPanel.length) {
+      $desktopPreviewFab = $2(`
+      <button type="button" class="gal-action-btn gal-pane-btn primary gal-custom-skin-desktop-preview-fab" id="gal-custom-skin-desktop-preview-fab">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>返回编辑器</span>
+      </button>
+    `);
+      $configPanel.append($desktopPreviewFab);
+    }
+    const setHint = (text, type = "normal") => {
       $hint.text(text || "");
       $hint.removeClass("ok warn err");
       if (type === "ok") $hint.addClass("ok");
       if (type === "warn") $hint.addClass("warn");
       if (type === "err") $hint.addClass("err");
     };
+    const bindPaneButton = (selector, handler) => {
+      $pane.off("click.customSkinButtons", selector).on("click.customSkinButtons", selector, (event3) => {
+        event3.preventDefault();
+        event3.stopPropagation();
+        if ($2(event3.currentTarget).prop("disabled")) return;
+        handler(event3);
+      });
+    };
+    const syncDesktopPreviewUi = () => {
+      $modal.toggleClass("gal-custom-skin-desktop-preview", state.desktopPreviewActive === true);
+      $desktopPreviewToggle.attr("aria-pressed", state.desktopPreviewActive === true ? "true" : "false");
+      $desktopPreviewToggle.attr(
+        "title",
+        state.desktopPreviewActive === true ? "当前正在主桌面预览，请点击右上角“返回编辑器”继续修改" : "临时隐藏编辑面板，直接查看当前主桌面效果"
+      );
+      $desktopPreviewFab.attr(
+        "title",
+        state.desktopPreviewActive === true ? "返回当前编辑界面" : "返回当前编辑界面"
+      );
+    };
+    const setDesktopPreviewActive = (active) => {
+      const nextActive = active === true;
+      if (state.desktopPreviewActive === nextActive) return;
+      state.desktopPreviewActive = nextActive;
+      syncDesktopPreviewUi();
+      if (nextActive) {
+        showToast4("已切换到主桌面预览，点击右上角“返回编辑器”继续修改");
+        return;
+      }
+      setHint("已返回当前编辑界面，可继续调整裁图和命中区。", "ok");
+    };
+    syncDesktopPreviewUi();
+    const formatAspectRatioLabel = (ratio) => {
+      const safe = Number(ratio);
+      if (!Number.isFinite(safe) || safe <= 0) return "-";
+      if (safe >= 1) return `${safe.toFixed(2)} : 1`;
+      return `1 : ${(1 / safe).toFixed(2)}`;
+    };
+    const syncMattingControls = () => {
+      const mattingState = state.cropper?.getMattingState?.() || {};
+      const keyColor = normalizeHexColor(mattingState.keyColor, DEFAULT_CHROMA_KEY_COLOR2);
+      const tolerance = Number.isFinite(Number(mattingState.tolerance)) ? Number(mattingState.tolerance) : DEFAULT_CHROMA_KEY_TOLERANCE2;
+      const brushSize = Number.isFinite(Number(mattingState.brushSize)) ? Number(mattingState.brushSize) : DEFAULT_MATTING_BRUSH_SIZE2;
+      const hasImage = !!state.cropper?.imageLoaded;
+      const mattingEnabled = mattingState.enabled === true;
+      const hasPreview = mattingState.applied === true;
+      const isPickingColor = mattingState.colorPicking === true;
+      $mattingEnabled.prop("checked", mattingEnabled);
+      $mattingColor.val(keyColor);
+      $mattingColorText.val(keyColor);
+      $mattingTolerance.val(String(tolerance));
+      $mattingToleranceValue.text(String(tolerance));
+      $mattingBrush.val(String(brushSize));
+      $mattingBrushValue.text(`${brushSize}px`);
+      $mattingToolButtons.removeClass("active");
+      $mattingToolButtons.filter(`[data-tool="${state.mattingTool === "keep" ? "keep" : "erase"}"]`).addClass("active");
+      $pickMattingColor.toggleClass("active", isPickingColor);
+      const disabled = !hasImage;
+      $mattingEnabled.prop("disabled", disabled);
+      $mattingColor.prop("disabled", disabled || !mattingEnabled);
+      $mattingColorText.prop("disabled", disabled || !mattingEnabled);
+      $pickMattingColor.prop("disabled", disabled || !mattingEnabled);
+      $mattingTolerance.prop("disabled", disabled || !mattingEnabled);
+      $applyMatting.prop("disabled", disabled || !mattingEnabled);
+      $clearMatting.prop("disabled", disabled || !mattingEnabled && !hasPreview);
+      $mattingBrush.prop("disabled", disabled || !hasPreview);
+      $mattingToolButtons.prop("disabled", disabled || !hasPreview);
+    };
+    const syncCropperPreviewControls = () => {
+      if (!state.cropper) return;
+      const zoomPercent = Math.round((Number(state.cropper.scale) || 1) * 100);
+      const zoomMinPercent = Math.max(1, Math.floor((Number(state.cropper.minScale) || 0.01) * 100));
+      const zoomMaxPercent = Math.max(zoomMinPercent, Math.ceil((Number(state.cropper.maxScale) || 5) * 100));
+      const cropAspectRatio = Number(state.cropper.getCropAspectRatio?.() || state.cropper.aspectRatio || 1);
+      $zoom.attr("min", String(zoomMinPercent));
+      $zoom.attr("max", String(zoomMaxPercent));
+      $zoom.val(String(zoomPercent));
+      $zoomValue.text(`${zoomPercent}%`);
+      $cropRatioValue.text(formatAspectRatioLabel(cropAspectRatio));
+      syncMattingControls();
+    };
+    const getCurrentProfileLabel = () => getUiSkinProfileLabel(state.profileId) || "未命名皮肤";
+    const syncProfileStatus = () => {
+      $profileStatus.text(`当前预览图包：${getPreviewPackId()} · 当前皮肤：${getCurrentProfileLabel()}`);
+    };
+    const syncProfileSelectOptions = () => {
+      const optionHtml = state.profiles.map((profile) => `<option value="${profile.id}">${profile.displayName}</option>`).join("");
+      $profileSelect.html(optionHtml);
+      $profileSelect.val(state.profileId || "");
+      const hasProfiles = state.profiles.length > 0;
+      $profileSelect.prop("disabled", !hasProfiles);
+      $pane.find("#gal-custom-skin-profile-rename").prop("disabled", !hasProfiles);
+      $pane.find("#gal-custom-skin-profile-duplicate").prop("disabled", !hasProfiles);
+      $pane.find("#gal-custom-skin-export-current").prop("disabled", !hasProfiles);
+      $pane.find("#gal-custom-skin-profile-delete").prop("disabled", !hasProfiles);
+      $pane.find("#gal-custom-skin-export-library").prop("disabled", !hasProfiles);
+      syncProfileStatus();
+    };
+    const syncActiveProfileSetting = async () => {
+      if (!state.profileId) return;
+      settings2.skin = state.profileId;
+      saveSettings();
+      refreshSkinSelectElement();
+      applySettingsToUI();
+      await applyCustomSkinRuntime().catch((error3) => {
+        console.warn(`[${SCRIPT_NAME}] sync active custom-skin profile failed:`, error3);
+      });
+    };
+    const reloadProfiles = async (preferredProfileId = "") => {
+      await refreshUiSkinProfilesCache();
+      state.profiles = getCachedUiSkinProfiles();
+      if (preferredProfileId && state.profiles.some((profile) => profile.id === preferredProfileId)) {
+        state.profileId = preferredProfileId;
+      } else if (!state.profiles.some((profile) => profile.id === state.profileId)) {
+        state.profileId = state.profiles[0]?.id || "";
+      }
+      syncProfileSelectOptions();
+      refreshSkinSelectElement();
+    };
+    const ensureActiveProfile = async () => {
+      await reloadProfiles(state.profileId);
+      if (state.profileId) return;
+      const createdProfile = await createUiSkinProfile({ displayName: "自定义皮肤 1" });
+      await reloadProfiles(createdProfile.id);
+      setHint("已自动创建第一套自定义皮肤，可以直接开始编辑。", "ok");
+    };
+    const switchProfile = async (profileId) => {
+      const safeProfileId = String(profileId || "").trim();
+      if (!safeProfileId || !state.profiles.some((profile) => profile.id === safeProfileId)) return;
+      state.profileId = safeProfileId;
+      syncProfileSelectOptions();
+      await syncActiveProfileSetting();
+      await loadCurrentAsset();
+    };
     const clearObjectUrls = () => {
       state.objectUrls.forEach((url) => {
         try {
           (topWindow.URL || URL).revokeObjectURL(url);
-        } catch (e) {
+        } catch (error3) {
         }
       });
       state.objectUrls.clear();
@@ -82012,323 +87192,1663 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#111827";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#6b7280";
+      ctx.fillStyle = "#94a3b8";
       ctx.font = "16px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(text, canvas.width / 2, canvas.height / 2);
     };
-    const setInput = (selector, value) => {
-      $pane.find(selector).val(toInputValue(value));
+    const setInputValue = (selector, value) => {
+      $pane.find(selector).val(formatInputValue(value));
     };
     const readInputNumber = (selector) => {
       const raw = String($pane.find(selector).val() || "").trim();
       if (!raw) return null;
       return getNumberValue(raw, null);
     };
-    const getCurrentElementDef = () => {
-      return getWesternSkinElementById(state.elementId) || WESTERN_SKIN_ELEMENTS[0] || null;
+    const getCurrentElementDef = () => getCustomSkinElementById(state.elementId) || CUSTOM_SKIN_ELEMENTS[0] || null;
+    const isCurrentElementInteractive = () => !!getCurrentElementDef()?.interactive;
+    const hasFooterBatchSession = () => state.footerBatchCandidates.length > 0;
+    const readMattingSettingsFromControls = () => ({
+      enabled: $mattingEnabled.is(":checked"),
+      keyColor: normalizeHexColor(String($mattingColorText.val() || $mattingColor.val() || DEFAULT_CHROMA_KEY_COLOR2), DEFAULT_CHROMA_KEY_COLOR2),
+      tolerance: Math.max(0, Math.min(255, Math.round(Number($mattingTolerance.val() || DEFAULT_CHROMA_KEY_TOLERANCE2)))),
+      brushSize: Math.max(4, Math.min(160, Math.round(Number($mattingBrush.val() || DEFAULT_MATTING_BRUSH_SIZE2))))
+    });
+    const syncCropperMattingSettings = ({ shouldRender = false, keepPreview = true } = {}) => {
+      if (!state.cropper) return readMattingSettingsFromControls();
+      const settings3 = readMattingSettingsFromControls();
+      state.cropper.setMattingEnabled(settings3.enabled, { shouldRender: false, keepPreview });
+      state.cropper.setMattingKeyColor(settings3.keyColor, { shouldRender: false });
+      state.cropper.setMattingTolerance(settings3.tolerance, { shouldRender: false });
+      state.cropper.setMattingBrushSize(settings3.brushSize, { shouldRender: false });
+      state.cropper.setMattingBrushMode(state.mattingTool === "keep" ? "keep" : "erase", { shouldRender: false });
+      if (shouldRender) {
+        state.cropper.render({ type: "matting-settings", state: state.cropper.getMattingState?.() });
+      }
+      return settings3;
+    };
+    const applyMattingPresetToControls = (preset) => {
+      const safeColor = normalizeHexColor(preset?.color, DEFAULT_CHROMA_KEY_COLOR2);
+      const safeTolerance = Math.max(
+        0,
+        Math.min(255, Math.round(Number(preset?.tolerance ?? DEFAULT_CHROMA_KEY_TOLERANCE2)))
+      );
+      $mattingEnabled.prop("checked", preset?.enabled === true);
+      $mattingColor.val(safeColor);
+      $mattingColorText.val(safeColor);
+      $mattingTolerance.val(String(safeTolerance));
+      $mattingToleranceValue.text(String(safeTolerance));
+      $mattingBrush.val(String(DEFAULT_MATTING_BRUSH_SIZE2));
+      $mattingBrushValue.text(`${DEFAULT_MATTING_BRUSH_SIZE2}px`);
+      state.mattingTool = "erase";
+      state.lastMattingBrushTool = "erase";
+      state.overlayMode = "";
+      syncCropperMattingSettings({ shouldRender: false, keepPreview: false });
+    };
+    const getEffectiveInteractionMode = () => state.overlayMode || state.editorMode;
+    const syncCropperInteractionMode = () => {
+      if (!state.cropper) return;
+      const nextMode = getEffectiveInteractionMode();
+      if (state.cropper.interactionMode !== nextMode) {
+        state.cropper.setInteractionMode(nextMode);
+        return;
+      }
+      syncMattingControls();
+    };
+    const activateMattingTool = (nextTool) => {
+      if (nextTool === "pick") {
+        state.overlayMode = "pick";
+        syncCropperInteractionMode();
+        syncMattingControls();
+        return;
+      }
+      state.mattingTool = nextTool === "keep" ? "keep" : "erase";
+      state.lastMattingBrushTool = state.mattingTool;
+      const hasPreview = !!state.cropper?.hasMattingPreview?.();
+      const mattingEnabled = $mattingEnabled.is(":checked");
+      state.overlayMode = hasPreview && mattingEnabled ? "matting" : "";
+      syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+      syncCropperInteractionMode();
+      syncMattingControls();
+    };
+    const getModeHelpText = () => {
+      if (isFooterBatchMode()) {
+        return `底栏固定顺序导入：先识别整条底栏，再按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 的默认顺序一次性保存。`;
+      }
+      if (state.overlayMode === "pick") {
+        return "取色模式：在画面上点一下，即可把该像素颜色填入抠图键色。";
+      }
+      if (state.overlayMode === "matting") {
+        return state.mattingTool === "keep" ? "抠图修补：拖动画笔恢复被误删的组件区域；保存后会输出透明 PNG。" : "抠图修补：拖动画笔继续擦除背景色残留；建议先应用抠图再局部修边。";
+      }
+      if (state.uiState !== "normal") {
+        return state.editorMode === "hit" && isCurrentElementInteractive() ? "当前状态可单独调整命中区；控件框形状继承 normal，若要改框形请切回 normal。" : "当前状态沿用 normal 的控件框形状，可拖动画面裁切当前状态图片；如需改框形请切回 normal。";
+      }
+      if (!isCurrentElementInteractive()) {
+        return "当前元素可拖边/角改变控件框形状，框内拖动画面。";
+      }
+      if (state.editorMode === "hit") {
+        return "命中区模式只影响点击范围：拖动白点调整轮廓，“添加命中点”用于贴合异形按钮。";
+      }
+      return "裁图模式下可拖边/角改变控件框形状，框内拖动画面；规则矩形按钮通常不需要添加命中点。";
+    };
+    const getCropWrapperTitle = () => {
+      if (isFooterBatchMode()) {
+        return `底栏固定顺序导入：候选框只用于预览识别结果，保存时会固定按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 的顺序处理。`;
+      }
+      if (state.overlayMode === "pick") {
+        return "点击图片吸取背景纯色。";
+      }
+      if (state.overlayMode === "matting") {
+        return state.mattingTool === "keep" ? "保留画笔：拖动恢复被误删区域。" : "移除画笔：拖动继续擦除背景。";
+      }
+      if (state.editorMode === "hit" && isCurrentElementInteractive()) {
+        return "命中区模式：拖动白点调整按钮点击范围。";
+      }
+      if (state.uiState !== "normal") {
+        return "当前状态继承 normal 的控件框形状；可拖动画面裁图，若要改框形请切回 normal。";
+      }
+      return "裁图模式：拖边/角可改框形，拖蓝框边框可移动整个框，框内拖动画面。";
     };
     const markActiveElementItem = () => {
-      $pane.find(".gal-western-element-item").removeClass("active");
-      $pane.find(`.gal-western-element-item[data-element-id="${state.elementId}"]`).addClass("active");
+      $pane.find(".gal-custom-skin-element-item").removeClass("active");
+      $pane.find(`.gal-custom-skin-element-item[data-element-id="${state.elementId}"]`).addClass("active");
     };
     const syncDeviceSwitchUI = () => {
-      $pane.find(".gal-western-device-tab").removeClass("active");
-      $pane.find(`.gal-western-device-tab[data-device="${state.device}"]`).addClass("active");
-      $deviceDisplay.val(state.device === "mobile" ? "mobile（移动端）" : "desktop（桌面）");
+      $pane.find(".gal-custom-skin-device-tab").removeClass("active");
+      $pane.find(`.gal-custom-skin-device-tab[data-device="${state.device}"]`).addClass("active");
       $deviceSelect.val(state.device);
+      $deviceDisplay.val(state.device === "mobile" ? "mobile（移动端）" : "desktop（桌面端）");
     };
     const syncStateOptions = () => {
-      const supports = getElementSupportsStates(state.elementId);
-      const nextState = supports.includes(state.uiState) ? state.uiState : supports[0];
-      state.uiState = nextState;
-      $stateSelect.html(supports.map((item) => `<option value="${item}">${item}</option>`).join(""));
-      $stateSelect.val(nextState);
+      const states = getElementStates(state.elementId);
+      if (!states.includes(state.uiState)) {
+        state.uiState = states[0];
+      }
+      $stateSelect.html(states.map((item) => `<option value="${item}">${item}</option>`).join(""));
+      $stateSelect.val(state.uiState);
     };
-    const getLayoutFromForm = () => ({
-      width: readInputNumber("#gal-western-width"),
-      height: readInputNumber("#gal-western-height"),
-      offsetX: readInputNumber("#gal-western-offset-x") ?? 0,
-      offsetY: readInputNumber("#gal-western-offset-y") ?? 0,
-      anchorX: readInputNumber("#gal-western-anchor-x") ?? 0,
-      anchorY: readInputNumber("#gal-western-anchor-y") ?? 0,
-      clipPath: String($pane.find("#gal-western-clip-path").val() || "").trim()
-    });
-    const getSliceFromForm = () => ({
-      top: readInputNumber("#gal-western-slice-top") ?? 0,
-      right: readInputNumber("#gal-western-slice-right") ?? 0,
-      bottom: readInputNumber("#gal-western-slice-bottom") ?? 0,
-      left: readInputNumber("#gal-western-slice-left") ?? 0
-    });
-    const getPaddingFromForm = () => ({
-      top: readInputNumber("#gal-western-pad-top") ?? 0,
-      right: readInputNumber("#gal-western-pad-right") ?? 0,
-      bottom: readInputNumber("#gal-western-pad-bottom") ?? 0,
-      left: readInputNumber("#gal-western-pad-left") ?? 0
-    });
-    const applyFormValues = (payload) => {
-      const layout4 = payload?.layout || {};
-      const slice2 = payload?.slice || createEmptySlice();
-      const textPadding = payload?.textPadding || createEmptyPadding();
-      setInput("#gal-western-width", layout4.width);
-      setInput("#gal-western-height", layout4.height);
-      setInput("#gal-western-offset-x", layout4.offsetX ?? 0);
-      setInput("#gal-western-offset-y", layout4.offsetY ?? 0);
-      setInput("#gal-western-anchor-x", layout4.anchorX ?? 0);
-      setInput("#gal-western-anchor-y", layout4.anchorY ?? 0);
-      setInput("#gal-western-clip-path", layout4.clipPath || "");
-      setInput("#gal-western-slice-top", slice2.top ?? 0);
-      setInput("#gal-western-slice-right", slice2.right ?? 0);
-      setInput("#gal-western-slice-bottom", slice2.bottom ?? 0);
-      setInput("#gal-western-slice-left", slice2.left ?? 0);
-      setInput("#gal-western-pad-top", textPadding.top ?? 0);
-      setInput("#gal-western-pad-right", textPadding.right ?? 0);
-      setInput("#gal-western-pad-bottom", textPadding.bottom ?? 0);
-      setInput("#gal-western-pad-left", textPadding.left ?? 0);
-      $pane.find("#gal-western-scale-mode").val(payload?.scaleMode || "stretch");
+    const setModeButtons = (mode) => {
+      const footerBatchMode = isFooterBatchMode();
+      if (footerBatchMode && mode === "hit") {
+        state.editorMode = "crop";
+      } else if (!isCurrentElementInteractive() && mode === "hit") {
+        state.editorMode = "crop";
+      } else {
+        state.editorMode = mode === "hit" ? "hit" : "crop";
+      }
+      state.overlayMode = "";
+      const currentMode = state.editorMode;
+      syncCropperInteractionMode();
+      $modeButtons.removeClass("active");
+      $pane.find(`.gal-custom-skin-mode-btn[data-mode="${currentMode}"]`).addClass("active");
+      const interactive = isCurrentElementInteractive() && !footerBatchMode;
+      const showHitActions = interactive && currentMode === "hit";
+      $hitModeButton.prop("disabled", !interactive);
+      $hitModeButton.attr("title", interactive ? "编辑按钮点击区域" : "当前元素不需要命中区");
+      $hitActions.css("display", showHitActions ? "flex" : "none");
+      $addHitPoint.prop("disabled", !showHitActions);
+      $removeHitPoint.prop("disabled", !showHitActions);
+      $resetHitPoint.prop("disabled", !showHitActions);
+      $modeHelp.text(getModeHelpText());
+      $cropWrapper.attr("title", getCropWrapperTitle());
+      syncMattingControls();
     };
-    const setCropperAspect = () => {
+    const setCropperAspect = (aspectRatioOverride = null) => {
       const def = getCurrentElementDef();
       if (!state.cropper || !def) return;
-      state.cropper.aspectRatio = def.aspectRatio || 16 / 9;
-      if (state.cropper.imageLoaded) {
-        state.cropper.calculateInitialScale();
-        state.cropper.render();
-        const percent = Math.round(state.cropper.scale * 100);
-        $zoom.val(String(percent));
-        $zoomValue.text(`${percent}%`);
+      const baseAspectRatio = Number(def.aspectRatio || 16 / 9);
+      const nextAspectRatio = Number(aspectRatioOverride);
+      state.cropper.setBaseAspectRatio(baseAspectRatio);
+      state.cropper.applyAspectRatio(
+        Number.isFinite(nextAspectRatio) && nextAspectRatio > 0 ? nextAspectRatio : baseAspectRatio,
+        { preserveView: true }
+      );
+      syncCropperPreviewControls();
+    };
+    const getDefaultPayload = (uiState = state.uiState) => buildDefaultCustomSkinAssetPayload({
+      packId: getAssetPackId(),
+      skinId: state.profileId,
+      elementId: state.elementId,
+      device: state.device,
+      state: uiState
+    });
+    const currentElementUsesRuntimeLayout = () => customSkinElementUsesRuntimeLayout(state.elementId);
+    const getLiveRuntimeLayoutSnapshot = (elementId = state.elementId) => {
+      if (!customSkinElementUsesRuntimeLayout(elementId)) return null;
+      const template = getCustomSkinRuntimeElementRects(state.device).find((item) => item?.elementId === elementId && item?.box);
+      if (!template?.box) return null;
+      return {
+        widthRatio: clamp014(template.box.width, 0),
+        offsetXRatio: 0,
+        offsetYRatio: 0,
+        anchorXRatio: 0,
+        anchorYRatio: 0
+      };
+    };
+    const getMergedNormalPayload = () => {
+      const baseNormal = getDefaultPayload("normal");
+      return mergePayload(baseNormal, state.normalAsset);
+    };
+    const applyFormValues = (payload) => {
+      const layout4 = {
+        ...payload?.layout || {},
+        ...getLiveRuntimeLayoutSnapshot() || {}
+      };
+      const textPadding = cloneBox(payload?.textPadding, EMPTY_BOX);
+      setInputValue("#gal-custom-skin-width-ratio", layout4.widthRatio ?? "");
+      setInputValue("#gal-custom-skin-offset-x-ratio", layout4.offsetXRatio ?? 0);
+      setInputValue("#gal-custom-skin-offset-y-ratio", layout4.offsetYRatio ?? 0);
+      setInputValue("#gal-custom-skin-anchor-x-ratio", layout4.anchorXRatio ?? 0);
+      setInputValue("#gal-custom-skin-anchor-y-ratio", layout4.anchorYRatio ?? 0);
+      setInputValue("#gal-custom-skin-pad-top", textPadding.top ?? 0);
+      setInputValue("#gal-custom-skin-pad-right", textPadding.right ?? 0);
+      setInputValue("#gal-custom-skin-pad-bottom", textPadding.bottom ?? 0);
+      setInputValue("#gal-custom-skin-pad-left", textPadding.left ?? 0);
+      $scaleMode.val(payload?.scaleMode || "stretch");
+      $showText.prop("checked", payload?.meta?.showText !== false);
+    };
+    const readLayoutFromForm = (normalBase) => {
+      const liveRuntimeLayout = getLiveRuntimeLayoutSnapshot();
+      if (liveRuntimeLayout) {
+        return {
+          ...normalBase.layout || {},
+          ...liveRuntimeLayout
+        };
+      }
+      return {
+        widthRatio: clamp014(readInputNumber("#gal-custom-skin-width-ratio"), clamp014(normalBase.layout?.widthRatio, 0.2)),
+        offsetXRatio: readInputNumber("#gal-custom-skin-offset-x-ratio") ?? Number(normalBase.layout?.offsetXRatio || 0),
+        offsetYRatio: readInputNumber("#gal-custom-skin-offset-y-ratio") ?? Number(normalBase.layout?.offsetYRatio || 0),
+        anchorXRatio: clamp014(readInputNumber("#gal-custom-skin-anchor-x-ratio"), clamp014(normalBase.layout?.anchorXRatio, 0)),
+        anchorYRatio: clamp014(readInputNumber("#gal-custom-skin-anchor-y-ratio"), clamp014(normalBase.layout?.anchorYRatio, 0))
+      };
+    };
+    const readTextPaddingFromForm = (normalBase) => ({
+      top: clamp014(readInputNumber("#gal-custom-skin-pad-top"), clamp014(normalBase.textPadding?.top, 0)),
+      right: clamp014(readInputNumber("#gal-custom-skin-pad-right"), clamp014(normalBase.textPadding?.right, 0)),
+      bottom: clamp014(readInputNumber("#gal-custom-skin-pad-bottom"), clamp014(normalBase.textPadding?.bottom, 0)),
+      left: clamp014(readInputNumber("#gal-custom-skin-pad-left"), clamp014(normalBase.textPadding?.left, 0))
+    });
+    const getTransparentContentTarget = () => getCurrentElementDef()?.transparentContentTarget || null;
+    const currentElementSupportsTextToggle = () => supportsTextToggle(state.elementId);
+    const isFooterBatchMode = () => isFooterBatchEntryElementId(state.elementId) && state.uiState === "normal";
+    const getShowTextTargetIds = () => {
+      const rawTargetIds = isFooterBatchMode() ? CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS : [state.elementId];
+      return rawTargetIds.map((targetId) => String(targetId || "").trim()).filter((targetId) => targetId && supportsTextToggle(targetId));
+    };
+    const resolveSavedShowTextValue = async (packId, token = state.loadToken) => {
+      if (!state.profileId || state.uiState !== "normal") return null;
+      const targetIds = getShowTextTargetIds();
+      if (targetIds.length === 0) return null;
+      const assets = await Promise.all(
+        targetIds.map((targetId) => getUiSkinAsset(packId, state.profileId, targetId, state.device, "normal"))
+      );
+      if (token !== state.loadToken) return void 0;
+      const savedValues = assets.filter((asset) => asset?.meta && Object.prototype.hasOwnProperty.call(asset.meta, "showText")).map((asset) => asset.meta.showText !== false);
+      if (savedValues.length === 0) return null;
+      return savedValues.every(Boolean);
+    };
+    const persistShowTextToggle = async (showText) => {
+      if (!state.profileId || state.uiState !== "normal") {
+        return { persistedCount: 0, targetCount: 0 };
+      }
+      const packId = getAssetPackId();
+      const targetIds = getShowTextTargetIds();
+      if (targetIds.length === 0) {
+        return { persistedCount: 0, targetCount: 0 };
+      }
+      const existingAssets = await Promise.all(
+        targetIds.map((targetId) => getUiSkinAsset(packId, state.profileId, targetId, state.device, "normal"))
+      );
+      const assetsToSave = existingAssets.flatMap((asset, index) => {
+        if (!asset) return [];
+        const targetId = targetIds[index];
+        const payload = mergePayload(
+          buildDefaultCustomSkinAssetPayload({
+            packId,
+            skinId: state.profileId,
+            elementId: targetId,
+            device: state.device,
+            state: "normal"
+          }),
+          asset
+        );
+        payload.id = buildUiSkinAssetId(packId, state.profileId, targetId, state.device, "normal");
+        payload.packId = packId;
+        payload.skinId = state.profileId;
+        payload.elementId = targetId;
+        payload.device = state.device;
+        payload.state = "normal";
+        payload.meta = {
+          ...payload.meta || {},
+          showText,
+          updatedBy: "custom-skin-text-toggle"
+        };
+        return [payload];
+      });
+      if (assetsToSave.length === 0) {
+        return { persistedCount: 0, targetCount: targetIds.length };
+      }
+      await Promise.all(assetsToSave.map((payload) => saveUiSkinAsset(payload)));
+      if (!isFooterBatchMode()) {
+        const currentPayload = assetsToSave.find((payload) => payload.elementId === state.elementId) || null;
+        if (currentPayload) {
+          state.normalAsset = currentPayload;
+          state.currentAsset = currentPayload;
+        }
+      }
+      return { persistedCount: assetsToSave.length, targetCount: targetIds.length };
+    };
+    const clearFooterBatchAssignments = () => {
+      state.footerBatchAssignments = {};
+      state.footerBatchSelectedCandidateId = "";
+    };
+    const clearComponentSession = ({
+      keepSessionActive = false,
+      shouldRender = true,
+      clearCropperCandidates = true
+    } = {}) => {
+      if (!keepSessionActive) {
+        state.componentSessionActive = false;
+        state.preserveUploadedImageOnSwitch = false;
+      }
+      state.componentSessionCandidates = [];
+      state.componentSessionSelectedCandidateId = "";
+      if (clearCropperCandidates && state.footerBatchCandidates.length === 0) {
+        state.cropper?.clearDetectedComponentCandidates(false);
+      }
+      state.cropper?.setComponentCandidateLabels({}, false);
+      state.cropper?.setSelectedComponentCandidate("", { shouldRender: false });
+      state.cropper?.setComponentCandidateOverlayEnabled(false, false);
+      if (shouldRender) {
+        state.cropper?.render();
       }
     };
-    const loadImageToCropper = async (source, shouldSaveImage) => {
+    const buildComponentSessionLabelLookup = () => {
+      const labels = {};
+      state.componentSessionCandidates.forEach((candidate, index) => {
+        if (!candidate?.id) return;
+        labels[candidate.id] = buildComponentCandidateLabel(candidate, index);
+      });
+      return labels;
+    };
+    const getSelectedComponentSessionCandidate = () => {
+      const selectedCandidateId = String(state.componentSessionSelectedCandidateId || "").trim();
+      if (!selectedCandidateId) return null;
+      return state.componentSessionCandidates.find((candidate) => candidate?.id === selectedCandidateId) || state.cropper?.getSelectedComponentCandidate?.() || null;
+    };
+    const syncSelectedCandidateHitAreaToCropper = (candidate) => {
+      const def = getCurrentElementDef();
+      if (!state.cropper || !def?.interactive || state.uiState !== "normal") return;
+      const nextHitArea = cloneHitArea({ points: candidate?.hitAreaPoints }, RECT_HIT_AREA);
+      state.cropper.setHitAreaPoints(nextHitArea.points);
+      $hitOverride.prop("checked", false);
+    };
+    const buildFooterBatchLabelLookup = () => {
+      const labels = {};
+      state.footerBatchCandidates.forEach((candidate, index) => {
+        if (!candidate?.id) return;
+        labels[candidate.id] = FOOTER_BATCH_SLOT_META[index]?.shortLabel || `候选 ${index + 1}`;
+      });
+      return labels;
+    };
+    const syncDetectedCandidatesOnCropper = ({ shouldRender = true, syncCropFrame = false } = {}) => {
+      if (!state.cropper) return;
+      if (isFooterBatchMode() && state.footerBatchCandidates.length > 0) {
+        state.cropper.applyDetectedComponentCandidates(state.footerBatchCandidates, {
+          shouldRender: false,
+          syncCropFrame: false,
+          selectedCandidateId: state.footerBatchSelectedCandidateId
+        });
+        state.cropper.setComponentCandidateLabels(buildFooterBatchLabelLookup(), false);
+        state.cropper.setSelectedComponentCandidate(state.footerBatchSelectedCandidateId, {
+          syncCropFrame,
+          paddingRatio: COMPONENT_SELECTION_PADDING_RATIO2,
+          shouldRender: false
+        });
+        state.cropper.setComponentCandidateOverlayEnabled(true, false);
+      } else if (state.componentSessionCandidates.length > 0) {
+        state.cropper.applyDetectedComponentCandidates(state.componentSessionCandidates, {
+          shouldRender: false,
+          syncCropFrame: false,
+          selectedCandidateId: state.componentSessionSelectedCandidateId,
+          selectFirstCandidate: false
+        });
+        state.cropper.setComponentCandidateLabels(buildComponentSessionLabelLookup(), false);
+        state.cropper.setSelectedComponentCandidate(state.componentSessionSelectedCandidateId, {
+          syncCropFrame,
+          paddingRatio: COMPONENT_SELECTION_PADDING_RATIO2,
+          shouldRender: false
+        });
+        state.cropper.setComponentCandidateOverlayEnabled(state.componentSessionActive === true, false);
+      } else {
+        state.cropper.clearDetectedComponentCandidates(false);
+        state.cropper.setComponentCandidateLabels({}, false);
+        state.cropper.setSelectedComponentCandidate("", { shouldRender: false });
+        state.cropper.setComponentCandidateOverlayEnabled(false, false);
+      }
+      if (shouldRender) {
+        state.cropper.render();
+      }
+    };
+    const clearFooterBatchSession = ({
+      keepCandidates = false,
+      shouldRender = true,
+      clearCropperCandidates = true
+    } = {}) => {
+      clearFooterBatchAssignments();
+      if (!keepCandidates) {
+        state.footerBatchCandidates = [];
+      }
+      if (!keepCandidates && clearCropperCandidates && state.componentSessionCandidates.length === 0) {
+        state.cropper?.clearDetectedComponentCandidates(false);
+      }
+      syncDetectedCandidatesOnCropper({ shouldRender });
+    };
+    const syncFooterBatchCandidatesOnCropper = ({ shouldRender = true, syncCropFrame = false } = {}) => {
+      syncDetectedCandidatesOnCropper({ shouldRender, syncCropFrame });
+    };
+    const syncFooterBatchUI = () => {
+      const batchMode = isFooterBatchMode();
+      $footerBatchPanel.css("display", batchMode ? "flex" : "none");
+      $saveCurrentButton.css("display", batchMode ? "none" : "");
+      $saveCurrentButtonLabel.text("保存当前元素");
+      if (!batchMode) {
+        $saveCurrentButton.prop("disabled", false).attr("title", "");
+        return;
+      }
+      const hasImage = !!state.cropper?.imageLoaded;
+      const candidateCount = state.footerBatchCandidates.length;
+      const requiredCount = CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.length;
+      let note = `上传整条底栏图后，点击“识别底栏”，系统会固定按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 的顺序保存 12 个底栏按钮。`;
+      if (!hasImage) {
+        note = "请先上传整条底栏图；支持直接用抠图后的透明预览做固定顺序识别。";
+      } else if (candidateCount > 0) {
+        note = candidateCount >= requiredCount ? `已识别 ${candidateCount}/${requiredCount} 个底栏候选框；保存时会固定按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 的顺序落库。` : `当前只识别到 ${candidateCount}/${requiredCount} 个底栏候选框；请换更完整的底栏图后再保存。`;
+      }
+      $footerBatchNote.text(note);
+      $saveCurrentButton.prop("disabled", true).attr(
+        "title",
+        "当前是底栏固定顺序导入页；请只使用右侧“按默认顺序保存”。"
+      );
+      $footerBatchSave.prop("disabled", candidateCount < requiredCount);
+      $footerBatchSave.attr(
+        "title",
+        candidateCount < requiredCount ? `需要先识别满 ${requiredCount} 个底栏按钮，固定顺序为 ${FOOTER_BATCH_FIXED_ORDER_TEXT}` : `固定按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 的顺序保存底栏按钮`
+      );
+      syncFooterBatchCandidatesOnCropper({ shouldRender: false });
+    };
+    const buildFooterBatchRowGroups = (candidates) => {
+      const rows = [];
+      [...Array.isArray(candidates) ? candidates : []].sort((left, right) => left.centerY - right.centerY || left.centerX - right.centerX).forEach((candidate) => {
+        const tolerance = Math.max(candidate.box.height, 0.03) * 0.9;
+        const row = rows.find((item) => Math.abs(item.centerY - candidate.centerY) <= Math.max(item.avgHeight, tolerance));
+        if (row) {
+          row.items.push(candidate);
+          row.centerY = row.items.reduce((sum, item) => sum + item.centerY, 0) / row.items.length;
+          row.avgHeight = row.items.reduce((sum, item) => sum + item.box.height, 0) / row.items.length;
+          return;
+        }
+        rows.push({
+          centerY: candidate.centerY,
+          avgHeight: candidate.box.height,
+          items: [candidate]
+        });
+      });
+      return rows.map((row) => ({
+        ...row,
+        items: row.items.sort((left, right) => left.centerX - right.centerX)
+      })).sort((left, right) => right.items.length - left.items.length || right.centerY - left.centerY);
+    };
+    const runFooterBatchDetection = ({ auto = false } = {}) => {
+      if (!state.cropper?.imageLoaded) {
+        if (!auto) {
+          showToast4("请先上传底栏图片后再批量识别。");
+        }
+        return false;
+      }
+      const rawCandidates = state.cropper.detectComponentCandidates({
+        minAreaRatio: 45e-5,
+        minAspectRatio: 0.7,
+        maxHeightRatio: 0.4,
+        maxCandidates: 24,
+        shouldRender: false
+      });
+      if (!Array.isArray(rawCandidates) || rawCandidates.length === 0) {
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false });
+        syncFooterBatchUI();
+        setHint(
+          auto ? "图片已加载，但还没有识别到底栏按钮候选框。" : "没有识别到底栏按钮候选框，请尽量上传只包含底栏区域的 PNG，或先做纯色抠图。",
+          "warn"
+        );
+        return false;
+      }
+      const bestRow = buildFooterBatchRowGroups(rawCandidates)[0]?.items || [];
+      const candidates = bestRow.slice(0, CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.length);
+      if (candidates.length === 0) {
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false });
+        syncFooterBatchUI();
+        setHint("识别到了主体，但没有找到成排的底栏按钮，请换一张更聚焦底栏的图片。", "warn");
+        return false;
+      }
+      state.footerBatchCandidates = candidates;
+      state.cropper.applyDetectedComponentCandidates(candidates, {
+        shouldRender: false,
+        syncCropFrame: true,
+        paddingRatio: COMPONENT_SELECTION_PADDING_RATIO2
+      });
+      state.footerBatchSelectedCandidateId = candidates[0]?.id || "";
+      syncFooterBatchUI();
+      syncFooterBatchCandidatesOnCropper();
+      if (candidates.length < CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.length) {
+        setHint(`当前只识别到 ${candidates.length}/${CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.length} 个底栏候选框，固定顺序保存已锁定但暂时不可执行。`, "warn");
+        return false;
+      }
+      setHint(`已识别 ${candidates.length} 个底栏候选框，保存时会固定按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 的顺序落库。`, "ok");
+      return true;
+    };
+    const runGeneralComponentDetection = ({ auto = false } = {}) => {
+      if (!state.cropper?.imageLoaded) {
+        if (!auto) {
+          showToast4("请先上传图片后再识别组件。");
+        }
+        return false;
+      }
+      const templates = getCustomSkinRuntimeElementRects(state.device).filter((template) => template?.elementId && template.elementId !== CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID);
+      const rawCandidates = state.cropper.detectComponentCandidates(buildComponentCandidateDetectionOptions(templates));
+      const candidates = classifyComponentCandidates(rawCandidates, templates);
+      if (!candidates.length) {
+        clearComponentSession({ keepSessionActive: true, shouldRender: false });
+        setHint(
+          auto ? "已应用纯色抠图，但还没有识别到可用组件候选框。" : "没有识别到可用组件候选框，请继续修边或手动选择元素。",
+          "warn"
+        );
+        return false;
+      }
+      state.componentSessionActive = true;
+      state.preserveUploadedImageOnSwitch = true;
+      state.componentSessionCandidates = candidates;
+      state.componentSessionSelectedCandidateId = "";
+      syncDetectedCandidatesOnCropper({ shouldRender: false });
+      syncCropperPreviewControls();
+      const currentElementLabel = getCurrentElementDef()?.label || state.elementId;
+      setHint(
+        `已识别 ${candidates.length} 个候选框，点击高亮框只会切换当前框选；保存时仍保存到“${currentElementLabel}”。`,
+        "ok"
+      );
+      return true;
+    };
+    const focusCandidateWithinComponentSession = (candidate) => {
+      const safeCandidateId = String(candidate?.id || "").trim();
+      if (!safeCandidateId) return false;
+      state.componentSessionActive = true;
+      state.preserveUploadedImageOnSwitch = true;
+      state.componentSessionSelectedCandidateId = safeCandidateId;
+      state.editorMode = "crop";
+      state.overlayMode = "";
+      syncDetectedCandidatesOnCropper({ shouldRender: false, syncCropFrame: true });
+      syncSelectedCandidateHitAreaToCropper(candidate);
+      $saveImage.prop("checked", true);
+      syncCropperPreviewControls();
+      return true;
+    };
+    const handleGeneralComponentCandidateSelection = async (payload) => {
+      const selectedCandidateId = String(payload?.candidateId || "").trim();
+      if (!selectedCandidateId) return;
+      const selectedCandidate = state.componentSessionCandidates.find((candidate) => candidate.id === selectedCandidateId) || payload?.candidate || null;
+      if (!selectedCandidate) return;
+      state.componentSessionSelectedCandidateId = selectedCandidateId;
+      const suggestedElementId = String(selectedCandidate?.suggestedElementId || "").trim();
+      const suggestedLabel = String(selectedCandidate?.suggestedElementLabel || getCustomSkinElementById(suggestedElementId)?.label || "").trim();
+      focusCandidateWithinComponentSession(selectedCandidate);
+      const candidateIndex = Math.max(0, state.componentSessionCandidates.findIndex((candidate) => candidate.id === selectedCandidateId)) + 1;
+      const currentElementLabel = getCurrentElementDef()?.label || state.elementId;
+      setHint(
+        suggestedElementId ? `已切到候选框 ${candidateIndex}；当前仍是“${currentElementLabel}”，不是“${suggestedLabel || suggestedElementId}”。保存会按当前元素落库。` : `已切到候选框 ${candidateIndex}；当前仍是“${currentElementLabel}”，保存会按当前元素落库。`,
+        "ok"
+      );
+    };
+    const saveFooterBatchResults = async () => {
+      if (!state.profileId) {
+        showToast4("请先创建自定义皮肤。");
+        return;
+      }
+      const requiredCount = CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.length;
+      const orderedCandidates = state.footerBatchCandidates.slice(0, requiredCount);
+      if (orderedCandidates.length < requiredCount) {
+        showToast4(`当前只识别到 ${orderedCandidates.length}/${requiredCount} 个底栏按钮，不能按默认顺序保存。`);
+        return;
+      }
+      const packId = getAssetPackId();
+      const mattingSettings = readMattingSettingsFromControls();
+      const footerBaseDef = getCustomSkinElementById(CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID);
+      const footerBasePayload = buildDefaultCustomSkinAssetPayload({
+        packId,
+        skinId: state.profileId,
+        elementId: CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID,
+        device: state.device,
+        state: "normal"
+      });
+      const sharedFooterHeightRatio = Math.max(0.01, Number(footerBasePayload.layout?.widthRatio || 0.11)) / Math.max(0.01, Number(footerBaseDef?.aspectRatio || 3.3));
+      const ordinaryDetectedHeightRatios = orderedCandidates.slice(0, CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS.length).map((candidate, index) => {
+        const targetId = CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS[index];
+        const def = getCustomSkinElementById(targetId);
+        const detectedAspectRatio = Math.max(0.01, Number(candidate?.aspectRatio || def?.aspectRatio || 1));
+        const detectedWidthRatio = Math.max(0, Number(candidate?.box?.width) || 0);
+        if (detectedWidthRatio <= 0) return 0;
+        return detectedWidthRatio / detectedAspectRatio;
+      }).filter((value) => value > 0);
+      const sortedDetectedHeights = [...ordinaryDetectedHeightRatios].sort((left, right) => left - right);
+      const middleIndex = Math.floor(sortedDetectedHeights.length / 2);
+      const referenceDetectedHeightRatio = sortedDetectedHeights.length ? sortedDetectedHeights.length % 2 === 0 ? (sortedDetectedHeights[middleIndex - 1] + sortedDetectedHeights[middleIndex]) / 2 : sortedDetectedHeights[middleIndex] : sharedFooterHeightRatio;
+      const heightAlignedFooterScale = referenceDetectedHeightRatio > 0 ? sharedFooterHeightRatio / referenceDetectedHeightRatio : 1;
+      const totalDetectedWidthRatio = orderedCandidates.reduce(
+        (sum, candidate) => sum + Math.max(0, Number(candidate?.box?.width) || 0),
+        0
+      );
+      const footerWidthBudget = state.device === "mobile" ? 0.9 : 0.82;
+      const widthBudgetScale = totalDetectedWidthRatio > 0 ? footerWidthBudget / totalDetectedWidthRatio : 1;
+      const sharedFooterScale = Math.min(1, heightAlignedFooterScale, widthBudgetScale);
+      const existingAssets = await Promise.all(
+        CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.map((targetId) => getUiSkinAsset(packId, state.profileId, targetId, state.device, "normal"))
+      );
+      for (let index = 0; index < CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.length; index += 1) {
+        const targetId = CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS[index];
+        const candidate = orderedCandidates[index];
+        const def = getCustomSkinElementById(targetId);
+        if (!candidate || !def) continue;
+        const basePayload = buildDefaultCustomSkinAssetPayload({
+          packId,
+          skinId: state.profileId,
+          elementId: targetId,
+          device: state.device,
+          state: "normal"
+        });
+        const payload = mergePayload(basePayload, existingAssets[index]);
+        payload.id = buildUiSkinAssetId(packId, state.profileId, targetId, state.device, "normal");
+        payload.packId = packId;
+        payload.skinId = state.profileId;
+        payload.elementId = targetId;
+        payload.device = state.device;
+        payload.state = "normal";
+        const detectedAspectRatio = Math.max(0.01, Number(candidate.aspectRatio || def.aspectRatio || 1));
+        const detectedWidthRatio = Math.max(0, Number(candidate.box?.width) || 0);
+        const fallbackWidthRatio = Math.max(0.01, Number(basePayload.layout?.widthRatio || 0.11));
+        payload.layout = {
+          ...payload.layout || {},
+          widthRatio: Math.min(1, Math.max(0.01, detectedWidthRatio > 0 ? detectedWidthRatio * sharedFooterScale : fallbackWidthRatio)),
+          aspectRatioOverride: detectedAspectRatio
+        };
+        payload.meta = {
+          ...payload.meta || {},
+          updatedBy: "custom-skin-footer-batch",
+          showText: def.supportsTextToggle === true ? $showText.is(":checked") : true
+        };
+        if (def.interactive) {
+          payload.meta.hitArea = {
+            type: "polygon",
+            points: candidate.hitAreaPoints.map((point) => ({ ...point }))
+          };
+          payload.meta.hitAreaOverride = false;
+        }
+        if (mattingSettings.enabled) {
+          payload.meta.chromaKey = {
+            enabled: true,
+            color: mattingSettings.keyColor,
+            tolerance: mattingSettings.tolerance
+          };
+        } else {
+          delete payload.meta.chromaKey;
+        }
+        payload.imageBlob = await state.cropper.exportDetectedComponentCandidateBlob(candidate, Math.max(64, Math.round(def.outputWidth || 512)));
+        console.log(`[${SCRIPT_NAME}] saveFooterBatch image export: target=${targetId}, candidate=${candidate.id}, blobSize=${payload.imageBlob?.size || 0}, widthRatio=${payload.layout?.widthRatio || 0}, aspect=${detectedAspectRatio}, sharedScale=${sharedFooterScale}, widthBudget=${footerWidthBudget}`);
+        payload.imageUrl = null;
+        await saveUiSkinAsset(payload);
+      }
+      showToast4(`已按默认顺序保存 ${CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS.length} 个底栏按钮资源`);
+      await applyCustomSkinRuntime().catch((error3) => {
+        console.warn(`[${SCRIPT_NAME}] refresh custom-skin runtime failed:`, error3);
+      });
+      setHint(`已按固定顺序保存底栏按钮：${FOOTER_BATCH_FIXED_ORDER_TEXT}。`, "ok");
+    };
+    const getOpaqueBoundsTarget = () => {
+      const def = getCurrentElementDef();
+      if (!def || def.interactive || def.transparentContentTarget) return null;
+      return "opaqueBounds";
+    };
+    const getAutoDetectionMode = () => {
+      if (isFooterBatchMode()) return "footerBatch";
+      if (isCurrentElementInteractive()) return "hitArea";
+      return getTransparentContentTarget() || getOpaqueBoundsTarget();
+    };
+    const updateFormSectionState = () => {
+      const hasTransparentContentTarget = !!getTransparentContentTarget();
+      $textPaddingSection.css("display", hasTransparentContentTarget ? "" : "none");
+      if (hasTransparentContentTarget) {
+        $textPaddingSection.prop("open", true);
+      } else {
+        $textPaddingSection.prop("open", false);
+      }
+      const lockLayout = state.uiState !== "normal";
+      const followsRuntimeLayout = state.uiState === "normal" && currentElementUsesRuntimeLayout();
+      $advancedLayoutSection.css("display", followsRuntimeLayout ? "none" : "");
+      if (lockLayout || followsRuntimeLayout) {
+        $advancedLayoutSection.prop("open", false);
+      }
+      const supportsToggle = currentElementSupportsTextToggle();
+      $showTextRow.css("display", supportsToggle ? "flex" : "none");
+      $showText.prop("disabled", !supportsToggle || lockLayout);
+      $showText.attr(
+        "title",
+        !supportsToggle ? "当前组件没有可隐藏的文字层" : lockLayout ? "仅 normal 状态可修改组件文字显示" : "关闭后将隐藏组件自带的覆盖文字"
+      );
+      syncFooterBatchUI();
+    };
+    const updateAutoDetectState = () => {
+      const target = getAutoDetectionMode();
+      const hasImage = !!state.cropper?.imageLoaded;
+      if (target === "footerBatch") {
+        const enabled2 = hasImage && state.uiState === "normal";
+        $autoDetectContent.prop("disabled", !enabled2);
+        $autoDetectContentLabel.text("识别底栏");
+        if (!hasImage) {
+          $autoDetectContent.attr("title", "请先上传整条底栏图后再识别");
+        } else {
+          $autoDetectContent.attr("title", `固定识别 12 个底栏按钮，保存时会按 ${FOOTER_BATCH_FIXED_ORDER_TEXT} 的顺序落库`);
+        }
+        return;
+      }
+      const isHitAreaDetection = target === "hitArea";
+      const enabled = !!target && hasImage && (isHitAreaDetection || state.uiState === "normal");
+      $autoDetectContent.prop("disabled", !enabled);
+      if (isHitAreaDetection) {
+        $autoDetectContentLabel.text("自动识别轮廓");
+        if (!hasImage) {
+          $autoDetectContent.attr("title", "请先选择图片");
+          return;
+        }
+        $autoDetectContent.attr(
+          "title",
+          state.uiState === "normal" ? "根据 PNG 透明边缘自动生成按钮命中区，命中点只需微调" : "根据 PNG 透明边缘自动生成当前状态命中区；若未勾选，将自动开启状态独立命中区"
+        );
+        return;
+      }
+      if (target === "opaqueBounds") {
+        $autoDetectContentLabel.text("自动识别主体");
+        if (state.uiState !== "normal") {
+          $autoDetectContent.attr("title", "仅 normal 状态支持自动收紧主体框选");
+          return;
+        }
+        if (!hasImage) {
+          $autoDetectContent.attr("title", "请先选择图片");
+          return;
+        }
+        $autoDetectContent.attr(
+          "title",
+          state.cropper?.hasMattingPreview?.() ? "根据纯色抠图后的透明轮廓自动收紧当前组件框选范围" : "根据 PNG 透明边缘自动收紧当前组件框选范围"
+        );
+        return;
+      }
+      $autoDetectContentLabel.text("自动识别透明区");
+      if (!target) {
+        $autoDetectContent.attr("title", "当前元素不支持自动识别");
+        return;
+      }
+      if (state.uiState !== "normal") {
+        $autoDetectContent.attr("title", "仅 normal 状态支持自动识别透明内容区");
+        return;
+      }
+      if (!hasImage) {
+        $autoDetectContent.attr("title", "请先选择图片");
+        return;
+      }
+      $autoDetectContent.attr(
+        "title",
+        state.cropper?.hasMattingPreview?.() ? "当前自动识别只用于对话框内嵌透明文字区；纯色抠图后的透明背景无需再次识别" : "自动识别对话框透明文字区并填充 textPadding"
+      );
+    };
+    const applyAutoDetection = ({ silentUnsupported = false, auto = false } = {}) => {
+      const target = getAutoDetectionMode();
+      if (!target) {
+        if (!silentUnsupported) {
+          showToast4("当前元素不支持自动识别。");
+        }
+        return false;
+      }
+      if (!state.cropper?.imageLoaded) {
+        if (!silentUnsupported) {
+          showToast4("请先选择图片后再自动识别。");
+        }
+        return false;
+      }
+      if (target === "footerBatch") {
+        return runFooterBatchDetection({ auto });
+      }
+      if (target === "hitArea") {
+        if (state.uiState !== "normal" && !$hitOverride.is(":checked")) {
+          $hitOverride.prop("checked", true);
+        }
+        const detection2 = state.cropper.detectOpaqueHitArea({
+          outputWidth: Math.min(768, Math.max(256, Math.round(getCurrentElementDef()?.outputWidth || 512)))
+        });
+        if (!detection2) {
+          setHint(
+            auto ? "图片已加载，但没有识别到有效轮廓，可切到命中区模式手动调整。" : "没有识别到有效轮廓，请检查 PNG 是否带透明边并确保主体与背景分离。",
+            "warn"
+          );
+          return false;
+        }
+        setHint(
+          state.uiState === "normal" ? "已根据透明边缘自动生成按钮命中区，可切到“命中区模式”微调。" : "已根据透明边缘自动生成当前状态命中区，并自动开启状态独立命中区。",
+          "ok"
+        );
+        return true;
+      }
+      if (target === "opaqueBounds") {
+        if (state.uiState !== "normal") {
+          if (!silentUnsupported) {
+            showToast4("主体轮廓自动识别仅支持 normal 状态。");
+          }
+          return false;
+        }
+        const detection2 = state.cropper.detectOpaqueContentBox({
+          outputWidth: Math.min(1024, Math.max(256, Math.round(getCurrentElementDef()?.outputWidth || 512)))
+        });
+        if (!detection2) {
+          setHint(
+            auto ? "图片已加载，但没有识别到清晰主体，可继续手动裁图。" : "没有识别到清晰主体，请检查 PNG 透明边缘或先执行纯色抠图。",
+            "warn"
+          );
+          return false;
+        }
+        state.cropper.applyContentBoxToCropFrame(detection2.box, { paddingRatio: 0.01 });
+        syncCropperPreviewControls();
+        setHint("已根据主体透明轮廓自动收紧当前组件框选范围，可继续微调。", "ok");
+        return true;
+      }
+      if (state.uiState !== "normal") {
+        if (!silentUnsupported) {
+          showToast4("透明内容区自动识别仅支持 normal 状态。");
+        }
+        return false;
+      }
+      const detection = state.cropper.detectTransparentContentBox({
+        outputWidth: Math.min(1024, Math.max(256, Math.round(getCurrentElementDef()?.outputWidth || 512)))
+      });
+      if (!detection) {
+        const hasMattingPreview = state.cropper?.hasMattingPreview?.() === true;
+        setHint(
+          hasMattingPreview ? "纯色抠图已生成透明预览；当前“自动识别透明区”仅用于对话框内部文字窗口，不影响透明背景。" : auto ? "图片已加载，但没有识别到封闭透明区域，可手动调整比例参数。" : "没有识别到封闭透明区域，请检查 PNG 是否包含内嵌透明窗口。",
+          "warn"
+        );
+        return false;
+      }
+      setInputValue("#gal-custom-skin-pad-top", detection.insets.top);
+      setInputValue("#gal-custom-skin-pad-right", detection.insets.right);
+      setInputValue("#gal-custom-skin-pad-bottom", detection.insets.bottom);
+      setInputValue("#gal-custom-skin-pad-left", detection.insets.left);
+      setHint("已根据透明 PNG 自动填充对话框文字区内边距。", "ok");
+      return true;
+    };
+    const updateEditableState = () => {
+      const lockLayout = state.uiState !== "normal";
+      const lockRuntimeLayout = state.uiState === "normal" && currentElementUsesRuntimeLayout();
+      const footerBatchMode = isFooterBatchMode();
+      const normalStateFields = [
+        "#gal-custom-skin-scale-mode",
+        "#gal-custom-skin-pad-top",
+        "#gal-custom-skin-pad-right",
+        "#gal-custom-skin-pad-bottom",
+        "#gal-custom-skin-pad-left",
+        "#gal-custom-skin-show-text"
+      ];
+      const advancedLayoutFields = [
+        "#gal-custom-skin-width-ratio",
+        "#gal-custom-skin-offset-x-ratio",
+        "#gal-custom-skin-offset-y-ratio",
+        "#gal-custom-skin-anchor-x-ratio",
+        "#gal-custom-skin-anchor-y-ratio"
+      ];
+      normalStateFields.forEach((selector) => {
+        $pane.find(selector).prop("disabled", lockLayout);
+      });
+      advancedLayoutFields.forEach((selector) => {
+        $pane.find(selector).prop("disabled", lockLayout || lockRuntimeLayout).attr("title", lockRuntimeLayout ? "对话框默认跟随当前主题的真实大小与位置，无需手动调整这些比例。" : "");
+      });
+      const allowHitOverride = isCurrentElementInteractive() && state.uiState !== "normal";
+      $hitOverrideRow.css("display", isCurrentElementInteractive() ? "flex" : "none");
+      $hitOverride.prop("disabled", !allowHitOverride);
+      $hitOverride.attr(
+        "title",
+        isCurrentElementInteractive() ? allowHitOverride ? "为当前按钮状态单独保存命中区" : "仅 hover / active 状态可单独保存命中区" : "当前元素不需要命中区"
+      );
+      if (!allowHitOverride) {
+        $hitOverride.prop("checked", false);
+      }
+      if (footerBatchMode && state.editorMode === "hit") {
+        state.editorMode = "crop";
+      }
+      updateFormSectionState();
+      state.cropper?.setCropFrameEditable(!lockLayout);
+      setModeButtons(state.editorMode);
+      syncDetectedCandidatesOnCropper({ shouldRender: false });
+      updateAutoDetectState();
+      syncMattingControls();
+      syncFooterBatchUI();
+    };
+    const loadImageIntoCropper = async (source, shouldSaveImage, options2 = {}) => {
       if (!state.cropper) return;
       try {
+        clearComponentSession({ keepSessionActive: false, shouldRender: false });
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
         await state.cropper.loadImage(source);
-        const percent = Math.round(state.cropper.scale * 100);
-        $zoom.val(String(percent));
-        $zoomValue.text(`${percent}%`);
+        state.overlayMode = "";
+        syncCropperMattingSettings({ shouldRender: false, keepPreview: false });
+        syncCropperPreviewControls();
         $saveImage.prop("checked", !!shouldSaveImage);
-        markHint("图片已加载，可调整裁剪区域后保存。", "ok");
+        updateAutoDetectState();
+        const canAutoDetect = !!options2.autoDetectAfterLoad && !!getAutoDetectionMode() && (isCurrentElementInteractive() || state.uiState === "normal");
+        const detected = canAutoDetect ? applyAutoDetection({ silentUnsupported: true, auto: true }) : false;
+        if (!detected && !canAutoDetect) {
+          setHint(
+            isCurrentElementInteractive() ? "图片已加载，可以继续调整裁图和命中区。" : "图片已加载，可以继续调整裁图和比例参数。",
+            "ok"
+          );
+        }
       } catch (error3) {
-        console.warn(`[${SCRIPT_NAME}] western 编辑器加载图片失败:`, error3);
+        console.warn(`[${SCRIPT_NAME}] custom-skin editor image load failed:`, error3);
+        clearComponentSession({ keepSessionActive: false, shouldRender: false });
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
+        state.cropper.clearImage();
+        syncCropperPreviewControls();
         setCanvasPlaceholder("图片加载失败");
-        markHint("图片加载失败，请更换图片。", "err");
+        updateAutoDetectState();
+        setHint("图片加载失败，请更换图片。", "err");
       }
     };
-    const loadCurrentAsset = async () => {
-      const token = ++state.loadToken;
-      const packId = getPackId();
-      const def = getCurrentElementDef();
-      const defaultPayload = buildDefaultWesternAssetPayload({
-        packId,
-        elementId: state.elementId,
-        device: state.device,
-        state: state.uiState
-      });
-      applyFormValues(defaultPayload);
-      setCropperAspect();
-      clearObjectUrls();
-      const asset = await getUiSkinAsset(packId, WESTERN_SKIN_ID, state.elementId, state.device, state.uiState);
-      if (token !== state.loadToken) return;
-      state.currentAsset = asset;
-      if (asset) {
-        applyFormValues({
-          ...defaultPayload,
-          ...asset,
-          layout: { ...defaultPayload.layout || {}, ...asset.layout || {} },
-          slice: { ...defaultPayload.slice || {}, ...asset.slice || {} },
-          textPadding: { ...defaultPayload.textPadding || {}, ...asset.textPadding || {} }
-        });
-        if (asset.imageBlob) {
-          const objectUrl = (topWindow.URL || URL).createObjectURL(asset.imageBlob);
-          state.objectUrls.add(objectUrl);
-          await loadImageToCropper(objectUrl, false);
-        } else if (asset.imageUrl) {
-          await loadImageToCropper(asset.imageUrl, false);
-        } else {
-          setCanvasPlaceholder("当前元素未设置图片");
-          $saveImage.prop("checked", false);
-          markHint("当前元素只有布局参数，没有图片。", "warn");
-        }
+    const resolvePreviewAsset = () => {
+      if (state.uiState === "normal") {
+        return state.normalAsset;
+      }
+      if (state.currentAsset?.imageBlob || state.currentAsset?.imageUrl) {
+        return state.currentAsset;
+      }
+      return state.normalAsset;
+    };
+    const performLoadCurrentAsset = async (options2 = {}) => {
+      const preserveUploadedImage = options2.preserveUploadedImage === true && state.cropper?.imageLoaded === true;
+      const preserveComponentSession = preserveUploadedImage && options2.preserveComponentSession === true && state.componentSessionActive === true;
+      state.preserveUploadedImageOnSwitch = preserveUploadedImage;
+      if (preserveComponentSession) {
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
       } else {
-        setCanvasPlaceholder("当前元素未设置图片");
+        clearComponentSession({ keepSessionActive: false, shouldRender: false });
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
+      }
+      if (!state.profileId) {
+        state.normalAsset = null;
+        state.currentAsset = null;
+        setCanvasPlaceholder("请先创建自定义皮肤");
+        setHint("当前还没有可编辑的自定义皮肤，请先新建。", "warn");
+        return;
+      }
+      const token = ++state.loadToken;
+      const packId = getAssetPackId();
+      const defaultNormal = getDefaultPayload("normal");
+      const defaultCurrent = getDefaultPayload(state.uiState);
+      if (!preserveUploadedImage) {
+        clearObjectUrls();
+      }
+      const requests = [
+        getUiSkinAsset(packId, state.profileId, state.elementId, state.device, "normal"),
+        state.uiState === "normal" ? Promise.resolve(null) : getUiSkinAsset(packId, state.profileId, state.elementId, state.device, state.uiState)
+      ];
+      const [normalAsset, currentAsset] = await Promise.all(requests);
+      if (token !== state.loadToken) return;
+      state.normalAsset = normalAsset;
+      state.currentAsset = state.uiState === "normal" ? normalAsset : currentAsset;
+      const mergedNormal = mergePayload(defaultNormal, normalAsset);
+      const mergedCurrent = state.uiState === "normal" ? mergedNormal : mergePayload(defaultCurrent, currentAsset);
+      setCropperAspect(mergedNormal.layout?.aspectRatioOverride);
+      applyFormValues(mergedNormal);
+      const savedShowText = await resolveSavedShowTextValue(packId, token);
+      if (token !== state.loadToken) return;
+      if (savedShowText !== null && savedShowText !== void 0) {
+        $showText.prop("checked", savedShowText);
+      }
+      updateEditableState();
+      const useStateHitArea = state.uiState !== "normal" && mergedCurrent.meta?.hitAreaOverride === true;
+      const hitArea = useStateHitArea ? cloneHitArea(mergedCurrent.meta?.hitArea, mergedNormal.meta?.hitArea || RECT_HIT_AREA) : cloneHitArea(mergedNormal.meta?.hitArea, RECT_HIT_AREA);
+      state.cropper.setHitAreaPoints(hitArea.points);
+      $hitOverride.prop("checked", useStateHitArea);
+      if (preserveUploadedImage) {
+        state.overlayMode = "";
+        syncCropperInteractionMode();
+        syncDetectedCandidatesOnCropper({ shouldRender: false });
+        syncCropperPreviewControls();
+        updateAutoDetectState();
+        return;
+      }
+      const previewAsset = resolvePreviewAsset();
+      const previewMattingPreset = previewAsset?.meta?.chromaKey || mergedCurrent.meta?.chromaKey || mergedNormal.meta?.chromaKey || null;
+      applyMattingPresetToControls({
+        enabled: previewMattingPreset?.enabled === true,
+        color: previewMattingPreset?.color,
+        tolerance: previewMattingPreset?.tolerance
+      });
+      if (previewAsset?.imageBlob) {
+        const objectUrl = (topWindow.URL || URL).createObjectURL(previewAsset.imageBlob);
+        state.objectUrls.add(objectUrl);
+        await loadImageIntoCropper(objectUrl, false);
+      } else if (previewAsset?.imageUrl) {
+        await loadImageIntoCropper(previewAsset.imageUrl, false);
+      } else {
+        state.cropper.clearImage();
+        state.overlayMode = "";
+        clearComponentSession({ keepSessionActive: false, shouldRender: false, clearCropperCandidates: false });
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
+        syncCropperPreviewControls();
+        setCanvasPlaceholder("当前元素尚未设置图片");
         $saveImage.prop("checked", false);
-        markHint("当前元素暂无配置，可直接上传并保存。");
+        updateAutoDetectState();
+        setHint("当前元素暂无图片，可仅保存比例参数或上传图片。", "warn");
+      }
+    };
+    const loadCurrentAsset = async (options2 = {}) => {
+      const pendingLoad = performLoadCurrentAsset(options2);
+      state.pendingAssetLoad = pendingLoad;
+      try {
+        await pendingLoad;
+      } finally {
+        if (state.pendingAssetLoad === pendingLoad) {
+          state.pendingAssetLoad = null;
+        }
       }
     };
     const saveCurrent = async () => {
+      if (!state.profileId) {
+        const message = "请先创建自定义皮肤。";
+        showToast4(message);
+        setHint(message, "warn");
+        return;
+      }
+      if (isFooterBatchMode()) {
+        const message = "当前是底栏固定顺序导入页；请使用右侧“按默认顺序保存”。";
+        showToast4(message);
+        setHint(message, "warn");
+        return;
+      }
+      if (state.pendingAssetLoad) {
+        await state.pendingAssetLoad;
+      }
       const def = getCurrentElementDef();
       if (!def) return;
-      const packId = getPackId();
-      const existing = state.currentAsset || await getUiSkinAsset(packId, WESTERN_SKIN_ID, state.elementId, state.device, state.uiState);
-      const base = buildDefaultWesternAssetPayload({
+      const packId = getAssetPackId();
+      const mergedNormal = getMergedNormalPayload();
+      const existingCurrent = state.uiState === "normal" ? state.normalAsset : state.currentAsset || await getUiSkinAsset(packId, state.profileId, state.elementId, state.device, state.uiState);
+      const payload = {
+        id: buildUiSkinAssetId(packId, state.profileId, state.elementId, state.device, state.uiState),
         packId,
+        skinId: state.profileId,
         elementId: state.elementId,
         device: state.device,
-        state: state.uiState
-      });
-      const payload = {
-        ...base,
-        id: buildUiSkinAssetId(packId, WESTERN_SKIN_ID, state.elementId, state.device, state.uiState),
-        skinId: WESTERN_SKIN_ID,
-        layout: getLayoutFromForm(),
-        slice: getSliceFromForm(),
-        textPadding: getPaddingFromForm(),
-        scaleMode: String($pane.find("#gal-western-scale-mode").val() || "stretch").trim() || "stretch",
+        state: state.uiState,
+        scaleMode: state.uiState === "normal" ? String($scaleMode.val() || mergedNormal.scaleMode || "stretch").trim() || "stretch" : String(mergedNormal.scaleMode || "stretch").trim() || "stretch",
+        layout: state.uiState === "normal" ? readLayoutFromForm(mergedNormal) : { ...mergedNormal.layout || {} },
+        slice: existingCurrent?.slice && typeof existingCurrent.slice === "object" ? { ...existingCurrent.slice } : mergedNormal.slice && typeof mergedNormal.slice === "object" ? { ...mergedNormal.slice } : { ...EMPTY_BOX },
+        textPadding: state.uiState === "normal" ? readTextPaddingFromForm(mergedNormal) : cloneBox(mergedNormal.textPadding, EMPTY_BOX),
         meta: {
-          ...existing?.meta || {},
-          updatedBy: "western-skin-editor"
+          ...existingCurrent?.meta && typeof existingCurrent.meta === "object" ? existingCurrent.meta : {},
+          showText: currentElementSupportsTextToggle() ? state.uiState === "normal" ? $showText.is(":checked") : mergedNormal.meta?.showText !== false : true,
+          updatedBy: "custom-skin-editor"
         }
       };
+      const mattingSettings = readMattingSettingsFromControls();
+      const selectedComponentCandidate = state.componentSessionActive === true ? getSelectedComponentSessionCandidate() : null;
+      if (def.interactive && state.uiState === "normal") {
+        if (selectedComponentCandidate?.hitAreaPoints?.length >= 3) {
+          syncSelectedCandidateHitAreaToCropper(selectedComponentCandidate);
+        }
+        payload.meta.hitArea = {
+          type: "polygon",
+          points: state.cropper.getHitAreaPoints()
+        };
+        payload.meta.hitAreaOverride = false;
+      } else if (def.interactive && $hitOverride.is(":checked")) {
+        payload.meta.hitArea = {
+          type: "polygon",
+          points: state.cropper.getHitAreaPoints()
+        };
+        payload.meta.hitAreaOverride = true;
+      } else {
+        delete payload.meta.hitArea;
+        payload.meta.hitAreaOverride = false;
+      }
+      if (mattingSettings.enabled) {
+        payload.meta.chromaKey = {
+          enabled: true,
+          color: mattingSettings.keyColor,
+          tolerance: mattingSettings.tolerance
+        };
+      } else {
+        delete payload.meta.chromaKey;
+      }
       const shouldSaveImage = $saveImage.is(":checked");
-      if (shouldSaveImage && state.cropper && state.cropper.imageLoaded) {
-        const outWidth = Math.max(64, Math.round(readInputNumber("#gal-western-width") || def.outputWidth || 512));
-        const croppedBlob = await state.cropper.getCroppedBlob(outWidth);
-        payload.imageBlob = croppedBlob;
+      console.log(`[${SCRIPT_NAME}] saveCurrent 诊断: shouldSaveImage=${shouldSaveImage}, imageLoaded=${state.cropper.imageLoaded}, componentSessionActive=${state.componentSessionActive}, selectedCandidate=${selectedComponentCandidate?.id || "none"}, hasMattingPreview=${state.cropper?.hasMattingPreview?.()}, elementId=${state.elementId}`);
+      const cropAspectRatio = Number(state.cropper?.getCropAspectRatio?.() || def.aspectRatio || 1);
+      if (state.uiState === "normal" && Number.isFinite(cropAspectRatio) && cropAspectRatio > 0) {
+        payload.layout.aspectRatioOverride = cropAspectRatio;
+      } else if (Number.isFinite(Number(mergedNormal.layout?.aspectRatioOverride)) && Number(mergedNormal.layout.aspectRatioOverride) > 0) {
+        payload.layout.aspectRatioOverride = Number(mergedNormal.layout.aspectRatioOverride);
+      } else {
+        delete payload.layout.aspectRatioOverride;
+      }
+      if (shouldSaveImage && state.cropper.imageLoaded) {
+        const componentOutputWidth = Math.max(64, Math.round(def.outputWidth || 512));
+        payload.imageBlob = await state.cropper.getCroppedBlob(componentOutputWidth);
+        if (!payload.imageBlob && selectedComponentCandidate?.id) {
+          payload.imageBlob = await state.cropper.exportDetectedComponentCandidateBlob(selectedComponentCandidate.id, componentOutputWidth);
+        }
+        console.log(`[${SCRIPT_NAME}] saveCurrent image export: element=${state.elementId}, candidate=${selectedComponentCandidate?.id || "none"}, blobSize=${payload.imageBlob?.size || 0}`);
         payload.imageUrl = null;
       } else if (shouldSaveImage) {
-        showToast4("请先上传图片，或取消“保存当前裁剪图像”");
+        const message = "请先选择图片，或取消“保存当前裁图后的图片”。";
+        showToast4(message);
+        setHint(message, "warn");
         return;
-      } else if (existing?.imageBlob || existing?.imageUrl) {
-        payload.imageBlob = existing.imageBlob || null;
-        payload.imageUrl = existing.imageUrl || null;
+      } else if (existingCurrent?.imageBlob || existingCurrent?.imageUrl) {
+        payload.imageBlob = existingCurrent.imageBlob || null;
+        payload.imageUrl = existingCurrent.imageUrl || null;
+      } else {
+        payload.imageBlob = null;
+        payload.imageUrl = null;
       }
       await saveUiSkinAsset(payload);
+      const savedRecord = await getUiSkinAsset(packId, state.profileId, state.elementId, state.device, state.uiState);
+      console.log(`[${SCRIPT_NAME}] saveCurrent readback: element=${state.elementId}, state=${state.uiState}, blobSize=${savedRecord?.imageBlob?.size || 0}, updatedAt=${savedRecord?.updatedAt || "none"}`);
+      if (state.uiState === "normal") {
+        state.normalAsset = payload;
+        state.currentAsset = payload;
+      } else {
+        state.currentAsset = payload;
+      }
+      const shouldExitComponentSessionAfterSave = state.componentSessionActive === true;
+      if (shouldExitComponentSessionAfterSave) {
+        await loadCurrentAsset();
+      }
       showToast4(`已保存：${def.label} [${state.device}/${state.uiState}]`);
-      await applyWesternSkinRuntime().catch((err) => {
-        console.warn(`[${SCRIPT_NAME}] 刷新 western 皮肤运行时失败:`, err);
+      await applyCustomSkinRuntime().catch((error3) => {
+        console.warn(`[${SCRIPT_NAME}] refresh custom-skin runtime failed:`, error3);
       });
-      await loadCurrentAsset();
+      setHint("已保存当前元素；本次会话中的抠图修补会继续保留，切换元素或关闭面板后失效。", "ok");
     };
     const resetCurrent = async () => {
+      if (!state.profileId) return;
       const def = getCurrentElementDef();
-      const ok = topWindow.confirm(`确定重置「${def?.label || state.elementId}」当前设备/状态配置吗？`);
+      const ok = topWindow.confirm(`确定重置“${def?.label || state.elementId}”当前设备/状态配置吗？`);
       if (!ok) return;
-      await deleteUiSkinAsset(getPackId(), WESTERN_SKIN_ID, state.elementId, state.device, state.uiState);
+      await deleteUiSkinAsset(getAssetPackId(), state.profileId, state.elementId, state.device, state.uiState);
+      clearFooterBatchSession({ keepCandidates: false, shouldRender: false });
       showToast4(`已重置：${def?.label || state.elementId}`);
-      await applyWesternSkinRuntime().catch((err) => {
-        console.warn(`[${SCRIPT_NAME}] 刷新 western 皮肤运行时失败:`, err);
+      await applyCustomSkinRuntime().catch((error3) => {
+        console.warn(`[${SCRIPT_NAME}] refresh custom-skin runtime failed:`, error3);
       });
       await loadCurrentAsset();
     };
-    const bindSelectChanges = () => {
+    const bindElementAndStateChanges = () => {
       $elementSelect.on("change", async function() {
         state.elementId = String($2(this).val() || "").trim() || state.elementId;
         syncStateOptions();
         markActiveElementItem();
         await loadCurrentAsset();
       });
-      $deviceSelect.on("change", async function() {
-        state.device = String($2(this).val() || "desktop").trim() || "desktop";
-        syncDeviceSwitchUI();
-        setWesternSkinRuntimePreviewDevice(state.device);
-        await applyWesternSkinRuntime().catch((err) => {
-          console.warn(`[${SCRIPT_NAME}] 切换设备后刷新 western 预览失败:`, err);
-        });
-        await loadCurrentAsset();
-      });
       $stateSelect.on("change", async function() {
         state.uiState = String($2(this).val() || "normal").trim() || "normal";
+        updateEditableState();
         await loadCurrentAsset();
       });
-      $pane.find(".gal-western-element-item").on("click", function() {
-        const elementId = String($2(this).attr("data-element-id") || "").trim();
-        if (!elementId) return;
-        state.elementId = elementId;
-        $elementSelect.val(elementId);
+      $pane.find(".gal-custom-skin-element-item").on("click", function() {
+        const nextElementId = String($2(this).attr("data-element-id") || "").trim();
+        if (!nextElementId) return;
+        state.elementId = nextElementId;
+        $elementSelect.val(nextElementId);
         syncStateOptions();
         markActiveElementItem();
         loadCurrentAsset();
       });
-      $pane.find(".gal-western-device-tab").on("click", async function() {
-        const nextDevice = String($2(this).attr("data-device") || "").trim();
+      const switchDevice = async (nextDevice) => {
         if (nextDevice !== "desktop" && nextDevice !== "mobile") return;
-        if (state.device === nextDevice) return;
         state.device = nextDevice;
         syncDeviceSwitchUI();
-        setWesternSkinRuntimePreviewDevice(state.device);
-        await applyWesternSkinRuntime().catch((err) => {
-          console.warn(`[${SCRIPT_NAME}] 切换设备后刷新 western 预览失败:`, err);
+        setCustomSkinRuntimePreviewDevice(nextDevice);
+        await applyCustomSkinRuntime().catch((error3) => {
+          console.warn(`[${SCRIPT_NAME}] custom-skin preview device refresh failed:`, error3);
         });
         await loadCurrentAsset();
-        markHint(`已切换到 ${nextDevice === "mobile" ? "移动端" : "桌面端"} 皮肤编辑模式。`, "ok");
+        setHint(`已切换到${nextDevice === "mobile" ? "移动端" : "桌面端"}资源。`, "ok");
+      };
+      $deviceSelect.on("change", function() {
+        switchDevice(String($2(this).val() || "desktop").trim() || "desktop");
+      });
+      $pane.find(".gal-custom-skin-device-tab").on("click", function() {
+        const nextDevice = String($2(this).attr("data-device") || "").trim();
+        if (nextDevice === state.device) return;
+        switchDevice(nextDevice);
+      });
+      $showText.on("change", function() {
+        const showText = $2(this).is(":checked");
+        const targetIds = getShowTextTargetIds();
+        if (targetIds.length === 0) return;
+        previewCustomSkinTextVisibility(targetIds, showText);
+        persistShowTextToggle(showText).then(async ({ persistedCount }) => {
+          if (persistedCount > 0) {
+            await applyCustomSkinRuntime().catch((error3) => {
+              console.warn(`[${SCRIPT_NAME}] refresh custom-skin runtime after text toggle failed:`, error3);
+            });
+          }
+          setHint(
+            persistedCount > 0 ? `组件文字已立即${showText ? "显示" : "隐藏"}，并已自动记住当前设置。` : `组件文字已立即${showText ? "显示" : "隐藏"}，当前无需再点保存。`,
+            "ok"
+          );
+        }).catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] toggle custom-skin text visibility failed:`, error3);
+          setHint(`切换文字显示失败：${error3.message || error3}`, "err");
+          showToast4(`切换文字显示失败: ${error3.message || error3}`);
+        });
       });
     };
     const bindPreviewActions = () => {
-      $pane.find("#gal-western-select-image").on("click", () => {
-        $imageInput.trigger("click");
+      bindPaneButton("#gal-custom-skin-desktop-preview-toggle", () => {
+        setDesktopPreviewActive(true);
+      });
+      $desktopPreviewFab.off("click.customSkinPreview").on("click.customSkinPreview", (event3) => {
+        event3.preventDefault();
+        event3.stopPropagation();
+        setDesktopPreviewActive(false);
+      });
+      bindPaneButton("#gal-custom-skin-select-image", () => {
+        $imageInput.get(0)?.click();
       });
       $imageInput.on("change", async function() {
         const file = this.files?.[0];
         if (!file) return;
-        await loadImageToCropper(file, true);
+        await loadImageIntoCropper(file, true, { autoDetectAfterLoad: true });
         this.value = "";
       });
-      $pane.find("#gal-western-reset-crop").on("click", () => {
+      $pane.find("#gal-custom-skin-reset-crop").on("click", () => {
         if (!state.cropper || !state.cropper.imageLoaded) return;
         state.cropper.reset();
-        const percent = Math.round(state.cropper.scale * 100);
-        $zoom.val(String(percent));
-        $zoomValue.text(`${percent}%`);
+        syncCropperPreviewControls();
+        const canAutoDetect = !!getAutoDetectionMode() && (isCurrentElementInteractive() || state.uiState === "normal");
+        if (!canAutoDetect || !applyAutoDetection({ silentUnsupported: true, auto: true })) {
+          if (canAutoDetect) return;
+          setHint(
+            isCurrentElementInteractive() ? "已重置裁图，可以继续调整图片位置与命中区。" : "已重置裁图，可以继续调整图片位置与比例参数。",
+            "ok"
+          );
+        }
+      });
+      $pane.find("#gal-custom-skin-auto-detect-content").on("click", () => {
+        applyAutoDetection();
+      });
+      $mattingEnabled.on("change", function() {
+        const enabled = $2(this).is(":checked");
+        syncCropperMattingSettings({ shouldRender: false, keepPreview: enabled });
+        if (!enabled) {
+          state.overlayMode = "";
+          clearComponentSession({ keepSessionActive: false, shouldRender: false });
+          state.cropper.clearMatting(false);
+          clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
+          syncCropperInteractionMode();
+          syncCropperPreviewControls();
+          setHint("已关闭纯色抠图，当前预览恢复为原图。", "ok");
+          return;
+        }
+        syncCropperInteractionMode();
+        syncCropperPreviewControls();
+        setHint("已启用纯色抠图，设置键色后点击“应用抠图”。", "ok");
+      });
+      const syncMattingColorInputs = (rawColor) => {
+        const color = normalizeHexColor(rawColor, DEFAULT_CHROMA_KEY_COLOR2);
+        $mattingColor.val(color);
+        $mattingColorText.val(color);
+        syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+        syncMattingControls();
+        return color;
+      };
+      $mattingColor.on("input change", function() {
+        syncMattingColorInputs($2(this).val());
+      });
+      $mattingColorText.on("change blur", function() {
+        syncMattingColorInputs($2(this).val());
+      });
+      $pane.find(".gal-custom-skin-color-chip").on("click", function() {
+        if ($2(this).prop("disabled")) return;
+        const color = String($2(this).attr("data-color") || DEFAULT_CHROMA_KEY_COLOR2).trim();
+        syncMattingColorInputs(color);
+        setHint(`已切换抠图键色为 ${color}。`, "ok");
+      });
+      $pickMattingColor.on("click", () => {
+        if ($pickMattingColor.prop("disabled")) return;
+        state.overlayMode = state.overlayMode === "pick" ? "" : "pick";
+        if (state.overlayMode === "pick") {
+          setHint("已进入取色模式，请点击画面中的纯色背景。", "ok");
+        } else {
+          setHint("已退出取色模式。", "ok");
+        }
+        syncCropperInteractionMode();
+        $modeHelp.text(getModeHelpText());
+        $cropWrapper.attr("title", getCropWrapperTitle());
+        syncMattingControls();
+      });
+      $mattingTolerance.on("input change", function() {
+        const value = Math.max(0, Math.min(255, Math.round(Number($2(this).val() || DEFAULT_CHROMA_KEY_TOLERANCE2))));
+        $mattingToleranceValue.text(String(value));
+        syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+      });
+      $pane.find("#gal-custom-skin-apply-matting").on("click", () => {
+        if ($applyMatting.prop("disabled")) return;
+        const settings3 = syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+        clearComponentSession({ keepSessionActive: false, shouldRender: false });
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
+        const result = state.cropper.applyChromaKey({
+          color: settings3.keyColor,
+          tolerance: settings3.tolerance
+        });
+        if (!result) {
+          setHint("当前没有可抠图的图片，请先上传图片。", "warn");
+          return;
+        }
+        state.mattingTool = state.lastMattingBrushTool || "erase";
+        state.overlayMode = "";
+        setModeButtons("crop");
+        syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+        syncCropperInteractionMode();
+        syncCropperPreviewControls();
+        const detected = isFooterBatchMode() ? runFooterBatchDetection({ auto: true }) : runGeneralComponentDetection({ auto: true });
+        if (!detected) {
+          setHint("已应用纯色抠图，并自动切回裁图模式；如需修边，可再点保留/移除画笔。", "ok");
+        }
+      });
+      $pane.find("#gal-custom-skin-clear-matting").on("click", () => {
+        if ($clearMatting.prop("disabled")) return;
+        state.overlayMode = "";
+        clearComponentSession({ keepSessionActive: false, shouldRender: false });
+        state.cropper.clearMatting(false);
+        clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
+        syncCropperInteractionMode();
+        syncCropperPreviewControls();
+        setHint("已清除当前会话的抠图预览，恢复为原图。", "ok");
+      });
+      $mattingBrush.on("input change", function() {
+        const value = Math.max(4, Math.min(160, Math.round(Number($2(this).val() || DEFAULT_MATTING_BRUSH_SIZE2))));
+        $mattingBrushValue.text(`${value}px`);
+        syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+      });
+      $mattingToolButtons.on("click", function() {
+        if ($2(this).prop("disabled")) return;
+        const tool = String($2(this).attr("data-tool") || "erase").trim();
+        activateMattingTool(tool === "keep" ? "keep" : "erase");
+        setHint(
+          tool === "keep" ? "保留画笔已激活，可恢复被误删的组件区域。" : "移除画笔已激活，可继续擦除残留背景。",
+          "ok"
+        );
+        $modeHelp.text(getModeHelpText());
+        $cropWrapper.attr("title", getCropWrapperTitle());
       });
       $zoom.on("input", function() {
         if (!state.cropper) return;
-        const value = Math.max(10, Math.min(500, Number($2(this).val() || 100)));
+        const min4 = Math.max(1, Math.floor((Number(state.cropper.minScale) || 0.01) * 100));
+        const max5 = Math.max(min4, Math.ceil((Number(state.cropper.maxScale) || 5) * 100));
+        const value = Math.max(min4, Math.min(max5, Number($2(this).val() || 100)));
         state.cropper.setScale(value / 100);
-        $zoomValue.text(`${Math.round(value)}%`);
+        syncCropperPreviewControls();
+      });
+      $modeButtons.on("click", function() {
+        if ($2(this).prop("disabled")) return;
+        const mode = String($2(this).attr("data-mode") || "crop").trim();
+        setModeButtons(mode === "hit" ? "hit" : "crop");
+      });
+      $addHitPoint.on("click", () => {
+        if ($addHitPoint.prop("disabled")) return;
+        state.cropper.addHitAreaPoint();
+      });
+      $removeHitPoint.on("click", () => {
+        if ($removeHitPoint.prop("disabled")) return;
+        if (!state.cropper.removeSelectedHitAreaPoint()) {
+          showToast4("至少保留 3 个点才能形成有效命中区。");
+        }
+      });
+      $resetHitPoint.on("click", () => {
+        if ($resetHitPoint.prop("disabled")) return;
+        state.cropper.resetHitAreaPoints();
       });
     };
     const bindFormActions = () => {
-      $pane.find("#gal-western-save-current").on("click", () => {
-        saveCurrent().catch((err) => {
-          console.error(`[${SCRIPT_NAME}] 保存 western 元素失败:`, err);
-          showToast4(`保存失败: ${err.message || err}`);
+      bindPaneButton("#gal-custom-skin-footer-batch-save", () => {
+        saveFooterBatchResults().catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] save footer batch assets failed:`, error3);
+          showToast4(`批量保存失败: ${error3.message || error3}`);
         });
       });
-      $pane.find("#gal-western-reload-current").on("click", () => {
-        loadCurrentAsset().catch((err) => {
-          console.error(`[${SCRIPT_NAME}] 重新加载 western 元素失败:`, err);
+      bindPaneButton("#gal-custom-skin-save-current", () => {
+        saveCurrent().catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] save custom-skin asset failed:`, error3);
+          setHint(`保存失败：${error3.message || error3}`, "err");
+          showToast4(`保存失败: ${error3.message || error3}`);
         });
       });
-      $pane.find("#gal-western-reset-current").on("click", () => {
-        resetCurrent().catch((err) => {
-          console.error(`[${SCRIPT_NAME}] 重置 western 元素失败:`, err);
-          showToast4(`重置失败: ${err.message || err}`);
+      bindPaneButton("#gal-custom-skin-reload-current", async () => {
+        try {
+          await loadCurrentAsset();
+          const def = getCurrentElementDef();
+          if (!def) return;
+          setHint("已重新加载当前元素配置。", "ok");
+          showToast4(`已重新加载：${def.label} [${state.device}/${state.uiState}]`);
+        } catch (error3) {
+          console.error(`[${SCRIPT_NAME}] reload custom-skin asset failed:`, error3);
+          setHint(`重新加载失败：${error3.message || error3}`, "err");
+          showToast4(`重新加载失败: ${error3.message || error3}`);
+        }
+      });
+      bindPaneButton("#gal-custom-skin-reset-current", () => {
+        resetCurrent().catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] reset custom-skin asset failed:`, error3);
+          setHint(`重置失败：${error3.message || error3}`, "err");
+          showToast4(`重置失败: ${error3.message || error3}`);
         });
       });
-      $pane.find("#gal-western-reload-runtime").on("click", () => {
-        setWesternSkinRuntimePreviewDevice(state.device);
-        applyWesternSkinRuntime().then(() => showToast4("已刷新 skin-western 预览")).catch((err) => {
-          console.error(`[${SCRIPT_NAME}] 刷新 skin-western 预览失败:`, err);
-          showToast4(`刷新失败: ${err.message || err}`);
+      bindPaneButton("#gal-custom-skin-reload-runtime", () => {
+        setCustomSkinRuntimePreviewDevice(state.device);
+        applyCustomSkinRuntime().then(() => {
+          setHint("已刷新自定义皮肤预览。", "ok");
+          showToast4("已刷新自定义皮肤预览");
+        }).catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] refresh custom-skin preview failed:`, error3);
+          setHint(`刷新失败：${error3.message || error3}`, "err");
+          showToast4(`刷新失败: ${error3.message || error3}`);
         });
       });
     };
-    state.cropper = new ImageCropper(getCurrentElementDef()?.aspectRatio || 16 / 9);
+    const bindProfileActions = () => {
+      $profileSelect.on("change", function() {
+        const nextProfileId = String($2(this).val() || "").trim();
+        switchProfile(nextProfileId).catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] switch custom-skin profile failed:`, error3);
+          showToast4(`切换皮肤失败: ${error3.message || error3}`);
+        });
+      });
+      $pane.find("#gal-custom-skin-profile-create").on("click", async () => {
+        const input = await showInAppPromptDialog({
+          title: "新建自定义皮肤",
+          message: "请输入新皮肤名称。创建后会自动切换到这套皮肤。",
+          label: "皮肤名称",
+          defaultValue: `自定义皮肤 ${state.profiles.length + 1}`,
+          placeholder: "例如：夜幕蓝调",
+          confirmText: "创建",
+          cancelText: "取消",
+          iconClass: "fa-solid fa-plus",
+          accent: "#0ea5e9",
+          required: true,
+          requiredMessage: "请输入皮肤名称"
+        });
+        if (input === null) return;
+        const profile = await createUiSkinProfile({ displayName: input });
+        await reloadProfiles(profile.id);
+        await syncActiveProfileSetting();
+        await loadCurrentAsset();
+        showToast4(`已创建自定义皮肤：${profile.displayName}`);
+      });
+      $pane.find("#gal-custom-skin-profile-rename").on("click", async () => {
+        if (!state.profileId) return;
+        const input = await showInAppPromptDialog({
+          title: "重命名自定义皮肤",
+          message: "请输入新的皮肤名称。",
+          label: "皮肤名称",
+          defaultValue: getCurrentProfileLabel(),
+          placeholder: "例如：夜幕蓝调",
+          confirmText: "保存",
+          cancelText: "取消",
+          iconClass: "fa-solid fa-pen",
+          accent: "#6366f1",
+          required: true,
+          requiredMessage: "请输入皮肤名称"
+        });
+        if (input === null) return;
+        const profile = await renameUiSkinProfile(state.profileId, input);
+        await reloadProfiles(profile.id);
+        refreshSkinSelectElement();
+        showToast4(`已重命名为：${profile.displayName}`);
+      });
+      $pane.find("#gal-custom-skin-profile-duplicate").on("click", async () => {
+        if (!state.profileId) return;
+        const input = await showInAppPromptDialog({
+          title: "另存为自定义皮肤",
+          message: "请输入新副本的名称。系统会复制当前皮肤的全部元素资源。",
+          label: "新皮肤名称",
+          defaultValue: `${getCurrentProfileLabel()} 副本`,
+          placeholder: "例如：夜幕蓝调 副本",
+          confirmText: "另存为",
+          cancelText: "取消",
+          iconClass: "fa-solid fa-copy",
+          accent: "#8b5cf6",
+          required: true,
+          requiredMessage: "请输入皮肤名称"
+        });
+        if (input === null) return;
+        const profile = await duplicateUiSkinProfile(state.profileId, { displayName: input });
+        await reloadProfiles(profile.id);
+        await syncActiveProfileSetting();
+        await loadCurrentAsset();
+        showToast4(`已复制为：${profile.displayName}`);
+      });
+      $pane.find("#gal-custom-skin-export-current").on("click", async () => {
+        if (!state.profileId) {
+          showToast4("请先选择要导出的自定义皮肤");
+          return;
+        }
+        const profileLabel = getCurrentProfileLabel();
+        const input = await showInAppPromptDialog({
+          title: "导出当前自定义皮肤",
+          message: "请输入导出包名，将只导出当前选中的这套自定义皮肤。",
+          label: "导出包名",
+          defaultValue: profileLabel,
+          placeholder: "例如：夜幕蓝调",
+          confirmText: "导出",
+          cancelText: "取消",
+          iconClass: "fa-solid fa-file-export",
+          accent: "#0d6efd",
+          required: true,
+          requiredMessage: "请输入导出包名"
+        });
+        if (!input) return;
+        await AssetIO.exportCustomSkinProfile(state.profileId, String(input || "").trim());
+      });
+      $pane.find("#gal-custom-skin-profile-delete").on("click", async () => {
+        if (!state.profileId) return;
+        const label = getCurrentProfileLabel();
+        const confirmed = await showInAppConfirmDialog({
+          title: "删除自定义皮肤",
+          message: `确定删除“${label}”吗？这会删除该皮肤下的全部元素资源。`,
+          confirmText: "删除",
+          cancelText: "取消",
+          iconClass: "fa-solid fa-trash",
+          accent: "#dc2626"
+        });
+        if (!confirmed) return;
+        const deletingProfileId = state.profileId;
+        await deleteUiSkinProfile(deletingProfileId);
+        await reloadProfiles();
+        if (String(settings2.skin || "").trim() === deletingProfileId) {
+          settings2.skin = state.profileId || "none";
+          saveSettings();
+          refreshSkinSelectElement();
+          applySettingsToUI();
+        }
+        await loadCurrentAsset();
+        showToast4(`已删除自定义皮肤：${label}`);
+      });
+      $pane.find("#gal-custom-skin-export-library").on("click", async () => {
+        const input = await showInAppPromptDialog({
+          title: "导出自定义皮肤库",
+          message: "请输入导出包名，将导出全部命名自定义皮肤。",
+          label: "导出包名",
+          defaultValue: `自定义皮肤库_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`,
+          placeholder: "自定义皮肤库",
+          confirmText: "导出",
+          cancelText: "取消",
+          iconClass: "fa-solid fa-file-export",
+          accent: "#0d6efd",
+          required: true,
+          requiredMessage: "请输入导出包名"
+        });
+        if (!input) return;
+        await AssetIO.exportCustomSkinLibrary(String(input || "").trim());
+      });
+      $pane.find("#gal-custom-skin-import-package").on("click", () => {
+        $profileImportZipInput.trigger("click");
+      });
+      $profileImportZipInput.on("change", async function() {
+        const file = this.files?.[0];
+        if (!file) return;
+        try {
+          await importFromZipFile(file);
+          await reloadProfiles(hasUiSkinProfileId(settings2.skin) ? String(settings2.skin).trim() : state.profileId);
+          await loadCurrentAsset();
+        } finally {
+          this.value = "";
+        }
+      });
+    };
+    state.cropper = new CustomSkinCropper(getCurrentElementDef()?.aspectRatio || 16 / 9);
+    state.cropper.setChangeListener((payload) => {
+      if (payload?.type === "matting-color-picked" && payload.color) {
+        const pickedColor = normalizeHexColor(payload.color, DEFAULT_CHROMA_KEY_COLOR2);
+        $mattingColor.val(pickedColor);
+        $mattingColorText.val(pickedColor);
+        state.overlayMode = state.cropper?.hasMattingPreview?.() ? "matting" : "";
+        if (!state.overlayMode && $mattingEnabled.is(":checked")) {
+          state.overlayMode = "";
+        }
+        setHint(`已吸取背景色 ${pickedColor}，可点击“应用抠图”生成透明预览。`, "ok");
+        syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+        syncCropperInteractionMode();
+        $modeHelp.text(getModeHelpText());
+        $cropWrapper.attr("title", getCropWrapperTitle());
+      }
+      if (payload?.type === "matting-paint" && state.componentSessionCandidates.length > 0) {
+        clearComponentSession({ keepSessionActive: true, shouldRender: false, clearCropperCandidates: false });
+      }
+      if (payload?.type === "component-candidate-selected" && isFooterBatchMode()) {
+        const selectedCandidateId = String(payload.candidateId || "").trim();
+        if (selectedCandidateId) {
+          state.footerBatchSelectedCandidateId = selectedCandidateId;
+          syncFooterBatchUI();
+          const candidateIndex = Math.max(0, state.footerBatchCandidates.findIndex((candidate) => candidate.id === selectedCandidateId)) + 1;
+          const targetMeta = FOOTER_BATCH_SLOT_META[candidateIndex - 1] || null;
+          setHint(
+            targetMeta ? `当前高亮的是第 ${candidateIndex} 个底栏候选框；保存时会固定落到 ${targetMeta.shortLabel}。` : `当前高亮的是第 ${candidateIndex} 个底栏候选框；保存时仍按默认顺序处理。`,
+            "ok"
+          );
+        }
+      } else if (payload?.type === "component-candidate-selected" && state.componentSessionActive) {
+        handleGeneralComponentCandidateSelection(payload).catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] switch component candidate failed:`, error3);
+          showToast4(`切换候选框失败: ${error3.message || error3}`);
+        });
+      }
+      updateAutoDetectState();
+      syncCropperPreviewControls();
+      syncFooterBatchUI();
+    });
     if (canvas) {
       state.cropper.attachToCanvas(canvas);
     }
     setCanvasPlaceholder();
     $elementSelect.val(state.elementId);
+    syncProfileSelectOptions();
     syncDeviceSwitchUI();
-    setWesternSkinRuntimePreviewDevice(state.device);
     syncStateOptions();
     markActiveElementItem();
-    bindSelectChanges();
+    updateEditableState();
+    setCustomSkinRuntimePreviewDevice(state.device);
+    setModeButtons("crop");
+    bindProfileActions();
+    bindElementAndStateChanges();
     bindPreviewActions();
     bindFormActions();
-    applyWesternSkinRuntime().catch((err) => {
-      console.warn(`[${SCRIPT_NAME}] 初始化 western 预览刷新失败:`, err);
-    });
-    loadCurrentAsset().catch((err) => {
-      console.error(`[${SCRIPT_NAME}] 初始化 western 编辑器失败:`, err);
-      markHint("初始化失败，请重开面板重试。", "err");
+    ensureActiveProfile().then(() => syncActiveProfileSetting()).then(() => loadCurrentAsset()).catch((error3) => {
+      console.error(`[${SCRIPT_NAME}] initial custom-skin editor load failed:`, error3);
+      setHint("初始化失败，请关闭面板后重试。", "err");
     });
     $modal.on("remove", () => {
+      state.desktopPreviewActive = false;
       clearObjectUrls();
-      setWesternSkinRuntimePreviewDevice(null);
-      applyWesternSkinRuntime().catch((err) => {
-        console.warn(`[${SCRIPT_NAME}] 退出 western 编辑器后恢复设备自动识别失败:`, err);
+      setCustomSkinRuntimePreviewDevice(null);
+      applyCustomSkinRuntime().catch((error3) => {
+        console.warn(`[${SCRIPT_NAME}] restore automatic custom-skin device detection failed:`, error3);
       });
     });
   }
@@ -82372,7 +88892,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     { id: "special-cgs", icon: "fa-photo-film", label: "CG管理" },
     { id: "special-cg-rules", icon: "fa-bolt", label: "MVU触发CG" },
     { id: "maps", icon: "fa-map-location-dot", label: "地图管理" },
-    { id: "skin", icon: "fa-palette", label: "皮肤编辑(未实装)" },
+    { id: "skin", icon: "fa-palette", label: "皮肤编辑" },
     { id: "imagegen", icon: "fa-wand-magic-sparkles", label: "生图配置" },
     { id: "opening", icon: "fa-pen-to-square", label: "开场白转换" },
     { id: "bgm", icon: "fa-music", label: "指定BGM" },
@@ -82763,7 +89283,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }
   }
   async function buildAssetManagerContent(activeTab) {
-    const settings = getSettings();
+    const settings2 = getSettings();
     const specialCgSettings = ensureSpecialCgSettings();
     const titleScreen = ensureTitleScreenSettings();
     const currentCharId = getCurrentCharId();
@@ -82821,16 +89341,16 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }).join("");
     const tabContentMap = {
       sprites: buildSpritesTab(activeTab, allSprites, charactersData),
-      backgrounds: buildBackgroundsTab(settings, allBackgrounds, hiddenTitleBackgroundCount),
+      backgrounds: buildBackgroundsTab(settings2, allBackgrounds, hiddenTitleBackgroundCount),
       "title-screen": buildTitleScreenTab(activeTab, titleScreen, currentCharId),
       "special-cgs": buildSpecialCgsTab(activeTab, allSpecialCgs),
       "special-cg-rules": buildSpecialCgRulesTab(activeTab, specialCgSettings, allSpecialCgs, mvuVariablePaths),
       maps: buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount),
-      skin: buildWesternSkinEditorTab(activeTab, currentPackId),
-      imagegen: buildImagegenTab(activeTab, settings),
+      skin: buildCustomSkinEditorTab(activeTab, currentPackId),
+      imagegen: buildImagegenTab(activeTab, settings2),
       opening: buildOpeningTab(activeTab),
-      bgm: buildBgmTab(activeTab, settings),
-      custom: buildCustomTab(settings)
+      bgm: buildBgmTab(activeTab, settings2),
+      custom: buildCustomTab(settings2)
     };
     const tabContentHtml = visibleTabIds.map((tabId) => tabContentMap[tabId] || "").filter(Boolean).join("");
     const showUnlockButton = uiAccessState.enabled && uiAccessState.locked && uiAccessState.hiddenAssetTabs.length > 0;
@@ -82923,7 +89443,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     return html;
   }
   function bindAssetManagerContentEvents($modal, activeTab) {
-    const settings = getSettings();
+    const settings2 = getSettings();
     $modal.find(".gal-tab-btn").on("click", function() {
       const tab = $2(this).data("tab");
       $modal.find(".gal-tab-btn").removeClass("active");
@@ -83010,7 +89530,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           rawText.split(/\r?\n/).map((name) => String(name || "").trim()).filter(Boolean)
         )
       );
-      settings.bgmWhitelist = whitelist;
+      settings2.bgmWhitelist = whitelist;
       saveSettings();
       const injected = await injectCOTToWorldbook();
       if (injected) {
@@ -83023,8 +89543,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         showToast4("指定BGM歌单已保存，但世界书同步失败", "warning");
       }
     });
-    bindImageGenConfigEvents($modal, settings);
-    bindWesternSkinEditorEvents($modal);
+    bindImageGenConfigEvents($modal, settings2);
+    bindCustomSkinEditorEvents($modal);
     bindOpeningEvents($modal);
     bindSpriteEvents($modal, activeTab);
     bindBackgroundEvents($modal, activeTab);
@@ -83079,7 +89599,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         </div>`}
   </div>`;
   }
-  function buildBackgroundsTab(settings, allBackgrounds, hiddenTitleBackgroundCount = 0) {
+  function buildBackgroundsTab(settings2, allBackgrounds, hiddenTitleBackgroundCount = 0) {
     return `
   <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
     <div class="gal-pane-header">
@@ -83318,10 +89838,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           </div>`}
   </div>`;
   }
-  function buildImagegenTab(activeTab, settings) {
+  function buildImagegenTab(activeTab, settings2) {
     return `
   <div class="gal-tab-pane" data-pane="imagegen" style="${activeTab !== "imagegen" ? "display: none;" : ""}">
-    ${buildImageGenConfigPane(settings)}
+    ${buildImageGenConfigPane(settings2)}
   </div>`;
   }
   function buildOpeningTab(activeTab) {
@@ -83366,10 +89886,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     </div>
   </div>`;
   }
-  function buildBgmTab(activeTab, settings) {
+  function buildBgmTab(activeTab, settings2) {
     const bgmWhitelist = Array.from(
       new Set(
-        (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
+        (Array.isArray(settings2.bgmWhitelist) ? settings2.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
       )
     );
     const bgmText = escapeHtml7(bgmWhitelist.join("\n"));
@@ -83400,7 +89920,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     </div>
   </div>`;
   }
-  function buildCustomTab(settings) {
+  function buildCustomTab(settings2) {
     const locationHtml = escapeHtml7(localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || "");
     const timeHtml = escapeHtml7(localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || "");
     const locationIconClass = normalizeLocationStatusIconClass(
@@ -83553,42 +90073,352 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
     .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
     .gal-pill.active { background:linear-gradient(135deg,${THEME.accent},#00a8cc); color:#fff; border-color:transparent; }
-    .gal-western-editor-layout { display: grid; grid-template-columns: 220px minmax(280px, 1fr) minmax(360px, 1.1fr); gap: 12px; min-height: 520px; }
-    .gal-western-device-switch { display: inline-flex; align-items: center; gap: 0; border: 1px solid #cbd5e1; border-radius: 999px; overflow: hidden; margin-bottom: 10px; }
-    .gal-western-device-tab { border: none; background: #f8fafc; color: #475569; font-size: 0.85rem; font-weight: 700; padding: 6px 14px; cursor: pointer; transition: all 0.15s ease; }
-    .gal-western-device-tab + .gal-western-device-tab { border-left: 1px solid #cbd5e1; }
-    .gal-western-device-tab.active { background: #0ea5e9; color: #fff; }
-    .gal-western-device-tab:hover { filter: brightness(0.96); }
-    .gal-western-editor-col { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .gal-western-editor-title { font-weight: 700; color: ${THEME.dark}; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
-    .gal-western-editor-hint { font-size: 0.82rem; color: #6b7280; min-height: 1.2rem; }
-    .gal-western-editor-hint.ok { color: #047857; }
-    .gal-western-editor-hint.warn { color: #b45309; }
-    .gal-western-editor-hint.err { color: #b91c1c; }
-    .gal-western-elements-list { display: flex; flex-direction: column; gap: 8px; max-height: 600px; overflow: auto; padding-right: 2px; }
-    .gal-western-element-item { border: 1px solid #d1d5db; border-radius: 8px; background: #f8fafc; padding: 8px 10px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px; }
-    .gal-western-element-item.active { border-color: ${THEME.accent}; box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.15); background: #ecfeff; }
-    .gal-western-element-label { font-weight: 700; color: #111827; font-size: 0.88rem; }
-    .gal-western-element-id { color: #6b7280; font-family: monospace; font-size: 0.72rem; }
-    .gal-western-crop-wrapper { width: 100%; aspect-ratio: 16 / 9; background: #111827; border-radius: 8px; overflow: hidden; border: 1px solid #1f2937; cursor: move; display: flex; align-items: center; justify-content: center; }
-    .gal-western-crop-wrapper canvas { width: 100%; height: 100%; display: block; }
-    .gal-western-preview-actions { display: flex; gap: 8px; }
-    .gal-western-zoom-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #374151; }
-    .gal-western-zoom-row input[type="range"] { flex: 1; }
-    .gal-western-check-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: #374151; }
-    .gal-western-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .gal-western-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #374151; }
-    .gal-western-form-grid label span { font-weight: 600; }
-    .gal-western-form-grid input,
-    .gal-western-form-grid select { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; color: #111827; background: #fff; }
-    .gal-western-field-wide { grid-column: 1 / -1; }
-    .gal-western-subtitle { margin-top: 4px; font-size: 0.82rem; font-weight: 700; color: #374151; }
-    .gal-western-four-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .gal-western-form-actions { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-    .gal-western-form-actions .gal-pane-btn { flex: 1; min-width: 120px; }
+    .gal-custom-skin-profile-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+    .gal-custom-skin-profile-select-wrap { display: flex; flex-direction: column; gap: 4px; min-width: min(100%, 320px); font-size: 0.82rem; color: var(--SmartThemeBodyColor, #f5f7fa); }
+    .gal-custom-skin-profile-select-wrap span { font-weight: 700; color: var(--SmartThemeBodyColor, #f5f7fa); }
+    .gal-custom-skin-profile-select-wrap select {
+      min-height: 38px;
+      border-radius: 8px;
+      border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+      background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+      color: var(--SmartThemeBodyColor, #f5f7fa);
+      padding: 7px 10px;
+      outline: none;
+    }
+    .gal-custom-skin-profile-select-wrap select::placeholder { color: rgba(245, 247, 250, 0.74); }
+    .gal-custom-skin-profile-select-wrap select:focus {
+      border-color: var(--SmartThemeEmColor, #9ac7ff);
+      box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
+    }
+    .gal-custom-skin-profile-select-wrap select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .gal-custom-skin-profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .gal-custom-skin-profile-actions .gal-pane-btn:disabled { opacity: 0.56; cursor: not-allowed; }
+    .gal-custom-skin-editor-layout {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr);
+      gap: 12px;
+      min-height: 560px;
+      height: clamp(620px, calc(100vh - 230px), 940px);
+      align-items: stretch;
+    }
+    .gal-custom-skin-device-switch { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); border-radius: 999px; overflow: hidden; margin-bottom: 10px; }
+    .gal-custom-skin-device-tab { border: none; background: rgba(255, 255, 255, 0.06); color: var(--SmartThemeBodyColor, #f5f7fa); font-size: 0.85rem; font-weight: 700; padding: 6px 14px; cursor: pointer; transition: all 0.15s ease; }
+    .gal-custom-skin-device-tab + .gal-custom-skin-device-tab { border-left: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); }
+    .gal-custom-skin-device-tab.active { background: rgba(154, 199, 255, 0.26); color: var(--SmartThemeBodyColor, #f5f7fa); }
+    .gal-custom-skin-device-tab:hover { filter: brightness(0.96); }
+    .gal-custom-skin-editor-col {
+      --gal-custom-skin-text: var(--SmartThemeBodyColor, #f5f7fa);
+      --gal-custom-skin-text-muted: rgba(245, 247, 250, 0.78);
+      --gal-custom-skin-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+      --gal-custom-skin-surface: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+      --gal-custom-skin-surface-soft: rgba(255, 255, 255, 0.06);
+      --gal-custom-skin-surface-soft-strong: rgba(255, 255, 255, 0.1);
+      --gal-custom-skin-input-bg: rgba(12, 18, 28, 0.88);
+      --gal-custom-skin-input-text: var(--SmartThemeBodyColor, #f5f7fa);
+      --gal-custom-skin-input-placeholder: rgba(245, 247, 250, 0.72);
+      --gal-custom-skin-input-focus: var(--SmartThemeEmColor, #9ac7ff);
+      background: var(--gal-custom-skin-surface);
+      border: 1px solid var(--gal-custom-skin-border);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      color: var(--gal-custom-skin-text);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+      min-height: 0;
+      min-width: 0;
+    }
+    .gal-custom-skin-editor-title { font-weight: 700; color: var(--SmartThemeEmColor, #9ac7ff); font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
+    .gal-custom-skin-editor-hint { font-size: 0.82rem; color: var(--gal-custom-skin-text-muted); min-height: 1.2rem; }
+    .gal-custom-skin-editor-hint.ok { color: #047857; }
+    .gal-custom-skin-editor-hint.warn { color: #b45309; }
+    .gal-custom-skin-editor-hint.err { color: #b91c1c; }
+    .gal-custom-skin-editor-main { overflow: hidden; position: relative; }
+    .gal-custom-skin-workbench {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      z-index: 1;
+    }
+    .gal-custom-skin-canvas-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+      min-height: 0;
+    }
+    .gal-custom-skin-canvas-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+    }
+    .gal-custom-skin-preview-toggle-btn {
+      margin-left: auto;
+      min-width: 132px;
+    }
+    .gal-custom-skin-side-tools {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+      padding-bottom: 2px;
+    }
+    .gal-custom-skin-side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--gal-custom-skin-border);
+      background: var(--gal-custom-skin-surface-soft);
+    }
+    .gal-custom-skin-footer-batch-panel { display: none; }
+    .gal-custom-skin-footer-batch-targets {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .gal-custom-skin-footer-batch-slot {
+      border: 1px solid var(--gal-custom-skin-border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--gal-custom-skin-text);
+      padding: 8px 10px;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    }
+    .gal-custom-skin-footer-batch-slot strong {
+      font-size: 0.86rem;
+      font-weight: 800;
+      color: var(--SmartThemeEmColor, #9ac7ff);
+    }
+    .gal-custom-skin-footer-batch-slot span {
+      font-size: 0.75rem;
+      color: var(--gal-custom-skin-text);
+      line-height: 1.45;
+    }
+    .gal-custom-skin-footer-batch-slot small {
+      font-size: 0.72rem;
+      color: var(--gal-custom-skin-text-muted);
+    }
+    .gal-custom-skin-footer-batch-slot:hover {
+      border-color: var(--SmartThemeEmColor, #9ac7ff);
+      transform: translateY(-1px);
+    }
+    .gal-custom-skin-footer-batch-slot.assigned {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.42);
+    }
+    .gal-custom-skin-footer-batch-slot.active {
+      background: rgba(14, 165, 233, 0.16);
+      border-color: var(--SmartThemeEmColor, #9ac7ff);
+      box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.14);
+    }
+    .gal-custom-skin-elements-list { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
+    .gal-custom-skin-element-item { border: 1px solid var(--gal-custom-skin-border); border-radius: 8px; background: var(--gal-custom-skin-surface-soft); padding: 8px 10px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px; color: var(--gal-custom-skin-text); }
+    .gal-custom-skin-element-item.active { border-color: var(--SmartThemeEmColor, #9ac7ff); box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.18); background: rgba(154, 199, 255, 0.14); }
+    .gal-custom-skin-element-label { font-weight: 700; color: var(--gal-custom-skin-text); font-size: 0.88rem; }
+    .gal-custom-skin-element-id { color: var(--gal-custom-skin-text-muted); font-family: monospace; font-size: 0.72rem; }
+    .gal-custom-skin-crop-wrapper {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      min-height: clamp(320px, 48vh, 680px);
+      flex: 1 0 auto;
+      background: #111827;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #1f2937;
+      cursor: default;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gal-custom-skin-crop-wrapper canvas { width: 100%; height: 100%; display: block; }
+    #gal-unified-panel .gal-custom-skin-desktop-preview-fab {
+      display: none;
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      min-width: 148px;
+      z-index: 4;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.32);
+      pointer-events: auto;
+    }
+    #gal-unified-panel.gal-custom-skin-desktop-preview {
+      background: transparent !important;
+      backdrop-filter: none !important;
+    }
+    #gal-unified-panel.gal-custom-skin-desktop-preview .gal-config-panel {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+    #gal-unified-panel.gal-custom-skin-desktop-preview .gal-config-panel > :not(.gal-custom-skin-desktop-preview-fab) {
+      display: none !important;
+    }
+    #gal-unified-panel.gal-custom-skin-desktop-preview .gal-custom-skin-desktop-preview-fab {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .gal-custom-skin-preview-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .gal-custom-skin-side-tools .gal-custom-skin-preview-actions .gal-pane-btn { flex: 1 1 calc(50% - 4px); min-width: 136px; }
+    .gal-custom-skin-preview-actions-secondary { flex-wrap: wrap; }
+    .gal-custom-skin-mode-btn.active { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; border-color: #0284c7; }
+    .gal-custom-skin-preview-actions .gal-pane-btn:disabled { opacity: 0.56; cursor: not-allowed; }
+    .gal-custom-skin-mode-help { font-size: 0.78rem; color: var(--gal-custom-skin-text-muted); line-height: 1.6; padding: 8px 10px; border-radius: 8px; background: var(--gal-custom-skin-surface-soft); border: 1px solid var(--gal-custom-skin-border); }
+    .gal-custom-skin-zoom-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--gal-custom-skin-text); }
+    .gal-custom-skin-zoom-row-metric { justify-content: space-between; }
+    .gal-custom-skin-zoom-row input[type="range"] { flex: 1; accent-color: var(--SmartThemeEmColor, #9ac7ff); }
+    .gal-custom-skin-check-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--gal-custom-skin-text); }
+    .gal-custom-skin-check-row-strong span { font-weight: 700; color: var(--gal-custom-skin-text); }
+    .gal-custom-skin-editor-note { font-size: 0.76rem; color: var(--gal-custom-skin-text-muted); line-height: 1.55; padding: 7px 9px; border-radius: 8px; background: var(--gal-custom-skin-surface-soft); border: 1px solid var(--gal-custom-skin-border); }
+    .gal-custom-skin-editor-note-inline { margin-top: 2px; }
+    .gal-custom-skin-editor-form-scroll { display: flex; flex-direction: column; gap: 10px; }
+    .gal-custom-skin-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .gal-custom-skin-form-grid-core { align-items: end; }
+    .gal-custom-skin-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--gal-custom-skin-text); }
+    .gal-custom-skin-form-grid label span { font-weight: 600; }
+    .gal-custom-skin-form-grid input,
+    .gal-custom-skin-form-grid select,
+    .gal-custom-skin-color-row input[type="text"],
+    .gal-custom-skin-color-row input[type="color"] {
+      padding: 6px 8px;
+      border: 1px solid var(--gal-custom-skin-border);
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: var(--gal-custom-skin-input-text);
+      background: var(--gal-custom-skin-input-bg);
+      caret-color: var(--gal-custom-skin-input-text);
+    }
+    .gal-custom-skin-form-grid input::placeholder,
+    .gal-custom-skin-form-grid select::placeholder,
+    .gal-custom-skin-color-row input[type="text"]::placeholder,
+    .gal-custom-skin-color-row input[type="color"]::placeholder { color: var(--gal-custom-skin-input-placeholder); opacity: 1; }
+    .gal-custom-skin-form-grid input:focus,
+    .gal-custom-skin-form-grid select:focus,
+    .gal-custom-skin-color-row input[type="text"]:focus,
+    .gal-custom-skin-color-row input[type="color"]:focus { outline: none; border-color: var(--gal-custom-skin-input-focus); box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22); }
+    .gal-custom-skin-form-grid input:disabled,
+    .gal-custom-skin-form-grid select:disabled,
+    .gal-custom-skin-color-row input[type="text"]:disabled,
+    .gal-custom-skin-color-row input[type="color"]:disabled { background: rgba(148, 163, 184, 0.2); color: rgba(245, 247, 250, 0.56); border-color: var(--gal-custom-skin-border); }
+    .gal-custom-skin-field-wide { grid-column: 1 / -1; }
+    .gal-custom-skin-subtitle { margin-top: 4px; font-size: 0.82rem; font-weight: 700; color: var(--SmartThemeEmColor, #9ac7ff); }
+    .gal-custom-skin-editor-section { border: 1px solid var(--gal-custom-skin-border); border-radius: 8px; background: var(--gal-custom-skin-surface-soft); overflow: hidden; }
+    .gal-custom-skin-editor-section summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--gal-custom-skin-text);
+    }
+    .gal-custom-skin-editor-section summary i { color: var(--SmartThemeEmColor, #9ac7ff); }
+    .gal-custom-skin-editor-section summary::-webkit-details-marker { display: none; }
+    .gal-custom-skin-editor-section summary::after { content: '展开'; font-size: 0.74rem; color: var(--gal-custom-skin-text-muted); }
+    .gal-custom-skin-editor-section[open] summary::after { content: '收起'; }
+    .gal-custom-skin-editor-section > :not(summary) { padding: 0 12px 12px; }
+    .gal-custom-skin-editor-section .gal-custom-skin-form-grid { margin-top: 8px; }
+    .gal-custom-skin-parameters-panel { flex: 0 0 auto; margin-top: 2px; }
+    .gal-custom-skin-parameters-body { max-height: min(34vh, 320px); overflow: auto; padding-right: 4px; }
+    .gal-custom-skin-four-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+    .gal-custom-skin-matting-panel { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; border: 1px solid var(--gal-custom-skin-border); background: var(--gal-custom-skin-surface-soft); }
+    .gal-custom-skin-matting-grid { grid-template-columns: 1fr; }
+    .gal-custom-skin-color-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+    .gal-custom-skin-color-row input[type="color"] { padding: 4px; min-height: 38px; min-width: 54px; }
+    .gal-custom-skin-color-row input[type="text"] { text-transform: uppercase; }
+    .gal-custom-skin-color-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+    .gal-custom-skin-color-chip {
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid var(--gal-custom-skin-border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--gal-custom-skin-text);
+      padding: 0 12px 0 30px;
+      position: relative;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .gal-custom-skin-color-chip::before {
+      content: '';
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      transform: translateY(-50%);
+      background: var(--gal-custom-skin-chip-color, #00FF00);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+    }
+    .gal-custom-skin-color-chip:hover { border-color: var(--SmartThemeEmColor, #9ac7ff); }
+    .gal-custom-skin-matting-tool-btn.active,
+    #gal-custom-skin-pick-matting-color.active { background: rgba(154, 199, 255, 0.22); color: var(--gal-custom-skin-text); border-color: var(--SmartThemeEmColor, #9ac7ff); }
+    .gal-custom-skin-form-actions {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding-top: 10px;
+      border-top: 1px solid var(--gal-custom-skin-border);
+      background: linear-gradient(180deg, rgba(20, 24, 32, 0) 0%, var(--gal-custom-skin-surface) 24%);
+      position: relative;
+      z-index: 3;
+      isolation: isolate;
+      pointer-events: auto;
+    }
+    .gal-custom-skin-form-actions .gal-pane-btn { flex: 1; min-width: 120px; }
+    @media (max-width: 1480px) {
+      .gal-custom-skin-editor-layout {
+        grid-template-columns: 190px minmax(0, 1fr);
+        height: clamp(600px, calc(100vh - 225px), 900px);
+      }
+      .gal-custom-skin-workbench {
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+      }
+    }
+    @media (max-width: 1320px) {
+      .gal-custom-skin-workbench {
+        grid-template-columns: 1fr;
+      }
+    }
     @media (max-width: 1180px) {
-      .gal-western-editor-layout { grid-template-columns: 1fr; }
-      .gal-western-editor-col { min-height: auto; }
+      .gal-custom-skin-editor-layout { grid-template-columns: 1fr; height: auto; }
+      .gal-custom-skin-editor-col { min-height: auto; overflow: visible; }
+      .gal-custom-skin-editor-main,
+      .gal-custom-skin-side-tools,
+      .gal-custom-skin-parameters-body { overflow: visible; padding-right: 0; }
+      .gal-custom-skin-workbench { grid-template-columns: 1fr; }
+      .gal-custom-skin-crop-wrapper { min-height: clamp(260px, 42vh, 520px); }
+      .gal-custom-skin-footer-batch-targets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 768px) {
+      #gal-unified-panel .gal-custom-skin-desktop-preview-fab {
+        top: 12px;
+        right: 12px;
+        min-width: 132px;
+      }
     }
     #gal-unified-panel #gal-custom-bgm-list,
     #gal-unified-panel #gal-custom-location-html,
@@ -84064,7 +90894,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     updateAllRuleRowsCurrentValue();
     $modal.find("#gal-special-cg-rule-save-btn").on("click", () => {
-      const settings = getSettings();
+      const settings2 = getSettings();
       const rules = [];
       let skippedCount = 0;
       let missingNameCount = 0;
@@ -84112,7 +90942,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         }
         return;
       }
-      settings.specialCg = {
+      settings2.specialCg = {
         enabled: $modal.find("#gal-special-cg-enabled").is(":checked"),
         rules
       };
@@ -84175,7 +91005,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const packId = $2(this).data("pack-id");
       $2("#gal-pack-menu").hide();
       setCurrentPack(packId);
-      applyWesternSkinRuntime().catch((e) => console.warn(`[${SCRIPT_NAME}] 切换图包后刷新 western 皮肤失败:`, e));
+      applyCustomSkinRuntime().catch((e) => console.warn(`[${SCRIPT_NAME}] 切换图包后刷新 custom-skin 失败:`, e));
       $modal.remove();
       $2(topWindow.document).off(".galMenus").off(".galImportMenu").off(".galPackMenu");
       showAssetManagerModal2();
@@ -84241,13 +91071,28 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         requiredMessage: "请输入导出包名"
       });
     };
+    const askAttachCurrentCustomSkinProfileId = async () => {
+      const currentSkin = String(settings?.skin || "").trim();
+      if (!hasUiSkinProfileId(currentSkin)) return "";
+      const profileLabel = getUiSkinProfileLabel(currentSkin) || currentSkin;
+      const confirmed = await showInAppConfirmDialog({
+        title: "附带当前自定义皮肤",
+        message: `当前正在使用自定义皮肤“${profileLabel}”。是否在导出包中附带这套皮肤，并在导入后自动切换到它？`,
+        confirmText: "附带导出",
+        cancelText: "仅导出图包",
+        iconClass: "fa-solid fa-palette",
+        accent: "#0ea5e9"
+      });
+      return confirmed ? currentSkin : "";
+    };
     $modal.find(".gal-export-item").on("click", async function() {
       const action = $2(this).data("action");
       $2("#gal-export-menu").hide();
       if (action === "export-local") {
         const packageName = await askExportPackageName("导出本地压缩包");
         if (!packageName) return;
-        AssetIO.exportAllAssets(null, packageName.trim());
+        const attachedCustomSkinProfileId = await askAttachCurrentCustomSkinProfileId();
+        AssetIO.exportAllAssets(null, packageName.trim(), { attachedCustomSkinProfileId });
         return;
       }
       if (action === "export-remote") {
@@ -84283,7 +91128,8 @@ ${baseUrl}`,
             accent: "#6f42c1"
           });
           if (!confirmed2) return;
-          AssetIO.exportAllAssets(baseUrl, packageName.trim());
+          const attachedCustomSkinProfileId2 = await askAttachCurrentCustomSkinProfileId();
+          AssetIO.exportAllAssets(baseUrl, packageName.trim(), { attachedCustomSkinProfileId: attachedCustomSkinProfileId2 });
           return;
         }
         if (rawInput.startsWith("http")) {
@@ -84335,7 +91181,8 @@ ${baseUrl}`,
           accent: "#6f42c1"
         });
         if (!confirmed) return;
-        AssetIO.exportAllAssets(baseUrl, packageName.trim());
+        const attachedCustomSkinProfileId = await askAttachCurrentCustomSkinProfileId();
+        AssetIO.exportAllAssets(baseUrl, packageName.trim(), { attachedCustomSkinProfileId });
         return;
       }
       if (action === "export-character-card") {
@@ -84415,6 +91262,17 @@ ${baseUrl}`,
   var CHAT_CHANGED_BOUND_FLAG = "__galgame_chat_changed_bound__";
   var CHAR_POLLING_BOUND_FLAG = "__galgame_char_polling_bound__";
   var initStarted = false;
+  function sanitizeLoadedSkinSetting(settings2) {
+    const rawSkin = String(settings2?.skin || "none").trim();
+    const builtinSkinSet = /* @__PURE__ */ new Set(["none", "skin-ancient", "skin-persona", "skin-jrpg", "skin-classic"]);
+    if (builtinSkinSet.has(rawSkin)) return false;
+    if (hasUiSkinProfileId(rawSkin)) return false;
+    if (rawSkin === "skin-western" || rawSkin === CUSTOM_SKIN_ID || rawSkin) {
+      settings2.skin = "none";
+      return true;
+    }
+    return false;
+  }
   async function init() {
     if (initStarted || topWindow[INIT_LOCK_FLAG]) {
       console.log(`[${SCRIPT_NAME}] 初始化流程已执行/进行中，跳过重复调用`);
@@ -84425,12 +91283,16 @@ ${baseUrl}`,
     try {
       loadSettings();
       setIsEnabled(isCurrentCharEnabled());
-      const settings = getSettings();
-      setGlobalDebugEnabled(!!settings.globalDebug);
-      Live2DManager.debug = !!settings.globalDebug;
+      const settings2 = getSettings();
+      setGlobalDebugEnabled(!!settings2.globalDebug);
+      Live2DManager.debug = !!settings2.globalDebug;
       console.log(`[${SCRIPT_NAME}] v${VERSION} 开始初始化...`);
-      setHideOtherFloors(settings.hideOtherFloors);
+      setHideOtherFloors(settings2.hideOtherFloors);
       await initDB();
+      await refreshUiSkinProfilesCache();
+      if (sanitizeLoadedSkinSetting(settings2)) {
+        saveSettings();
+      }
       await loadAllSpritesToCache();
       await loadAllBackgroundsToCache();
       SpriteManager.init();
@@ -84722,35 +91584,35 @@ ${baseUrl}`,
       return true;
     },
     enable(enabled = true) {
-      const settings = getSettings();
-      settings.effectsEnabled = !!enabled;
-      if (!settings.effectsEnabled) {
+      const settings2 = getSettings();
+      settings2.effectsEnabled = !!enabled;
+      if (!settings2.effectsEnabled) {
         clearAllPixiEffects();
       }
       syncPixiEffectsSettings();
-      return settings.effectsEnabled;
+      return settings2.effectsEnabled;
     },
     quality(level = "balanced") {
       const nextLevel = ["mobile", "balanced", "high"].includes(level) ? level : "balanced";
-      const settings = getSettings();
-      settings.effectsQuality = nextLevel;
+      const settings2 = getSettings();
+      settings2.effectsQuality = nextLevel;
       syncPixiEffectsSettings();
-      return settings.effectsQuality;
+      return settings2.effectsQuality;
     },
     maxActive(value = 2) {
       const parsed = parseInt(value, 10);
-      const settings = getSettings();
-      settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
+      const settings2 = getSettings();
+      settings2.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
       syncPixiEffectsSettings();
-      return settings.effectsMaxActive;
+      return settings2.effectsMaxActive;
     },
     state() {
-      const settings = getSettings();
+      const settings2 = getSettings();
       return {
-        effectsEnabled: settings.effectsEnabled !== false,
-        effectsQuality: settings.effectsQuality,
-        effectsAutoClearOnSceneChange: settings.effectsAutoClearOnSceneChange !== false,
-        effectsMaxActive: settings.effectsMaxActive
+        effectsEnabled: settings2.effectsEnabled !== false,
+        effectsQuality: settings2.effectsQuality,
+        effectsAutoClearOnSceneChange: settings2.effectsAutoClearOnSceneChange !== false,
+        effectsMaxActive: settings2.effectsMaxActive
       };
     }
   };

@@ -75,6 +75,15 @@ function ensureTitleScreenElement() {
         </div>
       </div>
     </div>
+    <div class="gal-title-cg-lightbox" aria-hidden="true">
+      <button type="button" class="gal-title-cg-lightbox-close" aria-label="关闭查看">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="gal-title-cg-lightbox-frame">
+        <img class="gal-title-cg-lightbox-image" alt="CG大图预览">
+        <div class="gal-title-cg-lightbox-caption"></div>
+      </div>
+    </div>
   `;
 
   root.addEventListener('click', event => {
@@ -106,6 +115,15 @@ function ensureTitleScreenElement() {
   const galleryLayer = root.querySelector('.gal-title-cg-gallery');
   galleryLayer?.addEventListener('click', event => {
     event.stopPropagation();
+    const card = event.target.closest('.gal-title-cg-gallery-card');
+    if (card) {
+      openTitleCgLightbox(root, {
+        imageUrl: card.getAttribute('data-image-url') || '',
+        name: card.getAttribute('data-name') || '',
+        description: card.getAttribute('data-description') || '',
+      });
+      return;
+    }
     if (event.target === galleryLayer) {
       closeTitleCgGallery(root);
     }
@@ -113,6 +131,18 @@ function ensureTitleScreenElement() {
   root.querySelector('.gal-title-cg-gallery-close')?.addEventListener('click', event => {
     event.stopPropagation();
     closeTitleCgGallery(root);
+  });
+
+  const lightboxLayer = root.querySelector('.gal-title-cg-lightbox');
+  lightboxLayer?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (event.target === lightboxLayer) {
+      closeTitleCgLightbox(root);
+    }
+  });
+  root.querySelector('.gal-title-cg-lightbox-close')?.addEventListener('click', event => {
+    event.stopPropagation();
+    closeTitleCgLightbox(root);
   });
 
   $overlay[0].appendChild(root);
@@ -143,9 +173,41 @@ function applyTitleText(root, config) {
   }
 }
 
+function closeTitleCgLightbox(root) {
+  const lightboxLayer = root?.querySelector('.gal-title-cg-lightbox');
+  const imageNode = lightboxLayer?.querySelector('.gal-title-cg-lightbox-image');
+  const captionNode = lightboxLayer?.querySelector('.gal-title-cg-lightbox-caption');
+  if (!lightboxLayer || !imageNode || !captionNode) return;
+  lightboxLayer.classList.remove('active');
+  lightboxLayer.setAttribute('aria-hidden', 'true');
+  imageNode.setAttribute('src', '');
+  imageNode.setAttribute('alt', 'CG大图预览');
+  captionNode.innerHTML = '';
+}
+
+function openTitleCgLightbox(root, item) {
+  const lightboxLayer = root?.querySelector('.gal-title-cg-lightbox');
+  const imageNode = lightboxLayer?.querySelector('.gal-title-cg-lightbox-image');
+  const captionNode = lightboxLayer?.querySelector('.gal-title-cg-lightbox-caption');
+  const imageUrl = String(item?.imageUrl || '').trim();
+  const name = String(item?.name || '').trim() || 'CG预览';
+  const description = String(item?.description || '').trim();
+  if (!lightboxLayer || !imageNode || !captionNode || !imageUrl) return;
+
+  imageNode.setAttribute('src', imageUrl);
+  imageNode.setAttribute('alt', name);
+  captionNode.innerHTML = `
+    <div class="gal-title-cg-lightbox-title">${escapeHtml(name)}</div>
+    ${description ? `<div class="gal-title-cg-lightbox-desc">${escapeHtml(description)}</div>` : ''}
+  `;
+  lightboxLayer.classList.add('active');
+  lightboxLayer.setAttribute('aria-hidden', 'false');
+}
+
 function closeTitleCgGallery(root) {
   const galleryLayer = root?.querySelector('.gal-title-cg-gallery');
   if (!galleryLayer) return;
+  closeTitleCgLightbox(root);
   galleryLayer.classList.remove('active');
   galleryLayer.setAttribute('aria-hidden', 'true');
 }
@@ -186,15 +248,24 @@ function renderTitleCgGallery(root, items) {
   }
 
   gridNode.innerHTML = items
-    .map(item => `
-      <div class="gal-title-cg-gallery-card" title="${escapeHtml(item.name)}">
+    .map(
+      item => `
+      <button
+        type="button"
+        class="gal-title-cg-gallery-card"
+        title="${escapeHtml(item.name)}"
+        data-image-url="${escapeHtml(item.imageUrl)}"
+        data-name="${escapeHtml(item.name)}"
+        data-description="${escapeHtml(item.description || '')}"
+      >
         <div class="gal-title-cg-gallery-preview">
           <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}">
         </div>
         <div class="gal-title-cg-gallery-name">${escapeHtml(item.name)}</div>
         ${item.description ? `<div class="gal-title-cg-gallery-desc">${escapeHtml(item.description)}</div>` : ''}
-      </div>
-    `)
+      </button>
+    `,
+    )
     .join('');
   emptyNode.style.display = 'none';
 }

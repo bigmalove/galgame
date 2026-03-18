@@ -1,12 +1,13 @@
 import { TTS_PROVIDER, getGptSoVitsVoiceList, getTTSEnabled, getTTSProvider, getTTSVoiceListAsync, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice, setTTSEnabled } from '../audio/tts-config.js';
 import { TTSManager } from '../audio/tts-manager.js';
-import { SCRIPT_NAME, THEME } from '../core/constants.js';
+import { CUSTOM_SKIN_ID, SCRIPT_NAME, THEME } from '../core/constants.js';
 import { setGlobalDebugEnabled } from '../core/debug.js';
 import { $, topWindow } from '../core/env.js';
 import { ensureEnhancedModeSettings, ensureTitleScreenSettings, getSettings, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled } from '../core/settings.js';
 import { getIsEnabled, setHideOtherFloors, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { saveBackground } from '../db/backgrounds.js';
+import { getCachedUiSkinProfiles, hasUiSkinProfileId, refreshUiSkinProfilesCache } from '../db/ui-skin-profiles.js';
 import { clearAllPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { getAvailableModels, getAvailablePresets, getAvailableProfiles, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
@@ -14,6 +15,7 @@ import { getModalMountRoot } from './fullscreen.js';
 import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloors } from './galgame-mode.js';
 import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
 import { updateButtonState } from './menu-button.js';
+import { applyCustomSkinRuntime } from './custom-skin-runtime.js';
 import { showToast } from './toast.js';
 import { finishActiveTypewriter, isTypewriterActive } from './typewriter.js';
 
@@ -81,14 +83,42 @@ function buildAboutPane() {
 }
 
 // 皮肤列表定义
-const SKIN_LIST = [
+const BUILTIN_SKIN_LIST = [
   { value: 'none',    label: '默认' },
   { value: 'skin-ancient', label: '墨染千秋（中国古风）' },
-  { value: 'skin-western', label: '冒险者酒馆（西方奇幻）' },
   { value: 'skin-persona', label: '心之怪盗（女神异闻录）' },
   { value: 'skin-jrpg',    label: '苍穹之庭（日式奇幻）' },
   { value: 'skin-classic',  label: '樱色物语（经典Galgame）' },
 ];
+
+function getEffectiveSkinList() {
+  const profileItems = getCachedUiSkinProfiles().map(profile => ({
+    value: profile.id,
+    label: `自定义 · ${profile.displayName}`,
+  }));
+  return [...BUILTIN_SKIN_LIST, ...profileItems];
+}
+
+function getSkinOptionHtml(currentSkin) {
+  return getEffectiveSkinList()
+    .map(item => `<option value="${item.value}" ${normalizeSkinValue(currentSkin) === item.value ? 'selected' : ''}>${item.label}</option>`)
+    .join('');
+}
+
+export function refreshSkinSelectElement($root = null) {
+  const $scope = $root && typeof $root.find === 'function' ? $root : $(topWindow.document || document);
+  const $select = $scope.find('#gal-skin-select');
+  if (!$select.length) return;
+  $select.html(getSkinOptionHtml(getSettings().skin));
+}
+
+function normalizeSkinValue(rawSkin) {
+  const skin = String(rawSkin || 'none').trim();
+  if (skin === 'skin-western' || skin === CUSTOM_SKIN_ID) return 'none';
+  if (BUILTIN_SKIN_LIST.some(item => item.value === skin)) return skin;
+  if (hasUiSkinProfileId(skin)) return skin;
+  return 'none';
+}
 
 const DIALOG_FONT_PRESETS = [
   {
@@ -146,17 +176,23 @@ function escapeHtml(value) {
 // 应用皮肤到覆盖层
 export function applySkin() {
   const settings = getSettings();
-  const skin = settings.skin || 'none';
+  const skin = normalizeSkinValue(settings.skin);
   const $overlay = $('#gal-global-overlay');
   // 移除所有皮肤 class
-  SKIN_LIST.forEach(s => { if (s.value !== 'none') $overlay.removeClass(s.value); });
+  BUILTIN_SKIN_LIST.forEach(s => { if (s.value !== 'none') $overlay.removeClass(s.value); });
+  getCachedUiSkinProfiles().forEach(profile => $overlay.removeClass(profile.id));
+  $overlay.removeClass(CUSTOM_SKIN_ID);
+  $overlay.removeClass('skin-western');
   // 添加选中的皮肤 class
-  if (skin !== 'none') $overlay.addClass(skin);
+  if (skin !== 'none') {
+    $overlay.addClass(hasUiSkinProfileId(skin) ? CUSTOM_SKIN_ID : skin);
+  }
 }
 
 // 应用设置到 UI
 export function applySettingsToUI() {
   const settings = getSettings();
+  const activeSkin = normalizeSkinValue(settings.skin);
   const fontScale = 0.5 + (settings.fontSize / 30) * 1.0;
   const dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
   const toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
@@ -172,7 +208,7 @@ export function applySettingsToUI() {
 
   const opacity = settings.dialogOpacity;
   // 只在非皮肤模式下应用默认面板样式
-  if (!settings.skin || settings.skin === 'none') {
+  if (activeSkin === 'none') {
     $('.gal-text-panel').css({
       'background-color': `rgba(255, 255, 255, ${opacity})`,
       'background-image': `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
@@ -219,6 +255,9 @@ export function applySettingsToUI() {
   applyBgFillMode();
   applySkin();
   applyTextEffect();
+  applyCustomSkinRuntime().catch(error => {
+    console.warn(`[${SCRIPT_NAME}] custom-skin runtime apply failed:`, error);
+  });
   syncPixiEffectsSettings();
 }
 
@@ -333,6 +372,7 @@ export function applyTextEffect() {
 }
 
 export async function showSettingsPanel(topTab, subTab) {
+  await refreshUiSkinProfilesCache();
   const $existing = $('#gal-unified-panel');
   if ($existing.length) {
     if (topTab === undefined) { $existing.remove(); return; } // toggle
@@ -555,7 +595,7 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">界面皮肤</span>
               <select id="gal-skin-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 200px;">
-                ${SKIN_LIST.map(s => `<option value="${s.value}" ${settings.skin === s.value ? 'selected' : ''}>${s.label}</option>`).join('')}
+                ${getSkinOptionHtml(settings.skin)}
               </select>
             </div>
             <div class="gal-settings-row">
@@ -1150,7 +1190,7 @@ export async function showSettingsPanel(topTab, subTab) {
     saveSettings();
   });
   $('#gal-bg-fill-mode').on('change', function () { settings.bgFillMode = $(this).val(); applyBgFillMode(); saveSettings(); });
-  $('#gal-skin-select').on('change', function () { settings.skin = $(this).val(); applySkin(); applySettingsToUI(); saveSettings(); });
+  $('#gal-skin-select').on('change', function () { settings.skin = normalizeSkinValue($(this).val()); applySkin(); applySettingsToUI(); saveSettings(); });
   const getTitleSettingsState = () => {
     const normalized = ensureTitleScreenSettings();
     settings.titleScreen = normalized;

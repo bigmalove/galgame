@@ -1,4 +1,4 @@
-import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_UI_SKINS } from '../core/constants.js';
+import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_UI_SKINS, CUSTOM_SKIN_ID } from '../core/constants.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 import { getCurrentPackId } from './image-packs.js';
@@ -25,7 +25,7 @@ function buildLookupKey(packId, skinId, elementId, device, state) {
 
 export function buildUiSkinAssetId(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
   const safePackId = normalizeKeyPart(packId, DEFAULT_PACK_ID);
-  const safeSkinId = normalizeKeyPart(skinId, 'skin-western');
+  const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
   const safeElementId = normalizeKeyPart(elementId, 'unknown-element');
   const safeDevice = normalizeKeyPart(device, DEFAULT_DEVICE);
   const safeState = normalizeKeyPart(state, DEFAULT_STATE);
@@ -34,7 +34,7 @@ export function buildUiSkinAssetId(packId, skinId, elementId, device = DEFAULT_D
 
 function normalizeUiSkinAsset(payload = {}) {
   const resolvedPackId = normalizeKeyPart(payload.packId, getCurrentPackId() || DEFAULT_PACK_ID);
-  const resolvedSkinId = normalizeKeyPart(payload.skinId, 'skin-western');
+  const resolvedSkinId = normalizeKeyPart(payload.skinId, CUSTOM_SKIN_ID);
   const resolvedElementId = normalizeKeyPart(payload.elementId, 'unknown-element');
   const resolvedDevice = normalizeKeyPart(payload.device, DEFAULT_DEVICE);
   const resolvedState = normalizeKeyPart(payload.state, DEFAULT_STATE);
@@ -76,10 +76,12 @@ export async function saveUiSkinAsset(payload = {}) {
     const transaction = db.transaction([STORE_UI_SKINS], 'readwrite');
     const store = transaction.objectStore(STORE_UI_SKINS);
     const request = store.put(data);
-    request.onsuccess = () => {
+    transaction.oncomplete = () => {
       console.log(`[${SCRIPT_NAME}] UI 皮肤元素已保存: ${data.id}`);
       resolve(data);
     };
+    transaction.onabort = () => reject(transaction.error || request.error);
+    transaction.onerror = () => reject(transaction.error || request.error);
     request.onerror = () => reject(request.error);
   });
 }
@@ -104,7 +106,7 @@ export async function getUiSkinAsset(packId, skinId, elementId, device = DEFAULT
 
 export async function getUiSkinAssetsByPackSkin(packId, skinId, device = null) {
   const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
-  const safeSkinId = normalizeKeyPart(skinId, 'skin-western');
+  const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
   const safeDevice = device ? normalizeKeyPart(device, DEFAULT_DEVICE) : null;
   const db = await ensureDbReady();
   return new Promise(resolve => {
@@ -140,7 +142,9 @@ export async function deleteUiSkinAssetById(id) {
     const transaction = db.transaction([STORE_UI_SKINS], 'readwrite');
     const store = transaction.objectStore(STORE_UI_SKINS);
     const request = store.delete(safeId);
-    request.onsuccess = () => resolve(true);
+    transaction.oncomplete = () => resolve(true);
+    transaction.onabort = () => reject(transaction.error || request.error);
+    transaction.onerror = () => reject(transaction.error || request.error);
     request.onerror = () => reject(request.error);
   });
 }
@@ -152,7 +156,7 @@ export async function deleteUiSkinAsset(packId, skinId, elementId, device = DEFA
 
 export async function deleteUiSkinAssetsByPackSkin(packId, skinId) {
   const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
-  const safeSkinId = normalizeKeyPart(skinId, 'skin-western');
+  const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
   const targetPackSkinKey = buildPackSkinKey(safePackId, safeSkinId);
   const db = await ensureDbReady();
 
@@ -163,6 +167,10 @@ export async function deleteUiSkinAssetsByPackSkin(packId, skinId) {
     const index = store.index('packSkinKey');
     const request = index.openCursor(IDBKeyRange.only(targetPackSkinKey));
 
+    transaction.oncomplete = () => resolve(deletedCount);
+    transaction.onabort = () => reject(transaction.error || request.error);
+    transaction.onerror = () => reject(transaction.error || request.error);
+
     request.onsuccess = event => {
       const cursor = event.target.result;
       if (cursor) {
@@ -171,7 +179,6 @@ export async function deleteUiSkinAssetsByPackSkin(packId, skinId) {
         cursor.continue();
         return;
       }
-      resolve(deletedCount);
     };
     request.onerror = () => reject(request.error);
   });

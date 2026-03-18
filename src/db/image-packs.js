@@ -335,7 +335,7 @@ async function transferAllResourcesToDefaultPack(packId) {
   });
 
   console.log(`[${SCRIPT_NAME}] moved ${spriteCount} sprites, ${bgCount} backgrounds, ${mapCount} maps and ${cgCount} cgs from pack ${packId} to default pack`);
-  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount, uiSkins: 0 };
 }
 
 export async function getPackResourceCount(packId) {
@@ -394,7 +394,7 @@ export async function getPackResourceCount(packId) {
     request.onerror = () => resolve();
   });
 
-  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount, uiSkins: 0 };
 }
 
 export function ensureBackgroundLayers($bgLayer) {

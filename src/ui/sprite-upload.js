@@ -22,6 +22,8 @@ import { refreshGalgameViews } from './galgame-mode.js';
 const DEFAULT_SPRITE_ASPECT_RATIO = 2 / 3;
 const DEFAULT_SPRITE_UPLOAD_RATIO_LABEL = '2:3';
 const CROPPER_MIN_SCALE = 0.01;
+const CROPPER_HIT_POINT_RADIUS = 9;
+const CROPPER_HIT_POINT_TOUCH_RADIUS = 18;
 
 function parseAspectRatioLabel(ratioLabel) {
   const [widthRaw, heightRaw] = String(ratioLabel || '').split(':');

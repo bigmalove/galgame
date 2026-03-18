@@ -1,12 +1,13 @@
 import { BGMManager } from './audio/bgm-manager.js';
 import { TTSManager } from './audio/tts-manager.js';
-import { SCRIPT_NAME, VERSION } from './core/constants.js';
+import { CUSTOM_SKIN_ID, SCRIPT_NAME, VERSION } from './core/constants.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
 import { $, topWindow } from './core/env.js';
-import { ensureTitleScreenSettings, getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings, setCurrentCharEnabled } from './core/settings.js';
+import { ensureTitleScreenSettings, getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings, saveSettings, setCurrentCharEnabled } from './core/settings.js';
 import { getIsEnabled, getIsLoadingSave, setHideOtherFloors, setIsEnabled } from './core/state.js';
 import { loadAllBackgroundsToCache } from './db/backgrounds.js';
 import { initDB } from './db/init.js';
+import { hasUiSkinProfileId, refreshUiSkinProfilesCache } from './db/ui-skin-profiles.js';
 import { loadAllSpritesToCache } from './db/sprites.js';
 import { applyPixiEffectOps, clearAllPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
 import { LipSyncManager } from './live2d/lip-sync.js';
@@ -41,6 +42,18 @@ const CHAT_CHANGED_BOUND_FLAG = '__galgame_chat_changed_bound__';
 const CHAR_POLLING_BOUND_FLAG = '__galgame_char_polling_bound__';
 let initStarted = false;
 
+function sanitizeLoadedSkinSetting(settings) {
+  const rawSkin = String(settings?.skin || 'none').trim();
+  const builtinSkinSet = new Set(['none', 'skin-ancient', 'skin-persona', 'skin-jrpg', 'skin-classic']);
+  if (builtinSkinSet.has(rawSkin)) return false;
+  if (hasUiSkinProfileId(rawSkin)) return false;
+  if (rawSkin === 'skin-western' || rawSkin === CUSTOM_SKIN_ID || rawSkin) {
+    settings.skin = 'none';
+    return true;
+  }
+  return false;
+}
+
 async function init() {
   if (initStarted || topWindow[INIT_LOCK_FLAG]) {
     console.log(`[${SCRIPT_NAME}] 初始化流程已执行/进行中，跳过重复调用`);
@@ -58,6 +71,10 @@ async function init() {
     console.log(`[${SCRIPT_NAME}] v${VERSION} 开始初始化...`);
     setHideOtherFloors(settings.hideOtherFloors);
     await initDB();
+    await refreshUiSkinProfilesCache();
+    if (sanitizeLoadedSkinSetting(settings)) {
+      saveSettings();
+    }
     await loadAllSpritesToCache();
     await loadAllBackgroundsToCache();
     SpriteManager.init();

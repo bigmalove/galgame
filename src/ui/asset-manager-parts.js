@@ -1048,7 +1048,7 @@ export async function showPackManagerModal() {
           </div>
           <div class="gal-pack-list" style="display: flex; flex-direction: column; gap: 10px;">
             ${allPacks.map(pack => {
-              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0, cgs: 0 };
+              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0, cgs: 0, uiSkins: 0 };
               const isDefault = pack.id === DEFAULT_PACK_ID;
               const isCurrent = pack.id === currentPackId;
               return `
@@ -1065,7 +1065,8 @@ export async function showPackManagerModal() {
                         <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘&nbsp;|&nbsp;
                         <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景&nbsp;|&nbsp;
                         <i class="fa-solid fa-map-location-dot"></i> ${stats.maps || 0} 张地图&nbsp;|&nbsp;
-                        <i class="fa-solid fa-photo-film"></i> ${stats.cgs || 0} 张CG
+                        <i class="fa-solid fa-photo-film"></i> ${stats.cgs || 0} 张CG&nbsp;|&nbsp;
+                        <i class="fa-solid fa-palette"></i> ${stats.uiSkins || 0} 组皮肤
                       </div>
                     </div>
                   </div>

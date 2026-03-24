@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&amp;family=Lato:wght@300;400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "dawn-teal": "#1a3a3a",
+              "dawn-sky": "#78a1bb",
+              "dawn-silver": "#b8c1c8",
+              "dawn-deep": "#0f172a",
+              "primary": "#78a1bb",
+              "on-surface": "#e2e8f0",
+              "surface-container": "#1e293b",
+              "outline-variant": "#334155",
+              "background": "#020617"
+            },
+            fontFamily: {
+              "headline": ["Montserrat", "sans-serif"],
+              "body": ["Lato", "sans-serif"],
+              "label": ["Montserrat", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .pattern-overlay {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.03) 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+        .glass-panel {
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+        .text-shadow-subtle {
+            text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        .cool-gradient-btn {
+            background: linear-gradient(135deg, rgba(26, 58, 58, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+        }
+        .dawn-glow {
+            box-shadow: 0 0 20px rgba(120, 161, 187, 0.15);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-hidden h-screen w-screen selection:bg-dawn-sky/30 selection:text-white">
+<div class="fixed inset-0 z-0">
+<img class="w-full h-full object-cover scale-105 brightness-50 grayscale-[20%]" data-alt="Cinematic dawn view" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7pbg4lQ7Gwzzs55TXr8o348rU_PhsLIPXy1fWUAtM4-SHP6qFsrH6ZlEyIlGAV_HYHJalQTQ0po7_bkQn8YC7xSt1iS6RzBobMpKMz33Ehrz-g3k3kanVeXrIObcjlFslNM7iqObjepszK3MnwRmUjFNN-Ad_FSaSErO8nkjDHi6kmVnfSFEnaI5CVPcMFaSZtOUSsnFqxH6FZExgn96EeAenseurVpd9QSofGfnKUT337UzG2ThmUsnmpcb29vygjnwFJ1PViVw"/>
+<div class="absolute inset-0 bg-gradient-to-b from-dawn-deep/40 via-transparent to-dawn-deep/80"></div>
+</div>
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 py-4 bg-transparent backdrop-blur-md bg-slate-950/30 border-b border-white/5">
+<div class="flex items-center gap-6">
+<h1 class="text-lg font-semibold text-dawn-silver tracking-[0.15em] uppercase font-headline">The Ethereal Manuscript</h1>
+<div class="h-4 w-px bg-white/10"></div>
+<div class="flex gap-4">
+<span class="font-headline font-medium tracking-[0.1em] uppercase text-[10px] text-dawn-sky">London, 1888</span>
+<span class="font-headline font-medium tracking-[0.1em] uppercase text-[10px] text-slate-400">05:42</span>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="p-2 text-dawn-silver hover:text-white hover:bg-white/5 transition-all rounded-full">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+<button class="p-2 text-dawn-silver hover:text-white hover:bg-white/5 transition-all rounded-full">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+</button>
+<button class="p-2 text-dawn-silver hover:text-white hover:bg-white/5 transition-all rounded-full">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+</button>
+</div>
+</header>
+<main class="relative z-10 h-full w-full flex flex-col px-12 pb-24">
+<div class="max-w-5xl mx-auto w-full mb-0 flex justify-end gap-3 px-8">
+<button class="glass-panel bg-white/5 hover:bg-white/10 text-dawn-silver px-5 py-2 rounded-t-lg font-headline font-semibold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-white/10">
+<span class="material-symbols-outlined text-sm opacity-70">refresh</span>
+<span>Regenerate</span>
+</button>
+<button class="glass-panel bg-dawn-teal/40 hover:bg-dawn-teal/60 text-dawn-sky px-5 py-2 rounded-t-lg font-headline font-semibold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-dawn-sky/30 dawn-glow">
+<span class="material-symbols-outlined text-sm">terminal</span>
+<span>Interface</span>
+</button>
+</div>
+<div class="flex-grow flex items-center justify-center mb-12">
+<div class="flex flex-col gap-4 w-full max-w-md justify-center px-4">
+<button class="relative group overflow-hidden glass-panel cool-gradient-btn hover:brightness-125 transition-all duration-500 px-8 py-4 rounded-lg border border-white/10 shadow-xl w-full">
+<div class="absolute inset-0 pattern-overlay opacity-10 pointer-events-none"></div>
+<span class="relative z-10 text-dawn-silver font-headline font-medium text-xs uppercase tracking-[0.25em]">Analyze the parchment structure</span>
+</button>
+<button class="relative group overflow-hidden glass-panel cool-gradient-btn hover:brightness-125 transition-all duration-500 px-8 py-4 rounded-lg border border-white/10 shadow-xl w-full">
+<div class="absolute inset-0 pattern-overlay opacity-10 pointer-events-none"></div>
+<span class="relative z-10 text-dawn-silver font-headline font-medium text-xs uppercase tracking-[0.25em]">Observe external fluctuations</span>
+</button>
+</div>
+</div>
+<div class="max-w-5xl mx-auto w-full relative">
+<div class="absolute -top-5 left-8 z-20">
+<div class="bg-gradient-to-r from-dawn-teal to-dawn-deep border border-dawn-sky/30 px-8 py-2 rounded-md shadow-lg">
+<span class="font-headline font-bold text-dawn-sky tracking-widest text-[11px] uppercase block">SYSTEM OBSERVATION</span>
+</div>
+</div>
+<div class="bg-slate-900/40 glass-panel rounded-xl overflow-hidden min-h-[180px] flex flex-col p-12 border border-white/10 shadow-2xl relative">
+<div class="absolute inset-0 pattern-overlay opacity-20 pointer-events-none"></div>
+<div class="relative z-10 flex-grow">
+<p class="text-dawn-silver text-lg leading-loose font-body font-light tracking-wide text-shadow-subtle">
+                    清晨的微光以15度角切入室内，尘埃颗粒在冷调的光束中遵循着布朗运动的轨迹缓慢起伏。街道上的噪音水平尚未达到峰值，环境湿度保持在百分之六十二。此时的房间呈现出一种高度凝滞的状态，时间在这里的流逝速度似乎低于外部基准。
+                    <span class="inline-flex items-center ml-2 text-dawn-sky opacity-80 animate-pulse">
+<span class="material-symbols-outlined text-base leading-none">arrow_right</span>
+</span>
+</p>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-center py-4 px-12 pb-safe bg-slate-950/60 backdrop-blur-2xl border-t border-white/5 shadow-2xl">
+<div class="flex items-center gap-1">
+<button class="px-4 py-1 font-headline text-[9px] font-semibold tracking-widest uppercase text-slate-500 hover:text-dawn-sky transition-all">LOG</button>
+<button class="px-4 py-1 font-headline text-[9px] font-semibold tracking-widest uppercase text-slate-500 hover:text-dawn-sky transition-all">CLOSE</button>
+<button class="px-4 py-1 font-headline text-[9px] font-semibold tracking-widest uppercase text-slate-500 hover:text-dawn-sky transition-all">VIEW</button>
+<button class="px-4 py-1 font-headline text-[9px] font-semibold tracking-widest uppercase text-slate-500 hover:text-dawn-sky transition-all">CONFIG</button>
+<div class="w-px h-3 bg-white/10 mx-2"></div>
+<button class="px-4 py-1 font-headline text-[9px] font-semibold tracking-widest uppercase text-slate-500 hover:text-dawn-sky transition-all">SAVE</button>
+<button class="px-4 py-1 font-headline text-[9px] font-semibold tracking-widest uppercase text-slate-500 hover:text-dawn-sky transition-all">LOAD</button>
+<button class="px-6 py-1.5 font-headline text-[9px] font-bold tracking-widest uppercase text-white bg-dawn-teal/50 rounded-full border border-dawn-sky/30 shadow-inner hover:bg-dawn-teal/80 transition-all">AUTO</button>
+<button class="px-4 py-1 font-headline text-[9px] font-semibold tracking-widest uppercase text-slate-500 hover:text-dawn-sky transition-all">SKIP</button>
+</div>
+</nav>
+<div class="fixed inset-0 pointer-events-none z-[100] opacity-[0.02] contrast-125" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCPr4hmKzQOXsfqn759ens5Yb3xa76oDM9pmpVbXorEf4yGj4x4TS0g5Hze_SD309gpnqHXuLTqk-bjl-_uwjEZPMIBXKKI4blZIakQVTK3jcN779-B7v2v-IJY9-mEIu4VsqlX9dOcW15VCnub79z-2SyOE2HMq6qkKhdRw7u7C4nbzarNgZuVFkB5Ek2XyJlBAR9z-jn5ik6eRxCvnpETjb02fm8PtK97ZPyBWTs8gAsPQnzWepKlTk7nSUKvrZMc4Fprdcv3kqw');"></div>
+
+</body></html>

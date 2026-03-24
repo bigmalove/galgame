@@ -3,7 +3,7 @@ import { TTSManager } from '../audio/tts-manager.js';
 import { CUSTOM_SKIN_ID, SCRIPT_NAME, THEME } from '../core/constants.js';
 import { setGlobalDebugEnabled } from '../core/debug.js';
 import { $, topWindow } from '../core/env.js';
-import { ensureEnhancedModeSettings, ensureTitleScreenSettings, getSettings, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled } from '../core/settings.js';
+import { UI_SCALE_PERCENT_MAX, UI_SCALE_PERCENT_MIN, dialogScalePercentToScaleFactorForSkin, ensureEnhancedModeSettings, ensureTitleScreenSettings, getSettings, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled, uiScalePercentToScaleFactor } from '../core/settings.js';
 import { getIsEnabled, setHideOtherFloors, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { saveBackground } from '../db/backgrounds.js';
@@ -15,7 +15,9 @@ import { getModalMountRoot } from './fullscreen.js';
 import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloors } from './galgame-mode.js';
 import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
 import { updateButtonState } from './menu-button.js';
-import { applyCustomSkinRuntime } from './custom-skin-runtime.js';
+import { ensureGlobalOverlay } from './overlay.js';
+import { applyCustomSkinRuntime, clearCustomSkinRuntime } from './custom-skin-runtime.js';
+import { TWILIGHT_SKIN_OPTION_ITEMS } from './skin-twilight.js';
 import { showToast } from './toast.js';
 import { finishActiveTypewriter, isTypewriterActive } from './typewriter.js';
 
@@ -89,6 +91,7 @@ const BUILTIN_SKIN_LIST = [
   { value: 'skin-persona', label: '心之怪盗（女神异闻录）' },
   { value: 'skin-jrpg',    label: '苍穹之庭（日式奇幻）' },
   { value: 'skin-classic',  label: '樱色物语（经典Galgame）' },
+  ...TWILIGHT_SKIN_OPTION_ITEMS,
 ];
 
 function getEffectiveSkinList() {
@@ -178,6 +181,7 @@ export function applySkin() {
   const settings = getSettings();
   const skin = normalizeSkinValue(settings.skin);
   const $overlay = $('#gal-global-overlay');
+  const isCustomSkinProfile = hasUiSkinProfileId(skin);
   // 移除所有皮肤 class
   BUILTIN_SKIN_LIST.forEach(s => { if (s.value !== 'none') $overlay.removeClass(s.value); });
   getCachedUiSkinProfiles().forEach(profile => $overlay.removeClass(profile.id));
@@ -185,7 +189,13 @@ export function applySkin() {
   $overlay.removeClass('skin-western');
   // 添加选中的皮肤 class
   if (skin !== 'none') {
-    $overlay.addClass(hasUiSkinProfileId(skin) ? CUSTOM_SKIN_ID : skin);
+    $overlay.addClass(isCustomSkinProfile ? CUSTOM_SKIN_ID : skin);
+  }
+  if (!isCustomSkinProfile) {
+    clearCustomSkinRuntime();
+  }
+  if ($overlay.length) {
+    ensureGlobalOverlay();
   }
 }
 
@@ -200,8 +210,8 @@ export function applySettingsToUI() {
   settings.toolbarScalePercent = toolbarScalePercent;
   const dialogFontStack = getDialogFontStack(settings.dialogFontFamily);
   $('#gal-global-overlay').css({
-    '--gal-dialog-scale-user': dialogScalePercent / 100,
-    '--gal-toolbar-scale-user': toolbarScalePercent / 100,
+    '--gal-dialog-scale-user': dialogScalePercentToScaleFactorForSkin(dialogScalePercent, activeSkin),
+    '--gal-toolbar-scale-user': uiScalePercentToScaleFactor(toolbarScalePercent),
     '--font-scale': fontScale,
     '--gal-dialog-font-family': dialogFontStack,
   });
@@ -494,14 +504,14 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">对话框缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-scale-percent" min="70" max="130" step="1" value="${settings.dialogScalePercent}">
+                <input type="range" id="gal-dialog-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings.dialogScalePercent}">
                 <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings.dialogScalePercent}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">底栏缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-toolbar-scale-percent" min="70" max="130" step="1" value="${settings.toolbarScalePercent}">
+                <input type="range" id="gal-toolbar-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings.toolbarScalePercent}">
                 <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings.toolbarScalePercent}%</span>
               </div>
             </div>
@@ -1240,9 +1250,31 @@ export async function showSettingsPanel(topTab, subTab) {
     ts.titleText = String($(this).val() || '').trim();
     saveSettings();
   });
+  $('#gal-title-font-family').on('input change', function () {
+    const ts = getTitleSettingsState();
+    ts.titleFontFamily = String($(this).val() || '').trim();
+    saveSettings();
+  });
+  $('#gal-title-font-size').on('input change', function () {
+    const ts = getTitleSettingsState();
+    const nextValue = Number.parseInt($(this).val(), 10);
+    ts.titleFontSize = Number.isFinite(nextValue) ? nextValue : '';
+    saveSettings();
+  });
   $('#gal-title-subtitle').on('input change', function () {
     const ts = getTitleSettingsState();
     ts.subtitleText = String($(this).val() || '').trim();
+    saveSettings();
+  });
+  $('#gal-title-subtitle-font-family').on('input change', function () {
+    const ts = getTitleSettingsState();
+    ts.subtitleFontFamily = String($(this).val() || '').trim();
+    saveSettings();
+  });
+  $('#gal-title-subtitle-font-size').on('input change', function () {
+    const ts = getTitleSettingsState();
+    const nextValue = Number.parseInt($(this).val(), 10);
+    ts.subtitleFontSize = Number.isFinite(nextValue) ? nextValue : '';
     saveSettings();
   });
   $('#gal-title-bg-source').on('change', function () {

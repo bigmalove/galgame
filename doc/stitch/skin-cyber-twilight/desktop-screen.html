@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;800;900&amp;family=Roboto+Mono:wght@300;400;500;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "cyber-purple": "#2d004d",
+              "cyber-blue": "#00d2ff",
+              "cyber-neon": "#39ff14",
+              "cyber-cyan": "#00f3ff",
+              "primary": "#00f3ff",
+              "on-surface": "#e0f2fe",
+              "surface-container": "#1a0b2e",
+              "outline-variant": "#4d2b7a",
+            },
+            fontFamily: {
+              "headline": ["Orbitron", "sans-serif"],
+              "body": ["Roboto Mono", "monospace"],
+              "label": ["Orbitron", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .pattern-overlay {
+            background-image: radial-gradient(circle at 2px 2px, rgba(0, 243, 255, 0.15) 1px, transparent 0);
+            background-size: 16px 16px;
+        }
+        .glass-panel {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            background: linear-gradient(135deg, rgba(45, 0, 77, 0.6) 0%, rgba(0, 210, 255, 0.1) 100%);
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+        .cyber-border {
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            box-shadow: inset 0 0 15px rgba(0, 243, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-[#0a0512] text-on-surface font-body overflow-hidden h-screen w-screen selection:bg-cyber-cyan/30 selection:text-white">
+<div class="fixed inset-0 z-0">
+<img class="w-full h-full object-cover scale-105 brightness-[0.4] contrast-125 saturate-50" data-alt="Cinematic sunset view of city skyline through a bedroom window" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7pbg4lQ7Gwzzs55TXr8o348rU_PhsLIPXy1fWUAtM4-SHP6qFsrH6ZlEyIlGAV_HYHJalQTQ0po7_bkQn8YC7xSt1iS6RzBobMpKMz33Ehrz-g3k3kanVeXrIObcjlFslNM7iqObjepszK3MnwRmUjFNN-Ad_FSaSErO8nkjDHi6kmVnfSFEnaI5CVPcMFaSZtOUSsnFqxH6FZExgn96EeAenseurVpd9QSofGfnKUT337UzG2ThmUsnmpcb29vygjnwFJ1PViVw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#0a0512] via-transparent to-[#0a0512]/40"></div>
+<div class="absolute inset-0 pattern-overlay opacity-20 pointer-events-none"></div>
+</div>
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 py-4 bg-transparent backdrop-blur-md bg-cyber-purple/40 border-b border-cyber-cyan/20">
+<div class="flex items-center gap-6">
+<h1 class="text-lg font-black text-cyber-cyan tracking-widest uppercase font-headline text-glow">Neural Network Diaries</h1>
+<div class="h-4 w-px bg-cyber-cyan/30"></div>
+<div class="flex gap-4">
+<span class="font-headline font-bold tracking-[0.1em] uppercase text-[10px] text-cyber-blue">Cybernetic City, 2342</span>
+<span class="font-headline font-bold tracking-[0.1em] uppercase text-[10px] text-cyber-neon/80">14:00 ST</span>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="p-2 text-cyber-cyan hover:bg-cyber-cyan/10 transition-colors duration-200 rounded-none border border-transparent hover:border-cyber-cyan/30">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+<button class="p-2 text-cyber-cyan hover:bg-cyber-cyan/10 transition-colors duration-200 rounded-none border border-transparent hover:border-cyber-cyan/30">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+</button>
+<button class="p-2 text-cyber-cyan hover:bg-cyber-cyan/10 transition-colors duration-200 rounded-none border border-transparent hover:border-cyber-cyan/30">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+</button>
+</div>
+</header>
+<main class="relative z-10 h-full w-full flex flex-col px-12 pb-24">
+<div class="max-w-5xl mx-auto w-full mb-0 flex justify-end gap-3 px-8">
+<button class="glass-panel bg-cyber-purple/20 hover:bg-cyber-purple/40 text-cyber-cyan px-5 py-2 font-headline font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border border-cyber-cyan/20">
+<span class="material-symbols-outlined text-sm opacity-70">refresh</span>
+<span>Sync Stream</span>
+</button>
+<button class="glass-panel bg-cyber-cyan/10 hover:bg-cyber-cyan/20 text-cyber-neon px-5 py-2 font-headline font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border border-cyber-neon/30 shadow-[0_0_15px_rgba(57,255,20,0.1)]">
+<span class="material-symbols-outlined text-sm">terminal</span>
+<span>Override Input</span>
+</button>
+</div>
+<div class="flex-grow flex items-center justify-center mb-12">
+<div class="flex flex-col gap-6 w-full max-w-lg justify-center px-4">
+<button class="relative group overflow-hidden glass-panel hover:bg-cyber-cyan/10 transition-all duration-300 px-8 py-5 border border-cyber-cyan/30 shadow-[0_0_20px_rgba(0,243,255,0.05)] w-full">
+<div class="absolute inset-0 pattern-overlay opacity-10 pointer-events-none group-hover:opacity-20"></div>
+<span class="relative z-10 text-cyber-cyan font-headline font-bold text-sm uppercase tracking-[0.3em] text-glow">Access Archives</span>
+</button>
+<button class="relative group overflow-hidden glass-panel hover:bg-cyber-neon/10 transition-all duration-300 px-8 py-5 border border-cyber-neon/30 shadow-[0_0_20px_rgba(57,255,20,0.05)] w-full">
+<div class="absolute inset-0 pattern-overlay opacity-10 pointer-events-none group-hover:opacity-20"></div>
+<span class="relative z-10 text-cyber-neon font-headline font-bold text-sm uppercase tracking-[0.3em]">Initiate Protocol</span>
+</button>
+</div>
+</div>
+<div class="max-w-5xl mx-auto w-full relative">
+<div class="absolute -top-6 left-8 z-20">
+<div class="bg-cyber-cyan px-10 py-2 shadow-[0_0_20px_rgba(0,243,255,0.4)]">
+<span class="font-headline font-black text-cyber-purple tracking-[0.2em] text-xs uppercase block">A.I. Narrator</span>
+</div>
+<div class="h-1 w-full bg-cyber-neon mt-1"></div>
+</div>
+<div class="bg-[#1a0b2e]/80 glass-panel overflow-hidden min-h-[160px] flex flex-col p-10 border border-cyber-cyan/30 shadow-[0_0_40px_rgba(0,0,0,0.6)] relative">
+<div class="absolute inset-0 pattern-overlay opacity-20 pointer-events-none"></div>
+<div class="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyber-neon/50"></div>
+<div class="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyber-cyan/50"></div>
+<div class="relative z-10 flex-grow">
+<p class="text-cyber-cyan/90 text-lg leading-relaxed font-body font-medium tracking-normal text-glow">
+                    [ANALYSIS: PHOTON DECAY DETECTED] The solar radiation levels are dropping as the urban core rotates away from the primary star. Atmospheric particulate matter is settling at a rate of 4.2%. [OBSERVATION: TEMPORAL STASIS] This residential unit exhibits a 98.7% variance from current societal entropy cycles, maintaining a legacy state of the late Anthropocene epoch.
+                 <span class="inline-flex items-center ml-2 text-cyber-neon animate-pulse"><span class="material-symbols-outlined text-xl leading-none">terminal</span></span></p>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-center py-4 px-12 pb-safe bg-cyber-purple/80 backdrop-blur-2xl border-t border-cyber-cyan/30 shadow-[0_-10px_40px_rgba(0,0,0,0.8)]">
+<div class="flex items-center gap-1">
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">LOG</button>
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">EXIT</button>
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">HUD</button>
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">SYS</button>
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">SAVE</button>
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">LOAD</button>
+<div class="w-px h-4 bg-cyber-cyan/20 mx-2"></div>
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">PREV</button>
+<button class="px-4 py-1 font-headline text-[9px] font-black tracking-[0.2em] uppercase text-cyber-purple bg-cyber-neon hover:bg-white transition-all shadow-[0_0_10px_rgba(57,255,20,0.4)]">AUTO</button>
+<button class="px-3 py-1 font-headline text-[9px] font-bold tracking-[0.2em] uppercase text-cyber-blue hover:text-white hover:bg-cyber-cyan/10 transition-all border-x border-transparent hover:border-cyber-cyan/30">SKIP</button>
+</div>
+</nav>
+<div class="fixed inset-0 pointer-events-none z-[100] opacity-[0.05] contrast-150 brightness-150" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCPr4hmKzQOXsfqn759ens5Yb3xa76oDM9pmpVbXorEf4yGj4x4TS0g5Hze_SD309gpnqHXuLTqk-bjl-_uwjEZPMIBXKKI4blZIakQVTK3jcN779-B7v2v-IJY9-mEIu4VsqlX9dOcW15VCnub79z-2SyOE2HMq6qkKhdRw7u7C4nbzarNgZuVFkB5Ek2XyJlBAR9z-jn5ik6eRxCvnpETjb02fm8PtK97ZPyBWTs8gAsPQnzWepKlTk7nSUKvrZMc4Fprdcv3kqw');"></div>
+
+</body></html>

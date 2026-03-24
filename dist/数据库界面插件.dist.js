@@ -7659,6 +7659,28 @@
   var DEFAULT_PACK_ID = "pack_default";
   var DEFAULT_PACK_NAME = "未定义";
   var CUSTOM_SKIN_ID = "custom-skin";
+  var TWILIGHT_SKIN_ID = "skin-twilight";
+  var GILDED_TWILIGHT_SKIN_ID = "skin-gilded-twilight";
+  var DAWN_TWILIGHT_SKIN_ID = "skin-dawn-twilight";
+  var ORCHID_TWILIGHT_SKIN_ID = "skin-orchid-twilight";
+  var NEON_TWILIGHT_SKIN_ID = "skin-neon-twilight";
+  var CLEAR_TWILIGHT_SKIN_ID = "skin-clear-twilight";
+  var FOREST_TWILIGHT_SKIN_ID = "skin-forest-twilight";
+  var CYBER_TWILIGHT_SKIN_ID = "skin-cyber-twilight";
+  var DREAM_TWILIGHT_SKIN_ID = "skin-dream-twilight";
+  var ROSY_TWILIGHT_SKIN_ID = "skin-rosy-twilight";
+  var TWILIGHT_VARIANT_SKIN_IDS = [
+    GILDED_TWILIGHT_SKIN_ID,
+    DAWN_TWILIGHT_SKIN_ID,
+    ORCHID_TWILIGHT_SKIN_ID,
+    NEON_TWILIGHT_SKIN_ID,
+    CLEAR_TWILIGHT_SKIN_ID,
+    FOREST_TWILIGHT_SKIN_ID,
+    CYBER_TWILIGHT_SKIN_ID,
+    DREAM_TWILIGHT_SKIN_ID,
+    ROSY_TWILIGHT_SKIN_ID
+  ];
+  var TWILIGHT_FAMILY_SKIN_IDS = [TWILIGHT_SKIN_ID, ...TWILIGHT_VARIANT_SKIN_IDS];
   var GLOBAL_CUSTOM_SKIN_PACK_ID = "__global_custom_skin__";
   var CUSTOM_SKIN_PROFILE_ID_PREFIX = "custom-profile::";
   var THEME = {
@@ -7909,20 +7931,46 @@
   var DEFAULT_TITLE_SCREEN_SETTINGS = {
     enabled: false,
     titleText: "",
+    titleFontFamily: "",
+    titleFontSize: "",
     subtitleText: "",
+    subtitleFontFamily: "",
+    subtitleFontSize: "",
     backgroundSource: "auto",
     backgroundSceneName: "__title__",
     backgroundUrl: "",
     backgroundFit: "cover",
     enableBackdropMask: true
   };
-  var UI_SCALE_PERCENT_MIN = 70;
-  var UI_SCALE_PERCENT_MAX = 130;
-  var UI_SCALE_PERCENT_DEFAULT = 100;
+  var UI_SCALE_PERCENT_LEGACY_MIN = 70;
+  var UI_SCALE_PERCENT_LEGACY_MAX = 130;
+  var UI_SCALE_PERCENT_BASELINE_OFFSET = 30;
+  var UI_SCALE_PERCENT_MIN = 100;
+  var UI_SCALE_PERCENT_MAX = 160;
+  var UI_SCALE_PERCENT_DEFAULT = 130;
+  var UI_SCALE_PERCENT_VERSION = 2;
   function normalizeUiScalePercent(rawValue) {
     const parsed = Number.parseInt(rawValue, 10);
     if (!Number.isFinite(parsed)) return UI_SCALE_PERCENT_DEFAULT;
     return Math.max(UI_SCALE_PERCENT_MIN, Math.min(parsed, UI_SCALE_PERCENT_MAX));
+  }
+  function convertLegacyUiScalePercent(rawValue) {
+    const parsed = Number.parseInt(rawValue, 10);
+    if (!Number.isFinite(parsed)) return UI_SCALE_PERCENT_DEFAULT;
+    const legacyPercent = Math.max(UI_SCALE_PERCENT_LEGACY_MIN, Math.min(parsed, UI_SCALE_PERCENT_LEGACY_MAX));
+    return normalizeUiScalePercent(legacyPercent + UI_SCALE_PERCENT_BASELINE_OFFSET);
+  }
+  function uiScalePercentToScaleFactor(rawValue) {
+    const normalizedPercent = normalizeUiScalePercent(rawValue);
+    return Math.max(0.01, (normalizedPercent - UI_SCALE_PERCENT_BASELINE_OFFSET) / 100);
+  }
+  function dialogScalePercentToScaleFactorForSkin(rawValue, rawSkin) {
+    const normalizedPercent = normalizeUiScalePercent(rawValue);
+    const skin = String(rawSkin || "").trim();
+    if (TWILIGHT_FAMILY_SKIN_IDS.includes(skin)) {
+      return uiScalePercentToScaleFactor(normalizedPercent);
+    }
+    return Math.max(0.01, normalizedPercent / 100);
   }
   var DEFAULT_SETTINGS = {
     // 文本显示
@@ -7946,6 +7994,7 @@
     effectsQuality: "balanced",
     effectsAutoClearOnSceneChange: true,
     effectsMaxActive: 2,
+    uiScalePercentVersion: UI_SCALE_PERCENT_VERSION,
     dialogScalePercent: UI_SCALE_PERCENT_DEFAULT,
     toolbarScalePercent: UI_SCALE_PERCENT_DEFAULT,
     // 立绘设置
@@ -8180,13 +8229,26 @@
     const fit2 = String(rawValue || "").trim().toLowerCase();
     return fit2 === "contain" ? "contain" : DEFAULT_TITLE_SCREEN_SETTINGS.backgroundFit;
   }
+  function normalizeTitleScreenFontFamily(rawValue) {
+    return String(rawValue || "").trim();
+  }
+  function normalizeTitleScreenFontSize(rawValue) {
+    if (rawValue === "" || rawValue === null || rawValue === void 0) return "";
+    const parsed = Number.parseInt(rawValue, 10);
+    if (!Number.isFinite(parsed)) return "";
+    return Math.max(8, Math.min(parsed, 240));
+  }
   function normalizeTitleScreenSettings(rawTitleScreen) {
     const safe = _safeObject(rawTitleScreen);
     const backgroundSceneName = String(safe.backgroundSceneName || "").trim() || DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSceneName;
     return {
       enabled: safe.enabled === true,
       titleText: String(safe.titleText || "").trim(),
+      titleFontFamily: normalizeTitleScreenFontFamily(safe.titleFontFamily),
+      titleFontSize: normalizeTitleScreenFontSize(safe.titleFontSize),
       subtitleText: String(safe.subtitleText || "").trim(),
+      subtitleFontFamily: normalizeTitleScreenFontFamily(safe.subtitleFontFamily),
+      subtitleFontSize: normalizeTitleScreenFontSize(safe.subtitleFontSize),
       backgroundSource: normalizeTitleScreenBackgroundSource(safe.backgroundSource),
       backgroundSceneName,
       backgroundUrl: String(safe.backgroundUrl || "").trim(),
@@ -8718,7 +8780,11 @@
     return {
       enabled: config.enabled === true,
       titleText: String(config.titleText || ""),
+      titleFontFamily: String(config.titleFontFamily || ""),
+      titleFontSize: config.titleFontSize === "" || config.titleFontSize == null ? "" : Number(config.titleFontSize),
       subtitleText: String(config.subtitleText || ""),
+      subtitleFontFamily: String(config.subtitleFontFamily || ""),
+      subtitleFontSize: config.subtitleFontSize === "" || config.subtitleFontSize == null ? "" : Number(config.subtitleFontSize),
       backgroundSource: String(config.backgroundSource || ""),
       backgroundSceneName: String(config.backgroundSceneName || ""),
       backgroundFit: String(config.backgroundFit || ""),
@@ -8839,6 +8905,13 @@
       characterSlotId: currentCharacterSlotId
     };
   }
+  function getCurrentCharacterName() {
+    try {
+      return String(getCurrentCharacterSnapshot()?.characterName || "").trim();
+    } catch {
+      return "";
+    }
+  }
   function getCurrentCharKeyAliases() {
     const snapshot = getCurrentCharacterSnapshot();
     const aliases = [];
@@ -8887,13 +8960,18 @@
         _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
         const hasLegacyUiScale = Object.prototype.hasOwnProperty.call(parsed, "uiScalePercent");
         if (hasLegacyUiScale) {
-          const legacyScale = normalizeUiScalePercent(parsed.uiScalePercent);
+          const legacyScale = convertLegacyUiScalePercent(parsed.uiScalePercent);
           if (!Object.prototype.hasOwnProperty.call(parsed, "dialogScalePercent")) {
             _settings.dialogScalePercent = legacyScale;
           }
           if (!Object.prototype.hasOwnProperty.call(parsed, "toolbarScalePercent")) {
             _settings.toolbarScalePercent = legacyScale;
           }
+        }
+        if (Number(_settings.uiScalePercentVersion) !== UI_SCALE_PERCENT_VERSION) {
+          _settings.dialogScalePercent = convertLegacyUiScalePercent(_settings.dialogScalePercent);
+          _settings.toolbarScalePercent = convertLegacyUiScalePercent(_settings.toolbarScalePercent);
+          _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
         }
         delete _settings.uiScalePercent;
         _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
@@ -8935,6 +9013,7 @@
         }
         _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
         _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
+        _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
         _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
         _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
         _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
@@ -9014,6 +9093,7 @@
       delete _settings.uiScalePercent;
       _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
       _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
+      _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
       ensureMapSettings();
       ensureTitleScreenSettings();
       topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY2, JSON.stringify(_settings));
@@ -9155,6 +9235,18 @@
     const txt = document.createElement("textarea");
     txt.innerHTML = html;
     return txt.value;
+  }
+  function getMesTextContentForGalgame(mesTextElement) {
+    const html = String(mesTextElement?.innerHTML || "").trim();
+    const visibleText = String(mesTextElement?.textContent || "").trim();
+    if (!html) {
+      return visibleText;
+    }
+    const decodedHtml = decodeHtml(html);
+    if (RE_GAL_TAGS.test(html) || RE_GAL_TAGS.test(decodedHtml)) {
+      return decodedHtml;
+    }
+    return visibleText;
   }
   function getRawMessageContent(mesId) {
     var _a, _b;
@@ -12598,6 +12690,563 @@ ${ssml}`;
     }
   }
 
+  // src/core/custom-skin-footer-buttons.js
+  var CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES = {
+    TOOLBAR: "toolbar",
+    MENU: "menu"
+  };
+  var CUSTOM_SKIN_FOOTER_BUTTONS = [
+    {
+      elementId: "footer_btn_log",
+      action: "log",
+      shortLabel: "LOG",
+      menuLabel: "历史",
+      iconClass: "fa-solid fa-list-ul"
+    },
+    {
+      elementId: "footer_btn_close",
+      action: "close-mode",
+      shortLabel: "CLOSE",
+      menuLabel: "退出",
+      iconClass: "fa-solid fa-power-off"
+    },
+    {
+      elementId: "footer_btn_view",
+      action: "view-original",
+      shortLabel: "VIEW",
+      menuLabel: "原界面",
+      iconClass: "fa-solid fa-display"
+    },
+    {
+      elementId: "footer_btn_config",
+      action: "config",
+      shortLabel: "CONFIG",
+      menuLabel: "设置",
+      iconClass: "fa-solid fa-gear"
+    },
+    {
+      elementId: "footer_btn_save",
+      action: "save",
+      shortLabel: "SAVE",
+      menuLabel: "存档",
+      iconClass: "fa-solid fa-floppy-disk"
+    },
+    {
+      elementId: "footer_btn_load",
+      action: "load",
+      shortLabel: "LOAD",
+      menuLabel: "读档",
+      iconClass: "fa-solid fa-folder-open"
+    },
+    {
+      elementId: "footer_btn_timeline",
+      action: "timeline",
+      shortLabel: "TL",
+      menuLabel: "时间线",
+      iconClass: "fa-solid fa-diagram-project"
+    },
+    {
+      elementId: "footer_btn_prev",
+      action: "prev",
+      shortLabel: "PREV",
+      menuLabel: "上一段",
+      iconClass: "fa-solid fa-chevron-left"
+    },
+    {
+      elementId: "footer_btn_auto",
+      action: "auto",
+      shortLabel: "AUTO",
+      menuLabel: "自动播放",
+      iconClass: "fa-solid fa-play"
+    },
+    {
+      elementId: "footer_btn_skip",
+      action: "skip",
+      shortLabel: "SKIP",
+      menuLabel: "快进",
+      iconClass: "fa-solid fa-forward"
+    },
+    {
+      elementId: "footer_btn_choices",
+      action: "show-choices",
+      shortLabel: "剧情选项",
+      menuLabel: "剧情选项",
+      iconClass: "fa-solid fa-list-check"
+    },
+    {
+      elementId: "footer_btn_next",
+      action: "next",
+      shortLabel: "NEXT",
+      menuLabel: "下一段",
+      iconClass: "fa-solid fa-chevron-right"
+    }
+  ];
+  var CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS = CUSTOM_SKIN_FOOTER_BUTTONS.map((item) => item.elementId);
+  var CUSTOM_SKIN_FOOTER_BUTTON_ACTIONS = CUSTOM_SKIN_FOOTER_BUTTONS.map((item) => item.action);
+  var DEFAULT_GAL_MOBILE_MENU_ACTIONS = ["open-settings", "log", "view-original", "save", "load", "timeline"];
+  var CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS = ["footer_btn_config", "footer_btn_choices", "footer_btn_next"];
+  var CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS = CUSTOM_SKIN_FOOTER_BUTTONS.filter(
+    (item) => !["footer_btn_choices", "footer_btn_next"].includes(item.elementId)
+  );
+  var FOOTER_BUTTON_BY_ELEMENT_ID = new Map(CUSTOM_SKIN_FOOTER_BUTTONS.map((item) => [item.elementId, item]));
+  var FOOTER_BUTTON_BY_ACTION = new Map(CUSTOM_SKIN_FOOTER_BUTTONS.map((item) => [item.action, item]));
+  var MOBILE_MENU_ACTION_META = new Map([
+    [
+      "open-settings",
+      {
+        action: "open-settings",
+        menuLabel: "设置",
+        iconClass: "fa-solid fa-gear"
+      }
+    ],
+    ...CUSTOM_SKIN_FOOTER_BUTTONS.map((item) => [
+      item.action,
+      {
+        action: item.action,
+        menuLabel: item.menuLabel,
+        iconClass: item.iconClass
+      }
+    ])
+  ]);
+  var DEFAULT_CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY = Object.freeze(
+    CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.reduce((result, elementId) => {
+      result[elementId] = CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
+      return result;
+    }, {
+      footer_btn_config: CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR
+    })
+  );
+  function getCustomSkinFooterButtonByElementId(elementId) {
+    return FOOTER_BUTTON_BY_ELEMENT_ID.get(String(elementId || "").trim()) || null;
+  }
+  function getCustomSkinFooterButtonByAction(action) {
+    return FOOTER_BUTTON_BY_ACTION.get(String(action || "").trim()) || null;
+  }
+  function normalizeCustomSkinFooterButtonDisplay(rawValue = null) {
+    const safeValue = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) ? rawValue : {};
+    const normalized = {};
+    CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.forEach((elementId) => {
+      const rawMode = String(safeValue[elementId] || "").trim().toLowerCase();
+      normalized[elementId] = rawMode === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU ? CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU : CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
+    });
+    CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS.forEach((elementId) => {
+      normalized[elementId] = CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
+    });
+    return normalized;
+  }
+  function hasCustomSkinFooterMenuItems(rawValue = null) {
+    const normalized = normalizeCustomSkinFooterButtonDisplay(rawValue);
+    return CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.some(
+      (elementId) => !CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS.includes(elementId) && normalized[elementId] === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU
+    );
+  }
+  function getCustomSkinFooterMenuActions(rawValue = null) {
+    const normalized = normalizeCustomSkinFooterButtonDisplay(rawValue);
+    return CUSTOM_SKIN_FOOTER_BUTTONS.filter((item) => !CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS.includes(item.elementId) && normalized[item.elementId] === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU).map((item) => item.action);
+  }
+  function buildGalMobileMenuButtonsHtml(actions = DEFAULT_GAL_MOBILE_MENU_ACTIONS) {
+    const safeActions = Array.from(new Set(
+      (Array.isArray(actions) ? actions : []).map((action) => String(action || "").trim()).filter((action) => MOBILE_MENU_ACTION_META.has(action))
+    ));
+    return safeActions.map((action) => {
+      const meta3 = MOBILE_MENU_ACTION_META.get(action);
+      return `
+          <button class="gal-menu-btn" data-action="${meta3.action}">
+              <i class="${meta3.iconClass}"></i> ${meta3.menuLabel}
+          </button>
+        `;
+    }).join("");
+  }
+
+  // src/db/ui-skins.js
+  var DEFAULT_DEVICE = "desktop";
+  var DEFAULT_STATE = "normal";
+  function normalizeKeyPart(value, fallback = "") {
+    const trimmed = String(value || "").trim();
+    return trimmed || fallback;
+  }
+  function buildPackSkinKey(packId, skinId) {
+    return `${packId}::${skinId}`;
+  }
+  function buildPackSkinDeviceKey(packId, skinId, device) {
+    return `${packId}::${skinId}::${device}`;
+  }
+  function buildLookupKey(packId, skinId, elementId, device, state) {
+    return `${packId}::${skinId}::${elementId}::${device}::${state}`;
+  }
+  function buildUiSkinAssetId(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
+    const safePackId = normalizeKeyPart(packId, DEFAULT_PACK_ID);
+    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
+    const safeElementId = normalizeKeyPart(elementId, "unknown-element");
+    const safeDevice = normalizeKeyPart(device, DEFAULT_DEVICE);
+    const safeState = normalizeKeyPart(state, DEFAULT_STATE);
+    return `${safePackId}:${safeSkinId}:${safeElementId}:${safeDevice}:${safeState}`;
+  }
+  function normalizeUiSkinAsset(payload = {}) {
+    const resolvedPackId = normalizeKeyPart(payload.packId, getCurrentPackId() || DEFAULT_PACK_ID);
+    const resolvedSkinId = normalizeKeyPart(payload.skinId, CUSTOM_SKIN_ID);
+    const resolvedElementId = normalizeKeyPart(payload.elementId, "unknown-element");
+    const resolvedDevice = normalizeKeyPart(payload.device, DEFAULT_DEVICE);
+    const resolvedState = normalizeKeyPart(payload.state, DEFAULT_STATE);
+    const id2 = normalizeKeyPart(
+      payload.id,
+      buildUiSkinAssetId(resolvedPackId, resolvedSkinId, resolvedElementId, resolvedDevice, resolvedState)
+    );
+    return {
+      id: id2,
+      packId: resolvedPackId,
+      skinId: resolvedSkinId,
+      elementId: resolvedElementId,
+      device: resolvedDevice,
+      state: resolvedState,
+      packSkinKey: buildPackSkinKey(resolvedPackId, resolvedSkinId),
+      packSkinDeviceKey: buildPackSkinDeviceKey(resolvedPackId, resolvedSkinId, resolvedDevice),
+      lookupKey: buildLookupKey(resolvedPackId, resolvedSkinId, resolvedElementId, resolvedDevice, resolvedState),
+      imageBlob: payload.imageBlob || null,
+      imageUrl: payload.imageUrl || null,
+      layout: payload.layout || null,
+      scaleMode: normalizeKeyPart(payload.scaleMode, "stretch"),
+      slice: payload.slice || null,
+      textPadding: payload.textPadding || null,
+      meta: payload.meta || null,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  async function ensureDbReady() {
+    if (!getDb()) await initDB();
+    return getDb();
+  }
+  async function saveUiSkinAsset(payload = {}) {
+    const db = await ensureDbReady();
+    const data4 = normalizeUiSkinAsset(payload);
+    return new Promise((resolve2, reject2) => {
+      const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
+      const store = transaction.objectStore(STORE_UI_SKINS);
+      const request = store.put(data4);
+      transaction.oncomplete = () => {
+        console.log(`[${SCRIPT_NAME}] UI 皮肤元素已保存: ${data4.id}`);
+        resolve2(data4);
+      };
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
+      request.onerror = () => reject2(request.error);
+    });
+  }
+  async function getUiSkinAssetById(id2) {
+    const safeId = normalizeKeyPart(id2, "");
+    if (!safeId) return null;
+    const db = await ensureDbReady();
+    return new Promise((resolve2) => {
+      const transaction = db.transaction([STORE_UI_SKINS], "readonly");
+      const store = transaction.objectStore(STORE_UI_SKINS);
+      const request = store.get(safeId);
+      request.onsuccess = () => resolve2(request.result || null);
+      request.onerror = () => resolve2(null);
+    });
+  }
+  async function getUiSkinAsset(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
+    const id2 = buildUiSkinAssetId(packId, skinId, elementId, device, state);
+    return getUiSkinAssetById(id2);
+  }
+  async function getUiSkinAssetsByPackSkin(packId, skinId, device = null) {
+    const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
+    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
+    const safeDevice = device ? normalizeKeyPart(device, DEFAULT_DEVICE) : null;
+    const db = await ensureDbReady();
+    return new Promise((resolve2) => {
+      const transaction = db.transaction([STORE_UI_SKINS], "readonly");
+      const store = transaction.objectStore(STORE_UI_SKINS);
+      const indexName = safeDevice ? "packSkinDeviceKey" : "packSkinKey";
+      const key = safeDevice ? buildPackSkinDeviceKey(safePackId, safeSkinId, safeDevice) : buildPackSkinKey(safePackId, safeSkinId);
+      const index = store.index(indexName);
+      const request = index.getAll(IDBKeyRange.only(key));
+      request.onsuccess = () => resolve2(request.result || []);
+      request.onerror = () => resolve2([]);
+    });
+  }
+  async function getAllUiSkinAssets() {
+    const db = await ensureDbReady();
+    return new Promise((resolve2) => {
+      const transaction = db.transaction([STORE_UI_SKINS], "readonly");
+      const store = transaction.objectStore(STORE_UI_SKINS);
+      const request = store.getAll();
+      request.onsuccess = () => resolve2(request.result || []);
+      request.onerror = () => resolve2([]);
+    });
+  }
+  async function deleteUiSkinAssetById(id2) {
+    const safeId = normalizeKeyPart(id2, "");
+    if (!safeId) return false;
+    const db = await ensureDbReady();
+    return new Promise((resolve2, reject2) => {
+      const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
+      const store = transaction.objectStore(STORE_UI_SKINS);
+      const request = store.delete(safeId);
+      transaction.oncomplete = () => resolve2(true);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
+      request.onerror = () => reject2(request.error);
+    });
+  }
+  async function deleteUiSkinAsset(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
+    const id2 = buildUiSkinAssetId(packId, skinId, elementId, device, state);
+    return deleteUiSkinAssetById(id2);
+  }
+  async function deleteUiSkinAssetsByPackSkin(packId, skinId) {
+    const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
+    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
+    const targetPackSkinKey = buildPackSkinKey(safePackId, safeSkinId);
+    const db = await ensureDbReady();
+    return new Promise((resolve2, reject2) => {
+      let deletedCount = 0;
+      const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
+      const store = transaction.objectStore(STORE_UI_SKINS);
+      const index = store.index("packSkinKey");
+      const request = index.openCursor(IDBKeyRange.only(targetPackSkinKey));
+      transaction.oncomplete = () => resolve2(deletedCount);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
+      request.onsuccess = (event3) => {
+        const cursor = event3.target.result;
+        if (cursor) {
+          deletedCount += 1;
+          cursor.delete();
+          cursor.continue();
+          return;
+        }
+      };
+      request.onerror = () => reject2(request.error);
+    });
+  }
+
+  // src/db/ui-skin-profiles.js
+  var DEFAULT_PROFILE_NAME = "自定义皮肤";
+  var cachedProfiles = [];
+  var cachedProfileMap = /* @__PURE__ */ new Map();
+  function normalizeProfileDisplayName(rawName, fallback = DEFAULT_PROFILE_NAME) {
+    const name = String(rawName || "").trim();
+    return name || fallback;
+  }
+  function normalizeProfileId(rawId) {
+    const id2 = String(rawId || "").trim();
+    if (!id2) return "";
+    return id2.startsWith(CUSTOM_SKIN_PROFILE_ID_PREFIX) ? id2 : "";
+  }
+  function normalizeProfileRecord(rawProfile = {}) {
+    const safeProfile = rawProfile && typeof rawProfile === "object" && !Array.isArray(rawProfile) ? rawProfile : {};
+    return {
+      ...safeProfile,
+      id: normalizeProfileId(safeProfile.id),
+      displayName: normalizeProfileDisplayName(safeProfile.displayName, DEFAULT_PROFILE_NAME),
+      createdAt: String(safeProfile.createdAt || "").trim(),
+      updatedAt: String(safeProfile.updatedAt || "").trim(),
+      sortOrder: Number.isFinite(Number(safeProfile.sortOrder)) ? Number(safeProfile.sortOrder) : 0,
+      footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(safeProfile.footerButtonDisplay)
+    };
+  }
+  function cloneProfileRecord(profile) {
+    if (!profile) return null;
+    return {
+      ...profile,
+      footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(profile.footerButtonDisplay)
+    };
+  }
+  function generateProfileId() {
+    const seed = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    return `${CUSTOM_SKIN_PROFILE_ID_PREFIX}${seed}`;
+  }
+  function compareProfiles(a, b) {
+    const sortA = Number(a?.sortOrder || 0);
+    const sortB = Number(b?.sortOrder || 0);
+    if (sortA !== sortB) return sortA - sortB;
+    const updatedA = String(a?.updatedAt || "");
+    const updatedB = String(b?.updatedAt || "");
+    if (updatedA !== updatedB) return updatedA.localeCompare(updatedB, "zh-Hans-CN");
+    return String(a?.displayName || "").localeCompare(String(b?.displayName || ""), "zh-Hans-CN");
+  }
+  function setProfileCache(list) {
+    cachedProfiles = (Array.isArray(list) ? list : []).map((profile) => normalizeProfileRecord(profile)).filter((profile) => !!profile.id).sort(compareProfiles);
+    cachedProfileMap = new Map(cachedProfiles.map((profile) => [profile.id, profile]));
+    return cachedProfiles;
+  }
+  async function ensureDbReady2() {
+    if (!getDb()) await initDB();
+    return getDb();
+  }
+  async function putProfileRecord(record) {
+    const db = await ensureDbReady2();
+    return new Promise((resolve2, reject2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readwrite");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.put(record);
+      transaction.oncomplete = () => resolve2(record);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
+      request.onerror = () => reject2(request.error);
+    });
+  }
+  async function getProfileRecord(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return null;
+    const db = await ensureDbReady2();
+    return new Promise((resolve2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readonly");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.get(safeId);
+      request.onsuccess = () => resolve2(request.result || null);
+      request.onerror = () => resolve2(null);
+    });
+  }
+  async function deleteProfileRecord(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return false;
+    const db = await ensureDbReady2();
+    return new Promise((resolve2, reject2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readwrite");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.delete(safeId);
+      transaction.oncomplete = () => resolve2(true);
+      transaction.onabort = () => reject2(transaction.error || request.error);
+      transaction.onerror = () => reject2(transaction.error || request.error);
+      request.onerror = () => reject2(request.error);
+    });
+  }
+  function buildUniqueDisplayName(rawName, profiles = cachedProfiles) {
+    const baseName = normalizeProfileDisplayName(rawName);
+    const existing = new Set((Array.isArray(profiles) ? profiles : []).map((item) => String(item?.displayName || "").trim()));
+    if (!existing.has(baseName)) return baseName;
+    let index = 2;
+    while (existing.has(`${baseName} (${index})`)) {
+      index += 1;
+    }
+    return `${baseName} (${index})`;
+  }
+  function isCustomSkinProfileId(rawId) {
+    return !!normalizeProfileId(rawId);
+  }
+  function hasUiSkinProfileId(rawId) {
+    const safeId = normalizeProfileId(rawId);
+    return !!safeId && cachedProfileMap.has(safeId);
+  }
+  function getCachedUiSkinProfiles() {
+    return cachedProfiles.map((profile) => cloneProfileRecord(profile));
+  }
+  function getCachedUiSkinProfile(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return null;
+    const profile = cachedProfileMap.get(safeId);
+    return cloneProfileRecord(profile);
+  }
+  function getUiSkinProfileLabel(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return "";
+    return cachedProfileMap.get(safeId)?.displayName || safeId;
+  }
+  function getAvailableUiSkinProfileDisplayName(rawName, profiles = cachedProfiles) {
+    return buildUniqueDisplayName(rawName, profiles);
+  }
+  async function refreshUiSkinProfilesCache() {
+    const db = await ensureDbReady2();
+    return new Promise((resolve2) => {
+      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readonly");
+      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
+      const request = store.getAll();
+      request.onsuccess = () => resolve2(setProfileCache(request.result || []));
+      request.onerror = () => resolve2(setProfileCache([]));
+    });
+  }
+  async function listUiSkinProfiles() {
+    const profiles = await refreshUiSkinProfilesCache();
+    return profiles.map((profile) => cloneProfileRecord(profile));
+  }
+  async function getUiSkinProfile(id2) {
+    const record = await getProfileRecord(id2);
+    return record ? cloneProfileRecord(normalizeProfileRecord(record)) : null;
+  }
+  async function saveUiSkinProfile(profile = {}) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const existing = normalizeProfileId(profile.id) ? await getProfileRecord(profile.id) : null;
+    const id2 = normalizeProfileId(profile.id) || generateProfileId();
+    const record = {
+      id: id2,
+      displayName: normalizeProfileDisplayName(profile.displayName, existing?.displayName || DEFAULT_PROFILE_NAME),
+      createdAt: String(profile.createdAt || existing?.createdAt || now),
+      updatedAt: String(profile.updatedAt || now),
+      sortOrder: Number.isFinite(Number(profile.sortOrder)) ? Number(profile.sortOrder) : Number(existing?.sortOrder || Date.now()),
+      footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(
+        Object.prototype.hasOwnProperty.call(profile, "footerButtonDisplay") ? profile.footerButtonDisplay : existing?.footerButtonDisplay
+      )
+    };
+    await putProfileRecord(record);
+    await refreshUiSkinProfilesCache();
+    console.log(`[${SCRIPT_NAME}] 保存自定义皮肤 profile: ${record.id} (${record.displayName})`);
+    return cloneProfileRecord(normalizeProfileRecord(record));
+  }
+  async function createUiSkinProfile({ displayName, id: id2 } = {}) {
+    const currentProfiles = await refreshUiSkinProfilesCache();
+    const record = await saveUiSkinProfile({
+      id: id2,
+      displayName: buildUniqueDisplayName(
+        displayName || `${DEFAULT_PROFILE_NAME} ${currentProfiles.length + 1}`,
+        currentProfiles
+      ),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      sortOrder: Date.now()
+    });
+    return record;
+  }
+  async function renameUiSkinProfile(id2, displayName) {
+    const existing = await getProfileRecord(id2);
+    if (!existing) {
+      throw new Error("要重命名的自定义皮肤不存在");
+    }
+    const profiles = await refreshUiSkinProfilesCache();
+    const otherProfiles = profiles.filter((profile) => profile.id !== existing.id);
+    return saveUiSkinProfile({
+      ...existing,
+      displayName: buildUniqueDisplayName(displayName, otherProfiles),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  }
+  async function duplicateUiSkinProfile(sourceId, { displayName, newId } = {}) {
+    const sourceProfile = await getProfileRecord(sourceId);
+    if (!sourceProfile) {
+      throw new Error("源自定义皮肤不存在");
+    }
+    const profiles = await refreshUiSkinProfilesCache();
+    const duplicatedProfile = await saveUiSkinProfile({
+      id: newId || generateProfileId(),
+      displayName: buildUniqueDisplayName(displayName || `${sourceProfile.displayName} 副本`, profiles),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      sortOrder: Date.now(),
+      footerButtonDisplay: sourceProfile.footerButtonDisplay
+    });
+    const assets = await getUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, sourceProfile.id);
+    await Promise.all(
+      assets.map(
+        (asset) => saveUiSkinAsset({
+          ...asset,
+          id: void 0,
+          packId: GLOBAL_CUSTOM_SKIN_PACK_ID,
+          skinId: duplicatedProfile.id
+        })
+      )
+    );
+    console.log(`[${SCRIPT_NAME}] 复制自定义皮肤 profile: ${sourceProfile.id} -> ${duplicatedProfile.id}`);
+    return duplicatedProfile;
+  }
+  async function deleteUiSkinProfile(id2) {
+    const safeId = normalizeProfileId(id2);
+    if (!safeId) return false;
+    await deleteUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, safeId);
+    await deleteProfileRecord(safeId);
+    await refreshUiSkinProfilesCache();
+    console.log(`[${SCRIPT_NAME}] 删除自定义皮肤 profile: ${safeId}`);
+    return true;
+  }
+
   // src/effects/pixi-loader.js
   var PIXI_CANDIDATE_URLS = Object.freeze([
     "https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js",
@@ -14169,6 +14818,229 @@ ${ssml}`;
     return normalizeStatusIconClass(value, TIME_STATUS_ICON_SET, DEFAULT_TIME_STATUS_ICON_CLASS);
   }
 
+  // src/ui/skin-twilight.js
+  var TWILIGHT_MOBILE_MENU_ACTIONS = ["open-settings", "save", "load", "view-original", "timeline"];
+  var DEFAULT_TWILIGHT_BRAND = "TWILIGHT";
+  var TWILIGHT_SKIN_OPTION_ITEMS = [
+    { value: TWILIGHT_SKIN_ID, label: "薄暮" },
+    { value: GILDED_TWILIGHT_SKIN_ID, label: "鎏暮" },
+    { value: DAWN_TWILIGHT_SKIN_ID, label: "晓暮" },
+    { value: ORCHID_TWILIGHT_SKIN_ID, label: "绯暮" },
+    { value: NEON_TWILIGHT_SKIN_ID, label: "霓暮" },
+    { value: CLEAR_TWILIGHT_SKIN_ID, label: "澄暮" },
+    { value: FOREST_TWILIGHT_SKIN_ID, label: "森暮" },
+    { value: CYBER_TWILIGHT_SKIN_ID, label: "电暮" },
+    { value: DREAM_TWILIGHT_SKIN_ID, label: "梦暮" },
+    { value: ROSY_TWILIGHT_SKIN_ID, label: "霞暮" }
+  ];
+  var TWILIGHT_VARIANT_SKIN_IDS2 = TWILIGHT_FAMILY_SKIN_IDS.filter((skinId) => skinId !== TWILIGHT_SKIN_ID);
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char] || char);
+  }
+  function isTwilightSkinSelected(rawSkin = getSettings()?.skin) {
+    return TWILIGHT_FAMILY_SKIN_IDS.includes(String(rawSkin || "").trim());
+  }
+  function isGildedTwilightSkinSelected(rawSkin = getSettings()?.skin) {
+    return String(rawSkin || "").trim() === GILDED_TWILIGHT_SKIN_ID;
+  }
+  function getTwilightOverlayClasses(rawSkin = getSettings()?.skin) {
+    const skin = String(rawSkin || "").trim();
+    if (!TWILIGHT_FAMILY_SKIN_IDS.includes(skin)) return [];
+    return skin === TWILIGHT_SKIN_ID ? [TWILIGHT_SKIN_ID] : [TWILIGHT_SKIN_ID, skin];
+  }
+  function applyTwilightSkinAssets(overlay) {
+  }
+  function clearTwilightSkinAssets(overlay) {
+  }
+  function buildTwilightOverlayHtml({
+    locationIconClass = "",
+    timeIconClass = "",
+    speakerGlow = false,
+    speakerBubble = false,
+    ttsEnabled = false
+  } = {}) {
+    const twilightBrand = getCurrentCharacterName() || DEFAULT_TWILIGHT_BRAND;
+    return `
+      <div class="gal-status-bar-container gal-twilight-header">
+        <div class="gal-twilight-brandline">
+          <div class="gal-twilight-brand">${escapeHtml(twilightBrand)}</div>
+          <div class="gal-twilight-divider" aria-hidden="true"></div>
+          <div class="gal-twilight-meta-group">
+            <button class="gal-location-bar gal-twilight-meta-btn" id="gal-location-bar" title="当前地点">
+              <i class="fa-solid fa-location-dot"></i>
+              <span class="gal-location-text" id="gal-location-text">LONDON, 1888</span>
+            </button>
+            <button class="gal-time-bar gal-twilight-meta-btn gal-twilight-time-inline" id="gal-time-bar" title="当前时间">
+              <i class="fa-regular fa-clock"></i>
+              <span class="gal-time-text" id="gal-time-text">22:15</span>
+            </button>
+          </div>
+        </div>
+        <div class="gal-twilight-header-actions">
+          <button class="gal-sprite-toggle" title="显示/隐藏立绘">
+            <i class="fa-solid fa-eye gal-eye-icon"></i>
+          </button>
+          <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="地点详情">
+            <i class="gal-status-popup-icon ${locationIconClass || "fa-solid fa-map"}"></i>
+          </button>
+          <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="时间详情">
+            <i class="gal-status-popup-icon ${timeIconClass || "fa-regular fa-clock"}"></i>
+          </button>
+          <button
+            class="gal-fullscreen-btn gal-twilight-header-action gal-twilight-fullscreen-toggle"
+            data-action="toggle-fullscreen"
+            title="切换全屏"
+            aria-label="切换全屏"
+          >
+            <i class="fa-solid fa-expand"></i>
+            <span>全屏</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="gal-game-container gal-twilight-shell" data-skin-shell="twilight">
+        <div class="gal-layer-bg gal-twilight-runtime-layer">
+          <div class="gal-bg-layer gal-bg-base"></div>
+          <div class="gal-bg-layer gal-bg-front"></div>
+        </div>
+
+        <div class="gal-layer-effect-bg gal-twilight-runtime-layer"></div>
+
+        <div class="gal-game-content gal-twilight-content">
+          <div class="gal-layer-character${speakerGlow ? " glow-enabled" : ""}${speakerBubble ? " bubble-enabled" : ""}${ttsEnabled ? " tts-mode-enabled" : ""} gal-twilight-runtime-layer">
+            <div class="gal-char-slot slot-left"></div>
+            <div class="gal-char-slot slot-center"></div>
+            <div class="gal-char-slot slot-right"></div>
+          </div>
+
+          <div class="gal-layer-effect-fg gal-twilight-runtime-layer"></div>
+          <div class="gal-twilight-scrim"></div>
+
+          <div class="gal-dialog-layer gal-twilight-dialog-layer">
+            <div class="gal-twilight-dialog-topline">
+              <div class="gal-name-badge">
+                <span>旁白</span>
+              </div>
+
+              <div class="gal-interaction-bar gal-twilight-mobile-actions gal-twilight-mobile-controls">
+                <button class="gal-action-btn gal-twilight-mobile-action btn-reroll" data-action="reroll" title="重绘当前">
+                  <i class="fa-solid fa-rotate-right"></i>
+                  <span>重绘当前</span>
+                </button>
+                <button class="gal-action-btn gal-twilight-mobile-action btn-free" data-action="free-input" title="自由对话">
+                  <i class="fa-regular fa-keyboard"></i>
+                  <span>自由对话</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="gal-text-panel" title="点击继续">
+              <p class="gal-dialog-text"></p>
+
+              <div class="gal-twilight-dialog-next-indicator" data-state="next" aria-hidden="true">
+                <i class="fa-solid fa-chevron-down"></i>
+              </div>
+
+              <div class="gal-generating-indicator" id="gal-generating-indicator">
+                <i class="fa-solid fa-wand-magic-sparkles gal-gen-icon"></i>
+                <span class="gal-gen-text">生成中</span>
+                <span class="gal-gen-status" id="gal-gen-status">正在初始化...</span>
+                <div class="gal-gen-dots">
+                  <span class="gal-gen-dot"></span>
+                  <span class="gal-gen-dot"></span>
+                  <span class="gal-gen-dot"></span>
+                </div>
+              </div>
+              
+              <div class="gal-progress-container">
+                <div class="gal-progress-bar"></div>
+              </div>
+
+            </div>
+
+            <button class="gal-footer-btn-next gal-twilight-mobile-next" data-action="next" title="下一段">
+              <span class="gal-btn-text">NEXT</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+
+          <div class="gal-bottom-toolbar">
+            <button class="gal-footer-btn" data-action="log" title="查看历史">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+              <span class="gal-btn-text">LOG</span>
+            </button>
+            <button class="gal-footer-btn gal-twilight-desktop-only" data-action="close-mode" title="退出 Galgame 模式">
+              <i class="fa-solid fa-power-off"></i>
+              <span class="gal-btn-text">CLOSE</span>
+            </button>
+            <button class="gal-footer-btn gal-twilight-desktop-only" data-action="view-original" title="查看消息内嵌界面">
+              <i class="fa-solid fa-display"></i>
+              <span class="gal-btn-text">VIEW</span>
+            </button>
+            <button class="gal-footer-btn" data-action="config" title="设置">
+              <i class="fa-solid fa-gear"></i>
+              <span class="gal-btn-text">CONFIG</span>
+            </button>
+            <button class="gal-pending-choices-btn" data-action="show-choices" title="查看待选项">
+              <i class="fa-solid fa-list-check"></i>
+              <span class="gal-btn-text">剧情选项</span>
+            </button>
+            <button class="gal-footer-btn" data-action="save" title="存档">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span class="gal-btn-text">SAVE</span>
+            </button>
+            <button class="gal-footer-btn" data-action="load" title="读档">
+              <i class="fa-solid fa-file-arrow-up"></i>
+              <span class="gal-btn-text">LOAD</span>
+            </button>
+            <button class="gal-footer-btn gal-twilight-desktop-only" data-action="timeline" title="时间线图谱">
+              <i class="fa-solid fa-diagram-project"></i>
+              <span class="gal-btn-text">TL</span>
+            </button>
+            <button class="gal-footer-btn gal-nav-btn" data-action="prev" title="上一段">
+              <i class="fa-solid fa-arrow-left"></i>
+              <span class="gal-btn-text">PREV</span>
+            </button>
+            <button class="gal-footer-btn gal-nav-btn" data-action="auto" title="自动播放">
+              <i class="fa-solid fa-play"></i>
+              <span class="gal-btn-text">AUTO</span>
+            </button>
+            <button class="gal-footer-btn gal-nav-btn" data-action="skip" title="按住快进 (Ctrl)">
+              <i class="fa-solid fa-forward"></i>
+              <span class="gal-btn-text">SKIP</span>
+            </button>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gal-special-cg-overlay" style="display:none;">
+        <img class="gal-special-cg-overlay-image" alt="特殊CG" />
+        <button class="gal-special-cg-overlay-close" title="关闭">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+
+      <div class="gal-cg-viewer" style="display:none;">
+        <img class="gal-cg-viewer-img" style="display:none;" />
+        <button class="gal-cg-viewer-close" title="关闭">
+          <i class="fa-solid fa-times"></i>
+        </button>
+        <div class="gal-cg-viewer-loading">图片生成中...</div>
+      </div>
+
+      <div class="gal-mobile-menu" id="gal-mobile-menu">
+        ${buildGalMobileMenuButtonsHtml(TWILIGHT_MOBILE_MENU_ACTIONS)}
+      </div>
+  `;
+  }
+
   // src/ui/overlay.js
   var currentDisplayMesId = null;
   var overlayUpdateQueue = Promise.resolve();
@@ -14178,6 +15050,7 @@ ${ssml}`;
     lastOverlayHeight: 0
   };
   var OVERLAY_HEIGHT_RECALC_THRESHOLD = 24;
+  var BUILTIN_SKIN_CLASS_LIST = ["skin-ancient", "skin-persona", "skin-jrpg", "skin-classic", ...TWILIGHT_FAMILY_SKIN_IDS];
   function getCurrentDisplayMesId() {
     return currentDisplayMesId;
   }
@@ -14201,6 +15074,26 @@ ${ssml}`;
     state.renderToken = (Number(state.renderToken) || 0) + 1;
     return state.renderToken;
   }
+  function syncOverlaySkinClass($overlay) {
+    if (!$overlay?.length) return;
+    const settings2 = getSettings();
+    const rawSkin = String(settings2?.skin || "none").trim();
+    BUILTIN_SKIN_CLASS_LIST.forEach((skinClass) => $overlay.removeClass(skinClass));
+    $overlay.removeClass(CUSTOM_SKIN_ID);
+    if (!rawSkin || rawSkin === "none" || rawSkin === "skin-western") return;
+    if (hasUiSkinProfileId(rawSkin)) {
+      $overlay.addClass(CUSTOM_SKIN_ID);
+      return;
+    }
+    if (BUILTIN_SKIN_CLASS_LIST.includes(rawSkin)) {
+      $overlay.addClass(rawSkin);
+      if (isTwilightSkinSelected(rawSkin)) {
+        getTwilightOverlayClasses(rawSkin).forEach((skinClass) => {
+          if (skinClass !== rawSkin) $overlay.addClass(skinClass);
+        });
+      }
+    }
+  }
   function scheduleOverlaySegmentDisplay(state, source = "unknown") {
     if (!state) return Promise.resolve(false);
     const token = nextOverlayRenderToken(state);
@@ -14210,22 +15103,20 @@ ${ssml}`;
     );
   }
   var _updateOverlaySegmentDisplayRef = null;
-  function setOverlayRefs({ updateOverlaySegmentDisplay: updateOverlaySegmentDisplay2 }) {
+  var _applySettingsToUIRef = null;
+  function setOverlayRefs({ updateOverlaySegmentDisplay: updateOverlaySegmentDisplay2, applySettingsToUI: applySettingsToUI2 }) {
     if (updateOverlaySegmentDisplay2) _updateOverlaySegmentDisplayRef = updateOverlaySegmentDisplay2;
+    if (applySettingsToUI2) _applySettingsToUIRef = applySettingsToUI2;
   }
-  function ensureGlobalOverlay() {
-    const settings2 = getSettings();
-    const targetDoc = topWindow.document;
-    let $overlay = $2(targetDoc).find("#gal-global-overlay");
-    if (!$overlay.length) {
-      const locationIconClass = normalizeLocationStatusIconClass(
-        topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS) || ""
-      );
-      const timeIconClass = normalizeTimeStatusIconClass(
-        topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS) || ""
-      );
-      const overlayHtml = `
-      <div id="gal-global-overlay">
+  function getOverlayShellType(rawSkin = getSettings()?.skin) {
+    return isTwilightSkinSelected(rawSkin) ? "twilight" : "default";
+  }
+  function buildDefaultOverlayInnerHtml({
+    settings: settings2,
+    locationIconClass,
+    timeIconClass
+  }) {
+    return `
         <!-- 地点弹窗二（仅展示，不作为弹窗入口） -->
         <div class="gal-status-bar-container">
           <div class="gal-location-bar" id="gal-location-bar" title="当前地点">
@@ -14244,7 +15135,7 @@ ${ssml}`;
           <span>全屏</span>
         </button>
 
-        <div class="gal-game-container">
+        <div class="gal-game-container" data-skin-shell="default">
           <!-- 背景层 -->
           <div class="gal-layer-bg">
             <div class="gal-bg-layer gal-bg-base"></div>
@@ -14263,7 +15154,6 @@ ${ssml}`;
             </div>
 
             <div class="gal-layer-effect-fg"></div>
-
             <!-- 对话框层 -->
             <div class="gal-dialog-layer">
               <button class="gal-sprite-toggle" title="显示/隐藏立绘">
@@ -14304,7 +15194,6 @@ ${ssml}`;
                     <span class="gal-gen-dot"></span>
                   </div>
                 </div>
-
                 <div class="gal-bottom-toolbar">
                   <button class="gal-footer-btn" data-action="log" title="查看历史">
                     <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
@@ -14337,7 +15226,7 @@ ${ssml}`;
                     <i class="fa-solid fa-forward"></i> <span class="gal-btn-text">SKIP</span>
                   </button>
                   <button class="gal-pending-choices-btn" data-action="show-choices" title="有待选择的选项">
-                    <i class="fa-solid fa-list-check" style="font-size:1.1rem"></i> <span class="gal-btn-text">选项</span>
+                    <i class="fa-solid fa-list-check" style="font-size:1.1rem"></i> <span class="gal-btn-text">剧情选项</span>
                   </button>
                   <button class="gal-footer-btn-next" data-action="next" title="下一段">
                     <span class="gal-btn-text">NEXT</span> <i class="fa-solid fa-chevron-right"></i>
@@ -14372,26 +15261,109 @@ ${ssml}`;
 
         <!-- 移动端上拉菜单（置于 overlay 顶层，避免被 overflow:hidden 裁剪） -->
         <div class="gal-mobile-menu" id="gal-mobile-menu">
-          <button class="gal-menu-btn" data-action="open-settings">
-              <i class="fa-solid fa-gear"></i> 设置
-          </button>
-          <button class="gal-menu-btn" data-action="log">
-              <i class="fa-solid fa-list-ul"></i> 历史
-          </button>
-          <button class="gal-menu-btn" data-action="view-original">
-              <i class="fa-solid fa-display"></i> 原界面
-          </button>
-          <button class="gal-menu-btn" data-action="save">
-              <i class="fa-solid fa-floppy-disk"></i> 存档
-          </button>
-          <button class="gal-menu-btn" data-action="load">
-              <i class="fa-solid fa-folder-open"></i> 读档
-          </button>
-          <button class="gal-menu-btn" data-action="timeline">
-              <i class="fa-solid fa-diagram-project"></i> 时间线
-          </button>
+          ${buildGalMobileMenuButtonsHtml(DEFAULT_GAL_MOBILE_MENU_ACTIONS)}
         </div>
-      </div>
+  `;
+  }
+  function buildOverlayInnerHtml({ settings: settings2, locationIconClass, timeIconClass }) {
+    if (isTwilightSkinSelected(settings2?.skin)) {
+      return buildTwilightOverlayHtml({
+        locationIconClass,
+        timeIconClass,
+        speakerGlow: Boolean(settings2?.speakerGlow),
+        speakerBubble: Boolean(settings2?.speakerBubble),
+        ttsEnabled: getTTSEnabled()
+      });
+    }
+    return buildDefaultOverlayInnerHtml({
+      settings: settings2,
+      locationIconClass,
+      timeIconClass
+    });
+  }
+  function syncOverlayThemeAssets($overlay, rawSkin) {
+    if (!$overlay?.length) return;
+    if (isTwilightSkinSelected(rawSkin)) {
+      applyTwilightSkinAssets($overlay[0]);
+      return;
+    }
+    clearTwilightSkinAssets($overlay[0]);
+  }
+  function snapshotOverlayState($overlay) {
+    if (!$overlay?.length) return null;
+    return {
+      mesId: String($overlay.find(".gal-game-container").attr("data-mes-id") || ""),
+      nameText: $overlay.find(".gal-name-badge span").text(),
+      nameBadgeClass: String($overlay.find(".gal-name-badge").attr("class") || ""),
+      dialogHtml: $overlay.find(".gal-dialog-text").html() || "",
+      generatingActive: $overlay.find("#gal-generating-indicator").hasClass("active"),
+      generatingStatus: $overlay.find("#gal-gen-status").text(),
+      progressStyle: String($overlay.find(".gal-progress-bar").attr("style") || ""),
+      locationText: $overlay.find("#gal-location-text").text(),
+      timeText: $overlay.find("#gal-time-text").text(),
+      locationTitle: String($overlay.find("#gal-location-bar").attr("title") || ""),
+      timeTitle: String($overlay.find("#gal-time-bar").attr("title") || ""),
+      hasPendingChoices: $overlay.find(".gal-pending-choices-btn").hasClass("show")
+    };
+  }
+  function restoreOverlayState($overlay, snapshot) {
+    if (!$overlay?.length || !snapshot) return;
+    const $gameContainer = $overlay.find(".gal-game-container");
+    if (snapshot.mesId) {
+      $gameContainer.attr("data-mes-id", snapshot.mesId);
+    }
+    const $nameBadge = $overlay.find(".gal-name-badge");
+    const $nameText = $nameBadge.find("span");
+    if (snapshot.nameText) {
+      $nameText.text(snapshot.nameText);
+    }
+    if (snapshot.nameBadgeClass.includes("gal-narrator-label")) {
+      $nameBadge.addClass("gal-narrator-label");
+    }
+    if (snapshot.dialogHtml) {
+      $overlay.find(".gal-dialog-text").html(snapshot.dialogHtml);
+    }
+    if (snapshot.generatingActive) {
+      $overlay.find("#gal-generating-indicator").addClass("active");
+    }
+    if (snapshot.generatingStatus) {
+      $overlay.find("#gal-gen-status").text(snapshot.generatingStatus);
+    }
+    if (snapshot.progressStyle) {
+      $overlay.find(".gal-progress-bar").attr("style", snapshot.progressStyle);
+    }
+    $overlay.find("#gal-location-text").text(snapshot.locationText || "--");
+    $overlay.find("#gal-time-text").text(snapshot.timeText || "--");
+    const $locationBar = $overlay.find("#gal-location-bar");
+    const $timeBar = $overlay.find("#gal-time-bar");
+    if (snapshot.locationTitle) {
+      $locationBar.attr("title", snapshot.locationTitle);
+    }
+    if (snapshot.timeTitle) {
+      $timeBar.attr("title", snapshot.timeTitle);
+    }
+    if (snapshot.hasPendingChoices) {
+      $overlay.find(".gal-pending-choices-btn").addClass("show");
+    }
+  }
+  function ensureGlobalOverlay() {
+    const settings2 = getSettings();
+    const targetDoc = topWindow.document;
+    let $overlay = $2(targetDoc).find("#gal-global-overlay");
+    const locationIconClass = normalizeLocationStatusIconClass(
+      topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS) || ""
+    );
+    const timeIconClass = normalizeTimeStatusIconClass(
+      topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS) || ""
+    );
+    const shellType = getOverlayShellType(settings2?.skin);
+    if (!$overlay.length) {
+      const overlayHtml = `
+      <div id="gal-global-overlay">${buildOverlayInnerHtml({
+        settings: settings2,
+        locationIconClass,
+        timeIconClass
+      })}</div>
     `;
       const $chat = $2(targetDoc).find("#chat");
       if ($chat.length) {
@@ -14400,7 +15372,20 @@ ${ssml}`;
         $2(targetDoc.body).append(overlayHtml);
       }
       $overlay = $2(targetDoc).find("#gal-global-overlay");
+    } else {
+      const currentShell = String($overlay.find(".gal-game-container").attr("data-skin-shell") || "default").trim() || "default";
+      if (currentShell !== shellType) {
+        const overlayStateSnapshot = snapshotOverlayState($overlay);
+        $overlay.html(buildOverlayInnerHtml({
+          settings: settings2,
+          locationIconClass,
+          timeIconClass
+        }));
+        restoreOverlayState($overlay, overlayStateSnapshot);
+      }
     }
+    syncOverlayThemeAssets($overlay, settings2?.skin);
+    syncOverlaySkinClass($overlay);
     return $overlay;
   }
   function renderMainInterface() {
@@ -14543,6 +15528,8 @@ ${ssml}`;
   function showGlobalOverlay() {
     const $overlay = ensureGlobalOverlay();
     if ($overlay.length) {
+      const wasActive = $overlay.hasClass("active");
+      syncOverlaySkinClass($overlay);
       $overlay.addClass("active");
       resumePixiEffects();
       setChatScrollLock(true);
@@ -14553,6 +15540,13 @@ ${ssml}`;
         adjustGameContentScale();
         adjustToolbarForSpace();
         resizePixiEffects();
+        if (!wasActive && _applySettingsToUIRef) {
+          try {
+            _applySettingsToUIRef();
+          } catch (error3) {
+            console.warn(`[${SCRIPT_NAME}] showGlobalOverlay reapply settings failed:`, error3);
+          }
+        }
         const chatEl = topWindow.document.getElementById("chat");
         if (chatEl) {
           chatEl.scrollTop = $overlay[0].offsetTop;
@@ -15478,167 +16472,6 @@ ${ssml}`;
         resolve2();
       };
       request.onerror = () => resolve2();
-    });
-  }
-
-  // src/db/ui-skins.js
-  var DEFAULT_DEVICE = "desktop";
-  var DEFAULT_STATE = "normal";
-  function normalizeKeyPart(value, fallback = "") {
-    const trimmed = String(value || "").trim();
-    return trimmed || fallback;
-  }
-  function buildPackSkinKey(packId, skinId) {
-    return `${packId}::${skinId}`;
-  }
-  function buildPackSkinDeviceKey(packId, skinId, device) {
-    return `${packId}::${skinId}::${device}`;
-  }
-  function buildLookupKey(packId, skinId, elementId, device, state) {
-    return `${packId}::${skinId}::${elementId}::${device}::${state}`;
-  }
-  function buildUiSkinAssetId(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
-    const safePackId = normalizeKeyPart(packId, DEFAULT_PACK_ID);
-    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
-    const safeElementId = normalizeKeyPart(elementId, "unknown-element");
-    const safeDevice = normalizeKeyPart(device, DEFAULT_DEVICE);
-    const safeState = normalizeKeyPart(state, DEFAULT_STATE);
-    return `${safePackId}:${safeSkinId}:${safeElementId}:${safeDevice}:${safeState}`;
-  }
-  function normalizeUiSkinAsset(payload = {}) {
-    const resolvedPackId = normalizeKeyPart(payload.packId, getCurrentPackId() || DEFAULT_PACK_ID);
-    const resolvedSkinId = normalizeKeyPart(payload.skinId, CUSTOM_SKIN_ID);
-    const resolvedElementId = normalizeKeyPart(payload.elementId, "unknown-element");
-    const resolvedDevice = normalizeKeyPart(payload.device, DEFAULT_DEVICE);
-    const resolvedState = normalizeKeyPart(payload.state, DEFAULT_STATE);
-    const id2 = normalizeKeyPart(
-      payload.id,
-      buildUiSkinAssetId(resolvedPackId, resolvedSkinId, resolvedElementId, resolvedDevice, resolvedState)
-    );
-    return {
-      id: id2,
-      packId: resolvedPackId,
-      skinId: resolvedSkinId,
-      elementId: resolvedElementId,
-      device: resolvedDevice,
-      state: resolvedState,
-      packSkinKey: buildPackSkinKey(resolvedPackId, resolvedSkinId),
-      packSkinDeviceKey: buildPackSkinDeviceKey(resolvedPackId, resolvedSkinId, resolvedDevice),
-      lookupKey: buildLookupKey(resolvedPackId, resolvedSkinId, resolvedElementId, resolvedDevice, resolvedState),
-      imageBlob: payload.imageBlob || null,
-      imageUrl: payload.imageUrl || null,
-      layout: payload.layout || null,
-      scaleMode: normalizeKeyPart(payload.scaleMode, "stretch"),
-      slice: payload.slice || null,
-      textPadding: payload.textPadding || null,
-      meta: payload.meta || null,
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-  }
-  async function ensureDbReady() {
-    if (!getDb()) await initDB();
-    return getDb();
-  }
-  async function saveUiSkinAsset(payload = {}) {
-    const db = await ensureDbReady();
-    const data4 = normalizeUiSkinAsset(payload);
-    return new Promise((resolve2, reject2) => {
-      const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
-      const store = transaction.objectStore(STORE_UI_SKINS);
-      const request = store.put(data4);
-      transaction.oncomplete = () => {
-        console.log(`[${SCRIPT_NAME}] UI 皮肤元素已保存: ${data4.id}`);
-        resolve2(data4);
-      };
-      transaction.onabort = () => reject2(transaction.error || request.error);
-      transaction.onerror = () => reject2(transaction.error || request.error);
-      request.onerror = () => reject2(request.error);
-    });
-  }
-  async function getUiSkinAssetById(id2) {
-    const safeId = normalizeKeyPart(id2, "");
-    if (!safeId) return null;
-    const db = await ensureDbReady();
-    return new Promise((resolve2) => {
-      const transaction = db.transaction([STORE_UI_SKINS], "readonly");
-      const store = transaction.objectStore(STORE_UI_SKINS);
-      const request = store.get(safeId);
-      request.onsuccess = () => resolve2(request.result || null);
-      request.onerror = () => resolve2(null);
-    });
-  }
-  async function getUiSkinAsset(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
-    const id2 = buildUiSkinAssetId(packId, skinId, elementId, device, state);
-    return getUiSkinAssetById(id2);
-  }
-  async function getUiSkinAssetsByPackSkin(packId, skinId, device = null) {
-    const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
-    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
-    const safeDevice = device ? normalizeKeyPart(device, DEFAULT_DEVICE) : null;
-    const db = await ensureDbReady();
-    return new Promise((resolve2) => {
-      const transaction = db.transaction([STORE_UI_SKINS], "readonly");
-      const store = transaction.objectStore(STORE_UI_SKINS);
-      const indexName = safeDevice ? "packSkinDeviceKey" : "packSkinKey";
-      const key = safeDevice ? buildPackSkinDeviceKey(safePackId, safeSkinId, safeDevice) : buildPackSkinKey(safePackId, safeSkinId);
-      const index = store.index(indexName);
-      const request = index.getAll(IDBKeyRange.only(key));
-      request.onsuccess = () => resolve2(request.result || []);
-      request.onerror = () => resolve2([]);
-    });
-  }
-  async function getAllUiSkinAssets() {
-    const db = await ensureDbReady();
-    return new Promise((resolve2) => {
-      const transaction = db.transaction([STORE_UI_SKINS], "readonly");
-      const store = transaction.objectStore(STORE_UI_SKINS);
-      const request = store.getAll();
-      request.onsuccess = () => resolve2(request.result || []);
-      request.onerror = () => resolve2([]);
-    });
-  }
-  async function deleteUiSkinAssetById(id2) {
-    const safeId = normalizeKeyPart(id2, "");
-    if (!safeId) return false;
-    const db = await ensureDbReady();
-    return new Promise((resolve2, reject2) => {
-      const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
-      const store = transaction.objectStore(STORE_UI_SKINS);
-      const request = store.delete(safeId);
-      transaction.oncomplete = () => resolve2(true);
-      transaction.onabort = () => reject2(transaction.error || request.error);
-      transaction.onerror = () => reject2(transaction.error || request.error);
-      request.onerror = () => reject2(request.error);
-    });
-  }
-  async function deleteUiSkinAsset(packId, skinId, elementId, device = DEFAULT_DEVICE, state = DEFAULT_STATE) {
-    const id2 = buildUiSkinAssetId(packId, skinId, elementId, device, state);
-    return deleteUiSkinAssetById(id2);
-  }
-  async function deleteUiSkinAssetsByPackSkin(packId, skinId) {
-    const safePackId = normalizeKeyPart(packId, getCurrentPackId() || DEFAULT_PACK_ID);
-    const safeSkinId = normalizeKeyPart(skinId, CUSTOM_SKIN_ID);
-    const targetPackSkinKey = buildPackSkinKey(safePackId, safeSkinId);
-    const db = await ensureDbReady();
-    return new Promise((resolve2, reject2) => {
-      let deletedCount = 0;
-      const transaction = db.transaction([STORE_UI_SKINS], "readwrite");
-      const store = transaction.objectStore(STORE_UI_SKINS);
-      const index = store.index("packSkinKey");
-      const request = index.openCursor(IDBKeyRange.only(targetPackSkinKey));
-      transaction.oncomplete = () => resolve2(deletedCount);
-      transaction.onabort = () => reject2(transaction.error || request.error);
-      transaction.onerror = () => reject2(transaction.error || request.error);
-      request.onsuccess = (event3) => {
-        const cursor = event3.target.result;
-        if (cursor) {
-          deletedCount += 1;
-          cursor.delete();
-          cursor.continue();
-          return;
-        }
-      };
-      request.onerror = () => reject2(request.error);
     });
   }
 
@@ -29154,25 +29987,12 @@ ${normalizedSource}`;
     const oldStyle = targetDoc.getElementById(`${SCRIPT_ID}-styles`);
     if (oldStyle) oldStyle.remove();
     topWindow[STYLES_INJECTED_FLAG] = true;
-    const webFontUrls = [
-      "https://gcore.jsdelivr.net/npm/@fontsource/barlow/index.css",
-      "https://gcore.jsdelivr.net/npm/@fontsource/noto-sans-sc/index.css",
-      "https://gcore.jsdelivr.net/npm/@fontsource/noto-serif-sc/index.css",
-      "https://gcore.jsdelivr.net/npm/lxgw-wenkai-screen-webfont/style.css"
-    ];
-    webFontUrls.forEach((href) => {
-      if (targetDoc.querySelector(`link[href="${href}"]`)) return;
-      const fontLink = targetDoc.createElement("link");
-      fontLink.href = href;
-      fontLink.rel = "stylesheet";
-      (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
-    });
     const css = `:root{--gal-z-overlay: 10000;--gal-z-dropdown: 1000;--gal-z-toast: 100000;--gal-z-modal: 100001;--gal-z-modal-critical: 100002;--gal-accent: #00d2ff;--gal-dark: #2b2e38;--gal-white: #ffffff;--gal-accent-sub: #ff0055;--gal-font-eng: "Barlow", sans-serif}.gal-z-overlay{z-index:var(--gal-z-overlay)!important}.gal-z-dropdown{z-index:var(--gal-z-dropdown)!important}.gal-z-toast{z-index:var(--gal-z-toast)!important}.gal-z-modal{z-index:var(--gal-z-modal)!important}.gal-z-critical{z-index:var(--gal-z-modal-critical)!important}#gal-global-overlay{position:relative!important;width:100%!important;min-height:31.25rem;height:70vh;max-height:50rem;display:none;background:transparent!important;font-family:Noto Sans SC,sans-serif;border-radius:.75rem;overflow:visible;margin:.625rem 0;contain:layout;-webkit-text-size-adjust:100%;text-size-adjust:100%}#gal-global-overlay{--ui-scale: 1;--ui-scale-base: 1;--font-scale: 1;--gal-dialog-scale-user: 1;--gal-toolbar-scale-user: 1}#gal-global-overlay .gal-dialog-layer{--ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-dialog-scale-user, 1))}#gal-global-overlay .gal-bottom-toolbar{--ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-toolbar-scale-user, 1))}#gal-global-overlay.active{display:block!important}.gal-draggable-handle{cursor:move;user-select:none}#gal-global-overlay.fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-height:none!important;min-height:100vh!important;z-index:var(--gal-z-overlay)!important;border-radius:0!important;margin:0!important;box-shadow:none!important}#chat>.mes.gal-hidden{display:none!important}.gal-embedded-viewer{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#000000b3;backdrop-filter:blur(.375rem)}.gal-embedded-viewer-body{position:relative;max-width:95vw;max-height:90vh;overflow:auto;border-radius:.75rem;box-shadow:0 .5rem 2rem #00000080}.gal-embedded-viewer-close{position:fixed;top:.75rem;right:.75rem;z-index:100000;display:flex;align-items:center;gap:.375rem;padding:.5rem 1rem;border-radius:.5rem;border:.0625rem solid rgba(255,255,255,.2);background:linear-gradient(135deg,#1e1e28f2,#323246f2);backdrop-filter:blur(.625rem);color:#fff;font-size:.85rem;cursor:pointer;box-shadow:0 .25rem 1rem #0006;transition:opacity .2s}.gal-embedded-viewer-close:hover{opacity:.85}@media screen and (max-width: 48rem){.gal-embedded-viewer{align-items:flex-start!important;padding-top:3rem!important;padding-top:calc(3rem + env(safe-area-inset-top))!important}.gal-embedded-viewer-body{max-height:calc(100vh - 4rem)!important;max-height:calc(100dvh - 4rem - env(safe-area-inset-top))!important;max-width:100vw!important;border-radius:0!important}}.gal-fullscreen-btn{position:absolute;top:.938rem;right:.938rem;z-index:100;background:#2b2e38e6;color:var(--gal-accent);border:.125rem solid var(--gal-accent);padding:.625rem 1.125rem;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:all .2s;font-family:Barlow,sans-serif;border-radius:.25rem;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-fullscreen-btn:hover{background:var(--gal-accent);color:var(--gal-dark)}.gal-fullscreen-btn i{font-size:1rem}.gal-status-bar-container{position:absolute;top:.938rem;right:7.5rem;z-index:100;display:flex;gap:.625rem;align-items:center;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-location-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(0,210,255,.5);white-space:nowrap;max-width:21.875rem;overflow:hidden;display:flex;align-items:center}.gal-location-bar i{color:var(--gal-accent);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-location-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-time-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(255,0,85,.5);white-space:nowrap;max-width:16.25rem;overflow:hidden;display:flex;align-items:center}.gal-time-bar i{color:var(--gal-accent-sub);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-time-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-status-bar-container .auto-shrink{display:inline-block;transform-origin:left center}#gal-global-overlay.fullscreen .gal-status-bar-container{right:8.125rem}.gal-bgm-widget{position:absolute;top:.938rem;left:.938rem;z-index:100;background:#2b2e38d9;backdrop-filter:blur(.313rem);padding:.5rem .938rem;border-radius:1.25rem;color:#fff;display:flex;align-items:center;gap:.625rem;font-size:.85rem;box-shadow:0 .25rem .625rem #0003;transition:all .3s ease;border:1px solid rgba(255,255,255,.1);max-width:2.5rem;overflow:hidden;white-space:nowrap;cursor:pointer}.gal-bgm-widget:hover,.gal-bgm-widget.active{max-width:18.75rem;background:#2b2e38f2}.gal-bgm-icon{color:var(--gal-accent);animation:galSpin 4s linear infinite;animation-play-state:paused;font-size:1.1rem;min-width:1.25rem;text-align:center}.gal-bgm-widget.playing .gal-bgm-icon{animation-play-state:running}@keyframes galSpin{to{transform:rotate(360deg)}}.gal-bgm-info{display:flex;flex-direction:column;line-height:1.2;overflow:hidden;margin-right:.313rem}.gal-bgm-title{font-weight:700;font-size:.8rem;color:var(--gal-accent)}.gal-bgm-ctrl{display:flex;align-items:center;gap:.5rem}.gal-bgm-btn{background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem;padding:0;width:1.25rem}.gal-bgm-btn:hover{color:var(--gal-accent)}.gal-bgm-slider{width:3.75rem;height:.25rem;-webkit-appearance:none;background:#ffffff4d;border-radius:.125rem;outline:none}.gal-bgm-slider::-webkit-slider-thumb{-webkit-appearance:none;width:.625rem;height:.625rem;background:#fff;border-radius:50%;cursor:pointer}.gal-game-container{position:relative;width:100%;height:100%;background:transparent;font-family:Noto Sans SC,sans-serif;overflow:hidden;border-radius:.75rem;box-shadow:0 .25rem 1.25rem #0000001a;box-sizing:border-box}#gal-global-overlay.fullscreen .gal-game-container{border-radius:0;box-shadow:none;padding:0}.gal-layer-bg{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;background:#f0f2f5;overflow:hidden}.gal-bg-layer{position:absolute;inset:0;background-repeat:no-repeat;background-size:cover;background-position:center;opacity:1;transform:scale(1);transition:opacity .45s ease,transform .45s ease;will-change:opacity,transform}.gal-bg-front{opacity:0;transform:scale(1.03)}.gal-bg-front.is-active{opacity:1;transform:scale(1)}.gal-layer-bg.generating-bg .gal-bg-layer{opacity:0!important}@media (prefers-reduced-motion: reduce){.gal-bg-layer{transition:none!important;transform:none!important}.gal-bg-front{opacity:0}.gal-bg-front.is-active{opacity:1}}.gal-game-content{position:relative;width:100%;height:100%;z-index:1}.gal-layer-effect-bg,.gal-layer-effect-fg{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none}.gal-layer-effect-bg{z-index:3}.gal-layer-effect-fg{z-index:12}.gal-layer-effect-bg .gal-pixi-effect-canvas,.gal-layer-effect-fg .gal-pixi-effect-canvas,.gal-layer-effect-bg canvas,.gal-layer-effect-fg canvas{width:100%!important;height:100%!important;display:block;pointer-events:none}.gal-layer-bg:before{content:"";position:absolute;top:0;left:0;width:100%;height:100%;background-image:radial-gradient(#ccc 1px,transparent 1px);background-size:1.25rem 1.25rem;opacity:.3;pointer-events:none}.gal-layer-bg.has-bg:before{display:none}.gal-layer-bg.generating-bg{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)}@keyframes galGenGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}to{background-position:0% 50%}}.gal-layer-bg.generating-bg:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent .125rem,rgba(0,210,255,.03) .125rem,rgba(0,210,255,.03) .25rem);opacity:.15;pointer-events:none}@keyframes galGenScanline{0%{transform:translateY(-100%)}to{transform:translateY(100%)}}@keyframes galSpriteSlideInLeft{0%{transform:translate(-6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInRight{0%{transform:translate(6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInCenter{0%{transform:translateY(3.125rem);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes galSpriteSlideOutLeft{0%{transform:translate(0);opacity:1}to{transform:translate(-6.25rem);opacity:0}}@keyframes galSpriteSlideOutRight{0%{transform:translate(0);opacity:1}to{transform:translate(6.25rem);opacity:0}}@keyframes galSpriteBreathing{0%,to{transform:translateY(0)}50%{transform:translateY(-.188rem)}}@keyframes galSpriteShake{0%,to{transform:translate(0)}20%{transform:translate(-.313rem)}40%{transform:translate(.313rem)}60%{transform:translate(-.188rem)}80%{transform:translate(.188rem)}}@keyframes galSpriteBounce{0%{transform:scale(1)}30%{transform:scale(1.15)}50%{transform:scale(.95)}70%{transform:scale(1.05)}to{transform:scale(1)}}@keyframes galSpriteExpressionChange{0%{opacity:.7;transform:scale(.98)}to{opacity:1;transform:scale(1)}}.gal-layer-character{position:absolute;bottom:35%;left:0;width:100%;height:55%;z-index:5;display:flex;justify-content:center;align-items:flex-end;pointer-events:none;padding:0 3%;gap:2%}.gal-live2d-stage-canvas{z-index:4;pointer-events:none}.gal-live2d-position-guide{position:absolute;inset:0;pointer-events:none;z-index:6}.gal-live2d-position-guide-box{position:absolute;border:.125rem dashed rgba(0,210,255,.55);border-radius:.625rem;box-shadow:0 0 1rem #00d2ff47;background:#0000000f}.gal-live2d-position-guide-label{position:absolute;top:-1.25rem;left:0;font-size:.72rem;line-height:1;color:#77dfff;text-shadow:0 0 .375rem rgba(0,0,0,.5);white-space:nowrap}.gal-live2d-position-toolbar{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translate(-50%);width:min(92vw,36rem);min-width:20rem;max-height:min(65vh,33.75rem);overflow-y:auto;padding:.9375rem 1.125rem;display:flex;flex-direction:column;gap:.6875rem;border-radius:.9375rem;border:.0625rem solid rgba(255,255,255,.16);color:#fff;background:linear-gradient(135deg,#1a1c26f7,#2a2e40f7);backdrop-filter:blur(.625rem);box-shadow:0 .5rem 1.75rem #00000075}.gal-live2d-position-row{display:flex;align-items:center;gap:.625rem}.gal-live2d-position-label{min-width:4.5rem;font-size:.85rem;color:#ffffffeb}.gal-live2d-position-slider{flex:1;cursor:pointer;accent-color:#00d2ff}.gal-live2d-position-value{min-width:2.875rem;text-align:right;font-size:.9rem;font-weight:600}.gal-live2d-position-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.25rem}.gal-live2d-position-btn{border:none;border-radius:.5rem;padding:.5rem .875rem;color:#fff;cursor:pointer;font-size:.85rem}.gal-live2d-position-btn-reset{background:#ffffff1f;border:.0625rem solid rgba(255,255,255,.2)}.gal-live2d-position-btn-cancel{background:#dc3545d1}.gal-live2d-position-btn-save{background:linear-gradient(135deg,#00d2ff,#3a7bd5);font-weight:600}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-live2d-position-toolbar{top:calc(.5rem + env(safe-area-inset-top,0px));bottom:auto;width:calc(100vw - 1rem);min-width:0;max-height:calc(72vh - env(safe-area-inset-top,0px));padding:.8125rem .8125rem .75rem;border-radius:.75rem}.gal-live2d-position-label{min-width:3.75rem;font-size:.8rem}.gal-live2d-position-value{min-width:2.5rem;font-size:.85rem}.gal-live2d-position-actions{flex-wrap:wrap;justify-content:stretch;margin-top:.125rem}.gal-live2d-position-btn{flex:1 1 calc(50% - .3125rem);min-height:2.25rem;font-size:.82rem;padding:.5rem .625rem}}.gal-char-slot{position:relative;flex:0 0 30%;max-width:30%;height:100%;display:flex;align-items:flex-end;justify-content:center;pointer-events:auto}.gal-char-slot.slot-left{order:1}.gal-char-slot.slot-center{order:2}.gal-char-slot.slot-right{order:3}.gal-char-container{position:relative;max-height:100%;--state-scale: 1;transform-origin:bottom center;max-width:100%;display:flex;align-items:flex-end;justify-content:center;filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,0,.4));transition:transform .4s cubic-bezier(.175,.885,.32,1.275),filter .3s ease,opacity .3s ease;pointer-events:auto;cursor:pointer;animation:galSpriteBreathing 4s ease-in-out infinite}.gal-char-container.entering-left{animation:galSpriteSlideInLeft .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-center{animation:galSpriteSlideInCenter .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-right{animation:galSpriteSlideInRight .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.exiting-left{animation:galSpriteSlideOutLeft .4s ease-in forwards;pointer-events:none}.gal-char-container.exiting-right,.gal-char-container.exiting-center{animation:galSpriteSlideOutRight .4s ease-in forwards;pointer-events:none}.gal-char-container.expression-change{animation:galSpriteExpressionChange .3s ease-out}.gal-char-container.speaking{--state-scale: 1.05;z-index:10;filter:drop-shadow(0 .938rem 2.5rem rgba(0,0,0,.5));position:relative}.gal-char-container.silent{--state-scale: .95;filter:drop-shadow(0 .313rem .938rem rgba(0,0,0,.3));z-index:4}@keyframes speakingGlow{0%,to{filter:drop-shadow(0 0 .5rem rgba(255,215,0,.7)) drop-shadow(0 0 .938rem rgba(255,180,0,.5)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}50%{filter:drop-shadow(0 0 .938rem rgba(255,215,0,.9)) drop-shadow(0 0 1.875rem rgba(255,180,0,.7)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}}.gal-layer-character.glow-enabled .gal-char-container.speaking{animation:speakingGlow 2s ease-in-out infinite,galSpriteBreathing 4s ease-in-out infinite}@keyframes bubbleBounce{0%,to{transform:translateY(0) scale(1)}50%{transform:translateY(-.5rem) scale(1.1)}}.gal-layer-character.bubble-enabled .gal-char-container.speaking:before{content:"?";position:absolute;top:-.625rem;right:10%;font-size:2.5rem;z-index:100;animation:bubbleBounce 1s ease-in-out infinite;filter:drop-shadow(.125rem .125rem .25rem rgba(0,0,0,.5))}.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{content:"\\f028"!important;font-family:"Font Awesome 6 Free";font-weight:900;color:var(--gal-accent);font-size:2.2rem}@media screen and (max-width: 48rem){.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{font-size:1.5rem!important;top:-.3rem!important;right:5%!important}}.gal-char-container[data-emotion=angry]{animation:galSpriteShake .4s ease-in-out 2,galSpriteBreathing 4s ease-in-out .8s infinite}.gal-char-container[data-emotion=surprised]{animation:galSpriteBounce .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-layer-character.scene-night{filter:hue-rotate(-10deg) brightness(.85) saturate(.9)}.gal-layer-character.scene-night .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,100,.5))}.gal-layer-character.scene-indoor{filter:sepia(.08) brightness(1.02)}.gal-layer-character.scene-indoor .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(100,50,0,.3))}.gal-char-img{max-height:100%;max-width:100%;height:auto;width:auto;object-fit:contain;object-position:bottom center;transform:scale(calc(var(--base-scale, 1) * var(--state-scale)));transform-origin:bottom center;transition:opacity .3s ease,transform .3s cubic-bezier(.175,.885,.32,1.275)}.gal-char-placeholder{width:12.5rem;height:21.875rem;background:linear-gradient(135deg,#fffc,#f0f0f0e6);border:.25rem dashed #ccc;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#999;gap:.625rem;border-radius:.625rem;cursor:pointer;transition:all .3s;pointer-events:auto}.gal-char-placeholder:hover{border-color:var(--gal-accent);color:var(--gal-accent)}.gal-char-placeholder i{font-size:4rem}.gal-char-placeholder span{font-size:.9rem;font-weight:600}.gal-dialog-layer{position:absolute;bottom:calc(1.25rem * var(--gal-dialog-scale-user, 1));left:50%;right:auto;width:min(96%,calc(80% * var(--gal-dialog-scale-user, 1)));height:calc(30% * var(--gal-dialog-scale-user, 1));min-height:9rem;max-height:72%;transform:translate(-50%);transform-origin:bottom center;max-width:none;z-index:30;pointer-events:auto}.gal-name-badge{position:absolute;top:-1.375rem;left:0;background:var(--gal-dark);color:var(--gal-accent);padding:.5rem 2.188rem .5rem 1.563rem;font-size:1.4rem;font-weight:900;font-family:Barlow,sans-serif;transform:skew(-15deg) scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem #0003}.gal-name-badge span{display:block;transform:skew(15deg)}.gal-sprite-toggle{position:absolute;top:-1.375rem;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gal-dark);border:none;border-radius:.375rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem #0003;transition:all .2s ease;opacity:.8}.gal-sprite-toggle:hover{opacity:1;background:var(--gal-accent)}.gal-sprite-toggle:hover .gal-eye-icon{color:var(--gal-dark)}.gal-eye-icon{font-size:1.2rem;color:var(--gal-accent);transition:color .2s ease;transform:skew(0)}.gal-sprite-toggle.sprites-hidden{background:#646464cc}.gal-sprite-toggle.sprites-hidden .gal-eye-icon{color:#999}.gal-sprite-toggle.sprites-hidden:hover{background:var(--gal-accent)}.gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon{color:var(--gal-dark)}.gal-status-popup-trigger{position:absolute;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gal-dark);border:none;border-radius:.375rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem #0003;transition:all .2s ease;opacity:.8}.gal-location-popup-trigger{top:1.35rem}.gal-time-popup-trigger{top:3.95rem}.gal-status-popup-icon{font-size:1rem;transition:color .2s ease;pointer-events:none}.gal-location-popup-trigger .gal-status-popup-icon{color:var(--gal-accent)}.gal-time-popup-trigger .gal-status-popup-icon{color:var(--gal-accent-sub)}.gal-location-popup-trigger:hover,.gal-time-popup-trigger:hover{opacity:1}.gal-location-popup-trigger:hover{background:var(--gal-accent)}.gal-location-popup-trigger:hover .gal-status-popup-icon{color:var(--gal-dark)}.gal-time-popup-trigger:hover{background:var(--gal-accent-sub)}.gal-time-popup-trigger:hover .gal-status-popup-icon{color:#fff}.gal-layer-character.sprites-hidden{opacity:0!important;pointer-events:none!important;transition:opacity .3s ease}.gal-narrator-label{background:#666;color:#fff}.gal-cg-thumbnail{max-height:3.5rem;border-radius:.25rem;vertical-align:middle;margin-right:.5rem;cursor:pointer;box-shadow:0 2px 4px #0000004d}.gal-styled-stage{position:absolute;inset:10% 12% 22%;z-index:18;display:none;align-items:center;justify-content:center;pointer-events:none}.gal-styled-stage.show{display:flex}.gal-styled-stage .gal-styled-stage-content{width:min(68vw,42rem);max-height:min(56vh,34rem);overflow:visible;scrollbar-width:none;pointer-events:auto}.gal-styled-stage .gal-styled-stage-content .gal-styled{width:100%}.gal-styled-stage .gal-styled-stage-content .gal-styled-sms,.gal-styled-stage .gal-styled-stage-content .gal-styled-letter,.gal-styled-stage .gal-styled-stage-content .gal-styled-parchment,.gal-styled-stage .gal-styled-stage-content .gal-styled-newspaper{max-height:none;overflow-y:visible!important}#gal-global-overlay.gal-mode-styled .gal-layer-character,#gal-global-overlay.gal-mode-styled .gal-live2d-stage-canvas,#gal-global-overlay.gal-mode-styled .gal-live2d-position-guide{opacity:0!important;visibility:hidden!important;pointer-events:none!important}#gal-global-overlay.gal-mode-styled .gal-name-badge,#gal-global-overlay.gal-mode-styled .gal-sprite-toggle,#gal-global-overlay.gal-mode-styled .gal-status-popup-trigger,#gal-global-overlay.gal-mode-styled .gal-interaction-bar,#gal-global-overlay.gal-mode-styled .gal-dialog-text,#gal-global-overlay.gal-mode-styled .gal-progress-container{display:none!important}#gal-global-overlay.gal-mode-styled .gal-text-panel{background:transparent!important;background-image:none!important;box-shadow:none!important;border:none!important;overflow:visible!important;padding:0 1rem 4.8rem!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;filter:none!important}#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-glass{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:transparent!important}#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-gradient:before{display:none!important}#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar{display:flex!important;opacity:1!important;visibility:visible!important;z-index:120!important;background:linear-gradient(to top,#0a0e16b8,#0a0e166b 45%,#0a0e1600)!important}#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar>*{pointer-events:auto!important;opacity:1!important;visibility:visible!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn,#gal-global-overlay.gal-mode-styled .gal-footer-btn-next,#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn{display:inline-flex!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;filter:none!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn{background:#fffffff5!important;color:#1b2230!important;border-color:#1b2230!important}#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn{background:#e93c64!important;color:#fff!important;border-color:#1b2230!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn-next{background:#161b27!important;color:#f7fbff!important;border-color:#161b27!important;box-shadow:0 .25rem .875rem #00000073!important}@media screen and (max-width: 48rem){.gal-styled-stage{inset:11% 4% 26%}.gal-styled-stage .gal-styled-stage-content{width:100%;max-height:54vh}#gal-global-overlay.gal-mode-styled .gal-text-panel{padding:0 .5rem calc(4.3rem + env(safe-area-inset-bottom)) .5rem!important}}.gal-cg-viewer{position:absolute;inset:0;background:#000000eb;z-index:100;display:flex;align-items:center;justify-content:center;cursor:pointer}.gal-cg-viewer-img{max-width:90%;max-height:90%;object-fit:contain;border-radius:.5rem;box-shadow:0 4px 20px #00000080}.gal-cg-viewer-close{position:absolute;top:1rem;right:1rem;background:#ffffff26;border:none;color:#fff;width:2.5rem;height:2.5rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:background .2s ease}.gal-cg-viewer-close:hover{background:#ffffff4d}.gal-cg-viewer-loading{color:#fff9;font-size:1.1rem}.gal-generating-status{position:absolute;top:-3.75rem;left:50%;transform:translate(-50%) scale(.8);background:linear-gradient(135deg,var(--gal-accent) 0%,#ff6b9d 100%);color:#fff;padding:.5rem 1.25rem;font-size:.9rem;font-weight:700;border-radius:1.25rem;box-shadow:0 .25rem .938rem #0000004d;opacity:0;transition:all .3s ease;pointer-events:none;z-index:50}.gal-generating-status.show{opacity:1;transform:translate(-50%) scale(1)}.gal-interaction-bar{position:absolute;top:-3.438rem;right:0;display:flex;gap:.938rem;z-index:35;transform:scale(var(--ui-scale));transform-origin:bottom right}.gal-action-btn{padding:.75rem 1.875rem;font-weight:700;font-size:1.1rem;cursor:pointer;transform:skew(-15deg);display:flex;align-items:center;gap:.625rem;transition:all .2s cubic-bezier(.34,1.56,.64,1);border:.125rem solid transparent;box-shadow:.313rem .313rem #0003;font-family:Noto Sans SC,sans-serif;background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn span,.gal-action-btn i{transform:skew(15deg)}.gal-action-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem #0000004d}.gal-action-btn.btn-reroll{background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn.btn-reroll:hover{background:var(--gal-dark);color:var(--gal-accent);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent)}.gal-action-btn.btn-free{background:var(--gal-accent-sub);color:#fff;border-color:var(--gal-accent-sub)}.gal-action-btn.btn-free:hover{background:var(--gal-dark);color:var(--gal-accent-sub);border-color:var(--gal-dark);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent-sub)}.gal-text-panel{position:relative;width:100%;height:100%;box-sizing:border-box;background:#fffffff2;background-image:linear-gradient(135deg,transparent 0%,transparent 95%,rgba(0,210,255,.1) 95%,rgba(0,210,255,.1) 100%);background-size:1.25rem 1.25rem;box-shadow:0 .625rem 1.875rem #00000026;border-radius:0;padding:calc(2.5rem * var(--gal-dialog-scale-user, 1)) calc(3.75rem * var(--gal-dialog-scale-user, 1)) calc(5rem * var(--gal-dialog-scale-user, 1)) calc(3.75rem * var(--gal-dialog-scale-user, 1));overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none}.gal-text-panel::-webkit-scrollbar{display:none}.gal-dialog-text{font-size:calc(1.25rem * var(--ui-scale) * var(--font-scale, 1));line-height:1.9;color:#333;font-weight:500;letter-spacing:.02em}.gal-text-panel.text-effect-glass{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:#ffffffb3!important}.gal-text-panel.text-effect-gradient:before{content:"";position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(0,0,0,.6) 0%,rgba(0,0,0,.3) 50%,transparent 100%);pointer-events:none;z-index:1}.gal-text-panel.text-effect-gradient .gal-dialog-text{position:relative;z-index:2}.gal-text-panel.text-effect-gradient .gal-name-badge{z-index:3}.gal-text-panel.text-effect-text-bg{background:transparent!important;background-image:none!important;box-shadow:none!important}.gal-tts-loading{position:absolute;top:auto;bottom:1rem;right:1.5rem;display:flex;align-items:center;justify-content:center;width:2.5rem;height:2.5rem;padding:0;background:#fffffff2;border:.125rem solid var(--gal-accent);border-radius:50%;color:var(--gal-accent);box-shadow:0 .25rem .75rem #0000001a;opacity:0;transform:scale(.8);transition:all .4s cubic-bezier(.175,.885,.32,1.275);pointer-events:none;z-index:10}.gal-tts-loading.active{opacity:1;transform:scale(1)}.gal-tts-loading i{font-size:1rem;color:var(--gal-accent)}.gal-generating-indicator{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.75rem;padding:1.25rem 2.5rem;background:#fffffffa;border:.188rem solid var(--gal-accent);border-radius:1rem;box-shadow:0 .5rem 2rem #00d2ff4d;z-index:20;opacity:0;visibility:hidden;transition:all .3s ease}.gal-generating-indicator.active{opacity:1;visibility:visible}.gal-generating-indicator .gal-gen-icon{font-size:2.5rem;color:var(--gal-accent);animation:galGenPulse 1.5s ease-in-out infinite}.gal-generating-indicator .gal-gen-text{font-size:1.1rem;font-weight:700;color:var(--gal-dark);letter-spacing:.05em}.gal-generating-indicator .gal-gen-status{font-size:.85rem;color:#666;max-width:17.5rem;text-align:center;min-height:1.2em}.gal-generating-indicator .gal-gen-dots{display:flex;gap:.375rem;margin-top:.25rem}.gal-generating-indicator .gal-gen-dot{width:.5rem;height:.5rem;background:var(--gal-accent);border-radius:50%;animation:galGenDotBounce 1.4s ease-in-out infinite both}.gal-generating-indicator .gal-gen-dot:nth-child(1){animation-delay:-.32s}.gal-generating-indicator .gal-gen-dot:nth-child(2){animation-delay:-.16s}@keyframes galGenPulse{0%,to{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.8}}@keyframes galGenDotBounce{0%,80%,to{transform:scale(0)}40%{transform:scale(1)}}.gal-bottom-toolbar{position:absolute;bottom:0;left:0;width:100%;height:auto;min-height:3.75rem;padding:.625rem 1.875rem 0;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:100;contain:layout style}.gal-bottom-toolbar>*{pointer-events:auto}.gal-toolbar-left,.gal-toolbar-right{display:flex;align-items:flex-end;gap:.5rem}.gal-footer-btn{background:#ffffffe6!important;color:var(--gal-dark)!important;padding:0 calc(.75rem * var(--ui-scale))!important;font-family:var(--gal-font-eng)!important;font-weight:800!important;font-size:calc(.85rem * var(--ui-scale))!important;cursor:pointer!important;transition:background .2s,color .2s,transform .2s,box-shadow .2s!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;display:flex!important;align-items:center!important;gap:calc(.375rem * var(--ui-scale))!important;height:calc(2.25rem * var(--ui-scale))!important;transform:skew(-10deg)!important;box-shadow:calc(.125rem * var(--ui-scale)) calc(.125rem * var(--ui-scale)) 0 #0000001a!important;border-radius:0!important;will-change:transform}.gal-footer-btn i,.gal-footer-btn span{transform:skew(10deg)!important;font-size:calc(1rem * var(--ui-scale))!important}.gal-footer-btn:hover{background:var(--gal-dark)!important;color:#fff!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.25rem .25rem #0003!important}.gal-footer-btn-next{background:var(--gal-dark)!important;color:#fff!important;font-size:calc(1.3rem * var(--ui-scale))!important;font-weight:800!important;padding:0 calc(2.5rem * var(--ui-scale))!important;height:calc(3.438rem * var(--ui-scale))!important;min-width:calc(8.75rem * var(--ui-scale))!important;border-radius:0!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;margin-left:calc(.938rem * var(--ui-scale))!important;margin-right:0!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:center!important;gap:calc(.625rem * var(--ui-scale))!important;white-space:nowrap!important;line-height:1!important;box-shadow:calc(.25rem * var(--ui-scale)) calc(.25rem * var(--ui-scale)) 0 #0003!important;flex-shrink:0!important;clip-path:polygon(calc(1.563rem * var(--ui-scale)) 0,100% 0,100% 100%,0% 100%)!important;transition:background .2s ease,color .2s ease,transform .2s ease!important;transform:none!important;will-change:transform}.gal-footer-btn-next:hover{background:var(--gal-accent)!important;color:var(--gal-dark)!important;transform:translate(-.188rem)!important}.gal-footer-btn-next i{font-size:1.1rem!important;margin:0!important}.gal-bottom-toolbar{justify-content:flex-start;gap:calc(.25rem * var(--ui-scale));padding:.625rem .75rem 0;overflow:visible}.gal-footer-btn{padding:0 calc(.55rem * var(--ui-scale))!important;gap:calc(.25rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important}.gal-footer-btn i,.gal-footer-btn span{font-size:calc(.9rem * var(--ui-scale))!important}.gal-pending-choices-btn{padding:0 calc(.7rem * var(--ui-scale))!important;height:calc(2.45rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important;margin-left:auto!important;margin-right:0!important}.gal-footer-btn-next{margin-left:calc(.375rem * var(--ui-scale))!important;margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.9rem * var(--ui-scale))!important}.gal-progress-indicator{font-family:Barlow,sans-serif;font-size:.85rem;font-weight:700;color:#888;padding:.375rem .625rem;display:flex;align-items:center;height:2.25rem}.gal-nav-btn.active{background:var(--gal-accent)!important;color:var(--gal-dark)!important;box-shadow:inset 1px 1px .188rem #0003!important}.gal-auto-playing{background:var(--gal-accent-sub)!important;color:#fff!important;border-color:var(--gal-accent-sub)!important;animation:galPulse 1s infinite}@keyframes galPulse{0%,to{opacity:1}50%{opacity:.8}}.gal-input-modal,#gal-free-input-modal{position:fixed;inset:0;background:#00000080;backdrop-filter:blur(.25rem);z-index:var(--gal-z-modal)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .2s ease}#gal-live2d-settings-modal{z-index:var(--gal-z-modal-critical)!important}@keyframes galFadeIn{0%{opacity:0}to{opacity:1}}.gal-input-box{background:var(--gal-white);border:.188rem solid var(--gal-dark);box-shadow:.625rem .625rem #00000026;width:90%;max-width:31.25rem;padding:1.563rem}.gal-input-title{font-family:Barlow,sans-serif;font-size:1.3rem;font-weight:800;color:var(--gal-dark);margin-bottom:.938rem;transform:skew(-5deg)}.gal-input-title span{transform:skew(5deg);display:block}.gal-input-field{width:100%;border:.125rem solid var(--gal-dark);padding:.75rem .938rem;font-size:1rem;font-family:Noto Sans SC,sans-serif;resize:vertical;min-height:5rem;box-sizing:border-box}.gal-input-field:focus{outline:none;border-color:var(--gal-accent);box-shadow:0 0 0 .188rem #00d2ff33}.gal-input-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.938rem}.gal-modal-layout-fixed{display:flex!important;flex-direction:column!important;overflow:hidden!important}.gal-modal-layout-fixed>.gal-input-title,.gal-modal-layout-fixed>.gal-modal-fixed-header{flex-shrink:0;position:sticky;top:0;z-index:2;background:var(--SmartThemeBlurTintColor, var(--gal-white))}.gal-modal-layout-fixed>.gal-input-title{margin-bottom:0!important}.gal-modal-layout-fixed>.gal-modal-scroll-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}.gal-modal-layout-fixed>.gal-input-actions,.gal-modal-layout-fixed>.gal-modal-fixed-actions{flex-shrink:0;margin-top:0!important}.gal-toast{position:fixed;bottom:1.875rem;right:1.875rem;background:var(--gal-dark);color:var(--gal-white);padding:.75rem 1.563rem;font-weight:600;transform:skew(-5deg);box-shadow:.313rem .313rem 0 var(--gal-accent);z-index:var(--gal-z-toast);animation:galToastIn .3s ease}.gal-toast span{display:block;transform:skew(5deg)}@keyframes galToastIn{0%{opacity:0;transform:skew(-5deg) translateY(1.25rem)}to{opacity:1;transform:skew(-5deg) translateY(0)}}.gal-input-modal,.gal-config-modal{position:fixed;inset:0;background:#0009;backdrop-filter:blur(.375rem);z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center}.gal-import-progress-overlay{z-index:var(--gal-z-modal-critical)!important}@media screen and (max-width: 48rem){.gal-import-progress-box{transform:translateY(8vh)}}.gal-config-panel{background:var(--gal-white);border:none!important;box-shadow:none!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;display:flex;flex-direction:column;border-radius:0!important}.gal-config-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.563rem;display:flex;justify-content:space-between;align-items:center}.gal-config-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:800;color:var(--gal-accent)}.gal-config-close{background:transparent;border:.125rem solid var(--gal-white);color:var(--gal-white);width:2rem;height:2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}.gal-config-close:hover{background:var(--gal-accent-sub);border-color:var(--gal-accent-sub)}.gal-config-body{padding:1.563rem;overflow-y:auto;flex:1}.gal-sprite-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.375rem,1fr));gap:.938rem}.gal-sprite-card{border:.125rem solid #eee;padding:.625rem;text-align:center;cursor:pointer;transition:all .2s}.gal-sprite-card:hover{border-color:var(--gal-accent);box-shadow:0 .25rem .75rem #00d2ff26}.gal-sprite-preview{width:100%;aspect-ratio:2 / 3;object-fit:cover;object-position:top center;background:#f9f9f9;border-radius:.25rem;margin-bottom:.5rem}.gal-crop-container{position:relative;width:100%;overflow:visible;background:#1a1a2e;border-radius:.5rem}.gal-crop-canvas-wrapper{position:relative;width:100%;height:23.75rem;overflow:hidden;cursor:move;display:flex;align-items:center;justify-content:center;background:#1a1a2e;border-radius:.5rem .5rem 0 0}#gal-crop-canvas{display:block}.gal-crop-overlay{position:absolute;inset:0;pointer-events:none}.gal-crop-frame{position:absolute;border:.188rem solid var(--gal-accent);box-shadow:0 0 0 624.938rem #0009;pointer-events:none}.gal-crop-controls{display:flex;align-items:center;justify-content:center;gap:.938rem;padding:.75rem 1.25rem;background:#000c;border-radius:0 0 .5rem .5rem}.gal-crop-controls .gal-crop-btn{padding:.5rem 1rem;min-width:3.75rem;font-size:.9rem}.gal-crop-zoom-slider{width:9.375rem;accent-color:var(--gal-accent)}.gal-crop-zoom-label{color:#fff;font-size:.85rem;font-weight:600;min-width:2.813rem}.gal-crop-btn{padding:.5rem 1rem;border:none;border-radius:.25rem;cursor:pointer;font-weight:600;transition:all .2s}.gal-crop-btn.reset{background:#666;color:#fff}.gal-crop-btn.reset:hover{background:#888}.gal-batch-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.938rem;max-height:60vh;overflow-y:auto;padding:.313rem}.gal-batch-upload-card{border:.125rem dashed #ccc;border-radius:.5rem;padding:.75rem;text-align:center;transition:all .2s;background:#fafafa}.gal-batch-upload-card:hover{border-color:var(--gal-accent);background:#00d2ff0d}.gal-batch-upload-card.has-image{border-style:solid;border-color:var(--gal-accent)}.gal-batch-upload-card .expression-label{font-weight:700;color:var(--gal-dark);margin-bottom:.625rem;font-size:.9rem}.gal-batch-upload-card .upload-preview{width:100%;aspect-ratio:2 / 3;background:#eee;border-radius:.375rem;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;margin-bottom:.5rem}.gal-batch-upload-card .upload-preview img{width:100%;height:100%;object-fit:cover;object-position:top center}.gal-batch-upload-card .upload-preview i{font-size:2rem;color:#bbb}.gal-batch-upload-card .upload-preview:hover i{color:var(--gal-accent)}.gal-batch-upload-card .remove-btn{background:var(--gal-accent-sub);color:#fff;border:none;padding:.25rem .625rem;border-radius:.25rem;font-size:.75rem;cursor:pointer;display:none}.gal-batch-upload-card.has-image .remove-btn{display:inline-block}.gal-sprite-label{font-size:.85rem;font-weight:700;color:var(--gal-dark);line-height:1.3}.gal-sprite-label small{font-weight:400;color:#888}.gal-upload-card{border:.125rem dashed #ccc;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:#999;min-height:7.5rem}.gal-upload-card:hover{border-color:var(--gal-accent);color:var(--gal-accent);background:#00d2ff0d}.gal-upload-card i{font-size:2rem}.gal-action-btn.primary{background:var(--gal-accent);color:var(--gal-dark);border-color:var(--gal-accent)}.gal-action-btn.primary:hover{background:var(--gal-dark);color:var(--gal-accent)}#gal-layer-choices{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;background:#0006!important;z-index:var(--gal-z-modal-critical)!important;display:none;flex-direction:column;justify-content:center;align-items:center;gap:.938rem;padding:1.25rem}#gal-layer-choices.active{display:flex!important;animation:galFadeIn .3s ease}.gal-choices-container{width:100%;max-width:32rem;display:flex;flex-direction:column;align-items:center;gap:.75rem;max-height:calc(100vh - 10rem);overflow-y:auto;padding:0 .5rem;box-sizing:border-box}.gal-choices-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:900;color:var(--gal-white);text-transform:uppercase;letter-spacing:.125rem;margin-bottom:.5rem;transform:skew(-10deg)}.gal-choices-title span{display:block;transform:skew(10deg)}.gal-choice-card{background:var(--gal-white);color:var(--gal-dark);padding:.75rem 1.875rem;min-width:12.5rem;max-width:90%;width:auto;text-align:center;font-weight:600;font-size:.95rem;line-height:1.4;border:.125rem solid var(--gal-dark);box-shadow:.375rem .375rem #00000026;transform:skew(-8deg);cursor:pointer;transition:all .2s cubic-bezier(.34,1.56,.64,1);position:relative;overflow:hidden;word-break:break-word}.gal-choice-card span{display:block;transform:skew(8deg)}.gal-choice-card:hover{background:var(--gal-accent);color:#fff;border-color:var(--gal-dark);transform:skew(-8deg) translate(-.188rem,-.188rem);box-shadow:.563rem .563rem 0 var(--gal-dark)}.gal-choice-card:after{content:"";display:none}.gal-choices-hint{font-size:.8rem;color:#ffffffb3;margin-top:.938rem}.gal-dialog-layer .gal-progress-container{position:absolute;bottom:0;left:0;width:100%;height:.375rem;background:#0003;border-radius:0;margin:0;z-index:10;overflow:hidden;position:relative;min-width:3.75rem}.gal-progress-bar{height:100%;background:linear-gradient(90deg,var(--gal-accent) 0%,#00a8cc 100%);width:0%;border-radius:0;transition:width .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 0 .625rem var(--gal-accent)}.gal-pending-choices-btn{background:linear-gradient(135deg,var(--gal-accent-sub) 0%,#cc0044 100%)!important;color:#fff!important;padding:0 calc(.72rem * var(--ui-scale))!important;font-weight:700!important;font-size:calc(.78rem * var(--ui-scale))!important;cursor:pointer!important;display:flex!important;align-items:center!important;gap:calc(.25rem * var(--ui-scale))!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;height:calc(2.25rem * var(--ui-scale))!important;margin-right:calc(.188rem * var(--ui-scale))!important;border-radius:0!important;transform:skew(-10deg)}.gal-pending-choices-btn.show{display:flex!important;-webkit-animation:galPendingPulse 2s ease-in-out infinite!important;animation:galPendingPulse 2s ease-in-out infinite!important}.gal-pending-choices-btn i,.gal-pending-choices-btn span{transform:skew(10deg)!important}.gal-pending-choices-btn i{font-size:calc(.9rem * var(--ui-scale))!important;margin:0!important}.gal-pending-choices-btn:hover{filter:brightness(1.1)!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.313rem .313rem #0003!important}@-webkit-keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}@keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}.gal-pending-choices-btn.gal-new-option-highlight{-webkit-animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important;animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important}@-webkit-keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}@keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}.gal-open-btn{display:inline-flex;align-items:center;gap:.313rem;padding:.125rem .5rem;background:transparent;color:var(--gal-accent);border:1px solid var(--gal-accent);border-radius:.25rem;font-size:.75rem;cursor:pointer;opacity:.6;transition:all .2s;margin-left:.313rem;font-family:Noto Sans SC,sans-serif}.gal-open-btn:hover{opacity:1;background:var(--gal-accent);color:var(--gal-dark)}.gal-history-modal{position:fixed!important;inset:0!important;background:#000000d9!important;backdrop-filter:blur(.313rem)!important;z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .3s ease}.gal-history-panel{background:var(--gal-white);border:.125rem solid var(--gal-accent);box-shadow:0 0 1.25rem #00d2ff4d;width:80%;max-width:50rem;height:80vh;display:flex;flex-direction:column;border-radius:.5rem;overflow:hidden}.gal-history-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.25rem;display:flex;justify-content:space-between;align-items:center;border-bottom:.125rem solid var(--gal-accent)}.gal-history-title{font-family:Noto Sans SC,sans-serif;font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:.625rem}.gal-history-close{background:transparent;border:none;color:#aaa;font-size:1.5rem;cursor:pointer;transition:color .2s;line-height:1}.gal-history-close:hover{color:var(--gal-accent)}.gal-history-body{flex:1;overflow-y:auto;padding:1.25rem;background:#f5f5f5}.gal-history-list{display:flex;flex-direction:column;gap:.938rem}.gal-history-item{background:#fff;padding:0;border-radius:.5rem;border:1px solid #eee;box-shadow:0 .25rem .75rem #0000000d;transition:all .2s;overflow:hidden;margin-bottom:.625rem}.gal-history-item:hover{box-shadow:0 .5rem 1.25rem #00d2ff26;transform:translateY(-.125rem);border-color:var(--gal-accent)}.gal-history-header-row{background:#f8f9fa;padding:.625rem 1.25rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}.gal-history-info-group{display:flex;align-items:center;gap:.75rem}.gal-history-index{background:var(--gal-accent);color:var(--gal-dark);padding:.125rem .5rem;border-radius:.25rem;font-size:.8rem;font-weight:700;font-family:Barlow,sans-serif}.gal-history-time{color:#666;font-size:.9rem;font-weight:600;font-family:Noto Sans SC,sans-serif;display:flex;align-items:center;gap:.375rem}.gal-history-time i{font-size:.8rem;color:#999}.gal-history-content{padding:1.25rem;font-size:1.05rem;line-height:1.8;color:#333;white-space:pre-wrap;text-align:justify}.gal-history-empty{text-align:center;padding:3.125rem;color:#999;font-style:italic}.galgame-database-container{position:fixed!important;top:0!important;left:0!important;width:100%!important;height:100%!important;z-index:var(--gal-z-modal-critical)!important;display:none}.gal-open-btn{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;background:linear-gradient(135deg,var(--gal-accent) 0%,#00a8cc 100%);color:#fff;border:none;border-radius:1.25rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 .125rem .5rem #00d2ff4d}.gal-open-btn:hover{transform:scale(1.05);box-shadow:0 .25rem .938rem #00d2ff80}.gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;gap:.5rem}.gal-realtime-label{font-size:.9rem!important;color:#2b2e38!important;font-weight:600!important;white-space:nowrap}.gal-realtime-switch{position:relative;display:inline-block;width:3.25rem;height:1.75rem;flex-shrink:0}.gal-realtime-switch input{opacity:0;width:0;height:0;position:absolute}.gal-realtime-slider{position:absolute;cursor:pointer;inset:0;background:linear-gradient(145deg,#d0d0d0,#b8b8b8);transition:all .3s ease;border-radius:1.75rem;box-shadow:inset 0 .125rem .25rem #0003}.gal-realtime-slider:before{content:"";position:absolute;height:1.375rem;width:1.375rem;left:.188rem;bottom:.188rem;background:linear-gradient(145deg,#fff,#f5f5f5);transition:transform .3s ease;border-radius:50%;box-shadow:0 .125rem .313rem #0000004d;z-index:2}.gal-realtime-slider:after{content:"OFF";position:absolute;right:.5rem;top:50%;transform:translateY(-50%);font-size:.563rem;font-weight:700;color:#666;z-index:1}.gal-realtime-switch input:checked+.gal-realtime-slider{background:linear-gradient(135deg,var(--gal-accent) 0%,var(--gal-accent-sub) 100%);box-shadow:inset 0 .125rem .25rem #0003,0 0 .75rem #00d2ff66}.gal-realtime-switch input:checked+.gal-realtime-slider:before{transform:translate(1.5rem)}.gal-realtime-switch input:checked+.gal-realtime-slider:after{content:"ON";left:.5rem;right:auto;color:#fffffff2}@media screen and (max-width: 48rem){.gal-input-modal,.gal-config-modal,#gal-settings-panel,#gal-asset-manager-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important;padding:0!important;z-index:var(--gal-z-modal-critical)!important;display:flex!important;align-items:center;justify-content:center}.gal-input-modal .gal-input-box,.gal-config-modal .gal-config-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;display:flex!important;flex-direction:column!important}.gal-config-body,.gal-input-box>div:not(.gal-input-title):not(.gal-input-actions){flex:1;overflow-y:auto!important}}@media screen and (max-width: 48rem){.gal-input-title{flex-direction:column;align-items:flex-start!important;gap:.625rem;padding:.625rem .938rem!important;height:auto!important}.gal-input-title span{font-size:1.2rem!important}.gal-input-title div{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.313rem}.gal-input-title div>button,.gal-input-title div>div{flex:1;min-width:auto!important;margin:0!important}.gal-title-btn{padding:.25rem .625rem!important;font-size:.85rem!important;min-width:auto!important;transform:none!important}.gal-title-btn *{transform:none!important}.gal-tab-header{padding:0 .625rem!important;gap:.625rem!important;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}.gal-tab-item{padding:.625rem .5rem!important;font-size:.9rem!important;flex-shrink:0}.gal-sub-header,.gal-action-bar{flex-direction:column;align-items:stretch!important;gap:.625rem;height:auto!important;padding:.625rem .938rem!important}.gal-action-group,.gal-filter-group{display:flex!important;flex-wrap:wrap;gap:.5rem!important;width:100%}.gal-action-btn{margin:0!important;flex:1;min-width:6.25rem;padding:.5rem 0!important;justify-content:center;transform:none!important}.gal-action-btn *{transform:none!important}.gal-grid-container{padding:.625rem!important;grid-template-columns:repeat(auto-fill,minmax(6.875rem,1fr))!important;gap:.625rem!important}.gal-input-box>div:last-child{padding:.625rem .938rem!important;min-height:auto!important}#gal-settings-close,#gal-char-sprites-close{min-height:2.5rem!important;transform:none!important}}#gal-asset-manager-modal .gal-asset-header{padding:.625rem .938rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;margin-bottom:.313rem!important}#gal-asset-manager-modal .gal-action-btn:where(#gal-asset-export,#gal-asset-export-remote,#gal-import-dropdown-btn){padding:.25rem .5rem!important;font-size:.8rem!important}#gal-asset-manager-modal .gal-tab-header{padding:0 .625rem!important;min-height:2.5rem!important}#gal-asset-manager-modal .gal-tab-btn{padding:.5rem .75rem!important;font-size:.9rem!important}#gal-asset-manager-modal .gal-tab-content{padding:.625rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin-bottom:.625rem!important;flex-wrap:wrap}#gal-asset-manager-modal .gal-input-actions{padding:.625rem .938rem!important;min-height:auto!important}#gal-asset-manager-modal .gal-asset-header>div{flex-wrap:wrap!important;gap:.625rem!important}#gal-asset-manager-modal .gal-input-title{white-space:nowrap!important;font-size:1.2rem!important;width:auto!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button i{margin:0!important;font-size:1rem!important}#gal-asset-manager-modal .gal-import-menu span{display:inline!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{display:flex!important;gap:.313rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;padding:.5rem .25rem!important;font-size:.85rem!important;white-space:nowrap!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:.25rem!important}#gal-asset-manager-modal .gal-input-actions{padding:.5rem!important}#gal-asset-manager-modal .gal-input-actions button{min-height:2.25rem!important;padding:0!important}#gal-asset-manager-modal .gal-asset-header{padding:1.25rem 1.563rem .938rem;border-bottom:1px solid #e0e0e0;flex-shrink:0}#gal-asset-manager-modal .gal-tab-header{display:flex;border-bottom:.125rem solid #e0e0e0;padding:0 1.563rem;flex-shrink:0}#gal-asset-manager-modal .gal-tab-content{flex:1;overflow-y:auto;padding:1.25rem 1.563rem}#gal-asset-manager-modal .gal-input-actions{padding:.938rem 1.563rem;border-top:1px solid #e0e0e0;flex-shrink:0}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{padding:.5rem .75rem!important;background:#fffffff2;backdrop-filter:blur(.625rem);border-bottom:1px solid rgba(0,0,0,.05)!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:.5rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;font-weight:700!important;margin-right:auto!important}#gal-asset-manager-modal .gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;margin-left:0!important;transform:scale(.85);transform-origin:left center;flex-shrink:0!important;min-width:fit-content;margin-right:.25rem}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child{display:block!important;height:auto!important;padding-bottom:.5rem!important;margin-bottom:.5rem!important;border-bottom:1px solid rgba(0,0,0,.05)!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>div{width:100%!important;display:flex!important;flex-wrap:wrap!important;justify-content:space-between!important;gap:.625rem!important;position:static!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds] .gal-realtime-toggle-wrapper{flex:0 0 100%!important;width:100%!important;order:-1!important;display:flex!important;align-items:center!important;justify-content:center!important;background:#00000008!important;border-radius:.5rem;padding:.5rem!important;margin:0!important;height:auto!important;min-height:2.5rem!important;visibility:visible!important;opacity:1!important;z-index:10!important}#gal-asset-manager-modal .gal-realtime-label{display:inline-block!important;font-size:.9rem!important;color:#444!important;margin-right:.625rem!important;font-weight:700!important}#gal-asset-manager-modal .gal-realtime-switch{display:inline-block!important;transform:scale(1)!important;margin:0!important}#gal-batch-bg-upload-btn,#gal-add-bg-btn{flex:1 1 45%!important;width:auto!important;margin:0!important}#gal-asset-manager-modal .gal-asset-header button{width:2rem!important;height:2rem!important;padding:0!important;border-radius:50%!important;background:#fff!important;border:1px solid #eee!important;color:#555!important;box-shadow:0 .125rem .313rem #0000000d!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important}#gal-import-menu{top:2.813rem!important;right:.625rem!important;width:12.5rem!important}#gal-asset-manager-modal .gal-tab-header{min-height:2.5rem!important;background:#f1f3f5;padding:.25rem!important;margin:0!important;border:none!important;gap:.25rem}#gal-asset-manager-modal .gal-tab-btn{flex:1;padding:0!important;display:flex;align-items:center;justify-content:center;border-radius:.375rem!important;border:none!important;font-size:.85rem!important;color:#666;background:transparent}#gal-asset-manager-modal .gal-tab-btn.active{background:#fff!important;color:#333!important;box-shadow:0 1px .188rem #0000001a!important;font-weight:700}#gal-asset-manager-modal .gal-tab-pane>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child .gal-realtime-toggle-wrapper{display:flex!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin:.625rem!important;gap:.5rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;height:2.25rem!important;border-radius:1.125rem!important;font-size:.85rem!important;box-shadow:0 .125rem .375rem #0000001a!important;padding:0!important}.gal-character-grid,.gal-bg-grid{padding:0 .625rem 3.75rem!important;gap:.5rem!important;grid-template-columns:repeat(3,1fr)!important}.gal-character-card,.gal-bg-card{box-shadow:none!important;border:1px solid #eee!important}.gal-character-card>div:last-child>div:last-child{display:none!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:1.25rem;left:50%;transform:translate(-50%);width:90%!important;padding:0!important;border:none!important;z-index:100!important;background:transparent!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.75rem!important;border-radius:1.375rem!important;background:linear-gradient(135deg,#2c3e50,#000)!important;color:#fff!important;box-shadow:0 .25rem .75rem #0003!important;opacity:.9}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-box{display:flex!important;flex-direction:column!important;height:100%!important;overflow:hidden!important}#gal-asset-manager-modal .gal-asset-header{flex:0 0 auto!important;height:3.125rem!important;padding:0 .625rem!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:.5rem!important;background:#fff!important;border-bottom:1px solid #eee!important}#gal-asset-manager-modal .gal-asset-header>div{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:.5rem!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button{flex:0 0 auto!important;width:2rem!important;height:2rem!important;min-width:2rem!important;max-width:2rem!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:.875rem!important}#gal-asset-manager-modal .gal-asset-header>div{flex:0 0 auto!important}#gal-asset-manager-modal .gal-tab-header{flex:0 0 auto!important;height:2.5rem!important;padding:.125rem .625rem!important;gap:.313rem!important;background:#f8f9fa!important;display:flex!important;align-items:center!important}#gal-asset-manager-modal .gal-tab-btn{flex:1!important;height:2rem!important;padding:0!important;font-size:.813rem!important;line-height:2rem!important}#gal-asset-manager-modal .gal-tab-content{flex:1 1 auto!important;height:0!important;padding:.625rem .625rem 3.75rem!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:.938rem;left:5%;width:90%!important;padding:0!important;border:none!important;background:transparent!important;pointer-events:none}#gal-asset-manager-modal .gal-input-actions button{pointer-events:auto;height:2.5rem!important;border-radius:1.25rem!important;background:#000000d9!important;color:#fff!important;box-shadow:0 .25rem .625rem #0003!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header button{border-radius:.25rem!important;width:auto!important;padding:0 .5rem!important;background:transparent!important;border:1px solid transparent!important;box-shadow:none!important;color:#555!important}#gal-asset-manager-modal .gal-asset-header button:active{background:#0000001a!important}#gal-asset-manager-modal .gal-asset-header #gal-asset-export-remote{color:#6f42c1!important}#gal-asset-manager-modal .gal-asset-header #gal-import-dropdown-btn{color:#28a745!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{z-index:100!important;position:relative!important;border-bottom:none!important;box-shadow:none!important;padding-bottom:0!important}#gal-asset-manager-modal .gal-tab-header{z-index:90!important;position:relative!important;border-top:none!important;background:#fff!important;margin-top:-1px!important;padding-top:0!important}#gal-asset-manager-modal .gal-import-menu{z-index:var(--gal-z-dropdown)!important;position:absolute!important;top:100%!important;right:0!important;box-shadow:0 .25rem .938rem #0003!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important;position:relative!important;overflow:visible!important}#gal-asset-manager-modal .gal-input-title{margin-bottom:0!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{overflow:visible!important;touch-action:none!important;z-index:var(--gal-z-dropdown)!important}#gal-asset-manager-modal .gal-import-dropdown{overflow:visible!important;position:static!important}#gal-asset-manager-modal .gal-import-menu{position:fixed!important;top:3.438rem!important;right:.625rem!important;z-index:var(--gal-z-dropdown)!important;max-height:60vh!important;overflow-y:auto!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-actions{position:static!important;width:100%!important;padding:.625rem .938rem!important;background:#fff!important;border-top:1px solid #eee!important;transform:none!important;left:auto!important;bottom:auto!important;pointer-events:auto!important;flex-shrink:0!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.5rem!important;border-radius:.25rem!important;background:#f8f9fa!important;color:#333!important;border:1px solid #ddd!important;box-shadow:none!important;display:flex!important;align-items:center!important;justify-content:center!important}#gal-asset-manager-modal .gal-input-actions button:hover,#gal-asset-manager-modal .gal-input-actions button:active{background:#e9ecef!important}#gal-asset-manager-modal .gal-tab-content{padding-bottom:.625rem!important}}@media screen and (max-width: 48rem){#gal-history-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:var(--gal-z-modal-critical)!important;background:#000000d9!important;visibility:visible!important;opacity:1!important}#gal-history-modal .gal-history-panel{position:relative!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;border:none!important;border-radius:0!important;background:#fff!important;transform:none!important;display:flex!important;flex-direction:column!important;z-index:var(--gal-z-modal-critical)!important;opacity:1!important}#gal-history-modal .gal-history-header{flex-shrink:0!important;padding:.625rem .938rem!important;border-bottom:1px solid #eee!important}#gal-history-modal .gal-history-body{flex:1!important;height:auto!important;max-height:none!important;overflow-y:auto!important;padding:.938rem!important}}@media screen and (max-width: 48rem){#gal-global-overlay *,.gal-input-modal,.gal-config-modal,.gal-history-modal{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.gal-input-modal,.gal-config-modal,.gal-history-modal{background:#000000b3!important}.gal-bgm-widget,.gal-location-bar,.gal-time-bar{background:#2b2e38f2!important}.gal-footer-btn,.gal-footer-btn-next,.gal-pending-choices-btn,.gal-action-btn{box-shadow:none!important}.gal-sprite-card:hover,.gal-character-card:hover,.gal-bg-card:hover{transform:none!important}}@media screen and (max-width: 48rem){.gal-dialog-layer{left:50%!important;right:auto!important;width:min(98%,calc(96% * var(--gal-dialog-scale-user, 1)))!important;bottom:calc(.625rem * var(--gal-dialog-scale-user, 1))!important;height:calc(40% * var(--gal-dialog-scale-user, 1))!important;min-height:11rem!important;max-height:84%!important;transform:translate(-50%)!important;padding-bottom:env(safe-area-inset-bottom)}.gal-text-panel{padding:calc(1.563rem * var(--gal-dialog-scale-user, 1)) calc(.938rem * var(--gal-dialog-scale-user, 1)) calc(2.813rem * var(--gal-dialog-scale-user, 1)) calc(.938rem * var(--gal-dialog-scale-user, 1))!important}.gal-dialog-text{font-size:calc(.88rem * var(--font-scale))!important;line-height:1.6!important}.gal-name-badge{top:-1.25rem!important;left:0!important;padding:.25rem 1.25rem .25rem .938rem!important;font-size:1.1rem!important;transform:skew(-15deg) scale(.9)!important;transform-origin:bottom left!important}.gal-interaction-bar{top:-2.813rem!important;right:0!important;transform:scale(.85)!important;transform-origin:bottom right!important;gap:.5rem!important}.gal-action-btn{padding:.5rem 1rem!important;font-size:.95rem!important}.gal-bgm-widget{top:3.75rem!important;padding:.375rem .625rem!important;gap:.375rem!important;font-size:.72rem!important;border-radius:1rem!important;max-width:2.125rem!important;transition:max-width .3s cubic-bezier(.4,0,.2,1)!important}.gal-bgm-icon{font-size:.95rem!important;min-width:1rem!important}.gal-bgm-title{font-size:.7rem!important}.gal-bgm-btn{font-size:.8rem!important;width:1rem!important}.gal-bgm-slider{width:3rem!important;height:.188rem!important}.gal-bgm-slider::-webkit-slider-thumb{width:.5rem!important;height:.5rem!important}.gal-bgm-widget:active,.gal-bgm-widget:focus-within,.gal-bgm-widget.active{max-width:12rem!important;background:#2b2e38fa!important}.gal-status-bar-container{top:.625rem!important;right:auto!important;left:.625rem!important;flex-direction:column!important;align-items:flex-start!important;gap:.375rem!important;transform:scale(.85)!important;transform-origin:top left!important;pointer-events:none;z-index:90!important}.gal-location-bar,.gal-time-bar{max-width:10rem!important;height:1.625rem!important;font-size:.75rem!important;background:#2b2e38cc!important;backdrop-filter:blur(.25rem)}.gal-fullscreen-btn{top:.625rem!important;right:.625rem!important;padding:.5rem .75rem!important;font-size:.8rem!important}.gal-bottom-toolbar{padding:0 .625rem .625rem!important;min-height:3.125rem!important;margin-bottom:env(safe-area-inset-bottom)}.gal-footer-btn{height:2.375rem!important;padding:0 .625rem!important;min-width:2.375rem!important}.gal-footer-btn-next{min-width:6.25rem!important;height:2.813rem!important;font-size:1.1rem!important;margin-left:.625rem!important;margin-right:-.625rem!important}.gal-input-modal,.gal-config-modal,.gal-history-modal,#gal-layer-choices{z-index:var(--gal-z-modal-critical)!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;height:100dvh!important;max-height:100dvh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}.gal-choices-container{width:min(100%,32rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choices-title,.gal-choices-hint{width:100%!important;text-align:center!important}.gal-choice-card{max-width:100%!important;width:100%!important}#gal-global-overlay.fullscreen{z-index:var(--gal-z-overlay)!important}.gal-progress-indicator{display:none!important}}@media screen and (max-width: 48rem){.gal-interaction-bar .gal-action-btn{transform:skew(-15deg)!important;margin:0!important;flex:initial!important;min-width:auto!important;width:auto!important;display:flex!important;border-radius:0!important}.gal-interaction-bar .gal-action-btn *,.gal-interaction-bar .gal-action-btn i,.gal-interaction-bar .gal-action-btn span{transform:skew(15deg)!important}.gal-interaction-bar .gal-action-btn.btn-reroll,.gal-interaction-bar .gal-action-btn.btn-free{padding:.375rem .75rem!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){.gal-bottom-toolbar{padding-right:.75rem!important;overflow:visible!important}.gal-footer-btn-next{margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.75rem * var(--ui-scale))!important}.gal-pending-choices-btn{margin-right:0!important}#gal-settings-panel,#gal-asset-manager-modal,#gal-history-modal,.gal-history-modal,.gal-config-modal,.gal-input-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-layer-choices,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important}#gal-settings-panel .gal-config-panel,.gal-config-modal .gal-config-panel,#gal-asset-manager-modal .gal-input-box,.gal-input-modal .gal-input-box,#gal-history-modal .gal-history-panel,.gal-history-modal .gal-history-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}.gal-choices-container{width:min(100%,34rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choice-card{width:100%!important;max-width:100%!important}}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-footer-btn .gal-btn-text,.gal-pending-choices-btn .gal-btn-text,.gal-footer-btn-next .gal-btn-text,.gal-footer-btn[data-action=log],.gal-footer-btn[data-action=view-original],.gal-footer-btn[data-action=save],.gal-footer-btn[data-action=load]{display:none!important}.gal-footer-btn[data-action=close-mode]{order:-1!important}.gal-bottom-toolbar{justify-content:flex-start!important;gap:.3rem!important;padding:0 .875rem .5rem .5rem!important;overflow:visible!important}.gal-footer-btn,.gal-pending-choices-btn{flex:1 1 0!important;width:auto!important;min-width:0!important;padding:0!important;justify-content:center!important;height:2.5rem!important;margin-left:0!important}.gal-footer-btn i,.gal-pending-choices-btn i{margin:0!important;font-size:1.15rem!important}.gal-footer-btn-next{flex:0 0 auto!important;width:5rem!important;min-width:5rem!important;height:2.5rem!important;margin-left:.35rem!important;padding:0!important;justify-content:center!important;margin-right:0!important;z-index:100!important}.gal-footer-btn-next i{margin:0!important;font-size:1.6rem!important}}.gal-mobile-menu{display:none;position:absolute;bottom:4rem;left:.5rem;transform:none;background:#fffffff2;border:.125rem solid var(--gal-dark);border-radius:0;padding:.5rem;flex-direction:column;gap:.5rem;z-index:200;min-width:9rem;box-shadow:.313rem .313rem #0003;backdrop-filter:blur(.25rem);pointer-events:auto}.gal-mobile-menu.active{display:flex}.gal-mobile-menu .gal-menu-btn{display:flex;align-items:center;gap:.5rem;padding:.5rem .875rem;color:var(--gal-dark);background:var(--gal-white);border:.125rem solid var(--gal-dark);border-radius:0;cursor:pointer;text-align:left;font-size:.85rem;font-weight:700;font-family:Barlow,sans-serif;transition:all .2s;box-shadow:.188rem .188rem #0000001f}.gal-mobile-menu .gal-menu-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:translateY(-.125rem);box-shadow:.25rem .25rem #0003}.gal-mobile-menu .gal-menu-btn i{width:1.2rem;text-align:center}@media screen and (max-width: 48rem){#gal-batch-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-height:100%!important;max-width:100%!important;border-radius:0!important}#gal-batch-upload-modal>.gal-input-box>div:last-child{flex-direction:column!important}#gal-batch-upload-modal .gal-batch-sidebar{width:100%!important;border-right:none!important;border-bottom:1px solid #ddd!important;max-height:none!important;flex-shrink:0!important}#gal-batch-upload-modal .gal-batch-sidebar>div:first-child{padding:6px 8px!important}#gal-batch-upload-modal #gal-batch-add-char{white-space:nowrap!important;padding:4px 10px!important;font-size:.8rem!important;min-height:auto!important}#gal-batch-upload-modal #gal-batch-char-list{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:4px!important;padding:4px 6px!important}#gal-batch-upload-modal .gal-char-item{flex-shrink:0!important;min-width:auto!important;max-width:none!important;padding:5px 10px!important;font-size:.8rem!important;margin-bottom:0!important;border-radius:3px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child{flex:1!important;min-height:0!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child{padding:10px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child{margin-bottom:8px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child label{margin-bottom:4px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child input{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area{min-height:100px!important;padding:.75rem!important}#gal-batch-upload-modal #gal-grid-upload-area i{font-size:1.8rem!important}#gal-batch-upload-modal #gal-grid-upload-area span{font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area small{font-size:.75rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child{padding:.625rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child{gap:.5rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child>div{gap:.25rem!important}#gal-batch-upload-modal #gal-grid-preview-area label{font-size:.75rem!important}#gal-batch-upload-modal .gal-grid-mapping-container{grid-template-columns:repeat(auto-fill,minmax(70px,1fr))!important;gap:.375rem!important;max-height:150px!important}#gal-batch-upload-modal .gal-input-actions{padding:.5rem .75rem!important;padding-bottom:calc(.5rem + env(safe-area-inset-bottom))!important;gap:.5rem!important}#gal-batch-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-batch-upload-modal .gal-upload-tab{padding:6px 10px!important;font-size:.8rem!important}#gal-batch-upload-modal input[type=text]{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:.95rem!important}}@media screen and (max-width: 48rem){#gal-bg-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-bg-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important}#gal-bg-upload-modal .gal-input-title span{transform:none!important;flex:1!important;min-width:0!important}#gal-bg-upload-modal #gal-bg-close-x{flex-shrink:0!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2){margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) label{margin-bottom:.25rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) input{padding:.4rem .5rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal .gal-upload-tab{padding:.3rem .5rem!important;font-size:.8rem!important}#gal-bg-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-upload-card{min-height:70px!important;margin-bottom:.5rem!important;padding:.625rem!important}#gal-bg-upload-modal .gal-upload-card i{font-size:1.5rem!important}#gal-bg-upload-modal .gal-upload-card span{font-size:.85rem!important;margin-top:.25rem!important}#gal-bg-upload-modal .gal-upload-card small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal #gal-upload-remote>div{min-height:70px!important;padding:.625rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child{padding:.5rem!important;margin-bottom:.5rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.1rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child span{font-size:.9rem!important}#gal-bg-upload-modal #gal-bg-comfyui-prompt{height:55px!important;font-size:.8rem!important}#gal-bg-upload-modal #gal-bg-comfyui-generate-btn{min-height:38px!important;font-size:.9rem!important}#gal-bg-upload-modal .gal-input-actions{margin-top:.5rem!important}#gal-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-bg-upload-modal #gal-bg-preview-container{margin-bottom:.5rem!important}}@media screen and (max-width: 48rem){#gal-batch-bg-upload-modal .gal-input-box{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;border-radius:0!important}#gal-batch-bg-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:1rem!important}#gal-batch-bg-upload-modal #gal-batch-step-1{padding:.75rem!important}#gal-batch-bg-upload-modal .gal-upload-card{min-height:120px!important}#gal-batch-bg-upload-modal .gal-upload-card i{font-size:2rem!important}#gal-batch-bg-upload-modal .gal-upload-card span{font-size:.95rem!important;margin-top:.5rem!important}#gal-batch-bg-upload-modal .gal-upload-tab{padding:.375rem .625rem!important;font-size:.85rem!important}#gal-batch-bg-upload-modal .gal-batch-grid-container{padding:.625rem!important}#gal-batch-bg-upload-modal #gal-batch-grid{grid-template-columns:repeat(2,1fr)!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-batch-input-area{padding:.375rem!important}#gal-batch-bg-upload-modal .gal-batch-scene-input{padding:.375rem .5rem!important;font-size:.8rem!important}#gal-batch-bg-upload-modal #gal-batch-step-2>div:last-child{padding:.375rem .75rem!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-input-actions{padding:.5rem .75rem!important;gap:.375rem!important}#gal-batch-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-bg-upload-modal #gal-upload-remote>div{padding:.75rem!important}#gal-batch-bg-upload-modal #gal-batch-remote-urls{height:120px!important;font-size:.8rem!important}}@media screen and (max-width: 48rem){#gal-sprite-upload-modal .gal-input-box{width:100%!important;max-width:100%!important;max-height:100%!important;height:auto!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;padding-bottom:.375rem!important;border-bottom:1px solid #eee!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2){display:grid!important;grid-template-columns:1fr 1fr!important;gap:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2)>div{width:auto!important;margin-bottom:0!important}#gal-sprite-upload-modal label{font-size:.8rem!important;margin-bottom:.25rem!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}#gal-sprite-upload-modal input[type=text],#gal-sprite-upload-modal select{padding:.4rem .5rem!important;font-size:.85rem!important;height:32px!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3){padding:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3)>div{flex-direction:row!important;flex-wrap:wrap!important;gap:.5rem!important;align-items:center!important}#gal-sprite-upload-modal #gal-tts-voice-select{flex:1!important;width:auto!important;min-width:120px!important}#gal-sprite-upload-modal #gal-tts-voice-save-btn{width:auto!important;padding:0 .75rem!important;height:32px!important}#gal-sprite-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important;flex-wrap:nowrap!important;overflow-x:auto!important;flex:none!important;min-height:auto!important;gap:.25rem!important}#gal-sprite-upload-modal .gal-upload-tab{padding:.35rem .5rem!important;font-size:.8rem!important;flex:1!important;min-width:auto!important;text-align:center!important;white-space:nowrap!important;border-radius:.25rem!important}#gal-sprite-upload-modal #gal-upload-content{flex:1!important;display:flex!important;flex-direction:column!important;min-height:0!important;overflow-y:auto!important}#gal-sprite-upload-modal #gal-upload-trigger{flex:1!important;min-height:120px!important;padding:.75rem!important;display:flex!important;flex-direction:column!important;justify-content:center!important}#gal-sprite-upload-modal #gal-upload-trigger i{font-size:2rem!important;margin-bottom:.5rem!important}#gal-sprite-upload-modal #gal-upload-trigger span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-trigger small{font-size:.75rem!important}#gal-sprite-upload-modal #gal-upload-remote>div{padding:1rem!important;min-height:120px!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child{padding:.75rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.25rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:nth-child(2){flex-direction:column!important;gap:.75rem!important}#gal-sprite-upload-modal #gal-crop-area{margin-bottom:.75rem!important}#gal-sprite-upload-modal .gal-crop-container{padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:.5rem!important;padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls input[type=range]{width:120px!important}#gal-sprite-upload-modal .gal-crop-btn{padding:.375rem .625rem!important;font-size:.8rem!important}#gal-sprite-upload-modal .gal-crop-controls span{font-size:.85rem!important}#gal-sprite-upload-modal #gal-crop-area>p{font-size:.75rem!important;margin:.5rem 0!important}#gal-sprite-upload-modal .gal-input-actions{flex-direction:column!important;gap:.5rem!important;margin-top:.75rem!important;padding-top:.75rem!important;border-top:1px solid #eee!important}#gal-sprite-upload-modal .gal-input-actions button{width:100%!important;min-height:42px!important;padding:.625rem 1rem!important;font-size:.9rem!important;flex:none!important}#gal-sprite-upload-modal .gal-input-actions button i{margin-right:.375rem!important}}@media screen and (max-width: 48rem){#gal-character-sprites-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;border-radius:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:.5rem .75rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2){margin:.375rem .75rem 0!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:nth-child(2){flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-tts-voice-select{flex:1 1 8rem!important;width:auto!important;min-width:8rem!important;padding:.375rem .5rem!important;font-size:.8rem!important}#gal-character-sprites-modal #gal-char-tts-save-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2) small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-section{margin:.375rem .75rem!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important;max-height:40vh!important;overflow-y:auto!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:nth-child(2){gap:.375rem!important;flex-wrap:wrap!important}#gal-character-sprites-modal #gal-char-live2d-section .gal-action-btn{padding:.25rem .5rem!important;font-size:.75rem!important}#gal-character-sprites-modal #gal-char-live2d-section small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-container{margin-top:.5rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-canvas{height:250px!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4){padding:.5rem .75rem!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4)>div:first-child{margin-bottom:.5rem!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:.375rem!important}#gal-character-sprites-modal .gal-sprite-card{border-radius:.25rem!important}#gal-character-sprites-modal .gal-sprite-label{font-size:.7rem!important;padding:.25rem!important}#gal-character-sprites-modal #gal-char-sprites-close:hover{color:#333!important}}@media screen and (max-width: 22.5rem){#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:100%!important}}@media screen and (max-width: 48rem){#gal-unified-panel .gal-config-body,#gal-unified-panel [data-l1-pane]{padding:12px!important}#gal-unified-panel .gal-l1-tab-btn{padding:10px 16px!important;font-size:.9rem!important}#gal-unified-panel .gal-l1-tab-btn span{font-size:.85rem!important}#gal-unified-panel .gal-config-close{width:2.5rem!important;height:2.5rem!important;min-width:2.5rem!important;font-size:1.1rem!important}#gal-unified-panel #gal-main-toggle{padding:10px 24px!important;font-size:1rem!important}#gal-unified-panel .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel .gal-settings-label{flex:1 1 100%!important;font-size:.85rem!important}#gal-unified-panel .gal-settings-control{flex:1 1 100%!important;justify-content:flex-start!important}#gal-unified-panel .gal-settings-control input[type=range]{width:100%!important;flex:1!important;min-width:0!important}#gal-unified-panel .gal-range-value{min-width:40px!important;flex-shrink:0!important}#gal-unified-panel .gal-settings-row:has(.gal-switch){flex-wrap:nowrap!important}#gal-unified-panel .gal-settings-row:has(.gal-switch) .gal-settings-label{flex:1 1 auto!important}#gal-unified-panel #gal-tts-provider,#gal-unified-panel #gal-tts-default-speaker{min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel #gal-gpt-sovits-media-type{min-width:0!important;width:100%!important}#gal-unified-panel #gal-bg-fill-mode{min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config{padding:8px!important;margin-top:8px!important}#gal-unified-panel #gal-gpt-sovits-config input[type=text],#gal-unified-panel #gal-gpt-sovits-config input[type=number]{margin-left:0!important;flex:1!important;min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row>.gal-settings-label{flex:1 1 100%!important}#gal-unified-panel #gal-gpt-sovits-speed{width:100%!important}#gal-unified-panel #gal-gpt-sovits-voices-json{font-size:.75rem!important}#gal-unified-panel #gal-gpt-sovits-config .gal-panel-btn{padding:8px!important;font-size:.85rem!important}#gal-unified-panel #gal-enhanced-config{padding-left:8px!important}#gal-unified-panel #gal-enhanced-config select{width:100%!important;margin-left:0!important}#gal-unified-panel #gal-enhanced-config>div>div{margin-left:8px!important}#gal-unified-panel #gal-enhanced-worldbooks-list{margin-left:8px!important}#gal-unified-panel .gal-enhanced-worldbook-item,#gal-unified-panel #gal-enhanced-config input[type=checkbox]{width:20px!important;height:20px!important}#gal-unified-panel .gal-switch{width:52px!important;height:30px!important;min-width:52px!important}#gal-unified-panel .gal-switch-slider:before{height:24px!important;width:24px!important}#gal-unified-panel .gal-switch input:checked+.gal-switch-slider:before{transform:translate(22px)!important}#gal-unified-panel .gal-bg-source-selector{padding:8px 10px!important;gap:8px!important;flex-wrap:wrap!important}#gal-unified-panel .gal-bg-source-selector .gal-radio-label{font-size:.8rem!important}#gal-unified-panel .gal-imagegen-pills{gap:6px!important;padding:8px 0!important}#gal-unified-panel .gal-pill{padding:6px 12px!important;font-size:.8rem!important}#gal-unified-panel [data-engine-pane]>div{padding:10px!important}#gal-unified-panel [data-engine-pane] input[type=text],#gal-unified-panel [data-engine-pane] input[type=password],#gal-unified-panel [data-engine-pane] textarea,#gal-unified-panel [data-engine-pane] select{max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel .gal-realtime-switch{min-width:3.25rem!important}#gal-unified-panel .gal-settings-divider{margin:10px 0!important}#gal-unified-panel .gal-settings-section-title{font-size:.9rem!important;margin-bottom:8px!important}#gal-unified-panel .gal-asset-header>div:first-child{flex-wrap:wrap!important;gap:8px!important}#gal-unified-panel #gal-pack-dropdown-btn,#gal-unified-panel #gal-render-scope-btn,#gal-unified-panel #gal-export-dropdown-btn,#gal-unified-panel #gal-import-dropdown-btn{padding:4px 8px!important;font-size:.8rem!important}#gal-unified-panel #gal-export-dropdown-btn>span,#gal-unified-panel #gal-import-dropdown-btn>span{display:none!important}#gal-unified-panel .gal-pack-menu,#gal-unified-panel .gal-export-menu,#gal-unified-panel .gal-import-menu{min-width:160px!important}#gal-unified-panel .gal-tab-header{display:flex!important;flex-wrap:nowrap!important;gap:0!important}#gal-unified-panel .gal-tab-btn{padding:8px 4px!important;font-size:.7rem!important;white-space:nowrap!important;flex:1!important;text-align:center!important;justify-content:center!important;gap:2px!important}#gal-unified-panel .gal-tab-btn i{font-size:.8rem!important;margin-right:2px!important}#gal-unified-panel .gal-pane-header{flex-wrap:wrap;gap:8px}#gal-unified-panel .gal-pane-stat{flex:1 1 100%;font-size:.85rem}#gal-unified-panel .gal-pane-actions{flex:1 1 100%;gap:6px}#gal-unified-panel .gal-pane-btn{padding:6px 8px!important;flex:1;justify-content:center;font-size:.75rem!important;gap:4px!important}#gal-unified-panel .gal-pane-btn>i{font-size:.8rem}#gal-prompts-modal{padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal>div>div:first-child{padding:12px 16px!important;border-radius:0!important}#gal-prompts-modal>div>div:nth-child(2){padding:12px!important}#gal-prompts-modal pre{font-size:.75rem!important;padding:8px!important}#gal-prompts-modal>div>div:last-child{padding:10px 12px!important}#gal-prompts-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-asset-header>div:first-child>div:first-child{gap:6px!important}#gal-unified-panel .gal-asset-header>div:first-child>div:last-child{gap:4px!important}#gal-unified-panel .gal-pack-item,#gal-unified-panel .gal-export-item,#gal-unified-panel .gal-import-item{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-character-grid{grid-template-columns:repeat(3,1fr)!important;gap:8px!important}#gal-unified-panel .gal-character-card>div:last-child{padding:6px!important}#gal-unified-panel .gal-character-card>div:last-child>div:first-child{font-size:.75rem!important}#gal-unified-panel .gal-bg-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}#gal-unified-panel .gal-bg-label{padding:6px!important;font-size:.8rem!important}}.gal-popup-modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:var(--gal-z-modal);padding:20px;box-sizing:border-box}.gal-popup-panel{background:var(--SmartThemeFormBg, #fff);color:#2b2e38;border-radius:12px;max-width:700px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px #0000004d}.gal-popup-header{padding:14px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}.gal-popup-title{font-weight:700;font-size:1.1rem;color:#2b2e38!important;text-shadow:none}.gal-popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#666;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background .2s}.gal-popup-close:hover{background:#00000014}.gal-popup-body{padding:20px;overflow-y:auto;flex:1;color:#2b2e38!important;line-height:1.7;text-shadow:none}.gal-popup-body a{color:#1f5fbf}.gal-popup-body *:not([style*=color]){color:inherit!important}@media screen and (max-width: 48rem){.gal-input-title{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;transform:none!important;gap:.5rem!important;padding:.5rem 0!important}.gal-input-title>span{transform:none!important;flex:1!important;min-width:0!important;display:inline!important;font-size:1rem!important}.gal-input-title>button,.gal-input-title .gal-close-btn{flex-shrink:0!important;transform:none!important}.gal-input-modal .gal-input-box:not(.gal-modal-layout-fixed){width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important;border-radius:0!important;overflow-y:auto!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;padding:0!important;border-radius:0!important;overflow:hidden!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-scroll-body{padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-title,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-header,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-actions,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-actions{padding-left:.75rem!important;padding-right:.75rem!important;margin-bottom:0!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-actions,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-actions{padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-scroll-body{margin-bottom:0!important}.gal-input-modal .gal-input-box>.gal-input-title{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div:last-child{margin-bottom:0!important}.gal-input-modal .gal-input-box label{margin-bottom:.25rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box input[type=text],.gal-input-modal .gal-input-box select,.gal-input-modal .gal-input-box textarea{padding:.4rem .5rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box small{font-size:.7rem!important;margin-top:.125rem!important}.gal-input-actions{margin-top:.5rem!important;gap:.375rem!important}.gal-input-actions button{min-height:36px!important;font-size:.85rem!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}.gal-popup-header{padding:10px 14px!important}.gal-popup-title{font-size:1rem!important}.gal-popup-body{padding:12px!important}#gal-live2d-settings-modal{padding:0!important}#gal-live2d-settings-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-live2d-settings-modal>div>div:first-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:first-child span{font-size:.95rem!important}#gal-live2d-settings-modal .gal-settings-tab{padding:8px 4px!important;font-size:.85rem!important}#gal-live2d-settings-modal .gal-settings-panel{padding:0!important}#gal-live2d-settings-modal>div>div:nth-child(3){padding:12px!important}#gal-live2d-settings-modal .gal-settings-panel div[style*=grid-template-columns]{grid-template-columns:1fr!important;gap:10px!important}#gal-live2d-settings-modal .gal-mapping-row{flex-wrap:wrap!important;gap:4px!important;padding:6px 0!important}#gal-live2d-settings-modal .gal-mapping-row span:first-child{min-width:50px!important;font-size:.8rem!important}#gal-live2d-settings-modal .gal-mapping-row select{flex:1 1 40%!important;min-width:0!important;font-size:.8rem!important;padding:4px!important}#gal-live2d-settings-modal>div>div:last-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-pack-manager-modal .gal-input-box{width:100%!important}#gal-pack-manager-modal .gal-pack-row{flex-wrap:wrap!important;gap:8px!important}#gal-pack-manager-modal .gal-pack-row>div:last-child{width:100%!important;justify-content:flex-end!important}#gal-transfer-modal .gal-input-box{width:100%!important}#gal-banana-appearance-picker .gal-input-box{max-width:none!important;width:100%!important;height:100%!important;max-height:none!important;border-radius:0!important}#gal-banana-appearance-picker .gal-input-title{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-box{padding:0!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-char-live2d-section>div:nth-child(2){flex-wrap:wrap!important;gap:6px!important}#gal-char-live2d-section .gal-action-btn{padding:4px 8px!important;font-size:.75rem!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]{margin:0 12px!important;padding:10px!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]>div:last-child{flex-direction:column!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))!important;gap:8px!important}#gal-sprite-upload-modal .gal-input-box{padding:12px!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:8px!important}#gal-sprite-upload-modal .gal-input-box>div:nth-child(2){flex-direction:column!important;gap:8px!important}#gal-sprite-upload-modal [style*="linear-gradient(135deg, #f5f7fa"]{padding:10px!important;margin-bottom:10px!important}#gal-sprite-upload-modal .gal-crop-container{margin-bottom:8px!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:6px!important}#gal-expression-manager-modal .gal-input-box{padding:12px!important}#gal-expression-manager-modal .gal-tag{padding:4px 8px!important;font-size:.75rem!important}#gal-expression-manager-modal .gal-input-box>div{margin-bottom:10px!important}#gal-expression-manager-modal .gal-input-box label{margin-bottom:4px!important;font-size:.85rem!important}#gal-expression-manager-modal .gal-input-box>div:last-child>div:last-child{gap:6px!important}#gal-expression-manager-modal #gal-new-expression-input{padding:8px 10px!important;font-size:.85rem!important;min-width:0!important}#gal-expression-manager-modal #gal-add-expression-btn{padding:8px 12px!important;font-size:.85rem!important;white-space:nowrap!important;flex-shrink:0!important}#gal-appearance-prompt-modal .gal-input-box{padding:12px!important}#gal-appearance-prompt-modal textarea{height:100px!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){#gal-live2d-settings-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important;padding:0!important}#gal-live2d-settings-modal>div{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}}#gal-asset-manager-modal .gal-tab-btn,#gal-live2d-settings-modal,#gal-live2d-settings-modal>div,#gal-bg-upload-modal,#gal-bg-upload-modal .gal-input-box,#gal-batch-bg-upload-modal,#gal-batch-bg-upload-modal .gal-input-box{opacity:1!important;filter:none!important}#gal-asset-manager-modal .gal-tab-btn{color:#4b5563!important;font-weight:700!important}#gal-asset-manager-modal .gal-tab-btn.active{color:var(--gal-accent)!important}#gal-live2d-settings-modal .gal-settings-tab{color:#5b6472!important;opacity:1!important}#gal-live2d-settings-modal .gal-settings-tab.active{color:var(--gal-accent)!important}#gal-live2d-settings-modal .gal-settings-panel,#gal-live2d-settings-modal .gal-settings-panel h4,#gal-live2d-settings-modal .gal-settings-panel p,#gal-live2d-settings-modal .gal-settings-panel label,#gal-live2d-settings-modal .gal-settings-panel span{color:#2b2e38!important;opacity:1!important}#gal-live2d-settings-modal .gal-settings-panel input[type=number],#gal-live2d-settings-modal .gal-settings-panel select,#gal-live2d-settings-modal .gal-settings-panel select option{color:#1f2937!important;background:#fff!important}#gal-live2d-settings-modal .gal-settings-panel button:not(:disabled){color:#2b2e38!important;opacity:1!important}#gal-live2d-settings-modal #gal-live2d-start-position-edit,#gal-live2d-settings-modal #gal-live2d-auto-match,#gal-live2d-settings-modal #gal-live2d-settings-save{color:#fff!important}#gal-live2d-settings-modal .gal-settings-panel button:disabled{opacity:.55!important;color:#6b7280!important}#gal-bg-upload-modal .gal-input-box,#gal-batch-bg-upload-modal .gal-input-box{color:#1f2937!important}#gal-bg-upload-modal .gal-upload-tab,#gal-batch-bg-upload-modal .gal-upload-tab{color:#6b7280!important;opacity:1!important}#gal-bg-upload-modal .gal-upload-tab.active,#gal-batch-bg-upload-modal .gal-upload-tab.active{color:#1f2937!important;font-weight:700!important}#gal-bg-upload-modal label,#gal-bg-upload-modal small,#gal-bg-upload-modal p,#gal-batch-bg-upload-modal label,#gal-batch-bg-upload-modal small,#gal-batch-bg-upload-modal p{color:#4b5563!important;opacity:1!important}#gal-bg-upload-modal input,#gal-bg-upload-modal textarea,#gal-bg-upload-modal select,#gal-batch-bg-upload-modal input,#gal-batch-bg-upload-modal textarea,#gal-batch-bg-upload-modal select{color:#1f2937!important;background:#fff!important;opacity:1!important}#gal-bg-upload-modal input::placeholder,#gal-bg-upload-modal textarea::placeholder,#gal-batch-bg-upload-modal input::placeholder,#gal-batch-bg-upload-modal textarea::placeholder{color:#9ca3af!important;opacity:1!important}#gal-bg-upload-modal button:not(:disabled),#gal-batch-bg-upload-modal button:not(:disabled){opacity:1!important}#gal-bg-upload-modal .gal-action-btn.primary:not(:disabled),#gal-batch-bg-upload-modal .gal-action-btn.primary:not(:disabled){color:#fff!important}#gal-bg-upload-modal button:disabled,#gal-batch-bg-upload-modal button:disabled{opacity:.55!important;color:#6b7280!important}#gal-bg-upload-modal #gal-bg-close-x,#gal-batch-bg-upload-modal #gal-batch-bg-close-x{color:#4b5563!important}#gal-unified-panel .gal-l1-tab-header{background:linear-gradient(135deg,#00000040,#0000008c),var(--SmartThemeBotMesBlurTintColor, #1a1a2e)!important}#gal-unified-panel .gal-l1-tab-btn{color:#ffffffd1!important}#gal-unified-panel .gal-l1-tab-btn i{color:currentColor!important;opacity:1!important}#gal-unified-panel .gal-l1-tab-btn:hover{color:#fffffff2!important}#gal-unified-panel .gal-l1-tab-btn.active{color:var(--gal-accent)!important}@media screen and (max-width: 48rem){.gal-sprite-toggle,.gal-status-popup-trigger{right:.375rem!important;transform:scale(max(var(--ui-scale),.88))!important;transform-origin:top right!important;z-index:91!important}.gal-sprite-toggle{top:-.9rem!important;width:2rem!important;height:2rem!important}.gal-location-popup-trigger{top:1.25rem!important;width:2rem!important;height:2rem!important}.gal-time-popup-trigger{top:3.55rem!important;width:2rem!important;height:2rem!important}.gal-status-popup-icon{font-size:.95rem!important}}#gal-global-overlay .gal-special-cg-overlay{position:absolute;inset:0;z-index:70;display:none;align-items:center;justify-content:center;background:#06080cd1;backdrop-filter:blur(2px)}#gal-global-overlay .gal-special-cg-overlay.active{display:flex!important}#gal-global-overlay .gal-special-cg-overlay-image{width:min(92%,72rem);max-height:88%;object-fit:contain;border-radius:.5rem;box-shadow:0 .75rem 2.5rem #00000073;border:.0625rem solid rgba(255,255,255,.2)}#gal-global-overlay .gal-special-cg-overlay-close{position:absolute;top:.875rem;right:.875rem;width:2.25rem;height:2.25rem;border:.0625rem solid rgba(255,255,255,.25);border-radius:999px;background:#0c1018b8;color:#f5f7fa;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}#gal-global-overlay .gal-special-cg-overlay-close:hover{background:#161c28e6}#gal-unified-panel .gal-special-cg-card,#gal-unified-panel .gal-special-cg-rules-panel{background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border-color:var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important}#gal-unified-panel .gal-special-cg-name,#gal-unified-panel .gal-special-cg-id,#gal-unified-panel .gal-special-cg-rules-hint,#gal-unified-panel .gal-special-cg-rules-header>span,#gal-unified-panel .gal-special-cg-master-switch,#gal-unified-panel .gal-special-cg-rule-enabled-wrap,#gal-unified-panel .gal-special-cg-empty-hint{color:var(--SmartThemeBodyColor, #f5f7fa)!important}#gal-unified-panel .gal-special-cg-id{opacity:.86}#gal-unified-panel .gal-special-cg-rules-hint code{color:var(--SmartThemeEmColor, #9ac7ff)!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text],#gal-unified-panel .gal-special-cg-rule-row input[type=number],#gal-unified-panel .gal-special-cg-rule-row textarea,#gal-unified-panel .gal-special-cg-rule-row select,#gal-special-cg-upload-modal input[type=text],#gal-special-cg-upload-modal input[type=number],#gal-special-cg-upload-modal textarea,#gal-special-cg-upload-modal select,#gal-batch-special-cg-upload-modal input[type=text],#gal-batch-special-cg-upload-modal input[type=number],#gal-batch-special-cg-upload-modal textarea,#gal-batch-special-cg-upload-modal select{color:var(--SmartThemeBodyColor, #f5f7fa)!important;background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text]::placeholder,#gal-unified-panel .gal-special-cg-rule-row input[type=number]::placeholder,#gal-unified-panel .gal-special-cg-rule-row textarea::placeholder,#gal-special-cg-upload-modal input[type=text]::placeholder,#gal-special-cg-upload-modal input[type=number]::placeholder,#gal-special-cg-upload-modal textarea::placeholder,#gal-batch-special-cg-upload-modal input[type=text]::placeholder,#gal-batch-special-cg-upload-modal input[type=number]::placeholder,#gal-batch-special-cg-upload-modal textarea::placeholder{color:var(--SmartThemeEmColor, #9ac7ff)!important;opacity:.82!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text]:focus,#gal-unified-panel .gal-special-cg-rule-row input[type=number]:focus,#gal-unified-panel .gal-special-cg-rule-row textarea:focus,#gal-unified-panel .gal-special-cg-rule-row select:focus,#gal-special-cg-upload-modal input[type=text]:focus,#gal-special-cg-upload-modal input[type=number]:focus,#gal-special-cg-upload-modal textarea:focus,#gal-special-cg-upload-modal select:focus,#gal-batch-special-cg-upload-modal input[type=text]:focus,#gal-batch-special-cg-upload-modal input[type=number]:focus,#gal-batch-special-cg-upload-modal textarea:focus,#gal-batch-special-cg-upload-modal select:focus{outline:none!important;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 .125rem #9ac7ff59!important}#gal-timeline-modal{z-index:var(--gal-z-modal-critical, 2147483000)!important;padding:1rem!important;align-items:stretch!important;justify-content:stretch!important;background:#07090eb8!important;backdrop-filter:blur(10px)}#gal-timeline-modal .gal-timeline-shell{width:min(96vw,92rem);height:min(92vh,56rem);margin:auto;display:flex;flex-direction:column;overflow:hidden;border-radius:1rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:linear-gradient(180deg,rgba(25,30,40,.96) 0%,var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92)) 100%);box-shadow:0 1rem 3rem #00000073;color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-header,#gal-timeline-modal .gal-timeline-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.9rem 1rem;border-bottom:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18))}#gal-timeline-modal .gal-timeline-title,#gal-timeline-modal .gal-timeline-header-actions,#gal-timeline-modal .gal-timeline-search-wrap,#gal-timeline-modal .gal-timeline-drawer-title-row,#gal-timeline-modal .gal-timeline-drawer-actions{display:flex;align-items:center;gap:.65rem}#gal-timeline-modal .gal-timeline-title{font-size:1.05rem;font-weight:700;color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-header-actions{margin-left:auto}#gal-timeline-modal .gal-timeline-header-btn,#gal-timeline-modal .gal-timeline-close,#gal-timeline-modal .gal-timeline-action-btn,#gal-timeline-modal .gal-timeline-session-btn{border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#ffffff0f;color:var(--SmartThemeBodyColor, #f5f7fa);border-radius:.75rem;cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .18s ease,box-shadow .18s ease}#gal-timeline-modal .gal-timeline-header-btn,#gal-timeline-modal .gal-timeline-action-btn{min-height:2.5rem;padding:.55rem .85rem;display:inline-flex;align-items:center;justify-content:center;gap:.45rem;font-size:.92rem;font-weight:600}#gal-timeline-modal .gal-timeline-close{width:2.5rem;height:2.5rem;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}#gal-timeline-modal .gal-timeline-header-btn:hover,#gal-timeline-modal .gal-timeline-close:hover,#gal-timeline-modal .gal-timeline-action-btn:hover,#gal-timeline-modal .gal-timeline-session-btn:hover{background:#9ac7ff24;border-color:var(--SmartThemeEmColor, #9ac7ff);transform:translateY(-.0625rem)}#gal-timeline-modal .gal-timeline-header-btn:focus,#gal-timeline-modal .gal-timeline-close:focus,#gal-timeline-modal .gal-timeline-action-btn:focus,#gal-timeline-modal .gal-timeline-session-btn:focus,#gal-timeline-modal .gal-timeline-search-input:focus{outline:none;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 .125rem #9ac7ff59}#gal-timeline-modal .gal-timeline-action-btn.primary{background:linear-gradient(135deg,#4997ffeb,#2f61ffeb);border-color:#c6deffb3;color:#fff}#gal-timeline-modal .gal-timeline-toolbar{gap:1rem}#gal-timeline-modal .gal-timeline-search-wrap{flex:1 1 auto;min-width:0;padding:0 .85rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#0a0e158a}#gal-timeline-modal .gal-timeline-search-wrap>i,#gal-timeline-modal .gal-timeline-status,#gal-timeline-modal .gal-timeline-preview-label,#gal-timeline-modal .gal-timeline-session-meta,#gal-timeline-modal .gal-timeline-drawer-hint,#gal-timeline-modal .gal-timeline-drawer-empty{color:var(--SmartThemeEmColor, #9ac7ff)}#gal-timeline-modal .gal-timeline-zoom-wrap{flex:0 0 auto;display:flex;align-items:center;gap:.55rem;min-width:18rem;padding:.4rem .65rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#0a0e158a}#gal-timeline-modal .gal-timeline-zoom-btn,#gal-timeline-modal .gal-timeline-zoom-value{flex:0 0 auto;min-width:2.25rem;height:2.25rem;border-radius:.7rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#ffffff0f;color:var(--SmartThemeBodyColor, #f5f7fa);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}#gal-timeline-modal .gal-timeline-zoom-value{min-width:4.3rem;padding:0 .7rem;font-weight:600}#gal-timeline-modal .gal-timeline-zoom-btn:hover,#gal-timeline-modal .gal-timeline-zoom-value:hover{background:#9ac7ff24;border-color:var(--SmartThemeEmColor, #9ac7ff)}#gal-timeline-modal .gal-timeline-zoom-btn:focus,#gal-timeline-modal .gal-timeline-zoom-value:focus,#gal-timeline-modal .gal-timeline-zoom-range:focus{outline:none;border-color:var(--SmartThemeEmColor, #9ac7ff);box-shadow:0 0 0 .125rem #9ac7ff59}#gal-timeline-modal .gal-timeline-zoom-range{flex:1 1 auto;min-width:8rem;accent-color:var(--SmartThemeEmColor, #9ac7ff);cursor:pointer}#gal-timeline-modal .gal-timeline-zoom-range::-webkit-slider-runnable-track{height:.35rem;border-radius:999px;background:linear-gradient(90deg,#9ac7ffe6,#4a6fffe6)}#gal-timeline-modal .gal-timeline-zoom-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:1rem;height:1rem;margin-top:-.325rem;border-radius:50%;border:.125rem solid rgba(255,255,255,.9);background:var(--SmartThemeBodyColor, #f5f7fa);box-shadow:0 .125rem .5rem #00000059}#gal-timeline-modal .gal-timeline-zoom-range::-moz-range-track{height:.35rem;border:none;border-radius:999px;background:linear-gradient(90deg,#9ac7ffe6,#4a6fffe6)}#gal-timeline-modal .gal-timeline-zoom-range::-moz-range-thumb{width:1rem;height:1rem;border:.125rem solid rgba(255,255,255,.9);border-radius:50%;background:var(--SmartThemeBodyColor, #f5f7fa);box-shadow:0 .125rem .5rem #00000059}#gal-timeline-modal .gal-timeline-search-input{width:100%;min-width:0;border:none!important;background:transparent!important;color:var(--SmartThemeBodyColor, #f5f7fa)!important;padding:.78rem 0!important;font-size:.95rem!important}#gal-timeline-modal .gal-timeline-search-input::placeholder{color:var(--SmartThemeEmColor, #9ac7ff)!important;opacity:.82!important}#gal-timeline-modal .gal-timeline-status{flex:0 0 auto;font-size:.85rem;white-space:nowrap}#gal-timeline-modal .gal-timeline-body{min-height:0;flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.9fr) minmax(18rem,.95fr)}#gal-timeline-modal .gal-timeline-graph-panel,#gal-timeline-modal .gal-timeline-drawer{min-height:0}#gal-timeline-modal .gal-timeline-graph-panel{position:relative;border-right:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18));background:radial-gradient(circle at top,#6084bc33,#0b0f16f5 62%)}#gal-timeline-modal #gal-timeline-graph,#gal-timeline-modal #gal-timeline-empty{width:100%;height:100%}#gal-timeline-modal #gal-timeline-empty{display:flex;align-items:center;justify-content:center;padding:2rem}#gal-timeline-modal .gal-timeline-empty-inner,#gal-timeline-modal .gal-timeline-drawer-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.65rem;text-align:center}#gal-timeline-modal .gal-timeline-drawer{overflow:auto;padding:1rem;background:#0b0f16ad}#gal-timeline-modal .gal-timeline-drawer-header,#gal-timeline-modal .gal-timeline-drawer-body{display:flex;flex-direction:column;gap:.85rem}#gal-timeline-modal .gal-timeline-drawer-title-row{justify-content:space-between;flex-wrap:wrap}#gal-timeline-modal .gal-timeline-node-type,#gal-timeline-modal .gal-timeline-chip{display:inline-flex;align-items:center;min-height:1.8rem;padding:.2rem .6rem;border-radius:999px;border:.0625rem solid rgba(154,199,255,.3);background:#9ac7ff1f;color:var(--SmartThemeBodyColor, #f5f7fa);font-size:.8rem}#gal-timeline-modal .gal-timeline-chip.checkpoint{border-color:#ffd16666;background:#ffd1661f}#gal-timeline-modal .gal-timeline-node-depth,#gal-timeline-modal .gal-timeline-node-label,#gal-timeline-modal .gal-timeline-preview,#gal-timeline-modal .gal-timeline-session-file{color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-node-label{font-size:1rem;font-weight:700;line-height:1.45}#gal-timeline-modal .gal-timeline-checkpoints{display:flex;flex-wrap:wrap;gap:.5rem}#gal-timeline-modal .gal-timeline-preview{padding:.9rem 1rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .22));background:#ffffff0a;line-height:1.6;white-space:pre-wrap;word-break:break-word}#gal-timeline-modal .gal-timeline-session-list{display:flex;flex-direction:column;gap:.55rem}#gal-timeline-modal .gal-timeline-session-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.75rem;text-align:left;padding:.7rem .85rem}#gal-timeline-modal .gal-timeline-session-btn.active{border-color:var(--SmartThemeEmColor, #9ac7ff);background:#9ac7ff29}#gal-timeline-modal .gal-timeline-session-btn.is-current{box-shadow:inset 0 0 0 .0625rem #ff5d9e66}#gal-timeline-modal .gal-timeline-session-file{flex:1 1 auto;min-width:0;font-weight:600;word-break:break-all}#gal-timeline-modal .gal-timeline-session-meta{flex:0 0 auto;font-size:.8rem}#gal-timeline-modal .gal-timeline-drawer-actions{flex-wrap:wrap}#gal-timeline-modal .gal-timeline-drawer-actions>button{flex:1 1 10rem}@media (max-width: 960px){#gal-timeline-modal{padding:0!important}#gal-timeline-modal .gal-timeline-shell{width:100vw;height:100vh;border-radius:0}#gal-timeline-modal .gal-timeline-toolbar,#gal-timeline-modal .gal-timeline-header{flex-wrap:wrap}#gal-timeline-modal .gal-timeline-zoom-wrap{width:100%;min-width:0}#gal-timeline-modal .gal-timeline-status{width:100%;white-space:normal}#gal-timeline-modal .gal-timeline-body{grid-template-columns:1fr;grid-template-rows:minmax(18rem,1fr) auto}#gal-timeline-modal .gal-timeline-graph-panel{min-height:18rem;border-right:none;border-bottom:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18))}}
 `;
     const skinCss = `
 /* === 全局皮肤重置 === */
-#gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-name-badge,
-#gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-name-badge span,
+#gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-twilight) .gal-name-badge,
+#gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-twilight) .gal-name-badge span,
 #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-action-btn,
 #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-action-btn span,
 #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-action-btn i,
@@ -29211,12 +30031,3726 @@ ${normalizedSource}`;
     min-width: calc(8.75rem * var(--ui-scale, 1)) !important;
 }
 /* 所有皮肤名牌+文字缩放适配 */
-#gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-name-badge {
+#gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-twilight) .gal-name-badge {
     transform: scale(var(--ui-scale, 1)) !important;
     transform-origin: left top !important;
 }
 #gal-global-overlay[class*="skin-"]:not(.skin-default) .gal-dialog-text {
     font-size: calc(1.25rem * var(--ui-scale, 1) * var(--font-scale, 1)) !important;
+}
+
+/* =========================================================
+   0. 薄暮 (Twilight) — Stitch 还原版
+   视觉真源:
+   Desktop VN - Inline Choice Indicator v5
+   Mobile VN - Refined Controls v13
+   ========================================================= */
+#gal-global-overlay.skin-twilight {
+    --twilight-glass-border: rgba(255, 255, 255, 0.16);
+    --twilight-glass-fill: rgba(16, 18, 28, 0.42);
+    --twilight-glass-strong: rgba(12, 14, 22, 0.76);
+    --twilight-text-main: rgba(245, 240, 232, 0.96);
+    --twilight-text-muted: rgba(236, 228, 216, 0.68);
+    --twilight-accent: #d7b189;
+    --twilight-accent-soft: rgba(215, 177, 137, 0.24);
+    --twilight-shadow: 0 18px 52px rgba(0, 0, 0, 0.28);
+    --twilight-header-height: 52px;
+    --twilight-footer-height: 46px;
+    --twilight-headline: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Be Vietnam Pro", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-label: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-name-badge-height-scale: 0.7;
+    font-family: var(--twilight-body) !important;
+    color: var(--twilight-text-main) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-game-container {
+    position: relative !important;
+    overflow: hidden !important;
+    border-radius: 20px !important;
+    background: transparent !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-layer-bg {
+    position: absolute !important;
+    inset: 0;
+    overflow: hidden !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bg-base,
+#gal-global-overlay.skin-twilight .gal-bg-front {
+    position: absolute !important;
+    inset: 0;
+}
+
+#gal-global-overlay.skin-twilight .gal-layer-character,
+#gal-global-overlay.skin-twilight .gal-layer-effect-bg,
+#gal-global-overlay.skin-twilight .gal-layer-effect-fg,
+#gal-global-overlay.skin-twilight .gal-char-slot:empty {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-game-container.gal-twilight-shell {
+    position: relative !important;
+    overflow: hidden !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-game-container.gal-twilight-shell::before {
+    content: none !important;
+    display: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-fullscreen-btn,
+#gal-global-overlay.skin-twilight .gal-bgm-widget {
+    display: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-mobile-menu {
+    display: none;
+    position: absolute;
+    min-width: 10rem;
+    padding: 0.5rem;
+    gap: 0.4rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    background: rgba(12, 14, 22, 0.88);
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    z-index: 30;
+    pointer-events: auto;
+}
+
+#gal-global-overlay.skin-twilight .gal-mobile-menu.active {
+    display: flex;
+}
+
+#gal-global-overlay.skin-twilight .gal-mobile-menu .gal-menu-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-height: 2.1rem;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(245, 239, 232, 0.9);
+    font-family: var(--twilight-label) !important;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    box-shadow: none;
+}
+
+#gal-global-overlay.skin-twilight .gal-mobile-menu .gal-menu-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 247, 238, 0.98);
+    transform: none;
+    box-shadow: none;
+}
+
+#gal-global-overlay.skin-twilight .gal-mobile-menu .gal-menu-btn i {
+    width: 1rem;
+    color: rgba(255, 244, 232, 0.82);
+    text-align: center;
+}
+
+#gal-global-overlay.skin-twilight .gal-game-content {
+    position: relative;
+    z-index: 3;
+}
+
+#gal-global-overlay.skin-twilight .gal-dialog-layer {
+    position: relative;
+    z-index: 6;
+}
+
+#gal-global-overlay.skin-twilight .gal-status-bar-container {
+    position: relative;
+    z-index: 8;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-content {
+    position: relative;
+    min-height: 100%;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-scrim {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(255, 211, 169, 0.16) 0%, rgba(255, 211, 169, 0) 55%),
+        linear-gradient(180deg, rgba(8, 10, 16, 0.2) 0%, rgba(8, 10, 16, 0.04) 24%, rgba(8, 10, 16, 0.08) 56%, rgba(6, 8, 14, 0.38) 100%);
+    pointer-events: none;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    min-height: var(--twilight-header-height);
+    padding: 10px 26px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: linear-gradient(180deg, rgba(10, 12, 18, 0.6) 0%, rgba(10, 12, 18, 0.22) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.16);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+#gal-global-overlay.skin-twilight .gal-status-bar-container.gal-twilight-header {
+    top: 0 !important;
+    right: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+    z-index: 8 !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    transform-origin: left top !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-brandline {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-brand {
+    font-family: var(--twilight-headline) !important;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: rgba(255, 244, 232, 0.92);
+    white-space: nowrap;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-divider {
+    width: 1px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.12);
+    flex: 0 0 auto;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-meta-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-meta-btn,
+#gal-global-overlay.skin-twilight .gal-status-popup-trigger,
+#gal-global-overlay.skin-twilight .gal-sprite-toggle,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+    position: static !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-meta-btn {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 8px;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    font-family: var(--twilight-headline) !important;
+    font-size: 0.68rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-meta-btn i {
+    display: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-location-bar {
+    color: rgba(255, 244, 232, 0.92) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-time-bar {
+    color: rgba(255, 244, 232, 0.58) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-location-text,
+#gal-global-overlay.skin-twilight .gal-time-text {
+    white-space: nowrap;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+    display: inline-flex !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: rgba(245, 239, 232, 0.84) !important;
+    cursor: pointer !important;
+    transform: none !important;
+    transition:
+        background-color 140ms ease,
+        box-shadow 140ms ease,
+        color 140ms ease,
+        opacity 140ms ease !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-twilight .gal-eye-icon,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(249, 241, 230, 0.88) !important;
+    opacity: 0.92 !important;
+    text-shadow: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(255, 255, 255, 0.12) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 244, 232, 0.98) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover .gal-status-popup-icon,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover .gal-eye-icon,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover i,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible i {
+    color: rgba(255, 250, 242, 1) !important;
+    opacity: 1 !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-twilight .gal-eye-icon,
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    font-size: 0.82rem !important;
+    line-height: 1 !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle span {
+    display: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-dialog-layer {
+    position: absolute !important;
+    left: 64px;
+    right: 64px;
+    bottom: calc(var(--twilight-footer-height) + 22px);
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    transform: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-dialog-topline {
+    position: absolute;
+    top: -32px;
+    left: 28px;
+    right: 28px;
+    z-index: 4;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 46px;
+    min-width: 0;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-mobile-controls {
+    display: inline-flex !important;
+    position: static !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    margin-left: auto !important;
+    transform: none !important;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 12px !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 14px !important;
+    margin-bottom: 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-bottom: none !important;
+    border-radius: 11px 11px 0 0 !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%),
+        rgba(58, 64, 78, 0.24) !important;
+    box-shadow:
+        0 -2px 8px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    color: rgba(248, 242, 234, 0.96) !important;
+    font-size: 0.64rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    gap: 5px !important;
+    transition:
+        background-color 140ms ease,
+        color 140ms ease,
+        box-shadow 140ms ease !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action + .gal-twilight-mobile-action {
+    border-left-width: 1px !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action i {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    color: currentColor !important;
+    font-size: 0.72rem !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action .gal-btn-text,
+#gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action span:last-child {
+    display: inline !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 100%),
+        rgba(66, 72, 88, 0.34) !important;
+    color: rgba(255, 250, 244, 1) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-name-badge {
+    position: absolute !important;
+    inset: auto !important;
+    left: 4px !important;
+    top: 16px !important;
+    align-self: flex-start;
+    min-width: 78px;
+    max-width: min(22vw, 132px);
+    min-height: 36px;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 1px solid rgba(186, 155, 112, 0.34) !important;
+    border-radius: 14px !important;
+    background:
+        linear-gradient(180deg, rgba(255, 251, 245, 0.98) 0%, rgba(244, 236, 223, 0.96) 100%) !important;
+    box-shadow:
+        0 14px 30px rgba(41, 29, 17, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.82) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transform: translate(0, -2px) skew(-10deg) scaleY(var(--twilight-name-badge-height-scale, 0.7)) !important;
+    transform-origin: center center !important;
+    overflow: visible !important;
+    z-index: 5;
+}
+
+#gal-global-overlay.skin-twilight .gal-name-badge span {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0 18px 0 16px !important;
+    border-radius: inherit !important;
+    background: transparent !important;
+    color: #7b5d33 !important;
+    font-family: var(--twilight-headline) !important;
+    font-size: 0.82rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    box-shadow: none !important;
+    transform: scaleY(calc(1 / var(--twilight-name-badge-height-scale, 0.7))) skew(12deg) !important;
+    transform-origin: center center !important;
+    text-shadow: none !important;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#gal-global-overlay.skin-twilight .gal-text-panel {
+    position: relative !important;
+    min-height: 146px;
+    width: 100% !important;
+    overflow: hidden !important;
+    padding: 54px 40px 30px !important;
+    border-radius: 18px !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0.008) 100%),
+        rgba(18, 19, 26, var(--panel-opacity, 0.7)) !important;
+    box-shadow:
+        0 18px 36px rgba(0, 0, 0, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    cursor: pointer !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-text-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 34%),
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0) 38%);
+    opacity: 0.12;
+    pointer-events: none;
+}
+
+#gal-global-overlay.skin-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.032) 0%, rgba(255, 255, 255, 0.01) 100%),
+        rgba(20, 21, 29, var(--panel-opacity, 0.7)) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-dialog-text {
+    display: block !important;
+    overflow: hidden !important;
+    color: var(--twilight-text-main) !important;
+    font-family: var(--twilight-body) !important;
+    font-size: 1.04rem !important;
+    font-weight: 400 !important;
+    line-height: 1.84 !important;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18) !important;
+    position: relative;
+    z-index: 1;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator {
+    position: absolute;
+    right: 22px;
+    bottom: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    color: rgba(255, 245, 236, 0.78);
+    opacity: 0.88;
+    pointer-events: none;
+    z-index: 2;
+    animation: galTwilightNextPulse 1.6s ease-in-out infinite;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(238, 224, 201, 0.82);
+    animation: none;
+}
+
+#gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator i {
+    font-size: 0.72rem !important;
+    line-height: 1 !important;
+    color: inherit !important;
+}
+
+@keyframes galTwilightNextPulse {
+    0%, 100% {
+        transform: translateY(0);
+        opacity: 0.62;
+    }
+    50% {
+        transform: translateY(2px);
+        opacity: 1;
+    }
+}
+
+#gal-global-overlay.skin-twilight .gal-generating-indicator {
+    display: none !important;
+    margin-top: 14px !important;
+    padding: 10px 14px !important;
+    border-radius: 999px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+    position: relative;
+    z-index: 1;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    gap: 10px;
+    color: rgba(245, 239, 232, 0.82) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-generating-indicator.active {
+    display: inline-flex !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-progress-container {
+    display: block !important;
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+    height: 4px !important;
+    opacity: 1 !important;
+    z-index: 100 !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bottom-toolbar {
+    position: absolute !important;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    min-height: var(--twilight-footer-height);
+    display: flex !important;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 6px 24px 8px !important;
+    background: linear-gradient(180deg, rgba(10, 12, 18, 0.12) 0%, rgba(10, 12, 18, 0.74) 100%) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.18) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+#gal-global-overlay.skin-twilight .gal-footer-btn,
+#gal-global-overlay.skin-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-twilight .gal-action-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 26px !important;
+    min-height: 26px !important;
+    min-width: 0 !important;
+    padding: 0 8px !important;
+    border-radius: 999px !important;
+    border: 1px solid transparent !important;
+    background: transparent !important;
+    color: rgba(245, 239, 232, 0.68) !important;
+    font-family: var(--twilight-headline) !important;
+    font-size: 0.58rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    box-shadow: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-footer-btn i,
+#gal-global-overlay.skin-twilight .gal-pending-choices-btn i,
+#gal-global-overlay.skin-twilight .gal-action-btn i {
+    color: currentColor !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-twilight .gal-action-btn:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: rgba(255, 244, 232, 0.92) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-pending-choices-btn.show {
+    background: rgba(215, 177, 137, 0.12) !important;
+    border-color: rgba(215, 177, 137, 0.22) !important;
+    color: #f3e5d4 !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bottom-toolbar .gal-footer-btn,
+#gal-global-overlay.skin-twilight .gal-bottom-toolbar .gal-pending-choices-btn {
+    width: auto !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bottom-toolbar .gal-btn-text {
+    display: inline !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bottom-toolbar i {
+    display: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    padding: 0 14px !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 241, 232, 0.96) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-footer-btn-next.gal-twilight-mobile-next {
+    display: none !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-progress-bar {
+    background: linear-gradient(90deg, rgba(232, 192, 145, 0.96) 0%, rgba(255, 224, 188, 0.92) 100%) !important;
+    box-shadow: 0 0 20px rgba(231, 190, 143, 0.35) !important;
+}
+
+#gal-layer-choices.skin-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(248, 208, 168, 0.22) 0%, rgba(248, 208, 168, 0) 34%),
+      linear-gradient(180deg, rgba(8, 10, 17, 0.72) 0%, rgba(4, 6, 12, 0.9) 100%) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+#gal-layer-choices.skin-twilight .gal-choices-title {
+    color: rgba(246, 239, 231, 0.94) !important;
+    font-family: "Cormorant Garamond", "Times New Roman", "Noto Serif SC", serif !important;
+    letter-spacing: 0.18em;
+}
+
+#gal-layer-choices.skin-twilight .gal-choices-hint {
+    color: rgba(236, 228, 216, 0.58) !important;
+    letter-spacing: 0.08em;
+}
+
+#gal-layer-choices.skin-twilight .gal-choice-card {
+    border: 1px solid rgba(255,255,255,0.14) !important;
+    border-radius: 22px !important;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%),
+      linear-gradient(180deg, rgba(18, 19, 30, 0.7) 0%, rgba(12, 14, 22, 0.84) 100%) !important;
+    color: rgba(247, 240, 232, 0.94) !important;
+    box-shadow: 0 22px 44px rgba(0, 0, 0, 0.18) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+#gal-layer-choices.skin-twilight .gal-choice-card:hover {
+    border-color: rgba(215, 177, 137, 0.42) !important;
+    background:
+      linear-gradient(180deg, rgba(241, 212, 179, 0.18) 0%, rgba(255,255,255,0.06) 100%),
+      linear-gradient(180deg, rgba(21, 22, 34, 0.76) 0%, rgba(12, 14, 22, 0.88) 100%) !important;
+}
+
+/* =========================================================
+   0.1 鎏暮 (Gilded Twilight) — 薄暮的鎏金羊皮纸变体
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-gilded-twilight {
+    --gilded-ivory: rgba(249, 248, 244, 0.96);
+    --gilded-ivory-soft: rgba(253, 250, 240, 0.78);
+    --gilded-ink: #2f2822;
+    --gilded-ink-soft: rgba(47, 40, 34, 0.62);
+    --gilded-gold: #b08d57;
+    --gilded-gold-soft: rgba(176, 141, 87, 0.2);
+    --gilded-oxblood: #6a2d32;
+    --gilded-shadow: 0 22px 56px rgba(76, 56, 28, 0.16);
+    --twilight-headline: "Cinzel", "Noto Serif SC", "Source Han Serif SC", serif;
+    --twilight-body: "Cormorant Garamond", "Noto Serif SC", "Source Han Serif SC", serif;
+    --twilight-label: "Montserrat", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--gilded-ink) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(239, 221, 190, 0.18) 0%, rgba(239, 221, 190, 0) 58%),
+        linear-gradient(180deg, rgba(255, 249, 238, 0.08) 0%, rgba(255, 249, 238, 0.02) 28%, rgba(245, 235, 220, 0.03) 58%, rgba(194, 171, 136, 0.16) 100%);
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(249, 248, 244, 0.94) 0%, rgba(249, 248, 244, 0.8) 100%) !important;
+    border-bottom: 1px solid rgba(176, 141, 87, 0.22) !important;
+    box-shadow: 0 10px 28px rgba(80, 58, 34, 0.08) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-brand {
+    color: var(--gilded-gold) !important;
+    letter-spacing: 0.24em !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-divider {
+    background: rgba(176, 141, 87, 0.3) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-location-bar {
+    color: var(--gilded-ink) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-time-bar {
+    color: var(--gilded-ink-soft) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.22em !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(176, 141, 87, 0.9) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-gilded-twilight .gal-eye-icon,
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(176, 141, 87, 0.96) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(176, 141, 87, 0.1) !important;
+    box-shadow: inset 0 0 0 1px rgba(176, 141, 87, 0.18) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(176, 141, 87, 0.22) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 100%),
+        rgba(251, 248, 240, 0.52) !important;
+    color: var(--gilded-gold) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow:
+        0 -2px 8px rgba(119, 91, 50, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.14) 100%),
+        rgba(255, 251, 245, 0.72) !important;
+    color: #8c6a3c !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-name-badge {
+    background: linear-gradient(180deg, rgba(253, 250, 240, 0.96) 0%, rgba(243, 233, 214, 0.98) 100%) !important;
+    border: 1px solid rgba(176, 141, 87, 0.24) !important;
+    box-shadow: 0 10px 24px rgba(111, 84, 46, 0.08) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-name-badge span {
+    position: relative !important;
+    background: transparent !important;
+    color: var(--gilded-gold) !important;
+    padding: 0 18px 0 16px !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-text-panel {
+    border: 1px solid rgba(176, 141, 87, 0.2) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.18) 100%),
+        rgba(249, 248, 244, calc(var(--panel-opacity, 0.7) * 0.88)) !important;
+    box-shadow:
+        0 20px 50px rgba(77, 58, 32, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.42) !important;
+    backdrop-filter: blur(16px) saturate(108%);
+    -webkit-backdrop-filter: blur(16px) saturate(108%);
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-text-panel::before {
+    opacity: 0.32 !important;
+    background:
+        linear-gradient(135deg, rgba(176, 141, 87, 0.08) 0%, rgba(176, 141, 87, 0) 36%),
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 42%) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.24) 100%),
+        rgba(249, 248, 244, calc(var(--panel-opacity, 0.7) * 0.94)) !important;
+    border-color: rgba(176, 141, 87, 0.3) !important;
+    box-shadow:
+        0 24px 56px rgba(77, 58, 32, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.48) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-dialog-text {
+    color: rgba(47, 40, 34, 0.94) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.03em !important;
+    text-shadow: 0.5px 0.5px 1px rgba(0, 0, 0, 0.06) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: var(--gilded-gold) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-twilight-dialog-next-indicator i {
+    color: var(--gilded-gold) !important;
+    text-shadow: 0 4px 16px rgba(176, 141, 87, 0.2) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-generating-indicator {
+    border-color: rgba(176, 141, 87, 0.18) !important;
+    background: rgba(252, 247, 238, 0.86) !important;
+    color: rgba(47, 40, 34, 0.84) !important;
+    box-shadow: 0 12px 30px rgba(77, 58, 32, 0.08) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(249, 248, 244, 0.68) 0%, rgba(249, 248, 244, 0.92) 100%) !important;
+    border-top: 1px solid rgba(176, 141, 87, 0.16) !important;
+    box-shadow: 0 -12px 30px rgba(80, 58, 34, 0.08) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-footer-btn,
+#gal-global-overlay.skin-gilded-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-gilded-twilight .gal-action-btn {
+    color: rgba(47, 40, 34, 0.56) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.2em !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-gilded-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-gilded-twilight .gal-action-btn:hover {
+    background: rgba(176, 141, 87, 0.08) !important;
+    color: var(--gilded-gold) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-pending-choices-btn.show {
+    background: rgba(176, 141, 87, 0.14) !important;
+    border-color: rgba(176, 141, 87, 0.24) !important;
+    color: var(--gilded-gold) !important;
+}
+
+#gal-global-overlay.skin-gilded-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(180deg, rgba(176, 141, 87, 0.9) 0%, rgba(153, 118, 70, 0.92) 100%) !important;
+    border-color: rgba(153, 118, 70, 0.96) !important;
+    color: rgba(255, 250, 244, 0.96) !important;
+}
+
+#gal-layer-choices.skin-gilded-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(251, 242, 224, 0.5) 0%, rgba(251, 242, 224, 0.18) 36%, rgba(238, 227, 204, 0.1) 52%, rgba(238, 227, 204, 0.3) 100%),
+      rgba(249, 248, 244, 0.72) !important;
+    backdrop-filter: blur(18px) saturate(105%);
+    -webkit-backdrop-filter: blur(18px) saturate(105%);
+}
+
+#gal-layer-choices.skin-gilded-twilight .gal-choices-title {
+    color: var(--gilded-gold) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.24em !important;
+}
+
+#gal-layer-choices.skin-gilded-twilight .gal-choices-hint {
+    color: rgba(47, 40, 34, 0.54) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-gilded-twilight .gal-choice-card {
+    border: 1px solid rgba(176, 141, 87, 0.22) !important;
+    border-radius: 14px !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.22) 100%),
+      rgba(249, 248, 244, 0.88) !important;
+    color: rgba(47, 40, 34, 0.92) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 42px rgba(77, 58, 32, 0.08) !important;
+}
+
+#gal-layer-choices.skin-gilded-twilight .gal-choice-card:hover {
+    border-color: rgba(176, 141, 87, 0.4) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.28) 100%),
+      rgba(253, 250, 240, 0.94) !important;
+    color: #8f6d3f !important;
+}
+
+/* =========================================================
+   0.2 晓暮 (Dawn Twilight) — 晨雾青蓝版
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-dawn-twilight {
+    --dawn-teal: #1a3a3a;
+    --dawn-sky: #78a1bb;
+    --dawn-silver: #b8c1c8;
+    --dawn-deep: #0f172a;
+    --dawn-surface: #1e293b;
+    --dawn-outline: #334155;
+    --dawn-text: #e2e8f0;
+    --twilight-headline: "Montserrat", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Lato", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-label: "Montserrat", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: rgba(226, 232, 240, 0.96) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(120, 161, 187, 0.14) 0%, rgba(120, 161, 187, 0) 58%),
+        linear-gradient(180deg, rgba(2, 6, 23, 0.1) 0%, rgba(2, 6, 23, 0.02) 28%, rgba(15, 23, 42, 0.04) 58%, rgba(2, 6, 23, 0.22) 100%);
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.62) 100%) !important;
+    border-bottom: 1px solid rgba(120, 161, 187, 0.16) !important;
+    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.22) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-brand {
+    color: rgba(184, 193, 200, 0.98) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-divider {
+    background: rgba(120, 161, 187, 0.26) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-location-bar {
+    color: rgba(120, 161, 187, 0.94) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-time-bar {
+    color: rgba(184, 193, 200, 0.74) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(184, 193, 200, 0.88) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-dawn-twilight .gal-eye-icon,
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(184, 193, 200, 0.9) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(120, 161, 187, 0.12) !important;
+    box-shadow: inset 0 0 0 1px rgba(120, 161, 187, 0.2) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(120, 161, 187, 0.22) !important;
+    background:
+        linear-gradient(180deg, rgba(120, 161, 187, 0.1) 0%, rgba(120, 161, 187, 0.03) 100%),
+        rgba(15, 23, 42, 0.66) !important;
+    color: rgba(184, 193, 200, 0.9) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow:
+        0 -2px 8px rgba(4, 10, 24, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(120, 161, 187, 0.16) 0%, rgba(120, 161, 187, 0.06) 100%),
+        rgba(15, 23, 42, 0.78) !important;
+    color: rgba(226, 232, 240, 0.98) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-name-badge {
+    background: linear-gradient(135deg, rgba(26, 58, 58, 0.96) 0%, rgba(15, 23, 42, 0.96) 100%) !important;
+    border: 1px solid rgba(120, 161, 187, 0.26) !important;
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.18) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(184, 193, 200, 0.98) !important;
+    padding: 0 18px 0 16px !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-text-panel {
+    border: 1px solid rgba(120, 161, 187, 0.18) !important;
+    background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.52) 0%, rgba(2, 6, 23, 0.14) 100%),
+        rgba(30, 41, 59, calc(var(--panel-opacity, 0.7) * 0.86)) !important;
+    box-shadow:
+        0 22px 56px rgba(2, 6, 23, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(16px) saturate(112%);
+    -webkit-backdrop-filter: blur(16px) saturate(112%);
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-text-panel::before {
+    opacity: 0.28 !important;
+    background:
+        linear-gradient(135deg, rgba(120, 161, 187, 0.08) 0%, rgba(120, 161, 187, 0) 36%),
+        radial-gradient(circle at top left, rgba(184, 193, 200, 0.08) 0%, rgba(184, 193, 200, 0) 42%) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.62) 0%, rgba(2, 6, 23, 0.2) 100%),
+        rgba(30, 41, 59, calc(var(--panel-opacity, 0.7) * 0.92)) !important;
+    border-color: rgba(120, 161, 187, 0.28) !important;
+    box-shadow:
+        0 26px 62px rgba(2, 6, 23, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-dialog-text {
+    color: rgba(226, 232, 240, 0.96) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.03em !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.38) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(120, 161, 187, 0.96) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(120, 161, 187, 0.98) !important;
+    text-shadow: 0 4px 16px rgba(120, 161, 187, 0.18) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-generating-indicator {
+    border-color: rgba(120, 161, 187, 0.18) !important;
+    background: rgba(15, 23, 42, 0.86) !important;
+    color: rgba(226, 232, 240, 0.84) !important;
+    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.2) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.62) 0%, rgba(2, 6, 23, 0.92) 100%) !important;
+    border-top: 1px solid rgba(120, 161, 187, 0.14) !important;
+    box-shadow: 0 -12px 30px rgba(2, 6, 23, 0.2) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-footer-btn,
+#gal-global-overlay.skin-dawn-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-dawn-twilight .gal-action-btn {
+    color: rgba(184, 193, 200, 0.58) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-dawn-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-dawn-twilight .gal-action-btn:hover {
+    background: rgba(120, 161, 187, 0.12) !important;
+    color: rgba(226, 232, 240, 0.98) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-pending-choices-btn.show {
+    background: rgba(120, 161, 187, 0.16) !important;
+    border-color: rgba(120, 161, 187, 0.24) !important;
+    color: rgba(226, 232, 240, 0.98) !important;
+}
+
+#gal-global-overlay.skin-dawn-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(135deg, rgba(26, 58, 58, 0.88) 0%, rgba(120, 161, 187, 0.94) 100%) !important;
+    border-color: rgba(120, 161, 187, 0.32) !important;
+    color: rgba(255, 255, 255, 0.98) !important;
+}
+
+#gal-layer-choices.skin-dawn-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(120, 161, 187, 0.16) 0%, rgba(120, 161, 187, 0.05) 34%, rgba(15, 23, 42, 0.04) 52%, rgba(2, 6, 23, 0.24) 100%),
+      rgba(2, 6, 23, 0.76) !important;
+    backdrop-filter: blur(18px) saturate(112%);
+    -webkit-backdrop-filter: blur(18px) saturate(112%);
+}
+
+#gal-layer-choices.skin-dawn-twilight .gal-choices-title {
+    color: rgba(184, 193, 200, 0.98) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-layer-choices.skin-dawn-twilight .gal-choices-hint {
+    color: rgba(184, 193, 200, 0.56) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-dawn-twilight .gal-choice-card {
+    border: 1px solid rgba(120, 161, 187, 0.18) !important;
+    border-radius: 14px !important;
+    background:
+      linear-gradient(180deg, rgba(120, 161, 187, 0.08) 0%, rgba(120, 161, 187, 0.02) 100%),
+      rgba(15, 23, 42, 0.88) !important;
+    color: rgba(226, 232, 240, 0.94) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 42px rgba(2, 6, 23, 0.18) !important;
+}
+
+#gal-layer-choices.skin-dawn-twilight .gal-choice-card:hover {
+    border-color: rgba(120, 161, 187, 0.34) !important;
+    background:
+      linear-gradient(180deg, rgba(120, 161, 187, 0.14) 0%, rgba(120, 161, 187, 0.05) 100%),
+      rgba(15, 23, 42, 0.94) !important;
+    color: rgba(226, 232, 240, 1) !important;
+}
+
+/* =========================================================
+   0.3 绯暮 (Orchid Twilight) — 紫暮琥珀版
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-orchid-twilight {
+    --orchid-plum: #2d1b2d;
+    --orchid-amber: #ffbf69;
+    --orchid-violet: #b79ced;
+    --orchid-night: #1a1625;
+    --orchid-blush: #e0b1cb;
+    --orchid-cream: #f7e1d7;
+    --twilight-headline: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Be Vietnam Pro", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-label: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: rgba(247, 225, 215, 0.96) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(224, 177, 203, 0.14) 0%, rgba(224, 177, 203, 0) 58%),
+        linear-gradient(180deg, rgba(26, 22, 37, 0.08) 0%, rgba(26, 22, 37, 0.02) 28%, rgba(45, 27, 45, 0.04) 58%, rgba(26, 22, 37, 0.22) 100%);
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(45, 27, 45, 0.9) 0%, rgba(26, 22, 37, 0.72) 100%) !important;
+    border-bottom: 1px solid rgba(183, 156, 237, 0.18) !important;
+    box-shadow: 0 12px 30px rgba(26, 22, 37, 0.24) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-brand {
+    color: rgba(255, 191, 105, 0.96) !important;
+    letter-spacing: 0.2em !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-divider {
+    background: rgba(183, 156, 237, 0.28) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-location-bar {
+    color: rgba(224, 177, 203, 0.96) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-time-bar {
+    color: rgba(247, 225, 215, 0.72) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(247, 225, 215, 0.88) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-orchid-twilight .gal-eye-icon,
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(255, 191, 105, 0.96) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(183, 156, 237, 0.14) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 191, 105, 0.16) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(183, 156, 237, 0.2) !important;
+    background:
+        linear-gradient(180deg, rgba(224, 177, 203, 0.12) 0%, rgba(224, 177, 203, 0.03) 100%),
+        rgba(45, 27, 45, 0.7) !important;
+    color: rgba(247, 225, 215, 0.94) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow:
+        0 -2px 8px rgba(26, 22, 37, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 191, 105, 0.16) 0%, rgba(183, 156, 237, 0.06) 100%),
+        rgba(45, 27, 45, 0.82) !important;
+    color: rgba(255, 243, 236, 0.98) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-name-badge {
+    background: linear-gradient(135deg, rgba(45, 27, 45, 0.96) 0%, rgba(26, 22, 37, 0.96) 100%) !important;
+    border: 1px solid rgba(255, 191, 105, 0.26) !important;
+    box-shadow: 0 10px 24px rgba(26, 22, 37, 0.2) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(255, 191, 105, 0.98) !important;
+    padding: 0 18px 0 16px !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-text-panel {
+    border: 1px solid rgba(183, 156, 237, 0.18) !important;
+    background:
+        linear-gradient(180deg, rgba(45, 27, 45, 0.56) 0%, rgba(26, 22, 37, 0.2) 100%),
+        rgba(26, 22, 37, calc(var(--panel-opacity, 0.7) * 0.9)) !important;
+    box-shadow:
+        0 22px 56px rgba(26, 22, 37, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: blur(16px) saturate(116%);
+    -webkit-backdrop-filter: blur(16px) saturate(116%);
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-text-panel::before {
+    opacity: 0.3 !important;
+    background:
+        linear-gradient(135deg, rgba(255, 191, 105, 0.1) 0%, rgba(255, 191, 105, 0) 36%),
+        radial-gradient(circle at top left, rgba(183, 156, 237, 0.12) 0%, rgba(183, 156, 237, 0) 42%) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(45, 27, 45, 0.66) 0%, rgba(26, 22, 37, 0.24) 100%),
+        rgba(26, 22, 37, calc(var(--panel-opacity, 0.7) * 0.96)) !important;
+    border-color: rgba(255, 191, 105, 0.24) !important;
+    box-shadow:
+        0 26px 62px rgba(26, 22, 37, 0.34),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-dialog-text {
+    color: rgba(247, 225, 215, 0.96) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.03em !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(255, 191, 105, 0.96) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(255, 191, 105, 0.98) !important;
+    text-shadow: 0 4px 16px rgba(255, 191, 105, 0.2) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-generating-indicator {
+    border-color: rgba(183, 156, 237, 0.2) !important;
+    background: rgba(26, 22, 37, 0.88) !important;
+    color: rgba(247, 225, 215, 0.84) !important;
+    box-shadow: 0 12px 30px rgba(26, 22, 37, 0.2) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(45, 27, 45, 0.64) 0%, rgba(26, 22, 37, 0.94) 100%) !important;
+    border-top: 1px solid rgba(183, 156, 237, 0.16) !important;
+    box-shadow: 0 -12px 30px rgba(26, 22, 37, 0.2) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-footer-btn,
+#gal-global-overlay.skin-orchid-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-orchid-twilight .gal-action-btn {
+    color: rgba(247, 225, 215, 0.6) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.16em !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-orchid-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-orchid-twilight .gal-action-btn:hover {
+    background: rgba(183, 156, 237, 0.12) !important;
+    color: rgba(255, 191, 105, 0.98) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-pending-choices-btn.show {
+    background: rgba(255, 191, 105, 0.16) !important;
+    border-color: rgba(255, 191, 105, 0.24) !important;
+    color: rgba(255, 243, 236, 0.98) !important;
+}
+
+#gal-global-overlay.skin-orchid-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(135deg, rgba(255, 191, 105, 0.94) 0%, rgba(183, 156, 237, 0.92) 100%) !important;
+    border-color: rgba(255, 191, 105, 0.34) !important;
+    color: rgba(26, 22, 37, 0.96) !important;
+}
+
+#gal-layer-choices.skin-orchid-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(224, 177, 203, 0.18) 0%, rgba(224, 177, 203, 0.05) 34%, rgba(45, 27, 45, 0.06) 52%, rgba(26, 22, 37, 0.28) 100%),
+      rgba(26, 22, 37, 0.78) !important;
+    backdrop-filter: blur(18px) saturate(116%);
+    -webkit-backdrop-filter: blur(18px) saturate(116%);
+}
+
+#gal-layer-choices.skin-orchid-twilight .gal-choices-title {
+    color: rgba(255, 191, 105, 0.98) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.2em !important;
+}
+
+#gal-layer-choices.skin-orchid-twilight .gal-choices-hint {
+    color: rgba(247, 225, 215, 0.58) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-orchid-twilight .gal-choice-card {
+    border: 1px solid rgba(183, 156, 237, 0.18) !important;
+    border-radius: 14px !important;
+    background:
+      linear-gradient(180deg, rgba(224, 177, 203, 0.08) 0%, rgba(224, 177, 203, 0.02) 100%),
+      rgba(45, 27, 45, 0.86) !important;
+    color: rgba(247, 225, 215, 0.94) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 42px rgba(26, 22, 37, 0.18) !important;
+}
+
+#gal-layer-choices.skin-orchid-twilight .gal-choice-card:hover {
+    border-color: rgba(255, 191, 105, 0.34) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 191, 105, 0.14) 0%, rgba(183, 156, 237, 0.06) 100%),
+      rgba(45, 27, 45, 0.92) !important;
+    color: rgba(255, 243, 236, 0.98) !important;
+}
+
+/* =========================================================
+   0.4 霓暮 (Neon Twilight) — 赛博霓虹版
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-neon-twilight {
+    --neon-cyan: #00f2ff;
+    --neon-violet: #7000ff;
+    --neon-pink: #ff00e5;
+    --neon-green: #00ff8c;
+    --neon-surface: #0a0a0f;
+    --neon-surface-soft: #131320;
+    --neon-ink: #f0f0ff;
+    --twilight-headline: "Oswald", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Poppins", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-label: "Oswald", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: rgba(240, 240, 255, 0.98) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(0, 242, 255, 0.12) 0%, rgba(0, 242, 255, 0) 58%),
+        linear-gradient(180deg, rgba(10, 10, 15, 0.08) 0%, rgba(10, 10, 15, 0.02) 28%, rgba(112, 0, 255, 0.04) 58%, rgba(10, 10, 15, 0.26) 100%);
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(10, 10, 15, 0.92) 0%, rgba(19, 19, 32, 0.76) 100%) !important;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.18) !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36), 0 0 26px rgba(0, 242, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-brand {
+    color: rgba(0, 242, 255, 0.98) !important;
+    letter-spacing: 0.24em !important;
+    text-shadow: 0 0 18px rgba(0, 242, 255, 0.24) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-divider {
+    background: linear-gradient(90deg, rgba(0, 242, 255, 0.34), rgba(255, 0, 229, 0.34)) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-location-bar {
+    color: rgba(0, 242, 255, 0.96) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-time-bar {
+    color: rgba(240, 240, 255, 0.7) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.2em !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(240, 240, 255, 0.88) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-neon-twilight .gal-eye-icon,
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(0, 242, 255, 0.98) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(0, 242, 255, 0.12) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 0, 229, 0.18), 0 0 18px rgba(0, 242, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(0, 242, 255, 0.22) !important;
+    background:
+        linear-gradient(180deg, rgba(0, 242, 255, 0.08) 0%, rgba(112, 0, 255, 0.06) 100%),
+        rgba(10, 10, 15, 0.72) !important;
+    color: rgba(240, 240, 255, 0.96) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow:
+        0 -2px 8px rgba(0, 0, 0, 0.16),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 0 18px rgba(0, 242, 255, 0.06) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(0, 242, 255, 0.16) 0%, rgba(255, 0, 229, 0.08) 100%),
+        rgba(10, 10, 15, 0.82) !important;
+    color: rgba(255, 255, 255, 0.98) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-name-badge {
+    background: linear-gradient(90deg, rgba(112, 0, 255, 0.94) 0%, rgba(0, 242, 255, 0.96) 100%) !important;
+    border: 1px solid rgba(0, 242, 255, 0.24) !important;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24), 0 0 18px rgba(112, 0, 255, 0.14) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(10, 10, 15, 0.98) !important;
+    padding: 0 18px 0 16px !important;
+    text-transform: uppercase;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-text-panel {
+    border: 1px solid transparent !important;
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(10, 10, 15, 0.82) 100%) padding-box,
+        linear-gradient(90deg, rgba(112, 0, 255, 0.78) 0%, rgba(0, 242, 255, 0.82) 100%) border-box !important;
+    box-shadow:
+        0 22px 56px rgba(0, 0, 0, 0.46),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 0 22px rgba(0, 242, 255, 0.06),
+        0 0 16px rgba(112, 0, 255, 0.08) !important;
+    backdrop-filter: blur(16px) saturate(120%);
+    -webkit-backdrop-filter: blur(16px) saturate(120%);
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-text-panel::before {
+    opacity: 0.2 !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 38%),
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.06) 1px, transparent 0) !important;
+    background-size: auto, 20px 20px !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, rgba(10, 10, 15, 0.88) 100%) padding-box,
+        linear-gradient(90deg, rgba(112, 0, 255, 0.88) 0%, rgba(0, 242, 255, 0.92) 100%) border-box !important;
+    border-color: transparent !important;
+    box-shadow:
+        0 26px 62px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 0 24px rgba(0, 242, 255, 0.08),
+        0 0 18px rgba(112, 0, 255, 0.1) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-dialog-text {
+    color: rgba(240, 240, 255, 0.98) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.04em !important;
+    text-shadow: 0 0 12px rgba(112, 0, 255, 0.18) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-neon-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(0, 242, 255, 0.98) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(255, 0, 229, 0.98) !important;
+    text-shadow: 0 0 18px rgba(255, 0, 229, 0.22) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-generating-indicator {
+    border-color: rgba(0, 242, 255, 0.22) !important;
+    background: rgba(10, 10, 15, 0.9) !important;
+    color: rgba(240, 240, 255, 0.88) !important;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24), 0 0 22px rgba(0, 242, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(19, 19, 32, 0.74) 0%, rgba(10, 10, 15, 0.96) 100%) !important;
+    border-top: 1px solid rgba(0, 242, 255, 0.14) !important;
+    box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.26), 0 0 24px rgba(0, 242, 255, 0.06) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-footer-btn,
+#gal-global-overlay.skin-neon-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-neon-twilight .gal-action-btn {
+    color: rgba(240, 240, 255, 0.62) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-neon-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-neon-twilight .gal-action-btn:hover {
+    background: rgba(0, 242, 255, 0.1) !important;
+    color: rgba(0, 242, 255, 0.98) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-pending-choices-btn.show {
+    background: rgba(255, 0, 229, 0.16) !important;
+    border-color: rgba(255, 0, 229, 0.26) !important;
+    color: rgba(255, 255, 255, 0.98) !important;
+}
+
+#gal-global-overlay.skin-neon-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(135deg, rgba(0, 242, 255, 0.96) 0%, rgba(112, 0, 255, 0.94) 52%, rgba(255, 0, 229, 0.92) 100%) !important;
+    border-color: rgba(0, 242, 255, 0.38) !important;
+    color: rgba(10, 10, 15, 0.98) !important;
+}
+
+#gal-layer-choices.skin-neon-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(0, 242, 255, 0.14) 0%, rgba(0, 242, 255, 0.04) 34%, rgba(112, 0, 255, 0.06) 52%, rgba(10, 10, 15, 0.36) 100%),
+      rgba(10, 10, 15, 0.82) !important;
+    backdrop-filter: blur(18px) saturate(122%);
+    -webkit-backdrop-filter: blur(18px) saturate(122%);
+}
+
+#gal-layer-choices.skin-neon-twilight .gal-choices-title {
+    color: rgba(0, 242, 255, 0.98) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.24em !important;
+    text-shadow: 0 0 18px rgba(0, 242, 255, 0.16) !important;
+}
+
+#gal-layer-choices.skin-neon-twilight .gal-choices-hint {
+    color: rgba(240, 240, 255, 0.58) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-neon-twilight .gal-choice-card {
+    border: 1px solid rgba(0, 242, 255, 0.18) !important;
+    border-radius: 14px !important;
+    background:
+      linear-gradient(180deg, rgba(0, 242, 255, 0.08) 0%, rgba(255, 0, 229, 0.03) 100%),
+      rgba(19, 19, 32, 0.9) !important;
+    color: rgba(240, 240, 255, 0.96) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24), 0 0 24px rgba(0, 242, 255, 0.06) !important;
+}
+
+#gal-layer-choices.skin-neon-twilight .gal-choice-card:hover {
+    border-color: rgba(255, 0, 229, 0.34) !important;
+    background:
+      linear-gradient(180deg, rgba(0, 242, 255, 0.14) 0%, rgba(255, 0, 229, 0.08) 100%),
+      rgba(19, 19, 32, 0.96) !important;
+    color: rgba(255, 255, 255, 0.98) !important;
+}
+
+/* =========================================================
+   0.5 澄暮 (Clear Twilight) — 白雾玻璃版
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-clear-twilight {
+    --clear-white: rgba(255, 255, 255, 0.74);
+    --clear-white-soft: rgba(255, 255, 255, 0.58);
+    --clear-charcoal: #1a1a1c;
+    --clear-charcoal-soft: rgba(26, 26, 28, 0.62);
+    --clear-sky: #0ea5e9;
+    --clear-sky-soft: #e0f2fe;
+    --clear-panel-border: rgba(0, 0, 0, 0.08);
+    --clear-on-sky: #0369a1;
+    --twilight-headline: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-label: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: rgba(26, 26, 28, 0.96) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(224, 242, 254, 0.24) 0%, rgba(224, 242, 254, 0) 58%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 28%, rgba(224, 242, 254, 0.04) 58%, rgba(255, 255, 255, 0.18) 100%);
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.58) 100%) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-brand {
+    color: rgba(26, 26, 28, 0.94) !important;
+    letter-spacing: 0.16em !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-divider {
+    background: rgba(14, 165, 233, 0.22) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-location-bar {
+    color: rgba(14, 165, 233, 0.92) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-time-bar {
+    color: rgba(26, 26, 28, 0.54) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(26, 26, 28, 0.76) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-clear-twilight .gal-eye-icon,
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(26, 26, 28, 0.82) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(0, 0, 0, 0.05) !important;
+    box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.14) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(0, 0, 0, 0.08) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.62) 100%),
+        rgba(255, 255, 255, 0.72) !important;
+    color: rgba(26, 26, 28, 0.82) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow: 0 -2px 8px rgba(148, 163, 184, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.52) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(224, 242, 254, 0.72) 100%),
+        rgba(255, 255, 255, 0.84) !important;
+    color: rgba(14, 165, 233, 0.92) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-name-badge {
+    background: linear-gradient(180deg, rgba(224, 242, 254, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%) !important;
+    border: 1px solid rgba(14, 165, 233, 0.14) !important;
+    box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(3, 105, 161, 0.94) !important;
+    padding: 0 22px !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-text-panel {
+    border: 1px solid rgba(0, 0, 0, 0.06) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.54) 100%),
+        rgba(255, 255, 255, calc(var(--panel-opacity, 0.7) * 0.9)) !important;
+    box-shadow:
+        0 22px 52px rgba(148, 163, 184, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.52) !important;
+    backdrop-filter: blur(16px) saturate(106%);
+    -webkit-backdrop-filter: blur(16px) saturate(106%);
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-text-panel::before {
+    opacity: 0.26 !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 36%),
+        radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.03) 1px, transparent 0) !important;
+    background-size: auto, 18px 18px !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.64) 100%),
+        rgba(255, 255, 255, calc(var(--panel-opacity, 0.7) * 0.96)) !important;
+    border-color: rgba(14, 165, 233, 0.12) !important;
+    box-shadow:
+        0 24px 56px rgba(148, 163, 184, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-dialog-text {
+    color: rgba(26, 26, 28, 0.94) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.02em !important;
+    text-shadow: none !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-clear-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(14, 165, 233, 0.92) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(14, 165, 233, 0.94) !important;
+    text-shadow: 0 4px 16px rgba(14, 165, 233, 0.12) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-generating-indicator {
+    border-color: rgba(0, 0, 0, 0.06) !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: rgba(26, 26, 28, 0.78) !important;
+    box-shadow: 0 12px 28px rgba(148, 163, 184, 0.1) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.84) 100%) !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 -10px 26px rgba(148, 163, 184, 0.08) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-footer-btn,
+#gal-global-overlay.skin-clear-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-clear-twilight .gal-action-btn {
+    color: rgba(26, 26, 28, 0.56) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-clear-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-clear-twilight .gal-action-btn:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: rgba(26, 26, 28, 0.9) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-pending-choices-btn.show {
+    background: rgba(224, 242, 254, 0.86) !important;
+    border-color: rgba(14, 165, 233, 0.14) !important;
+    color: rgba(3, 105, 161, 0.94) !important;
+}
+
+#gal-global-overlay.skin-clear-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(180deg, rgba(14, 165, 233, 0.92) 0%, rgba(2, 132, 199, 0.94) 100%) !important;
+    border-color: rgba(14, 165, 233, 0.3) !important;
+    color: rgba(255, 255, 255, 0.98) !important;
+}
+
+#gal-layer-choices.skin-clear-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(224, 242, 254, 0.28) 0%, rgba(224, 242, 254, 0.1) 36%, rgba(255, 255, 255, 0.08) 52%, rgba(255, 255, 255, 0.32) 100%),
+      rgba(255, 255, 255, 0.58) !important;
+    backdrop-filter: blur(18px) saturate(104%);
+    -webkit-backdrop-filter: blur(18px) saturate(104%);
+}
+
+#gal-layer-choices.skin-clear-twilight .gal-choices-title {
+    color: rgba(14, 165, 233, 0.94) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.16em !important;
+}
+
+#gal-layer-choices.skin-clear-twilight .gal-choices-hint {
+    color: rgba(26, 26, 28, 0.48) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-clear-twilight .gal-choice-card {
+    border: 1px solid rgba(0, 0, 0, 0.06) !important;
+    border-radius: 16px !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.62) 100%),
+      rgba(255, 255, 255, 0.84) !important;
+    color: rgba(26, 26, 28, 0.92) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 40px rgba(148, 163, 184, 0.1) !important;
+}
+
+#gal-layer-choices.skin-clear-twilight .gal-choice-card:hover {
+    border-color: rgba(14, 165, 233, 0.16) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(224, 242, 254, 0.74) 100%),
+      rgba(255, 255, 255, 0.9) !important;
+    color: rgba(3, 105, 161, 0.96) !important;
+}
+
+/* =========================================================
+   0.6 森暮 (Forest Twilight) — 深林魔契版
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-forest-twilight {
+    --forest-deep: #0a1f16;
+    --forest-moss: #1e3a2a;
+    --forest-earth: #3d2b1f;
+    --forest-gold: #d4af37;
+    --forest-ether: #a5f3fc;
+    --forest-outline: #4a454e;
+    --twilight-headline: "Cinzel Decorative", "Noto Serif SC", "Source Han Serif SC", serif;
+    --twilight-body: "Lora", "Noto Serif SC", "Source Han Serif SC", serif;
+    --twilight-label: "Lora", "Noto Serif SC", "Source Han Serif SC", serif;
+    color: rgba(243, 244, 246, 0.96) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(165, 243, 252, 0.12) 0%, rgba(165, 243, 252, 0) 58%),
+        linear-gradient(180deg, rgba(5, 15, 11, 0.08) 0%, rgba(5, 15, 11, 0.02) 28%, rgba(61, 43, 31, 0.05) 58%, rgba(5, 15, 11, 0.28) 100%);
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(10, 31, 22, 0.9) 0%, rgba(10, 31, 22, 0.72) 100%) !important;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.16) !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-brand {
+    color: rgba(212, 175, 55, 0.98) !important;
+    letter-spacing: 0.22em !important;
+    text-shadow: 0 0 18px rgba(212, 175, 55, 0.14) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-divider {
+    background: rgba(212, 175, 55, 0.22) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-location-bar {
+    color: rgba(165, 243, 252, 0.88) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-time-bar {
+    color: rgba(212, 175, 55, 0.62) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(165, 243, 252, 0.78) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-forest-twilight .gal-eye-icon,
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(165, 243, 252, 0.86) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(212, 175, 55, 0.08) !important;
+    box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.12) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(212, 175, 55, 0.16) !important;
+    background:
+        linear-gradient(180deg, rgba(61, 43, 31, 0.52) 0%, rgba(30, 58, 42, 0.6) 100%),
+        rgba(10, 31, 22, 0.76) !important;
+    color: rgba(212, 175, 55, 0.94) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(61, 43, 31, 0.66) 0%, rgba(30, 58, 42, 0.72) 100%),
+        rgba(10, 31, 22, 0.82) !important;
+    color: rgba(243, 244, 246, 0.98) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-name-badge {
+    background: linear-gradient(90deg, rgba(61, 43, 31, 0.96) 0%, rgba(30, 58, 42, 0.96) 100%) !important;
+    border: 1px solid rgba(212, 175, 55, 0.22) !important;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(212, 175, 55, 0.98) !important;
+    padding: 0 22px !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-text-panel {
+    border: 1px solid rgba(212, 175, 55, 0.16) !important;
+    background:
+        linear-gradient(180deg, rgba(10, 31, 22, 0.86) 0%, rgba(5, 15, 11, 0.74) 100%),
+        rgba(10, 31, 22, calc(var(--panel-opacity, 0.7) * 0.92)) !important;
+    box-shadow:
+        0 22px 52px rgba(0, 0, 0, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    backdrop-filter: blur(16px) saturate(112%);
+    -webkit-backdrop-filter: blur(16px) saturate(112%);
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-text-panel::before {
+    opacity: 0.28 !important;
+    background:
+        linear-gradient(135deg, rgba(212, 175, 55, 0.08) 0%, rgba(212, 175, 55, 0) 36%),
+        radial-gradient(circle at 1px 1px, rgba(165, 243, 252, 0.05) 1px, transparent 0) !important;
+    background-size: auto, 18px 18px !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(10, 31, 22, 0.92) 0%, rgba(5, 15, 11, 0.8) 100%),
+        rgba(10, 31, 22, calc(var(--panel-opacity, 0.7) * 0.98)) !important;
+    border-color: rgba(212, 175, 55, 0.24) !important;
+    box-shadow:
+        0 24px 56px rgba(0, 0, 0, 0.36),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-dialog-text {
+    color: rgba(243, 244, 246, 0.96) !important;
+    font-family: var(--twilight-body) !important;
+    font-style: italic !important;
+    letter-spacing: 0.03em !important;
+    text-shadow: 0 0 12px rgba(165, 243, 252, 0.08) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-forest-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(212, 175, 55, 0.96) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(212, 175, 55, 0.98) !important;
+    text-shadow: 0 0 16px rgba(212, 175, 55, 0.16) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-generating-indicator {
+    border-color: rgba(212, 175, 55, 0.18) !important;
+    background: rgba(10, 31, 22, 0.9) !important;
+    color: rgba(243, 244, 246, 0.82) !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(10, 31, 22, 0.76) 0%, rgba(5, 15, 11, 0.94) 100%) !important;
+    border-top: 1px solid rgba(212, 175, 55, 0.12) !important;
+    box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.24) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-footer-btn,
+#gal-global-overlay.skin-forest-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-forest-twilight .gal-action-btn {
+    color: rgba(212, 175, 55, 0.56) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.16em !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-forest-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-forest-twilight .gal-action-btn:hover {
+    background: rgba(212, 175, 55, 0.08) !important;
+    color: rgba(212, 175, 55, 0.98) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-pending-choices-btn.show {
+    background: rgba(165, 243, 252, 0.12) !important;
+    border-color: rgba(165, 243, 252, 0.18) !important;
+    color: rgba(165, 243, 252, 0.9) !important;
+}
+
+#gal-global-overlay.skin-forest-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(180deg, rgba(165, 243, 252, 0.16) 0%, rgba(165, 243, 252, 0.2) 100%) !important;
+    border-color: rgba(165, 243, 252, 0.22) !important;
+    color: rgba(165, 243, 252, 0.94) !important;
+}
+
+#gal-layer-choices.skin-forest-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(165, 243, 252, 0.12) 0%, rgba(165, 243, 252, 0.04) 34%, rgba(61, 43, 31, 0.08) 52%, rgba(5, 15, 11, 0.42) 100%),
+      rgba(10, 31, 22, 0.84) !important;
+    backdrop-filter: blur(18px) saturate(112%);
+    -webkit-backdrop-filter: blur(18px) saturate(112%);
+}
+
+#gal-layer-choices.skin-forest-twilight .gal-choices-title {
+    color: rgba(212, 175, 55, 0.98) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.22em !important;
+}
+
+#gal-layer-choices.skin-forest-twilight .gal-choices-hint {
+    color: rgba(165, 243, 252, 0.56) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-forest-twilight .gal-choice-card {
+    border: 1px solid rgba(212, 175, 55, 0.18) !important;
+    border-radius: 16px !important;
+    background:
+      linear-gradient(180deg, rgba(61, 43, 31, 0.34) 0%, rgba(30, 58, 42, 0.28) 100%),
+      rgba(10, 31, 22, 0.92) !important;
+    color: rgba(243, 244, 246, 0.94) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.26) !important;
+}
+
+#gal-layer-choices.skin-forest-twilight .gal-choice-card:hover {
+    border-color: rgba(212, 175, 55, 0.28) !important;
+    background:
+      linear-gradient(180deg, rgba(61, 43, 31, 0.46) 0%, rgba(30, 58, 42, 0.38) 100%),
+      rgba(10, 31, 22, 0.96) !important;
+    color: rgba(212, 175, 55, 0.98) !important;
+}
+
+/* =========================================================
+   0.7 电暮 (Cyber Twilight) — 紫青终端版
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-cyber-twilight {
+    --cyber-purple: #2d004d;
+    --cyber-blue: #00d2ff;
+    --cyber-neon: #39ff14;
+    --cyber-cyan: #00f3ff;
+    --cyber-surface: #1a0b2e;
+    --cyber-outline: #4d2b7a;
+    --cyber-text: #e0f2fe;
+    --twilight-headline: "Orbitron", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Roboto Mono", "Microsoft YaHei UI", monospace;
+    --twilight-label: "Orbitron", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: rgba(224, 242, 254, 0.98) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(0, 243, 255, 0.12) 0%, rgba(0, 243, 255, 0) 58%),
+        linear-gradient(180deg, rgba(45, 0, 77, 0.08) 0%, rgba(45, 0, 77, 0.02) 28%, rgba(26, 11, 46, 0.05) 58%, rgba(26, 11, 46, 0.32) 100%);
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(45, 0, 77, 0.42) 0%, rgba(26, 11, 46, 0.74) 100%) !important;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.18) !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36), 0 0 20px rgba(0, 243, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-brand {
+    color: rgba(0, 243, 255, 0.98) !important;
+    letter-spacing: 0.24em !important;
+    text-shadow: 0 0 18px rgba(0, 243, 255, 0.18) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-divider {
+    background: rgba(0, 243, 255, 0.26) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-location-bar {
+    color: rgba(0, 210, 255, 0.94) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-time-bar {
+    color: rgba(57, 255, 20, 0.78) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(0, 243, 255, 0.88) !important;
+    border-radius: 6px !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-cyber-twilight .gal-eye-icon,
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(0, 243, 255, 0.96) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(0, 243, 255, 0.08) !important;
+    box-shadow: inset 0 0 0 1px rgba(0, 243, 255, 0.18) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(0, 243, 255, 0.22) !important;
+    background:
+        linear-gradient(180deg, rgba(45, 0, 77, 0.3) 0%, rgba(26, 11, 46, 0.7) 100%),
+        rgba(26, 11, 46, 0.84) !important;
+    color: rgba(0, 243, 255, 0.96) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18), 0 0 18px rgba(0, 243, 255, 0.06) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(45, 0, 77, 0.44) 0%, rgba(26, 11, 46, 0.78) 100%),
+        rgba(26, 11, 46, 0.9) !important;
+    color: rgba(57, 255, 20, 0.96) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-name-badge {
+    background: rgba(0, 243, 255, 0.96) !important;
+    border: 1px solid rgba(0, 243, 255, 0.2) !important;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2), 0 0 18px rgba(0, 243, 255, 0.2) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(45, 0, 77, 0.98) !important;
+    padding: 0 20px !important;
+    text-transform: uppercase;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-text-panel {
+    border: 1px solid rgba(0, 243, 255, 0.24) !important;
+    background:
+        linear-gradient(180deg, rgba(26, 11, 46, 0.84) 0%, rgba(14, 6, 26, 0.88) 100%),
+        rgba(26, 11, 46, calc(var(--panel-opacity, 0.7) * 0.96)) !important;
+    box-shadow:
+        0 22px 54px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 0 20px rgba(0, 243, 255, 0.08) !important;
+    backdrop-filter: blur(16px) saturate(116%);
+    -webkit-backdrop-filter: blur(16px) saturate(116%);
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-text-panel::before {
+    opacity: 0.18 !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 38%),
+        radial-gradient(circle at 1px 1px, rgba(0, 243, 255, 0.08) 1px, transparent 0) !important;
+    background-size: auto, 18px 18px !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(26, 11, 46, 0.9) 0%, rgba(14, 6, 26, 0.94) 100%),
+        rgba(26, 11, 46, calc(var(--panel-opacity, 0.7) * 1)) !important;
+    border-color: rgba(57, 255, 20, 0.24) !important;
+    box-shadow:
+        0 24px 58px rgba(0, 0, 0, 0.44),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 0 22px rgba(0, 243, 255, 0.1) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-dialog-text {
+    color: rgba(224, 242, 254, 0.94) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.02em !important;
+    text-shadow: 0 0 14px rgba(0, 243, 255, 0.1) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(57, 255, 20, 0.96) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(57, 255, 20, 0.98) !important;
+    text-shadow: 0 0 18px rgba(57, 255, 20, 0.16) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-generating-indicator {
+    border-color: rgba(0, 243, 255, 0.22) !important;
+    background: rgba(26, 11, 46, 0.92) !important;
+    color: rgba(224, 242, 254, 0.86) !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24), 0 0 18px rgba(0, 243, 255, 0.08) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(45, 0, 77, 0.64) 0%, rgba(26, 11, 46, 0.94) 100%) !important;
+    border-top: 1px solid rgba(0, 243, 255, 0.16) !important;
+    box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-footer-btn,
+#gal-global-overlay.skin-cyber-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-cyber-twilight .gal-action-btn {
+    color: rgba(0, 210, 255, 0.72) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.18em !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-cyber-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-cyber-twilight .gal-action-btn:hover {
+    background: rgba(0, 243, 255, 0.08) !important;
+    color: rgba(224, 242, 254, 0.98) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-pending-choices-btn.show {
+    background: rgba(57, 255, 20, 0.12) !important;
+    border-color: rgba(57, 255, 20, 0.24) !important;
+    color: rgba(57, 255, 20, 0.94) !important;
+}
+
+#gal-global-overlay.skin-cyber-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(180deg, rgba(57, 255, 20, 0.92) 0%, rgba(0, 243, 255, 0.9) 100%) !important;
+    border-color: rgba(57, 255, 20, 0.26) !important;
+    color: rgba(45, 0, 77, 0.96) !important;
+}
+
+#gal-layer-choices.skin-cyber-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(0, 243, 255, 0.12) 0%, rgba(0, 243, 255, 0.04) 34%, rgba(45, 0, 77, 0.08) 52%, rgba(26, 11, 46, 0.44) 100%),
+      rgba(26, 11, 46, 0.86) !important;
+    backdrop-filter: blur(18px) saturate(118%);
+    -webkit-backdrop-filter: blur(18px) saturate(118%);
+}
+
+#gal-layer-choices.skin-cyber-twilight .gal-choices-title {
+    color: rgba(0, 243, 255, 0.98) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.24em !important;
+    text-shadow: 0 0 18px rgba(0, 243, 255, 0.16) !important;
+}
+
+#gal-layer-choices.skin-cyber-twilight .gal-choices-hint {
+    color: rgba(224, 242, 254, 0.56) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-cyber-twilight .gal-choice-card {
+    border: 1px solid rgba(0, 243, 255, 0.22) !important;
+    border-radius: 10px !important;
+    background:
+      linear-gradient(180deg, rgba(45, 0, 77, 0.26) 0%, rgba(26, 11, 46, 0.2) 100%),
+      rgba(26, 11, 46, 0.92) !important;
+    color: rgba(224, 242, 254, 0.96) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28), 0 0 18px rgba(0, 243, 255, 0.04) !important;
+}
+
+#gal-layer-choices.skin-cyber-twilight .gal-choice-card:hover {
+    border-color: rgba(57, 255, 20, 0.3) !important;
+    background:
+      linear-gradient(180deg, rgba(45, 0, 77, 0.34) 0%, rgba(26, 11, 46, 0.28) 100%),
+      rgba(26, 11, 46, 0.96) !important;
+    color: rgba(57, 255, 20, 0.96) !important;
+}
+
+/* =========================================================
+   0.8 梦暮 (Dream Twilight) — 粉雾薰衣草版
+   参考: Desktop VN - Inline Choice Indicator v5
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-dream-twilight {
+    --dream-lavender: #f3f0ff;
+    --dream-mint: #f0fff4;
+    --dream-plum: #4a3b4e;
+    --dream-charcoal: #3f3f46;
+    --dream-purple: #e9d5ff;
+    --dream-peach: #ffedd5;
+    --dream-blue: #e0f2fe;
+    --dream-pink: #fbcfe8;
+    --twilight-headline: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Be Vietnam Pro", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-label: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: rgba(63, 63, 70, 0.96) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 48% at 50% 18%, rgba(233, 213, 255, 0.26) 0%, rgba(233, 213, 255, 0) 58%),
+        linear-gradient(180deg, rgba(250, 250, 251, 0.14) 0%, rgba(250, 250, 251, 0.04) 28%, rgba(255, 237, 213, 0.04) 58%, rgba(243, 240, 255, 0.2) 100%);
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.68) 0%, rgba(243, 240, 255, 0.56) 100%) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.6) !important;
+    box-shadow: 0 10px 28px rgba(243, 240, 255, 0.16) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-brand {
+    color: rgba(74, 59, 78, 0.94) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-divider {
+    background: rgba(74, 59, 78, 0.18) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-location-bar {
+    color: rgba(74, 59, 78, 0.82) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-time-bar {
+    color: rgba(74, 59, 78, 0.58) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(74, 59, 78, 0.78) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-dream-twilight .gal-eye-icon,
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(74, 59, 78, 0.84) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(255, 255, 255, 0.34) !important;
+    box-shadow: inset 0 0 0 1px rgba(233, 213, 255, 0.46) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(255, 255, 255, 0.72) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.8) 0%, rgba(243, 240, 255, 0.66) 100%),
+        rgba(255, 255, 255, 0.76) !important;
+    color: rgba(74, 59, 78, 0.88) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow: 0 -2px 8px rgba(243, 240, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(233, 213, 255, 0.74) 100%),
+        rgba(255, 255, 255, 0.84) !important;
+    color: rgba(74, 59, 78, 0.96) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-name-badge {
+    background: linear-gradient(180deg, rgba(255, 237, 213, 0.96) 0%, rgba(255, 255, 255, 0.96) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.72) !important;
+    box-shadow: 0 10px 22px rgba(243, 240, 255, 0.16) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(74, 59, 78, 0.94) !important;
+    padding: 0 24px !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-text-panel {
+    border: 1px solid rgba(255, 255, 255, 0.72) !important;
+    background:
+        linear-gradient(180deg, rgba(243, 240, 255, 0.82) 0%, rgba(243, 240, 255, 0.62) 100%),
+        rgba(243, 240, 255, calc(var(--panel-opacity, 0.7) * 0.92)) !important;
+    box-shadow:
+        0 22px 52px rgba(243, 240, 255, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.58) !important;
+    backdrop-filter: blur(16px) saturate(104%);
+    -webkit-backdrop-filter: blur(16px) saturate(104%);
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-text-panel::before {
+    opacity: 0.26 !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 38%),
+        radial-gradient(circle at 1px 1px, rgba(74, 59, 78, 0.03) 1px, transparent 0) !important;
+    background-size: auto, 18px 18px !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(243, 240, 255, 0.9) 0%, rgba(243, 240, 255, 0.72) 100%),
+        rgba(243, 240, 255, calc(var(--panel-opacity, 0.7) * 0.98)) !important;
+    border-color: rgba(233, 213, 255, 0.88) !important;
+    box-shadow:
+        0 24px 56px rgba(243, 240, 255, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-dialog-text {
+    color: rgba(63, 63, 70, 0.92) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.03em !important;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.18) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-dream-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(74, 59, 78, 0.42) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(74, 59, 78, 0.42) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-generating-indicator {
+    border-color: rgba(255, 255, 255, 0.72) !important;
+    background: rgba(255, 255, 255, 0.88) !important;
+    color: rgba(74, 59, 78, 0.8) !important;
+    box-shadow: 0 12px 28px rgba(243, 240, 255, 0.18) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-bottom-toolbar {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.54) 0%, rgba(255, 255, 255, 0.72) 100%) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.68) !important;
+    box-shadow: 0 -10px 28px rgba(243, 240, 255, 0.16) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-footer-btn,
+#gal-global-overlay.skin-dream-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-dream-twilight .gal-action-btn {
+    color: rgba(74, 59, 78, 0.58) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-dream-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-dream-twilight .gal-action-btn:hover {
+    background: rgba(255, 255, 255, 0.34) !important;
+    color: rgba(74, 59, 78, 0.94) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-pending-choices-btn.show {
+    background: rgba(233, 213, 255, 0.7) !important;
+    border-color: rgba(255, 255, 255, 0.76) !important;
+    color: rgba(74, 59, 78, 0.9) !important;
+}
+
+#gal-global-overlay.skin-dream-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(180deg, rgba(233, 213, 255, 0.92) 0%, rgba(251, 207, 232, 0.88) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.82) !important;
+    color: rgba(74, 59, 78, 0.94) !important;
+}
+
+#gal-layer-choices.skin-dream-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(233, 213, 255, 0.24) 0%, rgba(233, 213, 255, 0.08) 36%, rgba(255, 237, 213, 0.08) 52%, rgba(255, 255, 255, 0.34) 100%),
+      rgba(255, 255, 255, 0.6) !important;
+    backdrop-filter: blur(18px) saturate(102%);
+    -webkit-backdrop-filter: blur(18px) saturate(102%);
+}
+
+#gal-layer-choices.skin-dream-twilight .gal-choices-title {
+    color: rgba(74, 59, 78, 0.92) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-layer-choices.skin-dream-twilight .gal-choices-hint {
+    color: rgba(74, 59, 78, 0.5) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-dream-twilight .gal-choice-card {
+    border: 1px solid rgba(255, 255, 255, 0.78) !important;
+    border-radius: 16px !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(243, 240, 255, 0.74) 100%),
+      rgba(243, 240, 255, 0.88) !important;
+    color: rgba(63, 63, 70, 0.92) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 40px rgba(243, 240, 255, 0.18) !important;
+}
+
+#gal-layer-choices.skin-dream-twilight .gal-choice-card:hover {
+    border-color: rgba(233, 213, 255, 0.94) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 237, 213, 0.76) 100%),
+      rgba(243, 240, 255, 0.94) !important;
+    color: rgba(74, 59, 78, 0.96) !important;
+}
+
+/* =========================================================
+   0.9 霞暮 (Rosy Twilight) — 落日粉雾版
+   参考: Desktop VN - Dynamic Background Edition v14
+   只替换配色 / 字体 / 细节质感，结构与薄暮一致
+   ========================================================= */
+#gal-global-overlay.skin-rosy-twilight {
+    --rosy-blush-base: #fff0f3;
+    --rosy-blush-panel: rgba(255, 240, 243, 0.78);
+    --rosy-primary: #ff80ab;
+    --rosy-accent: #ff007f;
+    --rosy-soft: #fce4ec;
+    --rosy-warm-grey: #3d3b3c;
+    --rosy-ink: #131316;
+    --twilight-headline: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --twilight-body: "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif;
+    --twilight-label: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: rgba(61, 59, 60, 0.96) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-scrim {
+    background:
+        radial-gradient(72% 50% at 50% 16%, rgba(255, 128, 171, 0.22) 0%, rgba(255, 128, 171, 0) 58%),
+        linear-gradient(180deg, rgba(255, 240, 243, 0.16) 0%, rgba(255, 240, 243, 0.06) 28%, rgba(252, 228, 236, 0.1) 58%, rgba(19, 19, 22, 0.16) 100%);
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 128, 171, 0.08) 100%),
+        rgba(255, 128, 171, 0.2) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.28) !important;
+    box-shadow: 0 12px 30px rgba(255, 128, 171, 0.12) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-brand {
+    color: rgba(61, 59, 60, 0.94) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-divider {
+    background: rgba(61, 59, 60, 0.18) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-location-bar {
+    color: rgba(61, 59, 60, 0.84) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-time-bar {
+    color: rgba(61, 59, 60, 0.58) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-meta-btn {
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle {
+    color: rgba(61, 59, 60, 0.78) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-status-popup-icon,
+#gal-global-overlay.skin-rosy-twilight .gal-eye-icon,
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle i {
+    color: rgba(61, 59, 60, 0.84) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-status-popup-trigger:hover,
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:hover,
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-twilight-fullscreen-toggle:focus-visible {
+    background: rgba(255, 255, 255, 0.42) !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+    border-color: rgba(255, 255, 255, 0.64) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.84) 0%, rgba(255, 240, 243, 0.72) 100%),
+        rgba(255, 255, 255, 0.8) !important;
+    color: rgba(61, 59, 60, 0.88) !important;
+    font-family: var(--twilight-label) !important;
+    box-shadow: 0 -2px 8px rgba(255, 128, 171, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(252, 228, 236, 0.76) 100%),
+        rgba(255, 255, 255, 0.86) !important;
+    color: rgba(61, 59, 60, 0.96) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-name-badge {
+    background: linear-gradient(180deg, rgba(252, 228, 236, 0.96) 0%, rgba(255, 240, 243, 0.96) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.7) !important;
+    box-shadow: 0 12px 28px rgba(255, 128, 171, 0.16) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-name-badge span {
+    background: transparent !important;
+    color: rgba(255, 0, 127, 0.94) !important;
+    padding: 0 24px !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-text-panel {
+    border: 1px solid rgba(255, 255, 255, 0.72) !important;
+    background:
+        linear-gradient(180deg, rgba(252, 228, 236, 0.82) 0%, rgba(255, 240, 243, 0.64) 100%),
+        rgba(255, 240, 243, calc(var(--panel-opacity, 0.7) * 0.92)) !important;
+    box-shadow:
+        0 22px 52px rgba(255, 128, 171, 0.14),
+        inset 0 1px 0 rgba(255, 255, 255, 0.58) !important;
+    backdrop-filter: blur(16px) saturate(104%);
+    -webkit-backdrop-filter: blur(16px) saturate(104%);
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-text-panel::before {
+    opacity: 0.46 !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 38%),
+        url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M25,10 c-5,0 -10,5 -10,10 c0,5 5,10 10,10 c5,0 10,-5 10,-10 c0,-5 -5,-10 -10,-10 z M60,40 c-3,0 -6,3 -6,6 c0,3 3,6 6,6 c3,0 6,-3 6,-6 c0,-3 -3,-6 -6,-6 z M85,15 c-4,0 -8,4 -8,8 c0,4 4,8 8,8 c4,0 8,-4 8,-8 c0,-4 -4,-8 -8,-8 z M15,75 c-6,0 -12,6 -12,12 c0,6 6,12 12,12 c6,0 12,-6 12,-12 c0,-6 -6,-12 -12,-12 z M70,80 c-5,0 -10,5 -10,10 c0,5 5,10 10,10 c5,0 10,-5 10,-10 c0,-5 -5,-10 -10,-10 z' fill='%23ff80ab' fill-opacity='0.4'/%3E%3Cpath d='M30,20 q-5,10 5,20 q10,-5 0,-20 z' fill='%23ff80ab' fill-opacity='0.2' transform='rotate(45 30 20)'/%3E%3Cpath d='M75,60 q-3,6 3,12 q6,-3 0,-12 z' fill='%23ff80ab' fill-opacity='0.3' transform='rotate(-20 75 60)'/%3E%3C/svg%3E") !important;
+    background-size: auto, 120px 120px !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-text-panel:hover {
+    background:
+        linear-gradient(180deg, rgba(252, 228, 236, 0.9) 0%, rgba(255, 240, 243, 0.74) 100%),
+        rgba(255, 240, 243, calc(var(--panel-opacity, 0.7) * 0.98)) !important;
+    border-color: rgba(255, 255, 255, 0.82) !important;
+    box-shadow:
+        0 24px 56px rgba(255, 128, 171, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.64) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-dialog-text {
+    color: rgba(61, 59, 60, 0.92) !important;
+    font-family: var(--twilight-body) !important;
+    letter-spacing: 0.04em !important;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.72) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-dialog-next-indicator,
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+    color: rgba(255, 0, 127, 0.64) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-twilight-dialog-next-indicator i {
+    color: rgba(255, 0, 127, 0.68) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-generating-indicator {
+    border-color: rgba(255, 255, 255, 0.72) !important;
+    background: rgba(255, 255, 255, 0.88) !important;
+    color: rgba(61, 59, 60, 0.8) !important;
+    box-shadow: 0 12px 28px rgba(255, 128, 171, 0.14) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-bottom-toolbar {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 128, 171, 0.14) 100%),
+        rgba(255, 128, 171, 0.2) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.38) !important;
+    box-shadow: 0 -10px 28px rgba(255, 128, 171, 0.12) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-footer-btn,
+#gal-global-overlay.skin-rosy-twilight .gal-pending-choices-btn,
+#gal-global-overlay.skin-rosy-twilight .gal-action-btn {
+    color: rgba(61, 59, 60, 0.62) !important;
+    font-family: var(--twilight-label) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-footer-btn:hover,
+#gal-global-overlay.skin-rosy-twilight .gal-pending-choices-btn:hover,
+#gal-global-overlay.skin-rosy-twilight .gal-action-btn:hover {
+    background: rgba(255, 255, 255, 0.28) !important;
+    color: rgba(61, 59, 60, 0.96) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-pending-choices-btn.show {
+    background: rgba(255, 240, 243, 0.78) !important;
+    border-color: rgba(255, 255, 255, 0.78) !important;
+    color: rgba(255, 0, 127, 0.88) !important;
+}
+
+#gal-global-overlay.skin-rosy-twilight .gal-bottom-toolbar [data-action="show-choices"] {
+    background: linear-gradient(180deg, rgba(255, 128, 171, 0.96) 0%, rgba(255, 0, 127, 0.9) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.72) !important;
+    color: rgba(255, 255, 255, 0.96) !important;
+    box-shadow: 0 14px 26px rgba(255, 0, 127, 0.16) !important;
+}
+
+#gal-layer-choices.skin-rosy-twilight {
+    background:
+      radial-gradient(120% 120% at 50% 0%, rgba(255, 128, 171, 0.24) 0%, rgba(255, 128, 171, 0.08) 36%, rgba(252, 228, 236, 0.1) 52%, rgba(255, 255, 255, 0.38) 100%),
+      rgba(255, 255, 255, 0.58) !important;
+    backdrop-filter: blur(18px) saturate(102%);
+    -webkit-backdrop-filter: blur(18px) saturate(102%);
+}
+
+#gal-layer-choices.skin-rosy-twilight .gal-choices-title {
+    color: rgba(61, 59, 60, 0.92) !important;
+    font-family: var(--twilight-headline) !important;
+    letter-spacing: 0.14em !important;
+}
+
+#gal-layer-choices.skin-rosy-twilight .gal-choices-hint {
+    color: rgba(61, 59, 60, 0.54) !important;
+    font-family: var(--twilight-label) !important;
+}
+
+#gal-layer-choices.skin-rosy-twilight .gal-choice-card {
+    border: 1px solid rgba(255, 255, 255, 0.74) !important;
+    border-radius: 16px !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.84) 0%, rgba(255, 240, 243, 0.74) 100%),
+      rgba(255, 240, 243, 0.9) !important;
+    color: rgba(61, 59, 60, 0.92) !important;
+    font-family: var(--twilight-body) !important;
+    box-shadow: 0 18px 40px rgba(255, 128, 171, 0.14) !important;
+}
+
+#gal-layer-choices.skin-rosy-twilight .gal-choice-card:hover {
+    border-color: rgba(255, 128, 171, 0.84) !important;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(252, 228, 236, 0.78) 100%),
+      rgba(255, 240, 243, 0.94) !important;
+    color: rgba(61, 59, 60, 0.96) !important;
+}
+
+@media screen and (max-width: 768px) {
+    #gal-global-overlay.skin-twilight {
+        --twilight-header-height: 76px;
+        --twilight-footer-height: 54px;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-game-container.gal-twilight-shell {
+        background: transparent !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-game-container.gal-twilight-shell::before {
+        content: none !important;
+        display: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-scrim {
+        background:
+            linear-gradient(180deg, rgba(7, 10, 16, 0.14) 0%, rgba(7, 10, 16, 0.05) 24%, rgba(7, 10, 16, 0.02) 62%, rgba(7, 10, 16, 0.18) 100%);
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-header {
+        min-height: var(--twilight-header-height) !important;
+        padding: 8px 6px 0 !important;
+        gap: 6px;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        justify-content: space-between;
+        align-items: center;
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-brandline {
+        width: auto;
+        gap: 4px;
+        flex-wrap: nowrap !important;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-brand {
+        font-size: 0.48rem;
+        letter-spacing: 0.24em;
+        opacity: 0.82;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-shrink: 1;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-divider {
+        display: none;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-meta-group {
+        gap: 4px;
+        width: auto;
+        flex-wrap: nowrap !important;
+        flex-shrink: 0;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-meta-btn {
+        font-size: 0.48rem !important;
+        white-space: nowrap;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-meta-btn i {
+        display: inline-flex !important;
+        font-size: 0.6rem !important;
+        color: var(--gal-immersive-accent) !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-header-actions {
+        gap: 4px;
+        margin-left: auto;
+        padding-right: 2px;
+        flex-wrap: nowrap !important;
+        flex-shrink: 0;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        width: 26px !important;
+        height: 26px !important;
+        min-width: 26px !important;
+        min-height: 26px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background: rgba(12, 14, 22, 0.18) !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-twilight-dialog-layer {
+        --ui-scale: 1 !important;
+        left: 12px !important;
+        right: 12px !important;
+        bottom: calc(var(--twilight-footer-height) + env(safe-area-inset-bottom, 0px) + 12px) !important;
+        width: auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        transform: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-dialog-topline {
+        position: static;
+        margin-bottom: 0;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-mobile-controls {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 6px;
+        border: none !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action {
+        height: 26px !important;
+        min-height: 26px !important;
+        padding: 0 11px !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 999px !important;
+        background: rgba(11, 13, 21, 0.7) !important;
+        color: rgba(245, 239, 232, 0.86) !important;
+        letter-spacing: 0.12em !important;
+        font-size: 0.56rem !important;
+        text-transform: uppercase !important;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16) !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action + .gal-twilight-mobile-action {
+        border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-mobile-controls .gal-twilight-mobile-action i {
+        font-size: 0.56rem !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-name-badge {
+        transform: scaleY(var(--twilight-name-badge-height-scale, 0.7)) !important;
+        transform-origin: center center !important;
+        min-width: 88px;
+        max-width: min(44vw, 180px);
+        min-height: 40px;
+        margin: 0 0 -18px 0 !important;
+        border: 1px solid rgba(186, 155, 112, 0.3) !important;
+        border-radius: 999px !important;
+        background:
+            linear-gradient(180deg, rgba(255, 251, 245, 0.97) 0%, rgba(244, 236, 223, 0.94) 100%) !important;
+        box-shadow:
+            0 12px 24px rgba(41, 29, 17, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-name-badge span {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 0 18px !important;
+        border: none !important;
+        background: transparent !important;
+        color: #7b5d33 !important;
+        font-size: 0.68rem !important;
+        transform: scaleY(calc(1 / var(--twilight-name-badge-height-scale, 0.7))) !important;
+        transform-origin: center center !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.12em;
+        box-shadow: none !important;
+        transform: none !important;
+        text-shadow: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-text-panel {
+        min-height: 128px;
+        padding: 34px 16px 42px !important;
+        border-radius: 18px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%),
+            rgba(10, 12, 18, var(--panel-opacity, 0.74)) !important;
+        box-shadow:
+            0 20px 40px rgba(0, 0, 0, 0.24),
+            inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator {
+        right: 22px;
+        bottom: 18px;
+        width: 18px;
+        height: 18px;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator::after {
+        content: none;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-dialog-text {
+        font-size: 0.84rem !important;
+        line-height: 1.76 !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator[data-state="end"] {
+        border: none;
+        background: transparent;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator[data-state="end"]::after {
+        content: none;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-generating-indicator {
+        margin-top: 8px !important;
+        padding: 8px 10px !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-footer-btn-next.gal-twilight-mobile-next {
+        display: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar {
+        --ui-scale: 1 !important;
+        left: 12px !important;
+        right: 12px !important;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+        width: auto !important;
+        min-height: 42px !important;
+        padding: 5px 8px !important;
+        background: rgba(10, 12, 18, 0.76) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        display: grid !important;
+        grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+        gap: 2px !important;
+        border-radius: 18px !important;
+        align-items: center !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-twilight-desktop-only {
+        display: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        width: 100% !important;
+        flex: 0 0 auto !important;
+        min-width: 0 !important;
+        height: 30px !important;
+        min-height: 30px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-radius: 10px !important;
+        border-color: transparent !important;
+        background: transparent !important;
+        justify-content: center !important;
+        box-shadow: none !important;
+        color: rgba(245, 239, 232, 0.74) !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-btn-text {
+        display: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar i {
+        display: block !important;
+        margin: 0 !important;
+        font-size: 0.82rem !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    #gal-layer-choices.skin-twilight .gal-choice-card {
+        border-radius: 18px !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(249, 248, 244, 0.86) 0%, rgba(249, 248, 244, 0.54) 100%) !important;
+        border-bottom: 1px solid rgba(176, 141, 87, 0.16) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-twilight-brand {
+        color: rgba(176, 141, 87, 0.92) !important;
+        opacity: 0.92 !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-twilight-meta-btn {
+        color: rgba(47, 40, 34, 0.72) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-gilded-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(176, 141, 87, 0.14) !important;
+        background: rgba(249, 248, 244, 0.52) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight[class*="skin-"] .gal-name-badge {
+        background: rgba(249, 248, 244, 0.92) !important;
+        border: 1px solid rgba(176, 141, 87, 0.28) !important;
+        box-shadow: 0 8px 16px rgba(111, 84, 46, 0.06) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: var(--gilded-gold) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.18) 100%),
+            rgba(249, 248, 244, calc(var(--panel-opacity, 0.74) * 0.88)) !important;
+        border-color: rgba(176, 141, 87, 0.18) !important;
+        box-shadow:
+            0 20px 40px rgba(77, 58, 32, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.44) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(47, 40, 34, 0.94) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(249, 248, 244, 0.82) !important;
+        border-color: rgba(176, 141, 87, 0.16) !important;
+        box-shadow: 0 16px 30px rgba(80, 58, 34, 0.08) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-gilded-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(47, 40, 34, 0.6) !important;
+    }
+
+    #gal-global-overlay.skin-gilded-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-gilded-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(176, 141, 87, 0.1) !important;
+        color: var(--gilded-gold) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.78) 0%, rgba(15, 23, 42, 0.5) 100%) !important;
+        border-bottom: 1px solid rgba(120, 161, 187, 0.14) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-twilight-brand {
+        color: rgba(184, 193, 200, 0.94) !important;
+        opacity: 0.94 !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-twilight-meta-btn {
+        color: rgba(184, 193, 200, 0.76) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-dawn-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(120, 161, 187, 0.14) !important;
+        background: rgba(15, 23, 42, 0.5) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight[class*="skin-"] .gal-name-badge {
+        background: rgba(15, 23, 42, 0.92) !important;
+        border: 1px solid rgba(120, 161, 187, 0.24) !important;
+        box-shadow: 0 8px 16px rgba(2, 6, 23, 0.12) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(184, 193, 200, 0.98) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(15, 23, 42, 0.56) 0%, rgba(2, 6, 23, 0.18) 100%),
+            rgba(30, 41, 59, calc(var(--panel-opacity, 0.74) * 0.9)) !important;
+        border-color: rgba(120, 161, 187, 0.18) !important;
+        box-shadow:
+            0 20px 40px rgba(2, 6, 23, 0.18),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(226, 232, 240, 0.96) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(15, 23, 42, 0.82) !important;
+        border-color: rgba(120, 161, 187, 0.16) !important;
+        box-shadow: 0 16px 30px rgba(2, 6, 23, 0.14) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-dawn-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(184, 193, 200, 0.66) !important;
+    }
+
+    #gal-global-overlay.skin-dawn-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-dawn-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(120, 161, 187, 0.12) !important;
+        color: rgba(226, 232, 240, 0.98) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(45, 27, 45, 0.82) 0%, rgba(26, 22, 37, 0.56) 100%) !important;
+        border-bottom: 1px solid rgba(183, 156, 237, 0.14) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-twilight-brand {
+        color: rgba(255, 191, 105, 0.94) !important;
+        opacity: 0.94 !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-twilight-meta-btn {
+        color: rgba(247, 225, 215, 0.74) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-orchid-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(255, 191, 105, 0.14) !important;
+        background: rgba(45, 27, 45, 0.54) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight[class*="skin-"] .gal-name-badge {
+        background: rgba(45, 27, 45, 0.94) !important;
+        border: 1px solid rgba(255, 191, 105, 0.26) !important;
+        box-shadow: 0 8px 16px rgba(26, 22, 37, 0.1) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(255, 191, 105, 0.98) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(45, 27, 45, 0.56) 0%, rgba(26, 22, 37, 0.2) 100%),
+            rgba(26, 22, 37, calc(var(--panel-opacity, 0.74) * 0.92)) !important;
+        border-color: rgba(183, 156, 237, 0.2) !important;
+        box-shadow:
+            0 20px 40px rgba(26, 22, 37, 0.16),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(247, 225, 215, 0.96) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(45, 27, 45, 0.84) !important;
+        border-color: rgba(183, 156, 237, 0.16) !important;
+        box-shadow: 0 16px 30px rgba(26, 22, 37, 0.12) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-orchid-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(247, 225, 215, 0.66) !important;
+    }
+
+    #gal-global-overlay.skin-orchid-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-orchid-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(255, 191, 105, 0.12) !important;
+        color: rgba(255, 191, 105, 0.98) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(10, 10, 15, 0.88) 0%, rgba(19, 19, 32, 0.62) 100%) !important;
+        border-bottom: 1px solid rgba(0, 242, 255, 0.16) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-twilight-brand {
+        color: rgba(0, 242, 255, 0.96) !important;
+        opacity: 0.96 !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-twilight-meta-btn {
+        color: rgba(240, 240, 255, 0.76) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-neon-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(0, 242, 255, 0.16) !important;
+        background: rgba(10, 10, 15, 0.58) !important;
+        box-shadow: 0 0 16px rgba(0, 242, 255, 0.06) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight[class*="skin-"] .gal-name-badge {
+        background: linear-gradient(90deg, rgba(112, 0, 255, 0.94) 0%, rgba(0, 242, 255, 0.96) 100%) !important;
+        border: 1px solid rgba(0, 242, 255, 0.24) !important;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14), 0 0 16px rgba(112, 0, 255, 0.12) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(10, 10, 15, 0.98) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(0, 0, 0, 0.66) 0%, rgba(10, 10, 15, 0.86) 100%) padding-box,
+            linear-gradient(90deg, rgba(112, 0, 255, 0.78) 0%, rgba(0, 242, 255, 0.82) 100%) border-box !important;
+        border-color: transparent !important;
+        box-shadow:
+            0 20px 40px rgba(0, 0, 0, 0.22),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06),
+            0 0 18px rgba(0, 242, 255, 0.06) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(240, 240, 255, 0.98) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(10, 10, 15, 0.88) !important;
+        border-color: rgba(0, 242, 255, 0.18) !important;
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.16), 0 0 18px rgba(0, 242, 255, 0.06) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-neon-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(240, 240, 255, 0.68) !important;
+    }
+
+    #gal-global-overlay.skin-neon-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-neon-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(0, 242, 255, 0.12) !important;
+        color: rgba(0, 242, 255, 0.98) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.62) 100%) !important;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-twilight-brand {
+        color: rgba(26, 26, 28, 0.92) !important;
+        opacity: 0.94 !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-twilight-meta-btn {
+        color: rgba(26, 26, 28, 0.66) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-clear-twilight .gal-twilight-header-actions .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(0, 0, 0, 0.06) !important;
+        background: rgba(255, 255, 255, 0.56) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight[class*="skin-"] .gal-name-badge {
+        background: rgba(224, 242, 254, 0.98) !important;
+        border: 1px solid rgba(14, 165, 233, 0.14) !important;
+        box-shadow: 0 8px 16px rgba(148, 163, 184, 0.06) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(3, 105, 161, 0.94) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.68) 100%),
+            rgba(255, 255, 255, calc(var(--panel-opacity, 0.74) * 0.94)) !important;
+        border-color: rgba(0, 0, 0, 0.05) !important;
+        box-shadow: 0 20px 40px rgba(148, 163, 184, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.54) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(26, 26, 28, 0.92) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(255, 255, 255, 0.84) !important;
+        border-color: rgba(0, 0, 0, 0.06) !important;
+        box-shadow: 0 16px 30px rgba(148, 163, 184, 0.08) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-clear-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(26, 26, 28, 0.64) !important;
+    }
+
+    #gal-global-overlay.skin-clear-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-clear-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(0, 0, 0, 0.05) !important;
+        color: rgba(14, 165, 233, 0.92) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(10, 31, 22, 0.84) 0%, rgba(10, 31, 22, 0.58) 100%) !important;
+        border-bottom: 1px solid rgba(212, 175, 55, 0.14) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-twilight-brand {
+        color: rgba(212, 175, 55, 0.94) !important;
+        opacity: 0.96 !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-twilight-meta-btn {
+        color: rgba(165, 243, 252, 0.72) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-forest-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-forest-twilight .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(212, 175, 55, 0.12) !important;
+        background: rgba(10, 31, 22, 0.54) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight[class*="skin-"] .gal-name-badge {
+        background: linear-gradient(90deg, rgba(61, 43, 31, 0.96) 0%, rgba(30, 58, 42, 0.96) 100%) !important;
+        border: 1px solid rgba(212, 175, 55, 0.22) !important;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(212, 175, 55, 0.98) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(10, 31, 22, 0.9) 0%, rgba(5, 15, 11, 0.82) 100%),
+            rgba(10, 31, 22, calc(var(--panel-opacity, 0.74) * 0.96)) !important;
+        border-color: rgba(212, 175, 55, 0.16) !important;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(243, 244, 246, 0.96) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(10, 31, 22, 0.86) !important;
+        border-color: rgba(212, 175, 55, 0.14) !important;
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.14) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-forest-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(212, 175, 55, 0.62) !important;
+    }
+
+    #gal-global-overlay.skin-forest-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-forest-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(212, 175, 55, 0.08) !important;
+        color: rgba(212, 175, 55, 0.98) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(45, 0, 77, 0.46) 0%, rgba(26, 11, 46, 0.72) 100%) !important;
+        border-bottom: 1px solid rgba(0, 243, 255, 0.16) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-twilight-brand {
+        color: rgba(0, 243, 255, 0.96) !important;
+        opacity: 0.96 !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-twilight-meta-btn {
+        color: rgba(0, 210, 255, 0.76) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-cyber-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-cyber-twilight .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(0, 243, 255, 0.16) !important;
+        background: rgba(26, 11, 46, 0.62) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight[class*="skin-"] .gal-name-badge {
+        background: rgba(0, 243, 255, 0.96) !important;
+        border: 1px solid rgba(0, 243, 255, 0.24) !important;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.14), 0 0 16px rgba(0, 243, 255, 0.14) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(45, 0, 77, 0.98) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(26, 11, 46, 0.9) 0%, rgba(14, 6, 26, 0.88) 100%),
+            rgba(26, 11, 46, calc(var(--panel-opacity, 0.74) * 0.98)) !important;
+        border-color: rgba(0, 243, 255, 0.22) !important;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 16px rgba(0, 243, 255, 0.08) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(224, 242, 254, 0.96) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(26, 11, 46, 0.9) !important;
+        border-color: rgba(0, 243, 255, 0.18) !important;
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.16) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-cyber-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(0, 210, 255, 0.72) !important;
+    }
+
+    #gal-global-overlay.skin-cyber-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-cyber-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(0, 243, 255, 0.08) !important;
+        color: rgba(57, 255, 20, 0.96) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-twilight-header {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(243, 240, 255, 0.58) 100%) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.72) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-twilight-brand {
+        color: rgba(74, 59, 78, 0.92) !important;
+        opacity: 0.94 !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-twilight-meta-btn {
+        color: rgba(74, 59, 78, 0.68) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-dream-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-dream-twilight .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(255, 255, 255, 0.72) !important;
+        background: rgba(255, 255, 255, 0.56) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight[class*="skin-"] .gal-name-badge {
+        background: rgba(255, 237, 213, 0.96) !important;
+        border: 1px solid rgba(255, 255, 255, 0.72) !important;
+        box-shadow: 0 8px 16px rgba(243, 240, 255, 0.08) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(74, 59, 78, 0.94) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(243, 240, 255, 0.88) 0%, rgba(243, 240, 255, 0.7) 100%),
+            rgba(243, 240, 255, calc(var(--panel-opacity, 0.74) * 0.96)) !important;
+        border-color: rgba(255, 255, 255, 0.78) !important;
+        box-shadow: 0 20px 40px rgba(243, 240, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(63, 63, 70, 0.92) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(255, 255, 255, 0.8) !important;
+        border-color: rgba(255, 255, 255, 0.72) !important;
+        box-shadow: 0 16px 30px rgba(243, 240, 255, 0.12) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-dream-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(74, 59, 78, 0.64) !important;
+    }
+
+    #gal-global-overlay.skin-dream-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-dream-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(255, 255, 255, 0.32) !important;
+        color: rgba(74, 59, 78, 0.94) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-twilight-header {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 128, 171, 0.1) 100%),
+            rgba(255, 128, 171, 0.22) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.44) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-twilight-brand {
+        color: rgba(61, 59, 60, 0.92) !important;
+        opacity: 0.94 !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-twilight-meta-btn {
+        color: rgba(61, 59, 60, 0.7) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
+    #gal-global-overlay.skin-rosy-twilight .gal-twilight-header-actions .gal-sprite-toggle,
+    #gal-global-overlay.skin-rosy-twilight .gal-fullscreen-btn.gal-twilight-fullscreen-toggle {
+        border-color: rgba(255, 255, 255, 0.68) !important;
+        background: rgba(255, 255, 255, 0.56) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight[class*="skin-"] .gal-name-badge {
+        background: rgba(252, 228, 236, 0.96) !important;
+        border: 1px solid rgba(255, 255, 255, 0.74) !important;
+        box-shadow: 0 8px 16px rgba(255, 128, 171, 0.1) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-name-badge span {
+        background: transparent !important;
+        color: rgba(255, 0, 127, 0.92) !important;
+        padding: 0 18px !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-twilight-dialog-topline {
+        margin-bottom: 0 !important;
+        align-items: flex-end !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-text-panel {
+        background:
+            linear-gradient(180deg, rgba(252, 228, 236, 0.88) 0%, rgba(255, 240, 243, 0.72) 100%),
+            rgba(255, 240, 243, calc(var(--panel-opacity, 0.74) * 0.96)) !important;
+        border-color: rgba(255, 255, 255, 0.78) !important;
+        box-shadow: 0 20px 40px rgba(255, 128, 171, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight .gal-dialog-text {
+        font-size: 0.88rem !important;
+        color: rgba(61, 59, 60, 0.92) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight[class*="skin-"] .gal-bottom-toolbar {
+        background: rgba(255, 255, 255, 0.76) !important;
+        border-color: rgba(255, 255, 255, 0.7) !important;
+        box-shadow: 0 16px 30px rgba(255, 128, 171, 0.12) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-rosy-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        color: rgba(61, 59, 60, 0.66) !important;
+    }
+
+    #gal-global-overlay.skin-rosy-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn:hover,
+    #gal-global-overlay.skin-rosy-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn:hover {
+        background: rgba(255, 255, 255, 0.32) !important;
+        color: rgba(61, 59, 60, 0.94) !important;
+    }
 }
 
 /* =========================================================
@@ -29299,6 +33833,7 @@ ${normalizedSource}`;
 #gal-global-overlay.custom-skin {
     --custom-skin-control-top: clamp(5.2rem, 10vh, 7.2rem);
     --custom-skin-footer-auto-scale: 1;
+    --custom-skin-footer-final-scale: calc(var(--ui-scale, 1) * var(--custom-skin-footer-auto-scale, 1));
     font-family: "Noto Serif SC", "Source Han Serif SC", "Georgia", serif;
 }
 
@@ -29407,7 +33942,7 @@ ${normalizedSource}`;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    gap: calc(0.5rem * var(--custom-skin-footer-auto-scale, 1)) !important;
+    gap: calc(0.5rem * var(--custom-skin-footer-final-scale, 1)) !important;
 }
 
 #gal-global-overlay.custom-skin .gal-action-btn.custom-skin-element-active,
@@ -29526,11 +34061,11 @@ ${normalizedSource}`;
 }
 
 #gal-global-overlay.custom-skin .gal-footer-btn.custom-skin-element-active {
-    width: calc(var(--custom-skin-footer_btn_common-width, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
-    height: calc(var(--custom-skin-footer_btn_common-height, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
+    width: calc(var(--custom-skin-footer_btn_common-width, 0px) * var(--custom-skin-footer-final-scale, 1)) !important;
+    height: calc(var(--custom-skin-footer_btn_common-height, 0px) * var(--custom-skin-footer-final-scale, 1)) !important;
     transform: translate(
-      calc((var(--custom-skin-footer_btn_common-offset-x, 0px) - var(--custom-skin-footer_btn_common-anchor-x, 0px)) * var(--custom-skin-footer-auto-scale, 1)),
-      calc((var(--custom-skin-footer_btn_common-offset-y, 0px) - var(--custom-skin-footer_btn_common-anchor-y, 0px)) * var(--custom-skin-footer-auto-scale, 1))
+      calc((var(--custom-skin-footer_btn_common-offset-x, 0px) - var(--custom-skin-footer_btn_common-anchor-x, 0px)) * var(--custom-skin-footer-final-scale, 1)),
+      calc((var(--custom-skin-footer_btn_common-offset-y, 0px) - var(--custom-skin-footer_btn_common-anchor-y, 0px)) * var(--custom-skin-footer-final-scale, 1))
     ) !important;
     clip-path: var(--custom-skin-footer_btn_common-normal-hit-clip, none);
     -webkit-clip-path: var(--custom-skin-footer_btn_common-normal-hit-clip, none);
@@ -29563,11 +34098,11 @@ ${normalizedSource}`;
 }
 
 #gal-global-overlay.custom-skin .gal-pending-choices-btn.custom-skin-element-active {
-    width: calc(var(--custom-skin-footer_btn_choices-width, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
-    height: calc(var(--custom-skin-footer_btn_choices-height, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
+    width: calc(var(--custom-skin-footer_btn_choices-width, 0px) * var(--custom-skin-footer-final-scale, 1)) !important;
+    height: calc(var(--custom-skin-footer_btn_choices-height, 0px) * var(--custom-skin-footer-final-scale, 1)) !important;
     transform: translate(
-      calc((var(--custom-skin-footer_btn_choices-offset-x, 0px) - var(--custom-skin-footer_btn_choices-anchor-x, 0px)) * var(--custom-skin-footer-auto-scale, 1)),
-      calc((var(--custom-skin-footer_btn_choices-offset-y, 0px) - var(--custom-skin-footer_btn_choices-anchor-y, 0px)) * var(--custom-skin-footer-auto-scale, 1))
+      calc((var(--custom-skin-footer_btn_choices-offset-x, 0px) - var(--custom-skin-footer_btn_choices-anchor-x, 0px)) * var(--custom-skin-footer-final-scale, 1)),
+      calc((var(--custom-skin-footer_btn_choices-offset-y, 0px) - var(--custom-skin-footer_btn_choices-anchor-y, 0px)) * var(--custom-skin-footer-final-scale, 1))
     ) !important;
     clip-path: var(--custom-skin-footer_btn_choices-normal-hit-clip, none);
     -webkit-clip-path: var(--custom-skin-footer_btn_choices-normal-hit-clip, none);
@@ -29600,11 +34135,11 @@ ${normalizedSource}`;
 }
 
 #gal-global-overlay.custom-skin .gal-footer-btn-next.custom-skin-element-active {
-    width: calc(var(--custom-skin-footer_btn_next-width, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
-    height: calc(var(--custom-skin-footer_btn_next-height, 0px) * var(--custom-skin-footer-auto-scale, 1)) !important;
+    width: calc(var(--custom-skin-footer_btn_next-width, 0px) * var(--custom-skin-footer-final-scale, 1)) !important;
+    height: calc(var(--custom-skin-footer_btn_next-height, 0px) * var(--custom-skin-footer-final-scale, 1)) !important;
     transform: translate(
-      calc((var(--custom-skin-footer_btn_next-offset-x, 0px) - var(--custom-skin-footer_btn_next-anchor-x, 0px)) * var(--custom-skin-footer-auto-scale, 1)),
-      calc((var(--custom-skin-footer_btn_next-offset-y, 0px) - var(--custom-skin-footer_btn_next-anchor-y, 0px)) * var(--custom-skin-footer-auto-scale, 1))
+      calc((var(--custom-skin-footer_btn_next-offset-x, 0px) - var(--custom-skin-footer_btn_next-anchor-x, 0px)) * var(--custom-skin-footer-final-scale, 1)),
+      calc((var(--custom-skin-footer_btn_next-offset-y, 0px) - var(--custom-skin-footer_btn_next-anchor-y, 0px)) * var(--custom-skin-footer-final-scale, 1))
     ) !important;
     clip-path: var(--custom-skin-footer_btn_next-normal-hit-clip, none);
     -webkit-clip-path: var(--custom-skin-footer_btn_next-normal-hit-clip, none);
@@ -30014,6 +34549,105 @@ ${normalizedSource}`;
 }
 
 /* === 对话字体最终兜底：始终由设置项控制 === */
+@media screen and (max-width: 48rem), screen and (max-height: 46rem) {
+    #gal-global-overlay.skin-twilight .gal-footer-btn[data-action='log'],
+    #gal-global-overlay.skin-twilight .gal-footer-btn[data-action='view-original'],
+    #gal-global-overlay.skin-twilight .gal-footer-btn[data-action='save'],
+    #gal-global-overlay.skin-twilight .gal-footer-btn[data-action='load'] {
+        display: inline-flex !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bottom-toolbar {
+        justify-content: stretch !important;
+        gap: 2px !important;
+        padding: 5px 8px !important;
+        overflow: visible !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-twilight .gal-bottom-toolbar .gal-pending-choices-btn {
+        flex: 0 0 auto !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-footer-btn-next.gal-twilight-mobile-next {
+        width: auto !important;
+        min-width: 76px !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        z-index: 4 !important;
+        display: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-footer-btn-next.gal-twilight-mobile-next .gal-btn-text {
+        display: inline !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-footer-btn-next.gal-twilight-mobile-next i {
+        font-size: 0.9rem !important;
+    }
+}
+
+@media screen and (max-width: 48rem) {
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-twilight-dialog-layer {
+        --ui-scale: 1 !important;
+        left: 12px !important;
+        right: 12px !important;
+        bottom: calc(var(--twilight-footer-height) + env(safe-area-inset-bottom, 0px) + 12px) !important;
+        width: auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        transform: none !important;
+        padding-bottom: 0 !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-text-panel {
+        min-height: 128px !important;
+        height: auto !important;
+        max-height: none !important;
+        padding: 18px 16px 42px !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar {
+        left: 12px !important;
+        right: 12px !important;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+        width: auto !important;
+        display: grid !important;
+        grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+        justify-content: stretch !important;
+        gap: 2px !important;
+        padding: 5px 8px !important;
+        overflow: visible !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-footer-btn,
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-pending-choices-btn {
+        width: 100% !important;
+        min-width: 0 !important;
+        height: 30px !important;
+        min-height: 30px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        flex: 0 0 auto !important;
+        border-radius: 10px !important;
+        background: transparent !important;
+        border: 1px solid transparent !important;
+        justify-content: center !important;
+        box-shadow: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar .gal-btn-text {
+        display: none !important;
+    }
+
+    #gal-global-overlay.skin-twilight[class*="skin-"] .gal-bottom-toolbar i {
+        display: block !important;
+        margin: 0 !important;
+        font-size: 0.82rem !important;
+    }
+}
+
 #gal-global-overlay .gal-dialog-text,
 #gal-global-overlay[class*="skin-"] .gal-dialog-text {
     font-family: var(--gal-dialog-font-family, "Noto Sans SC","PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif) !important;
@@ -31251,6 +35885,7 @@ ${normalizedSource}`;
 }
 
 #gal-save-load-modal .gal-save-load-close {
+    width: auto;
     min-height: 42px;
     padding: 0 18px;
     border-radius: 999px;
@@ -31393,6 +36028,31 @@ ${normalizedSource}`;
     font-size: 1.06rem;
     line-height: 1.65;
     color: var(--gal-immersive-text);
+}
+
+@media (min-width: 768px) {
+    #gal-save-load-modal .gal-save-slot-list::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.5);
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-actions {
+        top: auto;
+        bottom: 0;
+        height: auto;
+        flex-direction: row;
+        padding: 16px 14px;
+        background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.8));
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        z-index: 10;
+        justify-content: center;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 0 10px;
+    }
 }
 `;
     const saveLoadSlotsCss = `
@@ -31914,6 +36574,57 @@ ${normalizedSource}`;
         padding: 10px;
     }
 
+    #gal-save-load-modal .gal-save-load-header {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 20px 16px 14px;
+    }
+
+    #gal-save-load-modal .gal-save-load-heading {
+        flex: 1 1 0;
+        min-width: 0;
+        gap: 8px;
+    }
+
+    #gal-save-load-modal .gal-save-load-kicker,
+    #gal-save-load-modal .gal-save-load-stage-kicker,
+    #gal-save-load-modal .gal-save-load-panel-label {
+        font-size: 0.68rem;
+        letter-spacing: 0.16em;
+        opacity: 0.74;
+    }
+
+    #gal-save-load-modal .gal-save-load-title {
+        gap: 10px;
+        font-size: clamp(1.45rem, 6.8vw, 2rem);
+        line-height: 1.2;
+        letter-spacing: 0.03em;
+    }
+
+    #gal-save-load-modal .gal-save-load-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        align-self: flex-start;
+        flex: 0 0 auto;
+        width: auto;
+        min-width: fit-content;
+        max-width: 100%;
+        min-height: 38px;
+        padding: 0 14px;
+        margin-left: auto;
+        letter-spacing: 0.12em;
+        white-space: nowrap;
+    }
+
+    #gal-save-load-modal .gal-save-load-close span {
+        display: inline-block;
+        white-space: nowrap;
+    }
+
     #gal-save-load-modal .gal-save-load-shell,
     .gal-cg-upload-modal .gal-cg-upload-shell {
         border-radius: 18px;
@@ -31978,6 +36689,922 @@ ${normalizedSource}`;
 
     .gal-cg-upload-modal .gal-cg-upload-gallery-grid {
         grid-template-columns: 1fr;
+    }
+
+    #gal-save-load-modal.gal-save-load-modal[data-skin='skin-twilight'] {
+        align-items: center;
+        justify-content: center;
+        width: 100vw;
+        height: 100dvh;
+        min-height: 100dvh;
+        max-height: 100dvh;
+        padding: 12px 10px calc(env(safe-area-inset-bottom, 0px) + 12px);
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-shell {
+        width: 100%;
+        min-height: 0;
+        max-height: calc(100dvh - env(safe-area-inset-bottom, 0px) - 24px);
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0 12px 12px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-panel-intro {
+        display: none;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-rail {
+        gap: 0;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-controls-panel {
+        padding: 14px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-field {
+        margin-top: 10px;
+        gap: 8px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-controls {
+        margin-top: 12px;
+        gap: 10px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-stage {
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 14px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-stage-head {
+        margin-bottom: 10px;
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-load-stage-title {
+        display: none;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-right: 2px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-card {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        padding: 0;
+        min-height: 0;
+        height: auto;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-actions {
+        position: static;
+        opacity: 1;
+        pointer-events: auto;
+        background: none;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        gap: 10px;
+        padding: 0 14px 14px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-thumb-wrap {
+        width: 100%;
+        flex: 0 0 auto;
+        height: 132px;
+        max-width: none;
+        min-height: 132px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-info {
+        width: auto;
+        margin-top: 0;
+        padding: 14px 14px 12px;
+        gap: 8px;
+        background: linear-gradient(180deg, rgba(2, 5, 10, 0.2), rgba(2, 5, 10, 0.9) 100%);
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-meta,
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-detail {
+        gap: 8px;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-title {
+        font-size: 1rem;
+        line-height: 1.4;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-btn {
+        flex: 1 1 0;
+        width: auto;
+        min-width: 0;
+        min-height: 38px;
+        font-size: 0.84rem;
+    }
+
+    #gal-save-load-modal[data-skin='skin-twilight'] .gal-save-slot-time {
+        width: auto;
+        margin-left: auto;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] {
+        background: radial-gradient(circle at top, rgba(255, 249, 238, 0.22) 0%, rgba(255, 249, 238, 0.08) 22%, rgba(26, 18, 14, 0.58) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 100%),
+            rgba(249, 248, 244, 0.88) !important;
+        border-color: rgba(176, 141, 87, 0.18) !important;
+        box-shadow: 0 20px 48px rgba(80, 58, 34, 0.12) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-panel-label {
+        color: rgba(176, 141, 87, 0.88) !important;
+        font-family: "Montserrat", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.22em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-title {
+        color: rgba(47, 40, 34, 0.94) !important;
+        font-family: "Cormorant Garamond", "Noto Serif SC", "Source Han Serif SC", serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-meta {
+        color: rgba(47, 40, 34, 0.66) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-btn {
+        border-color: rgba(176, 141, 87, 0.18) !important;
+        font-family: "Montserrat", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.08em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(180deg, rgba(176, 141, 87, 0.94) 0%, rgba(153, 118, 70, 0.96) 100%) !important;
+        color: rgba(255, 252, 246, 0.98) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(106, 45, 50, 0.92) 0%, rgba(82, 29, 35, 0.96) 100%) !important;
+        color: rgba(255, 244, 240, 0.96) !important;
+        border-color: rgba(106, 45, 50, 0.88) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field select {
+        color: rgba(47, 40, 34, 0.94) !important;
+        background: rgba(255, 252, 246, 0.94) !important;
+        border-color: rgba(176, 141, 87, 0.2) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(47, 40, 34, 0.46) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(176, 141, 87, 0.42) !important;
+        box-shadow: 0 0 0 3px rgba(176, 141, 87, 0.12) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-gilded-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(255, 253, 247, 0.32), rgba(255, 253, 247, 0.86) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] {
+        background: radial-gradient(circle at top, rgba(120, 161, 187, 0.16) 0%, rgba(120, 161, 187, 0.06) 22%, rgba(2, 6, 23, 0.64) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(120, 161, 187, 0.08) 0%, rgba(120, 161, 187, 0.02) 100%),
+            rgba(15, 23, 42, 0.9) !important;
+        border-color: rgba(120, 161, 187, 0.18) !important;
+        box-shadow: 0 20px 48px rgba(2, 6, 23, 0.18) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-panel-label {
+        color: rgba(184, 193, 200, 0.9) !important;
+        font-family: "Montserrat", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.2em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-title {
+        color: rgba(226, 232, 240, 0.96) !important;
+        font-family: "Montserrat", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-meta {
+        color: rgba(184, 193, 200, 0.7) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-btn {
+        border-color: rgba(120, 161, 187, 0.2) !important;
+        color: rgba(226, 232, 240, 0.94) !important;
+        font-family: "Montserrat", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.08em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(135deg, rgba(26, 58, 58, 0.94) 0%, rgba(120, 161, 187, 0.92) 100%) !important;
+        color: rgba(255, 255, 255, 0.98) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(51, 65, 85, 0.92) 0%, rgba(30, 41, 59, 0.96) 100%) !important;
+        color: rgba(226, 232, 240, 0.96) !important;
+        border-color: rgba(120, 161, 187, 0.18) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field select {
+        color: rgba(226, 232, 240, 0.96) !important;
+        background: rgba(15, 23, 42, 0.94) !important;
+        border-color: rgba(120, 161, 187, 0.22) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(184, 193, 200, 0.5) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(120, 161, 187, 0.42) !important;
+        box-shadow: 0 0 0 3px rgba(120, 161, 187, 0.14) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dawn-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.34), rgba(2, 6, 23, 0.88) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] {
+        background: radial-gradient(circle at top, rgba(224, 177, 203, 0.18) 0%, rgba(224, 177, 203, 0.06) 22%, rgba(26, 22, 37, 0.7) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(224, 177, 203, 0.08) 0%, rgba(255, 191, 105, 0.03) 100%),
+            rgba(45, 27, 45, 0.9) !important;
+        border-color: rgba(183, 156, 237, 0.18) !important;
+        box-shadow: 0 20px 48px rgba(26, 22, 37, 0.2) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-panel-label {
+        color: rgba(255, 191, 105, 0.9) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.2em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-title {
+        color: rgba(247, 225, 215, 0.96) !important;
+        font-family: "Be Vietnam Pro", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-meta {
+        color: rgba(224, 177, 203, 0.72) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-btn {
+        border-color: rgba(255, 191, 105, 0.18) !important;
+        color: rgba(247, 225, 215, 0.94) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.08em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(135deg, rgba(255, 191, 105, 0.94) 0%, rgba(183, 156, 237, 0.92) 100%) !important;
+        color: rgba(26, 22, 37, 0.98) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(103, 49, 90, 0.92) 0%, rgba(65, 29, 64, 0.96) 100%) !important;
+        color: rgba(247, 225, 215, 0.96) !important;
+        border-color: rgba(183, 156, 237, 0.22) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field select {
+        color: rgba(247, 225, 215, 0.96) !important;
+        background: rgba(26, 22, 37, 0.94) !important;
+        border-color: rgba(255, 191, 105, 0.22) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(224, 177, 203, 0.5) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(255, 191, 105, 0.42) !important;
+        box-shadow: 0 0 0 3px rgba(255, 191, 105, 0.14) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-orchid-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(45, 27, 45, 0.36), rgba(26, 22, 37, 0.88) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] {
+        background: radial-gradient(circle at top, rgba(0, 242, 255, 0.18) 0%, rgba(0, 242, 255, 0.06) 18%, rgba(10, 10, 15, 0.78) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(0, 242, 255, 0.07) 0%, rgba(255, 0, 229, 0.03) 100%),
+            rgba(10, 10, 15, 0.92) !important;
+        border-color: rgba(0, 242, 255, 0.2) !important;
+        box-shadow: 0 20px 52px rgba(0, 0, 0, 0.24), 0 0 24px rgba(0, 242, 255, 0.08) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-panel-label {
+        color: rgba(0, 242, 255, 0.94) !important;
+        font-family: "Oswald", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.24em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-title {
+        color: rgba(240, 240, 255, 0.98) !important;
+        font-family: "Poppins", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-meta {
+        color: rgba(240, 240, 255, 0.72) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-btn {
+        border-color: rgba(0, 242, 255, 0.22) !important;
+        color: rgba(240, 240, 255, 0.96) !important;
+        font-family: "Oswald", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.1em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(135deg, rgba(0, 242, 255, 0.96) 0%, rgba(112, 0, 255, 0.94) 56%, rgba(255, 0, 229, 0.92) 100%) !important;
+        color: rgba(10, 10, 15, 0.98) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(255, 0, 229, 0.82) 0%, rgba(112, 0, 255, 0.9) 100%) !important;
+        color: rgba(255, 255, 255, 0.98) !important;
+        border-color: rgba(255, 0, 229, 0.26) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field select {
+        color: rgba(240, 240, 255, 0.98) !important;
+        background: rgba(10, 10, 15, 0.96) !important;
+        border-color: rgba(0, 242, 255, 0.24) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(240, 240, 255, 0.52) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(0, 242, 255, 0.42) !important;
+        box-shadow: 0 0 0 3px rgba(0, 242, 255, 0.14), 0 0 18px rgba(0, 242, 255, 0.1) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-neon-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(19, 19, 32, 0.4), rgba(10, 10, 15, 0.92) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] {
+        background: radial-gradient(circle at top, rgba(224, 242, 254, 0.28) 0%, rgba(224, 242, 254, 0.1) 22%, rgba(255, 255, 255, 0.56) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 100%),
+            rgba(255, 255, 255, 0.9) !important;
+        border-color: rgba(0, 0, 0, 0.08) !important;
+        box-shadow: 0 20px 48px rgba(148, 163, 184, 0.12) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-panel-label {
+        color: rgba(14, 165, 233, 0.9) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.18em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-title {
+        color: rgba(26, 26, 28, 0.94) !important;
+        font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-meta {
+        color: rgba(26, 26, 28, 0.66) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-btn {
+        border-color: rgba(0, 0, 0, 0.08) !important;
+        color: rgba(26, 26, 28, 0.9) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.08em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(180deg, rgba(14, 165, 233, 0.92) 0%, rgba(2, 132, 199, 0.94) 100%) !important;
+        color: rgba(255, 255, 255, 0.98) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(100, 116, 139, 0.86) 0%, rgba(71, 85, 105, 0.92) 100%) !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+        border-color: rgba(100, 116, 139, 0.2) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field select {
+        color: rgba(26, 26, 28, 0.94) !important;
+        background: rgba(255, 255, 255, 0.94) !important;
+        border-color: rgba(0, 0, 0, 0.08) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(26, 26, 28, 0.42) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(14, 165, 233, 0.28) !important;
+        box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-clear-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.88) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] {
+        background: radial-gradient(circle at top, rgba(165, 243, 252, 0.16) 0%, rgba(165, 243, 252, 0.05) 22%, rgba(5, 15, 11, 0.74) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(61, 43, 31, 0.12) 0%, rgba(30, 58, 42, 0.08) 100%),
+            rgba(10, 31, 22, 0.9) !important;
+        border-color: rgba(212, 175, 55, 0.18) !important;
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-panel-label {
+        color: rgba(212, 175, 55, 0.92) !important;
+        font-family: "Lora", "Noto Serif SC", "Source Han Serif SC", serif !important;
+        letter-spacing: 0.18em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-title {
+        color: rgba(243, 244, 246, 0.96) !important;
+        font-family: "Cinzel Decorative", "Noto Serif SC", "Source Han Serif SC", serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-meta {
+        color: rgba(165, 243, 252, 0.72) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-btn {
+        border-color: rgba(212, 175, 55, 0.18) !important;
+        color: rgba(212, 175, 55, 0.92) !important;
+        font-family: "Lora", "Noto Serif SC", "Source Han Serif SC", serif !important;
+        letter-spacing: 0.08em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(180deg, rgba(165, 243, 252, 0.18) 0%, rgba(165, 243, 252, 0.22) 100%) !important;
+        color: rgba(165, 243, 252, 0.96) !important;
+        border-color: rgba(165, 243, 252, 0.22) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(61, 43, 31, 0.88) 0%, rgba(37, 24, 18, 0.94) 100%) !important;
+        color: rgba(243, 244, 246, 0.96) !important;
+        border-color: rgba(212, 175, 55, 0.18) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field select {
+        color: rgba(243, 244, 246, 0.96) !important;
+        background: rgba(5, 15, 11, 0.9) !important;
+        border-color: rgba(212, 175, 55, 0.2) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(165, 243, 252, 0.46) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(212, 175, 55, 0.34) !important;
+        box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-forest-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(61, 43, 31, 0.22), rgba(5, 15, 11, 0.9) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] {
+        background: radial-gradient(circle at top, rgba(0, 243, 255, 0.16) 0%, rgba(0, 243, 255, 0.06) 18%, rgba(26, 11, 46, 0.82) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(45, 0, 77, 0.14) 0%, rgba(26, 11, 46, 0.08) 100%),
+            rgba(26, 11, 46, 0.92) !important;
+        border-color: rgba(0, 243, 255, 0.2) !important;
+        box-shadow: 0 20px 52px rgba(0, 0, 0, 0.28), 0 0 20px rgba(0, 243, 255, 0.08) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-panel-label {
+        color: rgba(0, 243, 255, 0.96) !important;
+        font-family: "Orbitron", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.24em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-title {
+        color: rgba(224, 242, 254, 0.98) !important;
+        font-family: "Roboto Mono", "Microsoft YaHei UI", monospace !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-meta {
+        color: rgba(0, 210, 255, 0.78) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-btn {
+        border-color: rgba(0, 243, 255, 0.22) !important;
+        color: rgba(0, 243, 255, 0.96) !important;
+        font-family: "Orbitron", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.1em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(180deg, rgba(57, 255, 20, 0.92) 0%, rgba(0, 243, 255, 0.9) 100%) !important;
+        color: rgba(45, 0, 77, 0.98) !important;
+        border-color: rgba(57, 255, 20, 0.3) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(45, 0, 77, 0.88) 0%, rgba(26, 11, 46, 0.94) 100%) !important;
+        color: rgba(224, 242, 254, 0.98) !important;
+        border-color: rgba(0, 243, 255, 0.18) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field select {
+        color: rgba(224, 242, 254, 0.98) !important;
+        background: rgba(14, 6, 26, 0.96) !important;
+        border-color: rgba(0, 243, 255, 0.24) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(0, 210, 255, 0.52) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(57, 255, 20, 0.34) !important;
+        box-shadow: 0 0 0 3px rgba(57, 255, 20, 0.12), 0 0 16px rgba(0, 243, 255, 0.1) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-cyber-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(45, 0, 77, 0.24), rgba(14, 6, 26, 0.92) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] {
+        background: radial-gradient(circle at top, rgba(233, 213, 255, 0.24) 0%, rgba(233, 213, 255, 0.08) 22%, rgba(255, 255, 255, 0.62) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 100%),
+            rgba(243, 240, 255, 0.9) !important;
+        border-color: rgba(255, 255, 255, 0.76) !important;
+        box-shadow: 0 20px 48px rgba(243, 240, 255, 0.24) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-panel-label {
+        color: rgba(74, 59, 78, 0.82) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.18em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-title {
+        color: rgba(74, 59, 78, 0.94) !important;
+        font-family: "Be Vietnam Pro", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-meta {
+        color: rgba(63, 63, 70, 0.68) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-btn {
+        border-color: rgba(255, 255, 255, 0.78) !important;
+        color: rgba(74, 59, 78, 0.9) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.08em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(180deg, rgba(233, 213, 255, 0.92) 0%, rgba(251, 207, 232, 0.88) 100%) !important;
+        color: rgba(74, 59, 78, 0.96) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(255, 237, 213, 0.92) 0%, rgba(248, 250, 252, 0.94) 100%) !important;
+        color: rgba(74, 59, 78, 0.94) !important;
+        border-color: rgba(255, 255, 255, 0.82) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field select {
+        color: rgba(74, 59, 78, 0.94) !important;
+        background: rgba(255, 255, 255, 0.94) !important;
+        border-color: rgba(255, 255, 255, 0.82) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(74, 59, 78, 0.44) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(233, 213, 255, 0.9) !important;
+        box-shadow: 0 0 0 3px rgba(233, 213, 255, 0.16) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-dream-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(243, 240, 255, 0.9) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] {
+        background: radial-gradient(circle at top, rgba(255, 128, 171, 0.22) 0%, rgba(255, 128, 171, 0.08) 22%, rgba(255, 240, 243, 0.62) 58%, rgba(255, 255, 255, 0.74) 100%) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-shell,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-panel,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-stage,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-card {
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.1) 100%),
+            rgba(255, 240, 243, 0.9) !important;
+        border-color: rgba(255, 255, 255, 0.78) !important;
+        box-shadow: 0 20px 48px rgba(255, 128, 171, 0.18) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-stage-kicker,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-panel-label {
+        color: rgba(61, 59, 60, 0.82) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.18em !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-title,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-panel-title,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-title {
+        color: rgba(61, 59, 60, 0.94) !important;
+        font-family: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-panel-copy,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-detail,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-time,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-meta {
+        color: rgba(61, 59, 60, 0.68) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-close,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-control-btn,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-btn {
+        border-color: rgba(255, 255, 255, 0.8) !important;
+        color: rgba(61, 59, 60, 0.9) !important;
+        font-family: "Inter", "Noto Sans SC", "PingFang SC", sans-serif !important;
+        letter-spacing: 0.08em !important;
+        box-shadow: none !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-control-btn.primary,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-btn.primary {
+        background: linear-gradient(180deg, rgba(255, 128, 171, 0.96) 0%, rgba(255, 0, 127, 0.9) 100%) !important;
+        color: rgba(255, 255, 255, 0.96) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-btn.danger {
+        background: linear-gradient(180deg, rgba(255, 240, 243, 0.96) 0%, rgba(252, 228, 236, 0.92) 100%) !important;
+        color: rgba(255, 0, 127, 0.92) !important;
+        border-color: rgba(255, 255, 255, 0.84) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field input[type='text'],
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field input[type='number'],
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field textarea,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field select {
+        color: rgba(61, 59, 60, 0.94) !important;
+        background: rgba(255, 255, 255, 0.94) !important;
+        border-color: rgba(255, 255, 255, 0.84) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field input[type='text']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field input[type='number']::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field textarea::placeholder,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field select::placeholder {
+        color: rgba(61, 59, 60, 0.44) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field input[type='text']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field input[type='number']:focus,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field textarea:focus,
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-load-field select:focus {
+        border-color: rgba(255, 128, 171, 0.88) !important;
+        box-shadow: 0 0 0 3px rgba(255, 128, 171, 0.16) !important;
+    }
+
+    #gal-save-load-modal[data-skin-variant='skin-rosy-twilight'] .gal-save-slot-info {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 240, 243, 0.92) 100%) !important;
     }
 }
 `;
@@ -32148,6 +37775,7 @@ ${normalizedSource}`;
         padding: 16px;
     }
 }
+
 `;
     const styleEl = targetDoc.createElement("style");
     styleEl.id = `${SCRIPT_ID}-styles`;
@@ -32638,11 +38266,20 @@ ${normalizedSource}`;
   // src/ui/overlay-content.js
   var messageSegmentState3 = GalgameStore.cache.segments;
   var TYPEWRITER_INSTANT_SOURCES = /* @__PURE__ */ new Set(["skip", "rewind", "auto-play"]);
+  var DEFAULT_TWILIGHT_BRAND2 = "TWILIGHT";
   function shouldUseTypewriterForSegment(segment) {
     return segment?.type === "dialogue" || segment?.type === "narration";
   }
   function shouldForceInstantBySource(source) {
     return TYPEWRITER_INSTANT_SOURCES.has(String(source || ""));
+  }
+  function syncTwilightBrandText($overlay) {
+    if (!$overlay?.length) return;
+    const nextBrand = getCurrentCharacterName() || DEFAULT_TWILIGHT_BRAND2;
+    const $brand = $overlay.find(".gal-twilight-brand");
+    if ($brand.length) {
+      $brand.text(nextBrand);
+    }
   }
   function renderStyledContent(segment) {
     const type = segment.styleType || "";
@@ -32944,6 +38581,7 @@ ${normalizedSource}`;
     const $nameBadge = $overlay.find(".gal-name-badge");
     const isStyled = displaySegment.type === "styled";
     cancelTypewriter();
+    syncTwilightBrandText($overlay);
     if (isCg) {
       setStyledPresentationMode($overlay, false);
       hideStyledStage($overlay);
@@ -33065,6 +38703,7 @@ ${normalizedSource}`;
     const forceInstantRender = shouldForceInstantBySource(source);
     const $nameBadge = $overlay.find(".gal-name-badge");
     cancelTypewriter();
+    syncTwilightBrandText($overlay);
     if (isCg) {
       setStyledPresentationMode($overlay, false);
       hideStyledStage($overlay);
@@ -33134,7 +38773,17 @@ ${normalizedSource}`;
     $overlay.find(".gal-progress-bar").css("width", `${progressPercent}%`);
     const isEnd = currentIndex >= total - 1;
     const $nextBtn = $overlay.find('[data-action="next"]');
+    const $twilightNextIndicator = $overlay.find(".gal-twilight-dialog-next-indicator");
     console.log(`[${SCRIPT_NAME}] 更新NEXT按钮 - isEnd=${isEnd}, isGeneratingResponse=${getIsGeneratingResponse()}`);
+    if ($twilightNextIndicator.length) {
+      if (isEnd) {
+        $twilightNextIndicator.attr("data-state", "end");
+        $twilightNextIndicator.html('<i class="fa-solid fa-flag-checkered"></i>');
+      } else {
+        $twilightNextIndicator.attr("data-state", "next");
+        $twilightNextIndicator.html('<i class="fa-solid fa-chevron-down"></i>');
+      }
+    }
     if (isEnd) {
       if (getIsGeneratingResponse() && !checkSillyTavernGenerating()) {
         console.log(`[${SCRIPT_NAME}] 状态修正：SillyTavern 未在生成，重置 isGeneratingResponse`);
@@ -33189,15 +38838,24 @@ ${normalizedSource}`;
       return;
     }
     const mesId = $lastAiMes.attr("mesid");
+    const $mesText = $lastAiMes.find(".mes_text");
+    const domVisibleContent = getMesTextContentForGalgame($mesText[0]);
     let contentToProcess = getFormattedSwipeContent(mesId);
     if (!contentToProcess) {
-      contentToProcess = getRawMessageContent(mesId);
+      const rawMessageContent = getRawMessageContent(mesId);
+      if (rawMessageContent) {
+        if (RE_GAL_TAGS2.test(rawMessageContent)) {
+          contentToProcess = rawMessageContent;
+        } else if (/<[a-z][\s\S]*?>/i.test(rawMessageContent) && domVisibleContent) {
+          contentToProcess = domVisibleContent;
+        } else {
+          contentToProcess = rawMessageContent;
+        }
+      }
     }
     if (!contentToProcess) {
-      const $mesText = $lastAiMes.find(".mes_text");
-      const html = $mesText.html();
-      if (!html) return;
-      contentToProcess = decodeHtml(html);
+      contentToProcess = domVisibleContent;
+      if (!contentToProcess) return;
     }
     const hasGalTags = RE_GAL_TAGS2.test(contentToProcess);
     if (!hasGalTags) {
@@ -33772,6 +39430,13 @@ ${normalizedSource}`;
   function setChoicesRefs({ getIsRerolling: getIsRerolling2 }) {
     if (getIsRerolling2) _isRerollingRef = getIsRerolling2;
   }
+  function syncChoicesLayerSkinClass($layer) {
+    if (!$layer?.length) return;
+    const $overlay = getOverlayElement();
+    TWILIGHT_FAMILY_SKIN_IDS.forEach((skinClass) => {
+      $layer.toggleClass(skinClass, $overlay.hasClass(skinClass));
+    });
+  }
   function ensureChoicesLayer() {
     const mountRoot = getModalMountRoot();
     let $layer = $2(mountRoot).find("#gal-layer-choices");
@@ -33791,7 +39456,15 @@ ${normalizedSource}`;
         }
       });
     }
+    syncChoicesLayerSkinClass($layer);
     return $layer;
+  }
+  function getOverlayElement() {
+    return $2("#gal-global-overlay");
+  }
+  function getPendingChoicesButtons($overlay = getOverlayElement()) {
+    const $scope = $overlay?.length ? $overlay : getOverlayElement();
+    return $scope.find(".gal-pending-choices-btn");
   }
   function renderGalgameChoices(options2) {
     if (!options2 || options2.length === 0) {
@@ -33817,6 +39490,7 @@ ${normalizedSource}`;
       });
       $container.append($card);
     });
+    syncChoicesLayerSkinClass($layer);
     $layer.addClass("active");
     setGalgameChoicesVisible(true);
   }
@@ -33835,7 +39509,9 @@ ${normalizedSource}`;
   }
   function hideGalgameChoices(userDismissed = false) {
     const mountRoot = getModalMountRoot();
-    $2(mountRoot).find("#gal-layer-choices").removeClass("active");
+    const $layer = $2(mountRoot).find("#gal-layer-choices");
+    syncChoicesLayerSkinClass($layer);
+    $layer.removeClass("active");
     setGalgameChoicesVisible(false);
     const pendingOptions = getPendingOptions();
     if (pendingOptions && pendingOptions.length > 0) {
@@ -33845,7 +39521,10 @@ ${normalizedSource}`;
   function handleChoiceSelection(optionValue) {
     console.log(`[${SCRIPT_NAME}] 用户选择了选项: ${optionValue}`);
     const mountRoot = getModalMountRoot();
-    $2(mountRoot).find("#gal-layer-choices").removeClass("active");
+    const $layer = $2(mountRoot).find("#gal-layer-choices");
+    syncChoicesLayerSkinClass($layer);
+    $layer.removeClass("active");
+    $2("#gal-global-overlay .gal-pending-choices-btn").removeClass("show");
     setGalgameChoicesVisible(false);
     const $textarea = $2(topWindow.document).find("#send_textarea");
     const $sendButton = $2(topWindow.document).find("#send_but");
@@ -33898,8 +39577,8 @@ ${normalizedSource}`;
     }
     const currentOptionHash = options2.map((o) => o.value).join("|||");
     setPendingOptions(options2);
-    ensureGlobalOverlay();
-    const $btn = $2("#gal-global-overlay .gal-pending-choices-btn");
+    const $overlay = ensureGlobalOverlay();
+    const $btn = getPendingChoicesButtons($overlay);
     if ($btn.length) {
       $btn.css("display", "flex");
       $btn.addClass("show");
@@ -33908,17 +39587,17 @@ ${normalizedSource}`;
     const optionChanged = currentOptionHash !== getLastGalgameOptionHash();
     if (optionChanged) {
       console.log(`[${SCRIPT_NAME}] 检测到新选项，更新缓存并显示提示按钮`);
-      $2("#gal-global-overlay .gal-pending-choices-btn").addClass("gal-new-option-highlight");
+      $btn.addClass("gal-new-option-highlight");
       setTimeout(() => {
-        $2("#gal-global-overlay .gal-pending-choices-btn").removeClass("gal-new-option-highlight");
+        $btn.removeClass("gal-new-option-highlight");
       }, 3e3);
       let shouldPopup = false;
       if (getGalgameChoicesVisible()) {
         shouldPopup = true;
       } else {
-        const $overlay = $2("#gal-global-overlay");
-        if ($overlay.length && $overlay.hasClass("active")) {
-          const mesId = $overlay.find(".gal-game-container").attr("data-mes-id");
+        const $overlay2 = $2("#gal-global-overlay");
+        if ($overlay2.length && $overlay2.hasClass("active")) {
+          const mesId = $overlay2.find(".gal-game-container").attr("data-mes-id");
           if (mesId) {
             const state = messageSegmentState5.get(String(mesId));
             if (state && state.currentIndex >= state.segments.length - 1) {
@@ -33934,7 +39613,7 @@ ${normalizedSource}`;
       const pending = getPendingOptions();
       if (pending && pending.length > 0) {
         ensureGlobalOverlay();
-        $2(".gal-game-container .gal-pending-choices-btn").addClass("show");
+        getPendingChoicesButtons(getOverlayElement()).addClass("show");
         adjustToolbarForSpace();
       }
     }
@@ -34101,10 +39780,10 @@ ${normalizedSource}`;
 
   // src/ui/galgame-mode.js
   var _processNewMessageRef2 = null;
-  var _applySettingsToUIRef = null;
+  var _applySettingsToUIRef2 = null;
   function setGalgameModeRefs({ processNewMessage: processNewMessage2, applySettingsToUI: applySettingsToUI2 }) {
     if (processNewMessage2) _processNewMessageRef2 = processNewMessage2;
-    if (applySettingsToUI2) _applySettingsToUIRef = applySettingsToUI2;
+    if (applySettingsToUI2) _applySettingsToUIRef2 = applySettingsToUI2;
   }
   async function applyGalgameMode() {
     void preloadPixiEffectsRuntime();
@@ -34132,8 +39811,8 @@ ${normalizedSource}`;
       await _processNewMessageRef2($lastAiMes[0], { forceRender: true });
     }
     showAllFloors();
-    if (_applySettingsToUIRef) {
-      _applySettingsToUIRef();
+    if (_applySettingsToUIRef2) {
+      _applySettingsToUIRef2();
     }
     return !!($lastAiMes && $lastAiMes.length);
   }
@@ -35818,13 +41497,13 @@ ${normalizedSource}`;
   var messageSegmentState6 = GalgameStore.cache.segments;
   var RE_CLOSED_P3 = /<\/p>/i;
   var _updateGlobalOverlayContentRef4 = null;
-  var _applySettingsToUIRef2 = null;
+  var _applySettingsToUIRef3 = null;
   var _handleRealTimeBackgroundGenerationRef = null;
   var _handleBananaBackgroundGenerationRef = null;
   var _handleNovelAIBackgroundGenerationRef = null;
   function setProcessMessageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, applySettingsToUI: applySettingsToUI2, handleRealTimeBackgroundGeneration: handleRealTimeBackgroundGeneration2, handleBananaBackgroundGeneration: handleBananaBackgroundGeneration2, handleNovelAIBackgroundGeneration: handleNovelAIBackgroundGeneration2 }) {
     if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
-    if (applySettingsToUI2) _applySettingsToUIRef2 = applySettingsToUI2;
+    if (applySettingsToUI2) _applySettingsToUIRef3 = applySettingsToUI2;
     if (handleRealTimeBackgroundGeneration2) _handleRealTimeBackgroundGenerationRef = handleRealTimeBackgroundGeneration2;
     if (handleBananaBackgroundGeneration2) _handleBananaBackgroundGenerationRef = handleBananaBackgroundGeneration2;
     if (handleNovelAIBackgroundGeneration2) _handleNovelAIBackgroundGenerationRef = handleNovelAIBackgroundGeneration2;
@@ -35873,18 +41552,27 @@ ${normalizedSource}`;
     if (isUser) return;
     const mesId = $mes.attr("mesid");
     const settings2 = getSettings();
+    const $mesText = $mes.find(".mes_text");
+    const domVisibleContent = getMesTextContentForGalgame($mesText[0]);
     let contentToProcess = getFormattedSwipeContent(mesId);
     if (!contentToProcess) {
-      contentToProcess = getRawMessageContent(mesId);
+      const rawMessageContent = getRawMessageContent(mesId);
+      if (rawMessageContent) {
+        if (RE_GAL_TAGS2.test(rawMessageContent)) {
+          contentToProcess = rawMessageContent;
+        } else if (/<[a-z][\s\S]*?>/i.test(rawMessageContent) && domVisibleContent) {
+          contentToProcess = domVisibleContent;
+        } else {
+          contentToProcess = rawMessageContent;
+        }
+      }
     }
     if (!contentToProcess) {
-      const $mesText = $mes.find(".mes_text");
-      const html = $mesText.html();
-      if (!html) {
+      if (!domVisibleContent) {
         if (!forceRender2) return;
         contentToProcess = String($mesText.text() || "").trim();
       } else {
-        contentToProcess = decodeHtml(html);
+        contentToProcess = domVisibleContent;
       }
     }
     const hasGalTags = RE_GAL_TAGS2.test(contentToProcess);
@@ -35995,7 +41683,7 @@ ${normalizedSource}`;
           await _updateGlobalOverlayContentRef4(mesId, parsed);
           showGlobalOverlay();
           requestAnimationFrame(() => {
-            if (_applySettingsToUIRef2) _applySettingsToUIRef2();
+            if (_applySettingsToUIRef3) _applySettingsToUIRef3();
           });
           if (parsed.bgm && parsed.bgm.keyword) {
             BGMManager.play(parsed.bgm.keyword);
@@ -36096,7 +41784,7 @@ ${normalizedSource}`;
 
   // src/ui/save-load-modal.js
   var MODAL_ID = "gal-save-load-modal";
-  function escapeHtml(value) {
+  function escapeHtml2(value) {
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function formatTime(timestamp) {
@@ -36137,22 +41825,22 @@ ${normalizedSource}`;
     }
     if (mode === "save") {
       return `
-      <button class="gal-save-slot-btn primary" data-role="overwrite" data-slot-id="${escapeHtml(slot.id)}">
+      <button class="gal-save-slot-btn primary" data-role="overwrite" data-slot-id="${escapeHtml2(slot.id)}">
         <i class="fa-solid fa-pen-to-square"></i>
         <span>覆盖存档</span>
       </button>
-      <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">
+      <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml2(slot.id)}">
         <i class="fa-solid fa-trash"></i>
         <span>删除</span>
       </button>
     `;
     }
     return `
-    <button class="gal-save-slot-btn primary" data-role="load" data-slot-id="${escapeHtml(slot.id)}">
+    <button class="gal-save-slot-btn primary" data-role="load" data-slot-id="${escapeHtml2(slot.id)}">
       <i class="fa-solid fa-folder-open"></i>
       <span>读取进度</span>
     </button>
-    <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml(slot.id)}">
+    <button class="gal-save-slot-btn danger" data-role="delete" data-slot-id="${escapeHtml2(slot.id)}">
       <i class="fa-solid fa-trash"></i>
       <span>删除</span>
     </button>
@@ -36166,21 +41854,21 @@ ${normalizedSource}`;
     const slotCode = buildSlotCode(index, prefix ? "QUICK" : "");
     const badgeText = prefix || "手动存档";
     return `
-    <div class="gal-save-slot-card" data-slot-id="${escapeHtml(slot.id)}">
+    <div class="gal-save-slot-card" data-slot-id="${escapeHtml2(slot.id)}">
       <div class="gal-save-thumb-wrap">
         ${getThumbnailHtml(slot)}
       </div>
       <div class="gal-save-slot-info">
         <div class="gal-save-slot-meta">
-          <span class="gal-save-slot-code">${escapeHtml(slotCode)}</span>
-          <span class="gal-save-slot-badge">${escapeHtml(badgeText)}</span>
+          <span class="gal-save-slot-code">${escapeHtml2(slotCode)}</span>
+          <span class="gal-save-slot-badge">${escapeHtml2(badgeText)}</span>
           <span class="gal-save-slot-time">${formatTime(slot.timestamp)}</span>
         </div>
         <div class="gal-save-slot-title-row">
-          <span class="gal-save-slot-title">${escapeHtml(slot.label || "未命名存档")}</span>
+          <span class="gal-save-slot-title">${escapeHtml2(slot.label || "未命名存档")}</span>
         </div>
         <div class="gal-save-slot-detail">
-          <span class="gal-save-slot-char">${escapeHtml(charInfo || "角色卡未记录")}</span>
+          <span class="gal-save-slot-char">${escapeHtml2(charInfo || "角色卡未记录")}</span>
           <span>${floorText}</span>
         </div>
       </div>
@@ -36218,10 +41906,12 @@ ${normalizedSource}`;
   function showSaveLoadModal(mode = "load") {
     const safeMode = mode === "save" ? "save" : "load";
     const mountRoot = getModalMountRoot();
+    const activeSkin = String(getSettings()?.skin || "").trim();
+    const modalSkin = isTwilightSkinSelected(activeSkin) ? "skin-twilight" : activeSkin;
     $2(mountRoot).find(`#${MODAL_ID}`).remove();
     const isSaveMode = safeMode === "save";
     const modalHtml = `
-    <div id="${MODAL_ID}" class="gal-save-load-modal" data-mode="${safeMode}">
+    <div id="${MODAL_ID}" class="gal-save-load-modal" data-mode="${safeMode}" data-skin="${escapeHtml2(modalSkin)}" data-skin-variant="${escapeHtml2(activeSkin)}">
       <div class="gal-save-load-shell">
         <div class="gal-save-load-header">
           <div class="gal-save-load-heading">
@@ -66774,205 +72464,6 @@ ${normalizedSource}`;
     return deleteMapImage(GLOBAL_MAP_REGION_KEY, packId);
   }
 
-  // src/db/ui-skin-profiles.js
-  var DEFAULT_PROFILE_NAME = "自定义皮肤";
-  var cachedProfiles = [];
-  var cachedProfileMap = /* @__PURE__ */ new Map();
-  function normalizeProfileDisplayName(rawName, fallback = DEFAULT_PROFILE_NAME) {
-    const name = String(rawName || "").trim();
-    return name || fallback;
-  }
-  function normalizeProfileId(rawId) {
-    const id2 = String(rawId || "").trim();
-    if (!id2) return "";
-    return id2.startsWith(CUSTOM_SKIN_PROFILE_ID_PREFIX) ? id2 : "";
-  }
-  function generateProfileId() {
-    const seed = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-    return `${CUSTOM_SKIN_PROFILE_ID_PREFIX}${seed}`;
-  }
-  function compareProfiles(a, b) {
-    const sortA = Number(a?.sortOrder || 0);
-    const sortB = Number(b?.sortOrder || 0);
-    if (sortA !== sortB) return sortA - sortB;
-    const updatedA = String(a?.updatedAt || "");
-    const updatedB = String(b?.updatedAt || "");
-    if (updatedA !== updatedB) return updatedA.localeCompare(updatedB, "zh-Hans-CN");
-    return String(a?.displayName || "").localeCompare(String(b?.displayName || ""), "zh-Hans-CN");
-  }
-  function setProfileCache(list) {
-    cachedProfiles = Array.isArray(list) ? [...list].sort(compareProfiles) : [];
-    cachedProfileMap = new Map(cachedProfiles.map((profile) => [profile.id, profile]));
-    return cachedProfiles;
-  }
-  async function ensureDbReady2() {
-    if (!getDb()) await initDB();
-    return getDb();
-  }
-  async function putProfileRecord(record) {
-    const db = await ensureDbReady2();
-    return new Promise((resolve2, reject2) => {
-      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readwrite");
-      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
-      const request = store.put(record);
-      transaction.oncomplete = () => resolve2(record);
-      transaction.onabort = () => reject2(transaction.error || request.error);
-      transaction.onerror = () => reject2(transaction.error || request.error);
-      request.onerror = () => reject2(request.error);
-    });
-  }
-  async function getProfileRecord(id2) {
-    const safeId = normalizeProfileId(id2);
-    if (!safeId) return null;
-    const db = await ensureDbReady2();
-    return new Promise((resolve2) => {
-      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readonly");
-      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
-      const request = store.get(safeId);
-      request.onsuccess = () => resolve2(request.result || null);
-      request.onerror = () => resolve2(null);
-    });
-  }
-  async function deleteProfileRecord(id2) {
-    const safeId = normalizeProfileId(id2);
-    if (!safeId) return false;
-    const db = await ensureDbReady2();
-    return new Promise((resolve2, reject2) => {
-      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readwrite");
-      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
-      const request = store.delete(safeId);
-      transaction.oncomplete = () => resolve2(true);
-      transaction.onabort = () => reject2(transaction.error || request.error);
-      transaction.onerror = () => reject2(transaction.error || request.error);
-      request.onerror = () => reject2(request.error);
-    });
-  }
-  function buildUniqueDisplayName(rawName, profiles = cachedProfiles) {
-    const baseName = normalizeProfileDisplayName(rawName);
-    const existing = new Set((Array.isArray(profiles) ? profiles : []).map((item) => String(item?.displayName || "").trim()));
-    if (!existing.has(baseName)) return baseName;
-    let index = 2;
-    while (existing.has(`${baseName} (${index})`)) {
-      index += 1;
-    }
-    return `${baseName} (${index})`;
-  }
-  function isCustomSkinProfileId(rawId) {
-    return !!normalizeProfileId(rawId);
-  }
-  function hasUiSkinProfileId(rawId) {
-    const safeId = normalizeProfileId(rawId);
-    return !!safeId && cachedProfileMap.has(safeId);
-  }
-  function getCachedUiSkinProfiles() {
-    return cachedProfiles.map((profile) => ({ ...profile }));
-  }
-  function getUiSkinProfileLabel(id2) {
-    const safeId = normalizeProfileId(id2);
-    if (!safeId) return "";
-    return cachedProfileMap.get(safeId)?.displayName || safeId;
-  }
-  function getAvailableUiSkinProfileDisplayName(rawName, profiles = cachedProfiles) {
-    return buildUniqueDisplayName(rawName, profiles);
-  }
-  async function refreshUiSkinProfilesCache() {
-    const db = await ensureDbReady2();
-    return new Promise((resolve2) => {
-      const transaction = db.transaction([STORE_UI_SKIN_PROFILES], "readonly");
-      const store = transaction.objectStore(STORE_UI_SKIN_PROFILES);
-      const request = store.getAll();
-      request.onsuccess = () => resolve2(setProfileCache(request.result || []));
-      request.onerror = () => resolve2(setProfileCache([]));
-    });
-  }
-  async function listUiSkinProfiles() {
-    const profiles = await refreshUiSkinProfilesCache();
-    return profiles.map((profile) => ({ ...profile }));
-  }
-  async function getUiSkinProfile(id2) {
-    const record = await getProfileRecord(id2);
-    return record ? { ...record } : null;
-  }
-  async function saveUiSkinProfile(profile = {}) {
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    const existing = normalizeProfileId(profile.id) ? await getProfileRecord(profile.id) : null;
-    const id2 = normalizeProfileId(profile.id) || generateProfileId();
-    const record = {
-      id: id2,
-      displayName: normalizeProfileDisplayName(profile.displayName, existing?.displayName || DEFAULT_PROFILE_NAME),
-      createdAt: String(profile.createdAt || existing?.createdAt || now),
-      updatedAt: String(profile.updatedAt || now),
-      sortOrder: Number.isFinite(Number(profile.sortOrder)) ? Number(profile.sortOrder) : Number(existing?.sortOrder || Date.now())
-    };
-    await putProfileRecord(record);
-    await refreshUiSkinProfilesCache();
-    console.log(`[${SCRIPT_NAME}] 保存自定义皮肤 profile: ${record.id} (${record.displayName})`);
-    return { ...record };
-  }
-  async function createUiSkinProfile({ displayName, id: id2 } = {}) {
-    const currentProfiles = await refreshUiSkinProfilesCache();
-    const record = await saveUiSkinProfile({
-      id: id2,
-      displayName: buildUniqueDisplayName(
-        displayName || `${DEFAULT_PROFILE_NAME} ${currentProfiles.length + 1}`,
-        currentProfiles
-      ),
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      sortOrder: Date.now()
-    });
-    return record;
-  }
-  async function renameUiSkinProfile(id2, displayName) {
-    const existing = await getProfileRecord(id2);
-    if (!existing) {
-      throw new Error("要重命名的自定义皮肤不存在");
-    }
-    const profiles = await refreshUiSkinProfilesCache();
-    const otherProfiles = profiles.filter((profile) => profile.id !== existing.id);
-    return saveUiSkinProfile({
-      ...existing,
-      displayName: buildUniqueDisplayName(displayName, otherProfiles),
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  }
-  async function duplicateUiSkinProfile(sourceId, { displayName, newId } = {}) {
-    const sourceProfile = await getProfileRecord(sourceId);
-    if (!sourceProfile) {
-      throw new Error("源自定义皮肤不存在");
-    }
-    const profiles = await refreshUiSkinProfilesCache();
-    const duplicatedProfile = await saveUiSkinProfile({
-      id: newId || generateProfileId(),
-      displayName: buildUniqueDisplayName(displayName || `${sourceProfile.displayName} 副本`, profiles),
-      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      sortOrder: Date.now()
-    });
-    const assets = await getUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, sourceProfile.id);
-    await Promise.all(
-      assets.map(
-        (asset) => saveUiSkinAsset({
-          ...asset,
-          id: void 0,
-          packId: GLOBAL_CUSTOM_SKIN_PACK_ID,
-          skinId: duplicatedProfile.id
-        })
-      )
-    );
-    console.log(`[${SCRIPT_NAME}] 复制自定义皮肤 profile: ${sourceProfile.id} -> ${duplicatedProfile.id}`);
-    return duplicatedProfile;
-  }
-  async function deleteUiSkinProfile(id2) {
-    const safeId = normalizeProfileId(id2);
-    if (!safeId) return false;
-    await deleteUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, safeId);
-    await deleteProfileRecord(safeId);
-    await refreshUiSkinProfilesCache();
-    console.log(`[${SCRIPT_NAME}] 删除自定义皮肤 profile: ${safeId}`);
-    return true;
-  }
-
   // src/utils/png-character-card.js
   var PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
   function concatBytes(parts) {
@@ -67787,28 +73278,14 @@ ${normalizedSource}`;
     }
   };
   var CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID = "footer_btn_common";
-  var CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS = [
-    "footer_btn_log",
-    "footer_btn_close",
-    "footer_btn_view",
-    "footer_btn_config",
-    "footer_btn_save",
-    "footer_btn_load",
-    "footer_btn_timeline",
-    "footer_btn_prev",
-    "footer_btn_auto",
-    "footer_btn_skip"
-  ];
-  var CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS = [
-    ...CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS,
-    "footer_btn_choices",
-    "footer_btn_next"
-  ];
-  function createFooterButtonElement(id2, label) {
+  var CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS = CUSTOM_SKIN_FOOTER_BUTTONS.filter((item) => item.elementId !== "footer_btn_choices" && item.elementId !== "footer_btn_next").map((item) => item.elementId);
+  var CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS = [...CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS];
+  function createFooterButtonElement(id2, label, { defaultShowText = true } = {}) {
     return {
       id: id2,
       label,
       supportsTextToggle: true,
+      defaultShowText: defaultShowText !== false,
       aspectRatio: 3.3,
       outputWidth: 720,
       supportsStates: ["normal", "hover", "active"],
@@ -67920,6 +73397,7 @@ ${normalizedSource}`;
       id: "footer_btn_choices",
       label: "选项按钮",
       supportsTextToggle: true,
+      defaultShowText: false,
       aspectRatio: 3.2,
       outputWidth: 720,
       supportsStates: ["normal", "hover", "active"],
@@ -68026,6 +73504,7 @@ ${normalizedSource}`;
   var LIVE_RUNTIME_LAYOUT_ELEMENT_IDS = /* @__PURE__ */ new Set([
     "dialog_panel"
   ]);
+  var TWILIGHT_MOBILE_MENU_ACTIONS2 = ["open-settings", "save", "load", "view-original", "timeline"];
   var runtimePreviewDevice = null;
   var runtimeBlobUrls = [];
   var runtimeResizeObserver = null;
@@ -68036,10 +73515,10 @@ ${normalizedSource}`;
   function getWindowObject() {
     return topWindow || window;
   }
-  function getOverlayElement() {
+  function getOverlayElement2() {
     return getWindowObject().document?.querySelector?.("#gal-global-overlay") || null;
   }
-  function getHostElement(overlay = getOverlayElement()) {
+  function getHostElement(overlay = getOverlayElement2()) {
     if (!overlay) return null;
     return overlay.querySelector(".gal-game-container") || overlay;
   }
@@ -68058,6 +73537,54 @@ ${normalizedSource}`;
       });
     });
     return nodes3;
+  }
+  function getNormalizedFooterButtonDisplay(profileId = "") {
+    const profile = getCachedUiSkinProfile(profileId);
+    return normalizeCustomSkinFooterButtonDisplay(profile?.footerButtonDisplay);
+  }
+  function setFooterButtonNodeVisibility(overlay, elementId, visible) {
+    getRuntimeNodesForElement(overlay, elementId).forEach((node) => {
+      if (!node?.style) return;
+      if (visible) {
+        node.style.removeProperty("display");
+        return;
+      }
+      node.style.setProperty("display", "none", "important");
+    });
+  }
+  function applyFooterMenuHtml(overlay, actions = DEFAULT_GAL_MOBILE_MENU_ACTIONS, { activeCustomSkin = false } = {}) {
+    const menu = overlay?.querySelector?.("#gal-mobile-menu");
+    if (!menu) return;
+    menu.innerHTML = buildGalMobileMenuButtonsHtml(actions);
+    menu.dataset.customSkinMenu = activeCustomSkin ? "true" : "false";
+    menu.dataset.customSkinMenuCount = String(Math.max(0, actions.length - 1));
+  }
+  function getBuiltinMobileMenuActions(overlay) {
+    if (overlay?.classList?.contains(TWILIGHT_SKIN_ID)) {
+      return TWILIGHT_MOBILE_MENU_ACTIONS2;
+    }
+    return DEFAULT_GAL_MOBILE_MENU_ACTIONS;
+  }
+  function resetFooterButtonPresentation(overlay) {
+    if (!overlay) return;
+    CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.forEach((elementId) => {
+      setFooterButtonNodeVisibility(overlay, elementId, true);
+    });
+    overlay.dataset.customSkinFooterMenuCount = "0";
+    overlay.dataset.customSkinActiveProfile = "false";
+    applyFooterMenuHtml(overlay, getBuiltinMobileMenuActions(overlay), { activeCustomSkin: false });
+  }
+  function applyFooterButtonPresentation(overlay, footerButtonDisplay) {
+    if (!overlay) return;
+    const normalized = normalizeCustomSkinFooterButtonDisplay(footerButtonDisplay);
+    const menuActions = ["open-settings", ...getCustomSkinFooterMenuActions(normalized)];
+    CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.forEach((elementId) => {
+      const shouldShowInToolbar = normalized[elementId] !== "menu";
+      setFooterButtonNodeVisibility(overlay, elementId, shouldShowInToolbar);
+    });
+    overlay.dataset.customSkinFooterMenuCount = String(Math.max(0, menuActions.length - 1));
+    overlay.dataset.customSkinActiveProfile = "true";
+    applyFooterMenuHtml(overlay, menuActions, { activeCustomSkin: true });
   }
   function customSkinElementUsesRuntimeLayout(elementId) {
     return LIVE_RUNTIME_LAYOUT_ELEMENT_IDS.has(String(elementId || "").trim());
@@ -68089,7 +73616,7 @@ ${normalizedSource}`;
     ];
   }
   function previewCustomSkinTextVisibility(elementIds, showText = true) {
-    const overlay = getOverlayElement();
+    const overlay = getOverlayElement2();
     if (!overlay) return;
     const ids = Array.isArray(elementIds) ? elementIds : [elementIds];
     const shouldShowText = showText !== false;
@@ -68135,7 +73662,7 @@ ${normalizedSource}`;
       aspectRatio: normalizedWidth / Math.max(normalizedHeight, 1e-4)
     };
   }
-  function getRuntimeElementLayoutSnapshot(elementId, overlay = getOverlayElement(), host = getHostElement(overlay), hostRect = host?.getBoundingClientRect?.() || null) {
+  function getRuntimeElementLayoutSnapshot(elementId, overlay = getOverlayElement2(), host = getHostElement(overlay), hostRect = host?.getBoundingClientRect?.() || null) {
     const safeElementId = String(elementId || "").trim();
     if (!safeElementId || !overlay || !hostRect || hostRect.width <= 0 || hostRect.height <= 0) return null;
     const mergedRect = mergeRuntimeNodeRects(getRuntimeNodesForElement(overlay, safeElementId));
@@ -68443,6 +73970,10 @@ ${normalizedSource}`;
     if (!toolbar || !(footerMetrics instanceof Map) || footerMetrics.size === 0) return 1;
     const win = getWindowObject();
     const toolbarStyle = win.getComputedStyle(toolbar);
+    const toolbarUiScale = Math.max(
+      0.01,
+      Number.parseFloat(toolbarStyle.getPropertyValue("--ui-scale")) || 1
+    );
     const paddingLeft = Number.parseFloat(toolbarStyle.paddingLeft) || 0;
     const paddingRight = Number.parseFloat(toolbarStyle.paddingRight) || 0;
     const gapValue = toolbarStyle.columnGap && toolbarStyle.columnGap !== "normal" ? toolbarStyle.columnGap : toolbarStyle.gap;
@@ -68463,7 +73994,7 @@ ${normalizedSource}`;
     nodes3.forEach((node) => {
       const elementId = getFooterElementIdFromNode(node);
       const metric = footerMetrics.get(elementId);
-      const desiredWidth = metric?.width > 0 ? metric.width : node.getBoundingClientRect?.().width || 0;
+      const desiredWidth = (metric?.width > 0 ? metric.width : node.getBoundingClientRect?.().width || 0) * toolbarUiScale;
       if (desiredWidth <= 0) return;
       if (scalableElementIds.has(elementId)) {
         scalableWidth += desiredWidth;
@@ -68499,7 +74030,7 @@ ${normalizedSource}`;
       slice: defaults3.slice && typeof defaults3.slice === "object" ? { ...defaults3.slice } : { top: 0, right: 0, bottom: 0, left: 0 },
       textPadding: normalizeTextPadding(defaults3.textPaddingRatio, defaults3.textPaddingRatio),
       meta: {
-        showText: def?.supportsTextToggle === true ? true : void 0,
+        showText: def?.supportsTextToggle === true ? def?.defaultShowText !== false : void 0,
         ...def?.interactive ? {
           hitArea: normalizeHitArea(defaults3.hitArea, { type: "polygon", points: FULL_RECT_POINTS })
         } : {}
@@ -68507,7 +74038,7 @@ ${normalizedSource}`;
     };
   }
   function getCustomSkinRuntimeElementRects(device = null) {
-    const overlay = getOverlayElement();
+    const overlay = getOverlayElement2();
     const host = getHostElement(overlay);
     if (!overlay || !host) return [];
     const hostRect = host.getBoundingClientRect();
@@ -68632,12 +74163,13 @@ ${normalizedSource}`;
     });
   }
   function clearCustomSkinRuntime() {
-    const overlay = getOverlayElement();
+    const overlay = getOverlayElement2();
     if (overlay) {
       removeRuntimeStyleProperties(overlay);
       updateRuntimeElementActivationClasses(overlay, /* @__PURE__ */ new Set());
       overlay.classList.remove(CUSTOM_SKIN_ID);
       overlay.classList.remove("custom-skin-image-mode");
+      resetFooterButtonPresentation(overlay);
     }
     revokeRuntimeBlobUrls();
     ensureObserverDisconnected();
@@ -68647,7 +74179,7 @@ ${normalizedSource}`;
   }
   async function applyCustomSkinRuntime() {
     const token = ++runtimeApplyToken;
-    const overlay = getOverlayElement();
+    const overlay = getOverlayElement2();
     if (!overlay) {
       ensureObserverDisconnected();
       revokeRuntimeBlobUrls();
@@ -68659,6 +74191,7 @@ ${normalizedSource}`;
       removeRuntimeStyleProperties(overlay);
       updateRuntimeElementActivationClasses(overlay, /* @__PURE__ */ new Set());
       overlay.classList.remove("custom-skin-image-mode");
+      resetFooterButtonPresentation(overlay);
       revokeRuntimeBlobUrls();
       ensureObserverDisconnected();
       return;
@@ -68668,6 +74201,7 @@ ${normalizedSource}`;
     ensureRuntimeObserver(host);
     const hostRect = host.getBoundingClientRect();
     const runtimeDevice = runtimePreviewDevice || (hostRect.width <= MOBILE_BREAKPOINT ? "mobile" : "desktop");
+    const footerButtonDisplay = getNormalizedFooterButtonDisplay(activeProfileId);
     const assets = await getUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, activeProfileId);
     if (token !== runtimeApplyToken) return;
     const assetLookup = createAssetLookup(assets);
@@ -68787,6 +74321,7 @@ ${normalizedSource}`;
       imageStateLookup.set(def.id, imageStates);
       textVisibilityLookup.set(def.id, showText);
     });
+    applyFooterButtonPresentation(overlay, footerButtonDisplay);
     nextStyleEntries.set("--custom-skin-footer-auto-scale", String(getFooterToolbarAutoScale(
       overlay,
       footerMetrics,
@@ -68861,7 +74396,8 @@ ${normalizedSource}`;
     { value: "skin-ancient", label: "墨染千秋（中国古风）" },
     { value: "skin-persona", label: "心之怪盗（女神异闻录）" },
     { value: "skin-jrpg", label: "苍穹之庭（日式奇幻）" },
-    { value: "skin-classic", label: "樱色物语（经典Galgame）" }
+    { value: "skin-classic", label: "樱色物语（经典Galgame）" },
+    ...TWILIGHT_SKIN_OPTION_ITEMS
   ];
   function getEffectiveSkinList() {
     const profileItems = getCachedUiSkinProfiles().map((profile) => ({
@@ -68925,13 +74461,14 @@ ${normalizedSource}`;
       )
     );
   }
-  function escapeHtml2(value) {
+  function escapeHtml3(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function applySkin() {
     const settings2 = getSettings();
     const skin = normalizeSkinValue(settings2.skin);
     const $overlay = $2("#gal-global-overlay");
+    const isCustomSkinProfile = hasUiSkinProfileId(skin);
     BUILTIN_SKIN_LIST.forEach((s) => {
       if (s.value !== "none") $overlay.removeClass(s.value);
     });
@@ -68939,7 +74476,13 @@ ${normalizedSource}`;
     $overlay.removeClass(CUSTOM_SKIN_ID);
     $overlay.removeClass("skin-western");
     if (skin !== "none") {
-      $overlay.addClass(hasUiSkinProfileId(skin) ? CUSTOM_SKIN_ID : skin);
+      $overlay.addClass(isCustomSkinProfile ? CUSTOM_SKIN_ID : skin);
+    }
+    if (!isCustomSkinProfile) {
+      clearCustomSkinRuntime();
+    }
+    if ($overlay.length) {
+      ensureGlobalOverlay();
     }
   }
   function applySettingsToUI() {
@@ -68952,8 +74495,8 @@ ${normalizedSource}`;
     settings2.toolbarScalePercent = toolbarScalePercent;
     const dialogFontStack = getDialogFontStack(settings2.dialogFontFamily);
     $2("#gal-global-overlay").css({
-      "--gal-dialog-scale-user": dialogScalePercent / 100,
-      "--gal-toolbar-scale-user": toolbarScalePercent / 100,
+      "--gal-dialog-scale-user": dialogScalePercentToScaleFactorForSkin(dialogScalePercent, activeSkin),
+      "--gal-toolbar-scale-user": uiScalePercentToScaleFactor(toolbarScalePercent),
       "--font-scale": fontScale,
       "--gal-dialog-font-family": dialogFontStack
     });
@@ -69208,14 +74751,14 @@ ${normalizedSource}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label">对话框缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-scale-percent" min="70" max="130" step="1" value="${settings2.dialogScalePercent}">
+                <input type="range" id="gal-dialog-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings2.dialogScalePercent}">
                 <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings2.dialogScalePercent}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">底栏缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-toolbar-scale-percent" min="70" max="130" step="1" value="${settings2.toolbarScalePercent}">
+                <input type="range" id="gal-toolbar-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings2.toolbarScalePercent}">
                 <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings2.toolbarScalePercent}%</span>
               </div>
             </div>
@@ -69748,8 +75291,8 @@ ${normalizedSource}`;
       }
       const html = normalizedList.map((voiceName) => `
         <span class="gal-voice-chip">
-          <span class="gal-voice-chip-name" title="${escapeHtml2(voiceName)}">${escapeHtml2(voiceName)}</span>
-          <button type="button" class="gal-voice-chip-remove" data-pool="${poolKey}" data-voice="${escapeHtml2(voiceName)}">×</button>
+          <span class="gal-voice-chip-name" title="${escapeHtml3(voiceName)}">${escapeHtml3(voiceName)}</span>
+          <button type="button" class="gal-voice-chip-remove" data-pool="${poolKey}" data-voice="${escapeHtml3(voiceName)}">×</button>
         </span>
       `).join("");
       $container.html(html);
@@ -69761,7 +75304,7 @@ ${normalizedSource}`;
           if (!name) return "";
           const desc = String(v?.desc || "").trim();
           const label = desc ? `${name} (${desc})` : name;
-          return `<option value="${escapeHtml2(name)}">${escapeHtml2(label)}</option>`;
+          return `<option value="${escapeHtml3(name)}">${escapeHtml3(label)}</option>`;
         }).filter(Boolean)
       ).join("");
       const $maleCandidate = $2("#gal-tts-default-male-candidate");
@@ -69794,7 +75337,7 @@ ${normalizedSource}`;
         if (!name) return;
         const desc = String(v?.desc || "").trim();
         const label = desc ? `${name} (${desc})` : name;
-        $sel.append(`<option value="${escapeHtml2(name)}">${escapeHtml2(label)}</option>`);
+        $sel.append(`<option value="${escapeHtml3(name)}">${escapeHtml3(label)}</option>`);
       });
       $sel.val(current);
       refreshTtsVoicePoolCandidates(voiceList);
@@ -69977,9 +75520,31 @@ ${normalizedSource}`;
       ts.titleText = String($2(this).val() || "").trim();
       saveSettings();
     });
+    $2("#gal-title-font-family").on("input change", function() {
+      const ts = getTitleSettingsState();
+      ts.titleFontFamily = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2("#gal-title-font-size").on("input change", function() {
+      const ts = getTitleSettingsState();
+      const nextValue = Number.parseInt($2(this).val(), 10);
+      ts.titleFontSize = Number.isFinite(nextValue) ? nextValue : "";
+      saveSettings();
+    });
     $2("#gal-title-subtitle").on("input change", function() {
       const ts = getTitleSettingsState();
       ts.subtitleText = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2("#gal-title-subtitle-font-family").on("input change", function() {
+      const ts = getTitleSettingsState();
+      ts.subtitleFontFamily = String($2(this).val() || "").trim();
+      saveSettings();
+    });
+    $2("#gal-title-subtitle-font-size").on("input change", function() {
+      const ts = getTitleSettingsState();
+      const nextValue = Number.parseInt($2(this).val(), 10);
+      ts.subtitleFontSize = Number.isFinite(nextValue) ? nextValue : "";
       saveSettings();
     });
     $2("#gal-title-bg-source").on("change", function() {
@@ -70438,7 +76003,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     return {
       enabled: config.enabled === true,
       titleText: String(config.titleText || ""),
+      titleFontFamily: String(config.titleFontFamily || ""),
+      titleFontSize: config.titleFontSize === "" || config.titleFontSize == null ? "" : Number(config.titleFontSize),
       subtitleText: String(config.subtitleText || ""),
+      subtitleFontFamily: String(config.subtitleFontFamily || ""),
+      subtitleFontSize: config.subtitleFontSize === "" || config.subtitleFontSize == null ? "" : Number(config.subtitleFontSize),
       backgroundSource: String(config.backgroundSource || ""),
       backgroundSceneName: String(config.backgroundSceneName || ""),
       backgroundFit: String(config.backgroundFit || ""),
@@ -70909,7 +76478,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       displayName: String(safe.displayName || safe.name || safe.label || "").trim() || id2,
       createdAt: String(safe.createdAt || "").trim(),
       updatedAt: String(safe.updatedAt || "").trim(),
-      sortOrder: Number.isFinite(Number(safe.sortOrder)) ? Number(safe.sortOrder) : null
+      sortOrder: Number.isFinite(Number(safe.sortOrder)) ? Number(safe.sortOrder) : null,
+      footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(safe.footerButtonDisplay)
     };
   }
   function normalizeUiSkinMetaRecord(raw = {}) {
@@ -71355,11 +76925,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     saveSettings();
     return { restored: true, count: settings2.bgmWhitelist.length };
   }
-  function escapeHtml3(input) {
+  function escapeHtml4(input) {
     return String(input || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function formatDialogText(input) {
-    return escapeHtml3(input).replace(/\r?\n/g, "<br>");
+    return escapeHtml4(input).replace(/\r?\n/g, "<br>");
   }
   var inAppDialogCounter = 0;
   function nextInAppDialogId(prefix = "gal-inline-dialog") {
@@ -71392,13 +76962,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const inputId = `${dialogId}-input`;
     const messageHtml = message ? `<div style="margin-bottom: 12px; color: #555; font-size: 0.92rem; line-height: 1.6;">${formatDialogText(message)}</div>` : "";
     const hintHtml = hint ? `<div style="margin-top: 8px; color: #7a7a7a; font-size: 0.82rem; line-height: 1.5;">${formatDialogText(hint)}</div>` : "";
-    const labelHtml = label ? `<label for="${inputId}" style="display: block; margin-bottom: 8px; color: #444; font-size: 0.9rem; font-weight: 600;">${escapeHtml3(label)}</label>` : "";
-    const inputHtml = multiline ? `<textarea id="${inputId}" placeholder="${escapeHtml3(placeholder)}" style="width: 100%; min-height: 110px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box; resize: vertical;">${escapeHtml3(defaultValue)}</textarea>` : `<input id="${inputId}" type="${escapeHtml3(inputType)}" value="${escapeHtml3(defaultValue)}" placeholder="${escapeHtml3(placeholder)}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />`;
+    const labelHtml = label ? `<label for="${inputId}" style="display: block; margin-bottom: 8px; color: #444; font-size: 0.9rem; font-weight: 600;">${escapeHtml4(label)}</label>` : "";
+    const inputHtml = multiline ? `<textarea id="${inputId}" placeholder="${escapeHtml4(placeholder)}" style="width: 100%; min-height: 110px; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box; resize: vertical;">${escapeHtml4(defaultValue)}</textarea>` : `<input id="${inputId}" type="${escapeHtml4(inputType)}" value="${escapeHtml4(defaultValue)}" placeholder="${escapeHtml4(placeholder)}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />`;
     const html = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
-      <div class="gal-input-box" style="max-width: ${escapeHtml3(width2)}; width: 92%; padding: 24px;">
+      <div class="gal-input-box" style="max-width: ${escapeHtml4(width2)}; width: 92%; padding: 24px;">
         <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="${escapeHtml3(iconClass)}" style="color: ${escapeHtml3(accent)};"></i> ${escapeHtml3(title)}</span>
+          <span><i class="${escapeHtml4(iconClass)}" style="color: ${escapeHtml4(accent)};"></i> ${escapeHtml4(title)}</span>
           <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s;">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -71411,10 +76981,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 10px;">
           <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
-            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml3(cancelText)}</span>
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml4(cancelText)}</span>
           </button>
-          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml3(accent)}; color: #fff; border-color: ${escapeHtml3(accent)};">
-            <i class="fa-solid fa-check"></i> <span>${escapeHtml3(confirmText)}</span>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml4(accent)}; color: #fff; border-color: ${escapeHtml4(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml4(confirmText)}</span>
           </button>
         </div>
       </div>
@@ -71494,23 +77064,23 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const confirmColor = danger ? "#dc3545" : accent;
     const html = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
-      <div class="gal-input-box" style="max-width: ${escapeHtml3(width2)}; width: 90%; padding: 24px;">
+      <div class="gal-input-box" style="max-width: ${escapeHtml4(width2)}; width: 90%; padding: 24px;">
         <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="${escapeHtml3(iconClass)}" style="color: ${escapeHtml3(confirmColor)};"></i> ${escapeHtml3(title)}</span>
+          <span><i class="${escapeHtml4(iconClass)}" style="color: ${escapeHtml4(confirmColor)};"></i> ${escapeHtml4(title)}</span>
           <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
-        <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid ${escapeHtml3(confirmColor)};">
+        <div style="margin-bottom: 16px; padding: 12px 14px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid ${escapeHtml4(confirmColor)};">
           ${messageHtml}
           ${hintHtml}
         </div>
         <div class="gal-input-actions" style="display: flex; gap: 10px;">
           <button class="gal-action-btn" id="${cancelId}" style="flex: 1; min-height: 42px; justify-content: center; background: #6c757d; color: #fff; border-color: #6c757d;">
-            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml3(cancelText)}</span>
+            <i class="fa-solid fa-xmark"></i> <span>${escapeHtml4(cancelText)}</span>
           </button>
-          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml3(confirmColor)}; color: #fff; border-color: ${escapeHtml3(confirmColor)};">
-            <i class="fa-solid fa-check"></i> <span>${escapeHtml3(confirmText)}</span>
+          <button class="gal-action-btn" id="${confirmId}" style="flex: 1; min-height: 42px; justify-content: center; background: ${escapeHtml4(confirmColor)}; color: #fff; border-color: ${escapeHtml4(confirmColor)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml4(confirmText)}</span>
           </button>
         </div>
       </div>
@@ -71570,9 +77140,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const okId = `${dialogId}-ok`;
     const html = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
-      <div class="gal-input-box" style="max-width: ${escapeHtml3(width2)}; width: 92%; padding: 24px;">
+      <div class="gal-input-box" style="max-width: ${escapeHtml4(width2)}; width: 92%; padding: 24px;">
         <div class="gal-input-title" style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-          <span><i class="${escapeHtml3(iconClass)}" style="color: ${escapeHtml3(accent)};"></i> ${escapeHtml3(title)}</span>
+          <span><i class="${escapeHtml4(iconClass)}" style="color: ${escapeHtml4(accent)};"></i> ${escapeHtml4(title)}</span>
           <button id="${closeId}" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1;">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -71582,8 +77152,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           ${detailHtml}
         </div>
         <div class="gal-input-actions" style="display: flex; justify-content: flex-end;">
-          <button class="gal-action-btn" id="${okId}" style="min-width: 130px; min-height: 42px; justify-content: center; background: ${escapeHtml3(accent)}; color: #fff; border-color: ${escapeHtml3(accent)};">
-            <i class="fa-solid fa-check"></i> <span>${escapeHtml3(buttonText)}</span>
+          <button class="gal-action-btn" id="${okId}" style="min-width: 130px; min-height: 42px; justify-content: center; background: ${escapeHtml4(accent)}; color: #fff; border-color: ${escapeHtml4(accent)};">
+            <i class="fa-solid fa-check"></i> <span>${escapeHtml4(buttonText)}</span>
           </button>
         </div>
       </div>
@@ -71817,7 +77387,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const pickFileId = `${dialogId}-pick-file`;
     const fileInputId = `${dialogId}-file`;
     const fileNameId = `${dialogId}-file-name`;
-    const reasonHtml = reason ? `<div style="margin-bottom: 10px; font-size: 0.84rem; color: #b45309; line-height: 1.5;">自动头像失败：${escapeHtml3(reason)}</div>` : "";
+    const reasonHtml = reason ? `<div style="margin-bottom: 10px; font-size: 0.84rem; color: #b45309; line-height: 1.5;">自动头像失败：${escapeHtml4(reason)}</div>` : "";
     const dialogHtml = `
     <div class="gal-input-modal gal-z-critical" id="${dialogId}">
       <div class="gal-input-box" style="max-width: 520px; width: 92%; padding: 22px;">
@@ -72643,7 +78213,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const hasSuggested = suggested && names.some((n) => n.toLowerCase() === suggested.toLowerCase());
     const defaultName = hasSuggested ? names.find((n) => n.toLowerCase() === suggested.toLowerCase()) : names[0];
     return new Promise((resolve2) => {
-      const optionsHtml = names.map((name) => `<option value="${escapeHtml3(name)}"${name === defaultName ? " selected" : ""}>${escapeHtml3(name)}</option>`).join("");
+      const optionsHtml = names.map((name) => `<option value="${escapeHtml4(name)}"${name === defaultName ? " selected" : ""}>${escapeHtml4(name)}</option>`).join("");
       const dialogHtml = `
       <div class="gal-input-modal gal-z-critical" id="gal-export-char-selector">
         <div class="gal-input-box" style="max-width: 460px; width: 90%; padding: 25px;">
@@ -72775,13 +78345,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const characterFieldHtml = characterNames.length > 0 ? `
       <select id="${characterSelectId}" style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;">
         <option value="">自动选择（当前会话）</option>
-        ${characterNames.map((name) => `<option value="${escapeHtml3(name)}"${name === suggestedCharacterName ? " selected" : ""}>${escapeHtml3(name)}</option>`).join("")}
+        ${characterNames.map((name) => `<option value="${escapeHtml4(name)}"${name === suggestedCharacterName ? " selected" : ""}>${escapeHtml4(name)}</option>`).join("")}
       </select>
       <div style="margin-top: 6px; font-size: 0.82rem; color: #7a7a7a;">
         未手动选择时，会优先尝试 current 与当前会话角色。
       </div>
     ` : `
-      <input id="${characterInputId}" type="text" value="${escapeHtml3(preferredCharacterName)}" placeholder="留空则自动选择 current"
+      <input id="${characterInputId}" type="text" value="${escapeHtml4(preferredCharacterName)}" placeholder="留空则自动选择 current"
              style="width: 100%; padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;" />
       <div style="margin-top: 6px; font-size: 0.82rem; color: #7a7a7a;">
         未能读取角色列表时可手动输入角色卡名称。
@@ -72791,14 +78361,14 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const packId = String(pack.id || "");
       const packName = String(pack.name || packId || "未命名图包");
       const suffix = packId === String(currentPackId) ? "（当前）" : "";
-      return `<option value="${escapeHtml3(packId)}">${escapeHtml3(packName)}${escapeHtml3(suffix)}</option>`;
+      return `<option value="${escapeHtml4(packId)}">${escapeHtml4(packName)}${escapeHtml4(suffix)}</option>`;
     }).join("");
     const uiAccessTabOptionsHtml = ASSET_TAB_ACCESS_OPTIONS.map((tab) => {
       const checked = hiddenAssetTabsDefault.includes(tab.id);
       return `
         <label class="gal-card-export-access-tab-item">
-          <input type="checkbox" class="gal-card-export-hidden-tab" value="${escapeHtml3(tab.id)}" ${checked ? "checked" : ""}>
-          <span>${escapeHtml3(tab.label)}</span>
+          <input type="checkbox" class="gal-card-export-hidden-tab" value="${escapeHtml4(tab.id)}" ${checked ? "checked" : ""}>
+          <span>${escapeHtml4(tab.label)}</span>
         </label>
       `;
     }).join("");
@@ -72814,7 +78384,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         <div class="gal-modal-scroll-body" style="padding: 14px 22px 12px 22px;">
 
         <div style="margin-bottom: 14px; padding: 10px 12px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid #0d6efd; color: #555; font-size: 0.9rem; line-height: 1.6;">
-          当前图包：<strong>${escapeHtml3(currentPackName)}</strong>（${escapeHtml3(String(currentPackId))}）<br>
+          当前图包：<strong>${escapeHtml4(currentPackName)}</strong>（${escapeHtml4(String(currentPackId))}）<br>
           一次设置完成后直接导出，可自由切换本地/远程导出。
         </div>
 
@@ -72871,7 +78441,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                 </label>
               </div>
               <div id="${spriteRemoteWrapId}">
-                <input id="${spriteRemoteInputId}" type="text" value="${escapeHtml3(spriteRemoteInputDefault)}"
+                <input id="${spriteRemoteInputId}" type="text" value="${escapeHtml4(spriteRemoteInputDefault)}"
                        placeholder="例如 user/repo@main/sprites/ 或 https://.../remote_assets.json"
                        style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               </div>
@@ -72894,7 +78464,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                 </label>
               </div>
               <div id="${backgroundRemoteWrapId}">
-                <input id="${backgroundRemoteInputId}" type="text" value="${escapeHtml3(backgroundRemoteInputDefault)}"
+                <input id="${backgroundRemoteInputId}" type="text" value="${escapeHtml4(backgroundRemoteInputDefault)}"
                        placeholder="例如 user/repo@main/backgrounds/ 或 https://.../remote_assets.json"
                        style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               </div>
@@ -72917,7 +78487,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                 </label>
               </div>
               <div id="${specialCgRemoteWrapId}">
-                <input id="${specialCgRemoteInputId}" type="text" value="${escapeHtml3(specialCgRemoteInputDefault)}"
+                <input id="${specialCgRemoteInputId}" type="text" value="${escapeHtml4(specialCgRemoteInputDefault)}"
                        placeholder="例如 user/repo@main/special-cgs/ 或 https://.../remote_assets.json"
                        style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               </div>
@@ -72937,7 +78507,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
               </label>
             </div>
             <div id="${live2dRemoteWrapId}" style="margin-bottom: 10px;">
-              <input id="${live2dRemoteInputId}" type="text" value="${escapeHtml3(live2dRemoteInputDefault)}"
+              <input id="${live2dRemoteInputId}" type="text" value="${escapeHtml4(live2dRemoteInputDefault)}"
                      placeholder="例如 user/repo@main/live2d/ 或 https://cdn.../{character}/model3.json"
                      style="width: 100%; padding: 9px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.92rem; box-sizing: border-box;" />
               <div style="margin-top: 6px; font-size: 0.82rem; color: #6b7280; line-height: 1.5;">
@@ -73009,7 +78579,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                   id="${uiAccessPasswordId}"
                   type="password"
                   class="gal-card-export-access-input"
-                  value="${escapeHtml3(unlockPasswordDefault)}"
+                  value="${escapeHtml4(unlockPasswordDefault)}"
                   placeholder="请输入解锁口令"
                   autocomplete="off"
                 />
@@ -74412,7 +79982,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
               displayName: profile.displayName,
               createdAt: profile.createdAt,
               updatedAt: profile.updatedAt,
-              sortOrder: profile.sortOrder
+              sortOrder: profile.sortOrder,
+              footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(profile.footerButtonDisplay)
             }));
             remoteConfig.activeCustomSkinProfileId = exportedActiveProfileId;
           }
@@ -74881,12 +80452,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         const currentPackId = getCurrentPackId();
         const currentPack = packs.find((p2) => p2.id === currentPackId);
         const currentPackName = currentPack ? currentPack.name : "当前图包";
-        const safeCurrentPackName = escapeHtml3(currentPackName);
+        const safeCurrentPackName = escapeHtml4(currentPackName);
         const packOptions = packs.map(
-          (p2) => `<option value="${escapeHtml3(p2.id)}">${escapeHtml3(p2.name)}${p2.id === currentPackId ? " (当前)" : ""}</option>`
+          (p2) => `<option value="${escapeHtml4(p2.id)}">${escapeHtml4(p2.name)}${p2.id === currentPackId ? " (当前)" : ""}</option>`
         ).join("");
         const defaultNewName = suggestedName || `导入包_${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}`;
-        const safeDefaultNewName = escapeHtml3(defaultNewName);
+        const safeDefaultNewName = escapeHtml4(defaultNewName);
         const dialogHtml = `
         <div class="gal-input-modal gal-z-critical" id="gal-import-pack-selector">
           <div class="gal-input-box" style="max-width: 450px; width: 90%; padding: 25px;">
@@ -75797,7 +81368,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     (0, import_cytoscape_dagre.default)(cytoscape2);
     dagreRegistered = true;
   }
-  function escapeHtml4(value) {
+  function escapeHtml5(value) {
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function closeTimelineModal() {
@@ -75904,7 +81475,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     setTimelineZoom(nextZoom);
   }
   function showEmptyState(text) {
-    const safeText = escapeHtml4(text || "暂无时间线数据");
+    const safeText = escapeHtml5(text || "暂无时间线数据");
     modalState.$modal?.find("#gal-timeline-empty").html(`<div class="gal-timeline-empty-inner"><i class="fa-regular fa-folder-open"></i><span>${safeText}</span></div>`).show();
     modalState.$modal?.find("#gal-timeline-graph").hide();
   }
@@ -75969,30 +81540,30 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const targetNode = node || getSelectedNode();
     if (!targetNode) return;
     const selectedSession = getSelectedSession(targetNode);
-    const checkpointBadges = targetNode.checkpointInfo?.names?.length ? `<div class="gal-timeline-checkpoints">${targetNode.checkpointInfo.names.map((name) => `<span class="gal-timeline-chip checkpoint">${escapeHtml4(name)}</span>`).join("")}</div>` : "";
+    const checkpointBadges = targetNode.checkpointInfo?.names?.length ? `<div class="gal-timeline-checkpoints">${targetNode.checkpointInfo.names.map((name) => `<span class="gal-timeline-chip checkpoint">${escapeHtml5(name)}</span>`).join("")}</div>` : "";
     const sessionButtons = Array.isArray(targetNode.sessions) ? targetNode.sessions.map((session, index) => {
       const active = selectedSession && isSameChatId(session.chatId, selectedSession.chatId) && session.messageId === selectedSession.messageId && session.swipeId === selectedSession.swipeId;
       const current = modalState.data?.current?.chatId && isSameChatId(session.chatId, modalState.data.current.chatId);
       const badgeText = session.swipeId != null ? `Swipe ${session.swipeId + 1}` : `楼层 ${session.messageId + 1}`;
       return `
           <button class="gal-timeline-session-btn ${active ? "active" : ""} ${current ? "is-current" : ""}" data-role="timeline-select-session" data-session-index="${index}">
-            <span class="gal-timeline-session-file">${escapeHtml4(session.chatFile || session.chatId)}</span>
-            <span class="gal-timeline-session-meta">${escapeHtml4(badgeText)}</span>
+            <span class="gal-timeline-session-file">${escapeHtml5(session.chatFile || session.chatId)}</span>
+            <span class="gal-timeline-session-meta">${escapeHtml5(badgeText)}</span>
           </button>
         `;
     }).join("") : "";
     const drawerHtml = `
     <div class="gal-timeline-drawer-header">
       <div class="gal-timeline-drawer-title-row">
-        <span class="gal-timeline-node-type ${escapeHtml4(targetNode.type)}">${escapeHtml4(targetNode.type === "swipe" ? "Swipe" : targetNode.role || targetNode.type)}</span>
+        <span class="gal-timeline-node-type ${escapeHtml5(targetNode.type)}">${escapeHtml5(targetNode.type === "swipe" ? "Swipe" : targetNode.role || targetNode.type)}</span>
         <span class="gal-timeline-node-depth">深度 ${targetNode.depth + 1}</span>
       </div>
-      <div class="gal-timeline-node-label">${escapeHtml4(targetNode.label || targetNode.preview)}</div>
+      <div class="gal-timeline-node-label">${escapeHtml5(targetNode.label || targetNode.preview)}</div>
       ${checkpointBadges}
     </div>
     <div class="gal-timeline-drawer-body">
       <div class="gal-timeline-preview-label">消息预览</div>
-      <div class="gal-timeline-preview">${escapeHtml4(targetNode.preview || "（空消息）")}</div>
+      <div class="gal-timeline-preview">${escapeHtml5(targetNode.preview || "（空消息）")}</div>
       <div class="gal-timeline-preview-label">所属聊天</div>
       <div class="gal-timeline-session-list">${sessionButtons || '<div class="gal-timeline-drawer-hint">没有可用的聊天会话</div>'}</div>
       <div class="gal-timeline-preview-label">操作</div>
@@ -76312,7 +81883,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   var hasShownInCurrentSession = false;
   var lastShownCharId = "";
   var cgGalleryLoadToken = 0;
-  function escapeHtml5(value) {
+  function escapeHtml6(value) {
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function resolveCurrentCharId() {
@@ -76324,6 +81895,20 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       return null;
     }
     return titleScreen;
+  }
+  function buildAdaptiveClampFontSize(fontSize, defaultPreset) {
+    const parsedSize = Number.parseFloat(fontSize);
+    if (!Number.isFinite(parsedSize) || parsedSize <= 0 || !defaultPreset) return "";
+    const scale2 = parsedSize / defaultPreset.maxPx;
+    const minPx = Math.round(defaultPreset.minPx * scale2 * 100) / 100;
+    const maxPx = Math.round(defaultPreset.maxPx * scale2 * 100) / 100;
+    const fluidVw = Math.round(defaultPreset.fluidVw * scale2 * 1e3) / 1e3;
+    return `clamp(${minPx}px, ${fluidVw}vw, ${maxPx}px)`;
+  }
+  function applyTitleTypography(node, fontFamily, fontSize, defaultPreset) {
+    if (!node) return;
+    node.style.fontFamily = String(fontFamily || "").trim();
+    node.style.fontSize = buildAdaptiveClampFontSize(fontSize, defaultPreset);
   }
   function ensureTitleScreenElement() {
     const $overlay = ensureGlobalOverlay();
@@ -76433,15 +82018,29 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const subtitleNode = root.querySelector(".gal-title-screen-subtitle");
     const startButton = root.querySelector('[data-action="start"]');
     const titleText = String(config?.titleText || "").trim();
+    const titleFontFamily = String(config?.titleFontFamily || "").trim();
+    const titleFontSize = config?.titleFontSize;
     const subtitleText = String(config?.subtitleText || "").trim();
+    const subtitleFontFamily = String(config?.subtitleFontFamily || "").trim();
+    const subtitleFontSize = config?.subtitleFontSize;
     if (titleNode) {
       titleNode.textContent = titleText || "Galgame";
       titleNode.setAttribute("data-text", titleText || "Galgame");
       titleNode.style.display = titleText ? "" : "none";
+      applyTitleTypography(titleNode, titleFontFamily, titleFontSize, {
+        minPx: 64,
+        fluidVw: 7,
+        maxPx: 104
+      });
     }
     if (subtitleNode) {
       subtitleNode.textContent = subtitleText;
       subtitleNode.style.display = subtitleText ? "" : "none";
+      applyTitleTypography(subtitleNode, subtitleFontFamily, subtitleFontSize, {
+        minPx: 16,
+        fluidVw: 2,
+        maxPx: 20.8
+      });
     }
     if (startButton) {
       startButton.textContent = "开始游戏";
@@ -76469,8 +82068,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     imageNode.setAttribute("src", imageUrl);
     imageNode.setAttribute("alt", name);
     captionNode.innerHTML = `
-    <div class="gal-title-cg-lightbox-title">${escapeHtml5(name)}</div>
-    ${description ? `<div class="gal-title-cg-lightbox-desc">${escapeHtml5(description)}</div>` : ""}
+    <div class="gal-title-cg-lightbox-title">${escapeHtml6(name)}</div>
+    ${description ? `<div class="gal-title-cg-lightbox-desc">${escapeHtml6(description)}</div>` : ""}
   `;
     lightboxLayer.classList.add("active");
     lightboxLayer.setAttribute("aria-hidden", "false");
@@ -76518,16 +82117,16 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       <button
         type="button"
         class="gal-title-cg-gallery-card"
-        title="${escapeHtml5(item.name)}"
-        data-image-url="${escapeHtml5(item.imageUrl)}"
-        data-name="${escapeHtml5(item.name)}"
-        data-description="${escapeHtml5(item.description || "")}"
+        title="${escapeHtml6(item.name)}"
+        data-image-url="${escapeHtml6(item.imageUrl)}"
+        data-name="${escapeHtml6(item.name)}"
+        data-description="${escapeHtml6(item.description || "")}"
       >
         <div class="gal-title-cg-gallery-preview">
-          <img src="${escapeHtml5(item.imageUrl)}" alt="${escapeHtml5(item.name)}">
+          <img src="${escapeHtml6(item.imageUrl)}" alt="${escapeHtml6(item.name)}">
         </div>
-        <div class="gal-title-cg-gallery-name">${escapeHtml5(item.name)}</div>
-        ${item.description ? `<div class="gal-title-cg-gallery-desc">${escapeHtml5(item.description)}</div>` : ""}
+        <div class="gal-title-cg-gallery-name">${escapeHtml6(item.name)}</div>
+        ${item.description ? `<div class="gal-title-cg-gallery-desc">${escapeHtml6(item.description)}</div>` : ""}
       </button>
     `
     ).join("");
@@ -78377,6 +83976,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $2(doc).on("mousedown touchstart", '#gal-global-overlay [data-action="prev"]', function(e) {
       e.stopPropagation();
       e.preventDefault();
+      closeMobileMenu();
       setRewindHoldTimer2(
         setTimeout(() => {
           startRewinding();
@@ -78411,6 +84011,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     $2(doc).on("click", '#gal-global-overlay [data-action="close-mode"]', async function(e) {
       e.stopPropagation();
+      closeMobileMenu();
       setIsEnabled(false);
       setCurrentCharEnabled(false);
       updateButtonState();
@@ -78495,6 +84096,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $2(doc).on("mousedown touchstart", '#gal-global-overlay [data-action="skip"]', function(e) {
       e.stopPropagation();
       e.preventDefault();
+      closeMobileMenu();
       startSkipping();
     });
     $2(doc).on("mouseup touchend mouseleave", '#gal-global-overlay [data-action="skip"]', function(e) {
@@ -78508,34 +84110,53 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     $2(doc).on("click", "#gal-global-overlay .gal-sprite-toggle", function(e) {
       e.stopPropagation();
-      const $btn = $2(this);
       const $overlay = $2("#gal-global-overlay");
       const $characterLayer = $overlay.find(".gal-layer-character");
-      $btn.toggleClass("sprites-hidden");
-      $characterLayer.toggleClass("sprites-hidden");
-      if ($btn.hasClass("sprites-hidden")) {
-        $btn.attr("title", "显示立绘");
-        $btn.find(".gal-eye-icon").text("🙈");
-      } else {
-        $btn.attr("title", "隐藏立绘");
-        $btn.find(".gal-eye-icon").text("👁");
-      }
+      const shouldHideSprites = !$characterLayer.hasClass("sprites-hidden");
+      const $buttons = $overlay.find(".gal-sprite-toggle");
+      $characterLayer.toggleClass("sprites-hidden", shouldHideSprites);
+      $buttons.toggleClass("sprites-hidden", shouldHideSprites);
+      $buttons.each(function() {
+        const $btn = $2(this);
+        const $icon = $btn.find(".gal-eye-icon");
+        if (shouldHideSprites) {
+          $btn.attr("title", "显示立绘");
+          if ($icon.is("i")) {
+            $icon.removeClass("fa-eye").addClass("fa-eye-slash").text("");
+          } else {
+            $icon.text("🙈");
+          }
+        } else {
+          $btn.attr("title", "隐藏立绘");
+          if ($icon.is("i")) {
+            $icon.removeClass("fa-eye-slash").addClass("fa-eye").text("");
+          } else {
+            $icon.text("👁");
+          }
+        }
+      });
     });
     function closeMobileMenu() {
       $2("#gal-mobile-menu").removeClass("active");
     }
-    function isMobileMenuMode() {
+    function isViewportMobileMenuMode() {
       const hasMatchMedia = !!(topWindow && typeof topWindow.matchMedia === "function");
       const isNarrowViewport = hasMatchMedia && topWindow.matchMedia("(max-width: 768px)").matches;
       const isShortViewport = hasMatchMedia && topWindow.matchMedia("(max-height: 736px)").matches;
-      const preferMobileMenu = isNarrowViewport || isShortViewport;
-      const $logBtn = $2('#gal-global-overlay .gal-footer-btn[data-action="log"]');
-      if (!$logBtn.length) return preferMobileMenu;
-      return preferMobileMenu || !$logBtn.is(":visible");
+      return isNarrowViewport || isShortViewport;
+    }
+    function hasCustomSkinFooterMenuItems2() {
+      const $overlay = $2("#gal-global-overlay");
+      if (!$overlay.length) return false;
+      if (String($overlay.attr("data-custom-skin-active-profile") || "") !== "true") return false;
+      return Number($overlay.attr("data-custom-skin-footer-menu-count") || 0) > 0;
+    }
+    function shouldOpenConfigMenu() {
+      return isViewportMobileMenuMode() || hasCustomSkinFooterMenuItems2();
     }
     $2(doc).on("click", '#gal-global-overlay [data-action="config"]', function(e) {
       e.stopPropagation();
-      if (isMobileMenuMode()) {
+      if (shouldOpenConfigMenu()) {
         const $menu = $2("#gal-mobile-menu");
         if (!$menu.hasClass("active")) {
           const $overlay = $2("#gal-global-overlay");
@@ -78675,11 +84296,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     $2(doc).on("click", '#gal-global-overlay [data-action="log"]', function(e) {
       e.stopPropagation();
+      closeMobileMenu();
       const history = getHistoryFromDatabase();
       showHistoryModal(history);
     });
     $2(doc).on("click", '#gal-global-overlay [data-action="show-choices"]', function(e) {
       e.stopPropagation();
+      closeMobileMenu();
       const pending = getPendingOptions();
       if (pending && pending.length > 0) {
         renderGalgameChoices(pending);
@@ -78689,6 +84312,14 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     $2(doc).on("click", '#gal-global-overlay [data-action="next"]', async function(e) {
       e.stopPropagation();
+      closeMobileMenu();
+      await triggerNextSegmentFromOverlay();
+    });
+    $2(doc).on("click", "#gal-global-overlay.skin-twilight .gal-text-panel", async function(e) {
+      const $target = $2(e.target);
+      if ($target.closest(".gal-generating-indicator, a, button, input, textarea, select").length) return;
+      e.stopPropagation();
+      closeMobileMenu();
       await triggerNextSegmentFromOverlay();
     });
     $2(doc).on("click", "#gal-global-overlay", async function(e) {
@@ -78706,6 +84337,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     $2(doc).on("click", '#gal-global-overlay [data-action="auto"]', function(e) {
       e.stopPropagation();
+      closeMobileMenu();
       const $btn = $2(this);
       const $overlay = $2("#gal-global-overlay");
       const mesId = $overlay.find(".gal-game-container").attr("data-mes-id");
@@ -78836,7 +84468,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     let previewDragStart = { x: 0, y: 0 };
     let previewDragOrigin = { x: 0, y: 0 };
     let previewRequestToken = 0;
-    const escapeHtml8 = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => {
+    const escapeHtml9 = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => {
       switch (char) {
         case "&":
           return "&amp;";
@@ -78932,10 +84564,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const allTags = buildMappingTagList();
       const nativeExprOptionsHtml = expressionList.length > 0 ? expressionList.map((name) => {
         const normalized = String(name ?? "");
-        return `<option value="${escapeHtml8(normalized)}">${escapeHtml8(normalized)}</option>`;
+        return `<option value="${escapeHtml9(normalized)}">${escapeHtml9(normalized)}</option>`;
       }).join("") : "";
       const builtinExprOptionsHtml = builtinExpressionOptions.length > 0 ? builtinExpressionOptions.map((item) => {
-        return `<option value="${escapeHtml8(item.token)}">${escapeHtml8(item.label)}</option>`;
+        return `<option value="${escapeHtml9(item.token)}">${escapeHtml9(item.label)}</option>`;
       }).join("") : "";
       const exprOptionsHtml = [
         nativeExprOptionsHtml ? `<optgroup label="模型表情">${nativeExprOptionsHtml}</optgroup>` : "",
@@ -78945,10 +84577,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         const rawGroup = String(groupName ?? "");
         const value = rawGroup === "" ? EMPTY_MOTION_GROUP_VALUE : rawGroup;
         const label = rawGroup === "" ? "(空动作组)" : rawGroup;
-        return `<option value="${escapeHtml8(value)}">${escapeHtml8(label)}</option>`;
+        return `<option value="${escapeHtml9(value)}">${escapeHtml9(label)}</option>`;
       }).join("") : "";
       const builtinMotionOptionsHtml = builtinMotionOptions.length > 0 ? builtinMotionOptions.map((item) => {
-        return `<option value="${escapeHtml8(item.token)}">${escapeHtml8(item.label)}</option>`;
+        return `<option value="${escapeHtml9(item.token)}">${escapeHtml9(item.label)}</option>`;
       }).join("") : "";
       const motionOptionsHtml = [
         nativeMotionOptionsHtml ? `<optgroup label="模型动作组">${nativeMotionOptionsHtml}</optgroup>` : "",
@@ -78959,9 +84591,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         const currentMotion = existingMotionMappings[tag] || {};
         const hasMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, "group");
         const currentMotionGroup = Object.prototype.hasOwnProperty.call(currentMotion, "group") ? String(currentMotion.group ?? "") : "";
-        const safeTag = escapeHtml8(tag || EMPTY_TAG_FALLBACK);
-        const safeCurrentExpr = escapeHtml8(String(currentExpr ?? ""));
-        const safeCurrentMotionGroup = escapeHtml8(String(currentMotionGroup ?? ""));
+        const safeTag = escapeHtml9(tag || EMPTY_TAG_FALLBACK);
+        const safeCurrentExpr = escapeHtml9(String(currentExpr ?? ""));
+        const safeCurrentMotionGroup = escapeHtml9(String(currentMotionGroup ?? ""));
         const safeDisabled = currentMotion.enabled === false ? "true" : "false";
         const safeHasGroup = hasMotionGroup ? "true" : "false";
         rows += `
@@ -82803,7 +88435,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       }
     }
   }
-  function escapeHtml6(value) {
+  function escapeHtml7(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function getParentPath(path = "") {
@@ -83034,7 +88666,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
                   style="width: 100%; text-align: left; border: none; border-bottom: 1px solid #f1f5f9; background: ${bg}; color: #111827; padding: 9px 12px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
             <span style="display: inline-flex; align-items: center; gap: 8px; min-width: 0;">
               <i class="fa-solid ${icon}" style="color: ${color};"></i>
-              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml6(entry.name)}</span>
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml7(entry.name)}</span>
             </span>
             <span style="font-size: 0.75rem; color: #94a3b8;">${isDir ? "目录" : "模型"}</span>
           </button>
@@ -83070,7 +88702,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         setStatus2(msg, true);
         $libList.html(`
         <div style="padding: 16px; color: #dc2626; text-align: center;">
-          ${escapeHtml6(msg)}
+          ${escapeHtml7(msg)}
         </div>
       `);
       }
@@ -83194,7 +88826,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           <i class="fa-solid fa-tags"></i> 角色名关键字
         </div>
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          <input type="text" id="gal-char-name-keywords" class="gal-char-keywords-input" value="${escapeHtml6(characterKeywordsInputValue)}" placeholder="例如：祥子,小祥|Sakiko、丰川祥子" style="flex: 1; min-width: 240px; padding: 9px 12px; border-radius: 6px;">
+          <input type="text" id="gal-char-name-keywords" class="gal-char-keywords-input" value="${escapeHtml7(characterKeywordsInputValue)}" placeholder="例如：祥子,小祥|Sakiko、丰川祥子" style="flex: 1; min-width: 240px; padding: 9px 12px; border-radius: 6px;">
           <button class="gal-action-btn" id="gal-char-keywords-save-btn" style="padding: 8px 16px; white-space: nowrap;">
             <i class="fa-solid fa-check"></i> 保存关键字
           </button>
@@ -86519,20 +92151,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   var DEFAULT_MATTING_BRUSH_SIZE2 = 28;
   var COMPONENT_SELECTION_PADDING_RATIO2 = 0;
   var CHROMA_KEY_PRESETS = ["#00FF00", "#FF00FF", "#FFFFFF", "#000000"];
-  var FOOTER_BATCH_SLOT_META = [
-    { id: "footer_btn_log", shortLabel: "LOG" },
-    { id: "footer_btn_close", shortLabel: "CLOSE" },
-    { id: "footer_btn_view", shortLabel: "VIEW" },
-    { id: "footer_btn_config", shortLabel: "CONFIG" },
-    { id: "footer_btn_save", shortLabel: "SAVE" },
-    { id: "footer_btn_load", shortLabel: "LOAD" },
-    { id: "footer_btn_timeline", shortLabel: "TL" },
-    { id: "footer_btn_prev", shortLabel: "PREV" },
-    { id: "footer_btn_auto", shortLabel: "AUTO" },
-    { id: "footer_btn_skip", shortLabel: "SKIP" },
-    { id: "footer_btn_choices", shortLabel: "选项" },
-    { id: "footer_btn_next", shortLabel: "NEXT" }
-  ];
+  var FOOTER_BATCH_SLOT_META = CUSTOM_SKIN_FOOTER_BUTTONS.map((item) => ({
+    id: item.elementId,
+    shortLabel: item.shortLabel
+  }));
   var FOOTER_BATCH_SLOT_META_MAP = new Map(FOOTER_BATCH_SLOT_META.map((item) => [item.id, item]));
   var FOOTER_BATCH_FIXED_ORDER_TEXT = FOOTER_BATCH_SLOT_META.map((item) => item.shortLabel).join(" -> ");
   function getPreviewPackId() {
@@ -86707,6 +92329,37 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         style="--gal-custom-skin-chip-color:${color};"
       >${color}</button>
     `).join("");
+    const footerDisplayRows = CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS.map((item) => {
+      if (item.elementId === "footer_btn_config") {
+        return `
+          <div class="gal-custom-skin-footer-display-row is-fixed" data-element-id="${item.elementId}">
+            <div class="gal-custom-skin-footer-display-meta">
+              <strong>${item.shortLabel}</strong>
+              <small>${item.menuLabel}</small>
+            </div>
+            <div class="gal-custom-skin-footer-display-fixed">固定为菜单入口</div>
+          </div>
+        `;
+      }
+      return `
+        <div class="gal-custom-skin-footer-display-row" data-element-id="${item.elementId}">
+          <div class="gal-custom-skin-footer-display-meta">
+            <strong>${item.shortLabel}</strong>
+            <small>${item.menuLabel}</small>
+          </div>
+          <div class="gal-custom-skin-footer-display-options" role="radiogroup" aria-label="${item.shortLabel} 显示位置">
+            <label class="gal-custom-skin-footer-display-option">
+              <input type="radio" name="gal-custom-skin-footer-display-${item.elementId}" value="toolbar" checked>
+              <span>底栏</span>
+            </label>
+            <label class="gal-custom-skin-footer-display-option">
+              <input type="radio" name="gal-custom-skin-footer-display-${item.elementId}" value="menu">
+              <span>菜单</span>
+            </label>
+          </div>
+        </div>
+      `;
+    }).join("");
     return `
   <div class="gal-tab-pane ${activeTab === "skin" ? "active" : ""}" data-pane="skin" style="${activeTab !== "skin" ? "display: none;" : ""}">
     <div class="gal-pane-header">
@@ -86730,6 +92383,16 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-profile-duplicate"><i class="fa-solid fa-copy"></i> <span>另存为</span></button>
         <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-export-current"><i class="fa-solid fa-file-export"></i> <span>导出当前皮肤</span></button>
         <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-profile-delete"><i class="fa-solid fa-trash"></i> <span>删除</span></button>
+      </div>
+    </div>
+    <div class="gal-custom-skin-footer-display-panel">
+      <div class="gal-custom-skin-footer-display-header">
+        <div class="gal-custom-skin-subtitle">底栏功能按钮显示方式</div>
+        <span class="gal-custom-skin-footer-display-status" id="gal-custom-skin-footer-display-status">按当前皮肤单独保存</span>
+      </div>
+      <div class="gal-custom-skin-editor-note">可逐个决定按钮是常驻底栏，还是收纳进 CONFIG 弹出菜单。CONFIG 始终保留在底栏作为菜单入口。</div>
+      <div class="gal-custom-skin-footer-display-list" id="gal-custom-skin-footer-display-list">
+        ${footerDisplayRows}
       </div>
     </div>
     <input type="file" id="gal-custom-skin-import-zip-input" accept=".zip" style="display:none;">
@@ -86979,6 +92642,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const $profileStatus = $pane.find("#gal-custom-skin-profile-status");
     const $profileSelect = $pane.find("#gal-custom-skin-profile-select");
     const $profileImportZipInput = $pane.find("#gal-custom-skin-import-zip-input");
+    const $footerDisplayStatus = $pane.find("#gal-custom-skin-footer-display-status");
+    const $footerDisplayList = $pane.find("#gal-custom-skin-footer-display-list");
     const $elementSelect = $pane.find("#gal-custom-skin-element-select");
     const $deviceSelect = $pane.find("#gal-custom-skin-device-select");
     const $deviceDisplay = $pane.find("#gal-custom-skin-device-display");
@@ -87126,6 +92791,64 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       syncMattingControls();
     };
     const getCurrentProfileLabel = () => getUiSkinProfileLabel(state.profileId) || "未命名皮肤";
+    const getCurrentProfileRecord = () => {
+      if (!state.profileId) return null;
+      return getCachedUiSkinProfile(state.profileId) || state.profiles.find((profile) => profile.id === state.profileId) || null;
+    };
+    const getCurrentFooterButtonDisplay = () => normalizeCustomSkinFooterButtonDisplay(
+      getCurrentProfileRecord()?.footerButtonDisplay
+    );
+    const syncFooterButtonDisplayControls = () => {
+      const hasProfile = !!state.profileId;
+      const footerButtonDisplay = getCurrentFooterButtonDisplay();
+      const collapsedCount = CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS.filter(
+        (item) => item.elementId !== "footer_btn_config" && footerButtonDisplay[item.elementId] === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU
+      ).length;
+      $footerDisplayStatus.text(
+        hasProfile ? `当前收纳 ${collapsedCount} 项` : "请先创建自定义皮肤"
+      );
+      $footerDisplayList.toggleClass("is-disabled", !hasProfile);
+      CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS.forEach((item) => {
+        const selector = `input[name="gal-custom-skin-footer-display-${item.elementId}"]`;
+        const $inputs = $pane.find(selector);
+        if (!$inputs.length) return;
+        const nextMode = footerButtonDisplay[item.elementId] || CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
+        $inputs.prop("checked", false);
+        $inputs.filter(`[value="${nextMode}"]`).prop("checked", true);
+        $inputs.prop("disabled", !hasProfile);
+      });
+    };
+    const persistFooterButtonDisplay = async (elementId, displayMode) => {
+      if (!state.profileId) {
+        showToast4("请先创建自定义皮肤。");
+        syncFooterButtonDisplayControls();
+        return;
+      }
+      const currentProfile = getCurrentProfileRecord();
+      if (!currentProfile) {
+        syncFooterButtonDisplayControls();
+        return;
+      }
+      const footerButtonDisplay = normalizeCustomSkinFooterButtonDisplay({
+        ...currentProfile.footerButtonDisplay || {},
+        [elementId]: displayMode
+      });
+      const savedProfile = await saveUiSkinProfile({
+        ...currentProfile,
+        id: state.profileId,
+        footerButtonDisplay
+      });
+      await reloadProfiles(savedProfile.id);
+      syncFooterButtonDisplayControls();
+      await applyCustomSkinRuntime().catch((error3) => {
+        console.warn(`[${SCRIPT_NAME}] refresh custom-skin runtime after footer display change failed:`, error3);
+      });
+      const buttonLabel = CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS.find((item) => item.elementId === elementId)?.shortLabel || elementId;
+      setHint(
+        `${buttonLabel} 已切换为${displayMode === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU ? "收纳进 CONFIG 菜单" : "显示在底栏"}，并已保存到当前皮肤。`,
+        "ok"
+      );
+    };
     const syncProfileStatus = () => {
       $profileStatus.text(`当前预览图包：${getPreviewPackId()} · 当前皮肤：${getCurrentProfileLabel()}`);
     };
@@ -87141,12 +92864,15 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       $pane.find("#gal-custom-skin-profile-delete").prop("disabled", !hasProfiles);
       $pane.find("#gal-custom-skin-export-library").prop("disabled", !hasProfiles);
       syncProfileStatus();
+      syncFooterButtonDisplayControls();
     };
-    const syncActiveProfileSetting = async () => {
+    const syncActiveProfileSetting = async ({ persistSkinSelection = true } = {}) => {
       if (!state.profileId) return;
-      settings2.skin = state.profileId;
-      saveSettings();
-      refreshSkinSelectElement();
+      if (persistSkinSelection) {
+        settings2.skin = state.profileId;
+        saveSettings();
+        refreshSkinSelectElement();
+      }
       applySettingsToUI();
       await applyCustomSkinRuntime().catch((error3) => {
         console.warn(`[${SCRIPT_NAME}] sync active custom-skin profile failed:`, error3);
@@ -88418,6 +94144,18 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           showToast4(`切换文字显示失败: ${error3.message || error3}`);
         });
       });
+      $footerDisplayList.on("change", 'input[type="radio"]', function() {
+        const $input = $2(this);
+        const elementId = String($input.closest(".gal-custom-skin-footer-display-row").attr("data-element-id") || "").trim();
+        const displayMode = String($input.val() || CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR).trim();
+        if (!elementId) return;
+        persistFooterButtonDisplay(elementId, displayMode).catch((error3) => {
+          console.error(`[${SCRIPT_NAME}] save custom-skin footer display failed:`, error3);
+          syncFooterButtonDisplayControls();
+          setHint(`保存底栏按钮显示方式失败：${error3.message || error3}`, "err");
+          showToast4(`保存底栏按钮显示方式失败: ${error3.message || error3}`);
+        });
+      });
     };
     const bindPreviewActions = () => {
       bindPaneButton("#gal-custom-skin-desktop-preview-toggle", () => {
@@ -88839,7 +94577,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     bindElementAndStateChanges();
     bindPreviewActions();
     bindFormActions();
-    ensureActiveProfile().then(() => syncActiveProfileSetting()).then(() => loadCurrentAsset()).catch((error3) => {
+    const shouldKeepCurrentCustomSkinActive = hasUiSkinProfileId(settings2.skin);
+    (shouldKeepCurrentCustomSkinActive ? ensureActiveProfile().then(() => syncActiveProfileSetting()).then(() => loadCurrentAsset()) : reloadProfiles(state.profileId).then(() => loadCurrentAsset())).catch((error3) => {
       console.error(`[${SCRIPT_NAME}] initial custom-skin editor load failed:`, error3);
       setHint("初始化失败，请关闭面板后重试。", "err");
     });
@@ -89119,7 +94858,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       unlockReadError: unlockState.error
     };
   }
-  function escapeHtml7(value) {
+  function escapeHtml8(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   var SPECIAL_CG_VAR_PATH_DATALIST_ID = "gal-special-cg-variable-path-datalist";
@@ -89164,7 +94903,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function buildVariablePathOptionsHtml(paths) {
     const safePaths = Array.from(new Set((Array.isArray(paths) ? paths : []).map((item) => String(item || "").trim().replace(/^stat_data\./, "")).filter(Boolean))).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-    return safePaths.map((path) => `<option value="${escapeHtml7(path)}"></option>`).join("");
+    return safePaths.map((path) => `<option value="${escapeHtml8(path)}"></option>`).join("");
   }
   function extractMvuVariablePathsFromData(variables) {
     const statData = variables?.stat_data;
@@ -89631,7 +95370,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     <div class="gal-settings-section">
       <div class="gal-settings-section-title"><i class="fa-solid fa-house"></i> 标题界面</div>
       <div style="font-size: 0.8rem; color: #666; margin: -6px 0 8px 0;">
-        当前角色卡独立配置（角色卡名: ${escapeHtml7(safeCharName)}）
+        当前角色卡独立配置（角色卡名: ${escapeHtml8(safeCharName)}）
       </div>
       <div class="gal-settings-row">
         <span class="gal-settings-label">启用标题界面</span>
@@ -89639,11 +95378,27 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       </div>
       <div class="gal-settings-row">
         <span class="gal-settings-label">标题文字</span>
-        <input type="text" id="gal-title-text" class="gal-title-settings-input" value="${escapeHtml7(safeTitleScreen.titleText || "")}" placeholder="例如：夏日物语">
+        <input type="text" id="gal-title-text" class="gal-title-settings-input" value="${escapeHtml8(safeTitleScreen.titleText || "")}" placeholder="例如：夏日物语">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">标题字体</span>
+        <input type="text" id="gal-title-font-family" class="gal-title-settings-input" value="${escapeHtml8(safeTitleScreen.titleFontFamily || "")}" placeholder="例如：'Noto Serif SC', serif">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">标题字号(px，默认最大 104)</span>
+        <input type="number" id="gal-title-font-size" class="gal-title-settings-input" value="${escapeHtml8(safeTitleScreen.titleFontSize ?? "")}" min="8" max="240" step="1" placeholder="留空使用默认最大 104px（自适应）">
       </div>
       <div class="gal-settings-row">
         <span class="gal-settings-label">副标题</span>
-        <input type="text" id="gal-title-subtitle" class="gal-title-settings-input" value="${escapeHtml7(safeTitleScreen.subtitleText || "")}" placeholder="例如：按下开始继续">
+        <input type="text" id="gal-title-subtitle" class="gal-title-settings-input" value="${escapeHtml8(safeTitleScreen.subtitleText || "")}" placeholder="例如：按下开始继续">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">副标题字体</span>
+        <input type="text" id="gal-title-subtitle-font-family" class="gal-title-settings-input" value="${escapeHtml8(safeTitleScreen.subtitleFontFamily || "")}" placeholder="例如：'Noto Sans SC', sans-serif">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">副标题字号(px，默认最大 20.8)</span>
+        <input type="number" id="gal-title-subtitle-font-size" class="gal-title-settings-input" value="${escapeHtml8(safeTitleScreen.subtitleFontSize ?? "")}" min="8" max="240" step="1" placeholder="留空使用默认最大 20.8px（自适应）">
       </div>
       <div class="gal-settings-row">
         <span class="gal-settings-label">背景来源</span>
@@ -89673,12 +95428,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           <button class="gal-action-btn" id="gal-title-bg-upload-btn" style="justify-content:center; min-width: 220px;">
             <i class="fa-solid fa-image"></i> 上传图片（支持 gif/webp）
           </button>
-          <small id="gal-title-bg-upload-hint" style="color: var(--SmartThemeBodyColor, #f5f7fa); opacity: 0.82;">上传后将保存到当前角色卡标题背景（scene: ${escapeHtml7(safeTitleScreen.backgroundSceneName || "__title__")}）</small>
+          <small id="gal-title-bg-upload-hint" style="color: var(--SmartThemeBodyColor, #f5f7fa); opacity: 0.82;">上传后将保存到当前角色卡标题背景（scene: ${escapeHtml8(safeTitleScreen.backgroundSceneName || "__title__")}）</small>
         </div>
       </div>
       <div class="gal-settings-row" id="gal-title-bg-url-row">
         <span class="gal-settings-label">背景URL</span>
-        <input type="url" id="gal-title-bg-url" class="gal-title-settings-input" value="${escapeHtml7(safeTitleScreen.backgroundUrl || "")}" placeholder="https://example.com/title.webp">
+        <input type="url" id="gal-title-bg-url" class="gal-title-settings-input" value="${escapeHtml8(safeTitleScreen.backgroundUrl || "")}" placeholder="https://example.com/title.webp">
       </div>
     </div>
   </div>`;
@@ -89698,13 +95453,13 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const name = String(item.name || cgId || "未命名CG").trim();
       const preview = item.imageUrl ? item.imageUrl : item.imageBlob ? URL.createObjectURL(item.imageBlob) : "";
       return `
-          <div class="gal-special-cg-card" data-cg-id="${escapeHtml7(cgId)}">
-            <div class="gal-special-cg-preview">${preview ? `<img src="${preview}" alt="${escapeHtml7(name)}">` : "<span>无预览</span>"}</div>
-            <div class="gal-special-cg-name">${escapeHtml7(name)}</div>
-            <div class="gal-special-cg-id">${escapeHtml7(cgId)}</div>
+          <div class="gal-special-cg-card" data-cg-id="${escapeHtml8(cgId)}">
+            <div class="gal-special-cg-preview">${preview ? `<img src="${preview}" alt="${escapeHtml8(name)}">` : "<span>无预览</span>"}</div>
+            <div class="gal-special-cg-name">${escapeHtml8(name)}</div>
+            <div class="gal-special-cg-id">${escapeHtml8(cgId)}</div>
             <div class="gal-special-cg-actions">
-              <button class="gal-special-cg-transfer" data-cg-id="${escapeHtml7(cgId)}" title="转移到其他图包"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-              <button class="gal-special-cg-delete" data-cg-id="${escapeHtml7(cgId)}" title="删除"><i class="fa-solid fa-trash"></i></button>
+              <button class="gal-special-cg-transfer" data-cg-id="${escapeHtml8(cgId)}" title="转移到其他图包"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+              <button class="gal-special-cg-delete" data-cg-id="${escapeHtml8(cgId)}" title="删除"><i class="fa-solid fa-trash"></i></button>
             </div>
           </div>`;
     }).join("")}</div>`}
@@ -89721,9 +95476,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const cgId = String(safeRule.cgId || "").trim();
     const enabled = safeRule.enabled !== false;
     return `
-    <div class="gal-special-cg-rule-row" data-rule-id="${escapeHtml7(id2)}">
-      <input type="text" class="gal-special-cg-rule-name" value="${escapeHtml7(name)}" placeholder="规则名（必填）" required title="规则名必填">
-      <input type="text" class="gal-special-cg-rule-path" list="${SPECIAL_CG_VAR_PATH_DATALIST_ID}" value="${escapeHtml7(variablePath)}" placeholder="变量路径，如：角色.艾莉.好感度" autocomplete="off">
+    <div class="gal-special-cg-rule-row" data-rule-id="${escapeHtml8(id2)}">
+      <input type="text" class="gal-special-cg-rule-name" value="${escapeHtml8(name)}" placeholder="规则名（必填）" required title="规则名必填">
+      <input type="text" class="gal-special-cg-rule-path" list="${SPECIAL_CG_VAR_PATH_DATALIST_ID}" value="${escapeHtml8(variablePath)}" placeholder="变量路径，如：角色.艾莉.好感度" autocomplete="off">
       <span class="gal-special-cg-rule-current-value is-empty" title="当前值：未读取">未读取</span>
       <select class="gal-special-cg-rule-operator">
         <option value="gte" ${operator === "gte" ? "selected" : ""}>≥</option>
@@ -89739,9 +95494,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       <input type="number" class="gal-special-cg-rule-priority" value="${priority3}" step="1">
       <label class="gal-special-cg-rule-enabled-wrap"><input type="checkbox" class="gal-special-cg-rule-enabled" ${enabled ? "checked" : ""}>启用</label>
       <button class="gal-special-cg-rule-remove" title="删除规则"><i class="fa-solid fa-trash"></i></button>
-      <input type="hidden" class="gal-special-cg-rule-id" value="${escapeHtml7(id2)}">
+      <input type="hidden" class="gal-special-cg-rule-id" value="${escapeHtml8(id2)}">
       <input type="hidden" class="gal-special-cg-rule-once" value="true">
-      <input type="hidden" class="gal-special-cg-rule-current-cg-id" value="${escapeHtml7(cgId)}">
+      <input type="hidden" class="gal-special-cg-rule-current-cg-id" value="${escapeHtml8(cgId)}">
     </div>
   `;
   }
@@ -89754,7 +95509,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const cgOptions = safeCgs.map((item) => {
       const cgId = String(item.cgId || item.id || "").trim();
       const cgName = String(item.name || cgId).trim();
-      return `<option value="${escapeHtml7(cgId)}">${escapeHtml7(`${cgName} (${cgId})`)}</option>`;
+      return `<option value="${escapeHtml8(cgId)}">${escapeHtml8(`${cgName} (${cgId})`)}</option>`;
     }).join("");
     const cgOptionsHtml = `<option value="">选择CG资源</option>${cgOptions}`;
     const rowsHtml = allRules.length > 0 ? allRules.map((rule, index) => buildSpecialCgRuleRowHtml(rule, cgOptionsHtml, index)).join("") : "";
@@ -89797,7 +95552,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       </div>
       <datalist id="${SPECIAL_CG_VAR_PATH_DATALIST_ID}">${variablePathOptionsHtml}</datalist>
       ${safeCgs.length === 0 ? '<div class="gal-special-cg-empty-hint">请先在“CG管理”中上传CG资源，否则规则无法生效。</div>' : ""}
-      <input type="hidden" id="gal-special-cg-options-template" value="${escapeHtml7(cgOptionsHtml)}">
+      <input type="hidden" id="gal-special-cg-options-template" value="${escapeHtml8(cgOptionsHtml)}">
     </div>
   </div>`;
   }
@@ -89892,7 +95647,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         (Array.isArray(settings2.bgmWhitelist) ? settings2.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
       )
     );
-    const bgmText = escapeHtml7(bgmWhitelist.join("\n"));
+    const bgmText = escapeHtml8(bgmWhitelist.join("\n"));
     return `
   <div class="gal-tab-pane" data-pane="bgm" style="${activeTab !== "bgm" ? "display: none;" : ""}">
     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #ddd; margin-bottom: 20px;">
@@ -89921,8 +95676,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   </div>`;
   }
   function buildCustomTab(settings2) {
-    const locationHtml = escapeHtml7(localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || "");
-    const timeHtml = escapeHtml7(localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || "");
+    const locationHtml = escapeHtml8(localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || "");
+    const timeHtml = escapeHtml8(localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || "");
     const locationIconClass = normalizeLocationStatusIconClass(
       localStorage.getItem(CUSTOM_LOCATION_ICON_CLASS_KEY3) || ""
     );
@@ -90096,6 +95851,122 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }
     .gal-custom-skin-profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .gal-custom-skin-profile-actions .gal-pane-btn:disabled { opacity: 0.56; cursor: not-allowed; }
+    .gal-custom-skin-footer-display-panel {
+      --gal-custom-skin-footer-panel-text: var(--SmartThemeBodyColor, #f5f7fa);
+      --gal-custom-skin-footer-panel-text-muted: rgba(245, 247, 250, 0.82);
+      --gal-custom-skin-footer-panel-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+      --gal-custom-skin-footer-panel-surface: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+      --gal-custom-skin-footer-panel-surface-soft: rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--gal-custom-skin-footer-panel-border);
+      background: var(--gal-custom-skin-footer-panel-surface);
+      color: var(--gal-custom-skin-footer-panel-text);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+    }
+    .gal-custom-skin-footer-display-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .gal-custom-skin-footer-display-status {
+      font-size: 0.78rem;
+      color: var(--SmartThemeEmColor, #9ac7ff);
+      font-weight: 700;
+    }
+    .gal-custom-skin-footer-display-panel .gal-custom-skin-editor-note {
+      color: var(--gal-custom-skin-footer-panel-text-muted);
+      background: var(--gal-custom-skin-footer-panel-surface-soft);
+      border-color: var(--gal-custom-skin-footer-panel-border);
+    }
+    .gal-custom-skin-footer-display-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+    }
+    .gal-custom-skin-footer-display-list.is-disabled {
+      opacity: 0.65;
+    }
+    .gal-custom-skin-footer-display-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--gal-custom-skin-footer-panel-border);
+      background: var(--gal-custom-skin-footer-panel-surface-soft);
+      color: var(--gal-custom-skin-footer-panel-text);
+    }
+    .gal-custom-skin-footer-display-row.is-fixed {
+      background: rgba(154, 199, 255, 0.08);
+    }
+    .gal-custom-skin-footer-display-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .gal-custom-skin-footer-display-meta strong {
+      color: var(--gal-custom-skin-footer-panel-text);
+      font-size: 0.82rem;
+    }
+    .gal-custom-skin-footer-display-meta small {
+      color: var(--gal-custom-skin-footer-panel-text-muted);
+      font-size: 0.76rem;
+    }
+    .gal-custom-skin-footer-display-fixed {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--SmartThemeEmColor, #9ac7ff);
+      white-space: nowrap;
+    }
+    .gal-custom-skin-footer-display-options {
+      display: inline-flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .gal-custom-skin-footer-display-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--gal-custom-skin-footer-panel-border);
+      background: rgba(15, 23, 42, 0.72);
+      color: var(--gal-custom-skin-footer-panel-text);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .gal-custom-skin-footer-display-option span {
+      color: var(--gal-custom-skin-footer-panel-text);
+    }
+    .gal-custom-skin-footer-display-option input {
+      margin: 0;
+      accent-color: var(--SmartThemeEmColor, #9ac7ff);
+    }
+    .gal-custom-skin-footer-display-option:has(input:checked) {
+      border-color: var(--SmartThemeEmColor, #9ac7ff);
+      background: rgba(154, 199, 255, 0.18);
+      box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.14);
+      color: var(--gal-custom-skin-footer-panel-text);
+    }
+    .gal-custom-skin-footer-display-option:has(input:focus-visible) {
+      box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
+    }
+    .gal-custom-skin-footer-display-option:has(input:disabled) {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
     .gal-custom-skin-editor-layout {
       display: grid;
       grid-template-columns: 210px minmax(0, 1fr);
@@ -90104,11 +95975,45 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       height: clamp(620px, calc(100vh - 230px), 940px);
       align-items: stretch;
     }
-    .gal-custom-skin-device-switch { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); border-radius: 999px; overflow: hidden; margin-bottom: 10px; }
-    .gal-custom-skin-device-tab { border: none; background: rgba(255, 255, 255, 0.06); color: var(--SmartThemeBodyColor, #f5f7fa); font-size: 0.85rem; font-weight: 700; padding: 6px 14px; cursor: pointer; transition: all 0.15s ease; }
-    .gal-custom-skin-device-tab + .gal-custom-skin-device-tab { border-left: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); }
-    .gal-custom-skin-device-tab.active { background: rgba(154, 199, 255, 0.26); color: var(--SmartThemeBodyColor, #f5f7fa); }
-    .gal-custom-skin-device-tab:hover { filter: brightness(0.96); }
+    .gal-custom-skin-device-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid rgba(148, 163, 184, 0.38);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+    }
+    .gal-custom-skin-device-tab {
+      border: none;
+      background: transparent;
+      color: #334155;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .gal-custom-skin-device-tab + .gal-custom-skin-device-tab { border-left: 1px solid rgba(148, 163, 184, 0.28); }
+    .gal-custom-skin-device-tab.active {
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #ffffff;
+      box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.18);
+    }
+    .gal-custom-skin-device-tab:hover {
+      background: rgba(226, 232, 240, 0.92);
+      color: #0f172a;
+    }
+    .gal-custom-skin-device-tab.active:hover {
+      background: linear-gradient(135deg, #22c3ee, #0284c7);
+      color: #ffffff;
+    }
+    .gal-custom-skin-device-tab:focus-visible {
+      outline: none;
+      box-shadow: inset 0 0 0 2px rgba(14, 165, 233, 0.25);
+    }
     .gal-custom-skin-editor-col {
       --gal-custom-skin-text: var(--SmartThemeBodyColor, #f5f7fa);
       --gal-custom-skin-text-muted: rgba(245, 247, 250, 0.78);
@@ -90744,7 +96649,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const posStyle = isFullscreen ? "position:absolute;top:0;left:0;width:100%;height:100%;" : "position:fixed;top:0;left:0;width:100vw;height:100vh;";
       const $lightbox = $2(`<div style="${posStyle}background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
       <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
-      <span style="color:#ccc;font-size:0.9rem;">${escapeHtml7(title)}</span>
+      <span style="color:#ccc;font-size:0.9rem;">${escapeHtml8(title)}</span>
     </div>`);
       $lightbox.on("click", function() {
         $2(this).remove();
@@ -91264,7 +97169,7 @@ ${baseUrl}`,
   var initStarted = false;
   function sanitizeLoadedSkinSetting(settings2) {
     const rawSkin = String(settings2?.skin || "none").trim();
-    const builtinSkinSet = /* @__PURE__ */ new Set(["none", "skin-ancient", "skin-persona", "skin-jrpg", "skin-classic"]);
+    const builtinSkinSet = /* @__PURE__ */ new Set(["none", "skin-ancient", "skin-persona", "skin-jrpg", "skin-classic", ...TWILIGHT_FAMILY_SKIN_IDS]);
     if (builtinSkinSet.has(rawSkin)) return false;
     if (hasUiSkinProfileId(rawSkin)) return false;
     if (rawSkin === "skin-western" || rawSkin === CUSTOM_SKIN_ID || rawSkin) {
@@ -91642,7 +97547,7 @@ ${baseUrl}`,
   setEnhancedModeRefs({ showToast: showToast4 });
   setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast: showToast4 });
   setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus });
-  setOverlayRefs({ updateOverlaySegmentDisplay });
+  setOverlayRefs({ updateOverlaySegmentDisplay, applySettingsToUI });
   setOverlayContentRefs({ renderGalgameChoices });
   setChoicesRefs({ getIsRerolling });
   setInteractionRefs({ showSpriteUploadDialog, hideGalgameChoices, refreshGalgameViews, updateGlobalOverlayContent });

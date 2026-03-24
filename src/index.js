@@ -135,7 +135,7 @@ setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbar
 setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus });
 
 // Phase 8 延迟引用: overlay -> overlay-content
-setOverlayRefs({ updateOverlaySegmentDisplay });
+setOverlayRefs({ updateOverlaySegmentDisplay, applySettingsToUI });
 
 // Phase 8 延迟引用: overlay-content -> choices
 setOverlayContentRefs({ renderGalgameChoices });

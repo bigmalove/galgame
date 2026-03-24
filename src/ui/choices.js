@@ -4,6 +4,7 @@ import { GalgameStore } from '../core/store.js';
 import { getIsEnabled, getPendingOptions, setPendingOptions, getGalgameChoicesVisible, setGalgameChoicesVisible, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { ensureGlobalOverlay, adjustToolbarForSpace } from './overlay.js';
+import { TWILIGHT_FAMILY_SKIN_IDS } from './skin-twilight.js';
 import { showToast } from './toast.js';
 
 // ============================================
@@ -18,6 +19,14 @@ let _isRerollingRef = null;
 
 export function setChoicesRefs({ getIsRerolling }) {
   if (getIsRerolling) _isRerollingRef = getIsRerolling;
+}
+
+function syncChoicesLayerSkinClass($layer) {
+  if (!$layer?.length) return;
+  const $overlay = getOverlayElement();
+  TWILIGHT_FAMILY_SKIN_IDS.forEach(skinClass => {
+    $layer.toggleClass(skinClass, $overlay.hasClass(skinClass));
+  });
 }
 
 function ensureChoicesLayer() {
@@ -39,7 +48,17 @@ function ensureChoicesLayer() {
       }
     });
   }
+  syncChoicesLayerSkinClass($layer);
   return $layer;
+}
+
+function getOverlayElement() {
+  return $('#gal-global-overlay');
+}
+
+function getPendingChoicesButtons($overlay = getOverlayElement()) {
+  const $scope = $overlay?.length ? $overlay : getOverlayElement();
+  return $scope.find('.gal-pending-choices-btn');
 }
 
 export function renderGalgameChoices(options) {
@@ -70,6 +89,7 @@ export function renderGalgameChoices(options) {
     $container.append($card);
   });
 
+  syncChoicesLayerSkinClass($layer);
   $layer.addClass('active');
   setGalgameChoicesVisible(true);
 }
@@ -91,7 +111,9 @@ export function hidePendingChoicesButton() {
 
 export function hideGalgameChoices(userDismissed = false) {
   const mountRoot = getModalMountRoot();
-  $(mountRoot).find('#gal-layer-choices').removeClass('active');
+  const $layer = $(mountRoot).find('#gal-layer-choices');
+  syncChoicesLayerSkinClass($layer);
+  $layer.removeClass('active');
   setGalgameChoicesVisible(false);
 
   const pendingOptions = getPendingOptions();
@@ -104,7 +126,10 @@ function handleChoiceSelection(optionValue) {
   console.log(`[${SCRIPT_NAME}] 用户选择了选项: ${optionValue}`);
 
   const mountRoot = getModalMountRoot();
-  $(mountRoot).find('#gal-layer-choices').removeClass('active');
+  const $layer = $(mountRoot).find('#gal-layer-choices');
+  syncChoicesLayerSkinClass($layer);
+  $layer.removeClass('active');
+  $('#gal-global-overlay .gal-pending-choices-btn').removeClass('show');
   setGalgameChoicesVisible(false);
 
   const $textarea = $(topWindow.document).find('#send_textarea');
@@ -165,8 +190,8 @@ function checkAndRenderOptions() {
   const currentOptionHash = options.map(o => o.value).join('|||');
   setPendingOptions(options);
 
-  ensureGlobalOverlay();
-  const $btn = $('#gal-global-overlay .gal-pending-choices-btn');
+  const $overlay = ensureGlobalOverlay();
+  const $btn = getPendingChoicesButtons($overlay);
   if ($btn.length) {
     $btn.css('display', 'flex');
     $btn.addClass('show');
@@ -177,9 +202,9 @@ function checkAndRenderOptions() {
   if (optionChanged) {
     console.log(`[${SCRIPT_NAME}] 检测到新选项，更新缓存并显示提示按钮`);
 
-    $('#gal-global-overlay .gal-pending-choices-btn').addClass('gal-new-option-highlight');
+    $btn.addClass('gal-new-option-highlight');
     setTimeout(() => {
-      $('#gal-global-overlay .gal-pending-choices-btn').removeClass('gal-new-option-highlight');
+      $btn.removeClass('gal-new-option-highlight');
     }, 3000);
 
     let shouldPopup = false;
@@ -205,7 +230,7 @@ function checkAndRenderOptions() {
     const pending = getPendingOptions();
     if (pending && pending.length > 0) {
       ensureGlobalOverlay();
-      $('.gal-game-container .gal-pending-choices-btn').addClass('show');
+      getPendingChoicesButtons(getOverlayElement()).addClass('show');
       adjustToolbarForSpace();
     }
   }

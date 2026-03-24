@@ -1,7 +1,15 @@
-import { CUSTOM_SKIN_ID, GLOBAL_CUSTOM_SKIN_PACK_ID, SCRIPT_NAME } from '../core/constants.js';
+import { CUSTOM_SKIN_ID, GLOBAL_CUSTOM_SKIN_PACK_ID, SCRIPT_NAME, TWILIGHT_SKIN_ID } from '../core/constants.js';
+import {
+  buildGalMobileMenuButtonsHtml,
+  CUSTOM_SKIN_FOOTER_BUTTONS,
+  CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS,
+  DEFAULT_GAL_MOBILE_MENU_ACTIONS,
+  getCustomSkinFooterMenuActions,
+  normalizeCustomSkinFooterButtonDisplay,
+} from '../core/custom-skin-footer-buttons.js';
 import { topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
-import { hasUiSkinProfileId } from '../db/ui-skin-profiles.js';
+import { getCachedUiSkinProfile, hasUiSkinProfileId } from '../db/ui-skin-profiles.js';
 import { getUiSkinAssetsByPackSkin } from '../db/ui-skins.js';
 
 const MOBILE_BREAKPOINT = 768;
@@ -32,29 +40,17 @@ const FOOTER_BUTTON_DEFAULTS = {
 };
 
 export const CUSTOM_SKIN_FOOTER_COMMON_ELEMENT_ID = 'footer_btn_common';
-export const CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS = [
-  'footer_btn_log',
-  'footer_btn_close',
-  'footer_btn_view',
-  'footer_btn_config',
-  'footer_btn_save',
-  'footer_btn_load',
-  'footer_btn_timeline',
-  'footer_btn_prev',
-  'footer_btn_auto',
-  'footer_btn_skip',
-];
-export const CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS = [
-  ...CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS,
-  'footer_btn_choices',
-  'footer_btn_next',
-];
+export const CUSTOM_SKIN_FOOTER_BUTTON_TARGET_IDS = CUSTOM_SKIN_FOOTER_BUTTONS
+  .filter(item => item.elementId !== 'footer_btn_choices' && item.elementId !== 'footer_btn_next')
+  .map(item => item.elementId);
+export const CUSTOM_SKIN_FOOTER_BATCH_TARGET_IDS = [...CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS];
 
-function createFooterButtonElement(id, label) {
+function createFooterButtonElement(id, label, { defaultShowText = true } = {}) {
   return {
     id,
     label,
     supportsTextToggle: true,
+    defaultShowText: defaultShowText !== false,
     aspectRatio: 3.3,
     outputWidth: 720,
     supportsStates: ['normal', 'hover', 'active'],
@@ -168,6 +164,7 @@ export const CUSTOM_SKIN_ELEMENTS = [
     id: 'footer_btn_choices',
     label: '选项按钮',
     supportsTextToggle: true,
+    defaultShowText: false,
     aspectRatio: 3.2,
     outputWidth: 720,
     supportsStates: ['normal', 'hover', 'active'],
@@ -275,6 +272,7 @@ const FOOTER_FALLBACK_ELEMENT_ID_SET = new Set(CUSTOM_SKIN_FOOTER_BUTTON_TARGET_
 const LIVE_RUNTIME_LAYOUT_ELEMENT_IDS = new Set([
   'dialog_panel',
 ]);
+const TWILIGHT_MOBILE_MENU_ACTIONS = ['open-settings', 'save', 'load', 'view-original', 'timeline'];
 
 let runtimePreviewDevice = null;
 let runtimeBlobUrls = [];
@@ -312,6 +310,60 @@ function getRuntimeNodesForElement(overlay, elementId, { forDetection = false } 
     });
   });
   return nodes;
+}
+
+function getNormalizedFooterButtonDisplay(profileId = '') {
+  const profile = getCachedUiSkinProfile(profileId);
+  return normalizeCustomSkinFooterButtonDisplay(profile?.footerButtonDisplay);
+}
+
+function setFooterButtonNodeVisibility(overlay, elementId, visible) {
+  getRuntimeNodesForElement(overlay, elementId).forEach(node => {
+    if (!node?.style) return;
+    if (visible) {
+      node.style.removeProperty('display');
+      return;
+    }
+    node.style.setProperty('display', 'none', 'important');
+  });
+}
+
+function applyFooterMenuHtml(overlay, actions = DEFAULT_GAL_MOBILE_MENU_ACTIONS, { activeCustomSkin = false } = {}) {
+  const menu = overlay?.querySelector?.('#gal-mobile-menu');
+  if (!menu) return;
+  menu.innerHTML = buildGalMobileMenuButtonsHtml(actions);
+  menu.dataset.customSkinMenu = activeCustomSkin ? 'true' : 'false';
+  menu.dataset.customSkinMenuCount = String(Math.max(0, actions.length - 1));
+}
+
+function getBuiltinMobileMenuActions(overlay) {
+  if (overlay?.classList?.contains(TWILIGHT_SKIN_ID)) {
+    return TWILIGHT_MOBILE_MENU_ACTIONS;
+  }
+  return DEFAULT_GAL_MOBILE_MENU_ACTIONS;
+}
+
+function resetFooterButtonPresentation(overlay) {
+  if (!overlay) return;
+  CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.forEach(elementId => {
+    setFooterButtonNodeVisibility(overlay, elementId, true);
+  });
+  overlay.dataset.customSkinFooterMenuCount = '0';
+  overlay.dataset.customSkinActiveProfile = 'false';
+  applyFooterMenuHtml(overlay, getBuiltinMobileMenuActions(overlay), { activeCustomSkin: false });
+}
+
+function applyFooterButtonPresentation(overlay, footerButtonDisplay) {
+  if (!overlay) return;
+  const normalized = normalizeCustomSkinFooterButtonDisplay(footerButtonDisplay);
+  const menuActions = ['open-settings', ...getCustomSkinFooterMenuActions(normalized)];
+  CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.forEach(elementId => {
+    const shouldShowInToolbar = normalized[elementId] !== 'menu';
+    setFooterButtonNodeVisibility(overlay, elementId, shouldShowInToolbar);
+  });
+  overlay.dataset.customSkinFooterMenuCount = String(Math.max(0, menuActions.length - 1));
+  overlay.dataset.customSkinActiveProfile = 'true';
+  applyFooterMenuHtml(overlay, menuActions, { activeCustomSkin: true });
 }
 
 export function customSkinElementUsesRuntimeLayout(elementId) {
@@ -758,6 +810,10 @@ function getFooterToolbarAutoScale(
   if (!toolbar || !(footerMetrics instanceof Map) || footerMetrics.size === 0) return 1;
   const win = getWindowObject();
   const toolbarStyle = win.getComputedStyle(toolbar);
+  const toolbarUiScale = Math.max(
+    0.01,
+    Number.parseFloat(toolbarStyle.getPropertyValue('--ui-scale')) || 1,
+  );
   const paddingLeft = Number.parseFloat(toolbarStyle.paddingLeft) || 0;
   const paddingRight = Number.parseFloat(toolbarStyle.paddingRight) || 0;
   const gapValue = toolbarStyle.columnGap && toolbarStyle.columnGap !== 'normal'
@@ -782,7 +838,8 @@ function getFooterToolbarAutoScale(
   nodes.forEach(node => {
     const elementId = getFooterElementIdFromNode(node);
     const metric = footerMetrics.get(elementId);
-    const desiredWidth = metric?.width > 0 ? metric.width : (node.getBoundingClientRect?.().width || 0);
+    const desiredWidth = (metric?.width > 0 ? metric.width : (node.getBoundingClientRect?.().width || 0))
+      * toolbarUiScale;
     if (desiredWidth <= 0) return;
     if (scalableElementIds.has(elementId)) {
       scalableWidth += desiredWidth;
@@ -821,7 +878,7 @@ export function buildDefaultCustomSkinAssetPayload({ packId, skinId, elementId, 
     slice: defaults.slice && typeof defaults.slice === 'object' ? { ...defaults.slice } : { top: 0, right: 0, bottom: 0, left: 0 },
     textPadding: normalizeTextPadding(defaults.textPaddingRatio, defaults.textPaddingRatio),
     meta: {
-      showText: def?.supportsTextToggle === true ? true : undefined,
+      showText: def?.supportsTextToggle === true ? def?.defaultShowText !== false : undefined,
       ...(def?.interactive
         ? {
             hitArea: normalizeHitArea(defaults.hitArea, { type: 'polygon', points: FULL_RECT_POINTS }),
@@ -976,6 +1033,7 @@ export function clearCustomSkinRuntime() {
     updateRuntimeElementActivationClasses(overlay, new Set());
     overlay.classList.remove(CUSTOM_SKIN_ID);
     overlay.classList.remove('custom-skin-image-mode');
+    resetFooterButtonPresentation(overlay);
   }
   revokeRuntimeBlobUrls();
   ensureObserverDisconnected();
@@ -1002,6 +1060,7 @@ export async function applyCustomSkinRuntime() {
     removeRuntimeStyleProperties(overlay);
     updateRuntimeElementActivationClasses(overlay, new Set());
     overlay.classList.remove('custom-skin-image-mode');
+    resetFooterButtonPresentation(overlay);
     revokeRuntimeBlobUrls();
     ensureObserverDisconnected();
     return;
@@ -1013,6 +1072,7 @@ export async function applyCustomSkinRuntime() {
 
   const hostRect = host.getBoundingClientRect();
   const runtimeDevice = runtimePreviewDevice || (hostRect.width <= MOBILE_BREAKPOINT ? 'mobile' : 'desktop');
+  const footerButtonDisplay = getNormalizedFooterButtonDisplay(activeProfileId);
   const assets = await getUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, activeProfileId);
   if (token !== runtimeApplyToken) return;
 
@@ -1161,6 +1221,7 @@ export async function applyCustomSkinRuntime() {
     textVisibilityLookup.set(def.id, showText);
   });
 
+  applyFooterButtonPresentation(overlay, footerButtonDisplay);
   nextStyleEntries.set('--custom-skin-footer-auto-scale', String(getFooterToolbarAutoScale(
     overlay,
     footerMetrics,

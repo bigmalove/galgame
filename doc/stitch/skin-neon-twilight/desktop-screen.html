@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&amp;family=Oswald:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#00f2ff", // Electric Cyan
+              "secondary": "#7000ff", // Electric Violet
+              "accent": "#ff00e5", // Neon Pink
+              "success": "#00ff8c", // Radiant Green
+              "surface-container": "#0a0a0f",
+              "on-surface": "#f0f0ff",
+            },
+            fontFamily: {
+              "headline": ["Oswald", "sans-serif"],
+              "body": ["Poppins", "sans-serif"],
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.375rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .pattern-overlay {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.08) 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+        .glass-panel {
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(0, 242, 255, 0.5), 0 0 20px rgba(0, 242, 255, 0.2);
+        }
+        .neo-gradient-border {
+            position: relative;
+            background-clip: padding-box;
+            border: 1px solid transparent;
+        }
+        .neo-gradient-border::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            z-index: -1;
+            margin: -1px;
+            border-radius: inherit;
+            background: linear-gradient(to right, #7000ff, #00f2ff);
+        }
+        .glow-shadow-violet {
+            box-shadow: 0 0 30px -10px rgba(112, 0, 255, 0.6);
+        }
+        .glow-shadow-cyan {
+            box-shadow: 0 0 30px -10px rgba(0, 242, 255, 0.6);
+        }
+    </style>
+</head>
+<body class="bg-black text-on-surface font-body overflow-hidden h-screen w-screen selection:bg-primary selection:text-black">
+<div class="fixed inset-0 z-0">
+<img class="w-full h-full object-cover scale-105 brightness-50 contrast-125" data-alt="Cinematic sunset view of city skyline through a bedroom window" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7pbg4lQ7Gwzzs55TXr8o348rU_PhsLIPXy1fWUAtM4-SHP6qFsrH6ZlEyIlGAV_HYHJalQTQ0po7_bkQn8YC7xSt1iS6RzBobMpKMz33Ehrz-g3k3kanVeXrIObcjlFslNM7iqObjepszK3MnwRmUjFNN-Ad_FSaSErO8nkjDHi6kmVnfSFEnaI5CVPcMFaSZtOUSsnFqxH6FZExgn96EeAenseurVpd9QSofGfnKUT337UzG2ThmUsnmpcb29vygjnwFJ1PViVw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+</div>
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 py-4 bg-black/40 backdrop-blur-md border-b border-white/5">
+<div class="flex items-center gap-6">
+<h1 class="text-xl font-black text-white tracking-[0.1em] uppercase font-headline italic">SYSTEM: ETHEREAL</h1>
+<div class="h-4 w-px bg-primary/30"></div>
+<div class="flex gap-4">
+<span class="font-headline font-bold tracking-[0.1em] uppercase text-xs text-primary">SECTOR 7 // LONDON</span>
+<span class="font-headline font-bold tracking-[0.1em] uppercase text-xs text-secondary">22:15:00</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-white/70 hover:text-primary transition-all duration-300">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+<button class="p-2 text-white/70 hover:text-primary transition-all duration-300">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+</button>
+<button class="p-2 text-white/70 hover:text-primary transition-all duration-300">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+</div>
+</header>
+<main class="relative z-10 h-full w-full flex flex-col px-12 pb-24">
+<div class="max-w-5xl mx-auto w-full mb-0 flex justify-end gap-3 px-8">
+<button class="glass-panel bg-white/5 hover:bg-white/10 text-white/80 px-6 py-2 rounded-t-xl font-headline font-bold text-xs uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-white/10">
+<span class="material-symbols-outlined text-sm">cached</span>
+<span>REGENERATE</span>
+</button>
+<button class="glass-panel bg-secondary/20 hover:bg-secondary/40 text-white px-6 py-2 rounded-t-xl font-headline font-bold text-xs uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-secondary/50 glow-shadow-violet">
+<span class="material-symbols-outlined text-sm">terminal</span>
+<span>DIRECT OVERRIDE</span>
+</button>
+</div>
+<div class="flex-grow flex items-center justify-center mb-12">
+<div class="flex flex-col gap-5 w-full max-w-lg justify-center px-4">
+<button class="relative group overflow-hidden glass-panel bg-gradient-to-r from-secondary/40 to-primary/40 hover:from-secondary/60 hover:to-primary/60 transition-all duration-500 p-[1px] rounded-xl glow-shadow-cyan">
+<div class="bg-black/80 rounded-xl px-8 py-5 flex items-center justify-center relative overflow-hidden">
+<div class="absolute inset-0 pattern-overlay opacity-30 pointer-events-none"></div>
+<span class="relative z-10 text-white font-headline font-bold text-base uppercase tracking-[0.25em] group-hover:scale-105 transition-transform duration-300">Decode the Manuscript</span>
+</div>
+</button>
+<button class="relative group overflow-hidden glass-panel bg-gradient-to-r from-accent/40 to-secondary/40 hover:from-accent/60 hover:to-secondary/60 transition-all duration-500 p-[1px] rounded-xl">
+<div class="bg-black/80 rounded-xl px-8 py-5 flex items-center justify-center relative overflow-hidden">
+<div class="absolute inset-0 pattern-overlay opacity-30 pointer-events-none"></div>
+<span class="relative z-10 text-white/80 font-headline font-bold text-base uppercase tracking-[0.25em] group-hover:text-white transition-colors">Await the Contact</span>
+</div>
+</button>
+</div>
+</div>
+<div class="max-w-5xl mx-auto w-full relative">
+<div class="absolute -top-7 left-10 z-20">
+<div class="bg-gradient-to-r from-secondary to-primary px-12 py-3 rounded-full shadow-[0_0_20px_rgba(112,0,255,0.4)] transform hover:scale-105 transition-transform duration-300">
+<span class="font-headline font-extrabold text-black tracking-[0.3em] text-sm uppercase block">SYSTEM_VOICE</span>
+</div>
+</div>
+<div class="bg-black/60 glass-panel rounded-2xl overflow-hidden min-h-[180px] flex flex-col p-12 neo-gradient-border shadow-[0_0_50px_-10px_rgba(0,242,255,0.2)] relative">
+<div class="absolute inset-0 pattern-overlay opacity-20 pointer-events-none"></div>
+<div class="relative z-10 flex-grow">
+<p class="text-white text-2xl leading-relaxed font-body font-medium tracking-tight">
+                    城市的残响正逐渐消逝。落日的余晖如锋利的刀刃，将阴影在大理石地面上整齐割开。在那尘封的柜台后，手稿正散发出一种无法用物理规律解释的微弱频率——真相已经开始松动，而你剩余的观察时间已不足五分钟。
+                    <span class="inline-flex items-center ml-2 text-primary animate-pulse"><span class="material-symbols-outlined text-2xl leading-none">play_arrow</span></span>
+</p>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-center py-5 px-12 pb-safe bg-black/80 backdrop-blur-3xl border-t border-white/10">
+<div class="flex items-center gap-1">
+<button class="px-4 py-1.5 font-headline text-xs font-bold tracking-[0.2em] uppercase text-white/50 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">LOG</button>
+<button class="px-4 py-1.5 font-headline text-xs font-bold tracking-[0.2em] uppercase text-white/50 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">EXIT</button>
+<button class="px-4 py-1.5 font-headline text-xs font-bold tracking-[0.2em] uppercase text-white/50 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">DATA</button>
+<div class="w-px h-4 bg-white/10 mx-2"></div>
+<button class="px-4 py-1.5 font-headline text-xs font-bold tracking-[0.2em] uppercase text-white/50 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">SAVE</button>
+<button class="px-4 py-1.5 font-headline text-xs font-bold tracking-[0.2em] uppercase text-white/50 hover:text-primary hover:bg-primary/5 rounded-lg transition-all">LOAD</button>
+<div class="w-px h-4 bg-white/10 mx-2"></div>
+<button class="px-6 py-1.5 font-headline text-xs font-black tracking-[0.3em] uppercase text-black bg-gradient-to-r from-success to-primary rounded-full shadow-[0_0_15px_rgba(0,255,140,0.3)] transition-all hover:brightness-110 active:scale-95">AUTO</button>
+<button class="px-4 py-1.5 font-headline text-xs font-bold tracking-[0.2em] uppercase text-white/50 hover:text-accent hover:bg-accent/5 rounded-lg transition-all">SKIP</button>
+</div>
+</nav>
+<div class="fixed inset-0 pointer-events-none z-[100] opacity-[0.05] contrast-150" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCPr4hmKzQOXsfqn759ens5Yb3xa76oDM9pmpVbXorEf4yGj4x4TS0g5Hze_SD309gpnqHXuLTqk-bjl-_uwjEZPMIBXKKI4blZIakQVTK3jcN779-B7v2v-IJY9-mEIu4VsqlX9dOcW15VCnub79z-2SyOE2HMq6qkKhdRw7u7C4nbzarNgZuVFkB5Ek2XyJlBAR9z-jn5ik6eRxCvnpETjb02fm8PtK97ZPyBWTs8gAsPQnzWepKlTk7nSUKvrZMc4Fprdcv3kqw');"></div>
+
+</body></html>

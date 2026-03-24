@@ -1,4 +1,4 @@
-import { SCRIPT_NAME } from './constants.js';
+import { SCRIPT_NAME, TWILIGHT_FAMILY_SKIN_IDS } from './constants.js';
 import { topWindow } from './env.js';
 import { GalgameStore } from './store.js';
 
@@ -37,7 +37,11 @@ export const DEFAULT_SPECIAL_CG_SETTINGS = {
 export const DEFAULT_TITLE_SCREEN_SETTINGS = {
   enabled: false,
   titleText: '',
+  titleFontFamily: '',
+  titleFontSize: '',
   subtitleText: '',
+  subtitleFontFamily: '',
+  subtitleFontSize: '',
   backgroundSource: 'auto',
   backgroundSceneName: '__title__',
   backgroundUrl: '',
@@ -45,14 +49,39 @@ export const DEFAULT_TITLE_SCREEN_SETTINGS = {
   enableBackdropMask: true,
 };
 
-export const UI_SCALE_PERCENT_MIN = 70;
-export const UI_SCALE_PERCENT_MAX = 130;
-export const UI_SCALE_PERCENT_DEFAULT = 100;
+export const UI_SCALE_PERCENT_LEGACY_MIN = 70;
+export const UI_SCALE_PERCENT_LEGACY_MAX = 130;
+export const UI_SCALE_PERCENT_BASELINE_OFFSET = 30;
+export const UI_SCALE_PERCENT_MIN = 100;
+export const UI_SCALE_PERCENT_MAX = 160;
+export const UI_SCALE_PERCENT_DEFAULT = 130;
+export const UI_SCALE_PERCENT_VERSION = 2;
 
 export function normalizeUiScalePercent(rawValue) {
   const parsed = Number.parseInt(rawValue, 10);
   if (!Number.isFinite(parsed)) return UI_SCALE_PERCENT_DEFAULT;
   return Math.max(UI_SCALE_PERCENT_MIN, Math.min(parsed, UI_SCALE_PERCENT_MAX));
+}
+
+export function convertLegacyUiScalePercent(rawValue) {
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed)) return UI_SCALE_PERCENT_DEFAULT;
+  const legacyPercent = Math.max(UI_SCALE_PERCENT_LEGACY_MIN, Math.min(parsed, UI_SCALE_PERCENT_LEGACY_MAX));
+  return normalizeUiScalePercent(legacyPercent + UI_SCALE_PERCENT_BASELINE_OFFSET);
+}
+
+export function uiScalePercentToScaleFactor(rawValue) {
+  const normalizedPercent = normalizeUiScalePercent(rawValue);
+  return Math.max(0.01, (normalizedPercent - UI_SCALE_PERCENT_BASELINE_OFFSET) / 100);
+}
+
+export function dialogScalePercentToScaleFactorForSkin(rawValue, rawSkin) {
+  const normalizedPercent = normalizeUiScalePercent(rawValue);
+  const skin = String(rawSkin || '').trim();
+  if (TWILIGHT_FAMILY_SKIN_IDS.includes(skin)) {
+    return uiScalePercentToScaleFactor(normalizedPercent);
+  }
+  return Math.max(0.01, normalizedPercent / 100);
 }
 
 // 默认设置 (全局)
@@ -78,6 +107,7 @@ export const DEFAULT_SETTINGS = {
   effectsQuality: 'balanced',
   effectsAutoClearOnSceneChange: true,
   effectsMaxActive: 2,
+  uiScalePercentVersion: UI_SCALE_PERCENT_VERSION,
   dialogScalePercent: UI_SCALE_PERCENT_DEFAULT,
   toolbarScalePercent: UI_SCALE_PERCENT_DEFAULT,
   // 立绘设置
@@ -342,6 +372,17 @@ function normalizeTitleScreenBackgroundFit(rawValue) {
   return fit === 'contain' ? 'contain' : DEFAULT_TITLE_SCREEN_SETTINGS.backgroundFit;
 }
 
+function normalizeTitleScreenFontFamily(rawValue) {
+  return String(rawValue || '').trim();
+}
+
+function normalizeTitleScreenFontSize(rawValue) {
+  if (rawValue === '' || rawValue === null || rawValue === undefined) return '';
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed)) return '';
+  return Math.max(8, Math.min(parsed, 240));
+}
+
 export function normalizeTitleScreenSettings(rawTitleScreen) {
   const safe = _safeObject(rawTitleScreen);
   const backgroundSceneName = String(safe.backgroundSceneName || '').trim() || DEFAULT_TITLE_SCREEN_SETTINGS.backgroundSceneName;
@@ -349,7 +390,11 @@ export function normalizeTitleScreenSettings(rawTitleScreen) {
   return {
     enabled: safe.enabled === true,
     titleText: String(safe.titleText || '').trim(),
+    titleFontFamily: normalizeTitleScreenFontFamily(safe.titleFontFamily),
+    titleFontSize: normalizeTitleScreenFontSize(safe.titleFontSize),
     subtitleText: String(safe.subtitleText || '').trim(),
+    subtitleFontFamily: normalizeTitleScreenFontFamily(safe.subtitleFontFamily),
+    subtitleFontSize: normalizeTitleScreenFontSize(safe.subtitleFontSize),
     backgroundSource: normalizeTitleScreenBackgroundSource(safe.backgroundSource),
     backgroundSceneName,
     backgroundUrl: String(safe.backgroundUrl || '').trim(),
@@ -950,7 +995,11 @@ function summarizeTitleScreenConfigForLog(rawConfig) {
   return {
     enabled: config.enabled === true,
     titleText: String(config.titleText || ''),
+    titleFontFamily: String(config.titleFontFamily || ''),
+    titleFontSize: config.titleFontSize === '' || config.titleFontSize == null ? '' : Number(config.titleFontSize),
     subtitleText: String(config.subtitleText || ''),
+    subtitleFontFamily: String(config.subtitleFontFamily || ''),
+    subtitleFontSize: config.subtitleFontSize === '' || config.subtitleFontSize == null ? '' : Number(config.subtitleFontSize),
     backgroundSource: String(config.backgroundSource || ''),
     backgroundSceneName: String(config.backgroundSceneName || ''),
     backgroundFit: String(config.backgroundFit || ''),
@@ -1098,6 +1147,14 @@ function getCurrentCharacterSnapshot() {
   };
 }
 
+export function getCurrentCharacterName() {
+  try {
+    return String(getCurrentCharacterSnapshot()?.characterName || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 function getCurrentCharKeyAliases() {
   const snapshot = getCurrentCharacterSnapshot();
   const aliases = [];
@@ -1152,13 +1209,18 @@ export function loadSettings() {
       _settings = Object.assign(Object.assign({}, DEFAULT_SETTINGS), parsed);
       const hasLegacyUiScale = Object.prototype.hasOwnProperty.call(parsed, 'uiScalePercent');
       if (hasLegacyUiScale) {
-        const legacyScale = normalizeUiScalePercent(parsed.uiScalePercent);
+        const legacyScale = convertLegacyUiScalePercent(parsed.uiScalePercent);
         if (!Object.prototype.hasOwnProperty.call(parsed, 'dialogScalePercent')) {
           _settings.dialogScalePercent = legacyScale;
         }
         if (!Object.prototype.hasOwnProperty.call(parsed, 'toolbarScalePercent')) {
           _settings.toolbarScalePercent = legacyScale;
         }
+      }
+      if (Number(_settings.uiScalePercentVersion) !== UI_SCALE_PERCENT_VERSION) {
+        _settings.dialogScalePercent = convertLegacyUiScalePercent(_settings.dialogScalePercent);
+        _settings.toolbarScalePercent = convertLegacyUiScalePercent(_settings.toolbarScalePercent);
+        _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
       }
       delete _settings.uiScalePercent;
       _settings.enhancedMode = normalizeEnhancedModeSettings(_settings.enhancedMode);
@@ -1200,6 +1262,7 @@ export function loadSettings() {
       }
       _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
       _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
+      _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
       _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
       _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
       _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
@@ -1275,6 +1338,7 @@ export function saveSettings() {
     delete _settings.uiScalePercent;
     _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
     _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
+    _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
     ensureMapSettings();
     ensureTitleScreenSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));

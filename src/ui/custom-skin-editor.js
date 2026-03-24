@@ -1,4 +1,10 @@
-import { CUSTOM_SKIN_ID, DEFAULT_PACK_ID, SCRIPT_NAME } from '../core/constants.js';
+import { DEFAULT_PACK_ID, SCRIPT_NAME } from '../core/constants.js';
+import {
+  CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS,
+  CUSTOM_SKIN_FOOTER_BUTTONS,
+  CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES,
+  normalizeCustomSkinFooterButtonDisplay,
+} from '../core/custom-skin-footer-buttons.js';
 import { $, topWindow } from '../core/env.js';
 import { GLOBAL_CUSTOM_SKIN_PACK_ID } from '../core/constants.js';
 import { getSettings, saveSettings } from '../core/settings.js';
@@ -8,11 +14,13 @@ import {
   createUiSkinProfile,
   deleteUiSkinProfile,
   duplicateUiSkinProfile,
+  getCachedUiSkinProfile,
   getCachedUiSkinProfiles,
   getUiSkinProfileLabel,
   hasUiSkinProfileId,
   refreshUiSkinProfilesCache,
   renameUiSkinProfile,
+  saveUiSkinProfile,
 } from '../db/ui-skin-profiles.js';
 import {
   AssetIO,
@@ -53,20 +61,10 @@ const DEFAULT_CHROMA_KEY_TOLERANCE = 60;
 const DEFAULT_MATTING_BRUSH_SIZE = 28;
 const COMPONENT_SELECTION_PADDING_RATIO = 0;
 const CHROMA_KEY_PRESETS = ['#00FF00', '#FF00FF', '#FFFFFF', '#000000'];
-const FOOTER_BATCH_SLOT_META = [
-  { id: 'footer_btn_log', shortLabel: 'LOG' },
-  { id: 'footer_btn_close', shortLabel: 'CLOSE' },
-  { id: 'footer_btn_view', shortLabel: 'VIEW' },
-  { id: 'footer_btn_config', shortLabel: 'CONFIG' },
-  { id: 'footer_btn_save', shortLabel: 'SAVE' },
-  { id: 'footer_btn_load', shortLabel: 'LOAD' },
-  { id: 'footer_btn_timeline', shortLabel: 'TL' },
-  { id: 'footer_btn_prev', shortLabel: 'PREV' },
-  { id: 'footer_btn_auto', shortLabel: 'AUTO' },
-  { id: 'footer_btn_skip', shortLabel: 'SKIP' },
-  { id: 'footer_btn_choices', shortLabel: '选项' },
-  { id: 'footer_btn_next', shortLabel: 'NEXT' },
-];
+const FOOTER_BATCH_SLOT_META = CUSTOM_SKIN_FOOTER_BUTTONS.map(item => ({
+  id: item.elementId,
+  shortLabel: item.shortLabel,
+}));
 const FOOTER_BATCH_SLOT_META_MAP = new Map(FOOTER_BATCH_SLOT_META.map(item => [item.id, item]));
 const FOOTER_BATCH_FIXED_ORDER_TEXT = FOOTER_BATCH_SLOT_META.map(item => item.shortLabel).join(' -> ');
 
@@ -277,6 +275,39 @@ export function buildCustomSkinEditorTab(activeTab, currentPackId) {
       >${color}</button>
     `)
     .join('');
+  const footerDisplayRows = CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS
+    .map(item => {
+      if (item.elementId === 'footer_btn_config') {
+        return `
+          <div class="gal-custom-skin-footer-display-row is-fixed" data-element-id="${item.elementId}">
+            <div class="gal-custom-skin-footer-display-meta">
+              <strong>${item.shortLabel}</strong>
+              <small>${item.menuLabel}</small>
+            </div>
+            <div class="gal-custom-skin-footer-display-fixed">固定为菜单入口</div>
+          </div>
+        `;
+      }
+      return `
+        <div class="gal-custom-skin-footer-display-row" data-element-id="${item.elementId}">
+          <div class="gal-custom-skin-footer-display-meta">
+            <strong>${item.shortLabel}</strong>
+            <small>${item.menuLabel}</small>
+          </div>
+          <div class="gal-custom-skin-footer-display-options" role="radiogroup" aria-label="${item.shortLabel} 显示位置">
+            <label class="gal-custom-skin-footer-display-option">
+              <input type="radio" name="gal-custom-skin-footer-display-${item.elementId}" value="toolbar" checked>
+              <span>底栏</span>
+            </label>
+            <label class="gal-custom-skin-footer-display-option">
+              <input type="radio" name="gal-custom-skin-footer-display-${item.elementId}" value="menu">
+              <span>菜单</span>
+            </label>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
   return `
   <div class="gal-tab-pane ${activeTab === 'skin' ? 'active' : ''}" data-pane="skin" style="${activeTab !== 'skin' ? 'display: none;' : ''}">
     <div class="gal-pane-header">
@@ -300,6 +331,16 @@ export function buildCustomSkinEditorTab(activeTab, currentPackId) {
         <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-profile-duplicate"><i class="fa-solid fa-copy"></i> <span>另存为</span></button>
         <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-export-current"><i class="fa-solid fa-file-export"></i> <span>导出当前皮肤</span></button>
         <button type="button" class="gal-action-btn gal-pane-btn" id="gal-custom-skin-profile-delete"><i class="fa-solid fa-trash"></i> <span>删除</span></button>
+      </div>
+    </div>
+    <div class="gal-custom-skin-footer-display-panel">
+      <div class="gal-custom-skin-footer-display-header">
+        <div class="gal-custom-skin-subtitle">底栏功能按钮显示方式</div>
+        <span class="gal-custom-skin-footer-display-status" id="gal-custom-skin-footer-display-status">按当前皮肤单独保存</span>
+      </div>
+      <div class="gal-custom-skin-editor-note">可逐个决定按钮是常驻底栏，还是收纳进 CONFIG 弹出菜单。CONFIG 始终保留在底栏作为菜单入口。</div>
+      <div class="gal-custom-skin-footer-display-list" id="gal-custom-skin-footer-display-list">
+        ${footerDisplayRows}
       </div>
     </div>
     <input type="file" id="gal-custom-skin-import-zip-input" accept=".zip" style="display:none;">
@@ -554,6 +595,8 @@ export function bindCustomSkinEditorEvents($modal) {
   const $profileStatus = $pane.find('#gal-custom-skin-profile-status');
   const $profileSelect = $pane.find('#gal-custom-skin-profile-select');
   const $profileImportZipInput = $pane.find('#gal-custom-skin-import-zip-input');
+  const $footerDisplayStatus = $pane.find('#gal-custom-skin-footer-display-status');
+  const $footerDisplayList = $pane.find('#gal-custom-skin-footer-display-list');
   const $elementSelect = $pane.find('#gal-custom-skin-element-select');
   const $deviceSelect = $pane.find('#gal-custom-skin-device-select');
   const $deviceDisplay = $pane.find('#gal-custom-skin-device-display');
@@ -723,6 +766,70 @@ export function bindCustomSkinEditorEvents($modal) {
   };
 
   const getCurrentProfileLabel = () => getUiSkinProfileLabel(state.profileId) || '未命名皮肤';
+  const getCurrentProfileRecord = () => {
+    if (!state.profileId) return null;
+    return getCachedUiSkinProfile(state.profileId)
+      || state.profiles.find(profile => profile.id === state.profileId)
+      || null;
+  };
+  const getCurrentFooterButtonDisplay = () => normalizeCustomSkinFooterButtonDisplay(
+    getCurrentProfileRecord()?.footerButtonDisplay,
+  );
+
+  const syncFooterButtonDisplayControls = () => {
+    const hasProfile = !!state.profileId;
+    const footerButtonDisplay = getCurrentFooterButtonDisplay();
+    const collapsedCount = CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS.filter(
+      item => item.elementId !== 'footer_btn_config' && footerButtonDisplay[item.elementId] === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU,
+    ).length;
+    $footerDisplayStatus.text(
+      hasProfile
+        ? `当前收纳 ${collapsedCount} 项`
+        : '请先创建自定义皮肤',
+    );
+    $footerDisplayList.toggleClass('is-disabled', !hasProfile);
+    CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS.forEach(item => {
+      const selector = `input[name="gal-custom-skin-footer-display-${item.elementId}"]`;
+      const $inputs = $pane.find(selector);
+      if (!$inputs.length) return;
+      const nextMode = footerButtonDisplay[item.elementId] || CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
+      $inputs.prop('checked', false);
+      $inputs.filter(`[value="${nextMode}"]`).prop('checked', true);
+      $inputs.prop('disabled', !hasProfile);
+    });
+  };
+
+  const persistFooterButtonDisplay = async (elementId, displayMode) => {
+    if (!state.profileId) {
+      showToast('请先创建自定义皮肤。');
+      syncFooterButtonDisplayControls();
+      return;
+    }
+    const currentProfile = getCurrentProfileRecord();
+    if (!currentProfile) {
+      syncFooterButtonDisplayControls();
+      return;
+    }
+    const footerButtonDisplay = normalizeCustomSkinFooterButtonDisplay({
+      ...(currentProfile.footerButtonDisplay || {}),
+      [elementId]: displayMode,
+    });
+    const savedProfile = await saveUiSkinProfile({
+      ...currentProfile,
+      id: state.profileId,
+      footerButtonDisplay,
+    });
+    await reloadProfiles(savedProfile.id);
+    syncFooterButtonDisplayControls();
+    await applyCustomSkinRuntime().catch(error => {
+      console.warn(`[${SCRIPT_NAME}] refresh custom-skin runtime after footer display change failed:`, error);
+    });
+    const buttonLabel = CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS.find(item => item.elementId === elementId)?.shortLabel || elementId;
+    setHint(
+      `${buttonLabel} 已切换为${displayMode === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU ? '收纳进 CONFIG 菜单' : '显示在底栏'}，并已保存到当前皮肤。`,
+      'ok',
+    );
+  };
 
   const syncProfileStatus = () => {
     $profileStatus.text(`当前预览图包：${getPreviewPackId()} · 当前皮肤：${getCurrentProfileLabel()}`);
@@ -742,13 +849,16 @@ export function bindCustomSkinEditorEvents($modal) {
     $pane.find('#gal-custom-skin-profile-delete').prop('disabled', !hasProfiles);
     $pane.find('#gal-custom-skin-export-library').prop('disabled', !hasProfiles);
     syncProfileStatus();
+    syncFooterButtonDisplayControls();
   };
 
-  const syncActiveProfileSetting = async () => {
+  const syncActiveProfileSetting = async ({ persistSkinSelection = true } = {}) => {
     if (!state.profileId) return;
-    settings.skin = state.profileId;
-    saveSettings();
-    refreshSkinSelectElement();
+    if (persistSkinSelection) {
+      settings.skin = state.profileId;
+      saveSettings();
+      refreshSkinSelectElement();
+    }
     applySettingsToUI();
     await applyCustomSkinRuntime().catch(error => {
       console.warn(`[${SCRIPT_NAME}] sync active custom-skin profile failed:`, error);
@@ -2202,6 +2312,19 @@ export function bindCustomSkinEditorEvents($modal) {
           showToast(`切换文字显示失败: ${error.message || error}`);
         });
     });
+
+    $footerDisplayList.on('change', 'input[type="radio"]', function () {
+      const $input = $(this);
+      const elementId = String($input.closest('.gal-custom-skin-footer-display-row').attr('data-element-id') || '').trim();
+      const displayMode = String($input.val() || CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR).trim();
+      if (!elementId) return;
+      persistFooterButtonDisplay(elementId, displayMode).catch(error => {
+        console.error(`[${SCRIPT_NAME}] save custom-skin footer display failed:`, error);
+        syncFooterButtonDisplayControls();
+        setHint(`保存底栏按钮显示方式失败：${error.message || error}`, 'err');
+        showToast(`保存底栏按钮显示方式失败: ${error.message || error}`);
+      });
+    });
   };
 
   const bindPreviewActions = () => {
@@ -2671,9 +2794,11 @@ export function bindCustomSkinEditorEvents($modal) {
   bindPreviewActions();
   bindFormActions();
 
-  ensureActiveProfile()
-    .then(() => syncActiveProfileSetting())
-    .then(() => loadCurrentAsset())
+  const shouldKeepCurrentCustomSkinActive = hasUiSkinProfileId(settings.skin);
+
+  (shouldKeepCurrentCustomSkinActive
+    ? ensureActiveProfile().then(() => syncActiveProfileSetting()).then(() => loadCurrentAsset())
+    : reloadProfiles(state.profileId).then(() => loadCurrentAsset()))
     .catch(error => {
       console.error(`[${SCRIPT_NAME}] initial custom-skin editor load failed:`, error);
       setHint('初始化失败，请关闭面板后重试。', 'err');

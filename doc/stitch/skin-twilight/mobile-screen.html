@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Enchanted Academy - Modern VN UI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Be+Vietnam+Pro:wght@300;400;500;600&amp;family=Inter:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface": "#e4e1e5",
+                        "primary": "#ffe4e7",
+                        "surface-container-lowest": "#0e0e11",
+                        "secondary-fixed-dim": "#c4c4df",
+                        "outline-variant": "#4a454e",
+                        "surface-container-high": "#2a2a2d",
+                        "on-secondary-container": "#b6b6d1",
+                        "surface-container": "#1f1f22",
+                        "secondary": "#c4c4df",
+                        "on-tertiary-container": "#4c586b",
+                        "on-primary": "#660025",
+                        "on-secondary-fixed-variant": "#43455b",
+                        "on-error": "#690005",
+                        "error": "#ffb4ab",
+                        "on-surface-variant": "#ccc4cf",
+                        "surface-container-highest": "#353438",
+                        "on-background": "#e4e1e5",
+                        "surface-container-low": "#1b1b1e",
+                        "background": "#131316",
+                        "surface-tint": "#ffb2be",
+                        "on-secondary-fixed": "#181a2e",
+                        "primary-container": "#ffbdc7",
+                        "on-primary-fixed": "#400014",
+                        "surface-variant": "#353438",
+                        "inverse-primary": "#bc004b",
+                        "inverse-on-surface": "#303033",
+                        "on-tertiary-fixed": "#101c2c",
+                        "surface": "#131316",
+                        "on-primary-fixed-variant": "#900038",
+                        "tertiary-fixed-dim": "#bbc7dd",
+                        "on-tertiary-fixed-variant": "#3c475a",
+                        "surface-dim": "#131316",
+                        "tertiary-container": "#c3cfe5",
+                        "on-error-container": "#ffdad6",
+                        "primary-fixed": "#ffd9de",
+                        "on-primary-container": "#b00046",
+                        "error-container": "#93000a",
+                        "surface-bright": "#39393c",
+                        "secondary-fixed": "#e0e0fc",
+                        "tertiary-fixed": "#d7e3fa",
+                        "inverse-surface": "#e4e1e5",
+                        "tertiary": "#e1ebff",
+                        "on-secondary": "#2d2f44",
+                        "on-tertiary": "#253142",
+                        "primary-fixed-dim": "#ffb2be",
+                        "secondary-container": "#46475e",
+                        "outline": "#958e98"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Be Vietnam Pro"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(19, 19, 22, 0.85);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        .glass-panel-light {
+            background: rgba(255, 228, 231, 0.05);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .diagonal-grid {
+            background-image: linear-gradient(45deg, rgba(204, 196, 207, 0.03) 25%, transparent 25%, transparent 50%, rgba(204, 196, 207, 0.03) 50%, rgba(204, 196, 207, 0.03) 75%, transparent 75%, transparent);
+            background-size: 3px 3px;
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(255, 228, 231, 0.4);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-hidden h-screen w-full select-none">
+<div class="fixed inset-0 z-0">
+<img alt="Twilight London Victorian scene 1888" class="w-full h-full object-cover grayscale-[0.3] brightness-[0.4]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDopFoYIWacqCXknisAwAvNM9-Hy84VLsx8DBhguKFipNbjiMaNvRcvtsqXVJep4Ir0-c3FlTb-S25UJOuVJajn8O-ATugs4q2LRz079l_MLBH37J_0R0utlRIkjp59yQymHKUV6S8Gj2BriXIwplWjYGXsXzX1h6Apkk0LU7GVZmL2AXEllMqJKiAc1kRvuaCEdVYIbmJMIcpGSJh0d7cNZuIV-_Qg0HT3cOJV4TASm0tqTnnMpJwtC4WkweTmBx5jHESFV8Vmtx8"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent opacity-90"></div>
+</div>
+<header class="fixed top-2 w-full z-50 flex justify-center items-center pointer-events-none">
+<div class="text-[9px] tracking-[0.25em] font-label text-primary/70 uppercase flex items-center gap-4">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[10px]">location_on</span> TWILIGHT</span>
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[10px]">schedule</span> 22:15</span>
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-[10px]">calendar_month</span> 1888</span>
+</div>
+</header>
+<aside class="fixed right-4 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-4">
+<!-- Chat button removed from here -->
+</aside>
+<main class="relative h-full flex flex-col justify-end px-4 pb-12">
+<div class="relative w-full mb-2">
+<!-- Dialogue Box Controls -->
+<div class="absolute -top-3 left-0 right-0 z-20 flex justify-between items-center px-4">
+<div class="bg-primary-container/20 backdrop-blur-2xl border border-primary/20 px-4 py-0.5 rounded-full shadow-lg">
+<span class="font-headline font-bold text-[10px] tracking-widest text-primary uppercase text-glow">Narrator</span>
+</div>
+<!-- Repositioned Chat and Redraw Buttons -->
+<div class="flex gap-2">
+<button class="bg-primary-container/20 backdrop-blur-2xl border border-primary/20 px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1.5 group active:scale-95 transition-all overflow-hidden relative">
+<div class="absolute inset-0 diagonal-grid opacity-30 pointer-events-none"></div>
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">forum</span>
+<span class="font-headline font-bold text-[9px] tracking-widest text-primary uppercase">Chat</span>
+</button>
+<button class="bg-primary-container/20 backdrop-blur-2xl border border-primary/20 px-3 py-0.5 rounded-full shadow-lg flex items-center gap-1.5 group active:scale-95 transition-all overflow-hidden relative">
+<div class="absolute inset-0 diagonal-grid opacity-30 pointer-events-none"></div>
+<span class="material-symbols-outlined text-[14px] text-primary">refresh</span>
+<span class="font-headline font-bold text-[9px] tracking-widest text-primary uppercase">Redraw</span>
+</button>
+</div>
+</div>
+<div class="glass-panel rounded-[20px] border border-outline-variant/10 p-6 shadow-2xl relative overflow-hidden">
+<div class="absolute inset-0 diagonal-grid opacity-30 pointer-events-none"></div>
+<div class="flex flex-col gap-2 relative z-10">
+<div class="flex gap-4 items-start">
+<button class="mt-1 opacity-30 hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-lg">settings_accessibility</span>
+</button>
+<div class="flex-1 min-h-[80px]">
+<p class="text-on-surface/90 text-base leading-relaxed font-body font-light">
+                            The cobblestones of London glistened like obsidian under the gaslight. A thick fog rolled in from the Thames, swallowing the silhouettes of hansom cabs in a spectral embrace.
+                        </p>
+</div>
+</div>
+<div class="flex justify-end">
+<button class="flex flex-col items-center gap-1 group">
+<div class="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center group-hover:bg-primary/20 transition-all">
+<span class="material-symbols-outlined text-primary text-xl translate-x-0.5">arrow_forward_ios</span>
+</div>
+<span class="font-label text-[8px] tracking-[0.2em] text-primary/60 font-bold uppercase">NEXT</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 bg-surface-container-low/80 backdrop-blur-2xl border-t border-white/5 h-10">
+<button class="text-on-surface-variant/50 hover:text-primary transition-all active:scale-90 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">history</span>
+</button>
+<button class="text-on-surface-variant/50 hover:text-primary transition-all active:scale-90 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">visibility_off</span>
+</button>
+<button class="text-on-surface-variant/50 hover:text-primary transition-all active:scale-90 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<button class="text-on-surface-variant/50 hover:text-primary transition-all active:scale-90 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">save</span>
+</button>
+<button class="text-on-surface-variant/50 hover:text-primary transition-all active:scale-90 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">upload_file</span>
+</button>
+<button class="text-on-surface-variant/50 hover:text-primary transition-all active:scale-90 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">arrow_back</span>
+</button>
+<button class="text-primary bg-primary/10 px-3 h-7 rounded-full active:scale-90 border border-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+<button class="text-on-surface-variant/50 hover:text-primary transition-all active:scale-90 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">fast_forward</span>
+</button>
+</nav>
+<div class="fixed right-0 top-1/3 -translate-y-1/2 w-[1px] h-16 bg-gradient-to-b from-transparent via-primary/10 to-transparent mr-0 opacity-20"></div>
+<div class="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-6 pointer-events-none">
+<button class="pointer-events-auto w-72 py-4 glass-panel border border-white/10 rounded-xl relative overflow-hidden group hover:border-primary/50 transition-all active:scale-95">
+<div class="absolute inset-0 diagonal-grid opacity-20 pointer-events-none"></div>
+<span class="relative z-10 text-white font-headline tracking-widest uppercase text-sm font-semibold">Investigate the manuscript</span>
+</button>
+<button class="pointer-events-auto w-72 py-4 glass-panel border border-white/10 rounded-xl relative overflow-hidden group hover:border-primary/50 transition-all active:scale-95">
+<div class="absolute inset-0 diagonal-grid opacity-20 pointer-events-none"></div>
+<span class="relative z-10 text-white font-headline tracking-widest uppercase text-sm font-semibold">Wait for Alastair</span>
+</button>
+</div>
+</body></html>

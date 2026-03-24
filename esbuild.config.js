@@ -29,6 +29,7 @@ const cssPlugin = {
       let js = fs.readFileSync(outFile, 'utf8');
       js = js.replace('__CSS_PLACEHOLDER__', escaped);
       fs.writeFileSync(outFile, js, 'utf8');
+
     });
   },
 };
@@ -61,9 +62,15 @@ if (isWatch) {
   esbuild.context(buildOptions).then(ctx => {
     ctx.watch();
     console.log('Watching for changes...');
-  }).catch(() => process.exit(1));
+  }).catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
 } else {
   esbuild.build(buildOptions).then(() => {
     console.log('Build complete!');
-  }).catch(() => process.exit(1));
+  }).catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
 }

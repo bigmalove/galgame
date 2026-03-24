@@ -1017,8 +1017,24 @@ function buildTitleScreenTab(activeTab, titleScreen, currentCharId) {
         <input type="text" id="gal-title-text" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.titleText || '')}" placeholder="例如：夏日物语">
       </div>
       <div class="gal-settings-row">
+        <span class="gal-settings-label">标题字体</span>
+        <input type="text" id="gal-title-font-family" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.titleFontFamily || '')}" placeholder="例如：'Noto Serif SC', serif">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">标题字号(px，默认最大 104)</span>
+        <input type="number" id="gal-title-font-size" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.titleFontSize ?? '')}" min="8" max="240" step="1" placeholder="留空使用默认最大 104px（自适应）">
+      </div>
+      <div class="gal-settings-row">
         <span class="gal-settings-label">副标题</span>
         <input type="text" id="gal-title-subtitle" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.subtitleText || '')}" placeholder="例如：按下开始继续">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">副标题字体</span>
+        <input type="text" id="gal-title-subtitle-font-family" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.subtitleFontFamily || '')}" placeholder="例如：'Noto Sans SC', sans-serif">
+      </div>
+      <div class="gal-settings-row">
+        <span class="gal-settings-label">副标题字号(px，默认最大 20.8)</span>
+        <input type="number" id="gal-title-subtitle-font-size" class="gal-title-settings-input" value="${escapeHtml(safeTitleScreen.subtitleFontSize ?? '')}" min="8" max="240" step="1" placeholder="留空使用默认最大 20.8px（自适应）">
       </div>
       <div class="gal-settings-row">
         <span class="gal-settings-label">背景来源</span>
@@ -1518,6 +1534,122 @@ export function buildAssetManagerStyles() {
     }
     .gal-custom-skin-profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .gal-custom-skin-profile-actions .gal-pane-btn:disabled { opacity: 0.56; cursor: not-allowed; }
+    .gal-custom-skin-footer-display-panel {
+      --gal-custom-skin-footer-panel-text: var(--SmartThemeBodyColor, #f5f7fa);
+      --gal-custom-skin-footer-panel-text-muted: rgba(245, 247, 250, 0.82);
+      --gal-custom-skin-footer-panel-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+      --gal-custom-skin-footer-panel-surface: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+      --gal-custom-skin-footer-panel-surface-soft: rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 10px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--gal-custom-skin-footer-panel-border);
+      background: var(--gal-custom-skin-footer-panel-surface);
+      color: var(--gal-custom-skin-footer-panel-text);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+    }
+    .gal-custom-skin-footer-display-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .gal-custom-skin-footer-display-status {
+      font-size: 0.78rem;
+      color: var(--SmartThemeEmColor, #9ac7ff);
+      font-weight: 700;
+    }
+    .gal-custom-skin-footer-display-panel .gal-custom-skin-editor-note {
+      color: var(--gal-custom-skin-footer-panel-text-muted);
+      background: var(--gal-custom-skin-footer-panel-surface-soft);
+      border-color: var(--gal-custom-skin-footer-panel-border);
+    }
+    .gal-custom-skin-footer-display-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+    }
+    .gal-custom-skin-footer-display-list.is-disabled {
+      opacity: 0.65;
+    }
+    .gal-custom-skin-footer-display-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--gal-custom-skin-footer-panel-border);
+      background: var(--gal-custom-skin-footer-panel-surface-soft);
+      color: var(--gal-custom-skin-footer-panel-text);
+    }
+    .gal-custom-skin-footer-display-row.is-fixed {
+      background: rgba(154, 199, 255, 0.08);
+    }
+    .gal-custom-skin-footer-display-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .gal-custom-skin-footer-display-meta strong {
+      color: var(--gal-custom-skin-footer-panel-text);
+      font-size: 0.82rem;
+    }
+    .gal-custom-skin-footer-display-meta small {
+      color: var(--gal-custom-skin-footer-panel-text-muted);
+      font-size: 0.76rem;
+    }
+    .gal-custom-skin-footer-display-fixed {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--SmartThemeEmColor, #9ac7ff);
+      white-space: nowrap;
+    }
+    .gal-custom-skin-footer-display-options {
+      display: inline-flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .gal-custom-skin-footer-display-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--gal-custom-skin-footer-panel-border);
+      background: rgba(15, 23, 42, 0.72);
+      color: var(--gal-custom-skin-footer-panel-text);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .gal-custom-skin-footer-display-option span {
+      color: var(--gal-custom-skin-footer-panel-text);
+    }
+    .gal-custom-skin-footer-display-option input {
+      margin: 0;
+      accent-color: var(--SmartThemeEmColor, #9ac7ff);
+    }
+    .gal-custom-skin-footer-display-option:has(input:checked) {
+      border-color: var(--SmartThemeEmColor, #9ac7ff);
+      background: rgba(154, 199, 255, 0.18);
+      box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.14);
+      color: var(--gal-custom-skin-footer-panel-text);
+    }
+    .gal-custom-skin-footer-display-option:has(input:focus-visible) {
+      box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
+    }
+    .gal-custom-skin-footer-display-option:has(input:disabled) {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
     .gal-custom-skin-editor-layout {
       display: grid;
       grid-template-columns: 210px minmax(0, 1fr);
@@ -1526,11 +1658,45 @@ export function buildAssetManagerStyles() {
       height: clamp(620px, calc(100vh - 230px), 940px);
       align-items: stretch;
     }
-    .gal-custom-skin-device-switch { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); border-radius: 999px; overflow: hidden; margin-bottom: 10px; }
-    .gal-custom-skin-device-tab { border: none; background: rgba(255, 255, 255, 0.06); color: var(--SmartThemeBodyColor, #f5f7fa); font-size: 0.85rem; font-weight: 700; padding: 6px 14px; cursor: pointer; transition: all 0.15s ease; }
-    .gal-custom-skin-device-tab + .gal-custom-skin-device-tab { border-left: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); }
-    .gal-custom-skin-device-tab.active { background: rgba(154, 199, 255, 0.26); color: var(--SmartThemeBodyColor, #f5f7fa); }
-    .gal-custom-skin-device-tab:hover { filter: brightness(0.96); }
+    .gal-custom-skin-device-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid rgba(148, 163, 184, 0.38);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+    }
+    .gal-custom-skin-device-tab {
+      border: none;
+      background: transparent;
+      color: #334155;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .gal-custom-skin-device-tab + .gal-custom-skin-device-tab { border-left: 1px solid rgba(148, 163, 184, 0.28); }
+    .gal-custom-skin-device-tab.active {
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #ffffff;
+      box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.18);
+    }
+    .gal-custom-skin-device-tab:hover {
+      background: rgba(226, 232, 240, 0.92);
+      color: #0f172a;
+    }
+    .gal-custom-skin-device-tab.active:hover {
+      background: linear-gradient(135deg, #22c3ee, #0284c7);
+      color: #ffffff;
+    }
+    .gal-custom-skin-device-tab:focus-visible {
+      outline: none;
+      box-shadow: inset 0 0 0 2px rgba(14, 165, 233, 0.25);
+    }
     .gal-custom-skin-editor-col {
       --gal-custom-skin-text: var(--SmartThemeBodyColor, #f5f7fa);
       --gal-custom-skin-text-muted: rgba(245, 247, 250, 0.78);

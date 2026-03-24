@@ -18,6 +18,28 @@ export const STORE_SPECIAL_CGS = 'specialCgs';
 export const DEFAULT_PACK_ID = 'pack_default';
 export const DEFAULT_PACK_NAME = '未定义';
 export const CUSTOM_SKIN_ID = 'custom-skin';
+export const TWILIGHT_SKIN_ID = 'skin-twilight';
+export const GILDED_TWILIGHT_SKIN_ID = 'skin-gilded-twilight';
+export const DAWN_TWILIGHT_SKIN_ID = 'skin-dawn-twilight';
+export const ORCHID_TWILIGHT_SKIN_ID = 'skin-orchid-twilight';
+export const NEON_TWILIGHT_SKIN_ID = 'skin-neon-twilight';
+export const CLEAR_TWILIGHT_SKIN_ID = 'skin-clear-twilight';
+export const FOREST_TWILIGHT_SKIN_ID = 'skin-forest-twilight';
+export const CYBER_TWILIGHT_SKIN_ID = 'skin-cyber-twilight';
+export const DREAM_TWILIGHT_SKIN_ID = 'skin-dream-twilight';
+export const ROSY_TWILIGHT_SKIN_ID = 'skin-rosy-twilight';
+export const TWILIGHT_VARIANT_SKIN_IDS = [
+  GILDED_TWILIGHT_SKIN_ID,
+  DAWN_TWILIGHT_SKIN_ID,
+  ORCHID_TWILIGHT_SKIN_ID,
+  NEON_TWILIGHT_SKIN_ID,
+  CLEAR_TWILIGHT_SKIN_ID,
+  FOREST_TWILIGHT_SKIN_ID,
+  CYBER_TWILIGHT_SKIN_ID,
+  DREAM_TWILIGHT_SKIN_ID,
+  ROSY_TWILIGHT_SKIN_ID,
+];
+export const TWILIGHT_FAMILY_SKIN_IDS = [TWILIGHT_SKIN_ID, ...TWILIGHT_VARIANT_SKIN_IDS];
 export const GLOBAL_CUSTOM_SKIN_PACK_ID = '__global_custom_skin__';
 export const CUSTOM_SKIN_PROFILE_ID_PREFIX = 'custom-profile::';
 

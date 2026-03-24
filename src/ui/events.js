@@ -168,6 +168,7 @@ export function setupGlobalEventListeners() {
   $(doc).on('mousedown touchstart', '#gal-global-overlay [data-action="prev"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
+    closeMobileMenu();
     setRewindHoldTimer(
       setTimeout(() => {
         startRewinding();
@@ -210,6 +211,7 @@ export function setupGlobalEventListeners() {
   // 退出 Galgame 模式
   $(doc).on('click', '#gal-global-overlay [data-action="close-mode"]', async function (e) {
     e.stopPropagation();
+    closeMobileMenu();
     setIsEnabled(false);
     setCurrentCharEnabled(false);
     updateButtonState();
@@ -311,6 +313,7 @@ export function setupGlobalEventListeners() {
   $(doc).on('mousedown touchstart', '#gal-global-overlay [data-action="skip"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
+    closeMobileMenu();
     startSkipping();
   });
   $(doc).on('mouseup touchend mouseleave', '#gal-global-overlay [data-action="skip"]', function (e) {
@@ -328,18 +331,32 @@ export function setupGlobalEventListeners() {
   // 立绘显示/隐藏
   $(doc).on('click', '#gal-global-overlay .gal-sprite-toggle', function (e) {
     e.stopPropagation();
-    const $btn = $(this);
     const $overlay = $('#gal-global-overlay');
     const $characterLayer = $overlay.find('.gal-layer-character');
-    $btn.toggleClass('sprites-hidden');
-    $characterLayer.toggleClass('sprites-hidden');
-    if ($btn.hasClass('sprites-hidden')) {
-      $btn.attr('title', '显示立绘');
-      $btn.find('.gal-eye-icon').text('\u{1F648}');
-    } else {
-      $btn.attr('title', '隐藏立绘');
-      $btn.find('.gal-eye-icon').text('\u{1F441}');
-    }
+    const shouldHideSprites = !$characterLayer.hasClass('sprites-hidden');
+    const $buttons = $overlay.find('.gal-sprite-toggle');
+
+    $characterLayer.toggleClass('sprites-hidden', shouldHideSprites);
+    $buttons.toggleClass('sprites-hidden', shouldHideSprites);
+    $buttons.each(function () {
+      const $btn = $(this);
+      const $icon = $btn.find('.gal-eye-icon');
+      if (shouldHideSprites) {
+        $btn.attr('title', '显示立绘');
+        if ($icon.is('i')) {
+          $icon.removeClass('fa-eye').addClass('fa-eye-slash').text('');
+        } else {
+          $icon.text('\u{1F648}');
+        }
+      } else {
+        $btn.attr('title', '隐藏立绘');
+        if ($icon.is('i')) {
+          $icon.removeClass('fa-eye-slash').addClass('fa-eye').text('');
+        } else {
+          $icon.text('\u{1F441}');
+        }
+      }
+    });
   });
 
   // 移动端菜单辅助
@@ -347,20 +364,28 @@ export function setupGlobalEventListeners() {
     $('#gal-mobile-menu').removeClass('active');
   }
 
-  function isMobileMenuMode() {
+  function isViewportMobileMenuMode() {
     const hasMatchMedia = !!(topWindow && typeof topWindow.matchMedia === 'function');
     const isNarrowViewport = hasMatchMedia && topWindow.matchMedia('(max-width: 768px)').matches;
     const isShortViewport = hasMatchMedia && topWindow.matchMedia('(max-height: 736px)').matches;
-    const preferMobileMenu = isNarrowViewport || isShortViewport;
-    const $logBtn = $('#gal-global-overlay .gal-footer-btn[data-action="log"]');
-    if (!$logBtn.length) return preferMobileMenu;
-    return preferMobileMenu || !$logBtn.is(':visible');
+    return isNarrowViewport || isShortViewport;
+  }
+
+  function hasCustomSkinFooterMenuItems() {
+    const $overlay = $('#gal-global-overlay');
+    if (!$overlay.length) return false;
+    if (String($overlay.attr('data-custom-skin-active-profile') || '') !== 'true') return false;
+    return Number($overlay.attr('data-custom-skin-footer-menu-count') || 0) > 0;
+  }
+
+  function shouldOpenConfigMenu() {
+    return isViewportMobileMenuMode() || hasCustomSkinFooterMenuItems();
   }
 
   // 设置按钮
   $(doc).on('click', '#gal-global-overlay [data-action="config"]', function (e) {
     e.stopPropagation();
-    if (isMobileMenuMode()) {
+    if (shouldOpenConfigMenu()) {
       const $menu = $('#gal-mobile-menu');
       if (!$menu.hasClass('active')) {
         // 动态计算菜单位置：在 CONFIG 按钮上方显示
@@ -535,6 +560,7 @@ export function setupGlobalEventListeners() {
   // LOG按钮
   $(doc).on('click', '#gal-global-overlay [data-action="log"]', function (e) {
     e.stopPropagation();
+    closeMobileMenu();
     const history = getHistoryFromDatabase();
     showHistoryModal(history);
   });
@@ -542,6 +568,7 @@ export function setupGlobalEventListeners() {
   // 待选择选项按钮
   $(doc).on('click', '#gal-global-overlay [data-action="show-choices"]', function (e) {
     e.stopPropagation();
+    closeMobileMenu();
     const pending = getPendingOptions();
     if (pending && pending.length > 0) {
       renderGalgameChoices(pending);
@@ -553,6 +580,15 @@ export function setupGlobalEventListeners() {
   // NEXT按钮
   $(doc).on('click', '#gal-global-overlay [data-action="next"]', async function (e) {
     e.stopPropagation();
+    closeMobileMenu();
+    await triggerNextSegmentFromOverlay();
+  });
+
+  $(doc).on('click', '#gal-global-overlay.skin-twilight .gal-text-panel', async function (e) {
+    const $target = $(e.target);
+    if ($target.closest('.gal-generating-indicator, a, button, input, textarea, select').length) return;
+    e.stopPropagation();
+    closeMobileMenu();
     await triggerNextSegmentFromOverlay();
   });
 
@@ -581,6 +617,7 @@ export function setupGlobalEventListeners() {
   // AUTO按钮
   $(doc).on('click', '#gal-global-overlay [data-action="auto"]', function (e) {
     e.stopPropagation();
+    closeMobileMenu();
     const $btn = $(this);
     const $overlay = $('#gal-global-overlay');
     const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');

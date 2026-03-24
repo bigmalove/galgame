@@ -4,6 +4,7 @@ import {
   SCRIPT_NAME,
   STORE_UI_SKIN_PROFILES,
 } from '../core/constants.js';
+import { normalizeCustomSkinFooterButtonDisplay } from '../core/custom-skin-footer-buttons.js';
 import { getDb } from '../core/state.js';
 import { initDB } from './init.js';
 import {
@@ -28,6 +29,29 @@ function normalizeProfileId(rawId) {
   return id.startsWith(CUSTOM_SKIN_PROFILE_ID_PREFIX) ? id : '';
 }
 
+function normalizeProfileRecord(rawProfile = {}) {
+  const safeProfile = rawProfile && typeof rawProfile === 'object' && !Array.isArray(rawProfile)
+    ? rawProfile
+    : {};
+  return {
+    ...safeProfile,
+    id: normalizeProfileId(safeProfile.id),
+    displayName: normalizeProfileDisplayName(safeProfile.displayName, DEFAULT_PROFILE_NAME),
+    createdAt: String(safeProfile.createdAt || '').trim(),
+    updatedAt: String(safeProfile.updatedAt || '').trim(),
+    sortOrder: Number.isFinite(Number(safeProfile.sortOrder)) ? Number(safeProfile.sortOrder) : 0,
+    footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(safeProfile.footerButtonDisplay),
+  };
+}
+
+function cloneProfileRecord(profile) {
+  if (!profile) return null;
+  return {
+    ...profile,
+    footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(profile.footerButtonDisplay),
+  };
+}
+
 function generateProfileId() {
   const seed = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   return `${CUSTOM_SKIN_PROFILE_ID_PREFIX}${seed}`;
@@ -44,7 +68,10 @@ function compareProfiles(a, b) {
 }
 
 function setProfileCache(list) {
-  cachedProfiles = Array.isArray(list) ? [...list].sort(compareProfiles) : [];
+  cachedProfiles = (Array.isArray(list) ? list : [])
+    .map(profile => normalizeProfileRecord(profile))
+    .filter(profile => !!profile.id)
+    .sort(compareProfiles);
   cachedProfileMap = new Map(cachedProfiles.map(profile => [profile.id, profile]));
   return cachedProfiles;
 }
@@ -116,7 +143,14 @@ export function hasUiSkinProfileId(rawId) {
 }
 
 export function getCachedUiSkinProfiles() {
-  return cachedProfiles.map(profile => ({ ...profile }));
+  return cachedProfiles.map(profile => cloneProfileRecord(profile));
+}
+
+export function getCachedUiSkinProfile(id) {
+  const safeId = normalizeProfileId(id);
+  if (!safeId) return null;
+  const profile = cachedProfileMap.get(safeId);
+  return cloneProfileRecord(profile);
 }
 
 export function getUiSkinProfileLabel(id) {
@@ -142,12 +176,12 @@ export async function refreshUiSkinProfilesCache() {
 
 export async function listUiSkinProfiles() {
   const profiles = await refreshUiSkinProfilesCache();
-  return profiles.map(profile => ({ ...profile }));
+  return profiles.map(profile => cloneProfileRecord(profile));
 }
 
 export async function getUiSkinProfile(id) {
   const record = await getProfileRecord(id);
-  return record ? { ...record } : null;
+  return record ? cloneProfileRecord(normalizeProfileRecord(record)) : null;
 }
 
 export async function saveUiSkinProfile(profile = {}) {
@@ -162,11 +196,16 @@ export async function saveUiSkinProfile(profile = {}) {
     sortOrder: Number.isFinite(Number(profile.sortOrder))
       ? Number(profile.sortOrder)
       : Number(existing?.sortOrder || Date.now()),
+    footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(
+      Object.prototype.hasOwnProperty.call(profile, 'footerButtonDisplay')
+        ? profile.footerButtonDisplay
+        : existing?.footerButtonDisplay,
+    ),
   };
   await putProfileRecord(record);
   await refreshUiSkinProfilesCache();
   console.log(`[${SCRIPT_NAME}] 保存自定义皮肤 profile: ${record.id} (${record.displayName})`);
-  return { ...record };
+  return cloneProfileRecord(normalizeProfileRecord(record));
 }
 
 export async function createUiSkinProfile({ displayName, id } = {}) {
@@ -210,6 +249,7 @@ export async function duplicateUiSkinProfile(sourceId, { displayName, newId } = 
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     sortOrder: Date.now(),
+    footerButtonDisplay: sourceProfile.footerButtonDisplay,
   });
 
   const assets = await getUiSkinAssetsByPackSkin(GLOBAL_CUSTOM_SKIN_PACK_ID, sourceProfile.id);

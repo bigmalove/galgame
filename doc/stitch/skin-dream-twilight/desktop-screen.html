@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Be+Vietnam+Pro:wght@300;400;500;600&amp;family=Inter:wght@400;500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              // Soft Pastel & Dreamy Palette
+              "pastel-lavender": "#f3f0ff", // Light lavender for panels
+              "pastel-mint": "#f0fff4",    // Pale mint for variation
+              "soft-plum": "#4a3b4e",      // Gentle plum for text
+              "charcoal-muted": "#3f3f46",  // Gentle charcoal for primary text
+              "accent-purple": "#e9d5ff",  // Muted purple accent
+              "accent-peach": "#ffedd5",   // Muted peach accent
+              "accent-blue": "#e0f2fe",    // Light blue accent
+              "primary": "#fbcfe8",        // Pastel pink
+              "on-primary": "#701a75",     // Deep plum for contrast on pink
+              "surface-container": "rgba(243, 240, 255, 0.85)", // Lavender glass
+              "background": "#fafafb",
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Be Vietnam Pro"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .pattern-overlay {
+            background-image: radial-gradient(circle at 2px 2px, rgba(147, 51, 234, 0.05) 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+        .glass-panel {
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+        }
+        .text-shadow-dreamy {
+            text-shadow: 0px 1px 2px rgba(255, 255, 255, 0.8);
+        }
+    </style>
+</head>
+<body class="bg-background text-soft-plum font-body overflow-hidden h-screen w-screen selection:bg-accent-purple selection:text-soft-plum">
+<div class="fixed inset-0 z-0">
+<img class="w-full h-full object-cover scale-105 brightness-110 saturate-[0.8] contrast-90" data-alt="Cinematic sunset view of city skyline through a bedroom window" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7pbg4lQ7Gwzzs55TXr8o348rU_PhsLIPXy1fWUAtM4-SHP6qFsrH6ZlEyIlGAV_HYHJalQTQ0po7_bkQn8YC7xSt1iS6RzBobMpKMz33Ehrz-g3k3kanVeXrIObcjlFslNM7iqObjepszK3MnwRmUjFNN-Ad_FSaSErO8nkjDHi6kmVnfSFEnaI5CVPcMFaSZtOUSsnFqxH6FZExgn96EeAenseurVpd9QSofGfnKUT337UzG2ThmUsnmpcb29vygjnwFJ1PViVw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-pastel-lavender/40 via-white/10 to-transparent"></div>
+</div>
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 py-4 bg-white/30 backdrop-blur-xl border-b border-white/40">
+<div class="flex items-center gap-6">
+<h1 class="text-lg font-bold text-soft-plum tracking-tighter uppercase font-headline opacity-90">The Ethereal Manuscript</h1>
+<div class="h-4 w-px bg-soft-plum/20"></div>
+<div class="flex gap-4">
+<span class="font-headline font-bold tracking-[0.05em] uppercase text-xs text-soft-plum/80">London, 1888</span>
+<span class="font-headline font-bold tracking-[0.05em] uppercase text-xs text-soft-plum/60">22:15</span>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="p-2 text-soft-plum hover:bg-white/40 transition-colors duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+<button class="p-2 text-soft-plum hover:bg-white/40 transition-colors duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+</button>
+<button class="p-2 text-soft-plum hover:bg-white/40 transition-colors duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+</button>
+</div>
+</header>
+<main class="relative z-10 h-full w-full flex flex-col px-12 pb-24">
+<div class="max-w-5xl mx-auto w-full mb-0 flex justify-end gap-3 px-8">
+<button class="glass-panel bg-white/60 hover:bg-white/80 text-soft-plum px-5 py-2 rounded-t-lg font-headline font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-white/60">
+<span class="material-symbols-outlined text-sm opacity-70">refresh</span>
+<span>重绘当前</span>
+</button>
+<button class="glass-panel bg-accent-purple/60 hover:bg-accent-purple/80 text-soft-plum px-5 py-2 rounded-t-lg font-headline font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-accent-purple/80 shadow-[0_-4px_12px_rgba(233,213,255,0.3)]">
+<span class="material-symbols-outlined text-sm">keyboard</span>
+<span>自由对话</span>
+</button>
+</div>
+<div class="flex-grow flex items-center justify-center mb-12">
+<div class="flex flex-col gap-6 w-full max-w-lg justify-center px-4">
+<button class="relative group overflow-hidden glass-panel bg-white/60 hover:bg-accent-blue/60 transition-all duration-300 px-8 py-5 rounded-xl border border-white/80 shadow-lg w-full">
+<div class="absolute inset-0 pattern-overlay opacity-30 pointer-events-none group-hover:opacity-40"></div>
+<span class="relative z-10 text-soft-plum font-headline font-bold text-sm uppercase tracking-[0.2em]">Investigate the manuscript</span>
+</button>
+<button class="relative group overflow-hidden glass-panel bg-white/60 hover:bg-accent-peach/60 transition-all duration-300 px-8 py-5 rounded-xl border border-white/80 shadow-lg w-full">
+<div class="absolute inset-0 pattern-overlay opacity-30 pointer-events-none group-hover:opacity-40"></div>
+<span class="relative z-10 text-soft-plum font-headline font-bold text-sm uppercase tracking-[0.2em]">Wait for Alastair</span>
+</button>
+</div>
+</div>
+<div class="max-w-5xl mx-auto w-full relative">
+<div class="absolute -top-6 left-8 z-20">
+<div class="bg-accent-peach px-10 py-2.5 rounded-full shadow-md transform -skew-x-12 border border-white/50">
+<span class="font-headline font-bold text-soft-plum tracking-widest text-sm uppercase skew-x-12 block">旁白</span>
+</div>
+</div>
+<div class="bg-pastel-lavender/80 glass-panel rounded-xl overflow-hidden min-h-[160px] flex flex-col p-10 outline outline-1 outline-white/80 shadow-2xl relative border border-white/60">
+<div class="absolute inset-0 pattern-overlay opacity-40 pointer-events-none"></div>
+<div class="relative z-10 flex-grow">
+<p class="text-charcoal-muted text-xl leading-relaxed font-body font-normal tracking-wide text-shadow-dreamy">
+                    夕阳的余晖在地板上拉出长长的影子，空气中弥漫着淡淡的尘埃和过往岁月的味道。窗外的城市正在缓慢地沉入蓝调的梦境，而这个房间却仿佛被时间遗忘了，停留在那个永恒的黄昏之中。
+                    <span class="inline-flex items-center ml-2 text-soft-plum/40"><span class="material-symbols-outlined text-base leading-none translate-y-[2px]">arrow_drop_down</span></span>
+</p>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-center py-4 px-12 pb-safe bg-white/50 backdrop-blur-2xl border-t border-white/60 shadow-[0_-10px_40px_rgba(243,240,255,0.4)]">
+<div class="flex items-center gap-2">
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">LOG</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">CLOSE</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">VIEW</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">CONFIG</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">选项</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">SAVE</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">LOAD</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">TL</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">PREV</button>
+<button class="px-4 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum bg-accent-purple/50 rounded-full shadow-sm ring-1 ring-white/60 transition-all hover:bg-accent-purple/70">AUTO</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-soft-plum/60 hover:text-soft-plum hover:bg-white/40 rounded transition-all">SKIP</button>
+</div>
+</nav>
+<div class="fixed inset-0 pointer-events-none z-[100] opacity-[0.05] contrast-100 brightness-110" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCPr4hmKzQOXsfqn759ens5Yb3xa76oDM9pmpVbXorEf4yGj4x4TS0g5Hze_SD309gpnqHXuLTqk-bjl-_uwjEZPMIBXKKI4blZIakQVTK3jcN779-B7v2v-IJY9-mEIu4VsqlX9dOcW15VCnub79z-2SyOE2HMq6qkKhdRw7u7C4nbzarNgZuVFkB5Ek2XyJlBAR9z-jn5ik6eRxCvnpETjb02fm8PtK97ZPyBWTs8gAsPQnzWepKlTk7nSUKvrZMc4Fprdcv3kqw');"></div>
+
+</body></html>

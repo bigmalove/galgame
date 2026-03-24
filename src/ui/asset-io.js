@@ -1,4 +1,5 @@
 import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID, CUSTOM_SKIN_ID, GLOBAL_CUSTOM_SKIN_PACK_ID } from '../core/constants.js';
+import { normalizeCustomSkinFooterButtonDisplay } from '../core/custom-skin-footer-buttons.js';
 import { $, topWindow } from '../core/env.js';
 import {
   buildTitleSceneNameForChar,
@@ -75,7 +76,11 @@ function summarizeTitleScreenConfigForLog(rawConfig) {
   return {
     enabled: config.enabled === true,
     titleText: String(config.titleText || ''),
+    titleFontFamily: String(config.titleFontFamily || ''),
+    titleFontSize: config.titleFontSize === '' || config.titleFontSize == null ? '' : Number(config.titleFontSize),
     subtitleText: String(config.subtitleText || ''),
+    subtitleFontFamily: String(config.subtitleFontFamily || ''),
+    subtitleFontSize: config.subtitleFontSize === '' || config.subtitleFontSize == null ? '' : Number(config.subtitleFontSize),
     backgroundSource: String(config.backgroundSource || ''),
     backgroundSceneName: String(config.backgroundSceneName || ''),
     backgroundFit: String(config.backgroundFit || ''),
@@ -626,6 +631,7 @@ function normalizeUiSkinProfileRecord(raw = {}) {
     createdAt: String(safe.createdAt || '').trim(),
     updatedAt: String(safe.updatedAt || '').trim(),
     sortOrder: Number.isFinite(Number(safe.sortOrder)) ? Number(safe.sortOrder) : null,
+    footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(safe.footerButtonDisplay),
   };
 }
 
@@ -4614,6 +4620,7 @@ export const AssetIO = {
             createdAt: profile.createdAt,
             updatedAt: profile.updatedAt,
             sortOrder: profile.sortOrder,
+            footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(profile.footerButtonDisplay),
           }));
           remoteConfig.activeCustomSkinProfileId = exportedActiveProfileId;
         }

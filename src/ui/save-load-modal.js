@@ -1,6 +1,8 @@
 import { $, topWindow } from '../core/env.js';
+import { getSettings } from '../core/settings.js';
 import { deleteSaveSlot, getQuickSaveSlot, getSaveSlots, loadProgressById, quickLoad, quickSave, saveCurrentProgress } from '../save-load/manager.js';
 import { getModalMountRoot } from './fullscreen.js';
+import { isTwilightSkinSelected } from './skin-twilight.js';
 import { showToast } from './toast.js';
 
 const MODAL_ID = 'gal-save-load-modal';
@@ -143,11 +145,13 @@ function closeModal($modal) {
 export function showSaveLoadModal(mode = 'load') {
   const safeMode = mode === 'save' ? 'save' : 'load';
   const mountRoot = getModalMountRoot();
+  const activeSkin = String(getSettings()?.skin || '').trim();
+  const modalSkin = isTwilightSkinSelected(activeSkin) ? 'skin-twilight' : activeSkin;
   $(mountRoot).find(`#${MODAL_ID}`).remove();
 
   const isSaveMode = safeMode === 'save';
   const modalHtml = `
-    <div id="${MODAL_ID}" class="gal-save-load-modal" data-mode="${safeMode}">
+    <div id="${MODAL_ID}" class="gal-save-load-modal" data-mode="${safeMode}" data-skin="${escapeHtml(modalSkin)}" data-skin-variant="${escapeHtml(activeSkin)}">
       <div class="gal-save-load-shell">
         <div class="gal-save-load-header">
           <div class="gal-save-load-heading">

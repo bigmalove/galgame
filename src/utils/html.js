@@ -12,6 +12,21 @@ export function decodeHtml(html) {
   return txt.value;
 }
 
+export function getMesTextContentForGalgame(mesTextElement) {
+  const html = String(mesTextElement?.innerHTML || '').trim();
+  const visibleText = String(mesTextElement?.textContent || '').trim();
+  if (!html) {
+    return visibleText;
+  }
+
+  const decodedHtml = decodeHtml(html);
+  if (RE_GAL_TAGS.test(html) || RE_GAL_TAGS.test(decodedHtml)) {
+    return decodedHtml;
+  }
+
+  return visibleText;
+}
+
 /**
  * 从 SillyTavern 的聊天数组中获取原始消息内容
  * @param {string|number} mesId 消息 ID

@@ -35,6 +35,23 @@ function getTitleScreenSettings() {
   return titleScreen;
 }
 
+function buildAdaptiveClampFontSize(fontSize, defaultPreset) {
+  const parsedSize = Number.parseFloat(fontSize);
+  if (!Number.isFinite(parsedSize) || parsedSize <= 0 || !defaultPreset) return '';
+
+  const scale = parsedSize / defaultPreset.maxPx;
+  const minPx = Math.round(defaultPreset.minPx * scale * 100) / 100;
+  const maxPx = Math.round(defaultPreset.maxPx * scale * 100) / 100;
+  const fluidVw = Math.round(defaultPreset.fluidVw * scale * 1000) / 1000;
+  return `clamp(${minPx}px, ${fluidVw}vw, ${maxPx}px)`;
+}
+
+function applyTitleTypography(node, fontFamily, fontSize, defaultPreset) {
+  if (!node) return;
+  node.style.fontFamily = String(fontFamily || '').trim();
+  node.style.fontSize = buildAdaptiveClampFontSize(fontSize, defaultPreset);
+}
+
 function ensureTitleScreenElement() {
   const $overlay = ensureGlobalOverlay();
   if (!$overlay.length) return null;
@@ -155,17 +172,31 @@ function applyTitleText(root, config) {
   const startButton = root.querySelector('[data-action="start"]');
 
   const titleText = String(config?.titleText || '').trim();
+  const titleFontFamily = String(config?.titleFontFamily || '').trim();
+  const titleFontSize = config?.titleFontSize;
   const subtitleText = String(config?.subtitleText || '').trim();
+  const subtitleFontFamily = String(config?.subtitleFontFamily || '').trim();
+  const subtitleFontSize = config?.subtitleFontSize;
 
   if (titleNode) {
     titleNode.textContent = titleText || 'Galgame';
     titleNode.setAttribute('data-text', titleText || 'Galgame');
     titleNode.style.display = titleText ? '' : 'none';
+    applyTitleTypography(titleNode, titleFontFamily, titleFontSize, {
+      minPx: 64,
+      fluidVw: 7,
+      maxPx: 104,
+    });
   }
 
   if (subtitleNode) {
     subtitleNode.textContent = subtitleText;
     subtitleNode.style.display = subtitleText ? '' : 'none';
+    applyTitleTypography(subtitleNode, subtitleFontFamily, subtitleFontSize, {
+      minPx: 16,
+      fluidVw: 2,
+      maxPx: 20.8,
+    });
   }
 
   if (startButton) {

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Be+Vietnam+Pro:wght@300;400;500;600&amp;family=Inter:wght@400;500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-fixed-dim": "#c4c4df",
+              "surface-container-lowest": "#0e0e11",
+              "primary": "#ffe4e7",
+              "on-surface": "#e4e1e5",
+              "on-primary": "#660025",
+              "on-tertiary-container": "#4c586b",
+              "surface-container": "#1f1f22",
+              "secondary": "#c4c4df",
+              "outline-variant": "#4a454e",
+              "on-secondary-container": "#b6b6d1",
+              "surface-container-high": "#2a2a2d",
+              "on-surface-variant": "#ccc4cf",
+              "on-error": "#690005",
+              "error": "#ffb4ab",
+              "on-secondary-fixed-variant": "#43455b",
+              "on-secondary-fixed": "#181a2e",
+              "surface-tint": "#ffb2be",
+              "on-background": "#e4e1e5",
+              "surface-container-highest": "#353438",
+              "background": "#131316",
+              "surface-container-low": "#1b1b1e",
+              "surface-variant": "#353438",
+              "inverse-on-surface": "#303033",
+              "inverse-primary": "#bc004b",
+              "on-tertiary-fixed": "#101c2c",
+              "on-primary-fixed": "#400014",
+              "primary-container": "#ffbdc7",
+              "surface-dim": "#131316",
+              "on-tertiary-fixed-variant": "#3c475a",
+              "on-primary-fixed-variant": "#900038",
+              "tertiary-fixed-dim": "#bbc7dd",
+              "surface": "#131316",
+              "inverse-surface": "#e4e1e5",
+              "tertiary-fixed": "#d7e3fa",
+              "on-primary-container": "#b00046",
+              "error-container": "#93000a",
+              "primary-fixed": "#ffd9de",
+              "surface-bright": "#39393c",
+              "secondary-fixed": "#e0e0fc",
+              "tertiary-container": "#c3cfe5",
+              "on-error-container": "#ffdad6",
+              "outline": "#958e98",
+              "secondary-container": "#46475e",
+              "primary-fixed-dim": "#ffb2be",
+              "on-secondary": "#2d2f44",
+              "tertiary": "#e1ebff",
+              "on-tertiary": "#253142"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Be Vietnam Pro"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .pattern-overlay {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+        .glass-panel {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .text-shadow-subtle {
+            text-shadow: 1px 1px 2px rgba(19, 19, 22, 0.8);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-hidden h-screen w-screen selection:bg-primary-container selection:text-on-primary-container">
+<!-- Background Layer -->
+<div class="fixed inset-0 z-0">
+<img class="w-full h-full object-cover scale-105 brightness-75 contrast-110" data-alt="Cinematic sunset view of city skyline through a bedroom window" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7pbg4lQ7Gwzzs55TXr8o348rU_PhsLIPXy1fWUAtM4-SHP6qFsrH6ZlEyIlGAV_HYHJalQTQ0po7_bkQn8YC7xSt1iS6RzBobMpKMz33Ehrz-g3k3kanVeXrIObcjlFslNM7iqObjepszK3MnwRmUjFNN-Ad_FSaSErO8nkjDHi6kmVnfSFEnaI5CVPcMFaSZtOUSsnFqxH6FZExgn96EeAenseurVpd9QSofGfnKUT337UzG2ThmUsnmpcb29vygjnwFJ1PViVw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent"></div>
+</div>
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-8 py-4 bg-transparent backdrop-blur-xl bg-zinc-900/40">
+<div class="flex items-center gap-6">
+<h1 class="text-lg font-bold text-zinc-50 tracking-tighter uppercase font-headline">Twilight</h1>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<div class="flex gap-4">
+<span class="font-headline font-bold tracking-[0.05em] uppercase text-xs text-zinc-50">London, 1888</span>
+<span class="font-headline font-bold tracking-[0.05em] uppercase text-xs text-zinc-400">22:15</span>
+</div>
+</div>
+<div class="flex gap-4">
+<button class="p-2 text-zinc-100 hover:bg-zinc-50/10 transition-colors duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+<button class="p-2 text-zinc-100 hover:bg-zinc-50/10 transition-colors duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+</button>
+<button class="p-2 text-zinc-100 hover:bg-zinc-50/10 transition-colors duration-200 rounded-full">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+</button>
+</div>
+</header>
+<!-- Main Narrative Canvas -->
+<main class="relative z-10 h-full w-full flex flex-col px-12 pb-24">
+<!-- Floating Prompt Buttons -->
+<div class="max-w-5xl mx-auto w-full mb-0 flex justify-end gap-3 px-8">
+<button class="glass-panel bg-white/5 hover:bg-white/10 text-zinc-100 px-5 py-2 rounded-t-lg font-headline font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-white/10">
+<span class="material-symbols-outlined text-sm opacity-70">refresh</span>
+<span>重绘当前</span>
+</button>
+<button class="glass-panel bg-primary/10 hover:bg-primary/20 text-primary px-5 py-2 rounded-t-lg font-headline font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 transition-all border-x border-t border-primary/30 shadow-[0_-4px_12px_rgba(224,195,252,0.1)]">
+<span class="material-symbols-outlined text-sm">keyboard</span>
+<span>自由对话</span>
+</button>
+</div>
+<!-- Dialogue Container -->
+<div class="flex-grow flex items-center justify-center mb-12">
+<div class="flex flex-col gap-6 w-full max-w-lg justify-center px-4">
+<button class="relative group overflow-hidden glass-panel bg-zinc-900/60 hover:bg-zinc-800/80 transition-all duration-300 px-8 py-5 rounded-xl border border-white/10 shadow-2xl w-full">
+<div class="absolute inset-0 pattern-overlay opacity-20 pointer-events-none group-hover:opacity-30"></div>
+<span class="relative z-10 text-zinc-100 font-headline font-bold text-sm uppercase tracking-[0.2em]">Investigate the manuscript</span>
+</button>
+<button class="relative group overflow-hidden glass-panel bg-zinc-900/60 hover:bg-zinc-800/80 transition-all duration-300 px-8 py-5 rounded-xl border border-white/10 shadow-2xl w-full">
+<div class="absolute inset-0 pattern-overlay opacity-20 pointer-events-none group-hover:opacity-30"></div>
+<span class="relative z-10 text-zinc-100 font-headline font-bold text-sm uppercase tracking-[0.2em]">Wait for Alastair</span>
+</button>
+</div>
+</div>
+<div class="max-w-5xl mx-auto w-full relative">
+<!-- Character Name Plate -->
+<div class="absolute -top-6 left-8 z-20">
+<div class="bg-primary-fixed px-10 py-2.5 rounded-full shadow-lg transform -skew-x-12">
+<span class="font-headline font-bold text-on-primary-fixed tracking-widest text-sm uppercase skew-x-12 block">旁白</span>
+</div>
+</div>
+<!-- Dialogue Box -->
+<div class="bg-surface-container-low/70 glass-panel rounded-xl overflow-hidden min-h-[160px] flex flex-col p-10 outline outline-1 outline-white/10 shadow-2xl relative">
+<!-- Intricate Pattern Overlay -->
+<div class="absolute inset-0 pattern-overlay opacity-30 pointer-events-none"></div>
+<!-- Narrative Text -->
+<div class="relative z-10 flex-grow">
+<p class="text-on-surface text-xl leading-relaxed font-body font-normal tracking-wide text-shadow-subtle">
+                    夕阳的余晖在地板上拉出长长的影子，空气中弥漫着淡淡的尘埃和过往岁月的味道。窗外的城市正在缓慢地沉入蓝调的梦境，而这个房间却仿佛被时间遗忘了，停留在那个永恒的黄昏之中。
+                 <span class="inline-flex items-center ml-2 text-primary opacity-80"><span class="material-symbols-outlined text-base leading-none translate-y-[2px]">arrow_drop_down</span></span></p>
+</div>
+<!-- Bottom Dialogue Actions -->
+</div>
+</div>
+</main>
+<!-- Bottom Action Bar (Comprehensive NavBar) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-center py-4 px-12 pb-safe bg-zinc-900/60 backdrop-blur-2xl border-t border-white/5 shadow-[0_-10px_40px_rgba(0,0,0,0.4)]">
+<div class="flex items-center gap-2">
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">LOG</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">CLOSE</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">VIEW</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">CONFIG</button><button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">选项</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">SAVE</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">LOAD</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">TL</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">PREV</button>
+<button class="px-4 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-purple-200 bg-white/10 rounded-full shadow-inner ring-1 ring-white/10 transition-all hover:bg-white/20">AUTO</button>
+<button class="px-3 py-1 font-headline text-[10px] font-bold tracking-widest uppercase text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded transition-all">SKIP</button>
+</div>
+</nav>
+<!-- Grain/Noise Overlay -->
+<div class="fixed inset-0 pointer-events-none z-[100] opacity-[0.03] contrast-150 brightness-150" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCPr4hmKzQOXsfqn759ens5Yb3xa76oDM9pmpVbXorEf4yGj4x4TS0g5Hze_SD309gpnqHXuLTqk-bjl-_uwjEZPMIBXKKI4blZIakQVTK3jcN779-B7v2v-IJY9-mEIu4VsqlX9dOcW15VCnub79z-2SyOE2HMq6qkKhdRw7u7C4nbzarNgZuVFkB5Ek2XyJlBAR9z-jn5ik6eRxCvnpETjb02fm8PtK97ZPyBWTs8gAsPQnzWepKlTk7nSUKvrZMc4Fprdcv3kqw');"></div>
+</body></html>

@@ -9,7 +9,7 @@ import { Live2DPreloadManager } from '../live2d/preload.js';
 import { parseGalgameContent, RE_GAL_TAGS } from '../logic/parser.js';
 import { consumePendingSpecialCgByScene } from '../logic/special-cg-trigger.js';
 import { markTimelineCacheDirty } from '../timeline/data.js';
-import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
+import { getFormattedSwipeContent, getMesTextContentForGalgame, getRawMessageContent } from '../utils/html.js';
 import { renderBGMWidget } from './bgm-widget.js';
 import { hideNonLastFloors, showAllFloors } from './galgame-mode.js';
 import { injectGalgameButton } from './menu-button.js';
@@ -91,18 +91,28 @@ export async function processNewMessage(mesNode, options = {}) {
   const mesId = $mes.attr('mesid');
   const settings = getSettings();
 
+  const $mesText = $mes.find('.mes_text');
+  const domVisibleContent = getMesTextContentForGalgame($mesText[0]);
+
   let contentToProcess = getFormattedSwipeContent(mesId);
   if (!contentToProcess) {
-    contentToProcess = getRawMessageContent(mesId);
+    const rawMessageContent = getRawMessageContent(mesId);
+    if (rawMessageContent) {
+      if (RE_GAL_TAGS.test(rawMessageContent)) {
+        contentToProcess = rawMessageContent;
+      } else if (/<[a-z][\s\S]*?>/i.test(rawMessageContent) && domVisibleContent) {
+        contentToProcess = domVisibleContent;
+      } else {
+        contentToProcess = rawMessageContent;
+      }
+    }
   }
   if (!contentToProcess) {
-    const $mesText = $mes.find('.mes_text');
-    const html = $mesText.html();
-    if (!html) {
+    if (!domVisibleContent) {
       if (!forceRender) return;
       contentToProcess = String($mesText.text() || '').trim();
     } else {
-      contentToProcess = decodeHtml(html);
+      contentToProcess = domVisibleContent;
     }
   }
 

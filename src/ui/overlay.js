@@ -1,10 +1,19 @@
 import { getTTSEnabled } from '../audio/tts-config.js';
-import { SCRIPT_NAME } from '../core/constants.js';
+import { CUSTOM_SKIN_ID, SCRIPT_NAME, TWILIGHT_FAMILY_SKIN_IDS } from '../core/constants.js';
+import { buildGalMobileMenuButtonsHtml, DEFAULT_GAL_MOBILE_MENU_ACTIONS } from '../core/custom-skin-footer-buttons.js';
 import { $, topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
+import { hasUiSkinProfileId } from '../db/ui-skin-profiles.js';
 import { pausePixiEffects, resizePixiEffects, resumePixiEffects } from '../effects/pixi-effect-manager.js';
 import { normalizeLocationStatusIconClass, normalizeTimeStatusIconClass } from '../utils/status-popup-icons.js';
+import {
+  applyTwilightSkinAssets,
+  buildTwilightOverlayHtml,
+  clearTwilightSkinAssets,
+  getTwilightOverlayClasses,
+  isTwilightSkinSelected,
+} from './skin-twilight.js';
 
 // ============================================
 // 全局覆盖层架构
@@ -18,6 +27,7 @@ let overlayHeightLockState = {
   lastOverlayHeight: 0,
 };
 const OVERLAY_HEIGHT_RECALC_THRESHOLD = 24;
+const BUILTIN_SKIN_CLASS_LIST = ['skin-ancient', 'skin-persona', 'skin-jrpg', 'skin-classic', ...TWILIGHT_FAMILY_SKIN_IDS];
 
 export function getCurrentDisplayMesId() {
   return currentDisplayMesId;
@@ -47,6 +57,29 @@ export function nextOverlayRenderToken(state) {
   return state.renderToken;
 }
 
+function syncOverlaySkinClass($overlay) {
+  if (!$overlay?.length) return;
+
+  const settings = getSettings();
+  const rawSkin = String(settings?.skin || 'none').trim();
+  BUILTIN_SKIN_CLASS_LIST.forEach(skinClass => $overlay.removeClass(skinClass));
+  $overlay.removeClass(CUSTOM_SKIN_ID);
+
+  if (!rawSkin || rawSkin === 'none' || rawSkin === 'skin-western') return;
+  if (hasUiSkinProfileId(rawSkin)) {
+    $overlay.addClass(CUSTOM_SKIN_ID);
+    return;
+  }
+  if (BUILTIN_SKIN_CLASS_LIST.includes(rawSkin)) {
+    $overlay.addClass(rawSkin);
+    if (isTwilightSkinSelected(rawSkin)) {
+      getTwilightOverlayClasses(rawSkin).forEach(skinClass => {
+        if (skinClass !== rawSkin) $overlay.addClass(skinClass);
+      });
+    }
+  }
+}
+
 export function scheduleOverlaySegmentDisplay(state, source = 'unknown') {
   if (!state) return Promise.resolve(false);
   const token = nextOverlayRenderToken(state);
@@ -57,28 +90,23 @@ export function scheduleOverlaySegmentDisplay(state, source = 'unknown') {
 
 // 延迟引用
 let _updateOverlaySegmentDisplayRef = null;
+let _applySettingsToUIRef = null;
 
-export function setOverlayRefs({ updateOverlaySegmentDisplay }) {
+export function setOverlayRefs({ updateOverlaySegmentDisplay, applySettingsToUI }) {
   if (updateOverlaySegmentDisplay) _updateOverlaySegmentDisplayRef = updateOverlaySegmentDisplay;
+  if (applySettingsToUI) _applySettingsToUIRef = applySettingsToUI;
 }
 
-/**
- * 创建或获取全局Galgame覆盖层
- */
-export function ensureGlobalOverlay() {
-  const settings = getSettings();
-  const targetDoc = topWindow.document;
-  let $overlay = $(targetDoc).find('#gal-global-overlay');
+function getOverlayShellType(rawSkin = getSettings()?.skin) {
+  return isTwilightSkinSelected(rawSkin) ? 'twilight' : 'default';
+}
 
-  if (!$overlay.length) {
-    const locationIconClass = normalizeLocationStatusIconClass(
-      topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS) || '',
-    );
-    const timeIconClass = normalizeTimeStatusIconClass(
-      topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS) || '',
-    );
-    const overlayHtml = `
-      <div id="gal-global-overlay">
+function buildDefaultOverlayInnerHtml({
+  settings,
+  locationIconClass,
+  timeIconClass,
+}) {
+  return `
         <!-- 地点弹窗二（仅展示，不作为弹窗入口） -->
         <div class="gal-status-bar-container">
           <div class="gal-location-bar" id="gal-location-bar" title="当前地点">
@@ -97,7 +125,7 @@ export function ensureGlobalOverlay() {
           <span>全屏</span>
         </button>
 
-        <div class="gal-game-container">
+        <div class="gal-game-container" data-skin-shell="default">
           <!-- 背景层 -->
           <div class="gal-layer-bg">
             <div class="gal-bg-layer gal-bg-base"></div>
@@ -116,7 +144,6 @@ export function ensureGlobalOverlay() {
             </div>
 
             <div class="gal-layer-effect-fg"></div>
-
             <!-- 对话框层 -->
             <div class="gal-dialog-layer">
               <button class="gal-sprite-toggle" title="显示/隐藏立绘">
@@ -157,7 +184,6 @@ export function ensureGlobalOverlay() {
                     <span class="gal-gen-dot"></span>
                   </div>
                 </div>
-
                 <div class="gal-bottom-toolbar">
                   <button class="gal-footer-btn" data-action="log" title="查看历史">
                     <i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span>
@@ -190,7 +216,7 @@ export function ensureGlobalOverlay() {
                     <i class="fa-solid fa-forward"></i> <span class="gal-btn-text">SKIP</span>
                   </button>
                   <button class="gal-pending-choices-btn" data-action="show-choices" title="有待选择的选项">
-                    <i class="fa-solid fa-list-check" style="font-size:1.1rem"></i> <span class="gal-btn-text">选项</span>
+                    <i class="fa-solid fa-list-check" style="font-size:1.1rem"></i> <span class="gal-btn-text">剧情选项</span>
                   </button>
                   <button class="gal-footer-btn-next" data-action="next" title="下一段">
                     <span class="gal-btn-text">NEXT</span> <i class="fa-solid fa-chevron-right"></i>
@@ -225,26 +251,125 @@ export function ensureGlobalOverlay() {
 
         <!-- 移动端上拉菜单（置于 overlay 顶层，避免被 overflow:hidden 裁剪） -->
         <div class="gal-mobile-menu" id="gal-mobile-menu">
-          <button class="gal-menu-btn" data-action="open-settings">
-              <i class="fa-solid fa-gear"></i> 设置
-          </button>
-          <button class="gal-menu-btn" data-action="log">
-              <i class="fa-solid fa-list-ul"></i> 历史
-          </button>
-          <button class="gal-menu-btn" data-action="view-original">
-              <i class="fa-solid fa-display"></i> 原界面
-          </button>
-          <button class="gal-menu-btn" data-action="save">
-              <i class="fa-solid fa-floppy-disk"></i> 存档
-          </button>
-          <button class="gal-menu-btn" data-action="load">
-              <i class="fa-solid fa-folder-open"></i> 读档
-          </button>
-          <button class="gal-menu-btn" data-action="timeline">
-              <i class="fa-solid fa-diagram-project"></i> 时间线
-          </button>
+          ${buildGalMobileMenuButtonsHtml(DEFAULT_GAL_MOBILE_MENU_ACTIONS)}
         </div>
-      </div>
+  `;
+}
+
+function buildOverlayInnerHtml({ settings, locationIconClass, timeIconClass }) {
+  if (isTwilightSkinSelected(settings?.skin)) {
+    return buildTwilightOverlayHtml({
+      locationIconClass,
+      timeIconClass,
+      speakerGlow: Boolean(settings?.speakerGlow),
+      speakerBubble: Boolean(settings?.speakerBubble),
+      ttsEnabled: getTTSEnabled(),
+    });
+  }
+  return buildDefaultOverlayInnerHtml({
+    settings,
+    locationIconClass,
+    timeIconClass,
+  });
+}
+
+function syncOverlayThemeAssets($overlay, rawSkin) {
+  if (!$overlay?.length) return;
+  if (isTwilightSkinSelected(rawSkin)) {
+    applyTwilightSkinAssets($overlay[0]);
+    return;
+  }
+  clearTwilightSkinAssets($overlay[0]);
+}
+
+function snapshotOverlayState($overlay) {
+  if (!$overlay?.length) return null;
+  return {
+    mesId: String($overlay.find('.gal-game-container').attr('data-mes-id') || ''),
+    nameText: $overlay.find('.gal-name-badge span').text(),
+    nameBadgeClass: String($overlay.find('.gal-name-badge').attr('class') || ''),
+    dialogHtml: $overlay.find('.gal-dialog-text').html() || '',
+    generatingActive: $overlay.find('#gal-generating-indicator').hasClass('active'),
+    generatingStatus: $overlay.find('#gal-gen-status').text(),
+    progressStyle: String($overlay.find('.gal-progress-bar').attr('style') || ''),
+    locationText: $overlay.find('#gal-location-text').text(),
+    timeText: $overlay.find('#gal-time-text').text(),
+    locationTitle: String($overlay.find('#gal-location-bar').attr('title') || ''),
+    timeTitle: String($overlay.find('#gal-time-bar').attr('title') || ''),
+    hasPendingChoices: $overlay.find('.gal-pending-choices-btn').hasClass('show'),
+  };
+}
+
+function restoreOverlayState($overlay, snapshot) {
+  if (!$overlay?.length || !snapshot) return;
+
+  const $gameContainer = $overlay.find('.gal-game-container');
+  if (snapshot.mesId) {
+    $gameContainer.attr('data-mes-id', snapshot.mesId);
+  }
+
+  const $nameBadge = $overlay.find('.gal-name-badge');
+  const $nameText = $nameBadge.find('span');
+  if (snapshot.nameText) {
+    $nameText.text(snapshot.nameText);
+  }
+  if (snapshot.nameBadgeClass.includes('gal-narrator-label')) {
+    $nameBadge.addClass('gal-narrator-label');
+  }
+
+  if (snapshot.dialogHtml) {
+    $overlay.find('.gal-dialog-text').html(snapshot.dialogHtml);
+  }
+
+  if (snapshot.generatingActive) {
+    $overlay.find('#gal-generating-indicator').addClass('active');
+  }
+  if (snapshot.generatingStatus) {
+    $overlay.find('#gal-gen-status').text(snapshot.generatingStatus);
+  }
+  if (snapshot.progressStyle) {
+    $overlay.find('.gal-progress-bar').attr('style', snapshot.progressStyle);
+  }
+
+  $overlay.find('#gal-location-text').text(snapshot.locationText || '--');
+  $overlay.find('#gal-time-text').text(snapshot.timeText || '--');
+
+  const $locationBar = $overlay.find('#gal-location-bar');
+  const $timeBar = $overlay.find('#gal-time-bar');
+  if (snapshot.locationTitle) {
+    $locationBar.attr('title', snapshot.locationTitle);
+  }
+  if (snapshot.timeTitle) {
+    $timeBar.attr('title', snapshot.timeTitle);
+  }
+
+  if (snapshot.hasPendingChoices) {
+    $overlay.find('.gal-pending-choices-btn').addClass('show');
+  }
+}
+
+/**
+ * 创建或获取全局Galgame覆盖层
+ */
+export function ensureGlobalOverlay() {
+  const settings = getSettings();
+  const targetDoc = topWindow.document;
+  let $overlay = $(targetDoc).find('#gal-global-overlay');
+  const locationIconClass = normalizeLocationStatusIconClass(
+    topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_LOCATION_ICON_CLASS) || '',
+  );
+  const timeIconClass = normalizeTimeStatusIconClass(
+    topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS) || '',
+  );
+  const shellType = getOverlayShellType(settings?.skin);
+
+  if (!$overlay.length) {
+    const overlayHtml = `
+      <div id="gal-global-overlay">${buildOverlayInnerHtml({
+        settings,
+        locationIconClass,
+        timeIconClass,
+      })}</div>
     `;
 
     const $chat = $(targetDoc).find('#chat');
@@ -254,7 +379,20 @@ export function ensureGlobalOverlay() {
       $(targetDoc.body).append(overlayHtml);
     }
     $overlay = $(targetDoc).find('#gal-global-overlay');
+  } else {
+    const currentShell = String($overlay.find('.gal-game-container').attr('data-skin-shell') || 'default').trim() || 'default';
+    if (currentShell !== shellType) {
+      const overlayStateSnapshot = snapshotOverlayState($overlay);
+      $overlay.html(buildOverlayInnerHtml({
+        settings,
+        locationIconClass,
+        timeIconClass,
+      }));
+      restoreOverlayState($overlay, overlayStateSnapshot);
+    }
   }
+  syncOverlayThemeAssets($overlay, settings?.skin);
+  syncOverlaySkinClass($overlay);
   return $overlay;
 }
 
@@ -437,6 +575,8 @@ export function adjustToolbarForSpace() {
 export function showGlobalOverlay() {
   const $overlay = ensureGlobalOverlay();
   if ($overlay.length) {
+    const wasActive = $overlay.hasClass('active');
+    syncOverlaySkinClass($overlay);
     $overlay.addClass('active');
     resumePixiEffects();
     setChatScrollLock(true);
@@ -447,6 +587,14 @@ export function showGlobalOverlay() {
       adjustGameContentScale();
       adjustToolbarForSpace();
       resizePixiEffects();
+      if (!wasActive && _applySettingsToUIRef) {
+        // Fallback startup paths may only show the overlay, so reapply UI settings here as well.
+        try {
+          _applySettingsToUIRef();
+        } catch (error) {
+          console.warn(`[${SCRIPT_NAME}] showGlobalOverlay reapply settings failed:`, error);
+        }
+      }
       // 确保 overlay 在 #chat 的可视区域内（overlay 在 #chat 末尾，可能被滚动裁剪）
       const chatEl = topWindow.document.getElementById('chat');
       if (chatEl) {

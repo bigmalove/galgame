@@ -1,7 +1,7 @@
 import { TTSManager } from '../audio/tts-manager.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $ } from '../core/env.js';
-import { getSettings } from '../core/settings.js';
+import { getCurrentCharacterName, getSettings } from '../core/settings.js';
 import { getGalgameChoicesVisible, getIsEnabled, getPendingOptions } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { applyPixiEffectOps, clearAllPixiEffects, mountPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
@@ -10,7 +10,7 @@ import { checkSillyTavernGenerating, getIsGeneratingResponse, resetGenerationSta
 import { RE_GAL_TAGS, parseGalgameContent } from '../logic/parser.js';
 import { SpriteManager } from '../sprite/sprite-manager.js';
 import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
-import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
+import { getFormattedSwipeContent, getMesTextContentForGalgame, getRawMessageContent } from '../utils/html.js';
 import { updateLocationTimeDisplay } from '../utils/location-time.js';
 import { stopNextBtnAnimation, updateNextBtnForGeneratingState } from './next-btn.js';
 import { ensureGlobalOverlay, getCurrentDisplayMesId, nextOverlayRenderToken, setCurrentDisplayMesId, showGlobalOverlay } from './overlay.js';
@@ -22,6 +22,7 @@ import { cancelTypewriter, renderTypewriterText } from './typewriter.js';
 
 const messageSegmentState = GalgameStore.cache.segments;
 const TYPEWRITER_INSTANT_SOURCES = new Set(['skip', 'rewind', 'auto-play']);
+const DEFAULT_TWILIGHT_BRAND = 'TWILIGHT';
 
 function shouldUseTypewriterForSegment(segment) {
   return segment?.type === 'dialogue' || segment?.type === 'narration';
@@ -29,6 +30,15 @@ function shouldUseTypewriterForSegment(segment) {
 
 function shouldForceInstantBySource(source) {
   return TYPEWRITER_INSTANT_SOURCES.has(String(source || ''));
+}
+
+function syncTwilightBrandText($overlay) {
+  if (!$overlay?.length) return;
+  const nextBrand = getCurrentCharacterName() || DEFAULT_TWILIGHT_BRAND;
+  const $brand = $overlay.find('.gal-twilight-brand');
+  if ($brand.length) {
+    $brand.text(nextBrand);
+  }
 }
 
 // ============================================
@@ -373,6 +383,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   const $nameBadge = $overlay.find('.gal-name-badge');
   const isStyled = displaySegment.type === 'styled';
   cancelTypewriter();
+  syncTwilightBrandText($overlay);
 
   if (isCg) {
     setStyledPresentationMode($overlay, false);
@@ -492,6 +503,7 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
 
   const $nameBadge = $overlay.find('.gal-name-badge');
   cancelTypewriter();
+  syncTwilightBrandText($overlay);
 
   if (isCg) {
     setStyledPresentationMode($overlay, false);
@@ -544,7 +556,18 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
 
   const isEnd = currentIndex >= total - 1;
   const $nextBtn = $overlay.find('[data-action="next"]');
+  const $twilightNextIndicator = $overlay.find('.gal-twilight-dialog-next-indicator');
   console.log(`[${SCRIPT_NAME}] 更新NEXT按钮 - isEnd=${isEnd}, isGeneratingResponse=${getIsGeneratingResponse()}`);
+
+  if ($twilightNextIndicator.length) {
+    if (isEnd) {
+      $twilightNextIndicator.attr('data-state', 'end');
+      $twilightNextIndicator.html('<i class="fa-solid fa-flag-checkered"></i>');
+    } else {
+      $twilightNextIndicator.attr('data-state', 'next');
+      $twilightNextIndicator.html('<i class="fa-solid fa-chevron-down"></i>');
+    }
+  }
 
   if (isEnd) {
     if (getIsGeneratingResponse() && !checkSillyTavernGenerating()) {
@@ -610,15 +633,25 @@ export async function refreshOverlayFromLastAiMessage() {
   }
 
   const mesId = $lastAiMes.attr('mesid');
+  const $mesText = $lastAiMes.find('.mes_text');
+  const domVisibleContent = getMesTextContentForGalgame($mesText[0]);
+
   let contentToProcess = getFormattedSwipeContent(mesId);
   if (!contentToProcess) {
-    contentToProcess = getRawMessageContent(mesId);
+    const rawMessageContent = getRawMessageContent(mesId);
+    if (rawMessageContent) {
+      if (RE_GAL_TAGS.test(rawMessageContent)) {
+        contentToProcess = rawMessageContent;
+      } else if (/<[a-z][\s\S]*?>/i.test(rawMessageContent) && domVisibleContent) {
+        contentToProcess = domVisibleContent;
+      } else {
+        contentToProcess = rawMessageContent;
+      }
+    }
   }
   if (!contentToProcess) {
-    const $mesText = $lastAiMes.find('.mes_text');
-    const html = $mesText.html();
-    if (!html) return;
-    contentToProcess = decodeHtml(html);
+    contentToProcess = domVisibleContent;
+    if (!contentToProcess) return;
   }
 
   const hasGalTags = RE_GAL_TAGS.test(contentToProcess);

@@ -1,6 +1,6 @@
 import { BGMManager } from './audio/bgm-manager.js';
 import { TTSManager } from './audio/tts-manager.js';
-import { CUSTOM_SKIN_ID, SCRIPT_NAME, VERSION } from './core/constants.js';
+import { CUSTOM_SKIN_ID, SCRIPT_NAME, TWILIGHT_FAMILY_SKIN_IDS, VERSION } from './core/constants.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
 import { $, topWindow } from './core/env.js';
 import { ensureTitleScreenSettings, getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings, saveSettings, setCurrentCharEnabled } from './core/settings.js';
@@ -44,7 +44,7 @@ let initStarted = false;
 
 function sanitizeLoadedSkinSetting(settings) {
   const rawSkin = String(settings?.skin || 'none').trim();
-  const builtinSkinSet = new Set(['none', 'skin-ancient', 'skin-persona', 'skin-jrpg', 'skin-classic']);
+  const builtinSkinSet = new Set(['none', 'skin-ancient', 'skin-persona', 'skin-jrpg', 'skin-classic', ...TWILIGHT_FAMILY_SKIN_IDS]);
   if (builtinSkinSet.has(rawSkin)) return false;
   if (hasUiSkinProfileId(rawSkin)) return false;
   if (rawSkin === 'skin-western' || rawSkin === CUSTOM_SKIN_ID || rawSkin) {

@@ -30106,8 +30106,7 @@ ${normalizedSource}`;
     display: none !important;
 }
 
-#gal-global-overlay.skin-twilight .gal-fullscreen-btn,
-#gal-global-overlay.skin-twilight .gal-bgm-widget {
+#gal-global-overlay.skin-twilight .gal-fullscreen-btn {
     display: none !important;
 }
 
@@ -30307,6 +30306,90 @@ ${normalizedSource}`;
     justify-content: flex-end;
     gap: 6px;
     flex: 0 0 auto;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-widget {
+    display: flex !important;
+    top: calc(var(--twilight-header-height) + 16px) !important;
+    left: 18px !important;
+    right: auto !important;
+    z-index: 12 !important;
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 9px !important;
+    gap: 0.4rem !important;
+    border-radius: 999px !important;
+    max-width: 30px !important;
+    background:
+        linear-gradient(180deg, rgba(20, 22, 32, 0.74) 0%, rgba(10, 12, 18, 0.84) 100%) !important;
+    border: 1px solid var(--twilight-glass-border) !important;
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.14) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: rgba(245, 240, 232, 0.88) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-widget:hover {
+    max-width: 30px !important;
+    background:
+        linear-gradient(180deg, rgba(26, 29, 41, 0.78) 0%, rgba(12, 14, 22, 0.88) 100%) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-widget.active,
+#gal-global-overlay.skin-twilight .gal-bgm-widget.active:hover {
+    max-width: min(12.5rem, calc(100vw - 2rem)) !important;
+    background:
+        linear-gradient(180deg, rgba(22, 24, 36, 0.88) 0%, rgba(10, 12, 18, 0.94) 100%) !important;
+    box-shadow:
+        0 16px 30px rgba(0, 0, 0, 0.16),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-icon {
+    min-width: 0.9rem;
+    font-size: 0.92rem !important;
+    color: var(--twilight-accent) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-info {
+    gap: 2px;
+    margin-right: 0 !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-title {
+    color: var(--twilight-accent) !important;
+    font-family: var(--twilight-label) !important;
+    font-size: 0.68rem !important;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-ctrl {
+    gap: 0.4rem;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-btn {
+    width: 0.85rem;
+    font-size: 0.72rem;
+    color: rgba(245, 240, 232, 0.82) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-btn:hover {
+    color: var(--twilight-accent) !important;
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-slider {
+    width: 2.9rem;
+    height: 0.2rem;
+    background: rgba(255, 255, 255, 0.22);
+}
+
+#gal-global-overlay.skin-twilight .gal-bgm-slider::-webkit-slider-thumb {
+    width: 0.5rem;
+    height: 0.5rem;
+    background: var(--twilight-accent);
 }
 
 #gal-global-overlay.skin-twilight .gal-twilight-header-actions .gal-status-popup-trigger,
@@ -32926,6 +33009,37 @@ ${normalizedSource}`;
         min-height: 26px !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
         background: rgba(12, 14, 22, 0.18) !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bgm-widget {
+        top: calc(var(--twilight-header-height) + 12px) !important;
+        left: 12px !important;
+        min-height: 26px !important;
+        height: 26px !important;
+        max-width: 26px !important;
+        padding: 0 7px !important;
+        gap: 0.32rem !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bgm-widget:hover {
+        max-width: 26px !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bgm-widget.active,
+    #gal-global-overlay.skin-twilight .gal-bgm-widget.active:hover {
+        max-width: min(11rem, calc(100vw - 1.5rem)) !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bgm-icon {
+        font-size: 0.82rem !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bgm-title {
+        font-size: 0.62rem !important;
+    }
+
+    #gal-global-overlay.skin-twilight .gal-bgm-slider {
+        width: 2.35rem;
     }
 
     #gal-global-overlay.skin-twilight[class*="skin-"] .gal-twilight-dialog-layer {

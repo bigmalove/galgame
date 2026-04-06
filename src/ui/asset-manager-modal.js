@@ -2706,6 +2706,7 @@ function bindPackSelectorEvents($modal, activeTab) {
 }
 
 function bindExportImportEvents($modal, activeTab) {
+  const settings = getSettings();
   $modal.find('#gal-export-dropdown-btn').on('click', function (e) {
     e.stopPropagation();
     $('#gal-import-menu').hide();

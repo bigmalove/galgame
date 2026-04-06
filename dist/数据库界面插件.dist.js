@@ -8414,9 +8414,9 @@
     return getMapSettings();
   }
   function getMapCoords(regionKey) {
-    const settings2 = ensureMapSettings();
+    const settings = ensureMapSettings();
     const key = String(regionKey || "").trim() || "default-region";
-    return _safeObject(settings2.mapCoordsByRegion[key]);
+    return _safeObject(settings.mapCoordsByRegion[key]);
   }
   function setMapCoord(regionKey, detailedLocation, coord) {
     const key = String(regionKey || "").trim() || "default-region";
@@ -11685,8 +11685,8 @@ ${ssml}`;
   }
   function getTTSProvider() {
     try {
-      const settings2 = getSettings();
-      return settings2?.ttsProvider || TTS_PROVIDER.LITTLEWHITEBOX;
+      const settings = getSettings();
+      return settings?.ttsProvider || TTS_PROVIDER.LITTLEWHITEBOX;
     } catch (e) {
       return TTS_PROVIDER.LITTLEWHITEBOX;
     }
@@ -11711,8 +11711,8 @@ ${ssml}`;
       voices: []
     };
     try {
-      const settings2 = getSettings();
-      const cfg = settings2?.gptSoVits || {};
+      const settings = getSettings();
+      const cfg = settings?.gptSoVits || {};
       const merged = Object.assign(
         Object.assign({}, defaults3),
         cfg,
@@ -14425,14 +14425,14 @@ ${ssml}`;
     return Math.max(min4, Math.min(max5, value));
   }
   function getEffectSettings() {
-    const settings2 = getSettings() || {};
-    const quality = QUALITY_PROFILES[settings2.effectsQuality] ? settings2.effectsQuality : DEFAULT_EFFECT_SETTINGS.effectsQuality;
-    const parsedMax = Number.parseInt(settings2.effectsMaxActive, 10);
+    const settings = getSettings() || {};
+    const quality = QUALITY_PROFILES[settings.effectsQuality] ? settings.effectsQuality : DEFAULT_EFFECT_SETTINGS.effectsQuality;
+    const parsedMax = Number.parseInt(settings.effectsMaxActive, 10);
     const effectsMaxActive = Number.isFinite(parsedMax) ? clamp2(parsedMax, 1, 6) : DEFAULT_EFFECT_SETTINGS.effectsMaxActive;
     return {
-      effectsEnabled: settings2.effectsEnabled !== false,
+      effectsEnabled: settings.effectsEnabled !== false,
       effectsQuality: quality,
-      effectsAutoClearOnSceneChange: settings2.effectsAutoClearOnSceneChange !== false,
+      effectsAutoClearOnSceneChange: settings.effectsAutoClearOnSceneChange !== false,
       effectsMaxActive
     };
   }
@@ -14568,7 +14568,7 @@ ${ssml}`;
     bindTicker("fg", effectState.fgApp);
     effectState.tickerBound = true;
   }
-  function applySingleOp(op, settings2, quality) {
+  function applySingleOp(op, settings, quality) {
     const action = String(op?.action || "").trim();
     if (!action) return;
     if (action === "init") {
@@ -14595,7 +14595,7 @@ ${ssml}`;
       return;
     }
     if (name !== "screenFlash") {
-      prunePersistentEffects(settings2.effectsMaxActive - 1);
+      prunePersistentEffects(settings.effectsMaxActive - 1);
     }
     const { width: width2, height: height2 } = getLayerSize(app);
     const instance = createPixiEffectInstance(name, { PIXI, width: width2, height: height2, quality });
@@ -14616,8 +14616,8 @@ ${ssml}`;
     if (!overlayEl) return false;
     const { bgHost, fgHost } = ensureEffectHosts(overlayEl);
     if (!bgHost || !fgHost) return false;
-    const settings2 = getEffectSettings();
-    const quality = getQualityProfile(settings2.effectsQuality);
+    const settings = getEffectSettings();
+    const quality = getQualityProfile(settings.effectsQuality);
     if (effectState.mounted && effectState.bgHost === bgHost && effectState.fgHost === fgHost) {
       return true;
     }
@@ -14644,18 +14644,18 @@ ${ssml}`;
   async function applyPixiEffectOps(ops = [], overlayLike = null) {
     const list = Array.isArray(ops) ? ops : [];
     if (list.length === 0) return true;
-    const settings2 = getEffectSettings();
-    if (!settings2.effectsEnabled) {
+    const settings = getEffectSettings();
+    if (!settings.effectsEnabled) {
       clearAllPixiEffects();
       return false;
     }
     const mounted = await mountPixiEffects(overlayLike);
     if (!mounted) return false;
-    const quality = getQualityProfile(settings2.effectsQuality);
+    const quality = getQualityProfile(settings.effectsQuality);
     for (const op of list) {
-      applySingleOp(op, settings2, quality);
+      applySingleOp(op, settings, quality);
     }
-    prunePersistentEffects(settings2.effectsMaxActive);
+    prunePersistentEffects(settings.effectsMaxActive);
     return true;
   }
   function resizePixiEffects() {
@@ -14696,23 +14696,23 @@ ${ssml}`;
   }
   function resumePixiEffects() {
     if (!effectState.mounted) return;
-    const settings2 = getEffectSettings();
-    if (!settings2.effectsEnabled) return;
+    const settings = getEffectSettings();
+    if (!settings.effectsEnabled) return;
     effectState.bgApp?.ticker?.start();
     effectState.fgApp?.ticker?.start();
   }
   function syncPixiEffectsSettings() {
     if (!effectState.mounted) return;
-    const settings2 = getEffectSettings();
-    const quality = getQualityProfile(settings2.effectsQuality);
+    const settings = getEffectSettings();
+    const quality = getQualityProfile(settings.effectsQuality);
     if (effectState.bgApp?.ticker) {
       effectState.bgApp.ticker.maxFPS = quality.targetFps;
     }
     if (effectState.fgApp?.ticker) {
       effectState.fgApp.ticker.maxFPS = quality.targetFps;
     }
-    prunePersistentEffects(settings2.effectsMaxActive);
-    if (!settings2.effectsEnabled) {
+    prunePersistentEffects(settings.effectsMaxActive);
+    if (!settings.effectsEnabled) {
       clearAllPixiEffects();
       pausePixiEffects();
       return;
@@ -15076,8 +15076,8 @@ ${ssml}`;
   }
   function syncOverlaySkinClass($overlay) {
     if (!$overlay?.length) return;
-    const settings2 = getSettings();
-    const rawSkin = String(settings2?.skin || "none").trim();
+    const settings = getSettings();
+    const rawSkin = String(settings?.skin || "none").trim();
     BUILTIN_SKIN_CLASS_LIST.forEach((skinClass) => $overlay.removeClass(skinClass));
     $overlay.removeClass(CUSTOM_SKIN_ID);
     if (!rawSkin || rawSkin === "none" || rawSkin === "skin-western") return;
@@ -15112,7 +15112,7 @@ ${ssml}`;
     return isTwilightSkinSelected(rawSkin) ? "twilight" : "default";
   }
   function buildDefaultOverlayInnerHtml({
-    settings: settings2,
+    settings,
     locationIconClass,
     timeIconClass
   }) {
@@ -15147,7 +15147,7 @@ ${ssml}`;
           <!-- 游戏内容层 -->
           <div class="gal-game-content">
             <!-- 立绘层 -->
-            <div class="gal-layer-character${settings2.speakerGlow ? " glow-enabled" : ""}${settings2.speakerBubble ? " bubble-enabled" : ""}${getTTSEnabled() ? " tts-mode-enabled" : ""}">
+            <div class="gal-layer-character${settings.speakerGlow ? " glow-enabled" : ""}${settings.speakerBubble ? " bubble-enabled" : ""}${getTTSEnabled() ? " tts-mode-enabled" : ""}">
               <div class="gal-char-slot slot-left"></div>
               <div class="gal-char-slot slot-center"></div>
               <div class="gal-char-slot slot-right"></div>
@@ -15265,18 +15265,18 @@ ${ssml}`;
         </div>
   `;
   }
-  function buildOverlayInnerHtml({ settings: settings2, locationIconClass, timeIconClass }) {
-    if (isTwilightSkinSelected(settings2?.skin)) {
+  function buildOverlayInnerHtml({ settings, locationIconClass, timeIconClass }) {
+    if (isTwilightSkinSelected(settings?.skin)) {
       return buildTwilightOverlayHtml({
         locationIconClass,
         timeIconClass,
-        speakerGlow: Boolean(settings2?.speakerGlow),
-        speakerBubble: Boolean(settings2?.speakerBubble),
+        speakerGlow: Boolean(settings?.speakerGlow),
+        speakerBubble: Boolean(settings?.speakerBubble),
         ttsEnabled: getTTSEnabled()
       });
     }
     return buildDefaultOverlayInnerHtml({
-      settings: settings2,
+      settings,
       locationIconClass,
       timeIconClass
     });
@@ -15347,7 +15347,7 @@ ${ssml}`;
     }
   }
   function ensureGlobalOverlay() {
-    const settings2 = getSettings();
+    const settings = getSettings();
     const targetDoc = topWindow.document;
     let $overlay = $2(targetDoc).find("#gal-global-overlay");
     const locationIconClass = normalizeLocationStatusIconClass(
@@ -15356,11 +15356,11 @@ ${ssml}`;
     const timeIconClass = normalizeTimeStatusIconClass(
       topWindow.localStorage.getItem(GalgameStore.STORAGE_KEYS.CUSTOM_TIME_ICON_CLASS) || ""
     );
-    const shellType = getOverlayShellType(settings2?.skin);
+    const shellType = getOverlayShellType(settings?.skin);
     if (!$overlay.length) {
       const overlayHtml = `
       <div id="gal-global-overlay">${buildOverlayInnerHtml({
-        settings: settings2,
+        settings,
         locationIconClass,
         timeIconClass
       })}</div>
@@ -15377,14 +15377,14 @@ ${ssml}`;
       if (currentShell !== shellType) {
         const overlayStateSnapshot = snapshotOverlayState($overlay);
         $overlay.html(buildOverlayInnerHtml({
-          settings: settings2,
+          settings,
           locationIconClass,
           timeIconClass
         }));
         restoreOverlayState($overlay, overlayStateSnapshot);
       }
     }
-    syncOverlayThemeAssets($overlay, settings2?.skin);
+    syncOverlayThemeAssets($overlay, settings?.skin);
     syncOverlaySkinClass($overlay);
     return $overlay;
   }
@@ -16764,19 +16764,19 @@ ${ssml}`;
   }
   function getCharacterUseLive2D(characterId) {
     try {
-      const settings2 = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
+      const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
       const rawKey = String(characterId ?? "").trim();
       if (!rawKey) return false;
-      if (Object.prototype.hasOwnProperty.call(settings2, rawKey)) {
-        return !!settings2[rawKey];
+      if (Object.prototype.hasOwnProperty.call(settings, rawKey)) {
+        return !!settings[rawKey];
       }
-      const resolvedKey = resolveCharacterIdByKeywords(rawKey, Object.keys(settings2));
-      if (resolvedKey && Object.prototype.hasOwnProperty.call(settings2, resolvedKey)) {
-        return !!settings2[resolvedKey];
+      const resolvedKey = resolveCharacterIdByKeywords(rawKey, Object.keys(settings));
+      if (resolvedKey && Object.prototype.hasOwnProperty.call(settings, resolvedKey)) {
+        return !!settings[resolvedKey];
       }
       const normalizedTarget = normalizeCharacterIdKey2(characterId);
       if (!normalizedTarget) return false;
-      for (const [key, value] of Object.entries(settings2)) {
+      for (const [key, value] of Object.entries(settings)) {
         if (normalizeCharacterIdKey2(key) === normalizedTarget) {
           return !!value;
         }
@@ -16788,24 +16788,24 @@ ${ssml}`;
   }
   function setCharacterUseLive2D(characterId, useLive2D) {
     try {
-      const settings2 = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
+      const settings = JSON.parse(localStorage.getItem(CHAR_USE_LIVE2D_KEY) || "{}");
       const rawKey = String(characterId ?? "").trim();
       if (!rawKey) return;
       const candidateIds = Array.from(/* @__PURE__ */ new Set([
-        ...Object.keys(settings2),
+        ...Object.keys(settings),
         ...Object.keys(getAllCharacterNameKeywords()),
         rawKey
       ]));
       const resolvedKey = resolveCharacterIdByKeywords(rawKey, candidateIds) || rawKey;
       const normalizedKey = normalizeCharacterIdKey2(resolvedKey);
-      settings2[resolvedKey] = !!useLive2D;
+      settings[resolvedKey] = !!useLive2D;
       if (resolvedKey !== rawKey) {
-        delete settings2[rawKey];
+        delete settings[rawKey];
       }
       if (normalizedKey && normalizedKey !== resolvedKey) {
-        settings2[normalizedKey] = !!useLive2D;
+        settings[normalizedKey] = !!useLive2D;
       }
-      localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings2));
+      localStorage.setItem(CHAR_USE_LIVE2D_KEY, JSON.stringify(settings));
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 保存 Live2D 设置失败:`, e);
     }
@@ -17643,14 +17643,14 @@ ${ssml}`;
     saveCharAppearancePrompts(prompts);
   }
   function getBananaCharacterAppearances() {
-    const settings2 = getSettings();
-    const list = settings2.bananaImageGen?.characterAppearances;
+    const settings = getSettings();
+    const list = settings.bananaImageGen?.characterAppearances;
     return Array.isArray(list) ? list : [];
   }
   function setBananaCharacterAppearances(list) {
-    const settings2 = getSettings();
-    if (!settings2.bananaImageGen) settings2.bananaImageGen = {};
-    settings2.bananaImageGen.characterAppearances = Array.isArray(list) ? list : [];
+    const settings = getSettings();
+    if (!settings.bananaImageGen) settings.bananaImageGen = {};
+    settings.bananaImageGen.characterAppearances = Array.isArray(list) ? list : [];
     saveSettings();
   }
   function buildBananaAppearancePromptText() {
@@ -17785,15 +17785,15 @@ ${lines.join("\n")}`;
     }
   }
   function getComfyUISettings() {
-    const settings2 = getSettings();
-    if (!settings2.comfyui) {
-      settings2.comfyui = Object.assign({}, DEFAULT_COMFYUI_SETTINGS);
+    const settings = getSettings();
+    if (!settings.comfyui) {
+      settings.comfyui = Object.assign({}, DEFAULT_COMFYUI_SETTINGS);
     }
-    return settings2.comfyui;
+    return settings.comfyui;
   }
   function saveComfyUISettings(newSettings) {
-    const settings2 = getSettings();
-    settings2.comfyui = newSettings;
+    const settings = getSettings();
+    settings.comfyui = newSettings;
     saveSettings();
   }
   function getComfyWorkflows() {
@@ -17820,8 +17820,8 @@ ${lines.join("\n")}`;
     lastRequestTime: 0,
     minRequestInterval: 1400,
     getSettings() {
-      const settings2 = getSettings();
-      return settings2.wallhaven || {};
+      const settings = getSettings();
+      return settings.wallhaven || {};
     },
     buildSearchQuery(tags, options2 = {}) {
       const ws = this.getSettings();
@@ -23518,11 +23518,11 @@ ${lines.join("\n")}`;
       candidates.push(obj);
     };
     const motionManager = model?.internalModel?.motionManager;
-    const settings2 = model?.internalModel?.settings;
-    add3(settings2);
-    add3(settings2?.json);
-    add3(settings2?.rawSettings);
-    add3(settings2?.modelJson);
+    const settings = model?.internalModel?.settings;
+    add3(settings);
+    add3(settings?.json);
+    add3(settings?.rawSettings);
+    add3(settings?.modelJson);
     add3(motionManager?.settings);
     add3(motionManager?.settings?.json);
     add3(motionManager?.settings?.rawSettings);
@@ -23557,31 +23557,31 @@ ${lines.join("\n")}`;
     pushFromContainer(expressionManager?.definitions, "definition");
     pushFromContainer(expressionManager?.expressions, "expression");
     const settingsCandidates = collectSettingsCandidates(model);
-    for (const settings3 of settingsCandidates) {
-      pushFromContainer(settings3?.expressions, "settings_expr");
-      pushFromContainer(settings3?.Expressions, "settings_expr");
-      pushFromContainer(settings3?.FileReferences?.Expressions, "file_ref_expr");
+    for (const settings2 of settingsCandidates) {
+      pushFromContainer(settings2?.expressions, "settings_expr");
+      pushFromContainer(settings2?.Expressions, "settings_expr");
+      pushFromContainer(settings2?.FileReferences?.Expressions, "file_ref_expr");
     }
-    const settings2 = model?.internalModel?.settings;
-    if (settings2 && typeof settings2 === "object") {
-      if (typeof settings2.getExpressionCount === "function") {
+    const settings = model?.internalModel?.settings;
+    if (settings && typeof settings === "object") {
+      if (typeof settings.getExpressionCount === "function") {
         let count = 0;
         try {
-          count = Number(settings2.getExpressionCount()) || 0;
+          count = Number(settings.getExpressionCount()) || 0;
         } catch (e) {
         }
         count = Math.max(0, Math.min(count, 1e3));
         for (let i = 0; i < count; i++) {
           let name = "";
-          if (typeof settings2.getExpressionName === "function") {
+          if (typeof settings.getExpressionName === "function") {
             try {
-              name = String(settings2.getExpressionName(i) ?? "").trim();
+              name = String(settings.getExpressionName(i) ?? "").trim();
             } catch (e) {
             }
           }
-          if (!name && typeof settings2.getExpressionFile === "function") {
+          if (!name && typeof settings.getExpressionFile === "function") {
             try {
-              name = normalizeFileStem(settings2.getExpressionFile(i));
+              name = normalizeFileStem(settings.getExpressionFile(i));
             } catch (e) {
             }
           }
@@ -23605,29 +23605,29 @@ ${lines.join("\n")}`;
     pushFromObject(motionManager?.groups);
     pushFromObject(motionManager?.definitions);
     const settingsCandidates = collectSettingsCandidates(model);
-    for (const settings3 of settingsCandidates) {
-      pushFromObject(settings3?.motions);
-      pushFromObject(settings3?.Motions);
-      pushFromObject(settings3?.FileReferences?.Motions);
+    for (const settings2 of settingsCandidates) {
+      pushFromObject(settings2?.motions);
+      pushFromObject(settings2?.Motions);
+      pushFromObject(settings2?.FileReferences?.Motions);
     }
-    const settings2 = model?.internalModel?.settings;
-    if (settings2 && typeof settings2 === "object") {
-      if (typeof settings2.getMotionGroupCount === "function" && typeof settings2.getMotionGroupName === "function") {
+    const settings = model?.internalModel?.settings;
+    if (settings && typeof settings === "object") {
+      if (typeof settings.getMotionGroupCount === "function" && typeof settings.getMotionGroupName === "function") {
         let count = 0;
         try {
-          count = Number(settings2.getMotionGroupCount()) || 0;
+          count = Number(settings.getMotionGroupCount()) || 0;
         } catch (e) {
         }
         count = Math.max(0, Math.min(count, 1e3));
         for (let i = 0; i < count; i++) {
           try {
-            uniquePush(groupNames, seen, String(settings2.getMotionGroupName(i) ?? ""));
+            uniquePush(groupNames, seen, String(settings.getMotionGroupName(i) ?? ""));
           } catch (e) {
           }
         }
-      } else if (typeof settings2.getMotionGroupNames === "function") {
+      } else if (typeof settings.getMotionGroupNames === "function") {
         try {
-          const names = settings2.getMotionGroupNames();
+          const names = settings.getMotionGroupNames();
           if (Array.isArray(names)) {
             for (const name of names) uniquePush(groupNames, seen, name);
           }
@@ -26006,7 +26006,7 @@ ${lines.join("\n")}`;
         this._refreshProviderState();
       }
       if (!this.enabled) return;
-      const settings2 = getSettings();
+      const settings = getSettings();
       const ttsConfig = segment.tts || {};
       const speakerName = String(segment.speaker || "").trim();
       const resolvedSpeakerName = resolveTTSCharacterId(speakerName);
@@ -26016,7 +26016,7 @@ ${lines.join("\n")}`;
       if (boundVoice) {
         voiceName = boundVoice;
       } else if (requestedVoiceTag === "男声" || requestedVoiceTag === "女声") {
-        const voicePool = requestedVoiceTag === "男声" ? settings2.ttsDefaultMaleVoices : settings2.ttsDefaultFemaleVoices;
+        const voicePool = requestedVoiceTag === "男声" ? settings.ttsDefaultMaleVoices : settings.ttsDefaultFemaleVoices;
         let providerVoices = [];
         try {
           providerVoices = await getTTSVoiceListAsync();
@@ -26036,10 +26036,10 @@ ${lines.join("\n")}`;
           console.log(`[${SCRIPT_NAME}] TTS: 自动绑定 "${bindingCharacterId}" -> "${voiceName}"`);
         }
         if (!voiceName) {
-          voiceName = String(settings2.ttsDefaultSpeaker || "").trim();
+          voiceName = String(settings.ttsDefaultSpeaker || "").trim();
         }
       } else {
-        voiceName = requestedVoiceTag || String(settings2.ttsDefaultSpeaker || "").trim();
+        voiceName = requestedVoiceTag || String(settings.ttsDefaultSpeaker || "").trim();
       }
       if (!voiceName) {
         voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? resolvedSpeakerName || speakerName : "桃夭";
@@ -27321,8 +27321,8 @@ ${lines.join("\n")}`;
     return optimized;
   }
   function handleWallhavenBackgroundSearch(sceneName, tags) {
-    const settings2 = getSettings();
-    if (settings2.bgImageSource !== "wallhaven") return;
+    const settings = getSettings();
+    if (settings.bgImageSource !== "wallhaven") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     if (sceneBackgrounds2.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] Wallhaven: 场景「${sceneName}」已存在缓存，跳过搜索`);
@@ -27359,7 +27359,7 @@ ${lines.join("\n")}`;
 
   // src/logic/cot-template.js
   async function generateCOTTemplate(options2 = {}) {
-    const settings2 = getSettings();
+    const settings = getSettings();
     const hasProvidedPending = !!(options2 && Object.prototype.hasOwnProperty.call(options2, "pendingSpecialCg"));
     let pendingSpecialCg = hasProvidedPending ? options2.pendingSpecialCg : null;
     if (!hasProvidedPending) {
@@ -27392,11 +27392,11 @@ ${statusTagInstructions.join("\n")}
 - 以上标签请放在 <maintext> 内。消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
 ` : "";
     let sceneListText = "";
-    const bgSrc = settings2.bgImageSource || "none";
+    const bgSrc = settings.bgImageSource || "none";
     const useBananaImageGen = bgSrc === "banana";
     const useWallhaven = bgSrc === "wallhaven";
     if (useBananaImageGen) {
-      const bs = settings2.bananaImageGen;
+      const bs = settings.bananaImageGen;
       let modeHint = "";
       if (bs.cgMode) {
         modeHint = `📌 **CG模式已开启**：请生成符合剧情的CG画面，必须包含人物（不是单纯背景）。
@@ -27449,7 +27449,7 @@ ${customCotText}${localSceneHint}
 - 樱花小径 → "春日午后的樱花小径，粉色花瓣随风飘落，两旁是盛开的樱花树，阳光透过花枝洒下斑驳光影"
 - 废弃工厂 → "荒废多年的工业厂房，锈迹斑斑的机器静默矗立，破碎的玻璃窗透进灰暗的光线，地上杂草丛生"`;
     } else if (useWallhaven) {
-      const ws = settings2.wallhaven;
+      const ws = settings.wallhaven;
       let categoryHint = "";
       switch (ws.category) {
         case "anime":
@@ -27560,7 +27560,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 ` : "";
     const pixiEffectNames = ["rain", "snow", "heavySnow", "cherryBlossoms", "fog", "fireflies", "embers", "screenFlash"];
     const pixiEffectListText = pixiEffectNames.join(", ");
-    const pixiEffectTagSection = settings2.effectsEnabled === false ? "" : `
+    const pixiEffectTagSection = settings.effectsEnabled === false ? "" : `
 ### Pixi 特效标签（可选）
 - 可用特效: ${pixiEffectListText}
 - 叠加特效格式: \`<pixiPerform name="特效名" />\`
@@ -27573,7 +27573,7 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 `;
     const bgmWhitelist = Array.from(
       new Set(
-        (Array.isArray(settings2.bgmWhitelist) ? settings2.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
+        (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
       )
     );
     const bgmWhitelistText = bgmWhitelist.map((name) => `  - ${name}`).join("\n");
@@ -27592,7 +27592,7 @@ ${bgmWhitelistText}
   - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
   - **示例**: \`<bgm>歌曲名</bgm>\``;
     const ttsEnabled = getTTSEnabled();
-    const ttsBilingualZhJaEnabled = settings2.ttsBilingualZhJaEnabled === true;
+    const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
     const ttsDialogueFormatLine = ttsBilingualZhJaEnabled ? '- **格式**: `<p>角色名[表情,男声/女声]: "中文文本[JP]日文文本"</p>`' : '- **格式**: `<p>角色名[表情,男声/女声]: "对话内容"</p>`';
     const ttsBilingualHintSection = ttsBilingualZhJaEnabled ? `
 ### 中日双语输出（必须严格遵守）
@@ -27609,7 +27609,7 @@ ${bgmWhitelistText}
     const ttsStructureDialogueLine1 = ttsBilingualZhJaEnabled ? '  <p>少女[微笑,女声]: "你终于来了～[JP]やっと来たね～"</p>' : '  <p>少女[微笑,女声]: "你终于来了～"</p>';
     const ttsStructureDialogueLine2 = ttsBilingualZhJaEnabled ? '  <p>少女[惊讶,女声|又急又关心地说]: "下这么大的雨，你怎么不带伞？[JP]こんな大雨なのに、どうして傘を持ってこなかったの？"</p>' : '  <p>少女[惊讶,女声|又急又关心地说]: "下这么大的雨，你怎么不带伞？"</p>';
     const ttsStructureDialogueLine3 = ttsBilingualZhJaEnabled ? '  <p>少女[难过,女声|带着心疼的语气]: "会感冒的……[JP]風邪ひいちゃうよ……"</p>' : '  <p>少女[难过,女声|带着心疼的语气]: "会感冒的……"</p>';
-    const situationalStyleEnabled = settings2.situationalStyleEnabled !== false;
+    const situationalStyleEnabled = settings.situationalStyleEnabled !== false;
     const removeStyledSectionFromCot = (template) => {
       if (situationalStyleEnabled || typeof template !== "string" || !template) return template;
       const styledFormatMarker = '- **格式**: `<styled type="';
@@ -28096,7 +28096,7 @@ ${extraRule}
     return result;
   }
   function parseGalgameContent(html, messageId) {
-    const settings2 = getSettings();
+    const settings = getSettings();
     const isEnabled = getIsEnabled();
     const parseCache2 = GalgameStore.cache.parse;
     const popup1Match = html.match(RE_POPUP1);
@@ -28104,7 +28104,7 @@ ${extraRule}
     if (popup1Match) html = html.replace(RE_POPUP1, "");
     if (popup2Match) html = html.replace(RE_POPUP2, "");
     html = preprocessSimplifiedFormat(html);
-    if (isEnabled && settings2.enhancedMode?.enabled && messageId) {
+    if (isEnabled && settings.enhancedMode?.enabled && messageId) {
       const formatData = _getFormattedContentRef ? _getFormattedContentRef(messageId) : null;
       if (formatData) {
         console.log(`[${SCRIPT_NAME}] 使用格式化版本 (swipe ${formatData.formattedIndex})`);
@@ -28344,7 +28344,7 @@ ${extraRule}
         const speaker = normalizeSpeakerName(dialogueMatch[1]);
         const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
         if (!speaker || !dialogue) return null;
-        const splitResult = splitZhJaForDisplayAndTts(dialogue, settings2.ttsBilingualZhJaEnabled === true);
+        const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
         if (speaker === "旁白") {
           const narrationSeg = {
             type: "narration",
@@ -28373,7 +28373,7 @@ ${extraRule}
           return segResult;
         }
       }
-      const narrationSplit = splitZhJaForDisplayAndTts(text, settings2.ttsBilingualZhJaEnabled === true);
+      const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
       const narrationResult = {
         type: "narration",
         speaker: null,
@@ -29479,8 +29479,8 @@ ${normalizedSource}`;
   // src/image-gen/banana-image.js
   var sceneBackgrounds3 = GalgameStore.cache.backgrounds;
   async function handleRealTimeBackgroundGeneration(sceneName, tags) {
-    const settings2 = getSettings();
-    if (settings2.bgImageSource !== "comfyui") return;
+    const settings = getSettings();
+    if (settings.bgImageSource !== "comfyui") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     try {
       const backgrounds = await getAllBackgrounds();
@@ -29500,7 +29500,7 @@ ${normalizedSource}`;
     }
     (async () => {
       try {
-        const workflowId = settings2.comfyui.defaultBgWorkflow;
+        const workflowId = settings.comfyui.defaultBgWorkflow;
         const allWorkflows = getComfyWorkflows();
         let targetWorkflow = null;
         if (workflowId && allWorkflows[workflowId]) {
@@ -29514,7 +29514,7 @@ ${normalizedSource}`;
           throw new Error(`未找到默认背景生成工作流: ${workflowId || "default_bg"}。请在设置-ComfyUI中配置。`);
         }
         const positive = `${tags}, (high quality, masterpiece, best quality, 4k, 8k:1.2), no humans`;
-        const negative = settings2.comfyui.negativePrompt || "nsfw, lowres, bad anatomy, bad hands, text, error";
+        const negative = settings.comfyui.negativePrompt || "nsfw, lowres, bad anatomy, bad hands, text, error";
         const seed = Math.floor(Math.random() * 1e10);
         const blob = await ComfyUIAPI.generate(targetWorkflow.json, positive, negative, seed);
         if (!blob) {
@@ -29594,14 +29594,14 @@ ${normalizedSource}`;
     return null;
   }
   function handleBananaBackgroundGeneration(sceneName, prompt2) {
-    const settings2 = getSettings();
-    if (settings2.bgImageSource !== "banana") return;
+    const settings = getSettings();
+    if (settings.bgImageSource !== "banana") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     if (sceneBackgrounds3.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] 大香蕉生图: 场景「${sceneName}」已存在缓存，跳过生成`);
       return;
     }
-    const bs = settings2.bananaImageGen;
+    const bs = settings.bananaImageGen;
     if (!bs.proxyUrl) {
       console.warn(`[${SCRIPT_NAME}] 大香蕉生图: 未配置反代 API 地址`);
       return;
@@ -29756,8 +29756,8 @@ ${normalizedSource}`;
     }
     throw new Error(`不支持的压缩方式: ${compressionMethod}`);
   }
-  function buildRequestBody(tags, settings2) {
-    const ns = settings2.novelai;
+  function buildRequestBody(tags, settings) {
+    const ns = settings.novelai;
     const negativePrompt = ns.negativePrompt || "nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark";
     let finalPrompt = tags;
     if (ns.defaultPromptPrefix) {
@@ -29809,14 +29809,14 @@ ${normalizedSource}`;
     };
   }
   function handleNovelAIBackgroundGeneration(sceneName, tags) {
-    const settings2 = getSettings();
-    if (settings2.bgImageSource !== "novelai") return;
+    const settings = getSettings();
+    if (settings.bgImageSource !== "novelai") return;
     if (BGMManager.generatingScenes.has(sceneName)) return;
     if (sceneBackgrounds4.has(sceneName)) {
       console.log(`[${SCRIPT_NAME}] NovelAI 生图: 场景「${sceneName}」已存在缓存，跳过生成`);
       return;
     }
-    const ns = settings2.novelai;
+    const ns = settings.novelai;
     if (!ns.apiKey) {
       console.warn(`[${SCRIPT_NAME}] NovelAI 生图: 未配置 API Key`);
       return;
@@ -29832,7 +29832,7 @@ ${normalizedSource}`;
       try {
         console.log(`[${SCRIPT_NAME}] NovelAI 生图: 开始生成场景「${sceneName}」`);
         console.log(`[${SCRIPT_NAME}] NovelAI 生图: Tags = ${tags.substring(0, 100)}`);
-        const requestBody = buildRequestBody(tags, settings2);
+        const requestBody = buildRequestBody(tags, settings);
         console.log(`[${SCRIPT_NAME}] NovelAI 生图: 模型=${requestBody.model}, 尺寸=${requestBody.parameters.width}x${requestBody.parameters.height}`);
         const response = await fetch("https://image.novelai.net/ai/generate-image", {
           method: "POST",
@@ -29902,7 +29902,7 @@ ${normalizedSource}`;
     }
     let chatStabilizeTimer = null;
     const chatObserver = new MutationObserver((mutations) => {
-      const settings2 = getSettings();
+      const settings = getSettings();
       const isEnabled = getIsEnabled();
       const overlayActive = !!topWindow.document.querySelector("#gal-global-overlay.active");
       let hasNewMessages = false;
@@ -29910,7 +29910,7 @@ ${normalizedSource}`;
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1 && node.classList?.contains("mes")) {
             hasNewMessages = true;
-            if (isEnabled && settings2.hideOtherFloors && overlayActive) {
+            if (isEnabled && settings.hideOtherFloors && overlayActive) {
               node.classList.add("gal-hidden");
             }
             setTimeout(() => {
@@ -38236,13 +38236,13 @@ ${normalizedSource}`;
     return null;
   }
   function getRuntimeSettings() {
-    const settings2 = getSettings();
-    const speed = clampNumber(settings2?.typewriterSpeed, MIN_SPEED, MAX_SPEED, DEFAULT_SPEED);
-    const soundVolume = clampNumber(settings2?.typewriterSoundVolume, 0, 100, DEFAULT_SOUND_VOLUME);
+    const settings = getSettings();
+    const speed = clampNumber(settings?.typewriterSpeed, MIN_SPEED, MAX_SPEED, DEFAULT_SPEED);
+    const soundVolume = clampNumber(settings?.typewriterSoundVolume, 0, 100, DEFAULT_SOUND_VOLUME);
     return {
-      enabled: settings2?.typewriterEnabled !== false,
+      enabled: settings?.typewriterEnabled !== false,
       speed,
-      soundEnabled: settings2?.typewriterSoundEnabled !== false,
+      soundEnabled: settings?.typewriterSoundEnabled !== false,
       soundVolume
     };
   }
@@ -38540,8 +38540,8 @@ ${normalizedSource}`;
   }
   async function syncEffectsForSegmentDisplay($overlay, state, currentIndex, { isNewMessage = false } = {}) {
     if (!state) return;
-    const settings2 = getSettings();
-    if (!settings2.effectsEnabled) {
+    const settings = getSettings();
+    if (!settings.effectsEnabled) {
       clearAllPixiEffects();
       state.lastAppliedEffectIndex = currentIndex;
       return;
@@ -38550,7 +38550,7 @@ ${normalizedSource}`;
     if (!mounted) return;
     syncPixiEffectsSettings();
     const lastApplied = Number.isFinite(state.lastAppliedEffectIndex) ? state.lastAppliedEffectIndex : -1;
-    const shouldClearOnSceneChange = !!settings2.effectsAutoClearOnSceneChange;
+    const shouldClearOnSceneChange = !!settings.effectsAutoClearOnSceneChange;
     const shouldAutoClearOnMessageSwitch = isNewMessage;
     const shouldReplay = shouldAutoClearOnMessageSwitch || currentIndex <= lastApplied || lastApplied < 0;
     const clearIfSceneChangedAt = (segmentIndex) => {
@@ -38638,7 +38638,7 @@ ${normalizedSource}`;
     console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
     const $overlay = ensureGlobalOverlay();
     const segments = parsedContent.segments;
-    const settings2 = getSettings();
+    const settings = getSettings();
     const mesIdStr = String(mesId);
     const suppressTTS = !!options2.suppressTTS;
     let state = messageSegmentState3.get(mesIdStr);
@@ -38791,7 +38791,7 @@ ${normalizedSource}`;
       $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     }
     updateLocationTimeDisplay();
-    if (isNewMessage && !suppressTTS && settings2.ttsEnabled && settings2.ttsAutoPlay && !isNarration && !isCg) {
+    if (isNewMessage && !suppressTTS && settings.ttsEnabled && settings.ttsAutoPlay && !isNarration && !isCg) {
       const segmentId = `${mesIdStr}_${currentIndex}`;
       TTSManager.stop();
       TTSManager.speak(displaySegment, segmentId);
@@ -39357,7 +39357,7 @@ ${normalizedSource}`;
   function startSkipping() {
     if (getIsSkipping()) return;
     setIsSkipping(true);
-    const settings2 = getSettings();
+    const settings = getSettings();
     const $btn = $2('#gal-global-overlay [data-action="skip"]');
     $btn.addClass("active");
     TTSManager.stop();
@@ -39375,7 +39375,7 @@ ${normalizedSource}`;
         TTSManager.stop();
         state.currentIndex++;
         await scheduleOverlaySegmentDisplay(state, "skip");
-        setSkipTimer(setTimeout(doSkip, settings2.skipSpeed * 1e3));
+        setSkipTimer(setTimeout(doSkip, settings.skipSpeed * 1e3));
       } else {
         stopSkipping();
         showToast4("已快进到最后");
@@ -39395,7 +39395,7 @@ ${normalizedSource}`;
   function startRewinding() {
     if (getIsRewinding()) return;
     setIsRewinding(true);
-    const settings2 = getSettings();
+    const settings = getSettings();
     showToast4("快速回退中...");
     const $btn = $2('#gal-global-overlay [data-action="prev"]');
     $btn.addClass("active");
@@ -39411,11 +39411,11 @@ ${normalizedSource}`;
         TTSManager.stop();
         state.currentIndex--;
         await scheduleOverlaySegmentDisplay(state, "rewind");
-        rewindTimer = setTimeout(doRewind, settings2.skipSpeed * 1e3);
+        rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
       } else {
         const switched = await switchToPreviousAiFloor({ suppressTTS: true });
         if (switched.ok) {
-          rewindTimer = setTimeout(doRewind, settings2.skipSpeed * 1e3);
+          rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
         } else {
           stopRewinding();
           showToast4("已回退到最早AI楼层");
@@ -39473,27 +39473,27 @@ ${normalizedSource}`;
       return;
     }
     topWindow[KEYBOARD_SHORTCUTS_BOUND_FLAG] = true;
-    const settings2 = getSettings();
+    const settings = getSettings();
     $2(topWindow.document).on("keydown", function(e) {
       if (!getIsEnabled()) return;
       const activeEl = topWindow.document.activeElement;
       if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.isContentEditable)) {
         return;
       }
-      if (e.key === "Control" && settings2.ctrlKeySkip) {
+      if (e.key === "Control" && settings.ctrlKeySkip) {
         startSkipping();
       }
-      if (e.code === "Space" && settings2.spaceKeyNext) {
+      if (e.code === "Space" && settings.spaceKeyNext) {
         e.preventDefault();
         triggerNextSegment();
       }
-      if (e.code === "Enter" && settings2.enterKeyNext) {
+      if (e.code === "Enter" && settings.enterKeyNext) {
         e.preventDefault();
         triggerNextSegment();
       }
     });
     $2(topWindow.document).on("keyup", function(e) {
-      if (e.key === "Control" && settings2.ctrlKeySkip) {
+      if (e.key === "Control" && settings.ctrlKeySkip) {
         stopSkipping();
       }
     });
@@ -41665,7 +41665,7 @@ ${normalizedSource}`;
     const isUser = $mes.attr("is_user") === "true";
     if (isUser) return;
     const mesId = $mes.attr("mesid");
-    const settings2 = getSettings();
+    const settings = getSettings();
     const $mesText = $mes.find(".mes_text");
     const domVisibleContent = getMesTextContentForGalgame($mesText[0]);
     let contentToProcess = getFormattedSwipeContent(mesId);
@@ -41690,7 +41690,7 @@ ${normalizedSource}`;
       }
     }
     const hasGalTags = RE_GAL_TAGS2.test(contentToProcess);
-    if (settings2.smartDetection && !hasGalTags && !forceRender2) return;
+    if (settings.smartDetection && !hasGalTags && !forceRender2) return;
     const hasClosedP = RE_CLOSED_P3.test(contentToProcess);
     if (!hasClosedP && !forceRender2) {
       console.log(`[${SCRIPT_NAME}] 流式输出中，等待完整内容...`);
@@ -41735,7 +41735,7 @@ ${normalizedSource}`;
       }
     }
     if (parsed && parsed.backgroundChanges) {
-      const bgSrc = settings2.bgImageSource || "none";
+      const bgSrc = settings.bgImageSource || "none";
       const bgDispatch = {
         comfyui: { tagKey: "generationTags", handler: _handleRealTimeBackgroundGenerationRef, label: "ComfyUI 背景生成" },
         banana: { tagKey: "bananaPrompt", handler: _handleBananaBackgroundGenerationRef, label: "大香蕉背景生成" },
@@ -41764,7 +41764,7 @@ ${normalizedSource}`;
     }
     console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed?.segments?.length || 0}`);
     if (!parsed || parsed.segments.length === 0) {
-      if (!settings2.smartDetection || forceRender2) {
+      if (!settings.smartDetection || forceRender2) {
         const fallbackText = contentToProcess && contentToProcess.trim().length > 0 ? contentToProcess : String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
         parsed = buildFallbackParsed2(fallbackText);
       } else {
@@ -72943,15 +72943,15 @@ ${normalizedSource}`;
     return refs.find((item) => item.path === path) || refs.find((item) => item.id === id2) || refs[0] || null;
   }
   function _clearLegacyImportPathSettings() {
-    const settings2 = getSettings();
-    settings2.gptSoVits = settings2.gptSoVits || {};
+    const settings = getSettings();
+    settings.gptSoVits = settings.gptSoVits || {};
     let changed = false;
-    if (String(settings2.gptSoVits.rootDir || "").trim()) {
-      settings2.gptSoVits.rootDir = "";
+    if (String(settings.gptSoVits.rootDir || "").trim()) {
+      settings.gptSoVits.rootDir = "";
       changed = true;
     }
-    if (String(settings2.gptSoVits.importPathPrefix || "").trim()) {
-      settings2.gptSoVits.importPathPrefix = "";
+    if (String(settings.gptSoVits.importPathPrefix || "").trim()) {
+      settings.gptSoVits.importPathPrefix = "";
       changed = true;
     }
     if (changed) saveSettings();
@@ -72972,12 +72972,12 @@ ${normalizedSource}`;
     };
   }
   function _saveModelsToSettings(models) {
-    const settings2 = getSettings();
-    settings2.gptSoVits = settings2.gptSoVits || {};
+    const settings = getSettings();
+    settings.gptSoVits = settings.gptSoVits || {};
     const cfg = getGptSoVitsConfig();
     const normalized = normalizeGptSoVitsModelsForStore(models, cfg);
-    settings2.gptSoVits.models = normalized;
-    settings2.gptSoVits.voices = normalized.map(_modelToLegacyVoice).filter(Boolean);
+    settings.gptSoVits.models = normalized;
+    settings.gptSoVits.voices = normalized.map(_modelToLegacyVoice).filter(Boolean);
     saveSettings();
     return normalized;
   }
@@ -73211,8 +73211,8 @@ ${normalizedSource}`;
       renderList();
     };
     const getLegacyImportPrefix = () => {
-      const settings2 = getSettings();
-      return String(settings2.gptSoVits?.importPathPrefix || settings2.gptSoVits?.rootDir || "").trim();
+      const settings = getSettings();
+      return String(settings.gptSoVits?.importPathPrefix || settings.gptSoVits?.rootDir || "").trim();
     };
     const renderList = () => {
       const keyword = String($modal.find("#gal-gpt-model-search").val() || "").trim().toLowerCase();
@@ -73348,8 +73348,8 @@ ${normalizedSource}`;
         return;
       }
       if (action === "set-default") {
-        const settings2 = getSettings();
-        settings2.ttsDefaultSpeaker = target.name;
+        const settings = getSettings();
+        settings.ttsDefaultSpeaker = target.name;
         saveSettings();
         showToast4(`默认音色已切换为：${target.name}`);
         if (typeof onChanged === "function") void onChanged(models);
@@ -74299,8 +74299,8 @@ ${normalizedSource}`;
       revokeRuntimeBlobUrls();
       return;
     }
-    const settings2 = getSettings();
-    const activeProfileId = hasUiSkinProfileId(String(settings2?.skin || "").trim()) ? String(settings2.skin).trim() : "";
+    const settings = getSettings();
+    const activeProfileId = hasUiSkinProfileId(String(settings?.skin || "").trim()) ? String(settings.skin).trim() : "";
     if (!activeProfileId) {
       removeRuntimeStyleProperties(overlay);
       updateRuntimeElementActivationClasses(overlay, /* @__PURE__ */ new Set());
@@ -74579,8 +74579,8 @@ ${normalizedSource}`;
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function applySkin() {
-    const settings2 = getSettings();
-    const skin = normalizeSkinValue(settings2.skin);
+    const settings = getSettings();
+    const skin = normalizeSkinValue(settings.skin);
     const $overlay = $2("#gal-global-overlay");
     const isCustomSkinProfile = hasUiSkinProfileId(skin);
     BUILTIN_SKIN_LIST.forEach((s) => {
@@ -74600,21 +74600,21 @@ ${normalizedSource}`;
     }
   }
   function applySettingsToUI() {
-    const settings2 = getSettings();
-    const activeSkin = normalizeSkinValue(settings2.skin);
-    const fontScale = 0.5 + settings2.fontSize / 30 * 1;
-    const dialogScalePercent = normalizeUiScalePercent(settings2.dialogScalePercent);
-    const toolbarScalePercent = normalizeUiScalePercent(settings2.toolbarScalePercent);
-    settings2.dialogScalePercent = dialogScalePercent;
-    settings2.toolbarScalePercent = toolbarScalePercent;
-    const dialogFontStack = getDialogFontStack(settings2.dialogFontFamily);
+    const settings = getSettings();
+    const activeSkin = normalizeSkinValue(settings.skin);
+    const fontScale = 0.5 + settings.fontSize / 30 * 1;
+    const dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
+    const toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
+    settings.dialogScalePercent = dialogScalePercent;
+    settings.toolbarScalePercent = toolbarScalePercent;
+    const dialogFontStack = getDialogFontStack(settings.dialogFontFamily);
     $2("#gal-global-overlay").css({
       "--gal-dialog-scale-user": dialogScalePercentToScaleFactorForSkin(dialogScalePercent, activeSkin),
       "--gal-toolbar-scale-user": uiScalePercentToScaleFactor(toolbarScalePercent),
       "--font-scale": fontScale,
       "--gal-dialog-font-family": dialogFontStack
     });
-    const opacity = settings2.dialogOpacity;
+    const opacity = settings.dialogOpacity;
     if (activeSkin === "none") {
       $2(".gal-text-panel").css({
         "background-color": `rgba(255, 255, 255, ${opacity})`,
@@ -74624,29 +74624,29 @@ ${normalizedSource}`;
       $2("#gal-global-overlay").css("--panel-opacity", opacity);
       $2(".gal-text-panel").css({ "background-color": "", "background-image": "" });
     }
-    if (settings2.showSprites) {
+    if (settings.showSprites) {
       $2(".gal-layer-character").show();
     } else {
       $2(".gal-layer-character").hide();
     }
-    if (!settings2.showMissingSpritePlaceholder) {
+    if (!settings.showMissingSpritePlaceholder) {
       $2("#gal-global-overlay .gal-char-placeholder").remove();
     }
     const $charLayer = $2(".gal-layer-character");
     $charLayer.css({
-      bottom: settings2.spriteBottomOffset + "%",
-      gap: settings2.spriteSpacing + "%"
+      bottom: settings.spriteBottomOffset + "%",
+      gap: settings.spriteSpacing + "%"
     });
     const el = $charLayer.get(0);
     if (el) {
-      el.style.setProperty("--base-scale", settings2.spriteScale / 100);
+      el.style.setProperty("--base-scale", settings.spriteScale / 100);
     }
-    if (settings2.speakerGlow) {
+    if (settings.speakerGlow) {
       $2(".gal-layer-character").addClass("glow-enabled");
     } else {
       $2(".gal-layer-character").removeClass("glow-enabled");
     }
-    if (settings2.speakerBubble) {
+    if (settings.speakerBubble) {
       $2(".gal-layer-character").addClass("bubble-enabled");
     } else {
       $2(".gal-layer-character").removeClass("bubble-enabled");
@@ -74660,8 +74660,8 @@ ${normalizedSource}`;
     syncPixiEffectsSettings();
   }
   function applyBgFillMode() {
-    const settings2 = getSettings();
-    const fillMode = settings2.bgFillMode || "cover";
+    const settings = getSettings();
+    const fillMode = settings.bgFillMode || "cover";
     const $bgLayers = $2(".gal-bg-layer");
     $bgLayers.css("background-size", fillMode);
     if (fillMode === "contain") {
@@ -74671,8 +74671,8 @@ ${normalizedSource}`;
     }
   }
   function applyTextEffect() {
-    const settings2 = getSettings();
-    const effect = settings2.textEffect || "none";
+    const settings = getSettings();
+    const effect = settings.textEffect || "none";
     const $textPanel = $2(".gal-text-panel");
     const $dialogText = $2(".gal-dialog-text");
     const $nameBadge = $2(".gal-name-badge");
@@ -74769,28 +74769,28 @@ ${normalizedSource}`;
       $existing.remove();
     }
     topTab = topTab || "settings";
-    const settings2 = getSettings();
+    const settings = getSettings();
     ensureTitleScreenSettings();
-    settings2.ttsDefaultMaleVoices = normalizeVoiceNameList(settings2.ttsDefaultMaleVoices);
-    settings2.ttsDefaultFemaleVoices = normalizeVoiceNameList(settings2.ttsDefaultFemaleVoices);
-    const effectQuality = ["mobile", "balanced", "high"].includes(settings2.effectsQuality) ? settings2.effectsQuality : "balanced";
-    const effectMaxActiveParsed = parseInt(settings2.effectsMaxActive, 10);
+    settings.ttsDefaultMaleVoices = normalizeVoiceNameList(settings.ttsDefaultMaleVoices);
+    settings.ttsDefaultFemaleVoices = normalizeVoiceNameList(settings.ttsDefaultFemaleVoices);
+    const effectQuality = ["mobile", "balanced", "high"].includes(settings.effectsQuality) ? settings.effectsQuality : "balanced";
+    const effectMaxActiveParsed = parseInt(settings.effectsMaxActive, 10);
     const effectMaxActive = Number.isFinite(effectMaxActiveParsed) ? Math.max(1, Math.min(effectMaxActiveParsed, 6)) : 2;
-    settings2.effectsQuality = effectQuality;
-    settings2.effectsMaxActive = effectMaxActive;
-    settings2.effectsEnabled = settings2.effectsEnabled !== false;
-    settings2.effectsAutoClearOnSceneChange = settings2.effectsAutoClearOnSceneChange !== false;
-    settings2.dialogScalePercent = normalizeUiScalePercent(settings2.dialogScalePercent);
-    settings2.toolbarScalePercent = normalizeUiScalePercent(settings2.toolbarScalePercent);
-    const typewriterSpeedParsed = parseInt(settings2.typewriterSpeed, 10);
-    const typewriterSoundVolumeParsed = parseInt(settings2.typewriterSoundVolume, 10);
-    settings2.typewriterEnabled = settings2.typewriterEnabled !== false;
-    settings2.typewriterSpeed = Number.isFinite(typewriterSpeedParsed) ? Math.max(5, Math.min(typewriterSpeedParsed, 60)) : 30;
-    settings2.typewriterSoundEnabled = settings2.typewriterSoundEnabled !== false;
-    settings2.typewriterSoundVolume = Number.isFinite(typewriterSoundVolumeParsed) ? Math.max(0, Math.min(typewriterSoundVolumeParsed, 100)) : 35;
+    settings.effectsQuality = effectQuality;
+    settings.effectsMaxActive = effectMaxActive;
+    settings.effectsEnabled = settings.effectsEnabled !== false;
+    settings.effectsAutoClearOnSceneChange = settings.effectsAutoClearOnSceneChange !== false;
+    settings.dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
+    settings.toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
+    const typewriterSpeedParsed = parseInt(settings.typewriterSpeed, 10);
+    const typewriterSoundVolumeParsed = parseInt(settings.typewriterSoundVolume, 10);
+    settings.typewriterEnabled = settings.typewriterEnabled !== false;
+    settings.typewriterSpeed = Number.isFinite(typewriterSpeedParsed) ? Math.max(5, Math.min(typewriterSpeedParsed, 60)) : 30;
+    settings.typewriterSoundEnabled = settings.typewriterSoundEnabled !== false;
+    settings.typewriterSoundVolume = Number.isFinite(typewriterSoundVolumeParsed) ? Math.max(0, Math.min(typewriterSoundVolumeParsed, 100)) : 35;
     const live2dManager = getLive2DManagerRef();
     if (live2dManager) {
-      live2dManager.debug = !!settings2.globalDebug;
+      live2dManager.debug = !!settings.globalDebug;
     }
     const isEnabled = getIsEnabled();
     const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
@@ -74799,18 +74799,18 @@ ${normalizedSource}`;
       getAvailableModels(),
       getAvailableWorldbooks()
     ]);
-    const savedWorldbooks = settings2.enhancedMode?.secondGenerate?.worldbooks || [];
+    const savedWorldbooks = settings.enhancedMode?.secondGenerate?.worldbooks || [];
     const presetOptions = [
       '<option value="">使用当前预设</option>',
-      ...presetNames.map((p2) => `<option value="${p2}" ${settings2.enhancedMode?.secondGenerate?.presetName === p2 ? "selected" : ""}>${p2}</option>`)
+      ...presetNames.map((p2) => `<option value="${p2}" ${settings.enhancedMode?.secondGenerate?.presetName === p2 ? "selected" : ""}>${p2}</option>`)
     ].join("");
     const profileOptions = [
       '<option value="">使用当前连接配置</option>',
-      ...profileNames.map((p2) => `<option value="${p2}" ${settings2.enhancedMode?.secondGenerate?.profileName === p2 ? "selected" : ""}>${p2}</option>`)
+      ...profileNames.map((p2) => `<option value="${p2}" ${settings.enhancedMode?.secondGenerate?.profileName === p2 ? "selected" : ""}>${p2}</option>`)
     ].join("");
     const modelOptions = [
       '<option value="">使用当前模型</option>',
-      ...modelNames.map((m) => `<option value="${m}" ${settings2.enhancedMode?.secondGenerate?.modelName === m ? "selected" : ""}>${m}</option>`)
+      ...modelNames.map((m) => `<option value="${m}" ${settings.enhancedMode?.secondGenerate?.modelName === m ? "selected" : ""}>${m}</option>`)
     ].join("");
     const worldbookListHtml = worldbookNames.length === 0 ? '<div style="font-size: 0.85rem; color: #333; margin-left: 24px; font-weight: 500;">暂无可用的世界书</div>' : `<div style="margin-left: 24px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background: var(--SmartThemeFormBg, #fff); color: var(--SmartThemeBodyColor, #333);">
         ${worldbookNames.map((wb) => `
@@ -74820,7 +74820,7 @@ ${normalizedSource}`;
           </label>
         `).join("")}
       </div>`;
-    const dialogFontOptions = DIALOG_FONT_PRESETS.map((item) => `<option value="${item.value}" ${settings2.dialogFontFamily === item.value ? "selected" : ""}>${item.label}</option>`).join("");
+    const dialogFontOptions = DIALOG_FONT_PRESETS.map((item) => `<option value="${item.value}" ${settings.dialogFontFamily === item.value ? "selected" : ""}>${item.label}</option>`).join("");
     let assetsHtml = "";
     if (_buildAssetsPaneRef) {
       assetsHtml = await _buildAssetsPaneRef(subTab);
@@ -74858,22 +74858,22 @@ ${normalizedSource}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label">字体大小</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${settings2.fontSize}">
-                <span class="gal-range-value" id="gal-font-size-value">${settings2.fontSize}</span>
+                <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${settings.fontSize}">
+                <span class="gal-range-value" id="gal-font-size-value">${settings.fontSize}</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">对话框缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings2.dialogScalePercent}">
-                <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings2.dialogScalePercent}%</span>
+                <input type="range" id="gal-dialog-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings.dialogScalePercent}">
+                <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings.dialogScalePercent}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">底栏缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-toolbar-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings2.toolbarScalePercent}">
-                <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings2.toolbarScalePercent}%</span>
+                <input type="range" id="gal-toolbar-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings.toolbarScalePercent}">
+                <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings.toolbarScalePercent}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
@@ -74887,44 +74887,44 @@ ${normalizedSource}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label">对话框透明度</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-opacity" min="0" max="100" step="5" value="${Math.round((1 - settings2.dialogOpacity) * 100)}">
-                <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round((1 - settings2.dialogOpacity) * 100)}%</span>
+                <input type="range" id="gal-dialog-opacity" min="0" max="100" step="5" value="${Math.round((1 - settings.dialogOpacity) * 100)}">
+                <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round((1 - settings.dialogOpacity) * 100)}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">文字特效</span>
               <div class="gal-settings-control">
                 <select id="gal-text-effect" class="gal-select">
-                  <option value="none" ${settings2.textEffect === "none" ? "selected" : ""}>无</option>
-                  <option value="shadow" ${settings2.textEffect === "shadow" ? "selected" : ""}>阴影增强</option>
-                  <option value="glow" ${settings2.textEffect === "glow" ? "selected" : ""}>发光效果</option>
-                  <option value="stroke" ${settings2.textEffect === "stroke" ? "selected" : ""}>文字描边</option>
-                  <option value="glass" ${settings2.textEffect === "glass" ? "selected" : ""}>毛玻璃背景</option>
-                  <option value="gradient" ${settings2.textEffect === "gradient" ? "selected" : ""}>底部渐变遮罩</option>
-                  <option value="text-bg" ${settings2.textEffect === "text-bg" ? "selected" : ""}>独立文字背景</option>
+                  <option value="none" ${settings.textEffect === "none" ? "selected" : ""}>无</option>
+                  <option value="shadow" ${settings.textEffect === "shadow" ? "selected" : ""}>阴影增强</option>
+                  <option value="glow" ${settings.textEffect === "glow" ? "selected" : ""}>发光效果</option>
+                  <option value="stroke" ${settings.textEffect === "stroke" ? "selected" : ""}>文字描边</option>
+                  <option value="glass" ${settings.textEffect === "glass" ? "selected" : ""}>毛玻璃背景</option>
+                  <option value="gradient" ${settings.textEffect === "gradient" ? "selected" : ""}>底部渐变遮罩</option>
+                  <option value="text-bg" ${settings.textEffect === "text-bg" ? "selected" : ""}>独立文字背景</option>
                 </select>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">打字机显示</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-enabled" ${settings2.typewriterEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-enabled" ${settings.typewriterEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">打字速度</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-typewriter-speed" min="5" max="60" step="1" value="${settings2.typewriterSpeed}">
-                <span class="gal-range-value" id="gal-typewriter-speed-value">${settings2.typewriterSpeed}字/秒</span>
+                <input type="range" id="gal-typewriter-speed" min="5" max="60" step="1" value="${settings.typewriterSpeed}">
+                <span class="gal-range-value" id="gal-typewriter-speed-value">${settings.typewriterSpeed}字/秒</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">打字音效</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-sound-enabled" ${settings2.typewriterSoundEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-sound-enabled" ${settings.typewriterSoundEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">音效音量</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-typewriter-sound-volume" min="0" max="100" step="1" value="${settings2.typewriterSoundVolume}">
-                <span class="gal-range-value" id="gal-typewriter-sound-volume-value">${settings2.typewriterSoundVolume}%</span>
+                <input type="range" id="gal-typewriter-sound-volume" min="0" max="100" step="1" value="${settings.typewriterSoundVolume}">
+                <span class="gal-range-value" id="gal-typewriter-sound-volume-value">${settings.typewriterSoundVolume}%</span>
               </div>
             </div>
           </div>
@@ -74937,8 +74937,8 @@ ${normalizedSource}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label">播放间隔</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-auto-speed" min="1" max="8" step="0.5" value="${settings2.autoPlaySpeed}">
-                <span class="gal-range-value" id="gal-auto-speed-value">${settings2.autoPlaySpeed}秒</span>
+                <input type="range" id="gal-auto-speed" min="1" max="8" step="0.5" value="${settings.autoPlaySpeed}">
+                <span class="gal-range-value" id="gal-auto-speed-value">${settings.autoPlaySpeed}秒</span>
               </div>
             </div>
           </div>
@@ -74950,28 +74950,28 @@ ${normalizedSource}`;
             <div class="gal-settings-section-title"><i class="fa-solid fa-display"></i> 显示设置</div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">显示立绘</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-show-sprites" ${settings2.showSprites ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-show-sprites" ${settings.showSprites ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">沉浸模式 <small style="color:#999;">(隐藏其他楼层)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-hide-floors" ${settings2.hideOtherFloors ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-hide-floors" ${settings.hideOtherFloors ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">背景图填充 <small style="color:#999;">(cover填满/contain完整)</small></span>
               <select id="gal-bg-fill-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
-                <option value="cover" ${settings2.bgFillMode === "cover" ? "selected" : ""}>Cover (填满裁剪)</option>
-                <option value="contain" ${settings2.bgFillMode === "contain" ? "selected" : ""}>Contain (完整显示)</option>
+                <option value="cover" ${settings.bgFillMode === "cover" ? "selected" : ""}>Cover (填满裁剪)</option>
+                <option value="contain" ${settings.bgFillMode === "contain" ? "selected" : ""}>Contain (完整显示)</option>
               </select>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">界面皮肤</span>
               <select id="gal-skin-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 200px;">
-                ${getSkinOptionHtml(settings2.skin)}
+                ${getSkinOptionHtml(settings.skin)}
               </select>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">情境样式 <small style="color:#999;">(控制 COT 是否包含 &lt;styled&gt; 规范)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-situational-style-enabled" ${settings2.situationalStyleEnabled !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-situational-style-enabled" ${settings.situationalStyleEnabled !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
           </div>
 
@@ -74982,7 +74982,7 @@ ${normalizedSource}`;
             <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Pixi特效</div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">启用特效</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-effects-enabled" ${settings2.effectsEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-effects-enabled" ${settings.effectsEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">质量档位</span>
@@ -74994,7 +74994,7 @@ ${normalizedSource}`;
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">切场景自动清空</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-effects-autoclear" ${settings2.effectsAutoClearOnSceneChange ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-effects-autoclear" ${settings.effectsAutoClearOnSceneChange ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">并发上限</span>
@@ -75013,35 +75013,35 @@ ${normalizedSource}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label">立绘大小</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-scale" min="50" max="150" step="5" value="${settings2.spriteScale}">
-                <span class="gal-range-value" id="gal-sprite-scale-value">${settings2.spriteScale}%</span>
+                <input type="range" id="gal-sprite-scale" min="50" max="150" step="5" value="${settings.spriteScale}">
+                <span class="gal-range-value" id="gal-sprite-scale-value">${settings.spriteScale}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">垂直位置 <small style="color:#999;">(底部偏移)</small></span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${settings2.spriteBottomOffset}">
-                <span class="gal-range-value" id="gal-sprite-bottom-value">${settings2.spriteBottomOffset}%</span>
+                <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${settings.spriteBottomOffset}">
+                <span class="gal-range-value" id="gal-sprite-bottom-value">${settings.spriteBottomOffset}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">立绘间距 <small style="color:#999;">(左右距离)</small></span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings2.spriteSpacing}">
-                <span class="gal-range-value" id="gal-sprite-spacing-value">${settings2.spriteSpacing}%</span>
+                <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings.spriteSpacing}">
+                <span class="gal-range-value" id="gal-sprite-spacing-value">${settings.spriteSpacing}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">无立绘时显示添加框 <small style="color:#999;">(关闭后不可点击上传)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings2.showMissingSpritePlaceholder ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings.showMissingSpritePlaceholder ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">说话者光晕 <small style="color:#999;">(轮廓发光)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-speaker-glow" ${settings2.speakerGlow ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-speaker-glow" ${settings.speakerGlow ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">气泡指示器 <small style="color:#999;">(漫画风格)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-speaker-bubble" ${settings2.speakerBubble ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-speaker-bubble" ${settings.speakerBubble ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
           </div>
 
@@ -75058,17 +75058,17 @@ ${normalizedSource}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label">TTS引擎</span>
               <select id="gal-tts-provider" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
-                <option value="littlewhitebox" ${settings2.ttsProvider === "littlewhitebox" ? "selected" : ""}>小白X（豆包火山）</option>
-                <option value="gpt_sovits_v2" ${settings2.ttsProvider === "gpt_sovits_v2" ? "selected" : ""}>GPT-SoVITS v2ProPlus</option>
+                <option value="littlewhitebox" ${settings.ttsProvider === "littlewhitebox" ? "selected" : ""}>小白X（豆包火山）</option>
+                <option value="gpt_sovits_v2" ${settings.ttsProvider === "gpt_sovits_v2" ? "selected" : ""}>GPT-SoVITS v2ProPlus</option>
               </select>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">自动播放 <small style="color:#999;">(切段自动朗读)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings2.ttsAutoPlay ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings.ttsAutoPlay ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">中日双语模式 <small style="color:#999;">(显示中文，TTS发送日文)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings2.ttsBilingualZhJaEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings.ttsBilingualZhJaEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">按“中文文本[JP]日文文本”输出（兼容【JP】）；未命中时自动回退原文朗读。</p>
             <div class="gal-settings-row">
@@ -75108,34 +75108,34 @@ ${normalizedSource}`;
               当 COT 使用 <code>男声/女声</code> 标签且角色未绑定时，将从对应列表随机分配并自动绑定。
             </p>
 
-            <div id="gal-gpt-sovits-config" style="margin-top: 10px; padding: 12px; border: 1px dashed #ddd; border-radius: 8px; background: #fafafa; ${settings2.ttsProvider === "gpt_sovits_v2" ? "" : "display: none;"}">
+            <div id="gal-gpt-sovits-config" style="margin-top: 10px; padding: 12px; border: 1px dashed #ddd; border-radius: 8px; background: #fafafa; ${settings.ttsProvider === "gpt_sovits_v2" ? "" : "display: none;"}">
               <div style="font-weight: 700; margin-bottom: 10px; color: ${THEME.dark}; display:flex; align-items:center; gap:8px;">
                 <i class="fa-solid fa-microchip" style="color:${THEME.accent};"></i>
                 <span>GPT-SoVITS（api_v2.py）设置</span>
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">API地址</span>
-                <input type="text" id="gal-gpt-sovits-url" value="${settings2.gptSoVits?.apiUrl || ""}" placeholder="http://127.0.0.1:9880" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <input type="text" id="gal-gpt-sovits-url" value="${settings.gptSoVits?.apiUrl || ""}" placeholder="http://127.0.0.1:9880" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">使用酒馆代理</span>
-                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-proxy" ${settings2.gptSoVits?.useCorsProxy ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-proxy" ${settings.gptSoVits?.useCorsProxy ? "checked" : ""}><span class="gal-switch-slider"></span></label>
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">模型切换模式</span>
                 <select id="gal-gpt-sovits-switch-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 210px;">
-                  <option value="set_weights" ${(settings2.gptSoVits?.modelSwitchMode || "set_weights") === "set_weights" ? "selected" : ""}>set_weights (api_v2.py)</option>
-                  <option value="set_model" ${(settings2.gptSoVits?.modelSwitchMode || "") === "set_model" ? "selected" : ""}>set_model (api.py)</option>
-                  <option value="none" ${(settings2.gptSoVits?.modelSwitchMode || "") === "none" ? "selected" : ""}>none（不自动切换）</option>
+                  <option value="set_weights" ${(settings.gptSoVits?.modelSwitchMode || "set_weights") === "set_weights" ? "selected" : ""}>set_weights (api_v2.py)</option>
+                  <option value="set_model" ${(settings.gptSoVits?.modelSwitchMode || "") === "set_model" ? "selected" : ""}>set_model (api.py)</option>
+                  <option value="none" ${(settings.gptSoVits?.modelSwitchMode || "") === "none" ? "selected" : ""}>none（不自动切换）</option>
                 </select>
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">set_model 接口</span>
-                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${settings2.gptSoVits?.setModelEndpoint || "/set_model"}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${settings.gptSoVits?.setModelEndpoint || "/set_model"}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">严格切换 <small style="color:#999;">(失败不回退)</small></span>
-                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-strict-switch" ${settings2.gptSoVits?.strictWeightSwitch ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+                <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-strict-switch" ${settings.gptSoVits?.strictWeightSwitch ? "checked" : ""}><span class="gal-switch-slider"></span></label>
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">模型管理</span>
@@ -75162,15 +75162,15 @@ ${normalizedSource}`;
             <div class="gal-settings-section-title"><i class="fa-solid fa-keyboard"></i> 快捷键</div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">空格键 -> 下一句</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-space-next" ${settings2.spaceKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-space-next" ${settings.spaceKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">回车键 -> 下一句</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-enter-next" ${settings2.enterKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-enter-next" ${settings.enterKeyNext ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">Ctrl长按 -> 快进</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-ctrl-skip" ${settings2.ctrlKeySkip ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-ctrl-skip" ${settings.ctrlKeySkip ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
           </div>
 
@@ -75181,17 +75181,17 @@ ${normalizedSource}`;
             <div class="gal-settings-section-title"><i class="fa-solid fa-forward"></i> 快进设置</div>
             <div class="gal-settings-row">
               <span class="gal-settings-label" title="开启后，只有检测到Galgame标签才会显示界面；关闭则总是显示">智能判断主界面显示</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings2.smartDetection ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings.smartDetection ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">全局Debug日志</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings2.globalDebug ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings.globalDebug ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">快进速度</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-skip-speed" min="0.01" max="0.2" step="0.01" value="${settings2.skipSpeed}">
-                <span class="gal-range-value" id="gal-skip-speed-value">${settings2.skipSpeed}s</span>
+                <input type="range" id="gal-skip-speed" min="0.01" max="0.2" step="0.01" value="${settings.skipSpeed}">
+                <span class="gal-range-value" id="gal-skip-speed-value">${settings.skipSpeed}s</span>
               </div>
             </div>
           </div>
@@ -75206,31 +75206,31 @@ ${normalizedSource}`;
                 <span class="gal-settings-label" style="font-weight: 600;">启用加强模式</span>
                 <small style="color: #888; font-size: 0.75rem;">两次生成策略：内容创作 + COT格式化</small>
               </div>
-              <label class="gal-switch"><input type="checkbox" id="gal-enhanced-mode" ${settings2.enhancedMode?.enabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              <label class="gal-switch"><input type="checkbox" id="gal-enhanced-mode" ${settings.enhancedMode?.enabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
-            <div id="gal-enhanced-hint" style="${settings2.enhancedMode?.enabled ? "" : "display: none;"} padding: 12px; background: #fff8e1; border-radius: 6px; margin-bottom: 16px; font-size: 0.8rem; color: #666; line-height: 1.5;">
+            <div id="gal-enhanced-hint" style="${settings.enhancedMode?.enabled ? "" : "display: none;"} padding: 12px; background: #fff8e1; border-radius: 6px; margin-bottom: 16px; font-size: 0.8rem; color: #666; line-height: 1.5;">
               <i class="fa-solid fa-lightbulb" style="color: #ff9800;"></i>
               第一次生成专注内容，第二次切换API进行COT格式化。
             </div>
-            <div id="gal-enhanced-config" style="${settings2.enhancedMode?.enabled ? "" : "display: none;"} padding-left: 12px; border-left: 2px solid #ffe0b2;">
+            <div id="gal-enhanced-config" style="${settings.enhancedMode?.enabled ? "" : "display: none;"} padding-left: 12px; border-left: 2px solid #ffe0b2;">
               <div style="font-weight: 600; margin-bottom: 12px; color: #e65100; font-size: 0.9rem;">第二次生成配置</div>
               <div style="margin-bottom: 12px;">
                 <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-profile" ${settings2.enhancedMode?.secondGenerate?.useProfile ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
+                  <input type="checkbox" id="gal-enhanced-use-profile" ${settings.enhancedMode?.secondGenerate?.useProfile ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
                   <span style="font-size: 0.9rem; font-weight: 600; color: #222;">连接配置</span>
                 </label>
                 <select id="gal-enhanced-profile-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${profileOptions}</select>
               </div>
               <div style="margin-bottom: 12px;">
                 <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-model" ${settings2.enhancedMode?.secondGenerate?.useModel ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
+                  <input type="checkbox" id="gal-enhanced-use-model" ${settings.enhancedMode?.secondGenerate?.useModel ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
                   <span style="font-size: 0.9rem; font-weight: 600; color: #222;">模型</span>
                 </label>
                 <select id="gal-enhanced-model-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${modelOptions}</select>
               </div>
               <div style="margin-bottom: 12px;">
                 <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-preset" ${settings2.enhancedMode?.secondGenerate?.usePreset ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
+                  <input type="checkbox" id="gal-enhanced-use-preset" ${settings.enhancedMode?.secondGenerate?.usePreset ? "checked" : ""} style="cursor: pointer; width: 16px; height: 16px;">
                   <span style="font-size: 0.9rem; font-weight: 600; color: #222;">预设</span>
                 </label>
                 <select id="gal-enhanced-preset-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${presetOptions}</select>
@@ -75239,18 +75239,18 @@ ${normalizedSource}`;
                 <div style="font-size: 0.9rem; font-weight: 600; color: #222; margin-bottom: 8px;">世界书设置</div>
                 <div style="margin-left: 24px;">
                   <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="default" ${!settings2.enhancedMode?.secondGenerate?.useWorldbooks && (!settings2.enhancedMode?.secondGenerate?.worldbooks || settings2.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="default" ${!settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
                     <span>不使用自定义世界书(默认选择)</span>
                   </label>
                   <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="none" ${settings2.enhancedMode?.secondGenerate?.useWorldbooks && (!settings2.enhancedMode?.secondGenerate?.worldbooks || settings2.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="none" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""} style="cursor: pointer;">
                     <span>不使用任何世界书</span>
                   </label>
                   <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="custom" ${settings2.enhancedMode?.secondGenerate?.useWorldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "checked" : ""} style="cursor: pointer;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="custom" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "checked" : ""} style="cursor: pointer;">
                     <span>使用以下世界书：</span>
                   </label>
-                  <div id="gal-enhanced-worldbooks-list" style="margin-left: 24px; ${settings2.enhancedMode?.secondGenerate?.useWorldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks && settings2.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "" : "display: none;"}">${worldbookListHtml}</div>
+                  <div id="gal-enhanced-worldbooks-list" style="margin-left: 24px; ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "" : "display: none;"}">${worldbookListHtml}</div>
                 </div>
               </div>
               <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #ffe0b2;">
@@ -75397,8 +75397,8 @@ ${normalizedSource}`;
     const renderVoicePoolChips = (containerSelector, poolKey) => {
       const $container = $2(containerSelector);
       if (!$container.length) return;
-      const normalizedList = normalizeVoiceNameList(settings2[poolKey]);
-      settings2[poolKey] = normalizedList;
+      const normalizedList = normalizeVoiceNameList(settings[poolKey]);
+      settings[poolKey] = normalizedList;
       if (normalizedList.length === 0) {
         $container.html('<span class="gal-voice-chip-empty">当前为空（从上方选择音色即可加入）。</span>');
         return;
@@ -75444,7 +75444,7 @@ ${normalizedSource}`;
       } catch (e) {
         console.warn(`[${SCRIPT_NAME}] 获取TTS音色列表失败:`, e);
       }
-      const current = settings2.ttsDefaultSpeaker || "";
+      const current = settings.ttsDefaultSpeaker || "";
       $sel.empty().append('<option value="">（不指定）</option>');
       voiceList.forEach((v) => {
         const name = String(v?.name || "").trim();
@@ -75461,7 +75461,7 @@ ${normalizedSource}`;
     };
     if ($2("#gal-gpt-sovits-voices-json").length) {
       try {
-        $2("#gal-gpt-sovits-voices-json").val(JSON.stringify(settings2.gptSoVits?.voices || [], null, 2));
+        $2("#gal-gpt-sovits-voices-json").val(JSON.stringify(settings.gptSoVits?.voices || [], null, 2));
       } catch (e) {
         $2("#gal-gpt-sovits-voices-json").val("[]");
       }
@@ -75487,7 +75487,7 @@ ${normalizedSource}`;
         $2(this).removeClass("gal-toggle-off").addClass("gal-toggle-on").html('<i class="fa-solid fa-toggle-on" style="font-size: 1.3rem;"></i><span>Galgame 模式已开启</span>');
         await injectCOTToWorldbook();
         applyGalgameMode();
-        if (settings2.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
+        if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
         showToast4("Galgame 模式已开启");
       } else {
         $2(this).removeClass("gal-toggle-on").addClass("gal-toggle-off").html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame 模式已关闭</span>');
@@ -75501,96 +75501,96 @@ ${normalizedSource}`;
       }
     });
     $2("#gal-font-size").on("input", function() {
-      settings2.fontSize = parseInt($2(this).val());
-      $2("#gal-font-size-value").text(settings2.fontSize);
+      settings.fontSize = parseInt($2(this).val());
+      $2("#gal-font-size-value").text(settings.fontSize);
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-dialog-scale-percent").on("input", function() {
-      settings2.dialogScalePercent = normalizeUiScalePercent($2(this).val());
-      $2("#gal-dialog-scale-percent-value").text(`${settings2.dialogScalePercent}%`);
+      settings.dialogScalePercent = normalizeUiScalePercent($2(this).val());
+      $2("#gal-dialog-scale-percent-value").text(`${settings.dialogScalePercent}%`);
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-toolbar-scale-percent").on("input", function() {
-      settings2.toolbarScalePercent = normalizeUiScalePercent($2(this).val());
-      $2("#gal-toolbar-scale-percent-value").text(`${settings2.toolbarScalePercent}%`);
+      settings.toolbarScalePercent = normalizeUiScalePercent($2(this).val());
+      $2("#gal-toolbar-scale-percent-value").text(`${settings.toolbarScalePercent}%`);
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-dialog-font-family").on("change", function() {
-      settings2.dialogFontFamily = $2(this).val();
+      settings.dialogFontFamily = $2(this).val();
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-dialog-opacity").on("input", function() {
       const t = parseInt($2(this).val());
-      settings2.dialogOpacity = 1 - t / 100;
+      settings.dialogOpacity = 1 - t / 100;
       $2("#gal-dialog-opacity-value").text(t + "%");
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-text-effect").on("change", function() {
-      settings2.textEffect = $2(this).val();
+      settings.textEffect = $2(this).val();
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-typewriter-enabled").on("change", function() {
-      settings2.typewriterEnabled = $2(this).is(":checked");
-      if (!settings2.typewriterEnabled && isTypewriterActive()) {
+      settings.typewriterEnabled = $2(this).is(":checked");
+      if (!settings.typewriterEnabled && isTypewriterActive()) {
         finishActiveTypewriter();
       }
       saveSettings();
     });
     $2("#gal-typewriter-speed").on("input", function() {
       const parsed = parseInt($2(this).val(), 10);
-      settings2.typewriterSpeed = Number.isFinite(parsed) ? Math.max(5, Math.min(parsed, 60)) : 30;
-      $2("#gal-typewriter-speed-value").text(settings2.typewriterSpeed + "字/秒");
+      settings.typewriterSpeed = Number.isFinite(parsed) ? Math.max(5, Math.min(parsed, 60)) : 30;
+      $2("#gal-typewriter-speed-value").text(settings.typewriterSpeed + "字/秒");
       saveSettings();
     });
     $2("#gal-typewriter-sound-enabled").on("change", function() {
-      settings2.typewriterSoundEnabled = $2(this).is(":checked");
+      settings.typewriterSoundEnabled = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-typewriter-sound-volume").on("input", function() {
       const parsed = parseInt($2(this).val(), 10);
-      settings2.typewriterSoundVolume = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 100)) : 35;
-      $2("#gal-typewriter-sound-volume-value").text(settings2.typewriterSoundVolume + "%");
+      settings.typewriterSoundVolume = Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, 100)) : 35;
+      $2("#gal-typewriter-sound-volume-value").text(settings.typewriterSoundVolume + "%");
       saveSettings();
     });
     $2("#gal-auto-speed").on("input", function() {
-      settings2.autoPlaySpeed = parseFloat($2(this).val());
-      $2("#gal-auto-speed-value").text(settings2.autoPlaySpeed + "秒");
+      settings.autoPlaySpeed = parseFloat($2(this).val());
+      $2("#gal-auto-speed-value").text(settings.autoPlaySpeed + "秒");
       saveSettings();
     });
     $2("#gal-show-sprites").on("change", function() {
-      settings2.showSprites = $2(this).is(":checked");
+      settings.showSprites = $2(this).is(":checked");
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-hide-floors").on("change", function() {
-      settings2.hideOtherFloors = $2(this).is(":checked");
-      setHideOtherFloors(settings2.hideOtherFloors);
+      settings.hideOtherFloors = $2(this).is(":checked");
+      setHideOtherFloors(settings.hideOtherFloors);
       if (getIsEnabled()) {
-        if (settings2.hideOtherFloors) hideNonLastFloors();
+        if (settings.hideOtherFloors) hideNonLastFloors();
         else showAllFloors();
       }
       saveSettings();
     });
     $2("#gal-bg-fill-mode").on("change", function() {
-      settings2.bgFillMode = $2(this).val();
+      settings.bgFillMode = $2(this).val();
       applyBgFillMode();
       saveSettings();
     });
     $2("#gal-skin-select").on("change", function() {
-      settings2.skin = normalizeSkinValue($2(this).val());
+      settings.skin = normalizeSkinValue($2(this).val());
       applySkin();
       applySettingsToUI();
       saveSettings();
     });
     const getTitleSettingsState = () => {
       const normalized = ensureTitleScreenSettings();
-      settings2.titleScreen = normalized;
+      settings.titleScreen = normalized;
       return normalized;
     };
     const normalizeTitleSourceChoice = (ts) => {
@@ -75710,8 +75710,8 @@ ${normalizedSource}`;
     });
     syncTitleSourceInputs();
     $2("#gal-effects-enabled").on("change", function() {
-      settings2.effectsEnabled = $2(this).is(":checked");
-      if (!settings2.effectsEnabled) {
+      settings.effectsEnabled = $2(this).is(":checked");
+      if (!settings.effectsEnabled) {
         clearAllPixiEffects();
       }
       syncPixiEffectsSettings();
@@ -75721,31 +75721,31 @@ ${normalizedSource}`;
     });
     $2("#gal-effects-quality").on("change", function() {
       const nextQuality = String($2(this).val() || "").trim();
-      settings2.effectsQuality = ["mobile", "balanced", "high"].includes(nextQuality) ? nextQuality : "balanced";
+      settings.effectsQuality = ["mobile", "balanced", "high"].includes(nextQuality) ? nextQuality : "balanced";
       syncPixiEffectsSettings();
       saveSettings();
     });
     $2("#gal-effects-autoclear").on("change", function() {
-      settings2.effectsAutoClearOnSceneChange = $2(this).is(":checked");
+      settings.effectsAutoClearOnSceneChange = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-effects-max-active").on("input change", function() {
       const parsed = parseInt($2(this).val(), 10);
-      settings2.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
-      $2("#gal-effects-max-active-value").text(settings2.effectsMaxActive);
+      settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
+      $2("#gal-effects-max-active-value").text(settings.effectsMaxActive);
       syncPixiEffectsSettings();
       saveSettings();
     });
     $2("#gal-space-next").on("change", function() {
-      settings2.spaceKeyNext = $2(this).is(":checked");
+      settings.spaceKeyNext = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-enter-next").on("change", function() {
-      settings2.enterKeyNext = $2(this).is(":checked");
+      settings.enterKeyNext = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-ctrl-skip").on("change", function() {
-      settings2.ctrlKeySkip = $2(this).is(":checked");
+      settings.ctrlKeySkip = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-enhanced-mode").on("change", function() {
@@ -75864,55 +75864,55 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       });
     });
     $2("#gal-skip-speed").on("input", function() {
-      settings2.skipSpeed = parseFloat($2(this).val());
-      $2("#gal-skip-speed-value").text(settings2.skipSpeed + "s");
+      settings.skipSpeed = parseFloat($2(this).val());
+      $2("#gal-skip-speed-value").text(settings.skipSpeed + "s");
       saveSettings();
     });
     $2("#gal-smart-detection").on("change", function() {
-      settings2.smartDetection = $2(this).is(":checked");
+      settings.smartDetection = $2(this).is(":checked");
       saveSettings();
       if (getIsEnabled()) applyGalgameMode();
     });
     $2("#gal-global-debug").on("change", function() {
-      settings2.globalDebug = $2(this).is(":checked");
-      setGlobalDebugEnabled(settings2.globalDebug);
+      settings.globalDebug = $2(this).is(":checked");
+      setGlobalDebugEnabled(settings.globalDebug);
       const manager = getLive2DManagerRef();
       if (manager) {
-        manager.debug = !!settings2.globalDebug;
+        manager.debug = !!settings.globalDebug;
       }
       saveSettings();
-      showToast4(settings2.globalDebug ? "全局 Debug 日志已开启" : "全局 Debug 日志已关闭，仅显示错误日志");
+      showToast4(settings.globalDebug ? "全局 Debug 日志已开启" : "全局 Debug 日志已关闭，仅显示错误日志");
     });
     $2("#gal-sprite-scale").on("input", function() {
-      settings2.spriteScale = parseInt($2(this).val());
-      $2("#gal-sprite-scale-value").text(settings2.spriteScale + "%");
+      settings.spriteScale = parseInt($2(this).val());
+      $2("#gal-sprite-scale-value").text(settings.spriteScale + "%");
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-sprite-bottom").on("input", function() {
-      settings2.spriteBottomOffset = parseInt($2(this).val());
-      $2("#gal-sprite-bottom-value").text(settings2.spriteBottomOffset + "%");
+      settings.spriteBottomOffset = parseInt($2(this).val());
+      $2("#gal-sprite-bottom-value").text(settings.spriteBottomOffset + "%");
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-sprite-spacing").on("input", function() {
-      settings2.spriteSpacing = parseInt($2(this).val());
-      $2("#gal-sprite-spacing-value").text(settings2.spriteSpacing + "%");
+      settings.spriteSpacing = parseInt($2(this).val());
+      $2("#gal-sprite-spacing-value").text(settings.spriteSpacing + "%");
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-show-missing-sprite-placeholder").on("change", function() {
-      settings2.showMissingSpritePlaceholder = $2(this).is(":checked");
+      settings.showMissingSpritePlaceholder = $2(this).is(":checked");
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-speaker-glow").on("change", function() {
-      settings2.speakerGlow = $2(this).is(":checked");
+      settings.speakerGlow = $2(this).is(":checked");
       applySettingsToUI();
       saveSettings();
     });
     $2("#gal-speaker-bubble").on("change", function() {
-      settings2.speakerBubble = $2(this).is(":checked");
+      settings.speakerBubble = $2(this).is(":checked");
       applySettingsToUI();
       saveSettings();
     });
@@ -75925,9 +75925,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       injectCOTToWorldbook().then(() => showToast4(enabled ? "TTS已启用，COT已更新" : "TTS已关闭，COT已更新"));
     });
     $2("#gal-tts-provider").on("change", async function() {
-      settings2.ttsProvider = $2(this).val();
+      settings.ttsProvider = $2(this).val();
       saveSettings();
-      $2("#gal-gpt-sovits-config").toggle(settings2.ttsProvider === TTS_PROVIDER.GPT_SOVITS_V2);
+      $2("#gal-gpt-sovits-config").toggle(settings.ttsProvider === TTS_PROVIDER.GPT_SOVITS_V2);
       try {
         TTSManager._refreshProviderState();
       } catch (e) {
@@ -75936,21 +75936,21 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       injectCOTToWorldbook().then(() => showToast4("TTS引擎已切换，COT已更新")).catch(() => showToast4("TTS引擎已切换"));
     });
     $2("#gal-tts-autoplay").on("change", function() {
-      settings2.ttsAutoPlay = $2(this).is(":checked");
+      settings.ttsAutoPlay = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-tts-bilingual-zh-ja-enabled").on("change", function() {
-      settings2.ttsBilingualZhJaEnabled = $2(this).is(":checked");
+      settings.ttsBilingualZhJaEnabled = $2(this).is(":checked");
       saveSettings();
-      injectCOTToWorldbook().then(() => showToast4(settings2.ttsBilingualZhJaEnabled ? "中日双语模式已开启，COT已更新" : "中日双语模式已关闭，COT已更新")).catch(() => showToast4(settings2.ttsBilingualZhJaEnabled ? "中日双语模式已开启" : "中日双语模式已关闭"));
+      injectCOTToWorldbook().then(() => showToast4(settings.ttsBilingualZhJaEnabled ? "中日双语模式已开启，COT已更新" : "中日双语模式已关闭，COT已更新")).catch(() => showToast4(settings.ttsBilingualZhJaEnabled ? "中日双语模式已开启" : "中日双语模式已关闭"));
     });
     $2("#gal-situational-style-enabled").on("change", function() {
-      settings2.situationalStyleEnabled = $2(this).is(":checked");
+      settings.situationalStyleEnabled = $2(this).is(":checked");
       saveSettings();
-      injectCOTToWorldbook().then(() => showToast4(settings2.situationalStyleEnabled ? "情境样式已开启，COT已更新" : "情境样式已关闭，COT已更新")).catch(() => showToast4(settings2.situationalStyleEnabled ? "情境样式已开启" : "情境样式已关闭"));
+      injectCOTToWorldbook().then(() => showToast4(settings.situationalStyleEnabled ? "情境样式已开启，COT已更新" : "情境样式已关闭，COT已更新")).catch(() => showToast4(settings.situationalStyleEnabled ? "情境样式已开启" : "情境样式已关闭"));
     });
     $2("#gal-tts-default-speaker").on("change", function() {
-      settings2.ttsDefaultSpeaker = $2(this).val();
+      settings.ttsDefaultSpeaker = $2(this).val();
       saveSettings();
     });
     const addVoiceToGenderPool = (poolKey, candidateSelector) => {
@@ -75958,12 +75958,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       if (!$candidate.length) return;
       const selectedVoice = String($candidate.val() || "").trim();
       if (!selectedVoice) return;
-      const nextList = normalizeVoiceNameList([...settings2[poolKey] || [], selectedVoice]);
-      if (nextList.length === (settings2[poolKey] || []).length) {
+      const nextList = normalizeVoiceNameList([...settings[poolKey] || [], selectedVoice]);
+      if (nextList.length === (settings[poolKey] || []).length) {
         showToast4("该音色已在列表中");
         return;
       }
-      settings2[poolKey] = nextList;
+      settings[poolKey] = nextList;
       saveSettings();
       renderVoicePoolChips(poolKey === "ttsDefaultMaleVoices" ? "#gal-tts-default-male-list" : "#gal-tts-default-female-list", poolKey);
       $candidate.val("");
@@ -75973,35 +75973,35 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $panel.on("click", ".gal-voice-chip-remove", function() {
       const poolKey = String($2(this).data("pool") || "").trim();
       const voiceName = String($2(this).data("voice") || "").trim();
-      if (!poolKey || !voiceName || !Array.isArray(settings2[poolKey])) return;
-      settings2[poolKey] = normalizeVoiceNameList(settings2[poolKey].filter((item) => String(item || "").trim() !== voiceName));
+      if (!poolKey || !voiceName || !Array.isArray(settings[poolKey])) return;
+      settings[poolKey] = normalizeVoiceNameList(settings[poolKey].filter((item) => String(item || "").trim() !== voiceName));
       saveSettings();
       renderVoicePoolChips(poolKey === "ttsDefaultMaleVoices" ? "#gal-tts-default-male-list" : "#gal-tts-default-female-list", poolKey);
     });
     $2("#gal-gpt-sovits-url").on("change", function() {
-      settings2.gptSoVits = settings2.gptSoVits || {};
-      settings2.gptSoVits.apiUrl = $2(this).val().trim();
+      settings.gptSoVits = settings.gptSoVits || {};
+      settings.gptSoVits.apiUrl = $2(this).val().trim();
       saveSettings();
     });
     $2("#gal-gpt-sovits-proxy").on("change", function() {
-      settings2.gptSoVits = settings2.gptSoVits || {};
-      settings2.gptSoVits.useCorsProxy = $2(this).is(":checked");
+      settings.gptSoVits = settings.gptSoVits || {};
+      settings.gptSoVits.useCorsProxy = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-gpt-sovits-switch-mode").on("change", function() {
-      settings2.gptSoVits = settings2.gptSoVits || {};
-      settings2.gptSoVits.modelSwitchMode = $2(this).val();
+      settings.gptSoVits = settings.gptSoVits || {};
+      settings.gptSoVits.modelSwitchMode = $2(this).val();
       saveSettings();
     });
     $2("#gal-gpt-sovits-set-model-endpoint").on("change", function() {
-      settings2.gptSoVits = settings2.gptSoVits || {};
+      settings.gptSoVits = settings.gptSoVits || {};
       const endpoint = String($2(this).val() || "").trim();
-      settings2.gptSoVits.setModelEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint || "set_model"}`;
+      settings.gptSoVits.setModelEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint || "set_model"}`;
       saveSettings();
     });
     $2("#gal-gpt-sovits-strict-switch").on("change", function() {
-      settings2.gptSoVits = settings2.gptSoVits || {};
-      settings2.gptSoVits.strictWeightSwitch = $2(this).is(":checked");
+      settings.gptSoVits = settings.gptSoVits || {};
+      settings.gptSoVits.strictWeightSwitch = $2(this).is(":checked");
       saveSettings();
     });
     $2("#gal-gpt-sovits-open-model-manager").on("click", function() {
@@ -76020,7 +76020,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       });
     });
     $2("#gal-gpt-sovits-voices-save").on("click", async function() {
-      settings2.gptSoVits = settings2.gptSoVits || {};
+      settings.gptSoVits = settings.gptSoVits || {};
       let parsed = null;
       try {
         parsed = JSON.parse($2("#gal-gpt-sovits-voices-json").val() || "[]");
@@ -76033,10 +76033,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         return;
       }
       const normalized = normalizeGptSoVitsVoicesForStore(parsed);
-      settings2.gptSoVits.voices = normalized.voices;
+      settings.gptSoVits.voices = normalized.voices;
       const firstUsable = pickFirstUsableGptSoVitsVoice(getGptSoVitsVoiceList());
-      if (!settings2.ttsDefaultSpeaker && firstUsable?.name) {
-        settings2.ttsDefaultSpeaker = firstUsable.name;
+      if (!settings.ttsDefaultSpeaker && firstUsable?.name) {
+        settings.ttsDefaultSpeaker = firstUsable.name;
       }
       saveSettings();
       await refreshTtsVoiceOptions();
@@ -76063,7 +76063,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         return;
       }
       if (selectedVoiceName !== voiceName) {
-        settings2.ttsDefaultSpeaker = voiceName;
+        settings.ttsDefaultSpeaker = voiceName;
         saveSettings();
         $2("#gal-tts-default-speaker").val(voiceName);
         showToast4(`已自动切换试听音色：${voiceName}`);
@@ -76074,7 +76074,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $2("#gal-refresh-views").on("click", () => {
       if (getIsEnabled()) {
         applyGalgameMode();
-        if (settings2.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
+        if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
         showToast4("视图已刷新");
       } else {
         showToast4("请先开启 Galgame 模式");
@@ -76665,8 +76665,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   async function switchToImportedCustomSkinProfile(activeProfileId = "") {
     const safeProfileId = String(activeProfileId || "").trim();
     if (!hasUiSkinProfileId(safeProfileId)) return false;
-    const settings2 = getSettings();
-    settings2.skin = safeProfileId;
+    const settings = getSettings();
+    settings.skin = safeProfileId;
     saveSettings();
     refreshSkinSelectElement();
     applySettingsToUI();
@@ -76950,8 +76950,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   function restoreImportedTitleScreenSettings(rawTitleScreenConfig, options2 = {}) {
     const titleScreenConfig = rawTitleScreenConfig && typeof rawTitleScreenConfig === "object" && !Array.isArray(rawTitleScreenConfig) ? rawTitleScreenConfig : null;
     if (!titleScreenConfig) return { restored: false, charIds: [] };
-    const settings2 = getSettings();
-    if (!settings2 || typeof settings2 !== "object") {
+    const settings = getSettings();
+    if (!settings || typeof settings !== "object") {
       return { restored: false, charIds: [] };
     }
     const currentCharId = normalizeCharacterCardId(getCurrentCharId());
@@ -76970,7 +76970,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     if (targetCharIds.size === 0) {
       targetCharIds.add(currentCharId || "default");
     }
-    const currentMap = settings2.titleScreenByChar && typeof settings2.titleScreenByChar === "object" && !Array.isArray(settings2.titleScreenByChar) ? settings2.titleScreenByChar : {};
+    const currentMap = settings.titleScreenByChar && typeof settings.titleScreenByChar === "object" && !Array.isArray(settings.titleScreenByChar) ? settings.titleScreenByChar : {};
     const nextMap = { ...currentMap };
     logTitleScreenDiag2("restoreImportedTitleScreenSettings:begin", {
       currentCharId,
@@ -76984,21 +76984,21 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       nextMap[charId] = buildExportableTitleScreenSettings(titleScreenConfig, charId);
     });
     const primaryCharId = targetCharIds.has(currentCharId) ? currentCharId : Array.from(targetCharIds)[0];
-    settings2.titleScreenByChar = nextMap;
-    settings2.titleScreen = nextMap[primaryCharId] || buildExportableTitleScreenSettings(titleScreenConfig, primaryCharId);
+    settings.titleScreenByChar = nextMap;
+    settings.titleScreen = nextMap[primaryCharId] || buildExportableTitleScreenSettings(titleScreenConfig, primaryCharId);
     saveSettings();
     logTitleScreenDiag2("restoreImportedTitleScreenSettings:end", {
       primaryCharId,
-      afterMapKeys: Object.keys(settings2.titleScreenByChar || {}),
-      activeTitleScreen: summarizeTitleScreenConfigForLog2(settings2.titleScreen)
+      afterMapKeys: Object.keys(settings.titleScreenByChar || {}),
+      activeTitleScreen: summarizeTitleScreenConfigForLog2(settings.titleScreen)
     });
     return { restored: true, charIds: Array.from(targetCharIds) };
   }
   function restoreImportedSpecialCgSettings(rawSpecialCgConfig, options2 = {}) {
     const specialCgConfig = rawSpecialCgConfig && typeof rawSpecialCgConfig === "object" && !Array.isArray(rawSpecialCgConfig) ? rawSpecialCgConfig : null;
     if (!specialCgConfig) return { restored: false, charIds: [] };
-    const settings2 = getSettings();
-    if (!settings2 || typeof settings2 !== "object") {
+    const settings = getSettings();
+    if (!settings || typeof settings !== "object") {
       return { restored: false, charIds: [] };
     }
     const currentCharId = normalizeCharacterCardId(getCurrentCharId());
@@ -77017,15 +77017,15 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     if (targetCharIds.size === 0) {
       targetCharIds.add(currentCharId || "default");
     }
-    const currentMap = settings2.specialCgByChar && typeof settings2.specialCgByChar === "object" && !Array.isArray(settings2.specialCgByChar) ? settings2.specialCgByChar : {};
+    const currentMap = settings.specialCgByChar && typeof settings.specialCgByChar === "object" && !Array.isArray(settings.specialCgByChar) ? settings.specialCgByChar : {};
     const nextMap = { ...currentMap };
     targetCharIds.forEach((charId) => {
       nextMap[charId] = buildExportableSpecialCgSettings(specialCgConfig);
     });
     const primaryCharId = targetCharIds.has(currentCharId) ? currentCharId : Array.from(targetCharIds)[0];
     const fallbackSettings = buildExportableSpecialCgSettings(specialCgConfig);
-    settings2.specialCgByChar = nextMap;
-    settings2.specialCg = nextMap[primaryCharId] || fallbackSettings;
+    settings.specialCgByChar = nextMap;
+    settings.specialCg = nextMap[primaryCharId] || fallbackSettings;
     saveSettings();
     return { restored: true, charIds: Array.from(targetCharIds) };
   }
@@ -77034,10 +77034,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     if (!bgmConfig || !Object.prototype.hasOwnProperty.call(bgmConfig, "whitelist")) {
       return { restored: false, count: 0 };
     }
-    const settings2 = getSettings();
-    settings2.bgmWhitelist = normalizeStringList(bgmConfig.whitelist);
+    const settings = getSettings();
+    settings.bgmWhitelist = normalizeStringList(bgmConfig.whitelist);
     saveSettings();
-    return { restored: true, count: settings2.bgmWhitelist.length };
+    return { restored: true, count: settings.bgmWhitelist.length };
   }
   function escapeHtml4(input) {
     return String(input || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -77862,15 +77862,15 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const ttsEnabled = !!getTTSEnabled();
     const characterVoice = getAllCharacterTTSVoices() || {};
     const characterKeywords = getAllCharacterNameKeywords() || {};
-    const settings2 = getSettings();
+    const settings = getSettings();
     const targetTitleCharId = normalizeCharacterCardId(
       exportCharacterId || getCurrentCharId()
     );
-    const titleScreenByCharMap = settings2?.titleScreenByChar && typeof settings2.titleScreenByChar === "object" && !Array.isArray(settings2.titleScreenByChar) ? settings2.titleScreenByChar : {};
-    const rawTitleScreenSettings = titleScreenByCharMap[targetTitleCharId] || settings2?.titleScreen;
+    const titleScreenByCharMap = settings?.titleScreenByChar && typeof settings.titleScreenByChar === "object" && !Array.isArray(settings.titleScreenByChar) ? settings.titleScreenByChar : {};
+    const rawTitleScreenSettings = titleScreenByCharMap[targetTitleCharId] || settings?.titleScreen;
     const exportTitleScreenSettings = buildTitleScreenExportPayload(rawTitleScreenSettings, targetTitleCharId);
-    const specialCgByCharMap = settings2?.specialCgByChar && typeof settings2.specialCgByChar === "object" && !Array.isArray(settings2.specialCgByChar) ? settings2.specialCgByChar : {};
-    const rawSpecialCgSettings = specialCgByCharMap[targetTitleCharId] || settings2?.specialCg;
+    const specialCgByCharMap = settings?.specialCgByChar && typeof settings.specialCgByChar === "object" && !Array.isArray(settings.specialCgByChar) ? settings.specialCgByChar : {};
+    const rawSpecialCgSettings = specialCgByCharMap[targetTitleCharId] || settings?.specialCg;
     const exportSpecialCgSettings = buildSpecialCgExportPayload(rawSpecialCgSettings, targetTitleCharId);
     logTitleScreenDiag2("buildGalgameCardConfig:title-export", {
       exportCharacterId: String(exportCharacterId || "").trim(),
@@ -78237,7 +78237,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }
     if (includeBgmSettings) {
       out.bgm = {
-        whitelist: normalizeStringList(settings2?.bgmWhitelist)
+        whitelist: normalizeStringList(settings?.bgmWhitelist)
       };
     }
     return out;
@@ -83298,11 +83298,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }
     const currentRegionKey = String(options2.regionKey || viewModel.regionKey || "default-region").trim() || "default-region";
     const coordScopeKey = GLOBAL_MAP_REGION_KEY;
-    const settings2 = getMapSettings();
-    const markerIconClass = buildMarkerIconClass(settings2.mapMarkerStyle);
+    const settings = getMapSettings();
+    const markerIconClass = buildMarkerIconClass(settings.mapMarkerStyle);
     const points = Array.isArray(viewModel.points) ? viewModel.points : [];
     const manualCoords = Object.assign({}, getMapCoords(coordScopeKey));
-    const autoCoords = generateAutoLayout(points, coordScopeKey, settings2.mapLayoutSeed);
+    const autoCoords = generateAutoLayout(points, coordScopeKey, settings.mapLayoutSeed);
     const draftCoords = Object.assign({}, manualCoords);
     const mapRecord = await getUnifiedMapImage();
     let mapImageUrl = "";
@@ -84002,7 +84002,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     topWindow[GLOBAL_EVENT_DELEGATION_BOUND_FLAG] = true;
     console.log(`[${SCRIPT_NAME}] 设置全局事件委托...`);
     const doc = topWindow.document;
-    const settings2 = getSettings();
+    const settings = getSettings();
     function normalizeStatusPopupHtml(value) {
       if (typeof value !== "string") return "";
       const trimmed = value.trim();
@@ -84035,7 +84035,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       const nextSegment = state.segments[state.currentIndex + 1];
       if (nextSegment) {
         const nextSpeakText = String(nextSegment.ttsText ?? nextSegment.text ?? "").trim();
-        const nextWillSpeak = nextSegment.type === "dialogue" && settings2.ttsEnabled && nextSpeakText.length > 0;
+        const nextWillSpeak = nextSegment.type === "dialogue" && settings.ttsEnabled && nextSpeakText.length > 0;
         if (nextWillSpeak) {
           TTSManager.stop();
         }
@@ -84467,7 +84467,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         $btn.addClass("gal-auto-playing");
         TTSManager.stop();
         const state = messageSegmentState7.get(String(mesId));
-        if (state && settings2.ttsEnabled) {
+        if (state && settings.ttsEnabled) {
           const currentSegment = state.segments[state.currentIndex];
           if (currentSegment && currentSegment.type === "dialogue") {
             const segmentId = `${mesId}_${state.currentIndex}`;
@@ -84491,7 +84491,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
               TTSManager.stop();
               state2.currentIndex++;
               await scheduleOverlaySegmentDisplay(state2, "auto-play");
-              if (settings2.ttsEnabled) {
+              if (settings.ttsEnabled) {
                 const currentSegment = state2.segments[state2.currentIndex];
                 if (currentSegment && currentSegment.type === "dialogue") {
                   const segmentId = `${mesId}_${state2.currentIndex}`;
@@ -84508,12 +84508,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           } finally {
             autoTickInFlight = false;
           }
-        }, settings2.autoPlaySpeed * 1e3);
+        }, settings.autoPlaySpeed * 1e3);
         $btn.data("auto-timer", timer);
       }
     });
     $2(doc).on("click", "#gal-global-overlay .gal-char-placeholder", async function(e) {
-      if (!settings2.showMissingSpritePlaceholder) return;
+      if (!settings.showMissingSpritePlaceholder) return;
       e.stopPropagation();
       const $container = $2(this).closest(".gal-char-container");
       const character = $container.data("character") || "default";
@@ -86679,9 +86679,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     return `${width2} / ${height2}`;
   }
   function resolveSpriteUploadAspectRatio() {
-    const settings2 = getSettings();
+    const settings = getSettings();
     const ratioLabel = normalizeSpriteUploadAspectRatio(
-      settings2?.spriteUploadAspectRatio || DEFAULT_SPRITE_UPLOAD_RATIO_LABEL
+      settings?.spriteUploadAspectRatio || DEFAULT_SPRITE_UPLOAD_RATIO_LABEL
     );
     return {
       ratioLabel,
@@ -87064,7 +87064,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       (e) => `<option value="${e}" ${e === expression || expression === "neutral" && e === "默认" ? "selected" : ""}>${e}</option>`
     ).join("");
     const ttsVoiceList = await getTTSVoiceListAsync();
-    const settings2 = getSettings();
+    const settings = getSettings();
     let { ratioLabel: spriteUploadRatioLabel, aspectRatio: spriteAspectRatio } = resolveSpriteUploadAspectRatio();
     const cropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS.map((item) => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? "selected" : ""}>${item.label}</option>`).join("");
     const ttsVoiceOptions = ttsVoiceList.map((v) => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? "selected" : ""}>${v.name} (${v.desc})</option>`).join("");
@@ -87300,7 +87300,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio(nextRatioLabel);
       spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
       if (persist) {
-        settings2.spriteUploadAspectRatio = spriteUploadRatioLabel;
+        settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
         saveSettings();
       }
       $2("#gal-sprite-ratio-label").text(spriteUploadRatioLabel);
@@ -87669,7 +87669,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function showBatchUploadDialog(characterId, onCloseCallback) {
     const allExpressions = getAllExpressions();
-    const settings2 = getSettings();
+    const settings = getSettings();
     let {
       ratioLabel: spriteUploadRatioLabel,
       aspectRatio: spriteAspectRatio,
@@ -87831,7 +87831,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     $modal.find("#gal-batch-crop-ratio").on("change", function() {
       spriteUploadRatioLabel = normalizeSpriteUploadAspectRatio($2(this).val());
       spriteAspectRatio = parseAspectRatioLabel(spriteUploadRatioLabel);
-      settings2.spriteUploadAspectRatio = spriteUploadRatioLabel;
+      settings.spriteUploadAspectRatio = spriteUploadRatioLabel;
       saveSettings();
       applyBatchCropRatioUI();
     });
@@ -89057,6 +89057,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     #gal-character-sprites-modal .gal-sprite-card:hover .gal-sprite-delete {
       opacity: 1;
     }
+    @media (max-width: 768px), (pointer: coarse) {
+      #gal-character-sprites-modal .gal-sprite-delete {
+        opacity: 1;
+      }
+    }
     #gal-character-sprites-modal input[type='text'],
     #gal-character-sprites-modal input[type='number'],
     #gal-character-sprites-modal textarea,
@@ -89539,8 +89544,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   function setImageGenConfigRefs({ showBananaAppearancePicker: showBananaAppearancePicker2 }) {
     if (showBananaAppearancePicker2) _showBananaAppearancePickerRef2 = showBananaAppearancePicker2;
   }
-  function buildImageGenConfigPane(settings2) {
-    const src = settings2.bgImageSource || "none";
+  function buildImageGenConfigPane(settings) {
+    const src = settings.bgImageSource || "none";
     const activeEngine = src !== "none" && ["comfyui", "banana", "novelai", "wallhaven"].includes(src) ? src : "comfyui";
     return `
     <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(15,23,42,0.08); border: 1px solid rgba(71,85,105,0.35); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
@@ -89558,9 +89563,9 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       <button class="gal-pill ${activeEngine === "wallhaven" ? "active" : ""}" data-engine="wallhaven"><i class="fa-solid fa-images"></i> Wallhaven</button>
     </div>
     <div data-engine-pane="comfyui" ${activeEngine !== "comfyui" ? 'style="display:none;"' : ""}>${buildComfyUIPane()}</div>
-    <div data-engine-pane="banana" ${activeEngine !== "banana" ? 'style="display:none;"' : ""}>${buildBananaPane(settings2)}</div>
-    <div data-engine-pane="novelai" ${activeEngine !== "novelai" ? 'style="display:none;"' : ""}>${buildNovelAIPane(settings2)}</div>
-    <div data-engine-pane="wallhaven" ${activeEngine !== "wallhaven" ? 'style="display:none;"' : ""}>${buildWallhavenPane(settings2)}</div>
+    <div data-engine-pane="banana" ${activeEngine !== "banana" ? 'style="display:none;"' : ""}>${buildBananaPane(settings)}</div>
+    <div data-engine-pane="novelai" ${activeEngine !== "novelai" ? 'style="display:none;"' : ""}>${buildNovelAIPane(settings)}</div>
+    <div data-engine-pane="wallhaven" ${activeEngine !== "wallhaven" ? 'style="display:none;"' : ""}>${buildWallhavenPane(settings)}</div>
   `;
   }
   function buildComfyUIPane() {
@@ -89587,28 +89592,28 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">负面提示词</label><textarea id="gal-comfyui-negative" placeholder="lowres, bad anatomy..." style="width: 100%; height: 60px; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460; font-size: 0.85rem; resize: vertical;">${getComfyUISettings().negativePrompt}</textarea></div>
   </div>`;
   }
-  function buildBananaPane(settings2) {
+  function buildBananaPane(settings) {
     return `
   <div style="padding: 15px; background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #6b21a8; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-wand-magic-sparkles" style="color: #fbbf24; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">大香蕉生图模块</span></div>
     </div>
     <div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 15px; padding: 10px; background: rgba(139,92,246,0.1); border-radius: 6px;">通过反代 API 生成背景图片，生成后自动保存到背景库。</div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API 地址</label><input type="text" id="gal-banana-proxy-url" placeholder="http://localhost:8045" value="${settings2.bananaImageGen?.proxyUrl || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings2.bananaImageGen?.proxyApiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-banana-proxy-key" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #6b21a8; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片生成模型</label><div style="display: flex; gap: 8px;"><select id="gal-banana-model" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">${settings2.bananaImageGen?.model ? `<option value="${settings2.bananaImageGen.model}" selected>${settings2.bananaImageGen.model}</option>` : '<option value="">点击刷新获取模型列表</option>'}</select><button id="gal-banana-refresh-models" style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer;" title="刷新模型列表"><i class="fa-solid fa-sync"></i></button></div></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生图COT自定义</label><textarea id="gal-banana-cot" placeholder="可填写额外规则" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 80px; resize: vertical;">${settings2.bananaImageGen?.cotTemplate || ""}</textarea></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词前缀</label><input type="text" id="gal-banana-prompt-prefix" placeholder="masterpiece, best quality, highres, " value="${settings2.bananaImageGen?.defaultPromptPrefix || "masterpiece, best quality, highres, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词后缀</label><input type="text" id="gal-banana-prompt-suffix" placeholder=", no humans, scenery, background" value="${settings2.bananaImageGen?.defaultPromptSuffix || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
-    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：生成包含人物的剧情CG | 关闭：生成纯场景背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-cgmode" ${settings2.bananaImageGen?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
-    <div id="gal-banana-size-section" style="margin-bottom: 12px; display: ${settings2.bananaImageGen?.cgMode ? "block" : "none"};"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生成图片比例</label><select id="gal-banana-image-size" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; cursor: pointer;"><option value="1:1" ${settings2.bananaImageGen?.cgImageSize === "1:1" || !settings2.bananaImageGen?.cgImageSize ? "selected" : ""}>1:1 (正方形)</option><option value="16:9" ${settings2.bananaImageGen?.cgImageSize === "16:9" ? "selected" : ""}>16:9 (横屏)</option><option value="9:16" ${settings2.bananaImageGen?.cgImageSize === "9:16" ? "selected" : ""}>9:16 (竖屏)</option><option value="4:3" ${settings2.bananaImageGen?.cgImageSize === "4:3" ? "selected" : ""}>4:3 (横屏)</option><option value="3:4" ${settings2.bananaImageGen?.cgImageSize === "3:4" ? "selected" : ""}>3:4 (竖屏)</option><option value="21:9" ${settings2.bananaImageGen?.cgImageSize === "21:9" ? "selected" : ""}>21:9 (宽银幕)</option><option value="3:2" ${settings2.bananaImageGen?.cgImageSize === "3:2" ? "selected" : ""}>3:2 (横屏)</option><option value="2:3" ${settings2.bananaImageGen?.cgImageSize === "2:3" ? "selected" : ""}>2:3 (竖屏)</option></select><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">选择生成CG图片的比例</div></div>
-    <div id="gal-banana-appearance-section" style="margin-bottom: 12px; display: ${settings2.bananaImageGen?.cgMode ? "block" : "none"};"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;"><label style="color: #ccd6f6; font-size: 0.9rem;">指定人物外观（最多3个）</label><button id="gal-banana-appearance-add" style="padding: 6px 10px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer; font-size: 0.8rem;"><i class="fa-solid fa-plus"></i> 添加角色</button></div><div id="gal-banana-appearance-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div><div id="gal-banana-appearance-empty" style="font-size: 0.75rem; color: #8892b0;">暂无已指定角色</div></div>
-    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">自动保存到背景库</label><div style="font-size: 0.75rem; color: #8892b0;">生成成功后自动添加到背景资源库</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-autosave" ${settings2.bananaImageGen?.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API 地址</label><input type="text" id="gal-banana-proxy-url" placeholder="http://localhost:8045" value="${settings.bananaImageGen?.proxyUrl || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">反代 API Key</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-banana-proxy-key" placeholder="sk-xxx" value="${settings.bananaImageGen?.proxyApiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; font-family: monospace;"><button type="button" class="gal-key-toggle" data-target="gal-banana-proxy-key" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #6b21a8; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片生成模型</label><div style="display: flex; gap: 8px;"><select id="gal-banana-model" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;">${settings.bananaImageGen?.model ? `<option value="${settings.bananaImageGen.model}" selected>${settings.bananaImageGen.model}</option>` : '<option value="">点击刷新获取模型列表</option>'}</select><button id="gal-banana-refresh-models" style="padding: 8px 12px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer;" title="刷新模型列表"><i class="fa-solid fa-sync"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生图COT自定义</label><textarea id="gal-banana-cot" placeholder="可填写额外规则" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 80px; resize: vertical;">${settings.bananaImageGen?.cotTemplate || ""}</textarea></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词前缀</label><input type="text" id="gal-banana-prompt-prefix" placeholder="masterpiece, best quality, highres, " value="${settings.bananaImageGen?.defaultPromptPrefix || "masterpiece, best quality, highres, "}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">默认提示词后缀</label><input type="text" id="gal-banana-prompt-suffix" placeholder=", no humans, scenery, background" value="${settings.bananaImageGen?.defaultPromptSuffix || ""}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：生成包含人物的剧情CG | 关闭：生成纯场景背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-cgmode" ${settings.bananaImageGen?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+    <div id="gal-banana-size-section" style="margin-bottom: 12px; display: ${settings.bananaImageGen?.cgMode ? "block" : "none"};"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">生成图片比例</label><select id="gal-banana-image-size" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; cursor: pointer;"><option value="1:1" ${settings.bananaImageGen?.cgImageSize === "1:1" || !settings.bananaImageGen?.cgImageSize ? "selected" : ""}>1:1 (正方形)</option><option value="16:9" ${settings.bananaImageGen?.cgImageSize === "16:9" ? "selected" : ""}>16:9 (横屏)</option><option value="9:16" ${settings.bananaImageGen?.cgImageSize === "9:16" ? "selected" : ""}>9:16 (竖屏)</option><option value="4:3" ${settings.bananaImageGen?.cgImageSize === "4:3" ? "selected" : ""}>4:3 (横屏)</option><option value="3:4" ${settings.bananaImageGen?.cgImageSize === "3:4" ? "selected" : ""}>3:4 (竖屏)</option><option value="21:9" ${settings.bananaImageGen?.cgImageSize === "21:9" ? "selected" : ""}>21:9 (宽银幕)</option><option value="3:2" ${settings.bananaImageGen?.cgImageSize === "3:2" ? "selected" : ""}>3:2 (横屏)</option><option value="2:3" ${settings.bananaImageGen?.cgImageSize === "2:3" ? "selected" : ""}>2:3 (竖屏)</option></select><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">选择生成CG图片的比例</div></div>
+    <div id="gal-banana-appearance-section" style="margin-bottom: 12px; display: ${settings.bananaImageGen?.cgMode ? "block" : "none"};"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;"><label style="color: #ccd6f6; font-size: 0.9rem;">指定人物外观（最多3个）</label><button id="gal-banana-appearance-add" style="padding: 6px 10px; border-radius: 6px; background: linear-gradient(135deg, #8b5cf6 0%, #6b21a8 100%); color: #fff; border: none; cursor: pointer; font-size: 0.8rem;"><i class="fa-solid fa-plus"></i> 添加角色</button></div><div id="gal-banana-appearance-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div><div id="gal-banana-appearance-empty" style="font-size: 0.75rem; color: #8892b0;">暂无已指定角色</div></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">自动保存到背景库</label><div style="font-size: 0.75rem; color: #8892b0;">生成成功后自动添加到背景资源库</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-banana-autosave" ${settings.bananaImageGen?.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
     <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(139,92,246,0.3);"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">手动生成背景</label><div style="display: flex; gap: 8px; margin-bottom: 8px;"><input type="text" id="gal-banana-scene-name" placeholder="场景名称（如：教室、森林）" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8;"></div><div style="display: flex; gap: 8px; margin-bottom: 8px;"><textarea id="gal-banana-custom-prompt" placeholder="自定义提示词（可选）" style="flex: 1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #6b21a8; min-height: 60px; resize: vertical;"></textarea></div><button id="gal-banana-generate-btn" style="width: 100%; padding: 10px; border-radius: 6px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #1a1a2e; border: none; cursor: pointer; font-weight: 700; font-size: 0.95rem;"><i class="fa-solid fa-wand-magic-sparkles"></i> 生成背景图片</button><div id="gal-banana-preview" style="margin-top: 10px; display: none;"><div style="font-size: 0.8rem; color: #a78bfa; margin-bottom: 5px;">生成预览：</div><img id="gal-banana-preview-img" style="max-width: 100%; border-radius: 6px; border: 1px solid #6b21a8;"><button id="gal-banana-save-to-library" style="width: 100%; margin-top: 8px; padding: 8px; border-radius: 6px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff; border: none; cursor: pointer; font-weight: 600; font-size: 0.9rem;"><i class="fa-solid fa-save"></i> 保存到背景库</button></div></div>
   </div>`;
   }
-  function buildNovelAIPane(settings2) {
-    const ns = settings2.novelai || {};
+  function buildNovelAIPane(settings) {
+    const ns = settings.novelai || {};
     return `
   <div style="padding: 15px; background: linear-gradient(135deg, #1a2e1a 0%, #1a1a2e 100%); border-radius: 10px; border: 1px solid #2d6a4f; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -89627,30 +89632,30 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">自动保存到背景库</label><div style="font-size: 0.75rem; color: #8892b0;">生成成功后自动添加到背景资源库</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-novelai-autosave" ${ns.autoSaveToLibrary !== false ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
   </div>`;
   }
-  function buildWallhavenPane(settings2) {
+  function buildWallhavenPane(settings) {
     return `
   <div style="padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 10px; border: 1px solid #0f3460; margin-top: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
       <div style="display: flex; align-items: center; gap: 10px;"><i class="fa-solid fa-images" style="color: #00d9ff; font-size: 1.2rem;"></i><span style="font-weight: 700; color: #fff; font-size: 1.1rem;">Wallhaven 壁纸搜索</span></div>
     </div>
     <div style="font-size: 0.8rem; color: #8892b0; margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">仅供学习研究使用。所有图片版权归原作者及 Wallhaven 所有。</div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片分类</label><select id="gal-wallhaven-category" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="anime" ${settings2.wallhaven?.category === "anime" ? "selected" : ""}>动漫漫画</option><option value="all" ${settings2.wallhaven?.category === "all" ? "selected" : ""}>全部类型</option><option value="people" ${settings2.wallhaven?.category === "people" ? "selected" : ""}>人物写真</option><option value="general" ${settings2.wallhaven?.category === "general" ? "selected" : ""}>综合壁纸</option></select></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">安全级别</label><select id="gal-wallhaven-purity" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="sfw" ${settings2.wallhaven?.purity === "sfw" ? "selected" : ""}>SFW (安全)</option><option value="sketchy" ${settings2.wallhaven?.purity === "sketchy" ? "selected" : ""}>Sketchy (略敏感)</option></select></div>
-    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：允许人物关键词 | 关闭：只搜环境背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-wallhaven-cgmode" ${settings2.wallhaven?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">自定义标签</label><input type="text" id="gal-wallhaven-customtags" placeholder="例如: cosplay, landscape, 4k" value="${(settings2.wallhaven?.customTags || []).join(", ")}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">多个标签用逗号分隔</div></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排序方式</label><select id="gal-wallhaven-sorting" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="favorites" ${settings2.wallhaven?.sorting === "favorites" || !settings2.wallhaven?.sorting ? "selected" : ""}>收藏量</option><option value="relevance" ${settings2.wallhaven?.sorting === "relevance" ? "selected" : ""}>相关度</option><option value="views" ${settings2.wallhaven?.sorting === "views" ? "selected" : ""}>浏览量</option><option value="date_added" ${settings2.wallhaven?.sorting === "date_added" ? "selected" : ""}>最新上传</option><option value="toplist" ${settings2.wallhaven?.sorting === "toplist" ? "selected" : ""}>排行榜</option><option value="random" ${settings2.wallhaven?.sorting === "random" ? "selected" : ""}>随机</option></select></div>
-    <div style="margin-bottom: 12px; ${settings2.wallhaven?.sorting === "toplist" ? "" : "display: none;"}" id="gal-wallhaven-toprange-container"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排行榜时间范围</label><select id="gal-wallhaven-toprange" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="1d" ${settings2.wallhaven?.topRange === "1d" ? "selected" : ""}>1天</option><option value="3d" ${settings2.wallhaven?.topRange === "3d" ? "selected" : ""}>3天</option><option value="1w" ${settings2.wallhaven?.topRange === "1w" ? "selected" : ""}>1周</option><option value="1M" ${settings2.wallhaven?.topRange === "1M" || !settings2.wallhaven?.topRange ? "selected" : ""}>1个月</option><option value="3M" ${settings2.wallhaven?.topRange === "3M" ? "selected" : ""}>3个月</option><option value="6M" ${settings2.wallhaven?.topRange === "6M" ? "selected" : ""}>6个月</option><option value="1y" ${settings2.wallhaven?.topRange === "1y" ? "selected" : ""}>1年</option></select></div>
-    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key（可选）</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-wallhaven-apikey" placeholder="留空使用公开 API" value="${settings2.wallhaven?.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><button type="button" class="gal-key-toggle" data-target="gal-wallhaven-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #0f3460; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">图片分类</label><select id="gal-wallhaven-category" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="anime" ${settings.wallhaven?.category === "anime" ? "selected" : ""}>动漫漫画</option><option value="all" ${settings.wallhaven?.category === "all" ? "selected" : ""}>全部类型</option><option value="people" ${settings.wallhaven?.category === "people" ? "selected" : ""}>人物写真</option><option value="general" ${settings.wallhaven?.category === "general" ? "selected" : ""}>综合壁纸</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">安全级别</label><select id="gal-wallhaven-purity" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="sfw" ${settings.wallhaven?.purity === "sfw" ? "selected" : ""}>SFW (安全)</option><option value="sketchy" ${settings.wallhaven?.purity === "sketchy" ? "selected" : ""}>Sketchy (略敏感)</option></select></div>
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;"><div><label style="color: #ccd6f6; font-size: 0.9rem;">CG模式</label><div style="font-size: 0.75rem; color: #8892b0;">开启：允许人物关键词 | 关闭：只搜环境背景</div></div><label class="gal-realtime-switch"><input type="checkbox" id="gal-wallhaven-cgmode" ${settings.wallhaven?.cgMode ? "checked" : ""}><span class="gal-realtime-slider"></span></label></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">自定义标签</label><input type="text" id="gal-wallhaven-customtags" placeholder="例如: cosplay, landscape, 4k" value="${(settings.wallhaven?.customTags || []).join(", ")}" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><div style="font-size: 0.75rem; color: #8892b0; margin-top: 4px;">多个标签用逗号分隔</div></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排序方式</label><select id="gal-wallhaven-sorting" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="favorites" ${settings.wallhaven?.sorting === "favorites" || !settings.wallhaven?.sorting ? "selected" : ""}>收藏量</option><option value="relevance" ${settings.wallhaven?.sorting === "relevance" ? "selected" : ""}>相关度</option><option value="views" ${settings.wallhaven?.sorting === "views" ? "selected" : ""}>浏览量</option><option value="date_added" ${settings.wallhaven?.sorting === "date_added" ? "selected" : ""}>最新上传</option><option value="toplist" ${settings.wallhaven?.sorting === "toplist" ? "selected" : ""}>排行榜</option><option value="random" ${settings.wallhaven?.sorting === "random" ? "selected" : ""}>随机</option></select></div>
+    <div style="margin-bottom: 12px; ${settings.wallhaven?.sorting === "toplist" ? "" : "display: none;"}" id="gal-wallhaven-toprange-container"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">排行榜时间范围</label><select id="gal-wallhaven-toprange" style="width: 100%; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><option value="1d" ${settings.wallhaven?.topRange === "1d" ? "selected" : ""}>1天</option><option value="3d" ${settings.wallhaven?.topRange === "3d" ? "selected" : ""}>3天</option><option value="1w" ${settings.wallhaven?.topRange === "1w" ? "selected" : ""}>1周</option><option value="1M" ${settings.wallhaven?.topRange === "1M" || !settings.wallhaven?.topRange ? "selected" : ""}>1个月</option><option value="3M" ${settings.wallhaven?.topRange === "3M" ? "selected" : ""}>3个月</option><option value="6M" ${settings.wallhaven?.topRange === "6M" ? "selected" : ""}>6个月</option><option value="1y" ${settings.wallhaven?.topRange === "1y" ? "selected" : ""}>1年</option></select></div>
+    <div style="margin-bottom: 12px;"><label style="color: #ccd6f6; font-size: 0.9rem; margin-bottom: 6px; display: block;">API Key（可选）</label><div style="display:flex; gap:8px; align-items:center;"><input type="password" id="gal-wallhaven-apikey" placeholder="留空使用公开 API" value="${settings.wallhaven?.apiKey || ""}" style="flex:1; padding: 8px; border-radius: 6px; background: #1a1a2e; color: #fff; border: 1px solid #0f3460;"><button type="button" class="gal-key-toggle" data-target="gal-wallhaven-apikey" style="width:36px; height:36px; border-radius:6px; background:#1a1a2e; border:1px solid #0f3460; color:#8892b0; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;" title="显示/隐藏"><i class="fa-solid fa-eye"></i></button></div></div>
   </div>`;
   }
-  function makeSettingsUpdater(settings2, subKey) {
+  function makeSettingsUpdater(settings, subKey) {
     return function update(field, value) {
-      if (!settings2[subKey]) settings2[subKey] = {};
-      settings2[subKey][field] = value;
+      if (!settings[subKey]) settings[subKey] = {};
+      settings[subKey][field] = value;
       saveSettings();
     };
   }
-  function bindImageGenConfigEvents($container, settings2) {
+  function bindImageGenConfigEvents($container, settings) {
     $container.find(".gal-pill").on("click", function() {
       const engine = $2(this).data("engine");
       $container.find(".gal-pill").removeClass("active");
@@ -89660,11 +89665,11 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     $container.find('input[name="gal-bg-source"]').on("change", async function() {
       const value = $2(this).val();
-      settings2.bgImageSource = value;
-      settings2.realTimeBackgroundGen = value === "comfyui";
-      if (settings2.bananaImageGen) settings2.bananaImageGen.enabled = value === "banana";
-      if (settings2.novelai) settings2.novelai.enabled = value === "novelai";
-      if (settings2.wallhaven) settings2.wallhaven.enabled = value === "wallhaven";
+      settings.bgImageSource = value;
+      settings.realTimeBackgroundGen = value === "comfyui";
+      if (settings.bananaImageGen) settings.bananaImageGen.enabled = value === "banana";
+      if (settings.novelai) settings.novelai.enabled = value === "novelai";
+      if (settings.wallhaven) settings.wallhaven.enabled = value === "wallhaven";
       saveSettings();
       if (getIsEnabled()) await injectCOTToWorldbook();
       $container.find(".gal-radio-label").css("color", BG_SOURCE_INACTIVE_COLOR);
@@ -89683,12 +89688,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       input.type = input.type === "password" ? "text" : "password";
       $2(this).find("i").toggleClass("fa-eye fa-eye-slash");
     });
-    bindComfyUIConfigEvents($container, settings2);
-    bindBananaConfigEvents($container, settings2);
-    bindNovelAIConfigEvents($container, settings2);
-    bindWallhavenConfigEvents($container, settings2);
+    bindComfyUIConfigEvents($container, settings);
+    bindBananaConfigEvents($container, settings);
+    bindNovelAIConfigEvents($container, settings);
+    bindWallhavenConfigEvents($container, settings);
   }
-  function bindComfyUIConfigEvents($container, settings2) {
+  function bindComfyUIConfigEvents($container, settings) {
     $container.find("#gal-comfyui-url").on("change", function() {
       const cs = getComfyUISettings();
       cs.apiUrl = $2(this).val().trim();
@@ -89750,7 +89755,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         $sel.html('<option value="">(加载失败)</option>');
       }
     }
-    if (settings2.bgImageSource === "comfyui") loadCheckpointsToSelect();
+    if (settings.bgImageSource === "comfyui") loadCheckpointsToSelect();
     $container.find("#gal-comfy-def-checkpoint").on("change", function() {
       const cs = getComfyUISettings();
       cs.defaultCheckpoint = $2(this).val();
@@ -89789,8 +89794,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       saveComfyUISettings(cs);
     });
   }
-  function bindBananaConfigEvents($container, settings2) {
-    const update = makeSettingsUpdater(settings2, "bananaImageGen");
+  function bindBananaConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "bananaImageGen");
     $container.find("#gal-banana-proxy-url").on("change", function() {
       update("proxyUrl", $2(this).val().trim());
     });
@@ -89924,7 +89929,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         }
         const requestBody = { model, messages: [{ role: "user", content: messageContent }], stream: false };
         if (cgMode) {
-          const imageSizeRatio = settings2.bananaImageGen?.cgImageSize || "1:1";
+          const imageSizeRatio = settings.bananaImageGen?.cgImageSize || "1:1";
           const [ratioW, ratioH] = imageSizeRatio.split(":").map(Number);
           let width2, height2;
           if (ratioW >= ratioH) {
@@ -89989,8 +89994,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       }
     });
   }
-  function bindNovelAIConfigEvents($container, settings2) {
-    const update = makeSettingsUpdater(settings2, "novelai");
+  function bindNovelAIConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "novelai");
     $container.find("#gal-novelai-apikey").on("input change", function() {
       update("apiKey", $2(this).val().trim());
     });
@@ -89998,10 +90003,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       update("model", $2(this).val());
     });
     $container.find("#gal-novelai-size").on("change", function() {
-      if (!settings2.novelai) settings2.novelai = {};
+      if (!settings.novelai) settings.novelai = {};
       const [w, h] = $2(this).val().split("x").map(Number);
-      settings2.novelai.width = w;
-      settings2.novelai.height = h;
+      settings.novelai.width = w;
+      settings.novelai.height = h;
       saveSettings();
     });
     $container.find("#gal-novelai-steps").on("input", function() {
@@ -90030,8 +90035,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       update("autoSaveToLibrary", $2(this).is(":checked"));
     });
   }
-  function bindWallhavenConfigEvents($container, settings2) {
-    const update = makeSettingsUpdater(settings2, "wallhaven");
+  function bindWallhavenConfigEvents($container, settings) {
+    const update = makeSettingsUpdater(settings, "wallhaven");
     $container.find("#gal-wallhaven-category").on("change", async function() {
       update("category", $2(this).val());
       if (getIsEnabled()) await injectCOTToWorldbook();
@@ -92725,8 +92730,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const $pane = $modal.find('.gal-tab-pane[data-pane="skin"]');
     if (!$pane.length) return;
     const initialProfiles = getCachedUiSkinProfiles();
-    const settings2 = getSettings();
-    const initialProfileId = hasUiSkinProfileId(settings2.skin) ? String(settings2.skin).trim() : initialProfiles[0]?.id || "";
+    const settings = getSettings();
+    const initialProfileId = hasUiSkinProfileId(settings.skin) ? String(settings.skin).trim() : initialProfiles[0]?.id || "";
     const state = {
       profileId: initialProfileId,
       profiles: initialProfiles,
@@ -92983,7 +92988,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     const syncActiveProfileSetting = async ({ persistSkinSelection = true } = {}) => {
       if (!state.profileId) return;
       if (persistSkinSelection) {
-        settings2.skin = state.profileId;
+        settings.skin = state.profileId;
         saveSettings();
         refreshSkinSelectElement();
       }
@@ -93057,16 +93062,16 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     const syncCropperMattingSettings = ({ shouldRender = false, keepPreview = true } = {}) => {
       if (!state.cropper) return readMattingSettingsFromControls();
-      const settings3 = readMattingSettingsFromControls();
-      state.cropper.setMattingEnabled(settings3.enabled, { shouldRender: false, keepPreview });
-      state.cropper.setMattingKeyColor(settings3.keyColor, { shouldRender: false });
-      state.cropper.setMattingTolerance(settings3.tolerance, { shouldRender: false });
-      state.cropper.setMattingBrushSize(settings3.brushSize, { shouldRender: false });
+      const settings2 = readMattingSettingsFromControls();
+      state.cropper.setMattingEnabled(settings2.enabled, { shouldRender: false, keepPreview });
+      state.cropper.setMattingKeyColor(settings2.keyColor, { shouldRender: false });
+      state.cropper.setMattingTolerance(settings2.tolerance, { shouldRender: false });
+      state.cropper.setMattingBrushSize(settings2.brushSize, { shouldRender: false });
       state.cropper.setMattingBrushMode(state.mattingTool === "keep" ? "keep" : "erase", { shouldRender: false });
       if (shouldRender) {
         state.cropper.render({ type: "matting-settings", state: state.cropper.getMattingState?.() });
       }
-      return settings3;
+      return settings2;
     };
     const applyMattingPresetToControls = (preset) => {
       const safeColor = normalizeHexColor(preset?.color, DEFAULT_CHROMA_KEY_COLOR2);
@@ -94362,12 +94367,12 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       });
       $pane.find("#gal-custom-skin-apply-matting").on("click", () => {
         if ($applyMatting.prop("disabled")) return;
-        const settings3 = syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
+        const settings2 = syncCropperMattingSettings({ shouldRender: false, keepPreview: true });
         clearComponentSession({ keepSessionActive: false, shouldRender: false });
         clearFooterBatchSession({ keepCandidates: false, shouldRender: false, clearCropperCandidates: false });
         const result = state.cropper.applyChromaKey({
-          color: settings3.keyColor,
-          tolerance: settings3.tolerance
+          color: settings2.keyColor,
+          tolerance: settings2.tolerance
         });
         if (!result) {
           setHint("当前没有可抠图的图片，请先上传图片。", "warn");
@@ -94593,8 +94598,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         const deletingProfileId = state.profileId;
         await deleteUiSkinProfile(deletingProfileId);
         await reloadProfiles();
-        if (String(settings2.skin || "").trim() === deletingProfileId) {
-          settings2.skin = state.profileId || "none";
+        if (String(settings.skin || "").trim() === deletingProfileId) {
+          settings.skin = state.profileId || "none";
           saveSettings();
           refreshSkinSelectElement();
           applySettingsToUI();
@@ -94627,7 +94632,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         if (!file) return;
         try {
           await importFromZipFile(file);
-          await reloadProfiles(hasUiSkinProfileId(settings2.skin) ? String(settings2.skin).trim() : state.profileId);
+          await reloadProfiles(hasUiSkinProfileId(settings.skin) ? String(settings.skin).trim() : state.profileId);
           await loadCurrentAsset();
         } finally {
           this.value = "";
@@ -94691,7 +94696,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     bindElementAndStateChanges();
     bindPreviewActions();
     bindFormActions();
-    const shouldKeepCurrentCustomSkinActive = hasUiSkinProfileId(settings2.skin);
+    const shouldKeepCurrentCustomSkinActive = hasUiSkinProfileId(settings.skin);
     (shouldKeepCurrentCustomSkinActive ? ensureActiveProfile().then(() => syncActiveProfileSetting()).then(() => loadCurrentAsset()) : reloadProfiles(state.profileId).then(() => loadCurrentAsset())).catch((error3) => {
       console.error(`[${SCRIPT_NAME}] initial custom-skin editor load failed:`, error3);
       setHint("初始化失败，请关闭面板后重试。", "err");
@@ -95136,7 +95141,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }
   }
   async function buildAssetManagerContent(activeTab) {
-    const settings2 = getSettings();
+    const settings = getSettings();
     const specialCgSettings = ensureSpecialCgSettings();
     const titleScreen = ensureTitleScreenSettings();
     const currentCharId = getCurrentCharId();
@@ -95194,16 +95199,16 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     }).join("");
     const tabContentMap = {
       sprites: buildSpritesTab(activeTab, allSprites, charactersData),
-      backgrounds: buildBackgroundsTab(settings2, allBackgrounds, hiddenTitleBackgroundCount),
+      backgrounds: buildBackgroundsTab(settings, allBackgrounds, hiddenTitleBackgroundCount),
       "title-screen": buildTitleScreenTab(activeTab, titleScreen, currentCharId),
       "special-cgs": buildSpecialCgsTab(activeTab, allSpecialCgs),
       "special-cg-rules": buildSpecialCgRulesTab(activeTab, specialCgSettings, allSpecialCgs, mvuVariablePaths),
       maps: buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount),
       skin: buildCustomSkinEditorTab(activeTab, currentPackId),
-      imagegen: buildImagegenTab(activeTab, settings2),
+      imagegen: buildImagegenTab(activeTab, settings),
       opening: buildOpeningTab(activeTab),
-      bgm: buildBgmTab(activeTab, settings2),
-      custom: buildCustomTab(settings2)
+      bgm: buildBgmTab(activeTab, settings),
+      custom: buildCustomTab(settings)
     };
     const tabContentHtml = visibleTabIds.map((tabId) => tabContentMap[tabId] || "").filter(Boolean).join("");
     const showUnlockButton = uiAccessState.enabled && uiAccessState.locked && uiAccessState.hiddenAssetTabs.length > 0;
@@ -95296,7 +95301,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     return html;
   }
   function bindAssetManagerContentEvents($modal, activeTab) {
-    const settings2 = getSettings();
+    const settings = getSettings();
     $modal.find(".gal-tab-btn").on("click", function() {
       const tab = $2(this).data("tab");
       $modal.find(".gal-tab-btn").removeClass("active");
@@ -95383,7 +95388,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           rawText.split(/\r?\n/).map((name) => String(name || "").trim()).filter(Boolean)
         )
       );
-      settings2.bgmWhitelist = whitelist;
+      settings.bgmWhitelist = whitelist;
       saveSettings();
       const injected = await injectCOTToWorldbook();
       if (injected) {
@@ -95396,7 +95401,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         showToast4("指定BGM歌单已保存，但世界书同步失败", "warning");
       }
     });
-    bindImageGenConfigEvents($modal, settings2);
+    bindImageGenConfigEvents($modal, settings);
     bindCustomSkinEditorEvents($modal);
     bindOpeningEvents($modal);
     bindSpriteEvents($modal, activeTab);
@@ -95452,7 +95457,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         </div>`}
   </div>`;
   }
-  function buildBackgroundsTab(settings2, allBackgrounds, hiddenTitleBackgroundCount = 0) {
+  function buildBackgroundsTab(settings, allBackgrounds, hiddenTitleBackgroundCount = 0) {
     return `
   <div class="gal-tab-pane" data-pane="backgrounds" style="display: none;">
     <div class="gal-pane-header">
@@ -95707,10 +95712,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
           </div>`}
   </div>`;
   }
-  function buildImagegenTab(activeTab, settings2) {
+  function buildImagegenTab(activeTab, settings) {
     return `
   <div class="gal-tab-pane" data-pane="imagegen" style="${activeTab !== "imagegen" ? "display: none;" : ""}">
-    ${buildImageGenConfigPane(settings2)}
+    ${buildImageGenConfigPane(settings)}
   </div>`;
   }
   function buildOpeningTab(activeTab) {
@@ -95755,10 +95760,10 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     </div>
   </div>`;
   }
-  function buildBgmTab(activeTab, settings2) {
+  function buildBgmTab(activeTab, settings) {
     const bgmWhitelist = Array.from(
       new Set(
-        (Array.isArray(settings2.bgmWhitelist) ? settings2.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
+        (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : []).map((name) => String(name || "").trim()).filter(Boolean)
       )
     );
     const bgmText = escapeHtml8(bgmWhitelist.join("\n"));
@@ -95789,7 +95794,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     </div>
   </div>`;
   }
-  function buildCustomTab(settings2) {
+  function buildCustomTab(settings) {
     const locationHtml = escapeHtml8(localStorage.getItem(CUSTOM_LOCATION_HTML_KEY4) || "");
     const timeHtml = escapeHtml8(localStorage.getItem(CUSTOM_TIME_HTML_KEY4) || "");
     const locationIconClass = normalizeLocationStatusIconClass(
@@ -96913,7 +96918,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
     updateAllRuleRowsCurrentValue();
     $modal.find("#gal-special-cg-rule-save-btn").on("click", () => {
-      const settings2 = getSettings();
+      const settings = getSettings();
       const rules = [];
       let skippedCount = 0;
       let missingNameCount = 0;
@@ -96961,7 +96966,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
         }
         return;
       }
-      settings2.specialCg = {
+      settings.specialCg = {
         enabled: $modal.find("#gal-special-cg-enabled").is(":checked"),
         rules
       };
@@ -97062,6 +97067,7 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     });
   }
   function bindExportImportEvents($modal, activeTab) {
+    const settings = getSettings();
     $modal.find("#gal-export-dropdown-btn").on("click", function(e) {
       e.stopPropagation();
       $2("#gal-import-menu").hide();
@@ -97281,13 +97287,13 @@ ${baseUrl}`,
   var CHAT_CHANGED_BOUND_FLAG = "__galgame_chat_changed_bound__";
   var CHAR_POLLING_BOUND_FLAG = "__galgame_char_polling_bound__";
   var initStarted = false;
-  function sanitizeLoadedSkinSetting(settings2) {
-    const rawSkin = String(settings2?.skin || "none").trim();
+  function sanitizeLoadedSkinSetting(settings) {
+    const rawSkin = String(settings?.skin || "none").trim();
     const builtinSkinSet = /* @__PURE__ */ new Set(["none", "skin-ancient", "skin-persona", "skin-jrpg", "skin-classic", ...TWILIGHT_FAMILY_SKIN_IDS]);
     if (builtinSkinSet.has(rawSkin)) return false;
     if (hasUiSkinProfileId(rawSkin)) return false;
     if (rawSkin === "skin-western" || rawSkin === CUSTOM_SKIN_ID || rawSkin) {
-      settings2.skin = "none";
+      settings.skin = "none";
       return true;
     }
     return false;
@@ -97302,14 +97308,14 @@ ${baseUrl}`,
     try {
       loadSettings();
       setIsEnabled(isCurrentCharEnabled());
-      const settings2 = getSettings();
-      setGlobalDebugEnabled(!!settings2.globalDebug);
-      Live2DManager.debug = !!settings2.globalDebug;
+      const settings = getSettings();
+      setGlobalDebugEnabled(!!settings.globalDebug);
+      Live2DManager.debug = !!settings.globalDebug;
       console.log(`[${SCRIPT_NAME}] v${VERSION} 开始初始化...`);
-      setHideOtherFloors(settings2.hideOtherFloors);
+      setHideOtherFloors(settings.hideOtherFloors);
       await initDB();
       await refreshUiSkinProfilesCache();
-      if (sanitizeLoadedSkinSetting(settings2)) {
+      if (sanitizeLoadedSkinSetting(settings)) {
         saveSettings();
       }
       await loadAllSpritesToCache();
@@ -97603,35 +97609,35 @@ ${baseUrl}`,
       return true;
     },
     enable(enabled = true) {
-      const settings2 = getSettings();
-      settings2.effectsEnabled = !!enabled;
-      if (!settings2.effectsEnabled) {
+      const settings = getSettings();
+      settings.effectsEnabled = !!enabled;
+      if (!settings.effectsEnabled) {
         clearAllPixiEffects();
       }
       syncPixiEffectsSettings();
-      return settings2.effectsEnabled;
+      return settings.effectsEnabled;
     },
     quality(level = "balanced") {
       const nextLevel = ["mobile", "balanced", "high"].includes(level) ? level : "balanced";
-      const settings2 = getSettings();
-      settings2.effectsQuality = nextLevel;
+      const settings = getSettings();
+      settings.effectsQuality = nextLevel;
       syncPixiEffectsSettings();
-      return settings2.effectsQuality;
+      return settings.effectsQuality;
     },
     maxActive(value = 2) {
       const parsed = parseInt(value, 10);
-      const settings2 = getSettings();
-      settings2.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
+      const settings = getSettings();
+      settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
       syncPixiEffectsSettings();
-      return settings2.effectsMaxActive;
+      return settings.effectsMaxActive;
     },
     state() {
-      const settings2 = getSettings();
+      const settings = getSettings();
       return {
-        effectsEnabled: settings2.effectsEnabled !== false,
-        effectsQuality: settings2.effectsQuality,
-        effectsAutoClearOnSceneChange: settings2.effectsAutoClearOnSceneChange !== false,
-        effectsMaxActive: settings2.effectsMaxActive
+        effectsEnabled: settings.effectsEnabled !== false,
+        effectsQuality: settings.effectsQuality,
+        effectsAutoClearOnSceneChange: settings.effectsAutoClearOnSceneChange !== false,
+        effectsMaxActive: settings.effectsMaxActive
       };
     }
   };

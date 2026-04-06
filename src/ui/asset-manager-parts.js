@@ -699,6 +699,11 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     #gal-character-sprites-modal .gal-sprite-card:hover .gal-sprite-delete {
       opacity: 1;
     }
+    @media (max-width: 768px), (pointer: coarse) {
+      #gal-character-sprites-modal .gal-sprite-delete {
+        opacity: 1;
+      }
+    }
     #gal-character-sprites-modal input[type='text'],
     #gal-character-sprites-modal input[type='number'],
     #gal-character-sprites-modal textarea,

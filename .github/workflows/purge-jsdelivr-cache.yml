@@ -22,13 +22,20 @@ jobs:
           echo "目标文件: 数据库界面插件.dist.js"
           echo "=========================================="
 
+          TARGET="gh/bigmalove/galgame@main/dist/数据库界面插件.dist.js"
+
           # jsDelivr purge API
-          RESPONSE=$(curl -s -X GET "https://purge.jsdelivr.net/gh/bigmalove/galgame@main/数据库界面插件.dist.js" \
+          RESPONSE=$(curl -s -X GET "https://purge.jsdelivr.net/${TARGET}" \
             -H "accept: */*" \
             -w "\nHTTP_CODE:%{http_code}")
 
           echo "响应结果:"
           echo "$RESPONSE"
+          HTTP_CODE=$(printf "%s" "$RESPONSE" | sed -n 's/^HTTP_CODE://p')
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "jsDelivr purge 失败，状态码: $HTTP_CODE"
+            exit 1
+          fi
 
       - name: Verify Cache Purge (Multiple CDN Nodes)
         run: |
@@ -36,18 +43,21 @@ jobs:
           echo "验证多个 CDN 节点的缓存状态..."
           echo "=========================================="
 
+          TARGET="gh/bigmalove/galgame@main/dist/数据库界面插件.dist.js"
+
           # 多次请求确保各个节点都被清除
           for i in 1 2 3; do
             echo ""
             echo "第 $i 次验证请求..."
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              "https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/数据库界面插件.dist.js?v=$RANDOM")
+              "https://cdn.jsdelivr.net/${TARGET}?v=$RANDOM")
             echo "CDN 节点 $i 状态码: $STATUS"
 
             if [ "$STATUS" = "200" ] || [ "$STATUS" = "304" ]; then
               echo "✓ 文件可正常访问"
             else
-              echo "⚠ 状态码异常: $STATUS"
+              echo "状态码异常: $STATUS"
+              exit 1
             fi
             sleep 1
           done
@@ -57,6 +67,6 @@ jobs:
           echo "=========================================="
           echo "文件访问链接:"
           echo "=========================================="
-          echo "jsDelivr CDN: https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/数据库界面插件.dist.js"
+          echo "jsDelivr CDN: https://cdn.jsdelivr.net/gh/bigmalove/galgame@main/dist/数据库界面插件.dist.js"
           echo "GitHub Raw:   https://raw.githubusercontent.com/bigmalove/galgame/main/dist/数据库界面插件.dist.js"
           echo "=========================================="

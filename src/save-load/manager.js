@@ -10,7 +10,7 @@ import { parseGalgameContent } from '../logic/parser.js';
 import { clearSpecialCgOverlayAndQueue } from '../logic/special-cg-trigger.js';
 import { SpriteManager } from '../sprite/sprite-manager.js';
 import { detectAndCaptureCg, updateGlobalOverlayContent } from '../ui/overlay-content.js';
-import { showGlobalOverlay } from '../ui/overlay.js';
+import { setCurrentDisplayMesId, showGlobalOverlay } from '../ui/overlay.js';
 import { showToast } from '../ui/toast.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
 import { captureSaveThumbnail } from './thumbnail.js';
@@ -755,7 +755,7 @@ function clearTimelineRelatedCaches() {
   if (GalgameStore.cache.parse instanceof Map) {
     GalgameStore.cache.parse.clear();
   }
-  GalgameStore.core.currentDisplayMesId = null;
+  setCurrentDisplayMesId(null);
 }
 
 async function trimChatTailAfterMessage(targetMessageId, knownLastMessageId = NaN) {

@@ -26,7 +26,6 @@ export function setupMessageObserver() {
     console.log(`[${SCRIPT_NAME}] 消息监听器已存在，跳过重复注册`);
     return;
   }
-  topWindow[MESSAGE_OBSERVER_BOUND_FLAG] = true;
 
   BGMManager.init();
   TTSManager.init();
@@ -89,6 +88,7 @@ export function setupMessageObserver() {
     }
   });
   chatObserver.observe(chatContainer, { childList: true, subtree: false });
+  topWindow[MESSAGE_OBSERVER_BOUND_FLAG] = true;
 
   chatContainer.querySelectorAll('.mes').forEach(mes => {
     setupMessageContentObserver(mes);

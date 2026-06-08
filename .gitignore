@@ -1,4 +1,8 @@
 node_modules
 src/dist/
+.tmp/
+tmp/
+*.tmp.js
+*.bak
 docs/.vitepress/cache
 docs/.vitepress/dist

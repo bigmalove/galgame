@@ -99,6 +99,7 @@ import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZip
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog, setAssetManagerRefs, setAssetManagerModalRef, renderBananaAppearanceList, refreshBananaAppearancePreviews } from './ui/asset-manager-parts.js';
 import { showAssetManagerModal, setAssetManagerModalRefs, buildAssetManagerContent, bindAssetManagerContentEvents, buildAssetManagerStyles } from './ui/asset-manager-modal.js';
 import { setImageGenConfigRefs } from './ui/image-gen-config.js';
+import { startGalgamePlugin } from './init.js';
 
 // Phase 1 延迟引用: expressions -> toast + state + worldbook
 setExpressionsRefs({ showToast, getIsEnabled, injectCOTToWorldbook });
@@ -200,7 +201,7 @@ setImageGenConfigRefs({ showBananaAppearancePicker });
 setAssetManagerModalRef(showAssetManagerModal);
 
 // === Phase 9: 初始化和启动 ===
-import './init.js';
+startGalgamePlugin();
 
 // Phase 1-9 验证
 console.log(`[${SCRIPT_NAME}] Phase 1-9 模块加载成功, 版本: ${VERSION}`);

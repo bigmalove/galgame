@@ -1,6 +1,7 @@
 const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
+const packageJson = require('./package.json');
 
 // CSS 注入插件
 const cssPlugin = {
@@ -44,6 +45,9 @@ const buildOptions = {
   target: ['es2020'],
   platform: 'browser',
   charset: 'utf8',
+  define: {
+    __GALGAME_VERSION__: JSON.stringify(packageJson.version),
+  },
 
   // 不压缩，保持可读性
   minify: false,

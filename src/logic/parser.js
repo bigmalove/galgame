@@ -1,5 +1,5 @@
 import { getCharacterTTSVoice } from '../audio/tts-config.js';
-import { SCRIPT_NAME } from '../core/constants.js';
+import { RE_GAL_TAGS as CORE_RE_GAL_TAGS, SCRIPT_NAME } from '../core/constants.js';
 import { getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
@@ -9,7 +9,7 @@ import { getAllExpressions } from '../utils/expressions.js';
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|styled)[^>]*>/i;
+export const RE_GAL_TAGS = CORE_RE_GAL_TAGS;
 const RE_CLOSED_P = /<\/p>/i;
 const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;
@@ -73,6 +73,15 @@ const WRAPPER_QUOTES = [
   ['"', '"'],
   ["'", "'"],
 ];
+
+function hashCacheSource(source) {
+  let hash = 2166136261;
+  for (let i = 0; i < source.length; i++) {
+    hash ^= source.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 // 延迟引用: getFormattedContent (enhanced-mode)
 let _getFormattedContentRef = null;
@@ -201,6 +210,8 @@ export function parseGalgameContent(html, messageId) {
   const settings = getSettings();
   const isEnabled = getIsEnabled();
   const parseCache = GalgameStore.cache.parse;
+  const originalHtml = String(html || '');
+  html = originalHtml;
 
   // 提取弹窗一/弹窗二内容（必须在 preprocessSimplifiedFormat 之前，因为其中的 cleanIllegalTags 会删除 <div> 标签）
   const popup1Match = html.match(RE_POPUP1);
@@ -224,7 +235,15 @@ export function parseGalgameContent(html, messageId) {
   }
 
   // 性能优化：检查缓存
-  const cacheKey = html.length + '_' + html.substring(0, 150) + '_' + html.substring(html.length - 50);
+  const popup1Html = popup1Match ? popup1Match[1].trim() : '';
+  const popup2Html = popup2Match ? popup2Match[1].trim() : '';
+  const cacheSource = [
+    html,
+    popup1Html,
+    popup2Html,
+    settings.ttsBilingualZhJaEnabled === true ? 'tts-bilingual-zh-ja' : 'tts-default',
+  ].join('\n---gal-cache-boundary---\n');
+  const cacheKey = `${cacheSource.length}_${hashCacheSource(cacheSource)}`;
   if (parseCache.has(cacheKey)) {
     return parseCache.get(cacheKey);
   }

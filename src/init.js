@@ -54,7 +54,7 @@ function sanitizeLoadedSkinSetting(settings) {
   return false;
 }
 
-async function init() {
+export async function init() {
   if (initStarted || topWindow[INIT_LOCK_FLAG]) {
     console.log(`[${SCRIPT_NAME}] 初始化流程已执行/进行中，跳过重复调用`);
     return;
@@ -367,87 +367,89 @@ async function init() {
 }
 
 // ============================================
-// 启动
+// 全局导出与启动
 // ============================================
-if ($ && topWindow.document.readyState === 'complete') {
-  init();
-} else {
-  topWindow.addEventListener('load', init);
+export function installGalgameGlobals() {
+  topWindow.LipSyncManager = LipSyncManager;
+  topWindow.Live2DManager = Live2DManager;
+  topWindow.TTSManager = TTSManager;
+  topWindow.BGMManager = BGMManager;
+
+  topWindow.galgame = topWindow.galgame || {};
+  topWindow.galgame.LipSyncManager = LipSyncManager;
+  topWindow.galgame.Live2DManager = Live2DManager;
+  topWindow.galgame.TTSManager = TTSManager;
+  topWindow.galgame.BGMManager = BGMManager;
+  topWindow.galgame.effects = {
+    help() {
+      console.log('[galgame.effects] commands:');
+      console.log('  preload()');
+      console.log('  play(name = "rain")');
+      console.log('  run([{ action: "perform", name: "snow" }])');
+      console.log('  clear()');
+      console.log('  enable(true|false)');
+      console.log('  quality("mobile"|"balanced"|"high")');
+      console.log('  maxActive(1-6)');
+      console.log('  state()');
+    },
+    preload() {
+      return preloadPixiEffectsRuntime();
+    },
+    play(name = 'rain') {
+      const $overlay = ensureGlobalOverlay();
+      return applyPixiEffectOps([{ action: 'perform', name: String(name || 'rain') }], $overlay[0]);
+    },
+    run(ops) {
+      const $overlay = ensureGlobalOverlay();
+      const list = Array.isArray(ops) ? ops : [ops];
+      return applyPixiEffectOps(list, $overlay[0]);
+    },
+    clear() {
+      clearAllPixiEffects();
+      return true;
+    },
+    enable(enabled = true) {
+      const settings = getSettings();
+      settings.effectsEnabled = !!enabled;
+      if (!settings.effectsEnabled) {
+        clearAllPixiEffects();
+      }
+      syncPixiEffectsSettings();
+      return settings.effectsEnabled;
+    },
+    quality(level = 'balanced') {
+      const nextLevel = ['mobile', 'balanced', 'high'].includes(level) ? level : 'balanced';
+      const settings = getSettings();
+      settings.effectsQuality = nextLevel;
+      syncPixiEffectsSettings();
+      return settings.effectsQuality;
+    },
+    maxActive(value = 2) {
+      const parsed = parseInt(value, 10);
+      const settings = getSettings();
+      settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
+      syncPixiEffectsSettings();
+      return settings.effectsMaxActive;
+    },
+    state() {
+      const settings = getSettings();
+      return {
+        effectsEnabled: settings.effectsEnabled !== false,
+        effectsQuality: settings.effectsQuality,
+        effectsAutoClearOnSceneChange: settings.effectsAutoClearOnSceneChange !== false,
+        effectsMaxActive: settings.effectsMaxActive,
+      };
+    },
+  };
+
+  console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager, effects}`);
 }
 
-// ============================================
-// 全局导出
-// ============================================
-topWindow.LipSyncManager = LipSyncManager;
-topWindow.Live2DManager = Live2DManager;
-topWindow.TTSManager = TTSManager;
-topWindow.BGMManager = BGMManager;
-
-topWindow.galgame = topWindow.galgame || {};
-topWindow.galgame.LipSyncManager = LipSyncManager;
-topWindow.galgame.Live2DManager = Live2DManager;
-topWindow.galgame.TTSManager = TTSManager;
-topWindow.galgame.BGMManager = BGMManager;
-topWindow.galgame.effects = {
-  help() {
-    console.log('[galgame.effects] commands:');
-    console.log('  preload()');
-    console.log('  play(name = "rain")');
-    console.log('  run([{ action: "perform", name: "snow" }])');
-    console.log('  clear()');
-    console.log('  enable(true|false)');
-    console.log('  quality("mobile"|"balanced"|"high")');
-    console.log('  maxActive(1-6)');
-    console.log('  state()');
-  },
-  preload() {
-    return preloadPixiEffectsRuntime();
-  },
-  play(name = 'rain') {
-    const $overlay = ensureGlobalOverlay();
-    return applyPixiEffectOps([{ action: 'perform', name: String(name || 'rain') }], $overlay[0]);
-  },
-  run(ops) {
-    const $overlay = ensureGlobalOverlay();
-    const list = Array.isArray(ops) ? ops : [ops];
-    return applyPixiEffectOps(list, $overlay[0]);
-  },
-  clear() {
-    clearAllPixiEffects();
-    return true;
-  },
-  enable(enabled = true) {
-    const settings = getSettings();
-    settings.effectsEnabled = !!enabled;
-    if (!settings.effectsEnabled) {
-      clearAllPixiEffects();
-    }
-    syncPixiEffectsSettings();
-    return settings.effectsEnabled;
-  },
-  quality(level = 'balanced') {
-    const nextLevel = ['mobile', 'balanced', 'high'].includes(level) ? level : 'balanced';
-    const settings = getSettings();
-    settings.effectsQuality = nextLevel;
-    syncPixiEffectsSettings();
-    return settings.effectsQuality;
-  },
-  maxActive(value = 2) {
-    const parsed = parseInt(value, 10);
-    const settings = getSettings();
-    settings.effectsMaxActive = Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, 6)) : 2;
-    syncPixiEffectsSettings();
-    return settings.effectsMaxActive;
-  },
-  state() {
-    const settings = getSettings();
-    return {
-      effectsEnabled: settings.effectsEnabled !== false,
-      effectsQuality: settings.effectsQuality,
-      effectsAutoClearOnSceneChange: settings.effectsAutoClearOnSceneChange !== false,
-      effectsMaxActive: settings.effectsMaxActive,
-    };
-  },
-};
-
-console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager, effects}`);
+export function startGalgamePlugin() {
+  installGalgameGlobals();
+  if ($ && topWindow.document.readyState === 'complete') {
+    init();
+  } else {
+    topWindow.addEventListener('load', init, { once: true });
+  }
+}

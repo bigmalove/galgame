@@ -25,7 +25,7 @@
 在酒馆助手的脚本管理中，新建一个脚本，内容填写：
 
 ```
-import 'https://gcore.jsdelivr.net/gh/bigmalove/galgame@v1.1/dist/数据库界面插件.dist.js'
+import 'https://gcore.jsdelivr.net/gh/bigmalove/galgame@main/dist/数据库界面插件.dist.js'
 ```
 
 ## 第一次启用

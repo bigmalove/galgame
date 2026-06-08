@@ -672,14 +672,14 @@ export async function buildAssetManagerContent(activeTab) {
         <div style="display: flex; align-items: center; gap: 12px;">
           <div class="gal-pack-selector" style="position: relative;">
             <button class="gal-action-btn" id="gal-pack-dropdown-btn" title="切换图包" style="padding: 6px 12px; font-size: 0.9rem; background: #6f42c1; color: #fff; border-color: #6f42c1;">
-              <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${currentPackName}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
+              <i class="fa-solid fa-layer-group"></i> <span id="gal-current-pack-name">${escapeHtml(currentPackName)}</span> <i class="fa-solid fa-caret-down" style="margin-left: 4px;"></i>
             </button>
             <div class="gal-pack-menu gal-z-dropdown" id="gal-pack-menu" style="display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #fff; border: 2px solid #333; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); min-width: 180px; overflow: hidden;">
               ${allPacks
                 .map(
                   pack => `
-                <div class="gal-pack-item ${pack.id === currentPackId ? 'active' : ''}" data-pack-id="${pack.id}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? 'background: #e9ecef; font-weight: 700;' : ''}">
-                  <span><i class="fa-solid fa-folder${pack.id === currentPackId ? '-open' : ''}" style="margin-right: 8px; color: ${pack.id === currentPackId ? '#6f42c1' : '#666'};"></i>${pack.name}</span>
+                <div class="gal-pack-item ${pack.id === currentPackId ? 'active' : ''}" data-pack-id="${escapeHtml(pack.id)}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333; ${pack.id === currentPackId ? 'background: #e9ecef; font-weight: 700;' : ''}">
+                  <span><i class="fa-solid fa-folder${pack.id === currentPackId ? '-open' : ''}" style="margin-right: 8px; color: ${pack.id === currentPackId ? '#6f42c1' : '#666'};"></i>${escapeHtml(pack.name)}</span>
                   ${pack.isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">默认</span>' : ''}
                 </div>
               `,
@@ -936,20 +936,20 @@ function buildSpritesTab(activeTab, allSprites, charactersData) {
                   : '';
               const typeLabel =
                 info.type && info.type !== '自定义'
-                  ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${info.type}</span>`
+                  ? `<span style="font-size: 0.7rem; background: ${THEME.accent}; color: ${THEME.dark}; padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${escapeHtml(info.type)}</span>`
                   : '';
               return `
-            <div class="gal-character-card" data-char="${charId}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s; position: relative;">
+            <div class="gal-character-card" data-char="${escapeHtml(charId)}" style="cursor: pointer; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: all 0.2s; position: relative;">
               <div class="gal-character-avatar" style="aspect-ratio: 1 / 1; background: #f0f0f0; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative;">
-                ${avatarUrl ? `<img src="${avatarUrl}" alt="${charId}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
+                ${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(charId)}" style="width: 100%; height: 100%; object-fit: cover; object-position: top center;">` : `<i class="fa-solid fa-user" style="font-size: 3rem; color: #ccc;"></i>`}
                 ${sprites.length === 0 ? '<div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 0.7rem; padding: 2px; text-align: center;">无立绘</div>' : ''}
                 <div class="gal-char-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s;">
-                  <button class="gal-char-transfer" data-char="${charId}" title="转移到其他图包" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(111, 66, 193, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-                  <button class="gal-char-delete" data-char="${charId}" title="删除角色" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220, 53, 69, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-trash"></i></button>
+                  <button class="gal-char-transfer" data-char="${escapeHtml(charId)}" title="转移到其他图包" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(111, 66, 193, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+                  <button class="gal-char-delete" data-char="${escapeHtml(charId)}" title="删除角色" style="width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(220, 53, 69, 0.9); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;"><i class="fa-solid fa-trash"></i></button>
                 </div>
               </div>
               <div style="padding: 10px; text-align: center;">
-                <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">${charId}</div>
+                <div style="font-weight: 700; color: ${THEME.dark}; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: center; align-items: center;">${escapeHtml(charId)}</div>
                 <div style="margin-top: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;">${typeLabel}<span style="font-size: 0.75rem; color: #888;">${sprites.length} 个表情</span></div>
               </div>
             </div>`;
@@ -976,12 +976,12 @@ function buildBackgroundsTab(settings, allBackgrounds, hiddenTitleBackgroundCoun
         : `<div class="gal-bg-grid">${allBackgrounds
             .map(
               bg => `
-          <div class="gal-bg-card" data-scene="${bg.sceneName}">
-            <div class="gal-bg-preview">${bg.imageUrl ? `<img src="${bg.imageUrl}" alt="${bg.sceneName}">` : bg.imageBlob ? `<img src="${URL.createObjectURL(bg.imageBlob)}" alt="${bg.sceneName}">` : ''}</div>
-            <div class="gal-bg-label">${bg.sceneName}</div>
+          <div class="gal-bg-card" data-scene="${escapeHtml(bg.sceneName)}">
+            <div class="gal-bg-preview">${bg.imageUrl ? `<img src="${escapeHtml(bg.imageUrl)}" alt="${escapeHtml(bg.sceneName)}">` : bg.imageBlob ? `<img src="${escapeHtml(URL.createObjectURL(bg.imageBlob))}" alt="${escapeHtml(bg.sceneName)}">` : ''}</div>
+            <div class="gal-bg-label">${escapeHtml(bg.sceneName)}</div>
             <div class="gal-bg-actions" style="position: absolute; top: 5px; right: 5px; display: flex; gap: 4px;">
-              <button class="gal-bg-transfer" data-scene="${bg.sceneName}" title="转移到其他图包" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(111, 66, 193, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-              <button class="gal-bg-delete" data-scene="${bg.sceneName}" title="删除" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-trash"></i></button>
+              <button class="gal-bg-transfer" data-scene="${escapeHtml(bg.sceneName)}" title="转移到其他图包" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(111, 66, 193, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
+              <button class="gal-bg-delete" data-scene="${escapeHtml(bg.sceneName)}" title="删除" style="width: 28px; height: 28px; border-radius: 50%; background: rgba(220, 53, 69, 0.9); color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem;"><i class="fa-solid fa-trash"></i></button>
             </div>
           </div>`,
             )
@@ -1097,7 +1097,7 @@ function buildSpecialCgsTab(activeTab, allSpecialCgs) {
                 : (item.imageBlob ? URL.createObjectURL(item.imageBlob) : '');
               return `
           <div class="gal-special-cg-card" data-cg-id="${escapeHtml(cgId)}">
-            <div class="gal-special-cg-preview">${preview ? `<img src="${preview}" alt="${escapeHtml(name)}">` : '<span>无预览</span>'}</div>
+            <div class="gal-special-cg-preview">${preview ? `<img src="${escapeHtml(preview)}" alt="${escapeHtml(name)}">` : '<span>无预览</span>'}</div>
             <div class="gal-special-cg-name">${escapeHtml(name)}</div>
             <div class="gal-special-cg-id">${escapeHtml(cgId)}</div>
             <div class="gal-special-cg-actions">
@@ -1134,11 +1134,11 @@ function buildSpecialCgRuleRowHtml(rule, cgOptionsHtml, index = 0) {
         <option value="lte" ${operator === 'lte' ? 'selected' : ''}>≤</option>
         <option value="lt" ${operator === 'lt' ? 'selected' : ''}>&lt;</option>
       </select>
-      <input type="number" class="gal-special-cg-rule-threshold" value="${threshold}" step="any">
+      <input type="number" class="gal-special-cg-rule-threshold" value="${escapeHtml(threshold)}" step="any">
       <select class="gal-special-cg-rule-cg-id">
         ${cgOptionsHtml}
       </select>
-      <input type="number" class="gal-special-cg-rule-priority" value="${priority}" step="1">
+      <input type="number" class="gal-special-cg-rule-priority" value="${escapeHtml(priority)}" step="1">
       <label class="gal-special-cg-rule-enabled-wrap"><input type="checkbox" class="gal-special-cg-rule-enabled" ${enabled ? 'checked' : ''}>启用</label>
       <button class="gal-special-cg-rule-remove" title="删除规则"><i class="fa-solid fa-trash"></i></button>
       <input type="hidden" class="gal-special-cg-rule-id" value="${escapeHtml(id)}">
@@ -1243,22 +1243,22 @@ function buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount = 0) {
       !hasMap
         ? `<div style="text-align: center; padding: 40px; color: #999;"><i class="fa-solid fa-map-location-dot" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i><p>尚未上传统一世界地图</p><small style="color: #bbb;">地图系统将使用一张统一大地图，不再按场景分别上传</small></div>`
         : `<div class="gal-map-grid">
-            <div class="gal-map-card" data-region="${recordRegionKey}" data-pack-id="${unifiedMapRecord.packId || DEFAULT_PACK_ID}">
+            <div class="gal-map-card" data-region="${escapeHtml(recordRegionKey)}" data-pack-id="${escapeHtml(unifiedMapRecord.packId || DEFAULT_PACK_ID)}">
               <div class="gal-map-card-preview">
-                ${thumbUrl ? `<img src="${thumbUrl}" alt="统一世界地图">` : `<i class="fa-solid fa-image"></i>`}
+                ${thumbUrl ? `<img src="${escapeHtml(thumbUrl)}" alt="统一世界地图">` : `<i class="fa-solid fa-image"></i>`}
               </div>
               <div class="gal-map-card-body">
                 <div class="gal-map-card-title">统一世界地图</div>
                 <div class="gal-map-card-meta">
-                  <span><i class="fa-solid fa-link"></i> ${sourceType}</span>
-                  <span><i class="fa-solid fa-clock"></i> ${modifiedText}</span>
-                  ${isLegacyFallback ? `<span style="color:#b45309;"><i class="fa-solid fa-triangle-exclamation"></i> 兼容读取旧记录：${recordRegionKey}</span>` : ''}
+                  <span><i class="fa-solid fa-link"></i> ${escapeHtml(sourceType)}</span>
+                  <span><i class="fa-solid fa-clock"></i> ${escapeHtml(modifiedText)}</span>
+                  ${isLegacyFallback ? `<span style="color:#b45309;"><i class="fa-solid fa-triangle-exclamation"></i> 兼容读取旧记录：${escapeHtml(recordRegionKey)}</span>` : ''}
                   ${legacyMapCount > 0 ? `<span style="color:#b45309;"><i class="fa-solid fa-layer-group"></i> 检测到 ${legacyMapCount} 条旧分区地图记录</span>` : ''}
                 </div>
               </div>
               <div class="gal-map-card-actions">
-                <button class="gal-map-open-btn" data-region="${recordRegionKey}" title="打开地图"><i class="fa-solid fa-compass"></i></button>
-                <button class="gal-map-delete-btn" data-region="${recordRegionKey}" data-pack-id="${unifiedMapRecord.packId || DEFAULT_PACK_ID}" title="删除地图"><i class="fa-solid fa-trash"></i></button>
+                <button class="gal-map-open-btn" data-region="${escapeHtml(recordRegionKey)}" title="打开地图"><i class="fa-solid fa-compass"></i></button>
+                <button class="gal-map-delete-btn" data-region="${escapeHtml(recordRegionKey)}" data-pack-id="${escapeHtml(unifiedMapRecord.packId || DEFAULT_PACK_ID)}" title="删除地图"><i class="fa-solid fa-trash"></i></button>
               </div>
             </div>
           </div>`
@@ -2307,8 +2307,8 @@ function bindBackgroundEvents($modal, activeTab) {
       : 'position:fixed;top:0;left:0;width:100vw;height:100vh;';
     const $lightbox =
       $(`<div style="${posStyle}background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
-      <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
-      <span style="color:#ccc;font-size:0.9rem;">${scene}</span>
+      <img src="${escapeHtml(src)}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
+      <span style="color:#ccc;font-size:0.9rem;">${escapeHtml(scene)}</span>
     </div>`);
     $lightbox.on('click', function () {
       $(this).remove();
@@ -2360,7 +2360,7 @@ function bindSpecialCgEvents($modal, activeTab) {
       : 'position:fixed;top:0;left:0;width:100vw;height:100vh;';
     const $lightbox =
       $(`<div style="${posStyle}background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:100003;cursor:zoom-out;flex-direction:column;gap:12px;">
-      <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
+      <img src="${escapeHtml(src)}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);">
       <span style="color:#ccc;font-size:0.9rem;">${escapeHtml(title)}</span>
     </div>`);
     $lightbox.on('click', function () {
@@ -2645,6 +2645,7 @@ function bindMapEvents($modal, activeTab) {
 }
 
 function bindPackSelectorEvents($modal, activeTab) {
+  $(topWindow.document).off('click.galPackMenu');
   $modal.find('#gal-pack-dropdown-btn').on('click', function (e) {
     e.stopPropagation();
     $('#gal-export-menu, #gal-import-menu').hide();
@@ -2707,6 +2708,7 @@ function bindPackSelectorEvents($modal, activeTab) {
 
 function bindExportImportEvents($modal, activeTab) {
   const settings = getSettings();
+  $(topWindow.document).off('click.galMenus').off('click.galImportMenu');
   $modal.find('#gal-export-dropdown-btn').on('click', function (e) {
     e.stopPropagation();
     $('#gal-import-menu').hide();
@@ -2931,7 +2933,7 @@ function bindExportImportEvents($modal, activeTab) {
   });
 
   $modal.on('remove', function () {
-    $(topWindow.document).off('click.galImportMenu');
+    $(topWindow.document).off('click.galMenus').off('click.galImportMenu').off('click.galPackMenu');
   });
 }
 

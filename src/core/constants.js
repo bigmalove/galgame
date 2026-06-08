@@ -3,7 +3,7 @@
 // ============================================
 export const SCRIPT_ID = 'galgame-ui-plugin';
 export const SCRIPT_NAME = 'Galgame界面插件';
-export const VERSION = '2.2.1';
+export const VERSION = typeof __GALGAME_VERSION__ !== 'undefined' ? __GALGAME_VERSION__ : '2.2.5';
 export const DB_NAME = 'GalgameUIPluginDB';
 export const DB_VERSION = 9;
 export const STORE_SPRITES = 'sprites';
@@ -80,7 +80,7 @@ export const EXPRESSION_TAG_MAP = {
 // ============================================
 // 预编译正则表达式
 // ============================================
-export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|弹窗一|弹窗二)[^>]*>/i;
+export const RE_GAL_TAGS = /<(p|sprite|maintext|background|pixiPerform|pixiInit|styled|弹窗一|弹窗二)[^>]*>/i;
 export const RE_CLOSED_P = /<\/p>/i;
 export const RE_THINK_CLOSED = /<(think|thinking)>[\s\S]*?<\/\1>/gi;
 export const RE_THINK_UNCLOSED = /<(think|thinking)>[\s\S]*$/gi;

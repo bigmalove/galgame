@@ -104,7 +104,7 @@ function getEffectiveSkinList() {
 
 function getSkinOptionHtml(currentSkin) {
   return getEffectiveSkinList()
-    .map(item => `<option value="${item.value}" ${normalizeSkinValue(currentSkin) === item.value ? 'selected' : ''}>${item.label}</option>`)
+    .map(item => `<option value="${escapeHtml(item.value)}" ${normalizeSkinValue(currentSkin) === item.value ? 'selected' : ''}>${escapeHtml(item.label)}</option>`)
     .join('');
 }
 
@@ -174,6 +174,10 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function cleanupAssetManagerDocumentEvents() {
+  $(topWindow.document).off('.galPackMenu').off('.galMenus').off('.galImportMenu');
 }
 
 // 应用皮肤到覆盖层
@@ -385,6 +389,7 @@ export async function showSettingsPanel(topTab, subTab) {
   await refreshUiSkinProfilesCache();
   const $existing = $('#gal-unified-panel');
   if ($existing.length) {
+    cleanupAssetManagerDocumentEvents();
     if (topTab === undefined) { $existing.remove(); return; } // toggle
     $existing.remove(); // 有参数 = 重建
   }
@@ -433,15 +438,15 @@ export async function showSettingsPanel(topTab, subTab) {
   const savedWorldbooks = settings.enhancedMode?.secondGenerate?.worldbooks || [];
   const presetOptions = [
     '<option value="">使用当前预设</option>',
-    ...presetNames.map(p => `<option value="${p}" ${settings.enhancedMode?.secondGenerate?.presetName === p ? 'selected' : ''}>${p}</option>`),
+    ...presetNames.map(p => `<option value="${escapeHtml(p)}" ${settings.enhancedMode?.secondGenerate?.presetName === p ? 'selected' : ''}>${escapeHtml(p)}</option>`),
   ].join('');
   const profileOptions = [
     '<option value="">使用当前连接配置</option>',
-    ...profileNames.map(p => `<option value="${p}" ${settings.enhancedMode?.secondGenerate?.profileName === p ? 'selected' : ''}>${p}</option>`),
+    ...profileNames.map(p => `<option value="${escapeHtml(p)}" ${settings.enhancedMode?.secondGenerate?.profileName === p ? 'selected' : ''}>${escapeHtml(p)}</option>`),
   ].join('');
   const modelOptions = [
     '<option value="">使用当前模型</option>',
-    ...modelNames.map(m => `<option value="${m}" ${settings.enhancedMode?.secondGenerate?.modelName === m ? 'selected' : ''}>${m}</option>`),
+    ...modelNames.map(m => `<option value="${escapeHtml(m)}" ${settings.enhancedMode?.secondGenerate?.modelName === m ? 'selected' : ''}>${escapeHtml(m)}</option>`),
   ].join('');
 
   const worldbookListHtml = worldbookNames.length === 0
@@ -449,13 +454,13 @@ export async function showSettingsPanel(topTab, subTab) {
     : `<div style="margin-left: 24px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background: var(--SmartThemeFormBg, #fff); color: var(--SmartThemeBodyColor, #333);">
         ${worldbookNames.map(wb => `
           <label style="display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; font-size: 0.9rem; color: #222; font-weight: 500;">
-            <input type="checkbox" class="gal-enhanced-worldbook-item" value="${wb}" ${savedWorldbooks.includes(wb) ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
-            <span style="color: #333;">${wb}</span>
+            <input type="checkbox" class="gal-enhanced-worldbook-item" value="${escapeHtml(wb)}" ${savedWorldbooks.includes(wb) ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
+            <span style="color: #333;">${escapeHtml(wb)}</span>
           </label>
         `).join('')}
       </div>`;
   const dialogFontOptions = DIALOG_FONT_PRESETS
-    .map(item => `<option value="${item.value}" ${settings.dialogFontFamily === item.value ? 'selected' : ''}>${item.label}</option>`)
+    .map(item => `<option value="${escapeHtml(item.value)}" ${settings.dialogFontFamily === item.value ? 'selected' : ''}>${escapeHtml(item.label)}</option>`)
     .join('');
 
   // 构建资源管理 pane (async)
@@ -497,21 +502,21 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">字体大小</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${settings.fontSize}">
+                <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${escapeHtml(settings.fontSize)}">
                 <span class="gal-range-value" id="gal-font-size-value">${settings.fontSize}</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">对话框缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings.dialogScalePercent}">
+                <input type="range" id="gal-dialog-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${escapeHtml(settings.dialogScalePercent)}">
                 <span class="gal-range-value" id="gal-dialog-scale-percent-value">${settings.dialogScalePercent}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">底栏缩放</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-toolbar-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${settings.toolbarScalePercent}">
+                <input type="range" id="gal-toolbar-scale-percent" min="${UI_SCALE_PERCENT_MIN}" max="${UI_SCALE_PERCENT_MAX}" step="1" value="${escapeHtml(settings.toolbarScalePercent)}">
                 <span class="gal-range-value" id="gal-toolbar-scale-percent-value">${settings.toolbarScalePercent}%</span>
               </div>
             </div>
@@ -526,7 +531,7 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">对话框透明度</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-dialog-opacity" min="0" max="100" step="5" value="${Math.round((1 - settings.dialogOpacity) * 100)}">
+                <input type="range" id="gal-dialog-opacity" min="0" max="100" step="5" value="${escapeHtml(Math.round((1 - settings.dialogOpacity) * 100))}">
                 <span class="gal-range-value" id="gal-dialog-opacity-value">${Math.round((1 - settings.dialogOpacity) * 100)}%</span>
               </div>
             </div>
@@ -551,7 +556,7 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">打字速度</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-typewriter-speed" min="5" max="60" step="1" value="${settings.typewriterSpeed}">
+                <input type="range" id="gal-typewriter-speed" min="5" max="60" step="1" value="${escapeHtml(settings.typewriterSpeed)}">
                 <span class="gal-range-value" id="gal-typewriter-speed-value">${settings.typewriterSpeed}字/秒</span>
               </div>
             </div>
@@ -562,7 +567,7 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">音效音量</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-typewriter-sound-volume" min="0" max="100" step="1" value="${settings.typewriterSoundVolume}">
+                <input type="range" id="gal-typewriter-sound-volume" min="0" max="100" step="1" value="${escapeHtml(settings.typewriterSoundVolume)}">
                 <span class="gal-range-value" id="gal-typewriter-sound-volume-value">${settings.typewriterSoundVolume}%</span>
               </div>
             </div>
@@ -576,7 +581,7 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">播放间隔</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-auto-speed" min="1" max="8" step="0.5" value="${settings.autoPlaySpeed}">
+                <input type="range" id="gal-auto-speed" min="1" max="8" step="0.5" value="${escapeHtml(settings.autoPlaySpeed)}">
                 <span class="gal-range-value" id="gal-auto-speed-value">${settings.autoPlaySpeed}秒</span>
               </div>
             </div>
@@ -638,7 +643,7 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">并发上限</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-effects-max-active" min="1" max="6" step="1" value="${effectMaxActive}">
+                <input type="range" id="gal-effects-max-active" min="1" max="6" step="1" value="${escapeHtml(effectMaxActive)}">
                 <span class="gal-range-value" id="gal-effects-max-active-value">${effectMaxActive}</span>
               </div>
             </div>
@@ -652,21 +657,21 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">立绘大小</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-scale" min="50" max="150" step="5" value="${settings.spriteScale}">
+                <input type="range" id="gal-sprite-scale" min="50" max="150" step="5" value="${escapeHtml(settings.spriteScale)}">
                 <span class="gal-range-value" id="gal-sprite-scale-value">${settings.spriteScale}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">垂直位置 <small style="color:#999;">(底部偏移)</small></span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${settings.spriteBottomOffset}">
+                <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${escapeHtml(settings.spriteBottomOffset)}">
                 <span class="gal-range-value" id="gal-sprite-bottom-value">${settings.spriteBottomOffset}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">立绘间距 <small style="color:#999;">(左右距离)</small></span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${settings.spriteSpacing}">
+                <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${escapeHtml(settings.spriteSpacing)}">
                 <span class="gal-range-value" id="gal-sprite-spacing-value">${settings.spriteSpacing}%</span>
               </div>
             </div>
@@ -754,7 +759,7 @@ export async function showSettingsPanel(topTab, subTab) {
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">API地址</span>
-                <input type="text" id="gal-gpt-sovits-url" value="${settings.gptSoVits?.apiUrl || ''}" placeholder="http://127.0.0.1:9880" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <input type="text" id="gal-gpt-sovits-url" value="${escapeHtml(settings.gptSoVits?.apiUrl || '')}" placeholder="http://127.0.0.1:9880" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">使用酒馆代理</span>
@@ -770,7 +775,7 @@ export async function showSettingsPanel(topTab, subTab) {
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">set_model 接口</span>
-                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${settings.gptSoVits?.setModelEndpoint || '/set_model'}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${escapeHtml(settings.gptSoVits?.setModelEndpoint || '/set_model')}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">严格切换 <small style="color:#999;">(失败不回退)</small></span>
@@ -829,7 +834,7 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">快进速度</span>
               <div class="gal-settings-control">
-                <input type="range" id="gal-skip-speed" min="0.01" max="0.2" step="0.01" value="${settings.skipSpeed}">
+                <input type="range" id="gal-skip-speed" min="0.01" max="0.2" step="0.01" value="${escapeHtml(settings.skipSpeed)}">
                 <span class="gal-range-value" id="gal-skip-speed-value">${settings.skipSpeed}s</span>
               </div>
             </div>
@@ -1125,8 +1130,16 @@ export async function showSettingsPanel(topTab, subTab) {
   });
 
   // 关闭
-  $('#gal-settings-close').on('click', () => $panel.remove());
-  $panel.on('click', function (e) { if (e.target === this) $panel.remove(); });
+  $('#gal-settings-close').on('click', () => {
+    cleanupAssetManagerDocumentEvents();
+    $panel.remove();
+  });
+  $panel.on('click', function (e) {
+    if (e.target === this) {
+      cleanupAssetManagerDocumentEvents();
+      $panel.remove();
+    }
+  });
 
   // 主开关
   $('#gal-main-toggle').on('click', async function () {

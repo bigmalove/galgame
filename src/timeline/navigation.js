@@ -15,6 +15,7 @@ import {
 import { markTimelineCacheDirty } from './data.js';
 import { showInAppPromptDialog } from '../ui/asset-io.js';
 import { triggerReroll } from '../ui/interaction.js';
+import { setCurrentDisplayMesId } from '../ui/overlay.js';
 import { showToast } from '../ui/toast.js';
 
 function buildSwitchTarget(node, session) {
@@ -72,7 +73,7 @@ function invalidateTimelineNavigationCaches() {
   if (GalgameStore.cache.parse instanceof Map) {
     GalgameStore.cache.parse.clear();
   }
-  GalgameStore.core.currentDisplayMesId = null;
+  setCurrentDisplayMesId(null);
 }
 
 function canTriggerTimelineReroll() {

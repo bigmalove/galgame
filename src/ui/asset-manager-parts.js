@@ -83,14 +83,14 @@ function renderBananaAppearanceList($modal) {
         const expr = a.expression || '默认';
         const key = `${name}_${expr}`;
         return `
-          <div class="gal-banana-appearance-card" data-char="${name}" data-expr="${expr}" style="background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 8px; color: #e5e7eb;">
+          <div class="gal-banana-appearance-card" data-char="${escapeHtml(name)}" data-expr="${escapeHtml(expr)}" style="background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 8px; color: #e5e7eb;">
             <div style="aspect-ratio: 2 / 3; background: #0f172a; border-radius: 6px; overflow: hidden; margin-bottom: 6px; display: flex; align-items: center; justify-content: center;">
-              <img class="gal-banana-appearance-img" data-key="${key}" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+              <img class="gal-banana-appearance-img" data-key="${escapeHtml(key)}" style="width: 100%; height: 100%; object-fit: cover; display: none;">
               <div class="gal-banana-appearance-placeholder" style="font-size: 0.75rem; color: #64748b;">无立绘</div>
             </div>
-            <div style="font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${name}</div>
-            <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 6px;">表情：${expr}</div>
-            <button class="gal-banana-appearance-remove" data-char="${name}" style="width: 100%; padding: 4px 0; border-radius: 6px; background: #ef4444; color: #fff; border: none; cursor: pointer; font-size: 0.75rem;">移除</button>
+            <div style="font-size: 0.8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(name)}</div>
+            <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 6px;">表情：${escapeHtml(expr)}</div>
+            <button class="gal-banana-appearance-remove" data-char="${escapeHtml(name)}" style="width: 100%; padding: 4px 0; border-radius: 6px; background: #ef4444; color: #fff; border: none; cursor: pointer; font-size: 0.75rem;">移除</button>
           </div>
         `;
       })
@@ -555,7 +555,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
   const characterKeywords = getCharacterNameKeywords(characterId);
   const characterKeywordsInputValue = characterKeywords.join(', ');
   const ttsVoiceOptions = ttsVoiceList
-    .map(v => `<option value="${v.name}" ${boundVoice === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`)
+    .map(v => `<option value="${escapeHtml(v.name)}" ${boundVoice === v.name ? 'selected' : ''}>${escapeHtml(v.name)} (${escapeHtml(v.desc)})</option>`)
     .join('');
 
   const modalHtml = `
@@ -563,7 +563,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     <div class="gal-input-box" style="max-width: 800px; width: 95%; max-height: 90vh; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
       <div style="padding: 20px 25px 15px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
         <div class="gal-input-title" style="margin: 0; font-size: 1.4rem;">
-          <span><i class="fa-solid fa-user"></i> ${characterId} 的立绘管理</span>
+          <span><i class="fa-solid fa-user"></i> ${escapeHtml(characterId)} 的立绘管理</span>
         </div>
         <button id="gal-char-sprites-close" title="关闭" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: #999; padding: 4px 8px; line-height: 1; transition: color 0.2s; transform: none;">
           <i class="fa-solid fa-xmark"></i>
@@ -608,19 +608,19 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
         </div>
         <div style="display: flex; align-items: center; gap: 10px;">
           <label style="display: flex; align-items: center; cursor: pointer;">
-            <input type="checkbox" id="gal-char-live2d-toggle" data-char-id="${characterId}" style="margin-right: 6px; width: 16px; height: 16px;" disabled>
+            <input type="checkbox" id="gal-char-live2d-toggle" data-char-id="${escapeHtml(characterId)}" style="margin-right: 6px; width: 16px; height: 16px;" disabled>
             <span>启用 Live2D</span>
           </label>
-          <button class="gal-action-btn" id="gal-char-live2d-upload" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3);">
+          <button class="gal-action-btn" id="gal-char-live2d-upload" data-char-id="${escapeHtml(characterId)}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3);">
             <i class="fa-solid fa-upload"></i> 上传模型
           </button>
-          <button class="gal-action-btn" id="gal-char-live2d-delete" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(220,53,69,0.8); color: #fff; border: none; display: none;">
+          <button class="gal-action-btn" id="gal-char-live2d-delete" data-char-id="${escapeHtml(characterId)}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(220,53,69,0.8); color: #fff; border: none; display: none;">
             <i class="fa-solid fa-trash"></i> 删除
           </button>
-          <button class="gal-action-btn" id="gal-char-live2d-preview" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); display: none;">
+          <button class="gal-action-btn" id="gal-char-live2d-preview" data-char-id="${escapeHtml(characterId)}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); display: none;">
             <i class="fa-solid fa-eye"></i> 预览
           </button>
-          <button class="gal-action-btn" id="gal-char-live2d-settings" data-char-id="${characterId}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(0,210,255,0.3); color: #fff; border: 1px solid rgba(0,210,255,0.5); display: none;">
+          <button class="gal-action-btn" id="gal-char-live2d-settings" data-char-id="${escapeHtml(characterId)}" style="padding: 6px 12px; font-size: 0.85rem; background: rgba(0,210,255,0.3); color: #fff; border: 1px solid rgba(0,210,255,0.5); display: none;">
             <i class="fa-solid fa-cog"></i> 设置
           </button>
           <span id="gal-char-live2d-status" style="font-size: 0.8rem; opacity: 0.9;"></span>
@@ -665,17 +665,17 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
               </div>`
             : `<div class="gal-sprite-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px;">
                 ${characterSpritesData.map(s => `
-                  <div class="gal-sprite-card" data-char="${s.characterId}" data-expr="${s.expression}" data-pack-id="${s.packId || ''}" data-sprite-id="${s.id || ''}" style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer;">
+                  <div class="gal-sprite-card" data-char="${escapeHtml(s.characterId)}" data-expr="${escapeHtml(s.expression)}" data-pack-id="${escapeHtml(s.packId || '')}" data-sprite-id="${escapeHtml(s.id || '')}" style="position: relative; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1); transition: transform 0.2s; cursor: pointer;">
                     <div class="gal-sprite-preview" style="aspect-ratio: 2 / 3; background: #eee; overflow: hidden;">
                       ${s.imageUrl
-                        ? `<img src="${s.imageUrl}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">`
+                        ? `<img src="${escapeHtml(s.imageUrl)}" alt="${escapeHtml(s.expression)}" style="width: 100%; height: 100%; object-fit: cover;">`
                         : s.imageBlob
-                          ? `<img src="${URL.createObjectURL(s.imageBlob)}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">`
+                          ? `<img src="${escapeHtml(URL.createObjectURL(s.imageBlob))}" alt="${escapeHtml(s.expression)}" style="width: 100%; height: 100%; object-fit: cover;">`
                           : ''}
                     </div>
-                    <div class="gal-sprite-label" style="padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${s.expression}</div>
+                    <div class="gal-sprite-label" style="padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 600; color: ${THEME.dark}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(s.expression)}</div>
                     <div class="gal-sprite-actions" style="position: absolute; top: 4px; right: 4px; display: flex; gap: 3px;">
-                      <button class="gal-sprite-delete" data-char="${s.characterId}" data-expr="${s.expression}" data-pack-id="${s.packId || ''}" data-sprite-id="${s.id || ''}" title="删除" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                      <button class="gal-sprite-delete" data-char="${escapeHtml(s.characterId)}" data-expr="${escapeHtml(s.expression)}" data-pack-id="${escapeHtml(s.packId || '')}" data-sprite-id="${escapeHtml(s.id || '')}" title="删除" style="width: 24px; height: 24px; border: none; border-radius: 50%; background: rgba(255,0,85,0.9); color: #fff; font-size: 0.7rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                         <i class="fa-solid fa-trash"></i>
                       </button>
                     </div>
@@ -1057,12 +1057,12 @@ export async function showPackManagerModal() {
               const isDefault = pack.id === DEFAULT_PACK_ID;
               const isCurrent = pack.id === currentPackId;
               return `
-                <div class="gal-pack-row" data-pack-id="${pack.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: ${isCurrent ? '#e8f4fd' : '#f8f9fa'}; border: 2px solid ${isCurrent ? '#0d6efd' : '#dee2e6'}; border-radius: 8px;">
+                <div class="gal-pack-row" data-pack-id="${escapeHtml(pack.id)}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; background: ${isCurrent ? '#e8f4fd' : '#f8f9fa'}; border: 2px solid ${isCurrent ? '#0d6efd' : '#dee2e6'}; border-radius: 8px;">
                   <div style="display: flex; align-items: center; gap: 12px;">
                     <i class="fa-solid fa-folder${isCurrent ? '-open' : ''}" style="font-size: 1.5rem; color: ${isCurrent ? '#0d6efd' : '#6c757d'};"></i>
                     <div>
                       <div style="font-weight: 700; color: #333; display: flex; align-items: center; gap: 8px;">
-                        <span class="pack-name-display">${pack.name}</span>
+                        <span class="pack-name-display">${escapeHtml(pack.name)}</span>
                         ${isDefault ? '<span style="font-size: 0.7rem; background: #6f42c1; color: #fff; padding: 2px 6px; border-radius: 3px;">默认</span>' : ''}
                         ${isCurrent ? '<span style="font-size: 0.7rem; background: #0d6efd; color: #fff; padding: 2px 6px; border-radius: 3px;">当前</span>' : ''}
                       </div>
@@ -1076,9 +1076,9 @@ export async function showPackManagerModal() {
                     </div>
                   </div>
                   <div style="display: flex; gap: 8px;">
-                    ${!isCurrent ? `<button class="gal-pack-select-btn gal-action-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; font-size: 0.8rem; background: #0d6efd; color: #fff; border-color: #0d6efd;" title="切换到此图包"><i class="fa-solid fa-check"></i></button>` : ''}
-                    ${!isDefault ? `<button class="gal-pack-rename-btn gal-action-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; font-size: 0.8rem;" title="重命名"><i class="fa-solid fa-pen"></i></button>` : ''}
-                    ${!isDefault ? `<button class="gal-pack-delete-btn gal-action-btn" data-pack-id="${pack.id}" style="padding: 6px 12px; font-size: 0.8rem; background: #dc3545; color: #fff; border-color: #dc3545;" title="删除"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    ${!isCurrent ? `<button class="gal-pack-select-btn gal-action-btn" data-pack-id="${escapeHtml(pack.id)}" style="padding: 6px 12px; font-size: 0.8rem; background: #0d6efd; color: #fff; border-color: #0d6efd;" title="切换到此图包"><i class="fa-solid fa-check"></i></button>` : ''}
+                    ${!isDefault ? `<button class="gal-pack-rename-btn gal-action-btn" data-pack-id="${escapeHtml(pack.id)}" style="padding: 6px 12px; font-size: 0.8rem;" title="重命名"><i class="fa-solid fa-pen"></i></button>` : ''}
+                    ${!isDefault ? `<button class="gal-pack-delete-btn gal-action-btn" data-pack-id="${escapeHtml(pack.id)}" style="padding: 6px 12px; font-size: 0.8rem; background: #dc3545; color: #fff; border-color: #dc3545;" title="删除"><i class="fa-solid fa-trash"></i></button>` : ''}
                   </div>
                 </div>
               `;
@@ -1159,7 +1159,7 @@ export async function showTransferDialog(resourceType, resourceIds, onComplete) 
           </p>
           <select id="gal-transfer-target" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 6px; font-size: 1rem;">
             ${allPacks.filter(p => p.id !== currentPackId).map(pack => `
-              <option value="${pack.id}">${pack.name}</option>
+              <option value="${escapeHtml(pack.id)}">${escapeHtml(pack.name)}</option>
             `).join('')}
           </select>
           <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">

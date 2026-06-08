@@ -1977,6 +1977,84 @@
   box-shadow: 0 0 0 0.188rem rgba(0, 210, 255, 0.2);
 }
 
+#gal-unified-panel input[type='text'],
+#gal-unified-panel input[type='password'],
+#gal-unified-panel input[type='url'],
+#gal-unified-panel input[type='number'],
+#gal-unified-panel textarea,
+#gal-unified-panel select,
+#gal-bg-upload-modal input[type='text'],
+#gal-bg-upload-modal input[type='url'],
+#gal-bg-upload-modal textarea,
+#gal-bg-upload-modal select,
+#gal-map-upload-modal input[type='text'],
+#gal-map-upload-modal input[type='url'],
+#gal-map-upload-modal textarea,
+#gal-map-upload-modal select,
+#gal-sprite-upload-modal input[type='text'],
+#gal-sprite-upload-modal textarea,
+#gal-sprite-upload-modal select,
+#gal-batch-upload-modal input[type='text'],
+#gal-batch-upload-modal textarea,
+#gal-batch-upload-modal select,
+#gal-character-sprites-modal input[type='text'],
+#gal-character-sprites-modal select,
+#gal-expression-manager-modal input[type='text'] {
+  color: var(--SmartThemeBodyColor, #f5f7fa) !important;
+  background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92)) !important;
+  border-color: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)) !important;
+  caret-color: var(--SmartThemeEmColor, #9ac7ff);
+}
+
+#gal-unified-panel input[type='text']::placeholder,
+#gal-unified-panel input[type='password']::placeholder,
+#gal-unified-panel input[type='url']::placeholder,
+#gal-unified-panel input[type='number']::placeholder,
+#gal-unified-panel textarea::placeholder,
+#gal-bg-upload-modal input[type='text']::placeholder,
+#gal-bg-upload-modal input[type='url']::placeholder,
+#gal-bg-upload-modal textarea::placeholder,
+#gal-map-upload-modal input[type='text']::placeholder,
+#gal-map-upload-modal input[type='url']::placeholder,
+#gal-map-upload-modal textarea::placeholder,
+#gal-sprite-upload-modal input[type='text']::placeholder,
+#gal-sprite-upload-modal textarea::placeholder,
+#gal-batch-upload-modal input[type='text']::placeholder,
+#gal-batch-upload-modal textarea::placeholder,
+#gal-character-sprites-modal input[type='text']::placeholder,
+#gal-expression-manager-modal input[type='text']::placeholder {
+  color: var(--SmartThemeBodyColor, #f5f7fa) !important;
+  opacity: 0.72;
+}
+
+#gal-unified-panel input[type='text']:focus,
+#gal-unified-panel input[type='password']:focus,
+#gal-unified-panel input[type='url']:focus,
+#gal-unified-panel input[type='number']:focus,
+#gal-unified-panel textarea:focus,
+#gal-unified-panel select:focus,
+#gal-bg-upload-modal input[type='text']:focus,
+#gal-bg-upload-modal input[type='url']:focus,
+#gal-bg-upload-modal textarea:focus,
+#gal-bg-upload-modal select:focus,
+#gal-map-upload-modal input[type='text']:focus,
+#gal-map-upload-modal input[type='url']:focus,
+#gal-map-upload-modal textarea:focus,
+#gal-map-upload-modal select:focus,
+#gal-sprite-upload-modal input[type='text']:focus,
+#gal-sprite-upload-modal textarea:focus,
+#gal-sprite-upload-modal select:focus,
+#gal-batch-upload-modal input[type='text']:focus,
+#gal-batch-upload-modal textarea:focus,
+#gal-batch-upload-modal select:focus,
+#gal-character-sprites-modal input[type='text']:focus,
+#gal-character-sprites-modal select:focus,
+#gal-expression-manager-modal input[type='text']:focus {
+  outline: none !important;
+  border-color: var(--SmartThemeEmColor, #9ac7ff) !important;
+  box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.26) !important;
+}
+
 .gal-input-actions {
   display: flex;
   justify-content: flex-end;

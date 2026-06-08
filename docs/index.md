@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Galgame 界面插件
   text: 将对话变为视觉小说
-  tagline: 为 SillyTavern 角色卡打造沉浸式 Galgame 体验——立绘、Live2D、语音、背景、特效，一键开启。v2.2.1
+  tagline: 为 SillyTavern 角色卡打造沉浸式 Galgame 体验——立绘、Live2D、语音、背景、特效，一键开启。v2.2.5
   actions:
     - theme: brand
       text: 开始使用 →

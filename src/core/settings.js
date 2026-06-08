@@ -590,24 +590,48 @@ export function getMapCoords(regionKey) {
   return _safeObject(settings.mapCoordsByRegion[key]);
 }
 
-export function setMapCoord(regionKey, detailedLocation, coord) {
-  const key = String(regionKey || '').trim() || 'default-region';
-  const location = String(detailedLocation || '').trim();
-  if (!location) return false;
+function normalizeMapCoordForSave(coord) {
   const c = _safeObject(coord);
   const x = Number(c.x);
   const y = Number(c.y);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
-  ensureMapSettings();
-  if (!_settings.mapCoordsByRegion[key]) _settings.mapCoordsByRegion[key] = {};
-  _settings.mapCoordsByRegion[key][location] = {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
     x: Math.max(0, Math.min(1, x)),
     y: Math.max(0, Math.min(1, y)),
     anchor: String(c.anchor || '').trim(),
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function setMapCoord(regionKey, detailedLocation, coord) {
+  const key = String(regionKey || '').trim() || 'default-region';
+  const location = String(detailedLocation || '').trim();
+  if (!location) return false;
+  const normalizedCoord = normalizeMapCoordForSave(coord);
+  if (!normalizedCoord) return false;
+  ensureMapSettings();
+  if (!_settings.mapCoordsByRegion[key]) _settings.mapCoordsByRegion[key] = {};
+  _settings.mapCoordsByRegion[key][location] = normalizedCoord;
   saveSettings();
   return true;
+}
+
+export function setMapCoords(regionKey, coordsByLocation = {}) {
+  const key = String(regionKey || '').trim() || 'default-region';
+  const source = _safeObject(coordsByLocation);
+  ensureMapSettings();
+  if (!_settings.mapCoordsByRegion[key]) _settings.mapCoordsByRegion[key] = {};
+  let changed = 0;
+  Object.entries(source).forEach(([rawLocation, coord]) => {
+    const location = String(rawLocation || '').trim();
+    if (!location) return;
+    const normalizedCoord = normalizeMapCoordForSave(coord);
+    if (!normalizedCoord) return;
+    _settings.mapCoordsByRegion[key][location] = normalizedCoord;
+    changed++;
+  });
+  if (changed > 0) saveSettings();
+  return changed;
 }
 
 export function removeMapCoord(regionKey, detailedLocation) {

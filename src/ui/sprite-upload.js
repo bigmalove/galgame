@@ -25,6 +25,15 @@ const CROPPER_MIN_SCALE = 0.01;
 const CROPPER_HIT_POINT_RADIUS = 9;
 const CROPPER_HIT_POINT_TOUCH_RADIUS = 18;
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function parseAspectRatioLabel(ratioLabel) {
   const [widthRaw, heightRaw] = String(ratioLabel || '').split(':');
   const width = Number(widthRaw);
@@ -384,15 +393,15 @@ export async function showBananaAppearancePicker(onSelect) {
           const preview = s.imageUrl || (s.imageBlob ? URL.createObjectURL(s.imageBlob) : '');
           if (preview && preview.startsWith('blob:')) blobUrls.push(preview);
           return `
-                <div class="gal-banana-appearance-item" data-char="${charId}" data-expr="${s.expression}" style="border: 1px solid #334155; border-radius: 8px; padding: 8px; background: #0f172a; cursor: pointer;">
+                <div class="gal-banana-appearance-item" data-char="${escapeHtml(charId)}" data-expr="${escapeHtml(s.expression)}" style="border: 1px solid #334155; border-radius: 8px; padding: 8px; background: #0f172a; cursor: pointer;">
                   <div style="aspect-ratio: 2 / 3; background: #020617; border-radius: 6px; overflow: hidden; margin-bottom: 6px; display: flex; align-items: center; justify-content: center;">
                     ${
                       preview
-                        ? `<img src="${preview}" alt="${s.expression}" style="width: 100%; height: 100%; object-fit: cover;">`
+                        ? `<img src="${escapeHtml(preview)}" alt="${escapeHtml(s.expression)}" style="width: 100%; height: 100%; object-fit: cover;">`
                         : `<div style="font-size: 0.75rem; color: #64748b;">无立绘</div>`
                     }
                   </div>
-                  <div style="font-size: 0.8rem; color: #e2e8f0;">${s.expression || '默认'}</div>
+                  <div style="font-size: 0.8rem; color: #e2e8f0;">${escapeHtml(s.expression || '默认')}</div>
                 </div>
               `;
         })
@@ -454,17 +463,17 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
   const expressionOptions = allExpressions
     .map(
       e =>
-        `<option value="${e}" ${e === expression || (expression === 'neutral' && e === '默认') ? 'selected' : ''}>${e}</option>`,
+        `<option value="${escapeHtml(e)}" ${e === expression || (expression === 'neutral' && e === '默认') ? 'selected' : ''}>${escapeHtml(e)}</option>`,
     )
     .join('');
   const ttsVoiceList = await getTTSVoiceListAsync();
   const settings = getSettings();
   let { ratioLabel: spriteUploadRatioLabel, aspectRatio: spriteAspectRatio } = resolveSpriteUploadAspectRatio();
   const cropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS
-    .map(item => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? 'selected' : ''}>${item.label}</option>`)
+    .map(item => `<option value="${escapeHtml(item.value)}" ${item.value === spriteUploadRatioLabel ? 'selected' : ''}>${escapeHtml(item.label)}</option>`)
     .join('');
   const ttsVoiceOptions = ttsVoiceList
-    .map(v => `<option value="${v.name}" ${getCharacterTTSVoice(characterId) === v.name ? 'selected' : ''}>${v.name} (${v.desc})</option>`)
+    .map(v => `<option value="${escapeHtml(v.name)}" ${getCharacterTTSVoice(characterId) === v.name ? 'selected' : ''}>${escapeHtml(v.name)} (${escapeHtml(v.desc)})</option>`)
     .join('');
   const modalHtml = `
       <div class="gal-input-modal" id="gal-sprite-upload-modal">
@@ -481,7 +490,7 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
               <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark}; font-size: 1rem;">
                 <i class="fa-solid fa-user"></i> 角色名称
               </label>
-              <input type="text" id="gal-sprite-character" value="${characterId || ''}"
+              <input type="text" id="gal-sprite-character" value="${escapeHtml(characterId || '')}"
                      placeholder="输入角色名"
                      style="width: 100%; padding: 12px 15px; border: 2px solid #ddd; font-size: 1rem; box-sizing: border-box; border-radius: 4px;">
             </div>
@@ -584,12 +593,12 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
                         </button>
                     </div>
                     <div id="gal-appearance-preview" style="background: #f5f5f5; padding: 10px; border-radius: 6px; font-size: 0.85rem; color: #666; min-height: 40px; border: 1px dashed #ddd;">
-                        ${getCharAppearancePrompt(characterId) || '<i style="color: #999;">未设置，点击右侧按钮添加</i>'}
+                        ${getCharAppearancePrompt(characterId) ? escapeHtml(getCharAppearancePrompt(characterId)) : '<i style="color: #999;">未设置，点击右侧按钮添加</i>'}
                     </div>
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
-                        <i class="fa-solid fa-face-smile"></i> 当前表情: <span id="gal-comfyui-expr-label" style="color: ${THEME.accent};">${expression}</span>
+                        <i class="fa-solid fa-face-smile"></i> 当前表情: <span id="gal-comfyui-expr-label" style="color: ${THEME.accent};">${escapeHtml(expression)}</span>
                     </label>
                     <div style="background: #e8f4fc; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; color: #0066cc;">
                         <i class="fa-solid fa-arrow-right"></i>
@@ -742,7 +751,7 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
       const models = await ComfyUIAPI.getModels(cs.apiUrl);
       $sel.empty();
       $sel.append('<option value="">-- 使用 Workflow默认 --</option>');
-      models.forEach(m => { $sel.append(`<option value="${m}">${m}</option>`); });
+      models.forEach(m => { $sel.append(`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`); });
       if (cs.defaultCheckpoint) { $sel.val(cs.defaultCheckpoint); }
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 加载模型失败:`, e);
@@ -756,14 +765,19 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
     const cs = getComfyUISettings();
     $sel.empty();
     $sel.append('<option value="default_char">内置 SDXL Turbo</option>');
-    Object.keys(workflows).forEach(id => { $sel.append(`<option value="${id}">${workflows[id].name}</option>`); });
+    Object.keys(workflows).forEach(id => { $sel.append(`<option value="${escapeHtml(id)}">${escapeHtml(workflows[id].name)}</option>`); });
     if (cs.defaultCharWorkflow) { $sel.val(cs.defaultCharWorkflow); }
   }
   initComfyUIWorkflowSelect();
   $('#gal-edit-appearance-btn').on('click', () => {
     const charName = $('#gal-sprite-character').val().trim() || characterId;
     showCharAppearancePromptEditor(charName, newPrompt => {
-      $('#gal-appearance-preview').html(newPrompt || '<i style="color: #999;">未设置，点击右侧按钮添加</i>');
+      const $preview = $('#gal-appearance-preview');
+      if (newPrompt) {
+        $preview.text(newPrompt);
+      } else {
+        $preview.html('<i style="color: #999;">未设置，点击右侧按钮添加</i>');
+      }
     });
   });
   $('#gal-sprite-expression').on('change', function () {
@@ -1020,7 +1034,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
     cssAspectRatio: spriteUploadCssAspectRatio,
   } = resolveSpriteUploadAspectRatio();
   const batchCropRatioOptions = SPRITE_UPLOAD_RATIO_OPTIONS
-    .map(item => `<option value="${item.value}" ${item.value === spriteUploadRatioLabel ? 'selected' : ''}>${item.label}</option>`)
+    .map(item => `<option value="${escapeHtml(item.value)}" ${item.value === spriteUploadRatioLabel ? 'selected' : ''}>${escapeHtml(item.label)}</option>`)
     .join('');
   const modalHtml = `
       <div class="gal-input-modal" id="gal-batch-upload-modal">
@@ -1046,7 +1060,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
                       <label style="display: block; font-weight: 700; margin-bottom: 8px; color: ${THEME.dark};">
                         <i class="fa-solid fa-user"></i> 当前角色
                       </label>
-                      <input type="text" id="gal-batch-character" value="${characterId || ''}"
+                      <input type="text" id="gal-batch-character" value="${escapeHtml(characterId || '')}"
                              placeholder="请在左侧选择或添加角色" readonly
                              style="width: 100%; padding: 10px 15px; border: 2px solid #eee; background: #f9f9f9; font-size: 1rem; box-sizing: border-box; border-radius: 4px; color: #555;">
                     </div>
@@ -1059,7 +1073,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
                                 style="flex: 0 0 220px; max-width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; color: #333; background: #fff;">
                           ${batchCropRatioOptions}
                         </select>
-                        <small id="gal-batch-ratio-hint" style="color: #666;">当前：${spriteUploadRatioLabel}</small>
+                        <small id="gal-batch-ratio-hint" style="color: #666;">当前：${escapeHtml(spriteUploadRatioLabel)}</small>
                       </div>
                     </div>
                     <div class="gal-upload-tabs" style="display: flex; border-bottom: 1px solid #ddd; margin-bottom: 15px;">
@@ -1201,11 +1215,11 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
       const isActive = $('#gal-batch-character').val() === char.name;
       const hasSprites = existingChars.has(char.name);
       const $item = $(`
-                    <div class="gal-char-item ${isActive ? 'active' : ''}" data-name="${char.name}">
+                    <div class="gal-char-item ${isActive ? 'active' : ''}" data-name="${escapeHtml(char.name)}">
                         <div style="width: 24px; height: 24px; background: #ddd; border-radius: 50%; margin-right: 8px; overflow: hidden;">
                              <i class="fa-solid fa-user" style="line-height: 24px; text-align: center; width: 100%; color: #fff;"></i>
                         </div>
-                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${char.name}</div>
+                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(char.name)}</div>
                         ${hasSprites ? '<i class="fa-solid fa-images" style="color: #28a745; margin-left: 8px; font-size: 0.9em;" title="已有立绘"></i>' : ''}
                     </div>
                 `);
@@ -1227,11 +1241,11 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
       const $list = $('#gal-batch-char-list');
       $list.find('.gal-char-item').removeClass('active');
       const $item = $(`
-                    <div class="gal-char-item active" data-name="${newName}">
+                    <div class="gal-char-item active" data-name="${escapeHtml(newName)}">
                         <div style="width: 24px; height: 24px; background: #ddd; border-radius: 50%; margin-right: 8px; overflow: hidden;">
                                 <i class="fa-solid fa-user" style="line-height: 24px; text-align: center; width: 100%; color: #fff;"></i>
                         </div>
-                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${newName}</div>
+                        <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(newName)}</div>
                     </div>
                 `);
       $item.on('click', function () {
@@ -1367,7 +1381,7 @@ export function showBatchUploadDialog(characterId, onCloseCallback) {
       allExpressions.forEach(expr => {
         if (!usedExpressions.has(expr) || expr === currentValue) {
           const selected = expr === savedValue ? 'selected' : '';
-          $select.append(`<option value="${expr}" ${selected}>${expr}</option>`);
+          $select.append(`<option value="${escapeHtml(expr)}" ${selected}>${escapeHtml(expr)}</option>`);
         }
       });
     });
@@ -1491,8 +1505,8 @@ export function showCustomExpressionManager(onCloseCallback) {
                                 ? customExpressions
                                     .map(
                                       e => `
-                                <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
-                                    <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
+                                <div class="gal-custom-expr-row" data-expr="${escapeHtml(e.name)}" style="display: flex; align-items: center; gap: 10px;">
+                                    <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${escapeHtml(e.name)}</span>
                                     <i class="fa-solid fa-xmark gal-remove-expr" title="删除" style="cursor: pointer; color: #999; padding: 5px;"></i>
                                 </div>
                             `,
@@ -1529,8 +1543,8 @@ export function showCustomExpressionManager(onCloseCallback) {
     $list.empty();
     if (currentCustomExpressions.length > 0) {
       $list.html(currentCustomExpressions.map(e => `
-                <div class="gal-custom-expr-row" data-expr="${e.name}" style="display: flex; align-items: center; gap: 10px;">
-                    <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${e.name}</span>
+                <div class="gal-custom-expr-row" data-expr="${escapeHtml(e.name)}" style="display: flex; align-items: center; gap: 10px;">
+                    <span class="gal-tag gal-custom-tag" style="flex-shrink: 0;">${escapeHtml(e.name)}</span>
                     <i class="fa-solid fa-xmark gal-remove-expr" title="删除" style="cursor: pointer; color: #999; padding: 5px;"></i>
                 </div>
             `).join(''));

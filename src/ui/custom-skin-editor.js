@@ -46,6 +46,15 @@ import {
 import { applySettingsToUI, refreshSkinSelectElement } from './settings-panel.js';
 import { showToast } from './toast.js';
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const EMPTY_BOX = { top: 0, right: 0, bottom: 0, left: 0 };
 const RECT_HIT_AREA = {
   type: 'polygon',
@@ -243,10 +252,10 @@ function buildComponentCandidateLabel(candidate, index = 0) {
 export function buildCustomSkinEditorTab(activeTab, currentPackId) {
   const firstElementId = CUSTOM_SKIN_ELEMENTS[0]?.id || 'dialog_panel';
   const profileOptions = getCachedUiSkinProfiles()
-    .map(profile => `<option value="${profile.id}">${profile.displayName}</option>`)
+    .map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.displayName)}</option>`)
     .join('');
   const elementOptions = CUSTOM_SKIN_ELEMENTS
-    .map(def => `<option value="${def.id}">${def.label}</option>`)
+    .map(def => `<option value="${escapeHtml(def.id)}">${escapeHtml(def.label)}</option>`)
     .join('');
   const elementList = CUSTOM_SKIN_ELEMENTS
     .map((def, index) => `
@@ -837,7 +846,7 @@ export function bindCustomSkinEditorEvents($modal) {
 
   const syncProfileSelectOptions = () => {
     const optionHtml = state.profiles
-      .map(profile => `<option value="${profile.id}">${profile.displayName}</option>`)
+      .map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.displayName)}</option>`)
       .join('');
     $profileSelect.html(optionHtml);
     $profileSelect.val(state.profileId || '');
@@ -1065,7 +1074,7 @@ export function bindCustomSkinEditorEvents($modal) {
     if (!states.includes(state.uiState)) {
       state.uiState = states[0];
     }
-    $stateSelect.html(states.map(item => `<option value="${item}">${item}</option>`).join(''));
+    $stateSelect.html(states.map(item => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join(''));
     $stateSelect.val(state.uiState);
   };
 

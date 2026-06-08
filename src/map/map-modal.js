@@ -1,6 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
-import { clearMapCoordsByRegion, getMapCoords, getMapSettings, setMapCoord } from '../core/settings.js';
+import { clearMapCoordsByRegion, getMapCoords, getMapSettings, setMapCoords } from '../core/settings.js';
 import { GLOBAL_MAP_REGION_KEY, getUnifiedMapImage } from '../db/map-images.js';
 import { generateAutoLayout } from './layout.js';
 import { buildMapViewModel } from './data-adapter.js';
@@ -10,6 +10,15 @@ import { showToast } from '../ui/toast.js';
 
 const MAP_MODAL_ID = 'gal-map-system-modal';
 const MAP_MODAL_STYLE_ID = 'gal-map-system-modal-style';
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function ensureMapModalStyle() {
   const mountRoot = getModalMountRoot();
@@ -589,7 +598,7 @@ export async function showMapModal(options = {}) {
     const listHtml = points.map(point => {
       const location = String(point.detailedLocation || '').trim();
       const active = location && location === selectedLocation ? 'active' : '';
-      return `<button class="gal-map-point-item ${active}" data-location="${location}">${location}</button>`;
+      return `<button class="gal-map-point-item ${active}" data-location="${escapeHtml(location)}">${escapeHtml(location)}</button>`;
     }).join('');
     return listHtml || '<div class="gal-map-empty-list">暂无地点数据</div>';
   };
@@ -602,9 +611,9 @@ export async function showMapModal(options = {}) {
       const active = location === selectedLocation ? 'active' : '';
       const editable = editMode ? 'editable' : '';
       return `
-        <button class="gal-map-marker ${active} ${editable}" data-location="${location}" style="left:${(coord.x * 100).toFixed(4)}%; top:${(coord.y * 100).toFixed(4)}%;">
+        <button class="gal-map-marker ${active} ${editable}" data-location="${escapeHtml(location)}" style="left:${(coord.x * 100).toFixed(4)}%; top:${(coord.y * 100).toFixed(4)}%;">
           <i class="${markerIconClass}"></i>
-          <span class="name">${location}</span>
+          <span class="name">${escapeHtml(location)}</span>
         </button>
       `;
     }).join('');
@@ -625,7 +634,7 @@ export async function showMapModal(options = {}) {
     const pointActionButtons = pointActions.map(action => {
       const safeAction = String(action || '').trim();
       if (!safeAction) return '';
-      return `<button class="gal-map-op-btn" data-location="${selectedLocation}" data-action="${safeAction}" data-element="">${safeAction}</button>`;
+      return `<button class="gal-map-op-btn" data-location="${escapeHtml(selectedLocation)}" data-action="${escapeHtml(safeAction)}" data-element="">${escapeHtml(safeAction)}</button>`;
     }).join('');
     const pointActionSection = pointActionButtons
       ? `<div class="gal-map-actions-row acu-card-actions">${pointActionButtons}</div>`
@@ -640,13 +649,13 @@ export async function showMapModal(options = {}) {
         const actionButtons = (Array.isArray(item.actions) ? item.actions : []).map(action => {
           const safeAction = String(action || '').trim();
           if (!safeAction) return '';
-          return `<button class="gal-map-op-btn" data-location="${selectedLocation}" data-action="${safeAction}" data-element="${elementName}">${safeAction}</button>`;
+          return `<button class="gal-map-op-btn" data-location="${escapeHtml(selectedLocation)}" data-action="${escapeHtml(safeAction)}" data-element="${escapeHtml(elementName)}">${escapeHtml(safeAction)}</button>`;
         }).join('');
         return `
           <div class="gal-map-element-card">
-            <div class="gal-map-element-name">${elementName}${elementType ? ` · ${elementType}` : ''}</div>
-            ${status ? `<div class="gal-map-kv"><span class="key">状态</span><span>${status}</span></div>` : ''}
-            ${desc ? `<div style="font-size:0.82rem; color:#475569;">${desc}</div>` : ''}
+            <div class="gal-map-element-name">${escapeHtml(elementName)}${elementType ? ` · ${escapeHtml(elementType)}` : ''}</div>
+            ${status ? `<div class="gal-map-kv"><span class="key">状态</span><span>${escapeHtml(status)}</span></div>` : ''}
+            ${desc ? `<div style="font-size:0.82rem; color:#475569;">${escapeHtml(desc)}</div>` : ''}
             ${actionButtons ? `<div class="gal-map-actions-row acu-card-actions">${actionButtons}</div>` : ''}
           </div>
         `;
@@ -654,12 +663,12 @@ export async function showMapModal(options = {}) {
       : `<div style="font-size:0.84rem; color:#64748b;">该地点暂无可交互元素。</div>`;
 
     return `
-      <div class="gal-map-detail-title">${selectedLocation}</div>
-      <div class="gal-map-kv"><span class="key">次要地区</span><span>${secRegion}</span></div>
-      <div class="gal-map-kv"><span class="key">地点类型</span><span>${locationType}</span></div>
-      <div class="gal-map-kv"><span class="key">重要度</span><span>${importance}</span></div>
-      <div class="gal-map-kv"><span class="key">探索状态</span><span>${explore}</span></div>
-      <div class="gal-map-kv"><span class="key">环境描述</span><span>${envText}</span></div>
+      <div class="gal-map-detail-title">${escapeHtml(selectedLocation)}</div>
+      <div class="gal-map-kv"><span class="key">次要地区</span><span>${escapeHtml(secRegion)}</span></div>
+      <div class="gal-map-kv"><span class="key">地点类型</span><span>${escapeHtml(locationType)}</span></div>
+      <div class="gal-map-kv"><span class="key">重要度</span><span>${escapeHtml(importance)}</span></div>
+      <div class="gal-map-kv"><span class="key">探索状态</span><span>${escapeHtml(explore)}</span></div>
+      <div class="gal-map-kv"><span class="key">环境描述</span><span>${escapeHtml(envText)}</span></div>
       <div class="gal-map-section">
         <div class="gal-map-section-title">地点操作</div>
         ${pointActionSection}
@@ -684,7 +693,7 @@ export async function showMapModal(options = {}) {
               ${mapImageUrl
       ? `
                   <div class="gal-map-canvas" id="gal-map-canvas">
-                    <img class="gal-map-image" src="${mapImageUrl}" alt="world-map">
+          <img class="gal-map-image" src="${escapeHtml(mapImageUrl)}" alt="world-map">
                     <div class="gal-map-markers" id="gal-map-markers">${buildMarkersHtml()}</div>
                   </div>
                   <div class="gal-map-zoom-controls">
@@ -752,7 +761,7 @@ export async function showMapModal(options = {}) {
 
   const updateListActiveState = () => {
     $modal.find('.gal-map-point-item').removeClass('active');
-    $modal.find(`.gal-map-point-item[data-location="${selectedLocation}"]`).addClass('active');
+    $modal.find('.gal-map-point-item').filter((_, el) => String($(el).data('location') || '') === selectedLocation).addClass('active');
   };
 
   const rerenderMarkers = () => {
@@ -769,7 +778,7 @@ export async function showMapModal(options = {}) {
   const syncPlacingUi = () => {
     $modal.find('.gal-map-marker').removeClass('placing');
     if (!editMode || !placingLocation) return;
-    $modal.find(`.gal-map-marker[data-location="${placingLocation}"]`).addClass('placing');
+    $modal.find('.gal-map-marker').filter((_, el) => String($(el).data('location') || '') === placingLocation).addClass('placing');
   };
 
   const syncEditUi = () => {
@@ -1193,12 +1202,7 @@ export async function showMapModal(options = {}) {
   $modal.on('click', '#gal-map-save-coords', function (e) {
     e.preventDefault();
     e.stopPropagation();
-    let changed = 0;
-    Object.entries(draftCoords).forEach(([location, coord]) => {
-      if (setMapCoord(coordScopeKey, location, coord)) {
-        changed++;
-      }
-    });
+    const changed = setMapCoords(coordScopeKey, draftCoords);
     dirty = false;
     placingLocation = '';
     syncEditUi();

@@ -321,6 +321,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   const $overlay = ensureGlobalOverlay();
   const segments = parsedContent.segments;
   const settings = getSettings();
+  const simpleStorybookMode = settings.simpleStorybookMode === true;
   const mesIdStr = String(mesId);
   const suppressTTS = !!options.suppressTTS;
 
@@ -371,7 +372,11 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   $overlay.attr('data-render-token', String(renderToken));
 
   const currentIndex = Math.min(state.currentIndex, segments.length - 1);
-  Live2DPreloadManager.preloadFromSegments(segments, currentIndex, 'overlay-content');
+  if (simpleStorybookMode) {
+    SpriteManager.reset($overlay);
+  } else {
+    Live2DPreloadManager.preloadFromSegments(segments, currentIndex, 'overlay-content');
+  }
 
   const displaySegment = segments[currentIndex] || { type: 'narration', text: '' };
   const displayText = displaySegment.text || '';
@@ -434,10 +439,12 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
   $overlay.find('.gal-progress-bar').css('width', `${progressPercent}%`);
 
-  await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
-  clearSpritesOnBackgroundCommand($overlay, displaySegment);
-  const expression = displaySegment.expression || '默认';
-  await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken);
+  if (!simpleStorybookMode) {
+    await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
+    clearSpritesOnBackgroundCommand($overlay, displaySegment);
+    const expression = displaySegment.expression || '默认';
+    await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken);
+  }
 
   const sceneToApply = displaySegment.backgroundScene || parsedContent.currentBackground?.scene;
   if (sceneToApply) {
@@ -485,11 +492,14 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
   if (isRenderTokenStale()) return false;
 
   const $overlay = $('#gal-global-overlay');
+  const simpleStorybookMode = getSettings().simpleStorybookMode === true;
   const currentIndex = state.currentIndex;
   const segment = state.segments[currentIndex];
   if (!segment) return false;
 
-  Live2DPreloadManager.preloadFromSegments(state.segments, currentIndex, 'segment-display');
+  if (!simpleStorybookMode) {
+    Live2DPreloadManager.preloadFromSegments(state.segments, currentIndex, 'segment-display');
+  }
 
   if (expectedRenderToken !== null) {
     $overlay.attr('data-render-token', String(expectedRenderToken));
@@ -596,13 +606,15 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
     $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
   }
 
-  await SpriteManager.applySpriteCommands($overlay, segment.spriteCommands, expectedRenderToken);
-  if (isRenderTokenStale()) return false;
+  if (!simpleStorybookMode) {
+    await SpriteManager.applySpriteCommands($overlay, segment.spriteCommands, expectedRenderToken);
+    if (isRenderTokenStale()) return false;
 
-  clearSpritesOnBackgroundCommand($overlay, segment);
-  const expression = segment.expression || '默认';
-  await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken);
-  if (isRenderTokenStale()) return false;
+    clearSpritesOnBackgroundCommand($overlay, segment);
+    const expression = segment.expression || '默认';
+    await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken);
+    if (isRenderTokenStale()) return false;
+  }
 
   const sceneToApply = segment.backgroundScene || state.parsedContent?.currentBackground?.scene;
   if (sceneToApply) {
@@ -655,7 +667,8 @@ export async function refreshOverlayFromLastAiMessage() {
   }
 
   const hasGalTags = RE_GAL_TAGS.test(contentToProcess);
-  if (!hasGalTags) {
+  const simpleStorybookMode = getSettings().simpleStorybookMode === true;
+  if (!hasGalTags && !simpleStorybookMode) {
     console.log(`[${SCRIPT_NAME}] 最后AI消息不包含Galgame标签`);
     return;
   }
@@ -683,16 +696,59 @@ export async function renderGalgameMessage(mesId, parsedContent) {
 const capturedCgImages = new Map(); // mesId -> [imgSrc, ...]
 const cgObservers = new Map(); // mesId -> MutationObserver
 
+const CHATU8_CG_CONTAINER_SELECTOR = [
+  '.st-chatu8-collapse-wrapper',
+  '.st-chatu8-collapse-content',
+  '.st-chatu8-image-container',
+  '.st-chatu8-image-span',
+  '[data-st-chatu8]',
+].join(',');
+
+function getChatu8ImageSrc(img) {
+  return String(img?.currentSrc || img?.src || img?.getAttribute('src') || img?.getAttribute('data-src') || '').trim();
+}
+
+function getDirectMesTextChild(mesTextNode, node) {
+  let cursor = node;
+  while (cursor && cursor.parentElement && cursor.parentElement !== mesTextNode) {
+    cursor = cursor.parentElement;
+  }
+  return cursor?.parentElement === mesTextNode ? cursor : null;
+}
+
+function collectChatu8CgEntries(mesTextNode) {
+  if (!mesTextNode) return [];
+
+  const entries = [];
+  const seenImages = new Set();
+  const containers = Array.from(mesTextNode.querySelectorAll(CHATU8_CG_CONTAINER_SELECTOR));
+
+  for (const container of containers) {
+    const images = container.matches?.('img') ? [container] : Array.from(container.querySelectorAll('img'));
+    for (const img of images) {
+      if (!img || seenImages.has(img)) continue;
+
+      seenImages.add(img);
+      entries.push({
+        container,
+        img,
+        directChild: getDirectMesTextChild(mesTextNode, container),
+        src: getChatu8ImageSrc(img),
+      });
+    }
+  }
+
+  return entries;
+}
+
 export function getCapturedCgImage(mesId, cgIndex) {
   const images = capturedCgImages.get(String(mesId));
   return images ? images[cgIndex] || null : null;
 }
 
-function collectCgImages(mesId, mesTextNode, cgCount) {
-  const imgs = mesTextNode.querySelectorAll('.st-chatu8-collapse-content img');
-  const sources = Array.from(imgs)
-    .map(img => img.src || img.getAttribute('src') || '')
-    .filter(src => src && src !== '');
+function collectCgImages(mesId, mesTextNode) {
+  const sources = collectChatu8CgEntries(mesTextNode)
+    .map(entry => getChatu8ImageSrc(entry.img));
 
   const existing = capturedCgImages.get(String(mesId)) || [];
   if (sources.length !== existing.length || sources.some((s, i) => s !== existing[i])) {
@@ -723,53 +779,68 @@ function refreshCgDisplayIfNeeded(mesId) {
 }
 
 /**
- * 从 DOM 检测 CG 图片并注入段落
- * 直接扫描 .mes_text 中的 .st-chatu8-collapse-content 容器
+ * 从 DOM 检测 st-chatu8 渲染出的图片并注入 CG 段落。
+ * 支持折叠容器与新版图片容器，按它们在 .mes_text 中的实际顺序插入。
  */
 export function detectAndCaptureCg(mesId, mesNode, parsed) {
+  if (getSettings().simpleStorybookMode === true) return 0;
   const mesText = mesNode.querySelector ? mesNode.querySelector('.mes_text') : $(mesNode).find('.mes_text')[0];
   if (!mesText) return 0;
 
-  const containers = mesText.querySelectorAll('.st-chatu8-collapse-content');
-  if (containers.length === 0) return 0;
+  const cgEntries = collectChatu8CgEntries(mesText);
+  if (cgEntries.length === 0) return 0;
 
   const mesIdStr = String(mesId);
+  capturedCgImages.set(mesIdStr, cgEntries.map(entry => entry.src));
 
-  // 立即抓取图片 src
-  const sources = [];
-  containers.forEach((container, i) => {
-    const img = container.querySelector('img');
-    const src = img ? (img.src || '') : '';
-    sources.push(src);
-  });
-  capturedCgImages.set(mesIdStr, sources.filter(s => s));
-
-  // 确定 CG 在 DOM 中的位置，按 <p> 兄弟顺序插入
-  const cgParentPs = new Set();
-  containers.forEach(c => {
-    const p = c.closest('p');
-    if (p) cgParentPs.add(p);
-  });
-
-  // 移除旧 CG 段落（避免缓存重复）
+  // 移除旧 CG 段落（避免重复检测时叠加）
   const baseSegments = parsed.segments.filter(s => s.type !== 'cg');
+  const entriesByChild = new Map();
+  const fallbackEntries = [];
 
-  // 遍历 .mes_text 下的 <p>，按顺序交织普通段落和 CG 段落
-  const allPs = mesText.querySelectorAll(':scope > p');
+  cgEntries.forEach(entry => {
+    if (entry.directChild) {
+      const list = entriesByChild.get(entry.directChild) || [];
+      list.push(entry);
+      entriesByChild.set(entry.directChild, list);
+    } else {
+      fallbackEntries.push(entry);
+    }
+  });
+
   let regularIdx = 0;
   let cgIdx = 0;
   const merged = [];
+  const pushCgSegment = () => {
+    const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
+    merged.push({ type: 'cg', speaker: null, text: '', expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
+  };
+  const pushRegularSegment = () => {
+    if (regularIdx < baseSegments.length) {
+      merged.push(baseSegments[regularIdx++]);
+    }
+  };
 
-  allPs.forEach(p => {
-    if (cgParentPs.has(p)) {
-      const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
-      merged.push({ type: 'cg', speaker: null, text: '', expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
-    } else {
-      if (regularIdx < baseSegments.length) {
-        merged.push(baseSegments[regularIdx++]);
+  Array.from(mesText.childNodes).forEach(node => {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const entries = entriesByChild.get(node) || [];
+      if (entries.length > 0) {
+        entries.forEach(pushCgSegment);
+        return;
       }
+      if (node.matches?.('p')) {
+        pushRegularSegment();
+      }
+      return;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE && String(node.textContent || '').trim()) {
+      pushRegularSegment();
     }
   });
+
+  fallbackEntries.forEach(pushCgSegment);
+
   // 追加剩余段落（如长段落切分产生的额外段落）
   while (regularIdx < baseSegments.length) {
     merged.push(baseSegments[regularIdx++]);
@@ -782,13 +853,13 @@ export function detectAndCaptureCg(mesId, mesNode, parsed) {
     cgObservers.get(mesIdStr).disconnect();
   }
   const observer = new MutationObserver(() => {
-    collectCgImages(mesIdStr, mesText, containers.length);
+    collectCgImages(mesIdStr, mesText);
   });
   observer.observe(mesText, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['src'],
+    attributeFilter: ['src', 'data-src'],
   });
   cgObservers.set(mesIdStr, observer);
 

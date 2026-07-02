@@ -11,6 +11,7 @@ import { getCachedUiSkinProfiles, hasUiSkinProfileId, refreshUiSkinProfilesCache
 import { clearAllPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { getAvailableModels, getAvailablePresets, getAvailableProfiles, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
+import { SpriteManager } from '../sprite/sprite-manager.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloors } from './galgame-mode.js';
 import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
@@ -234,7 +235,7 @@ export function applySettingsToUI() {
     $('.gal-text-panel').css({ 'background-color': '', 'background-image': '' });
   }
 
-  if (settings.showSprites) {
+  if (settings.showSprites && settings.simpleStorybookMode !== true) {
     $('.gal-layer-character').show();
   } else {
     $('.gal-layer-character').hide();
@@ -595,6 +596,10 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">显示立绘</span>
               <label class="gal-switch"><input type="checkbox" id="gal-show-sprites" ${settings.showSprites ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">简化图书绘本模式 <small style="color: var(--SmartThemeEmColor, #9ac7ff);">(纯文本对话框，不解析角色/旁白/表情，不显示立绘/Live2D)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-simple-storybook-mode" ${settings.simpleStorybookMode ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">沉浸模式 <small style="color:#999;">(隐藏其他楼层)</small></span>
@@ -1206,6 +1211,20 @@ export async function showSettingsPanel(topTab, subTab) {
 
   // 开关设置
   $('#gal-show-sprites').on('change', function () { settings.showSprites = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
+  $('#gal-simple-storybook-mode').on('change', function () {
+    settings.simpleStorybookMode = $(this).is(':checked');
+    if (settings.simpleStorybookMode) {
+      SpriteManager.reset($('#gal-global-overlay'));
+    }
+    applySettingsToUI();
+    saveSettings();
+    if (getIsEnabled()) {
+      applyGalgameMode().catch(error => console.warn(`[${SCRIPT_NAME}] 切换简化图书绘本模式后刷新失败`, error));
+    }
+    injectCOTToWorldbook()
+      .then(() => showToast(settings.simpleStorybookMode ? '简化图书绘本模式已开启，COT已更新' : '简化图书绘本模式已关闭，COT已更新'))
+      .catch(() => showToast(settings.simpleStorybookMode ? '简化图书绘本模式已开启' : '简化图书绘本模式已关闭'));
+  });
   $('#gal-hide-floors').on('change', function () {
     settings.hideOtherFloors = $(this).is(':checked');
     setHideOtherFloors(settings.hideOtherFloors);

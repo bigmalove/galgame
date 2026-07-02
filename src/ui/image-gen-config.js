@@ -12,7 +12,7 @@ import { showToast } from './toast.js';
 import { renderBananaAppearanceList } from './asset-manager-parts.js';
 
 // ============================================
-// 生图配置 - pill 切换 + 4 引擎配置
+// 生图配置 - pill 切换 + 4 引擎配置 + 外部识别
 // ============================================
 
 let _showBananaAppearancePickerRef = null;
@@ -23,6 +23,7 @@ const BG_SOURCE_COLORS = {
   banana: '#7e22ce',
   novelai: '#15803d',
   wallhaven: '#a16207',
+  chatu8: '#0f766e',
 };
 
 function escapeHtml(value) {
@@ -44,16 +45,19 @@ export function setImageGenConfigRefs({ showBananaAppearancePicker }) {
 
 export function buildImageGenConfigPane(settings) {
   const src = settings.bgImageSource || 'none';
-  const activeEngine = (src !== 'none' && ['comfyui', 'banana', 'novelai', 'wallhaven'].includes(src)) ? src : 'comfyui';
+  const internalEngines = ['comfyui', 'banana', 'novelai', 'wallhaven'];
+  const activeEngine = src === 'chatu8' ? null : (internalEngines.includes(src) ? src : 'comfyui');
   return `
     <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(15,23,42,0.08); border: 1px solid rgba(71,85,105,0.35); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
       <span style="font-weight: 700; color: #1f2937; font-size: 0.9rem; white-space: nowrap;"><i class="fa-solid fa-satellite-dish" style="margin-right: 6px;"></i>背景图来源</span>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'none' ? BG_SOURCE_COLORS.none : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="none" ${src === 'none' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.none};"> 关闭</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'chatu8' ? BG_SOURCE_COLORS.chatu8 : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="chatu8" ${src === 'chatu8' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.chatu8};"> st-chatu8识别</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'comfyui' ? BG_SOURCE_COLORS.comfyui : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="comfyui" ${src === 'comfyui' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.comfyui};"> ComfyUI</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'banana' ? BG_SOURCE_COLORS.banana : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="banana" ${src === 'banana' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.banana};"> 大香蕉</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'novelai' ? BG_SOURCE_COLORS.novelai : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="novelai" ${src === 'novelai' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.novelai};"> NovelAI</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === 'wallhaven' ? BG_SOURCE_COLORS.wallhaven : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="wallhaven" ${src === 'wallhaven' ? 'checked' : ''} style="accent-color:${BG_SOURCE_COLORS.wallhaven};"> Wallhaven</label>
     </div>
+    <div class="gal-chatu8-source-note" style="display:${src === 'chatu8' ? 'block' : 'none'}; padding: 10px 12px; margin-bottom: 10px; border-radius: 8px; background: rgba(15,118,110,0.12); border: 1px solid rgba(15,118,110,0.35); color: #0f766e; font-size: 0.85rem; font-weight: 600;">st-chatu8识别模式已开启：本插件不会触发 ComfyUI / 大香蕉 / NovelAI / Wallhaven 背景生图，只识别 st-chatu8 在消息中渲染出的图片。</div>
     <div class="gal-imagegen-pills">
       <button class="gal-pill ${activeEngine === 'comfyui' ? 'active' : ''}" data-engine="comfyui"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI</button>
       <button class="gal-pill ${activeEngine === 'banana' ? 'active' : ''}" data-engine="banana"><i class="fa-solid fa-lemon"></i> 大香蕉</button>
@@ -197,11 +201,16 @@ export function bindImageGenConfigEvents($container, settings) {
     $container.find('.gal-radio-label').css('color', BG_SOURCE_INACTIVE_COLOR);
     $(this).closest('.gal-radio-label').css('color', '');
     $(this).closest('.gal-radio-label').css('color', BG_SOURCE_COLORS[value] || BG_SOURCE_INACTIVE_COLOR);
-    // 自动切到对应 pill（关闭则不切）
-    if (value !== 'none') {
+    // 自动切到对应 pill；外部识别模式隐藏内置生图配置。
+    const internalEngines = ['comfyui', 'banana', 'novelai', 'wallhaven'];
+    $container.find('.gal-chatu8-source-note').toggle(value === 'chatu8');
+    if (internalEngines.includes(value)) {
       $container.find(`.gal-pill[data-engine="${value}"]`).trigger('click');
+    } else if (value === 'chatu8') {
+      $container.find('.gal-pill').removeClass('active');
+      $container.find('[data-engine-pane]').hide();
     }
-    const names = { none: '关闭', comfyui: 'ComfyUI', banana: '大香蕉', novelai: 'NovelAI', wallhaven: 'Wallhaven' };
+    const names = { none: '关闭', chatu8: 'st-chatu8识别', comfyui: 'ComfyUI', banana: '大香蕉', novelai: 'NovelAI', wallhaven: 'Wallhaven' };
     showToast(`背景图来源: ${names[value] || value}`);
   });
 

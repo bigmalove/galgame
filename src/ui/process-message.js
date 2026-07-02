@@ -90,6 +90,7 @@ export async function processNewMessage(mesNode, options = {}) {
 
   const mesId = $mes.attr('mesid');
   const settings = getSettings();
+  const simpleStorybookMode = settings.simpleStorybookMode === true;
 
   const $mesText = $mes.find('.mes_text');
   const domVisibleContent = getMesTextContentForGalgame($mesText[0]);
@@ -117,10 +118,10 @@ export async function processNewMessage(mesNode, options = {}) {
   }
 
   const hasGalTags = RE_GAL_TAGS.test(contentToProcess);
-  if (settings.smartDetection && !hasGalTags && !forceRender) return;
+  if (!simpleStorybookMode && settings.smartDetection && !hasGalTags && !forceRender) return;
 
   const hasClosedP = RE_CLOSED_P.test(contentToProcess);
-  if (!hasClosedP && !forceRender) {
+  if (!simpleStorybookMode && !hasClosedP && !forceRender) {
     console.log(`[${SCRIPT_NAME}] 流式输出中，等待完整内容...`);
     const loadingParsed = buildFallbackParsed('生成中...');
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
@@ -168,22 +169,24 @@ export async function processNewMessage(mesNode, options = {}) {
   // 实时背景生成处理 (根据 bgImageSource 单选分派)
   if (parsed && parsed.backgroundChanges) {
     const bgSrc = settings.bgImageSource || 'none';
-    const bgDispatch = {
-      comfyui:   { tagKey: 'generationTags', handler: _handleRealTimeBackgroundGenerationRef, label: 'ComfyUI 背景生成' },
-      banana:    { tagKey: 'bananaPrompt',    handler: _handleBananaBackgroundGenerationRef,  label: '大香蕉背景生成' },
-      novelai:   { tagKey: 'generationTags', handler: _handleNovelAIBackgroundGenerationRef, label: 'NovelAI 背景生成' },
-      wallhaven: { tagKey: 'wallhavenTags',  handler: handleWallhavenBackgroundSearch,       label: 'Wallhaven 背景搜索' },
-    };
-    const entry = bgDispatch[bgSrc];
-    if (entry && entry.handler) {
-      for (const bgChange of parsed.backgroundChanges) {
-        const tags = bgChange[entry.tagKey];
-        if (tags) {
-          console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ${entry.label}: "${bgChange.scene}"`);
-          try {
-            entry.handler(bgChange.scene, tags);
-          } catch (error) {
-            console.warn(`[${SCRIPT_NAME}] 背景处理失败: ${entry.label}`, error);
+    if (bgSrc !== 'chatu8') {
+      const bgDispatch = {
+        comfyui:   { tagKey: 'generationTags', handler: _handleRealTimeBackgroundGenerationRef, label: 'ComfyUI 背景生成' },
+        banana:    { tagKey: 'bananaPrompt',    handler: _handleBananaBackgroundGenerationRef,  label: '大香蕉背景生成' },
+        novelai:   { tagKey: 'generationTags', handler: _handleNovelAIBackgroundGenerationRef, label: 'NovelAI 背景生成' },
+        wallhaven: { tagKey: 'wallhavenTags',  handler: handleWallhavenBackgroundSearch,       label: 'Wallhaven 背景搜索' },
+      };
+      const entry = bgDispatch[bgSrc];
+      if (entry && entry.handler) {
+        for (const bgChange of parsed.backgroundChanges) {
+          const tags = bgChange[entry.tagKey];
+          if (tags) {
+            console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ${entry.label}: "${bgChange.scene}"`);
+            try {
+              entry.handler(bgChange.scene, tags);
+            } catch (error) {
+              console.warn(`[${SCRIPT_NAME}] 背景处理失败: ${entry.label}`, error);
+            }
           }
         }
       }
@@ -200,7 +203,7 @@ export async function processNewMessage(mesNode, options = {}) {
   console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed?.segments?.length || 0}`);
 
   if (!parsed || parsed.segments.length === 0) {
-    if (!settings.smartDetection || forceRender) {
+    if (simpleStorybookMode || !settings.smartDetection || forceRender) {
       const fallbackText = (contentToProcess && contentToProcess.trim().length > 0)
         ? contentToProcess
         : (String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）');
@@ -228,7 +231,9 @@ export async function processNewMessage(mesNode, options = {}) {
 
   markTimelineCacheDirty();
 
-  Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, 'process-message');
+  if (!simpleStorybookMode) {
+    Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, 'process-message');
+  }
 
   const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
   if (isLastAi) {

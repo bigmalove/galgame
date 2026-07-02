@@ -99,6 +99,7 @@ export const DEFAULT_SETTINGS = {
   autoPlaySpeed: 2,
   // 显示设置
   showSprites: true,
+  simpleStorybookMode: false,
   hideOtherFloors: true,
   fullscreenMode: false,
   bgFillMode: 'cover',
@@ -132,7 +133,7 @@ export const DEFAULT_SETTINGS = {
   // ComfyUI
   defaultCheckpoint: '',
   realTimeBackgroundGen: false,
-  // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven'
+  // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven' | 'chatu8'
   bgImageSource: 'none',
   // 指定可用 BGM 歌单（为空表示不限制）
   bgmWhitelist: [],
@@ -1289,6 +1290,7 @@ export function loadSettings() {
       _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
       _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
       _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
+      _settings.simpleStorybookMode = _settings.simpleStorybookMode === true;
       _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
       _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);
       // 兼容旧版 sceneMode -> cgMode
@@ -1363,6 +1365,7 @@ export function saveSettings() {
     _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
     _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
     _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
+    _settings.simpleStorybookMode = _settings.simpleStorybookMode === true;
     ensureMapSettings();
     ensureTitleScreenSettings();
     topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(_settings));

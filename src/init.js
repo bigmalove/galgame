@@ -172,7 +172,8 @@ export async function init() {
                   content = decodeHtml($mesText.html() || '');
                 }
                 const hasGalTags = RE_GAL_TAGS.test(content);
-                if (hasGalTags) {
+                const simpleStorybookMode = getSettings().simpleStorybookMode === true;
+                if (hasGalTags || simpleStorybookMode) {
                   processNewMessage(mesNode);
                 } else if (mesNode.classList.contains('gal-hidden')) {
                   mesNode.classList.remove('gal-hidden');

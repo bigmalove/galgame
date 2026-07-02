@@ -118,6 +118,45 @@ function removeImagePlaceholderLines(text) {
   return lines.filter(line => !RE_IMAGE_PLACEHOLDER_LINE.test(line.trim())).join('\n');
 }
 
+function normalizePlainStorybookText(rawText) {
+  return removeImagePlaceholderLines(String(rawText || '')
+    .replace(/<bgm>[\s\S]*?<\/bgm>/gi, '\n')
+    .replace(/<bnimg>[\s\S]*?<\/bnimg>/gi, '\n')
+    .replace(/<bgimg>[\s\S]*?<\/bgimg>/gi, '\n')
+    .replace(/<whimg>[\s\S]*?<\/whimg>/gi, '\n')
+    .replace(/<option\b[^>]*>[\s\S]*?<\/option>/gi, '\n')
+    .replace(/<background\b[^>]*\/?>/gi, '\n')
+    .replace(/<sprite\b[^>]*\/?>/gi, '\n')
+    .replace(/<pixiInit\b[^>]*\/?>/gi, '\n')
+    .replace(/<pixiPerform\b[^>]*\/?>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<p(?:\s[^>]*)?>/gi, '')
+    .replace(/<\/styled>/gi, '\n')
+    .replace(/<styled\b[^>]*>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n'))
+    .replace(RE_IMAGE_PLACEHOLDER_INLINE, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function splitPlainStorybookText(text) {
+  return String(text || '')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
 function stripOuterQuotes(text) {
   let result = String(text || '').trim();
   if (!result) return result;
@@ -209,6 +248,7 @@ function preprocessSimplifiedFormat(html) {
 export function parseGalgameContent(html, messageId) {
   const settings = getSettings();
   const isEnabled = getIsEnabled();
+  const simpleStorybookMode = settings.simpleStorybookMode === true;
   const parseCache = GalgameStore.cache.parse;
   const originalHtml = String(html || '');
   html = originalHtml;
@@ -221,7 +261,9 @@ export function parseGalgameContent(html, messageId) {
   if (popup2Match) html = html.replace(RE_POPUP2, '');
 
   // 预处理简化格式
-  html = preprocessSimplifiedFormat(html);
+  if (!simpleStorybookMode) {
+    html = preprocessSimplifiedFormat(html);
+  }
 
   // 加强模式：优先使用格式化版本
   if (isEnabled && settings.enhancedMode?.enabled && messageId) {
@@ -241,6 +283,7 @@ export function parseGalgameContent(html, messageId) {
     html,
     popup1Html,
     popup2Html,
+    simpleStorybookMode ? 'simple-storybook' : 'standard-galgame',
     settings.ttsBilingualZhJaEnabled === true ? 'tts-bilingual-zh-ja' : 'tts-default',
   ].join('\n---gal-cache-boundary---\n');
   const cacheKey = `${cacheSource.length}_${hashCacheSource(cacheSource)}`;
@@ -285,7 +328,7 @@ export function parseGalgameContent(html, messageId) {
 
   // 找到 <maintext> 内第一个 Galgame 标签
   const firstGalMatch = content.match(/<(background|p|pixiperform|pixiinit|bgm|sprite|option|bgimg|whimg|bnimg)\b/i);
-  if (firstGalMatch && firstGalMatch.index > 0) {
+  if (!simpleStorybookMode && firstGalMatch && firstGalMatch.index > 0) {
     console.log(`[${SCRIPT_NAME}] [DEBUG] 清理 <maintext> 前 ${firstGalMatch.index} 字符的污染内容`);
     content = content.substring(firstGalMatch.index);
   }
@@ -430,6 +473,42 @@ export function parseGalgameContent(html, messageId) {
     });
   }
 
+  if (simpleStorybookMode) {
+    const plainPTagRegex = /<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/gi;
+    let plainPMatch;
+    let cursor = 0;
+
+    const pushPlainStorybookText = (rawText, sourcePos) => {
+      const normalizedText = normalizePlainStorybookText(rawText);
+      const lines = splitPlainStorybookText(normalizedText);
+      for (const line of lines) {
+        const seg = {
+          type: 'narration',
+          speaker: null,
+          text: line,
+          expression: null,
+          _sourcePos: sourcePos,
+        };
+        const bgAtThisPos = getBackgroundAtPosition(sourcePos);
+        if (bgAtThisPos) {
+          seg.backgroundScene = bgAtThisPos.scene;
+        }
+        result.segments.push(seg);
+      }
+    };
+
+    while ((plainPMatch = plainPTagRegex.exec(content)) !== null) {
+      if (plainPMatch.index > cursor) {
+        pushPlainStorybookText(content.substring(cursor, plainPMatch.index), cursor);
+      }
+      pushPlainStorybookText(plainPMatch[1], plainPMatch.index);
+      cursor = plainPTagRegex.lastIndex;
+    }
+
+    if (cursor < content.length) {
+      pushPlainStorybookText(content.substring(cursor), cursor);
+    }
+  } else {
   // 解析所有 <styled> 标签
   const styledBlocks = [];
   const styledRegex = /<styled\b([^>]*)>([\s\S]*?)<\/styled>/gi;
@@ -685,7 +764,9 @@ export function parseGalgameContent(html, messageId) {
     }
   }
 
-  if (spriteCommands.length > 0 && result.segments.length > 0) {
+  }
+
+  if (!simpleStorybookMode && spriteCommands.length > 0 && result.segments.length > 0) {
     for (const cmd of spriteCommands) {
       let targetSegment = null;
       for (const seg of result.segments) {

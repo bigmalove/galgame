@@ -58,6 +58,7 @@ ${statusTagInstructions.join('\n')}
   const bgSrc = settings.bgImageSource || 'none';
   const useBananaImageGen = bgSrc === 'banana';
   const useWallhaven = bgSrc === 'wallhaven';
+  const useChatu8 = bgSrc === 'chatu8';
 
   if (useBananaImageGen) {
     const bs = settings.bananaImageGen;
@@ -113,6 +114,15 @@ ${customCotText}${localSceneHint}
 - 古典书房 → "昏暗的古典书房，烛光摇曳，木质书架上摆满古籍，桌上散落着羽毛笔和羊皮纸，窗外是深邃的夜空"
 - 樱花小径 → "春日午后的樱花小径，粉色花瓣随风飘落，两旁是盛开的樱花树，阳光透过花枝洒下斑驳光影"
 - 废弃工厂 → "荒废多年的工业厂房，锈迹斑斑的机器静默矗立，破碎的玻璃窗透进灰暗的光线，地上杂草丛生"`;
+  } else if (useChatu8) {
+    const localSceneHint = sceneNames.length > 0
+      ? `- 可用本地背景: ${sceneNames.join(', ')}
+- 需要切换本地背景时，只输出：\`<background scene="已有场景名" />\``
+      : '- 当前未配置本地背景；画面可由 st-chatu8 插件渲染出的图片承载，可以省略背景标签。';
+
+    sceneListText = `**st-chatu8 图片识别模式**: 本插件只识别 st-chatu8 插件在消息中渲染出的图片，不调用本插件内置背景生图。
+${localSceneHint}
+- 不要输出任何本插件内置背景生图提示。`;
   } else if (useWallhaven) {
     const ws = settings.wallhaven;
 
@@ -214,11 +224,22 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
   const exampleScene = isGenerativeEngine ? '雨夜中的都市街道' : sceneNames.length > 0 ? sceneNames[0] : '场景名';
 
   const extraRule =
-    bgSrc === 'banana'
-      ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。`
-      : isGenerativeEngine
-        ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
-        : `5. **背景场景必须使用已配置的场景名称**`;
+    useChatu8
+      ? `5. **背景规则**: st-chatu8识别模式不使用本插件内置背景生图；只切换已配置本地背景，或省略背景标签。`
+      : bgSrc === 'banana'
+        ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。`
+        : isGenerativeEngine
+          ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
+          : `5. **背景场景必须使用已配置的场景名称**`;
+
+  const backgroundTagTitle = useChatu8 ? '背景标签 (可选)' : '背景标签 (场景环境强制)';
+  const backgroundUsageRuleSection = useChatu8
+    ? `- **使用规则**:
+  - **可选触发**: 只在需要切换已配置本地背景时输出背景标签；如果画面由 st-chatu8 图片承载，可以省略。
+  - **禁止内置生图**: 不要请求本插件生成新背景图。`
+    : `- **使用规则**:
+  - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
+  - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。`;
 
   const pendingSceneAlias = pendingSpecialCg
     ? String(pendingSpecialCg.sceneAlias || pendingSpecialCg.ruleName || pendingSpecialCg.ruleId || '规则名').trim()
@@ -328,6 +349,44 @@ ${bgmWhitelistText}
     return `${template.slice(0, start)}\n${template.slice(end + 1)}`;
   };
 
+  if (settings.simpleStorybookMode === true) {
+    const cotTemplate = `# 简化图书绘本输出规范
+
+本角色卡配合简化图书绘本模式，输出会作为纯文本显示在对话框中。
+
+## 正文输出
+- 直接输出绘本文字即可，每个自然段会显示在对话框。
+- 如需显式分段，可使用 \`<p>文本内容</p>\`；系统只会把其中内容当作普通文本。
+- 不需要区分角色对话与旁白。
+- 不要输出角色名、说话者、旁白前缀、表情、音色或语气标记。
+- 禁止输出 \`<sprite>\` 或任何立绘/Live2D 控制内容。
+${statusTagSection}
+
+## 可选控制标签
+${bgmRuleSection}
+
+### 背景标签（可选）
+- 格式: \`<background scene="场景名" />\`
+- ${sceneListText}
+${pendingSpecialCgSection}
+${pixiEffectTagSection}
+
+## 输出示例
+\`\`\`
+<background scene="${exampleScene}" />
+夜色像柔软的书页一样铺开，街灯在雨中慢慢亮起。
+
+她撑着伞站在路口，雨滴沿着伞沿落下，像一串细小的银铃。
+\`\`\`
+
+## 重要提醒
+1. 正文只写绘本文字，不写 \`角色名: "对话"\`。
+2. 不写 \`旁白:\`。
+3. 不写表情标签、音色标签、语气标签、\`<sprite>\` 标签。
+`;
+    return cotTemplate;
+  }
+
   if (ttsEnabled) {
     const cotTemplate = `# Galgame 输出格式规范
 
@@ -360,11 +419,9 @@ ${ttsBilingualHintSection}
 
 ${bgmRuleSection}
 
-### 背景标签 (场景环境强制)
+### ${backgroundTagTitle}
 - 格式: \`<background scene="场景名" />\`
-- **使用规则**:
-  - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
-  - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
+${backgroundUsageRuleSection}
 - ${sceneListText}
 ${pendingSpecialCgSection}
 ${pixiEffectTagSection}
@@ -437,11 +494,9 @@ ${statusTagSection}
 
 ${bgmRuleSection}
 
-### 背景标签 (场景环境强制)
+### ${backgroundTagTitle}
 - 格式: \`<background scene="场景名" />\`
-- **使用规则**:
-  - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
-  - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
+${backgroundUsageRuleSection}
 - ${sceneListText}
 ${pendingSpecialCgSection}
 ${pixiEffectTagSection}

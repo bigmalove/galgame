@@ -7986,6 +7986,7 @@
     autoPlaySpeed: 2,
     // 显示设置
     showSprites: true,
+    simpleStorybookMode: false,
     hideOtherFloors: true,
     fullscreenMode: false,
     bgFillMode: "cover",
@@ -8019,7 +8020,7 @@
     // ComfyUI
     defaultCheckpoint: "",
     realTimeBackgroundGen: false,
-    // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven'
+    // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven' | 'chatu8'
     bgImageSource: "none",
     // 指定可用 BGM 歌单（为空表示不限制）
     bgmWhitelist: [],
@@ -9038,6 +9039,7 @@
         _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
         _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
         _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
+        _settings.simpleStorybookMode = _settings.simpleStorybookMode === true;
         _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
         _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);
         if (_settings.bananaImageGen) {
@@ -9116,6 +9118,7 @@
       _settings.dialogScalePercent = normalizeUiScalePercent(_settings.dialogScalePercent);
       _settings.toolbarScalePercent = normalizeUiScalePercent(_settings.toolbarScalePercent);
       _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
+      _settings.simpleStorybookMode = _settings.simpleStorybookMode === true;
       ensureMapSettings();
       ensureTitleScreenSettings();
       topWindow.localStorage.setItem(SETTINGS_STORAGE_KEY2, JSON.stringify(_settings));
@@ -27416,6 +27419,7 @@ ${statusTagInstructions.join("\n")}
     const bgSrc = settings.bgImageSource || "none";
     const useBananaImageGen = bgSrc === "banana";
     const useWallhaven = bgSrc === "wallhaven";
+    const useChatu8 = bgSrc === "chatu8";
     if (useBananaImageGen) {
       const bs = settings.bananaImageGen;
       let modeHint = "";
@@ -27469,6 +27473,12 @@ ${customCotText}${localSceneHint}
 - 古典书房 → "昏暗的古典书房，烛光摇曳，木质书架上摆满古籍，桌上散落着羽毛笔和羊皮纸，窗外是深邃的夜空"
 - 樱花小径 → "春日午后的樱花小径，粉色花瓣随风飘落，两旁是盛开的樱花树，阳光透过花枝洒下斑驳光影"
 - 废弃工厂 → "荒废多年的工业厂房，锈迹斑斑的机器静默矗立，破碎的玻璃窗透进灰暗的光线，地上杂草丛生"`;
+    } else if (useChatu8) {
+      const localSceneHint = sceneNames.length > 0 ? `- 可用本地背景: ${sceneNames.join(", ")}
+- 需要切换本地背景时，只输出：\`<background scene="已有场景名" />\`` : "- 当前未配置本地背景；画面可由 st-chatu8 插件渲染出的图片承载，可以省略背景标签。";
+      sceneListText = `**st-chatu8 图片识别模式**: 本插件只识别 st-chatu8 插件在消息中渲染出的图片，不调用本插件内置背景生图。
+${localSceneHint}
+- 不要输出任何本插件内置背景生图提示。`;
     } else if (useWallhaven) {
       const ws = settings.wallhaven;
       let categoryHint = "";
@@ -27573,7 +27583,13 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
     }
     const isGenerativeEngine = bgSrc === "comfyui" || bgSrc === "banana" || bgSrc === "novelai";
     const exampleScene = isGenerativeEngine ? "雨夜中的都市街道" : sceneNames.length > 0 ? sceneNames[0] : "场景名";
-    const extraRule = bgSrc === "banana" ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。` : isGenerativeEngine ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。` : `5. **背景场景必须使用已配置的场景名称**`;
+    const extraRule = useChatu8 ? `5. **背景规则**: st-chatu8识别模式不使用本插件内置背景生图；只切换已配置本地背景，或省略背景标签。` : bgSrc === "banana" ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。` : isGenerativeEngine ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。` : `5. **背景场景必须使用已配置的场景名称**`;
+    const backgroundTagTitle = useChatu8 ? "背景标签 (可选)" : "背景标签 (场景环境强制)";
+    const backgroundUsageRuleSection = useChatu8 ? `- **使用规则**:
+  - **可选触发**: 只在需要切换已配置本地背景时输出背景标签；如果画面由 st-chatu8 图片承载，可以省略。
+  - **禁止内置生图**: 不要请求本插件生成新背景图。` : `- **使用规则**:
+  - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
+  - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。`;
     const pendingSceneAlias = pendingSpecialCg ? String(pendingSpecialCg.sceneAlias || pendingSpecialCg.ruleName || pendingSpecialCg.ruleId || "规则名").trim() : "";
     const pendingSpecialCgSection = pendingSceneAlias ? `
 ### 临时特殊CG提示（必须遵守）
@@ -27645,6 +27661,43 @@ ${bgmWhitelistText}
       return `${template.slice(0, start)}
 ${template.slice(end + 1)}`;
     };
+    if (settings.simpleStorybookMode === true) {
+      const cotTemplate = `# 简化图书绘本输出规范
+
+本角色卡配合简化图书绘本模式，输出会作为纯文本显示在对话框中。
+
+## 正文输出
+- 直接输出绘本文字即可，每个自然段会显示在对话框。
+- 如需显式分段，可使用 \`<p>文本内容</p>\`；系统只会把其中内容当作普通文本。
+- 不需要区分角色对话与旁白。
+- 不要输出角色名、说话者、旁白前缀、表情、音色或语气标记。
+- 禁止输出 \`<sprite>\` 或任何立绘/Live2D 控制内容。
+${statusTagSection}
+
+## 可选控制标签
+${bgmRuleSection}
+
+### 背景标签（可选）
+- 格式: \`<background scene="场景名" />\`
+- ${sceneListText}
+${pendingSpecialCgSection}
+${pixiEffectTagSection}
+
+## 输出示例
+\`\`\`
+<background scene="${exampleScene}" />
+夜色像柔软的书页一样铺开，街灯在雨中慢慢亮起。
+
+她撑着伞站在路口，雨滴沿着伞沿落下，像一串细小的银铃。
+\`\`\`
+
+## 重要提醒
+1. 正文只写绘本文字，不写 \`角色名: "对话"\`。
+2. 不写 \`旁白:\`。
+3. 不写表情标签、音色标签、语气标签、\`<sprite>\` 标签。
+`;
+      return cotTemplate;
+    }
     if (ttsEnabled) {
       const cotTemplate = `# Galgame 输出格式规范
 
@@ -27677,11 +27730,9 @@ ${ttsBilingualHintSection}
 
 ${bgmRuleSection}
 
-### 背景标签 (场景环境强制)
+### ${backgroundTagTitle}
 - 格式: \`<background scene="场景名" />\`
-- **使用规则**:
-  - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
-  - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
+${backgroundUsageRuleSection}
 - ${sceneListText}
 ${pendingSpecialCgSection}
 ${pixiEffectTagSection}
@@ -27756,11 +27807,9 @@ ${statusTagSection}
 
 ${bgmRuleSection}
 
-### 背景标签 (场景环境强制)
+### ${backgroundTagTitle}
 - 格式: \`<background scene="场景名" />\`
-- **使用规则**:
-  - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
-  - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。
+${backgroundUsageRuleSection}
 - ${sceneListText}
 ${pendingSpecialCgSection}
 ${pixiEffectTagSection}
@@ -28065,6 +28114,12 @@ ${extraRule}
     const lines = String(text).split(/\r?\n/);
     return lines.filter((line) => !RE_IMAGE_PLACEHOLDER_LINE.test(line.trim())).join("\n");
   }
+  function normalizePlainStorybookText(rawText) {
+    return removeImagePlaceholderLines(String(rawText || "").replace(/<bgm>[\s\S]*?<\/bgm>/gi, "\n").replace(/<bnimg>[\s\S]*?<\/bnimg>/gi, "\n").replace(/<bgimg>[\s\S]*?<\/bgimg>/gi, "\n").replace(/<whimg>[\s\S]*?<\/whimg>/gi, "\n").replace(/<option\b[^>]*>[\s\S]*?<\/option>/gi, "\n").replace(/<background\b[^>]*\/?>/gi, "\n").replace(/<sprite\b[^>]*\/?>/gi, "\n").replace(/<pixiInit\b[^>]*\/?>/gi, "\n").replace(/<pixiPerform\b[^>]*\/?>/gi, "\n").replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<p(?:\s[^>]*)?>/gi, "").replace(/<\/styled>/gi, "\n").replace(/<styled\b[^>]*>/gi, "").replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/\r\n/g, "\n").replace(/\r/g, "\n")).replace(RE_IMAGE_PLACEHOLDER_INLINE, "").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function splitPlainStorybookText(text) {
+    return String(text || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  }
   function stripOuterQuotes(text) {
     let result = String(text || "").trim();
     if (!result) return result;
@@ -28127,6 +28182,7 @@ ${extraRule}
   function parseGalgameContent(html, messageId) {
     const settings = getSettings();
     const isEnabled = getIsEnabled();
+    const simpleStorybookMode = settings.simpleStorybookMode === true;
     const parseCache2 = GalgameStore.cache.parse;
     const originalHtml = String(html || "");
     html = originalHtml;
@@ -28134,7 +28190,9 @@ ${extraRule}
     const popup2Match = html.match(RE_POPUP2);
     if (popup1Match) html = html.replace(RE_POPUP1, "");
     if (popup2Match) html = html.replace(RE_POPUP2, "");
-    html = preprocessSimplifiedFormat(html);
+    if (!simpleStorybookMode) {
+      html = preprocessSimplifiedFormat(html);
+    }
     if (isEnabled && settings.enhancedMode?.enabled && messageId) {
       const formatData = _getFormattedContentRef ? _getFormattedContentRef(messageId) : null;
       if (formatData) {
@@ -28150,6 +28208,7 @@ ${extraRule}
       html,
       popup1Html,
       popup2Html,
+      simpleStorybookMode ? "simple-storybook" : "standard-galgame",
       settings.ttsBilingualZhJaEnabled === true ? "tts-bilingual-zh-ja" : "tts-default"
     ].join("\n---gal-cache-boundary---\n");
     const cacheKey = `${cacheSource.length}_${hashCacheSource(cacheSource)}`;
@@ -28180,7 +28239,7 @@ ${extraRule}
       }
     }
     const firstGalMatch = content.match(/<(background|p|pixiperform|pixiinit|bgm|sprite|option|bgimg|whimg|bnimg)\b/i);
-    if (firstGalMatch && firstGalMatch.index > 0) {
+    if (!simpleStorybookMode && firstGalMatch && firstGalMatch.index > 0) {
       console.log(`[${SCRIPT_NAME}] [DEBUG] 清理 <maintext> 前 ${firstGalMatch.index} 字符的污染内容`);
       content = content.substring(firstGalMatch.index);
     }
@@ -28305,215 +28364,249 @@ ${extraRule}
         text: optionMatch[2].trim()
       });
     }
-    const styledBlocks = [];
-    const styledRegex = /<styled\b([^>]*)>([\s\S]*?)<\/styled>/gi;
-    let styledMatch;
-    while ((styledMatch = styledRegex.exec(content)) !== null) {
-      const styledAttrs = parseTagAttributes(styledMatch[1] || "");
-      const styledType = String(styledAttrs.type || "").trim();
-      if (!styledType) continue;
-      const styledBody = styledMatch[2].trim();
-      if (!styledBody) continue;
-      const normalizedStyledBody = styledBody.replace(/<br\s*\/?>/gi, "\n").replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
-      const styledLines = normalizedStyledBody.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const parsedLines = styledLines.map((line) => {
-        const colonMatch = line.match(/^([^:：]{1,20})[：:]\s*(.+)$/);
-        if (colonMatch) {
-          return { sender: colonMatch[1].trim(), text: colonMatch[2].trim() };
-        }
-        return { sender: null, text: line };
-      });
-      styledBlocks.push({
-        position: styledMatch.index,
-        styleType: styledType,
-        from: styledAttrs.from || null,
-        to: styledAttrs.to || null,
-        title: styledAttrs.title || null,
-        date: styledAttrs.date || null,
-        lines: parsedLines
-      });
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到 styled 块[${styledMatch.index}]: type="${styledType}", ${parsedLines.length}行`);
-    }
-    const expressionNames = getAllExpressions();
-    const expressionPattern = expressionNames.map((e) => e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-    function parseTTSConfig(ttsString, defaultSpeaker) {
-      if (!ttsString) return null;
-      const config = {
-        speaker: defaultSpeaker,
-        context: null
-      };
-      const pairs = ttsString.split(";");
-      for (const pair of pairs) {
-        const [key, value] = pair.trim().split("=");
-        if (key && value) {
-          const trimmedKey = key.trim();
-          const trimmedValue = value.trim();
-          if (trimmedKey === "speaker") config.speaker = trimmedValue;
-          else if (trimmedKey === "context") config.context = trimmedValue;
-        }
-      }
-      return config;
-    }
-    function parseSegmentText(text, ttsConfigString = null) {
-      if (!text) return null;
-      text = text.trim();
-      if (!text) return null;
-      text = text.replace(/<span[^>]*>/gi, "").replace(/<\/span>/gi, "");
-      text = text.replace(/<q>([^<]*)<\/q>/gi, "$1");
-      text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, "$1");
-      text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, "$1");
-      text = text.replace(/<pixiInit\b[^>]*\/?>/gi, "");
-      text = text.replace(/<pixiPerform\b[^>]*\/?>/gi, "");
-      text = text.replace(RE_IMAGE_PLACEHOLDER_INLINE, "");
-      text = removeImagePlaceholderLines(text).trim();
-      text = stripOuterQuotes(text);
-      if (!text) return null;
-      let expression = null;
-      const expressionTagRegex = new RegExp(`<(${expressionPattern})>`, "i");
-      const exprMatch = text.match(expressionTagRegex);
-      if (exprMatch) {
-        expression = exprMatch[1];
-        text = text.replace(expressionTagRegex, "").trim();
-      }
-      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["'“‘「『（(]([\s\S]+)["'”’」』）)]\s*$/);
-      if (!dialogueMatch) {
-        dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
-      }
-      if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
-        const speaker = normalizeSpeakerName(dialogueMatch[1]);
-        const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
-        if (!speaker || !dialogue) return null;
-        const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
-        if (speaker === "旁白") {
-          const narrationSeg = {
+    if (simpleStorybookMode) {
+      const plainPTagRegex = /<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/gi;
+      let plainPMatch;
+      let cursor = 0;
+      const pushPlainStorybookText = (rawText, sourcePos) => {
+        const normalizedText = normalizePlainStorybookText(rawText);
+        const lines = splitPlainStorybookText(normalizedText);
+        for (const line of lines) {
+          const seg = {
             type: "narration",
             speaker: null,
-            text: splitResult.displayText,
-            expression: null
+            text: line,
+            expression: null,
+            _sourcePos: sourcePos
           };
-          if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
-            narrationSeg.ttsText = splitResult.ttsText;
-          }
-          return narrationSeg;
-        }
-        if (speaker.length <= 20 && speaker.length > 0) {
-          const segResult = {
-            type: "dialogue",
-            speaker,
-            text: splitResult.displayText,
-            expression: expression || "默认"
-          };
-          if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
-            segResult.ttsText = splitResult.ttsText;
-          }
-          if (ttsConfigString) {
-            segResult.tts = parseTTSConfig(ttsConfigString, speaker);
-          }
-          return segResult;
-        }
-      }
-      const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
-      const narrationResult = {
-        type: "narration",
-        speaker: null,
-        text: narrationSplit.displayText,
-        expression: null
-      };
-      if (narrationSplit.ttsText && narrationSplit.ttsText !== narrationSplit.displayText) {
-        narrationResult.ttsText = narrationSplit.ttsText;
-      }
-      return narrationResult;
-    }
-    const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
-    const allContentItems = [];
-    let match2;
-    let lastClosedPTagEnd = 0;
-    while ((match2 = pTagRegex.exec(content)) !== null) {
-      const ttsConfig = match2[1];
-      const seg = parseSegmentText(match2[2], ttsConfig);
-      if (seg) {
-        seg._sourcePos = match2.index;
-        const bgAtThisPos = getBackgroundAtPosition(match2.index);
-        if (bgAtThisPos) {
-          seg.backgroundScene = bgAtThisPos.scene;
-        }
-        allContentItems.push({ position: match2.index, type: "segment", data: seg });
-      }
-      lastClosedPTagEnd = pTagRegex.lastIndex;
-    }
-    for (const block of styledBlocks) {
-      const bgAtThisPos = getBackgroundAtPosition(block.position);
-      const styledSeg = {
-        type: "styled",
-        speaker: null,
-        text: block.lines.map((l) => l.text).join(" "),
-        expression: null,
-        styleType: block.styleType,
-        styledFrom: block.from,
-        styledTo: block.to,
-        styledTitle: block.title,
-        styledDate: block.date,
-        styledLines: block.lines,
-        backgroundScene: bgAtThisPos ? bgAtThisPos.scene : null,
-        _sourcePos: block.position
-      };
-      allContentItems.push({ position: block.position, type: "segment", data: styledSeg });
-    }
-    allContentItems.sort((a, b) => a.position - b.position);
-    for (const item of allContentItems) {
-      if (result.segments.length < 3) {
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${item.position} 类型:${item.data.type} 背景:${item.data.backgroundScene || "null"} 文本:${(item.data.text || "").substring(0, 20)}...`);
-      }
-      result.segments.push(item.data);
-    }
-    const remainingText = content.substring(lastClosedPTagEnd);
-    const unclosedPMatch = remainingText.match(/<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*)$/i);
-    if (unclosedPMatch) {
-      const rawContent = unclosedPMatch[2];
-      const ttsConfig = unclosedPMatch[1];
-      if (rawContent && rawContent.trim()) {
-        const seg = parseSegmentText(rawContent, ttsConfig);
-        if (seg) {
-          const segPos = lastClosedPTagEnd + unclosedPMatch.index;
-          seg._sourcePos = segPos;
-          const bgAtThisPos = getBackgroundAtPosition(segPos);
+          const bgAtThisPos = getBackgroundAtPosition(sourcePos);
           if (bgAtThisPos) {
             seg.backgroundScene = bgAtThisPos.scene;
           }
           result.segments.push(seg);
         }
+      };
+      while ((plainPMatch = plainPTagRegex.exec(content)) !== null) {
+        if (plainPMatch.index > cursor) {
+          pushPlainStorybookText(content.substring(cursor, plainPMatch.index), cursor);
+        }
+        pushPlainStorybookText(plainPMatch[1], plainPMatch.index);
+        cursor = plainPTagRegex.lastIndex;
+      }
+      if (cursor < content.length) {
+        pushPlainStorybookText(content.substring(cursor), cursor);
+      }
+    } else {
+      let parseTTSConfig2 = function(ttsString, defaultSpeaker) {
+        if (!ttsString) return null;
+        const config = {
+          speaker: defaultSpeaker,
+          context: null
+        };
+        const pairs = ttsString.split(";");
+        for (const pair of pairs) {
+          const [key, value] = pair.trim().split("=");
+          if (key && value) {
+            const trimmedKey = key.trim();
+            const trimmedValue = value.trim();
+            if (trimmedKey === "speaker") config.speaker = trimmedValue;
+            else if (trimmedKey === "context") config.context = trimmedValue;
+          }
+        }
+        return config;
+      }, parseSegmentText2 = function(text, ttsConfigString = null) {
+        if (!text) return null;
+        text = text.trim();
+        if (!text) return null;
+        text = text.replace(/<span[^>]*>/gi, "").replace(/<\/span>/gi, "");
+        text = text.replace(/<q>([^<]*)<\/q>/gi, "$1");
+        text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, "$1");
+        text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, "$1");
+        text = text.replace(/<pixiInit\b[^>]*\/?>/gi, "");
+        text = text.replace(/<pixiPerform\b[^>]*\/?>/gi, "");
+        text = text.replace(RE_IMAGE_PLACEHOLDER_INLINE, "");
+        text = removeImagePlaceholderLines(text).trim();
+        text = stripOuterQuotes(text);
+        if (!text) return null;
+        let expression = null;
+        const expressionTagRegex = new RegExp(`<(${expressionPattern})>`, "i");
+        const exprMatch = text.match(expressionTagRegex);
+        if (exprMatch) {
+          expression = exprMatch[1];
+          text = text.replace(expressionTagRegex, "").trim();
+        }
+        let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["'“‘「『（(]([\s\S]+)["'”’」』）)]\s*$/);
+        if (!dialogueMatch) {
+          dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
+        }
+        if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
+          const speaker = normalizeSpeakerName(dialogueMatch[1]);
+          const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
+          if (!speaker || !dialogue) return null;
+          const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
+          if (speaker === "旁白") {
+            const narrationSeg = {
+              type: "narration",
+              speaker: null,
+              text: splitResult.displayText,
+              expression: null
+            };
+            if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+              narrationSeg.ttsText = splitResult.ttsText;
+            }
+            return narrationSeg;
+          }
+          if (speaker.length <= 20 && speaker.length > 0) {
+            const segResult = {
+              type: "dialogue",
+              speaker,
+              text: splitResult.displayText,
+              expression: expression || "默认"
+            };
+            if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+              segResult.ttsText = splitResult.ttsText;
+            }
+            if (ttsConfigString) {
+              segResult.tts = parseTTSConfig2(ttsConfigString, speaker);
+            }
+            return segResult;
+          }
+        }
+        const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
+        const narrationResult = {
+          type: "narration",
+          speaker: null,
+          text: narrationSplit.displayText,
+          expression: null
+        };
+        if (narrationSplit.ttsText && narrationSplit.ttsText !== narrationSplit.displayText) {
+          narrationResult.ttsText = narrationSplit.ttsText;
+        }
+        return narrationResult;
+      };
+      var parseTTSConfig = parseTTSConfig2, parseSegmentText = parseSegmentText2;
+      const styledBlocks = [];
+      const styledRegex = /<styled\b([^>]*)>([\s\S]*?)<\/styled>/gi;
+      let styledMatch;
+      while ((styledMatch = styledRegex.exec(content)) !== null) {
+        const styledAttrs = parseTagAttributes(styledMatch[1] || "");
+        const styledType = String(styledAttrs.type || "").trim();
+        if (!styledType) continue;
+        const styledBody = styledMatch[2].trim();
+        if (!styledBody) continue;
+        const normalizedStyledBody = styledBody.replace(/<br\s*\/?>/gi, "\n").replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n");
+        const styledLines = normalizedStyledBody.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const parsedLines = styledLines.map((line) => {
+          const colonMatch = line.match(/^([^:：]{1,20})[：:]\s*(.+)$/);
+          if (colonMatch) {
+            return { sender: colonMatch[1].trim(), text: colonMatch[2].trim() };
+          }
+          return { sender: null, text: line };
+        });
+        styledBlocks.push({
+          position: styledMatch.index,
+          styleType: styledType,
+          from: styledAttrs.from || null,
+          to: styledAttrs.to || null,
+          title: styledAttrs.title || null,
+          date: styledAttrs.date || null,
+          lines: parsedLines
+        });
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到 styled 块[${styledMatch.index}]: type="${styledType}", ${parsedLines.length}行`);
+      }
+      const expressionNames = getAllExpressions();
+      const expressionPattern = expressionNames.map((e) => e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+      const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
+      const allContentItems = [];
+      let match2;
+      let lastClosedPTagEnd = 0;
+      while ((match2 = pTagRegex.exec(content)) !== null) {
+        const ttsConfig = match2[1];
+        const seg = parseSegmentText2(match2[2], ttsConfig);
+        if (seg) {
+          seg._sourcePos = match2.index;
+          const bgAtThisPos = getBackgroundAtPosition(match2.index);
+          if (bgAtThisPos) {
+            seg.backgroundScene = bgAtThisPos.scene;
+          }
+          allContentItems.push({ position: match2.index, type: "segment", data: seg });
+        }
+        lastClosedPTagEnd = pTagRegex.lastIndex;
+      }
+      for (const block of styledBlocks) {
+        const bgAtThisPos = getBackgroundAtPosition(block.position);
+        const styledSeg = {
+          type: "styled",
+          speaker: null,
+          text: block.lines.map((l) => l.text).join(" "),
+          expression: null,
+          styleType: block.styleType,
+          styledFrom: block.from,
+          styledTo: block.to,
+          styledTitle: block.title,
+          styledDate: block.date,
+          styledLines: block.lines,
+          backgroundScene: bgAtThisPos ? bgAtThisPos.scene : null,
+          _sourcePos: block.position
+        };
+        allContentItems.push({ position: block.position, type: "segment", data: styledSeg });
+      }
+      allContentItems.sort((a, b) => a.position - b.position);
+      for (const item of allContentItems) {
+        if (result.segments.length < 3) {
+          console.log(`[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${item.position} 类型:${item.data.type} 背景:${item.data.backgroundScene || "null"} 文本:${(item.data.text || "").substring(0, 20)}...`);
+        }
+        result.segments.push(item.data);
+      }
+      const remainingText = content.substring(lastClosedPTagEnd);
+      const unclosedPMatch = remainingText.match(/<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*)$/i);
+      if (unclosedPMatch) {
+        const rawContent = unclosedPMatch[2];
+        const ttsConfig = unclosedPMatch[1];
+        if (rawContent && rawContent.trim()) {
+          const seg = parseSegmentText2(rawContent, ttsConfig);
+          if (seg) {
+            const segPos = lastClosedPTagEnd + unclosedPMatch.index;
+            seg._sourcePos = segPos;
+            const bgAtThisPos = getBackgroundAtPosition(segPos);
+            if (bgAtThisPos) {
+              seg.backgroundScene = bgAtThisPos.scene;
+            }
+            result.segments.push(seg);
+          }
+        }
+      }
+      if (result.segments.length === 0) {
+        const plainText = content.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "\n").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const normalizedText = removeImagePlaceholderLines(plainText).replace(RE_IMAGE_PLACEHOLDER_INLINE, "").trim();
+        if (normalizedText) {
+          const lines = normalizedText.split("\n").map((line) => line.trim()).filter(Boolean);
+          for (const line of lines) {
+            const seg = parseSegmentText2(line);
+            if (!seg) continue;
+            seg._sourcePos = content.length;
+            if (backgroundChanges.length > 0) {
+              seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+            }
+            result.segments.push(seg);
+          }
+          if (result.segments.length === 0) {
+            const seg = {
+              type: "narration",
+              speaker: null,
+              text: normalizedText,
+              expression: null,
+              _sourcePos: content.length
+            };
+            if (backgroundChanges.length > 0) {
+              seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+            }
+            result.segments.push(seg);
+          }
+        }
       }
     }
-    if (result.segments.length === 0) {
-      const plainText = content.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "\n").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-      const normalizedText = removeImagePlaceholderLines(plainText).replace(RE_IMAGE_PLACEHOLDER_INLINE, "").trim();
-      if (normalizedText) {
-        const lines = normalizedText.split("\n").map((line) => line.trim()).filter(Boolean);
-        for (const line of lines) {
-          const seg = parseSegmentText(line);
-          if (!seg) continue;
-          seg._sourcePos = content.length;
-          if (backgroundChanges.length > 0) {
-            seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
-          }
-          result.segments.push(seg);
-        }
-        if (result.segments.length === 0) {
-          const seg = {
-            type: "narration",
-            speaker: null,
-            text: normalizedText,
-            expression: null,
-            _sourcePos: content.length
-          };
-          if (backgroundChanges.length > 0) {
-            seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
-          }
-          result.segments.push(seg);
-        }
-      }
-    }
-    if (spriteCommands.length > 0 && result.segments.length > 0) {
+    if (!simpleStorybookMode && spriteCommands.length > 0 && result.segments.length > 0) {
       for (const cmd of spriteCommands) {
         let targetSegment = null;
         for (const seg of result.segments) {
@@ -38678,6 +38771,7 @@ ${normalizedSource}`;
     const $overlay = ensureGlobalOverlay();
     const segments = parsedContent.segments;
     const settings = getSettings();
+    const simpleStorybookMode = settings.simpleStorybookMode === true;
     const mesIdStr = String(mesId);
     const suppressTTS = !!options2.suppressTTS;
     let state = messageSegmentState3.get(mesIdStr);
@@ -38724,7 +38818,11 @@ ${normalizedSource}`;
     const renderToken = nextOverlayRenderToken(state);
     $overlay.attr("data-render-token", String(renderToken));
     const currentIndex = Math.min(state.currentIndex, segments.length - 1);
-    Live2DPreloadManager.preloadFromSegments(segments, currentIndex, "overlay-content");
+    if (simpleStorybookMode) {
+      SpriteManager.reset($overlay);
+    } else {
+      Live2DPreloadManager.preloadFromSegments(segments, currentIndex, "overlay-content");
+    }
     const displaySegment = segments[currentIndex] || { type: "narration", text: "" };
     const displayText = displaySegment.text || "";
     const speaker = displaySegment.speaker;
@@ -38802,10 +38900,12 @@ ${normalizedSource}`;
     const total = segments.length;
     const progressPercent = total > 0 ? (currentIndex + 1) / total * 100 : 0;
     $overlay.find(".gal-progress-bar").css("width", `${progressPercent}%`);
-    await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
-    clearSpritesOnBackgroundCommand($overlay, displaySegment);
-    const expression = displaySegment.expression || "默认";
-    await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken);
+    if (!simpleStorybookMode) {
+      await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
+      clearSpritesOnBackgroundCommand($overlay, displaySegment);
+      const expression = displaySegment.expression || "默认";
+      await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken);
+    }
     const sceneToApply = displaySegment.backgroundScene || parsedContent.currentBackground?.scene;
     if (sceneToApply) {
       await SpriteManager.applySceneTint($overlay, sceneToApply);
@@ -38842,10 +38942,13 @@ ${normalizedSource}`;
     const isRenderTokenStale = () => expectedRenderToken !== null && expectedRenderToken !== (Number(state.renderToken) || 0);
     if (isRenderTokenStale()) return false;
     const $overlay = $2("#gal-global-overlay");
+    const simpleStorybookMode = getSettings().simpleStorybookMode === true;
     const currentIndex = state.currentIndex;
     const segment = state.segments[currentIndex];
     if (!segment) return false;
-    Live2DPreloadManager.preloadFromSegments(state.segments, currentIndex, "segment-display");
+    if (!simpleStorybookMode) {
+      Live2DPreloadManager.preloadFromSegments(state.segments, currentIndex, "segment-display");
+    }
     if (expectedRenderToken !== null) {
       $overlay.attr("data-render-token", String(expectedRenderToken));
     }
@@ -38962,12 +39065,14 @@ ${normalizedSource}`;
       stopNextBtnAnimation();
       $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     }
-    await SpriteManager.applySpriteCommands($overlay, segment.spriteCommands, expectedRenderToken);
-    if (isRenderTokenStale()) return false;
-    clearSpritesOnBackgroundCommand($overlay, segment);
-    const expression = segment.expression || "默认";
-    await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken);
-    if (isRenderTokenStale()) return false;
+    if (!simpleStorybookMode) {
+      await SpriteManager.applySpriteCommands($overlay, segment.spriteCommands, expectedRenderToken);
+      if (isRenderTokenStale()) return false;
+      clearSpritesOnBackgroundCommand($overlay, segment);
+      const expression = segment.expression || "默认";
+      await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken);
+      if (isRenderTokenStale()) return false;
+    }
     const sceneToApply = segment.backgroundScene || state.parsedContent?.currentBackground?.scene;
     if (sceneToApply) {
       await SpriteManager.applySceneTint($overlay, sceneToApply);
@@ -39011,7 +39116,8 @@ ${normalizedSource}`;
       if (!contentToProcess) return;
     }
     const hasGalTags = RE_GAL_TAGS2.test(contentToProcess);
-    if (!hasGalTags) {
+    const simpleStorybookMode = getSettings().simpleStorybookMode === true;
+    if (!hasGalTags && !simpleStorybookMode) {
       console.log(`[${SCRIPT_NAME}] 最后AI消息不包含Galgame标签`);
       return;
     }
@@ -39029,13 +39135,49 @@ ${normalizedSource}`;
   }
   var capturedCgImages = /* @__PURE__ */ new Map();
   var cgObservers = /* @__PURE__ */ new Map();
+  var CHATU8_CG_CONTAINER_SELECTOR = [
+    ".st-chatu8-collapse-wrapper",
+    ".st-chatu8-collapse-content",
+    ".st-chatu8-image-container",
+    ".st-chatu8-image-span",
+    "[data-st-chatu8]"
+  ].join(",");
+  function getChatu8ImageSrc(img) {
+    return String(img?.currentSrc || img?.src || img?.getAttribute("src") || img?.getAttribute("data-src") || "").trim();
+  }
+  function getDirectMesTextChild(mesTextNode, node) {
+    let cursor = node;
+    while (cursor && cursor.parentElement && cursor.parentElement !== mesTextNode) {
+      cursor = cursor.parentElement;
+    }
+    return cursor?.parentElement === mesTextNode ? cursor : null;
+  }
+  function collectChatu8CgEntries(mesTextNode) {
+    if (!mesTextNode) return [];
+    const entries = [];
+    const seenImages = /* @__PURE__ */ new Set();
+    const containers = Array.from(mesTextNode.querySelectorAll(CHATU8_CG_CONTAINER_SELECTOR));
+    for (const container2 of containers) {
+      const images = container2.matches?.("img") ? [container2] : Array.from(container2.querySelectorAll("img"));
+      for (const img of images) {
+        if (!img || seenImages.has(img)) continue;
+        seenImages.add(img);
+        entries.push({
+          container: container2,
+          img,
+          directChild: getDirectMesTextChild(mesTextNode, container2),
+          src: getChatu8ImageSrc(img)
+        });
+      }
+    }
+    return entries;
+  }
   function getCapturedCgImage(mesId, cgIndex) {
     const images = capturedCgImages.get(String(mesId));
     return images ? images[cgIndex] || null : null;
   }
-  function collectCgImages(mesId, mesTextNode, cgCount) {
-    const imgs = mesTextNode.querySelectorAll(".st-chatu8-collapse-content img");
-    const sources = Array.from(imgs).map((img) => img.src || img.getAttribute("src") || "").filter((src) => src && src !== "");
+  function collectCgImages(mesId, mesTextNode) {
+    const sources = collectChatu8CgEntries(mesTextNode).map((entry) => getChatu8ImageSrc(entry.img));
     const existing = capturedCgImages.get(String(mesId)) || [];
     if (sources.length !== existing.length || sources.some((s, i) => s !== existing[i])) {
       capturedCgImages.set(String(mesId), sources);
@@ -39059,38 +39201,54 @@ ${normalizedSource}`;
     }
   }
   function detectAndCaptureCg(mesId, mesNode, parsed) {
+    if (getSettings().simpleStorybookMode === true) return 0;
     const mesText = mesNode.querySelector ? mesNode.querySelector(".mes_text") : $2(mesNode).find(".mes_text")[0];
     if (!mesText) return 0;
-    const containers = mesText.querySelectorAll(".st-chatu8-collapse-content");
-    if (containers.length === 0) return 0;
+    const cgEntries = collectChatu8CgEntries(mesText);
+    if (cgEntries.length === 0) return 0;
     const mesIdStr = String(mesId);
-    const sources = [];
-    containers.forEach((container2, i) => {
-      const img = container2.querySelector("img");
-      const src = img ? img.src || "" : "";
-      sources.push(src);
-    });
-    capturedCgImages.set(mesIdStr, sources.filter((s) => s));
-    const cgParentPs = /* @__PURE__ */ new Set();
-    containers.forEach((c) => {
-      const p2 = c.closest("p");
-      if (p2) cgParentPs.add(p2);
-    });
+    capturedCgImages.set(mesIdStr, cgEntries.map((entry) => entry.src));
     const baseSegments = parsed.segments.filter((s) => s.type !== "cg");
-    const allPs = mesText.querySelectorAll(":scope > p");
+    const entriesByChild = /* @__PURE__ */ new Map();
+    const fallbackEntries = [];
+    cgEntries.forEach((entry) => {
+      if (entry.directChild) {
+        const list = entriesByChild.get(entry.directChild) || [];
+        list.push(entry);
+        entriesByChild.set(entry.directChild, list);
+      } else {
+        fallbackEntries.push(entry);
+      }
+    });
     let regularIdx = 0;
     let cgIdx = 0;
     const merged = [];
-    allPs.forEach((p2) => {
-      if (cgParentPs.has(p2)) {
-        const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
-        merged.push({ type: "cg", speaker: null, text: "", expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
-      } else {
-        if (regularIdx < baseSegments.length) {
-          merged.push(baseSegments[regularIdx++]);
+    const pushCgSegment = () => {
+      const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
+      merged.push({ type: "cg", speaker: null, text: "", expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
+    };
+    const pushRegularSegment = () => {
+      if (regularIdx < baseSegments.length) {
+        merged.push(baseSegments[regularIdx++]);
+      }
+    };
+    Array.from(mesText.childNodes).forEach((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const entries = entriesByChild.get(node) || [];
+        if (entries.length > 0) {
+          entries.forEach(pushCgSegment);
+          return;
         }
+        if (node.matches?.("p")) {
+          pushRegularSegment();
+        }
+        return;
+      }
+      if (node.nodeType === Node.TEXT_NODE && String(node.textContent || "").trim()) {
+        pushRegularSegment();
       }
     });
+    fallbackEntries.forEach(pushCgSegment);
     while (regularIdx < baseSegments.length) {
       merged.push(baseSegments[regularIdx++]);
     }
@@ -39099,13 +39257,13 @@ ${normalizedSource}`;
       cgObservers.get(mesIdStr).disconnect();
     }
     const observer = new MutationObserver(() => {
-      collectCgImages(mesIdStr, mesText, containers.length);
+      collectCgImages(mesIdStr, mesText);
     });
     observer.observe(mesText, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["src"]
+      attributeFilter: ["src", "data-src"]
     });
     cgObservers.set(mesIdStr, observer);
     return cgIdx;
@@ -41705,6 +41863,7 @@ ${normalizedSource}`;
     if (isUser) return;
     const mesId = $mes.attr("mesid");
     const settings = getSettings();
+    const simpleStorybookMode = settings.simpleStorybookMode === true;
     const $mesText = $mes.find(".mes_text");
     const domVisibleContent = getMesTextContentForGalgame($mesText[0]);
     let contentToProcess = getFormattedSwipeContent(mesId);
@@ -41729,9 +41888,9 @@ ${normalizedSource}`;
       }
     }
     const hasGalTags = RE_GAL_TAGS2.test(contentToProcess);
-    if (settings.smartDetection && !hasGalTags && !forceRender2) return;
+    if (!simpleStorybookMode && settings.smartDetection && !hasGalTags && !forceRender2) return;
     const hasClosedP = RE_CLOSED_P3.test(contentToProcess);
-    if (!hasClosedP && !forceRender2) {
+    if (!simpleStorybookMode && !hasClosedP && !forceRender2) {
       console.log(`[${SCRIPT_NAME}] 流式输出中，等待完整内容...`);
       const loadingParsed = buildFallbackParsed2("生成中...");
       const isLastAi2 = $mes.nextAll('.mes[is_user!="true"]').length === 0;
@@ -41775,22 +41934,24 @@ ${normalizedSource}`;
     }
     if (parsed && parsed.backgroundChanges) {
       const bgSrc = settings.bgImageSource || "none";
-      const bgDispatch = {
-        comfyui: { tagKey: "generationTags", handler: _handleRealTimeBackgroundGenerationRef, label: "ComfyUI 背景生成" },
-        banana: { tagKey: "bananaPrompt", handler: _handleBananaBackgroundGenerationRef, label: "大香蕉背景生成" },
-        novelai: { tagKey: "generationTags", handler: _handleNovelAIBackgroundGenerationRef, label: "NovelAI 背景生成" },
-        wallhaven: { tagKey: "wallhavenTags", handler: handleWallhavenBackgroundSearch, label: "Wallhaven 背景搜索" }
-      };
-      const entry = bgDispatch[bgSrc];
-      if (entry && entry.handler) {
-        for (const bgChange of parsed.backgroundChanges) {
-          const tags = bgChange[entry.tagKey];
-          if (tags) {
-            console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ${entry.label}: "${bgChange.scene}"`);
-            try {
-              entry.handler(bgChange.scene, tags);
-            } catch (error3) {
-              console.warn(`[${SCRIPT_NAME}] 背景处理失败: ${entry.label}`, error3);
+      if (bgSrc !== "chatu8") {
+        const bgDispatch = {
+          comfyui: { tagKey: "generationTags", handler: _handleRealTimeBackgroundGenerationRef, label: "ComfyUI 背景生成" },
+          banana: { tagKey: "bananaPrompt", handler: _handleBananaBackgroundGenerationRef, label: "大香蕉背景生成" },
+          novelai: { tagKey: "generationTags", handler: _handleNovelAIBackgroundGenerationRef, label: "NovelAI 背景生成" },
+          wallhaven: { tagKey: "wallhavenTags", handler: handleWallhavenBackgroundSearch, label: "Wallhaven 背景搜索" }
+        };
+        const entry = bgDispatch[bgSrc];
+        if (entry && entry.handler) {
+          for (const bgChange of parsed.backgroundChanges) {
+            const tags = bgChange[entry.tagKey];
+            if (tags) {
+              console.log(`[${SCRIPT_NAME}] [DEBUG] 触发 ${entry.label}: "${bgChange.scene}"`);
+              try {
+                entry.handler(bgChange.scene, tags);
+              } catch (error3) {
+                console.warn(`[${SCRIPT_NAME}] 背景处理失败: ${entry.label}`, error3);
+              }
             }
           }
         }
@@ -41803,7 +41964,7 @@ ${normalizedSource}`;
     }
     console.log(`[${SCRIPT_NAME}] [DEBUG] processNewMessage 解析完成. Segments: ${parsed?.segments?.length || 0}`);
     if (!parsed || parsed.segments.length === 0) {
-      if (!settings.smartDetection || forceRender2) {
+      if (simpleStorybookMode || !settings.smartDetection || forceRender2) {
         const fallbackText = contentToProcess && contentToProcess.trim().length > 0 ? contentToProcess : String($mes.find(".mes_text").text() || "").trim() || "（当前消息无可显示内容）";
         parsed = buildFallbackParsed2(fallbackText);
       } else {
@@ -41826,7 +41987,9 @@ ${normalizedSource}`;
       }
     }
     markTimelineCacheDirty();
-    Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, "process-message");
+    if (!simpleStorybookMode) {
+      Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, "process-message");
+    }
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
     if (isLastAi) {
       cancelTypewriter();
@@ -74666,7 +74829,7 @@ ${normalizedSource}`;
       $2("#gal-global-overlay").css("--panel-opacity", opacity);
       $2(".gal-text-panel").css({ "background-color": "", "background-image": "" });
     }
-    if (settings.showSprites) {
+    if (settings.showSprites && settings.simpleStorybookMode !== true) {
       $2(".gal-layer-character").show();
     } else {
       $2(".gal-layer-character").hide();
@@ -74994,6 +75157,10 @@ ${normalizedSource}`;
             <div class="gal-settings-row">
               <span class="gal-settings-label">显示立绘</span>
               <label class="gal-switch"><input type="checkbox" id="gal-show-sprites" ${settings.showSprites ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">简化图书绘本模式 <small style="color: var(--SmartThemeEmColor, #9ac7ff);">(纯文本对话框，不解析角色/旁白/表情，不显示立绘/Live2D)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-simple-storybook-mode" ${settings.simpleStorybookMode ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">沉浸模式 <small style="color:#999;">(隐藏其他楼层)</small></span>
@@ -75616,6 +75783,18 @@ ${normalizedSource}`;
       settings.showSprites = $2(this).is(":checked");
       applySettingsToUI();
       saveSettings();
+    });
+    $2("#gal-simple-storybook-mode").on("change", function() {
+      settings.simpleStorybookMode = $2(this).is(":checked");
+      if (settings.simpleStorybookMode) {
+        SpriteManager.reset($2("#gal-global-overlay"));
+      }
+      applySettingsToUI();
+      saveSettings();
+      if (getIsEnabled()) {
+        applyGalgameMode().catch((error3) => console.warn(`[${SCRIPT_NAME}] 切换简化图书绘本模式后刷新失败`, error3));
+      }
+      injectCOTToWorldbook().then(() => showToast4(settings.simpleStorybookMode ? "简化图书绘本模式已开启，COT已更新" : "简化图书绘本模式已关闭，COT已更新")).catch(() => showToast4(settings.simpleStorybookMode ? "简化图书绘本模式已开启" : "简化图书绘本模式已关闭"));
     });
     $2("#gal-hide-floors").on("change", function() {
       settings.hideOtherFloors = $2(this).is(":checked");
@@ -89594,7 +89773,8 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
     comfyui: "#0369a1",
     banana: "#7e22ce",
     novelai: "#15803d",
-    wallhaven: "#a16207"
+    wallhaven: "#a16207",
+    chatu8: "#0f766e"
   };
   function escapeHtml10(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -89604,16 +89784,19 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
   }
   function buildImageGenConfigPane(settings) {
     const src = settings.bgImageSource || "none";
-    const activeEngine = src !== "none" && ["comfyui", "banana", "novelai", "wallhaven"].includes(src) ? src : "comfyui";
+    const internalEngines = ["comfyui", "banana", "novelai", "wallhaven"];
+    const activeEngine = src === "chatu8" ? null : internalEngines.includes(src) ? src : "comfyui";
     return `
     <div class="gal-bg-source-selector" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: rgba(15,23,42,0.08); border: 1px solid rgba(71,85,105,0.35); border-radius: 10px; margin-bottom: 10px; flex-wrap: wrap;">
       <span style="font-weight: 700; color: #1f2937; font-size: 0.9rem; white-space: nowrap;"><i class="fa-solid fa-satellite-dish" style="margin-right: 6px;"></i>背景图来源</span>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "none" ? BG_SOURCE_COLORS.none : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="none" ${src === "none" ? "checked" : ""} style="accent-color:${BG_SOURCE_COLORS.none};"> 关闭</label>
+      <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "chatu8" ? BG_SOURCE_COLORS.chatu8 : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="chatu8" ${src === "chatu8" ? "checked" : ""} style="accent-color:${BG_SOURCE_COLORS.chatu8};"> st-chatu8识别</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "comfyui" ? BG_SOURCE_COLORS.comfyui : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="comfyui" ${src === "comfyui" ? "checked" : ""} style="accent-color:${BG_SOURCE_COLORS.comfyui};"> ComfyUI</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "banana" ? BG_SOURCE_COLORS.banana : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="banana" ${src === "banana" ? "checked" : ""} style="accent-color:${BG_SOURCE_COLORS.banana};"> 大香蕉</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "novelai" ? BG_SOURCE_COLORS.novelai : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="novelai" ${src === "novelai" ? "checked" : ""} style="accent-color:${BG_SOURCE_COLORS.novelai};"> NovelAI</label>
       <label class="gal-radio-label" style="cursor:pointer;display:flex;align-items:center;gap:4px;color:${src === "wallhaven" ? BG_SOURCE_COLORS.wallhaven : BG_SOURCE_INACTIVE_COLOR};font-size:0.85rem;font-weight:600;"><input type="radio" name="gal-bg-source" value="wallhaven" ${src === "wallhaven" ? "checked" : ""} style="accent-color:${BG_SOURCE_COLORS.wallhaven};"> Wallhaven</label>
     </div>
+    <div class="gal-chatu8-source-note" style="display:${src === "chatu8" ? "block" : "none"}; padding: 10px 12px; margin-bottom: 10px; border-radius: 8px; background: rgba(15,118,110,0.12); border: 1px solid rgba(15,118,110,0.35); color: #0f766e; font-size: 0.85rem; font-weight: 600;">st-chatu8识别模式已开启：本插件不会触发 ComfyUI / 大香蕉 / NovelAI / Wallhaven 背景生图，只识别 st-chatu8 在消息中渲染出的图片。</div>
     <div class="gal-imagegen-pills">
       <button class="gal-pill ${activeEngine === "comfyui" ? "active" : ""}" data-engine="comfyui"><i class="fa-solid fa-wand-magic-sparkles"></i> ComfyUI</button>
       <button class="gal-pill ${activeEngine === "banana" ? "active" : ""}" data-engine="banana"><i class="fa-solid fa-lemon"></i> 大香蕉</button>
@@ -89733,10 +89916,15 @@ ${prompts.userPrompt}`).then(() => showToast4("已复制到剪贴板")).catch(()
       $container.find(".gal-radio-label").css("color", BG_SOURCE_INACTIVE_COLOR);
       $2(this).closest(".gal-radio-label").css("color", "");
       $2(this).closest(".gal-radio-label").css("color", BG_SOURCE_COLORS[value] || BG_SOURCE_INACTIVE_COLOR);
-      if (value !== "none") {
+      const internalEngines = ["comfyui", "banana", "novelai", "wallhaven"];
+      $container.find(".gal-chatu8-source-note").toggle(value === "chatu8");
+      if (internalEngines.includes(value)) {
         $container.find(`.gal-pill[data-engine="${value}"]`).trigger("click");
+      } else if (value === "chatu8") {
+        $container.find(".gal-pill").removeClass("active");
+        $container.find("[data-engine-pane]").hide();
       }
-      const names = { none: "关闭", comfyui: "ComfyUI", banana: "大香蕉", novelai: "NovelAI", wallhaven: "Wallhaven" };
+      const names = { none: "关闭", chatu8: "st-chatu8识别", comfyui: "ComfyUI", banana: "大香蕉", novelai: "NovelAI", wallhaven: "Wallhaven" };
       showToast4(`背景图来源: ${names[value] || value}`);
     });
     $container.find(".gal-key-toggle").on("click", function() {
@@ -97462,7 +97650,8 @@ ${baseUrl}`,
                     content = decodeHtml($mesText.html() || "");
                   }
                   const hasGalTags = RE_GAL_TAGS2.test(content);
-                  if (hasGalTags) {
+                  const simpleStorybookMode = getSettings().simpleStorybookMode === true;
+                  if (hasGalTags || simpleStorybookMode) {
                     processNewMessage(mesNode);
                   } else if (mesNode.classList.contains("gal-hidden")) {
                     mesNode.classList.remove("gal-hidden");

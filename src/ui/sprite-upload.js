@@ -14,6 +14,7 @@ import { getModalMountRoot } from './fullscreen.js';
 import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
 import { refreshGalgameViews } from './galgame-mode.js';
+import { listBuiltinSpriteTemplates, applySpriteTemplateToCharacter } from './builtin-bg-packs.js';
 
 // ============================================
 // 立绘上传相关模块
@@ -540,6 +541,9 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
             <div class="gal-upload-tab" data-target="comfyui" style="padding: 8px 15px; cursor: pointer; color: #888;">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> 本地文生图
             </div>
+            <div class="gal-upload-tab" data-target="builtin" style="padding: 8px 15px; cursor: pointer; color: #888;">
+                <i class="fa-solid fa-images"></i> 内置模板
+            </div>
           </div>
           <div id="gal-upload-local" class="gal-upload-pane">
             <input type="file" id="gal-sprite-file" accept="image/*" style="display: none;">
@@ -622,6 +626,17 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
                         <img id="gal-comfyui-preview-img" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 2px solid ${THEME.accent};">
                     </div>
                 </div>
+          </div>
+          <div id="gal-upload-builtin" class="gal-upload-pane" style="display: none;">
+            <div style="background: #fdf2f8; padding: 12px 14px; border-radius: 8px; border: 1px solid #fbcfe8; margin-bottom: 12px; font-size: 0.85rem; color: #9d174d;">
+              <i class="fa-solid fa-circle-info"></i>
+              选择一套内置立绘模板，整套 10 个表情将套用到上方填写的角色名下（远程链接引用，不占本地存储）。需先导入对应的内置图包。
+            </div>
+            <div id="gal-builtin-template-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; max-height: 320px; overflow-y: auto; padding: 4px;">
+              <div style="grid-column: 1 / -1; text-align: center; color: #999; padding: 20px;">
+                <i class="fa-solid fa-spinner fa-spin"></i> 正在加载模板...
+              </div>
+            </div>
           </div>
           <!-- 选择图片后显示裁剪区 -->
           <div id="gal-crop-area" style="display: none;">
@@ -724,7 +739,64 @@ export async function showSpriteUploadDialog(characterId, expression, onCloseCal
     $(this).addClass('active').css({ fontWeight: 'bold', color: THEME.dark, borderBottom: `2px solid ${THEME.accent}` });
     $modal.find('.gal-upload-pane').hide();
     $modal.find(`#gal-upload-${target}`).show();
+    if (target === 'builtin') loadBuiltinTemplates();
   });
+  // 内置立绘模板：懒加载列表 + 一键套用到当前角色名
+  let builtinTemplatesLoaded = false;
+  async function loadBuiltinTemplates() {
+    if (builtinTemplatesLoaded) return;
+    builtinTemplatesLoaded = true;
+    const $list = $modal.find('#gal-builtin-template-list');
+    try {
+      const templates = await listBuiltinSpriteTemplates();
+      if (!templates.length) {
+        $list.html('<div style="grid-column: 1 / -1; text-align: center; color: #999; padding: 20px;">未获取到模板（请检查网络）</div>');
+        return;
+      }
+      $list.html(
+        templates
+          .map((tpl, i) => {
+            const cover = tpl.expressions.find(e => e.expression === '默认') || tpl.expressions[0];
+            return `
+              <div class="gal-builtin-template-card" data-tpl-index="${i}" style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #fff; display: flex; flex-direction: column;">
+                <div style="aspect-ratio: 3 / 4; background-image: linear-gradient(45deg, #e5e7eb 25%, transparent 25%, transparent 75%, #e5e7eb 75%), linear-gradient(45deg, #e5e7eb 25%, #f9fafb 25%, #f9fafb 75%, #e5e7eb 75%); background-size: 14px 14px; background-position: 0 0, 7px 7px; display: flex; align-items: center; justify-content: center;">
+                  <img src="${escapeHtml(cover?.thumb || cover?.url || '')}" alt="${escapeHtml(tpl.characterId)}" loading="lazy" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                </div>
+                <div style="padding: 6px 8px; text-align: center;">
+                  <div style="font-weight: 700; font-size: 0.85rem; color: #111827;">${escapeHtml(tpl.characterId)}</div>
+                  <div style="font-size: 0.72rem; color: #64748b; margin: 2px 0 6px;">${escapeHtml(tpl.packName)} · ${tpl.expressions.length} 表情</div>
+                  <button class="gal-action-btn primary gal-builtin-template-apply" data-tpl-index="${i}" style="width: 100%; padding: 5px 8px; font-size: 0.8rem; justify-content: center;">
+                    <i class="fa-solid fa-check"></i> 套用
+                  </button>
+                </div>
+              </div>`;
+          })
+          .join(''),
+      );
+      $list.find('.gal-builtin-template-apply').on('click', async function () {
+        const tpl = templates[parseInt($(this).data('tpl-index'))];
+        if (!tpl) return;
+        const charName = $('#gal-sprite-character').val().trim() || characterId;
+        if (!charName) {
+          showToast('请先在上方输入角色名称');
+          return;
+        }
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i>');
+        try {
+          await applySpriteTemplateToCharacter(tpl, charName);
+          refreshGalgameViews();
+          handleClose();
+        } catch (e) {
+          showToast(`套用失败: ${e?.message || e}`);
+          $btn.prop('disabled', false).html('<i class="fa-solid fa-check"></i> 套用');
+        }
+      });
+    } catch (e) {
+      $list.html(`<div style="grid-column: 1 / -1; text-align: center; color: #c00; padding: 20px;">模板加载失败: ${escapeHtml(e?.message || String(e))}</div>`);
+      builtinTemplatesLoaded = false;
+    }
+  }
   // 远程图片获取
   $('#gal-sprite-fetch-btn').on('click', async function () {
     const url = $('#gal-sprite-remote-url').val().trim();

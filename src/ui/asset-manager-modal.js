@@ -37,13 +37,12 @@ import {
     showInAppPromptDialog,
     showRemoteZipImportDialog,
 } from './asset-io.js';
-import { getUiSkinProfileLabel, hasUiSkinProfileId } from '../db/ui-skin-profiles.js';
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog } from './asset-manager-parts.js';
+import { BUILTIN_BG_PACKS, importBuiltinBgPack, showBuiltinBgPackBrowser } from './builtin-bg-packs.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { bindImageGenConfigEvents, buildImageGenConfigPane } from './image-gen-config.js';
 import { showMapUploadDialog } from './map-upload.js';
-import { bindCustomSkinEditorEvents, buildCustomSkinEditorTab } from './custom-skin-editor.js';
-import { applyCustomSkinRuntime } from './custom-skin-runtime.js';
+import { bindHtmlSkinTabEvents, buildHtmlSkinTab, buildHtmlSkinTabStyles } from './html-skin-manager.js';
 import { showToast } from './toast.js';
 
 // 延迟引用
@@ -87,7 +86,7 @@ const ASSET_SUB_TAB_DEFS = [
   { id: 'special-cgs', icon: 'fa-photo-film', label: 'CG管理' },
   { id: 'special-cg-rules', icon: 'fa-bolt', label: 'MVU触发CG' },
   { id: 'maps', icon: 'fa-map-location-dot', label: '地图管理' },
-  { id: 'skin', icon: 'fa-palette', label: '皮肤编辑' },
+  { id: 'skin', icon: 'fa-palette', label: '自定义皮肤' },
   { id: 'imagegen', icon: 'fa-wand-magic-sparkles', label: '生图配置' },
   { id: 'opening', icon: 'fa-pen-to-square', label: '开场白转换' },
   { id: 'bgm', icon: 'fa-music', label: '指定BGM' },
@@ -647,7 +646,7 @@ export async function buildAssetManagerContent(activeTab) {
     'special-cgs': buildSpecialCgsTab(activeTab, allSpecialCgs),
     'special-cg-rules': buildSpecialCgRulesTab(activeTab, specialCgSettings, allSpecialCgs, mvuVariablePaths),
     maps: buildMapsTab(activeTab, unifiedMapRecord, legacyMapCount),
-    skin: buildCustomSkinEditorTab(activeTab, currentPackId),
+    skin: buildHtmlSkinTab(activeTab),
     imagegen: buildImagegenTab(activeTab, settings),
     opening: buildOpeningTab(activeTab),
     bgm: buildBgmTab(activeTab, settings),
@@ -685,6 +684,21 @@ export async function buildAssetManagerContent(activeTab) {
               `,
                 )
                 .join('')}
+              ${(() => {
+                // 内置图包：尚未导入的显示在列表里（默认未选中），点击即导入并切换
+                const importedNames = new Set(allPacks.map(p => p.name));
+                const pending = BUILTIN_BG_PACKS.filter(bp => !importedNames.has(bp.name));
+                if (!pending.length) return '';
+                return `<div style="border-top: 2px solid #eee;">${pending
+                  .map(
+                    bp => `
+                <div class="gal-pack-item gal-pack-item-builtin" data-builtin-id="${escapeHtml(bp.id)}" title="${escapeHtml(bp.desc)}" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
+                  <span><i class="fa-solid fa-cloud-arrow-down" style="margin-right: 8px; color: #e83e8c;"></i>${escapeHtml(bp.name)}</span>
+                  <span style="font-size: 0.7rem; background: #e83e8c; color: #fff; padding: 2px 6px; border-radius: 3px;">未导入</span>
+                </div>`,
+                  )
+                  .join('')}</div>`;
+              })()}
               <div style="border-top: 2px solid #eee;">
                 <div class="gal-pack-item" id="gal-add-pack-btn" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #28a745;">
                   <i class="fa-solid fa-plus"></i> <span>新建图包</span>
@@ -731,8 +745,11 @@ export async function buildAssetManagerContent(activeTab) {
               <div class="gal-import-item" data-action="import-json" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                 <i class="fa-solid fa-link" style="width: 20px; color: #9b59b6;"></i><span>导入远程链接JSON</span>
               </div>
-              <div class="gal-import-item" data-action="import-github" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
+              <div class="gal-import-item" data-action="import-github" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eee; transition: background 0.2s; color: #333;">
                 <i class="fa-brands fa-github" style="width: 20px; color: #333;"></i><span>从GitHub导入</span>
+              </div>
+              <div class="gal-import-item" data-action="import-builtin-bg" style="padding: 10px 15px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: background 0.2s; color: #333;">
+                <i class="fa-solid fa-images" style="width: 20px; color: #e83e8c;"></i><span>内置背景图包</span>
               </div>
             </div>
           </div>
@@ -883,7 +900,7 @@ export function bindAssetManagerContentEvents($modal, activeTab) {
 
   // 生图配置事件
   bindImageGenConfigEvents($modal, settings);
-  bindCustomSkinEditorEvents($modal);
+  bindHtmlSkinTabEvents($modal);
   bindOpeningEvents($modal);
 
   bindSpriteEvents($modal, activeTab);
@@ -1511,503 +1528,7 @@ export function buildAssetManagerStyles() {
     .gal-pill { padding:8px 18px; border:2px solid rgba(0,0,0,0.15); background:rgba(0,0,0,0.05); border-radius:20px; cursor:pointer; font-size:0.85rem; font-weight:600; color:rgba(0,0,0,0.6); transition:all 0.2s; display:flex; align-items:center; gap:6px; }
     .gal-pill:hover { border-color:${THEME.accent}; color:${THEME.accent}; }
     .gal-pill.active { background:linear-gradient(135deg,${THEME.accent},#00a8cc); color:#fff; border-color:transparent; }
-    .gal-custom-skin-profile-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-    .gal-custom-skin-profile-select-wrap { display: flex; flex-direction: column; gap: 4px; min-width: min(100%, 320px); font-size: 0.82rem; color: var(--SmartThemeBodyColor, #f5f7fa); }
-    .gal-custom-skin-profile-select-wrap span { font-weight: 700; color: var(--SmartThemeBodyColor, #f5f7fa); }
-    .gal-custom-skin-profile-select-wrap select {
-      min-height: 38px;
-      border-radius: 8px;
-      border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-      background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-      color: var(--SmartThemeBodyColor, #f5f7fa);
-      padding: 7px 10px;
-      outline: none;
-    }
-    .gal-custom-skin-profile-select-wrap select::placeholder { color: rgba(245, 247, 250, 0.74); }
-    .gal-custom-skin-profile-select-wrap select:focus {
-      border-color: var(--SmartThemeEmColor, #9ac7ff);
-      box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
-    }
-    .gal-custom-skin-profile-select-wrap select:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-    .gal-custom-skin-profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .gal-custom-skin-profile-actions .gal-pane-btn:disabled { opacity: 0.56; cursor: not-allowed; }
-    .gal-custom-skin-footer-display-panel {
-      --gal-custom-skin-footer-panel-text: var(--SmartThemeBodyColor, #f5f7fa);
-      --gal-custom-skin-footer-panel-text-muted: rgba(245, 247, 250, 0.82);
-      --gal-custom-skin-footer-panel-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-      --gal-custom-skin-footer-panel-surface: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-      --gal-custom-skin-footer-panel-surface-soft: rgba(255, 255, 255, 0.06);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-bottom: 10px;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid var(--gal-custom-skin-footer-panel-border);
-      background: var(--gal-custom-skin-footer-panel-surface);
-      color: var(--gal-custom-skin-footer-panel-text);
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
-    }
-    .gal-custom-skin-footer-display-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .gal-custom-skin-footer-display-status {
-      font-size: 0.78rem;
-      color: var(--SmartThemeEmColor, #9ac7ff);
-      font-weight: 700;
-    }
-    .gal-custom-skin-footer-display-panel .gal-custom-skin-editor-note {
-      color: var(--gal-custom-skin-footer-panel-text-muted);
-      background: var(--gal-custom-skin-footer-panel-surface-soft);
-      border-color: var(--gal-custom-skin-footer-panel-border);
-    }
-    .gal-custom-skin-footer-display-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 8px;
-    }
-    .gal-custom-skin-footer-display-list.is-disabled {
-      opacity: 0.65;
-    }
-    .gal-custom-skin-footer-display-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid var(--gal-custom-skin-footer-panel-border);
-      background: var(--gal-custom-skin-footer-panel-surface-soft);
-      color: var(--gal-custom-skin-footer-panel-text);
-    }
-    .gal-custom-skin-footer-display-row.is-fixed {
-      background: rgba(154, 199, 255, 0.08);
-    }
-    .gal-custom-skin-footer-display-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 0;
-    }
-    .gal-custom-skin-footer-display-meta strong {
-      color: var(--gal-custom-skin-footer-panel-text);
-      font-size: 0.82rem;
-    }
-    .gal-custom-skin-footer-display-meta small {
-      color: var(--gal-custom-skin-footer-panel-text-muted);
-      font-size: 0.76rem;
-    }
-    .gal-custom-skin-footer-display-fixed {
-      font-size: 0.76rem;
-      font-weight: 700;
-      color: var(--SmartThemeEmColor, #9ac7ff);
-      white-space: nowrap;
-    }
-    .gal-custom-skin-footer-display-options {
-      display: inline-flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-    .gal-custom-skin-footer-display-option {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      min-height: 34px;
-      padding: 0 10px;
-      border-radius: 999px;
-      border: 1px solid var(--gal-custom-skin-footer-panel-border);
-      background: rgba(15, 23, 42, 0.72);
-      color: var(--gal-custom-skin-footer-panel-text);
-      cursor: pointer;
-      font-size: 0.78rem;
-      font-weight: 600;
-    }
-    .gal-custom-skin-footer-display-option span {
-      color: var(--gal-custom-skin-footer-panel-text);
-    }
-    .gal-custom-skin-footer-display-option input {
-      margin: 0;
-      accent-color: var(--SmartThemeEmColor, #9ac7ff);
-    }
-    .gal-custom-skin-footer-display-option:has(input:checked) {
-      border-color: var(--SmartThemeEmColor, #9ac7ff);
-      background: rgba(154, 199, 255, 0.18);
-      box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.14);
-      color: var(--gal-custom-skin-footer-panel-text);
-    }
-    .gal-custom-skin-footer-display-option:has(input:focus-visible) {
-      box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
-    }
-    .gal-custom-skin-footer-display-option:has(input:disabled) {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    .gal-custom-skin-editor-layout {
-      display: grid;
-      grid-template-columns: 210px minmax(0, 1fr);
-      gap: 12px;
-      min-height: 560px;
-      height: clamp(620px, calc(100vh - 230px), 940px);
-      align-items: stretch;
-    }
-    .gal-custom-skin-device-switch {
-      display: inline-flex;
-      align-items: center;
-      gap: 0;
-      border: 1px solid rgba(148, 163, 184, 0.38);
-      border-radius: 999px;
-      overflow: hidden;
-      margin-bottom: 10px;
-      background: rgba(255, 255, 255, 0.96);
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
-    }
-    .gal-custom-skin-device-tab {
-      border: none;
-      background: transparent;
-      color: #334155;
-      font-size: 0.85rem;
-      font-weight: 700;
-      padding: 6px 14px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-    .gal-custom-skin-device-tab + .gal-custom-skin-device-tab { border-left: 1px solid rgba(148, 163, 184, 0.28); }
-    .gal-custom-skin-device-tab.active {
-      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
-      color: #ffffff;
-      box-shadow: inset 0 0 0 1px rgba(14, 165, 233, 0.18);
-    }
-    .gal-custom-skin-device-tab:hover {
-      background: rgba(226, 232, 240, 0.92);
-      color: #0f172a;
-    }
-    .gal-custom-skin-device-tab.active:hover {
-      background: linear-gradient(135deg, #22c3ee, #0284c7);
-      color: #ffffff;
-    }
-    .gal-custom-skin-device-tab:focus-visible {
-      outline: none;
-      box-shadow: inset 0 0 0 2px rgba(14, 165, 233, 0.25);
-    }
-    .gal-custom-skin-editor-col {
-      --gal-custom-skin-text: var(--SmartThemeBodyColor, #f5f7fa);
-      --gal-custom-skin-text-muted: rgba(245, 247, 250, 0.78);
-      --gal-custom-skin-border: var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-      --gal-custom-skin-surface: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-      --gal-custom-skin-surface-soft: rgba(255, 255, 255, 0.06);
-      --gal-custom-skin-surface-soft-strong: rgba(255, 255, 255, 0.1);
-      --gal-custom-skin-input-bg: rgba(12, 18, 28, 0.88);
-      --gal-custom-skin-input-text: var(--SmartThemeBodyColor, #f5f7fa);
-      --gal-custom-skin-input-placeholder: rgba(245, 247, 250, 0.72);
-      --gal-custom-skin-input-focus: var(--SmartThemeEmColor, #9ac7ff);
-      background: var(--gal-custom-skin-surface);
-      border: 1px solid var(--gal-custom-skin-border);
-      border-radius: 10px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      color: var(--gal-custom-skin-text);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-      min-height: 0;
-      min-width: 0;
-    }
-    .gal-custom-skin-editor-title { font-weight: 700; color: var(--SmartThemeEmColor, #9ac7ff); font-size: 0.95rem; display: flex; align-items: center; gap: 8px; }
-    .gal-custom-skin-editor-hint { font-size: 0.82rem; color: var(--gal-custom-skin-text-muted); min-height: 1.2rem; }
-    .gal-custom-skin-editor-hint.ok { color: #047857; }
-    .gal-custom-skin-editor-hint.warn { color: #b45309; }
-    .gal-custom-skin-editor-hint.err { color: #b91c1c; }
-    .gal-custom-skin-editor-main { overflow: hidden; position: relative; }
-    .gal-custom-skin-workbench {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
-      gap: 12px;
-      flex: 1;
-      min-height: 0;
-      position: relative;
-      z-index: 1;
-    }
-    .gal-custom-skin-canvas-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-width: 0;
-      min-height: 0;
-    }
-    .gal-custom-skin-canvas-toolbar {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 8px;
-      min-height: 36px;
-    }
-    .gal-custom-skin-preview-toggle-btn {
-      margin-left: auto;
-      min-width: 132px;
-    }
-    .gal-custom-skin-side-tools {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-height: 0;
-      overflow: auto;
-      padding-right: 4px;
-      padding-bottom: 2px;
-    }
-    .gal-custom-skin-side-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid var(--gal-custom-skin-border);
-      background: var(--gal-custom-skin-surface-soft);
-    }
-    .gal-custom-skin-footer-batch-panel { display: none; }
-    .gal-custom-skin-footer-batch-targets {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .gal-custom-skin-footer-batch-slot {
-      border: 1px solid var(--gal-custom-skin-border);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.04);
-      color: var(--gal-custom-skin-text);
-      padding: 8px 10px;
-      text-align: left;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      cursor: pointer;
-      transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
-    }
-    .gal-custom-skin-footer-batch-slot strong {
-      font-size: 0.86rem;
-      font-weight: 800;
-      color: var(--SmartThemeEmColor, #9ac7ff);
-    }
-    .gal-custom-skin-footer-batch-slot span {
-      font-size: 0.75rem;
-      color: var(--gal-custom-skin-text);
-      line-height: 1.45;
-    }
-    .gal-custom-skin-footer-batch-slot small {
-      font-size: 0.72rem;
-      color: var(--gal-custom-skin-text-muted);
-    }
-    .gal-custom-skin-footer-batch-slot:hover {
-      border-color: var(--SmartThemeEmColor, #9ac7ff);
-      transform: translateY(-1px);
-    }
-    .gal-custom-skin-footer-batch-slot.assigned {
-      background: rgba(34, 197, 94, 0.12);
-      border-color: rgba(34, 197, 94, 0.42);
-    }
-    .gal-custom-skin-footer-batch-slot.active {
-      background: rgba(14, 165, 233, 0.16);
-      border-color: var(--SmartThemeEmColor, #9ac7ff);
-      box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.14);
-    }
-    .gal-custom-skin-elements-list { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow: auto; padding-right: 2px; }
-    .gal-custom-skin-element-item { border: 1px solid var(--gal-custom-skin-border); border-radius: 8px; background: var(--gal-custom-skin-surface-soft); padding: 8px 10px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px; color: var(--gal-custom-skin-text); }
-    .gal-custom-skin-element-item.active { border-color: var(--SmartThemeEmColor, #9ac7ff); box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.18); background: rgba(154, 199, 255, 0.14); }
-    .gal-custom-skin-element-label { font-weight: 700; color: var(--gal-custom-skin-text); font-size: 0.88rem; }
-    .gal-custom-skin-element-id { color: var(--gal-custom-skin-text-muted); font-family: monospace; font-size: 0.72rem; }
-    .gal-custom-skin-crop-wrapper {
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      min-height: clamp(320px, 48vh, 680px);
-      flex: 1 0 auto;
-      background: #111827;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 1px solid #1f2937;
-      cursor: default;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .gal-custom-skin-crop-wrapper canvas { width: 100%; height: 100%; display: block; }
-    #gal-unified-panel .gal-custom-skin-desktop-preview-fab {
-      display: none;
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      min-width: 148px;
-      z-index: 4;
-      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.32);
-      pointer-events: auto;
-    }
-    #gal-unified-panel.gal-custom-skin-desktop-preview {
-      background: transparent !important;
-      backdrop-filter: none !important;
-    }
-    #gal-unified-panel.gal-custom-skin-desktop-preview .gal-config-panel {
-      background: transparent !important;
-      box-shadow: none !important;
-    }
-    #gal-unified-panel.gal-custom-skin-desktop-preview .gal-config-panel > :not(.gal-custom-skin-desktop-preview-fab) {
-      display: none !important;
-    }
-    #gal-unified-panel.gal-custom-skin-desktop-preview .gal-custom-skin-desktop-preview-fab {
-      display: inline-flex !important;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .gal-custom-skin-preview-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .gal-custom-skin-side-tools .gal-custom-skin-preview-actions .gal-pane-btn { flex: 1 1 calc(50% - 4px); min-width: 136px; }
-    .gal-custom-skin-preview-actions-secondary { flex-wrap: wrap; }
-    .gal-custom-skin-mode-btn.active { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: #fff; border-color: #0284c7; }
-    .gal-custom-skin-preview-actions .gal-pane-btn:disabled { opacity: 0.56; cursor: not-allowed; }
-    .gal-custom-skin-mode-help { font-size: 0.78rem; color: var(--gal-custom-skin-text-muted); line-height: 1.6; padding: 8px 10px; border-radius: 8px; background: var(--gal-custom-skin-surface-soft); border: 1px solid var(--gal-custom-skin-border); }
-    .gal-custom-skin-zoom-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--gal-custom-skin-text); }
-    .gal-custom-skin-zoom-row-metric { justify-content: space-between; }
-    .gal-custom-skin-zoom-row input[type="range"] { flex: 1; accent-color: var(--SmartThemeEmColor, #9ac7ff); }
-    .gal-custom-skin-check-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--gal-custom-skin-text); }
-    .gal-custom-skin-check-row-strong span { font-weight: 700; color: var(--gal-custom-skin-text); }
-    .gal-custom-skin-editor-note { font-size: 0.76rem; color: var(--gal-custom-skin-text-muted); line-height: 1.55; padding: 7px 9px; border-radius: 8px; background: var(--gal-custom-skin-surface-soft); border: 1px solid var(--gal-custom-skin-border); }
-    .gal-custom-skin-editor-note-inline { margin-top: 2px; }
-    .gal-custom-skin-editor-form-scroll { display: flex; flex-direction: column; gap: 10px; }
-    .gal-custom-skin-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .gal-custom-skin-form-grid-core { align-items: end; }
-    .gal-custom-skin-form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--gal-custom-skin-text); }
-    .gal-custom-skin-form-grid label span { font-weight: 600; }
-    .gal-custom-skin-form-grid input,
-    .gal-custom-skin-form-grid select,
-    .gal-custom-skin-color-row input[type="text"],
-    .gal-custom-skin-color-row input[type="color"] {
-      padding: 6px 8px;
-      border: 1px solid var(--gal-custom-skin-border);
-      border-radius: 6px;
-      font-size: 0.85rem;
-      color: var(--gal-custom-skin-input-text);
-      background: var(--gal-custom-skin-input-bg);
-      caret-color: var(--gal-custom-skin-input-text);
-    }
-    .gal-custom-skin-form-grid input::placeholder,
-    .gal-custom-skin-form-grid select::placeholder,
-    .gal-custom-skin-color-row input[type="text"]::placeholder,
-    .gal-custom-skin-color-row input[type="color"]::placeholder { color: var(--gal-custom-skin-input-placeholder); opacity: 1; }
-    .gal-custom-skin-form-grid input:focus,
-    .gal-custom-skin-form-grid select:focus,
-    .gal-custom-skin-color-row input[type="text"]:focus,
-    .gal-custom-skin-color-row input[type="color"]:focus { outline: none; border-color: var(--gal-custom-skin-input-focus); box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22); }
-    .gal-custom-skin-form-grid input:disabled,
-    .gal-custom-skin-form-grid select:disabled,
-    .gal-custom-skin-color-row input[type="text"]:disabled,
-    .gal-custom-skin-color-row input[type="color"]:disabled { background: rgba(148, 163, 184, 0.2); color: rgba(245, 247, 250, 0.56); border-color: var(--gal-custom-skin-border); }
-    .gal-custom-skin-field-wide { grid-column: 1 / -1; }
-    .gal-custom-skin-subtitle { margin-top: 4px; font-size: 0.82rem; font-weight: 700; color: var(--SmartThemeEmColor, #9ac7ff); }
-    .gal-custom-skin-editor-section { border: 1px solid var(--gal-custom-skin-border); border-radius: 8px; background: var(--gal-custom-skin-surface-soft); overflow: hidden; }
-    .gal-custom-skin-editor-section summary {
-      list-style: none;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 10px 12px;
-      cursor: pointer;
-      font-size: 0.84rem;
-      font-weight: 700;
-      color: var(--gal-custom-skin-text);
-    }
-    .gal-custom-skin-editor-section summary i { color: var(--SmartThemeEmColor, #9ac7ff); }
-    .gal-custom-skin-editor-section summary::-webkit-details-marker { display: none; }
-    .gal-custom-skin-editor-section summary::after { content: '展开'; font-size: 0.74rem; color: var(--gal-custom-skin-text-muted); }
-    .gal-custom-skin-editor-section[open] summary::after { content: '收起'; }
-    .gal-custom-skin-editor-section > :not(summary) { padding: 0 12px 12px; }
-    .gal-custom-skin-editor-section .gal-custom-skin-form-grid { margin-top: 8px; }
-    .gal-custom-skin-parameters-panel { flex: 0 0 auto; margin-top: 2px; }
-    .gal-custom-skin-parameters-body { max-height: min(34vh, 320px); overflow: auto; padding-right: 4px; }
-    .gal-custom-skin-four-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
-    .gal-custom-skin-matting-panel { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; border: 1px solid var(--gal-custom-skin-border); background: var(--gal-custom-skin-surface-soft); }
-    .gal-custom-skin-matting-grid { grid-template-columns: 1fr; }
-    .gal-custom-skin-color-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-    .gal-custom-skin-color-row input[type="color"] { padding: 4px; min-height: 38px; min-width: 54px; }
-    .gal-custom-skin-color-row input[type="text"] { text-transform: uppercase; }
-    .gal-custom-skin-color-presets { display: flex; gap: 8px; flex-wrap: wrap; }
-    .gal-custom-skin-color-chip {
-      min-height: 34px;
-      border-radius: 999px;
-      border: 1px solid var(--gal-custom-skin-border);
-      background: rgba(255, 255, 255, 0.04);
-      color: var(--gal-custom-skin-text);
-      padding: 0 12px 0 30px;
-      position: relative;
-      cursor: pointer;
-      font-size: 0.78rem;
-      font-weight: 700;
-    }
-    .gal-custom-skin-color-chip::before {
-      content: '';
-      position: absolute;
-      left: 10px;
-      top: 50%;
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      transform: translateY(-50%);
-      background: var(--gal-custom-skin-chip-color, #00FF00);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-    }
-    .gal-custom-skin-color-chip:hover { border-color: var(--SmartThemeEmColor, #9ac7ff); }
-    .gal-custom-skin-matting-tool-btn.active,
-    #gal-custom-skin-pick-matting-color.active { background: rgba(154, 199, 255, 0.22); color: var(--gal-custom-skin-text); border-color: var(--SmartThemeEmColor, #9ac7ff); }
-    .gal-custom-skin-form-actions {
-      display: flex;
-      flex: 0 0 auto;
-      gap: 8px;
-      flex-wrap: wrap;
-      padding-top: 10px;
-      border-top: 1px solid var(--gal-custom-skin-border);
-      background: linear-gradient(180deg, rgba(20, 24, 32, 0) 0%, var(--gal-custom-skin-surface) 24%);
-      position: relative;
-      z-index: 3;
-      isolation: isolate;
-      pointer-events: auto;
-    }
-    .gal-custom-skin-form-actions .gal-pane-btn { flex: 1; min-width: 120px; }
-    @media (max-width: 1480px) {
-      .gal-custom-skin-editor-layout {
-        grid-template-columns: 190px minmax(0, 1fr);
-        height: clamp(600px, calc(100vh - 225px), 900px);
-      }
-      .gal-custom-skin-workbench {
-        grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
-      }
-    }
-    @media (max-width: 1320px) {
-      .gal-custom-skin-workbench {
-        grid-template-columns: 1fr;
-      }
-    }
-    @media (max-width: 1180px) {
-      .gal-custom-skin-editor-layout { grid-template-columns: 1fr; height: auto; }
-      .gal-custom-skin-editor-col { min-height: auto; overflow: visible; }
-      .gal-custom-skin-editor-main,
-      .gal-custom-skin-side-tools,
-      .gal-custom-skin-parameters-body { overflow: visible; padding-right: 0; }
-      .gal-custom-skin-workbench { grid-template-columns: 1fr; }
-      .gal-custom-skin-crop-wrapper { min-height: clamp(260px, 42vh, 520px); }
-      .gal-custom-skin-footer-batch-targets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    }
-    @media (max-width: 768px) {
-      #gal-unified-panel .gal-custom-skin-desktop-preview-fab {
-        top: 12px;
-        right: 12px;
-        min-width: 132px;
-      }
-    }
+    ${buildHtmlSkinTabStyles()}
     #gal-unified-panel #gal-custom-bgm-list,
     #gal-unified-panel #gal-custom-location-html,
     #gal-unified-panel #gal-custom-time-html {
@@ -2244,7 +1765,8 @@ function bindSpriteEvents($modal, activeTab) {
   });
   $modal.find('.gal-character-card').on('click', function (e) {
     if ($(e.target).closest('.gal-char-actions').length) return;
-    const charId = $(this).data('char');
+    // 用 attr 而非 data：jQuery .data() 会把纯数字角色名转成 number，导致详情弹窗严格比较查不到立绘
+    const charId = $(this).attr('data-char');
     showCharacterSpritesModal(charId);
   });
   $modal
@@ -2257,9 +1779,9 @@ function bindSpriteEvents($modal, activeTab) {
     });
   $modal.find('.gal-char-transfer').on('click', async function (e) {
     e.stopPropagation();
-    const charId = $(this).data('char');
+    const charId = $(this).attr('data-char');
     const allSpritesAll = await getAllSprites(null, true);
-    const charSprites = allSpritesAll.filter(s => s.characterId === charId);
+    const charSprites = allSpritesAll.filter(s => String(s.characterId) === charId);
     if (charSprites.length === 0) {
       showToast('该角色没有立绘可转移', 'warning');
       return;
@@ -2272,9 +1794,9 @@ function bindSpriteEvents($modal, activeTab) {
   });
   $modal.find('.gal-char-delete').on('click', async function (e) {
     e.stopPropagation();
-    const charId = $(this).data('char');
+    const charId = $(this).attr('data-char');
     const allSpritesAll = await getAllSprites(null, true);
-    const charSprites = allSpritesAll.filter(s => s.characterId === charId);
+    const charSprites = allSpritesAll.filter(s => String(s.characterId) === charId);
     if (charSprites.length === 0) {
       showToast('该角色没有立绘', 'warning');
       return;
@@ -2298,7 +1820,7 @@ function bindBackgroundEvents($modal, activeTab) {
     const $img = $(this).find('.gal-bg-preview img');
     if (!$img.length) return;
     const src = $img.attr('src');
-    const scene = $(this).data('scene');
+    const scene = $(this).attr('data-scene');
     // 全屏时 contain:layout 会困住 position:fixed，需用 absolute 替代
     const mountRoot = getModalMountRoot();
     const isFullscreen = mountRoot !== topWindow.document.body;
@@ -2337,7 +1859,7 @@ function bindBackgroundEvents($modal, activeTab) {
   });
   $modal.find('.gal-bg-transfer').on('click', function (e) {
     e.stopPropagation();
-    const sceneName = $(this).data('scene');
+    const sceneName = $(this).attr('data-scene');
     showTransferDialog('background', [sceneName], () => {
       $modal.remove();
       $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
@@ -2658,10 +2180,29 @@ function bindPackSelectorEvents($modal, activeTab) {
     const packId = $(this).data('pack-id');
     $('#gal-pack-menu').hide();
     setCurrentPack(packId);
-    applyCustomSkinRuntime().catch(e => console.warn(`[${SCRIPT_NAME}] 切换图包后刷新 custom-skin 失败:`, e));
     $modal.remove();
     $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
     showAssetManagerModal();
+  });
+  // 内置图包（未导入）：点击后拉取清单导入并切换为当前图包
+  $modal.find('.gal-pack-item-builtin[data-builtin-id]').on('click', async function () {
+    const pack = BUILTIN_BG_PACKS.find(p => p.id === $(this).data('builtin-id'));
+    if (!pack) return;
+    $('#gal-pack-menu').hide();
+    const $item = $(this);
+    $item.css('pointer-events', 'none').find('i').removeClass('fa-cloud-arrow-down').addClass('fa-spinner fa-spin');
+    try {
+      const result = await importBuiltinBgPack(pack, { autoSwitch: true });
+      if (result) {
+        $modal.remove();
+        $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');
+        showAssetManagerModal();
+      }
+    } catch (error) {
+      showToast(`内置图包导入失败: ${error?.message || error}`);
+    } finally {
+      $item.css('pointer-events', '').find('i').removeClass('fa-spinner fa-spin').addClass('fa-cloud-arrow-down');
+    }
   });
   $modal.find('#gal-add-pack-btn').on('click', function () {
     $('#gal-pack-menu').hide();
@@ -2738,21 +2279,6 @@ function bindExportImportEvents($modal, activeTab) {
     });
   };
 
-  const askAttachCurrentCustomSkinProfileId = async () => {
-    const currentSkin = String(settings?.skin || '').trim();
-    if (!hasUiSkinProfileId(currentSkin)) return '';
-    const profileLabel = getUiSkinProfileLabel(currentSkin) || currentSkin;
-    const confirmed = await showInAppConfirmDialog({
-      title: '附带当前自定义皮肤',
-      message: `当前正在使用自定义皮肤“${profileLabel}”。是否在导出包中附带这套皮肤，并在导入后自动切换到它？`,
-      confirmText: '附带导出',
-      cancelText: '仅导出图包',
-      iconClass: 'fa-solid fa-palette',
-      accent: '#0ea5e9',
-    });
-    return confirmed ? currentSkin : '';
-  };
-
   $modal.find('.gal-export-item').on('click', async function () {
     const action = $(this).data('action');
     $('#gal-export-menu').hide();
@@ -2760,8 +2286,7 @@ function bindExportImportEvents($modal, activeTab) {
     if (action === 'export-local') {
       const packageName = await askExportPackageName('导出本地压缩包');
       if (!packageName) return;
-      const attachedCustomSkinProfileId = await askAttachCurrentCustomSkinProfileId();
-      AssetIO.exportAllAssets(null, packageName.trim(), { attachedCustomSkinProfileId });
+      AssetIO.exportAllAssets(null, packageName.trim());
       return;
     }
 
@@ -2800,8 +2325,7 @@ function bindExportImportEvents($modal, activeTab) {
           accent: '#6f42c1',
         });
         if (!confirmed) return;
-        const attachedCustomSkinProfileId = await askAttachCurrentCustomSkinProfileId();
-        AssetIO.exportAllAssets(baseUrl, packageName.trim(), { attachedCustomSkinProfileId });
+        AssetIO.exportAllAssets(baseUrl, packageName.trim());
         return;
       }
 
@@ -2856,8 +2380,7 @@ function bindExportImportEvents($modal, activeTab) {
         accent: '#6f42c1',
       });
       if (!confirmed) return;
-      const attachedCustomSkinProfileId = await askAttachCurrentCustomSkinProfileId();
-      AssetIO.exportAllAssets(baseUrl, packageName.trim(), { attachedCustomSkinProfileId });
+      AssetIO.exportAllAssets(baseUrl, packageName.trim());
       return;
     }
 
@@ -2889,6 +2412,14 @@ function bindExportImportEvents($modal, activeTab) {
         break;
       case 'import-github':
         handleGitHubImport();
+        break;
+      case 'import-builtin-bg':
+        showBuiltinBgPackBrowser({
+          onImported: () => {
+            $modal.remove();
+            showAssetManagerModal('backgrounds');
+          },
+        });
         break;
     }
   });

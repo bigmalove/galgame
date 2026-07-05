@@ -1,5 +1,4 @@
-import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID, CUSTOM_SKIN_ID, GLOBAL_CUSTOM_SKIN_PACK_ID } from '../core/constants.js';
-import { normalizeCustomSkinFooterButtonDisplay } from '../core/custom-skin-footer-buttons.js';
+import { SCRIPT_ID, SCRIPT_NAME, DEFAULT_PACK_ID } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
 import {
   buildTitleSceneNameForChar,
@@ -16,15 +15,6 @@ import { saveSprite, saveSpritesBatch, getAllSprites } from '../db/sprites.js';
 import { saveBackground, saveBackgroundsBatch, getAllBackgrounds } from '../db/backgrounds.js';
 import { GLOBAL_MAP_REGION_KEY, getAllMapImages, saveUnifiedMapImage } from '../db/map-images.js';
 import { getCurrentPackId, getAllImagePacks, createImagePack } from '../db/image-packs.js';
-import { getAllUiSkinAssets, saveUiSkinAsset } from '../db/ui-skins.js';
-import {
-  getAvailableUiSkinProfileDisplayName,
-  hasUiSkinProfileId,
-  isCustomSkinProfileId,
-  listUiSkinProfiles,
-  refreshUiSkinProfilesCache,
-  saveUiSkinProfile,
-} from '../db/ui-skin-profiles.js';
 import { getAllLive2DModels } from '../db/live2d-models.js';
 import { getAllSpecialCgs, saveSpecialCg } from '../db/special-cgs.js';
 import { getTTSEnabled, getAllCharacterTTSVoices, setTTSEnabled } from '../audio/tts-config.js';
@@ -35,7 +25,6 @@ import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '
 import { embedCardIntoPngBytes, isPngBytes } from '../utils/png-character-card.js';
 import { normalizeLocationStatusIconClass, normalizeTimeStatusIconClass } from '../utils/status-popup-icons.js';
 import { getModalMountRoot } from './fullscreen.js';
-import { applySettingsToUI, refreshSkinSelectElement } from './settings-panel.js';
 import { showToast } from './toast.js';
 import { makeDraggable } from './interaction.js';
 
@@ -439,148 +428,6 @@ function buildLive2dRemoteModelUrl(templateInput, characterId) {
   return `${ensureTrailingSlash(raw)}${encodedChar}/model3.json`;
 }
 
-async function buildCustomSkinProfileExportBundle(profileIds = [], activeProfileId = '') {
-  const idSet = new Set(
-    (Array.isArray(profileIds) ? profileIds : [])
-      .map(id => String(id || '').trim())
-      .filter(id => isCustomSkinProfileId(id)),
-  );
-  if (idSet.size === 0) {
-    return {
-      profiles: [],
-      assets: [],
-      activeProfileId: '',
-    };
-  }
-
-  const allProfiles = await listUiSkinProfiles();
-  const profiles = allProfiles.filter(profile => idSet.has(String(profile?.id || '').trim()));
-  const availableProfileIds = new Set(profiles.map(profile => profile.id));
-  const allAssets = await getAllUiSkinAssets();
-  const assets = allAssets.filter(asset => {
-    const packId = String(asset?.packId || '').trim();
-    const skinId = String(asset?.skinId || '').trim();
-    return packId === GLOBAL_CUSTOM_SKIN_PACK_ID && availableProfileIds.has(skinId);
-  });
-
-  return {
-    profiles,
-    assets,
-    activeProfileId: availableProfileIds.has(String(activeProfileId || '').trim())
-      ? String(activeProfileId || '').trim()
-      : '',
-  };
-}
-
-async function exportCustomSkinBundleArchive(loadJSZip, {
-  profileIds = [],
-  packageName = null,
-  activeProfileId = '',
-  scope = 'custom-skin-library',
-  preparingMessage = '正在准备导出自定义皮肤...',
-  compressMessage = '正在压缩自定义皮肤...',
-  emptyMessage = '当前还没有可导出的自定义皮肤',
-  defaultPackageName = '自定义皮肤',
-  successMessageBuilder = null,
-} = {}) {
-  showToast(preparingMessage);
-  const zip = new (await loadJSZip())();
-  const {
-    profiles: exportedProfiles,
-    assets: uiSkinAssets,
-    activeProfileId: safeActiveProfileId,
-  } = await buildCustomSkinProfileExportBundle(profileIds, activeProfileId);
-
-  if (exportedProfiles.length === 0) {
-    showToast(emptyMessage);
-    return false;
-  }
-
-  const resolvedPackageName = String(
-    packageName
-    || exportedProfiles[0]?.displayName
-    || defaultPackageName,
-  ).trim() || defaultPackageName;
-
-  zip.file('ui-skin-profiles/manifest.json', JSON.stringify({
-    version: '1.0',
-    profiles: exportedProfiles,
-    activeProfileId: safeActiveProfileId,
-  }, null, 2));
-
-  const uiSkinManifest = [];
-  if (uiSkinAssets.length > 0) {
-    const uiSkinFolder = zip.folder('ui-skins');
-    for (const rawAsset of uiSkinAssets) {
-      const meta = normalizeUiSkinMetaRecord(rawAsset);
-      if (!meta) continue;
-      const manifestRecord = {
-        skinId: meta.skinId,
-        elementId: meta.elementId,
-        device: meta.device,
-        state: meta.state,
-        scaleMode: meta.scaleMode,
-        layout: meta.layout,
-        slice: meta.slice,
-        textPadding: meta.textPadding,
-        meta: meta.meta,
-      };
-      if (rawAsset.imageBlob) {
-        const ext = rawAsset.imageBlob.type.split('/')[1] || 'png';
-        const fileName = buildUiSkinZipFilename(meta, ext);
-        uiSkinFolder.file(fileName, rawAsset.imageBlob);
-        manifestRecord.file = fileName;
-      } else if (rawAsset.imageUrl) {
-        manifestRecord.imageUrl = rawAsset.imageUrl;
-      }
-      uiSkinManifest.push(manifestRecord);
-    }
-    zip.file('ui-skins/manifest.json', JSON.stringify({ version: '1.0', assets: uiSkinManifest }, null, 2));
-  }
-
-  zip.file('package_info.json', JSON.stringify({
-    packageName: resolvedPackageName,
-    exportDate: new Date().toISOString(),
-    version: '1.0',
-    scope: String(scope || 'custom-skin-library').trim() || 'custom-skin-library',
-    uiSkinProfileCount: exportedProfiles.length,
-    uiSkinCount: uiSkinAssets.length,
-  }, null, 2));
-
-  showToast(compressMessage);
-  const content = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(content);
-  const a = document.createElement('a');
-  a.href = url;
-  const safePackageName = sanitizeFileName(resolvedPackageName);
-  const date = new Date().toISOString().slice(0, 10);
-  a.download = `${safePackageName}_${date}.zip`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  if (typeof successMessageBuilder === 'function') {
-    showToast(successMessageBuilder({
-      exportedProfiles,
-      uiSkinAssets,
-      packageName: resolvedPackageName,
-    }));
-  }
-  return true;
-}
-
-function resolveImportedCustomSkinActiveProfileId(rawActiveProfileId, profiles = []) {
-  const safeProfiles = (Array.isArray(profiles) ? profiles : [])
-    .map(profile => normalizeUiSkinProfileRecord(profile))
-    .filter(Boolean);
-  const safeActiveProfileId = String(rawActiveProfileId || '').trim();
-  if (safeActiveProfileId && safeProfiles.some(profile => profile.id === safeActiveProfileId)) {
-    return safeActiveProfileId;
-  }
-  return safeProfiles.length === 1 ? safeProfiles[0].id : '';
-}
-
 function normalizeRemoteMode(value, options = {}) {
   const allowSkipExport = !!options.allowSkipExport;
   const mode = String(value || '').trim().toLowerCase();
@@ -619,105 +466,6 @@ function saveCardExportPrefs(prefs) {
 
 function sanitizeFileName(name) {
   return String(name || 'character').replace(/[\\/:*?"<>|]/g, '_').trim() || 'character';
-}
-
-function normalizeUiSkinProfileRecord(raw = {}) {
-  const safe = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  const id = String(safe.id || safe.profileId || safe.skinId || '').trim();
-  if (!isCustomSkinProfileId(id)) return null;
-  return {
-    id,
-    displayName: String(safe.displayName || safe.name || safe.label || '').trim() || id,
-    createdAt: String(safe.createdAt || '').trim(),
-    updatedAt: String(safe.updatedAt || '').trim(),
-    sortOrder: Number.isFinite(Number(safe.sortOrder)) ? Number(safe.sortOrder) : null,
-    footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(safe.footerButtonDisplay),
-  };
-}
-
-function normalizeUiSkinMetaRecord(raw = {}) {
-  const rawSkinId = String(raw.skinId || '').trim();
-  const skinId = rawSkinId === 'skin-western' || rawSkinId === CUSTOM_SKIN_ID ? '' : rawSkinId;
-  const elementId = String(raw.elementId || '').trim();
-  const device = String(raw.device || 'desktop').trim() || 'desktop';
-  const state = String(raw.state || 'normal').trim() || 'normal';
-  if (!elementId || !isCustomSkinProfileId(skinId)) return null;
-  return {
-    skinId,
-    elementId,
-    device,
-    state,
-    scaleMode: String(raw.scaleMode || 'stretch').trim() || 'stretch',
-    layout: raw.layout && typeof raw.layout === 'object' ? raw.layout : {},
-    slice: raw.slice && typeof raw.slice === 'object' ? raw.slice : {},
-    textPadding: raw.textPadding && typeof raw.textPadding === 'object' ? raw.textPadding : {},
-    meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},
-  };
-}
-
-function buildUiSkinZipFilename(record, ext = 'png') {
-  const safeSkin = sanitizeFileName(record.skinId || 'skin');
-  const safeElement = sanitizeFileName(record.elementId || 'element');
-  const safeDevice = sanitizeFileName(record.device || 'desktop');
-  const safeState = sanitizeFileName(record.state || 'normal');
-  const safeExt = sanitizeFileName(ext || 'png');
-  return `${safeSkin}__${safeElement}__${safeDevice}__${safeState}.${safeExt}`;
-}
-
-function parseUiSkinMetaFromFilename(fileName) {
-  const baseName = String(fileName || '').replace(/\.[^.]+$/, '');
-  const parts = baseName.split('__');
-  if (parts.length < 4) return null;
-  return normalizeUiSkinMetaRecord({
-    skinId: parts[0],
-    elementId: parts[1],
-    device: parts[2],
-    state: parts.slice(3).join('__') || 'normal',
-  });
-}
-
-async function importUiSkinProfilesIntoGlobalLibrary(rawProfiles = []) {
-  const existingProfiles = await listUiSkinProfiles();
-  const existingById = new Map(existingProfiles.map(profile => [profile.id, profile]));
-  const resolvedProfiles = [];
-  const nameScope = [...existingProfiles];
-
-  for (const rawProfile of Array.isArray(rawProfiles) ? rawProfiles : []) {
-    const profile = normalizeUiSkinProfileRecord(rawProfile);
-    if (!profile) continue;
-
-    const existing = existingById.get(profile.id) || null;
-    let displayName = profile.displayName;
-    if (!existing) {
-      displayName = getAvailableUiSkinProfileDisplayName(displayName, nameScope);
-    }
-
-    const savedProfile = await saveUiSkinProfile({
-      ...existing,
-      ...profile,
-      displayName,
-      createdAt: profile.createdAt || existing?.createdAt || new Date().toISOString(),
-      updatedAt: profile.updatedAt || new Date().toISOString(),
-      sortOrder: Number.isFinite(profile.sortOrder) ? profile.sortOrder : (existing?.sortOrder || Date.now()),
-    });
-    existingById.set(savedProfile.id, savedProfile);
-    nameScope.push(savedProfile);
-    resolvedProfiles.push(savedProfile);
-  }
-
-  await refreshUiSkinProfilesCache();
-  return resolvedProfiles;
-}
-
-async function switchToImportedCustomSkinProfile(activeProfileId = '') {
-  const safeProfileId = String(activeProfileId || '').trim();
-  if (!hasUiSkinProfileId(safeProfileId)) return false;
-  const settings = getSettings();
-  settings.skin = safeProfileId;
-  saveSettings();
-  refreshSkinSelectElement();
-  applySettingsToUI();
-  return true;
 }
 
 function normalizeSpecialCgMetaRecord(raw = {}) {
@@ -933,6 +681,24 @@ function restoreImportedTtsSettings(rawTtsConfig) {
     restoredEnabled = true;
   }
 
+  const importedCharEnabledMap = ttsConfig.characterEnabled;
+  if (importedCharEnabledMap && typeof importedCharEnabledMap === 'object' && !Array.isArray(importedCharEnabledMap)) {
+    const existingCharEnabledMap = readLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_TTS_ENABLED, {});
+    const mergedCharEnabledMap = {
+      ...(existingCharEnabledMap && typeof existingCharEnabledMap === 'object' ? existingCharEnabledMap : {}),
+    };
+    for (const [characterId, enabled] of Object.entries(importedCharEnabledMap)) {
+      const safeCharacterId = String(characterId || '').trim();
+      if (!safeCharacterId) continue;
+      if (enabled === false) {
+        mergedCharEnabledMap[safeCharacterId] = false;
+      } else {
+        delete mergedCharEnabledMap[safeCharacterId];
+      }
+    }
+    saveLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_TTS_ENABLED, mergedCharEnabledMap);
+  }
+
   const importedVoiceMap = ttsConfig.characterVoice;
   if (importedVoiceMap && typeof importedVoiceMap === 'object' && !Array.isArray(importedVoiceMap)) {
     const existingVoiceMap = readLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE, {});
@@ -962,6 +728,35 @@ function restoreImportedTtsSettings(rawTtsConfig) {
   }
 
   return { restoredEnabled, restoredVoiceCount, restoredKeywordCount };
+}
+
+function restoreImportedSpriteVisibilitySettings(rawSpriteVisibilityConfig) {
+  const config = rawSpriteVisibilityConfig && typeof rawSpriteVisibilityConfig === 'object' && !Array.isArray(rawSpriteVisibilityConfig)
+    ? rawSpriteVisibilityConfig
+    : null;
+  if (!config) return { restoredVisibleCount: 0 };
+
+  let restoredVisibleCount = 0;
+  const importedVisibleMap = config.characterVisible;
+  if (importedVisibleMap && typeof importedVisibleMap === 'object' && !Array.isArray(importedVisibleMap)) {
+    const existingVisibleMap = readLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_SPRITE_VISIBLE, {});
+    const mergedVisibleMap = {
+      ...(existingVisibleMap && typeof existingVisibleMap === 'object' ? existingVisibleMap : {}),
+    };
+    for (const [characterId, visible] of Object.entries(importedVisibleMap)) {
+      const safeCharacterId = String(characterId || '').trim();
+      if (!safeCharacterId) continue;
+      if (visible === false) {
+        mergedVisibleMap[safeCharacterId] = false;
+      } else {
+        delete mergedVisibleMap[safeCharacterId];
+      }
+      restoredVisibleCount += 1;
+    }
+    saveLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_SPRITE_VISIBLE, mergedVisibleMap);
+  }
+
+  return { restoredVisibleCount };
 }
 
 function restoreImportedLive2dSettings(rawLive2dConfig) {
@@ -2168,6 +1963,8 @@ async function buildGalgameCardConfig(options = {}) {
 
   const live2dEnabledMap = readLocalStorageJson(CHAR_USE_LIVE2D_KEY, {});
   const live2dConfigMap = readLocalStorageJson(LIVE2D_CONFIG_KEY, {});
+  const charTtsEnabledMap = readLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_TTS_ENABLED, {});
+  const charSpriteVisibleMap = readLocalStorageJson(GalgameStore.STORAGE_KEYS.CHAR_SPRITE_VISIBLE, {});
   const live2dModels = await getAllLive2DModels();
   const live2dList = Array.isArray(live2dModels) ? live2dModels : [];
   const live2dOutModels = {};
@@ -2524,6 +2321,10 @@ async function buildGalgameCardConfig(options = {}) {
       enabled: ttsEnabled,
       characterVoice: characterVoice || {},
       characterKeywords: characterKeywords || {},
+      characterEnabled: charTtsEnabledMap || {},
+    },
+    spriteVisibility: {
+      characterVisible: charSpriteVisibleMap || {},
     },
   };
 
@@ -4039,10 +3840,6 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     const json = JSON.parse(text);
     const { rawJson, pluginConfig, cardObject } = extractImportPayloadFromJson(json);
     const payload = pluginConfig && typeof pluginConfig === 'object' ? pluginConfig : rawJson;
-    const importedUiSkinProfiles = [
-      ...(Array.isArray(payload?.uiSkinProfiles) ? payload.uiSkinProfiles : []),
-      ...(payload !== rawJson && Array.isArray(rawJson?.uiSkinProfiles) ? rawJson.uiSkinProfiles : []),
-    ];
     logTitleScreenDiag('importAssetsFromJson:payload-detected', {
       hasPluginConfig: !!pluginConfig,
       payloadSchema: String(payload?.schema || ''),
@@ -4061,17 +3858,6 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     }
 
     let count = 0;
-    const savedUiSkinProfiles = importedUiSkinProfiles.length > 0
-      ? await importUiSkinProfilesIntoGlobalLibrary(importedUiSkinProfiles)
-      : [];
-    const importedUiSkinProfileIds = new Set(savedUiSkinProfiles.map(profile => profile.id));
-    const importedActiveCustomSkinProfileId = resolveImportedCustomSkinActiveProfileId(
-      payload?.activeCustomSkinProfileId
-      || payload?.activeProfileId
-      || rawJson?.activeCustomSkinProfileId
-      || rawJson?.activeProfileId,
-      savedUiSkinProfiles,
-    );
     const importedSpriteKeys = new Set();
     const importedBackgroundKeys = new Set();
     const newExpressions = [];
@@ -4291,35 +4077,7 @@ export async function importAssetsFromJson(file, targetPackId = null) {
         count++;
       }
     }
-    const uiSkinList = [
-      ...(Array.isArray(payload?.uiSkins) ? payload.uiSkins : []),
-      ...(payload !== rawJson && Array.isArray(rawJson?.uiSkins) ? rawJson.uiSkins : []),
-    ];
-    for (const rawItem of uiSkinList) {
-      const meta = normalizeUiSkinMetaRecord(rawItem);
-      if (!meta) continue;
-      const remoteUrl = String(rawItem.url || rawItem.imageUrl || '').trim();
-      const payloadRecord = {
-        packId: importedUiSkinProfileIds.has(meta.skinId) || isCustomSkinProfileId(meta.skinId)
-          ? GLOBAL_CUSTOM_SKIN_PACK_ID
-          : targetPackId,
-        skinId: meta.skinId,
-        elementId: meta.elementId,
-        device: meta.device,
-        state: meta.state,
-        layout: meta.layout,
-        scaleMode: meta.scaleMode,
-        slice: meta.slice,
-        textPadding: meta.textPadding,
-        meta: meta.meta,
-      };
-      if (remoteUrl) {
-        payloadRecord.imageUrl = remoteUrl;
-        payloadRecord.imageBlob = null;
-      }
-      await saveUiSkinAsset(payloadRecord);
-      count++;
-    }
+    // 旧图片式自定义皮肤数据（uiSkins/uiSkinProfiles）已废弃，静默跳过
 
     let pluginWriteResult = null;
     if (pluginConfig && typeof pluginConfig === 'object') {
@@ -4338,6 +4096,7 @@ export async function importAssetsFromJson(file, targetPackId = null) {
 
     const restoredLive2d = restoreImportedLive2dSettings(payload?.live2d || rawJson?.live2d);
     const restoredTts = restoreImportedTtsSettings(payload?.tts || rawJson?.tts);
+    restoreImportedSpriteVisibilitySettings(payload?.spriteVisibility || rawJson?.spriteVisibility);
     const restoredCustom = restoreImportedCustomModuleSettings(payload?.custom || rawJson?.custom);
     const restoredTitleScreen = restoreImportedTitleScreenSettings(
       payload?.titleScreen
@@ -4388,16 +4147,6 @@ export async function importAssetsFromJson(file, targetPackId = null) {
     if (restoredTts.restoredEnabled || restoredTts.restoredVoiceCount > 0 || restoredTts.restoredKeywordCount > 0) {
       summaryParts.push(`TTS 音色 ${restoredTts.restoredVoiceCount}，关键字 ${restoredTts.restoredKeywordCount}`);
     }
-    if (savedUiSkinProfiles.length > 0) {
-      summaryParts.push(`自定义皮肤 ${savedUiSkinProfiles.length} 套`);
-    }
-    if (importedActiveCustomSkinProfileId) {
-      const switched = await switchToImportedCustomSkinProfile(importedActiveCustomSkinProfileId);
-      if (switched) {
-        const switchedProfile = savedUiSkinProfiles.find(profile => profile.id === importedActiveCustomSkinProfileId);
-        summaryParts.push(`已切换到 ${switchedProfile?.displayName || importedActiveCustomSkinProfileId}`);
-      }
-    }
     showToast(summaryParts.join('，'));
 
     const hasUiAccessConfig = !!(pluginConfig?.custom?.uiAccess && pluginConfig.custom.uiAccess.enabled);
@@ -4445,9 +4194,6 @@ export const AssetIO = {
       const allPacks = await getAllImagePacks();
       const currentPack = allPacks.find(p => p.id === currentPackId);
       const currentPackName = currentPack ? currentPack.name : '未命名包';
-      const attachedCustomSkinProfileId = isCustomSkinProfileId(options?.attachedCustomSkinProfileId)
-        ? String(options.attachedCustomSkinProfileId).trim()
-        : '';
 
       const remoteConfig = {
         packageName: packageName || currentPackName,
@@ -4457,9 +4203,6 @@ export const AssetIO = {
         backgrounds: [],
         specialCgs: [],
         maps: [],
-        uiSkins: [],
-        uiSkinProfiles: [],
-        activeCustomSkinProfileId: '',
         mapSettings: buildExportableMapSettings(),
       };
       const baseUrl = remoteBaseUrl ? (remoteBaseUrl.endsWith('/') ? remoteBaseUrl : remoteBaseUrl + '/') : '';
@@ -4598,76 +4341,6 @@ export const AssetIO = {
         zip.file('maps/manifest.json', JSON.stringify({ version: '1.0', assets: mapManifest }, null, 2));
       }
 
-      const {
-        profiles: exportedUiSkinProfiles,
-        assets: uiSkinAssets,
-        activeProfileId: exportedActiveProfileId,
-      } = await buildCustomSkinProfileExportBundle(
-        attachedCustomSkinProfileId ? [attachedCustomSkinProfileId] : [],
-        attachedCustomSkinProfileId,
-      );
-      const uiSkinManifest = [];
-      if (exportedUiSkinProfiles.length > 0) {
-        zip.file('ui-skin-profiles/manifest.json', JSON.stringify({
-          version: '1.0',
-          profiles: exportedUiSkinProfiles,
-          activeProfileId: exportedActiveProfileId,
-        }, null, 2));
-        if (remoteBaseUrl) {
-          remoteConfig.uiSkinProfiles = exportedUiSkinProfiles.map(profile => ({
-            id: profile.id,
-            displayName: profile.displayName,
-            createdAt: profile.createdAt,
-            updatedAt: profile.updatedAt,
-            sortOrder: profile.sortOrder,
-            footerButtonDisplay: normalizeCustomSkinFooterButtonDisplay(profile.footerButtonDisplay),
-          }));
-          remoteConfig.activeCustomSkinProfileId = exportedActiveProfileId;
-        }
-      }
-      if (uiSkinAssets.length > 0) {
-        const uiSkinFolder = zip.folder('ui-skins');
-        for (const rawAsset of uiSkinAssets) {
-          const meta = normalizeUiSkinMetaRecord(rawAsset);
-          if (!meta) continue;
-          const manifestRecord = {
-            skinId: meta.skinId,
-            elementId: meta.elementId,
-            device: meta.device,
-            state: meta.state,
-            scaleMode: meta.scaleMode,
-            layout: meta.layout,
-            slice: meta.slice,
-            textPadding: meta.textPadding,
-            meta: meta.meta,
-          };
-          if (rawAsset.imageBlob) {
-            const ext = rawAsset.imageBlob.type.split('/')[1] || 'png';
-            const fileName = buildUiSkinZipFilename(meta, ext);
-            uiSkinFolder.file(fileName, rawAsset.imageBlob);
-            manifestRecord.file = fileName;
-            if (remoteBaseUrl) {
-              remoteConfig.uiSkins.push({
-                ...manifestRecord,
-                url: `${baseUrl}ui-skins/${fileName}`,
-                packId: currentPackId,
-              });
-            }
-          } else if (rawAsset.imageUrl) {
-            manifestRecord.imageUrl = rawAsset.imageUrl;
-            if (remoteBaseUrl) {
-              remoteConfig.uiSkins.push({
-                ...manifestRecord,
-                url: rawAsset.imageUrl,
-                packId: currentPackId,
-              });
-            }
-          }
-          uiSkinManifest.push(manifestRecord);
-        }
-        zip.file('ui-skins/manifest.json', JSON.stringify({ version: '1.0', assets: uiSkinManifest }, null, 2));
-      }
-
       const packageInfo = {
         packageName: packageName || currentPackName,
         exportDate: new Date().toISOString(),
@@ -4677,9 +4350,6 @@ export const AssetIO = {
         backgroundCount: backgrounds.length,
         specialCgCount: specialCgs.length,
         mapCount: maps.length,
-        uiSkinCount: uiSkinAssets.length,
-        uiSkinProfileCount: exportedUiSkinProfiles.length,
-        attachedCustomSkinProfileId: exportedActiveProfileId,
         mapSettings: remoteConfig.mapSettings,
       };
       zip.file('package_info.json', JSON.stringify(packageInfo, null, 2));
@@ -4698,57 +4368,10 @@ export const AssetIO = {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      const skinSummary = exportedUiSkinProfiles.length > 0
-        ? `，附带 ${exportedUiSkinProfiles.length} 套自定义皮肤（${uiSkinAssets.length} 个皮肤元素）`
-        : '';
-      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${specialCgs.length} 个 CG，${maps.length} 张地图${skinSummary}`);
+      showToast(`导出成功！共导出 ${sprites.length} 个立绘，${backgrounds.length} 个背景，${specialCgs.length} 个 CG，${maps.length} 张地图`);
     } catch (e) {
       console.error(`[${SCRIPT_NAME}] 导出失败:`, e);
       showToast('导出失败: ' + e.message);
-    }
-  },
-  async exportCustomSkinLibrary(packageName = null) {
-    try {
-      const exportedProfiles = await listUiSkinProfiles();
-      const profileIds = exportedProfiles.map(profile => profile.id);
-      return await exportCustomSkinBundleArchive(() => this.loadJSZip(), {
-        profileIds,
-        packageName,
-        scope: 'custom-skin-library',
-        preparingMessage: '正在准备导出自定义皮肤库...',
-        compressMessage: '正在压缩皮肤库...',
-        emptyMessage: '当前还没有可导出的自定义皮肤',
-        defaultPackageName: '自定义皮肤库',
-        successMessageBuilder: ({ exportedProfiles: profiles, uiSkinAssets }) =>
-          `已导出 ${profiles.length} 套自定义皮肤（${uiSkinAssets.length} 个皮肤元素）`,
-      });
-    } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 导出自定义皮肤库失败:`, e);
-      showToast('导出自定义皮肤库失败: ' + e.message);
-      return false;
-    }
-  },
-  async exportCustomSkinProfile(profileId, packageName = null) {
-    try {
-      const safeProfileId = String(profileId || '').trim();
-      return await exportCustomSkinBundleArchive(() => this.loadJSZip(), {
-        profileIds: safeProfileId ? [safeProfileId] : [],
-        packageName,
-        activeProfileId: safeProfileId,
-        scope: 'custom-skin-profile',
-        preparingMessage: '正在准备导出当前自定义皮肤...',
-        compressMessage: '正在压缩当前自定义皮肤...',
-        emptyMessage: '当前皮肤不存在或没有可导出的内容',
-        defaultPackageName: '自定义皮肤',
-        successMessageBuilder: ({ exportedProfiles, uiSkinAssets }) => {
-          const profileLabel = exportedProfiles[0]?.displayName || '当前皮肤';
-          return `已导出自定义皮肤“${profileLabel}”（${uiSkinAssets.length} 个皮肤元素）`;
-        },
-      });
-    } catch (e) {
-      console.error(`[${SCRIPT_NAME}] 导出当前自定义皮肤失败:`, e);
-      showToast('导出当前自定义皮肤失败: ' + e.message);
-      return false;
     }
   },
   async importFiles(fileList, targetPackId = null) {
@@ -5232,8 +4855,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
   const hasSpritesDir = zipPaths.some(path => path.startsWith('sprites/'));
   const hasBackgroundsDir = zipPaths.some(path => path.startsWith('backgrounds/'));
   const hasMapsDir = zipPaths.some(path => path.startsWith('maps/'));
-  const hasUiSkinsDir = zipPaths.some(path => path.startsWith('ui-skins/'));
-  const hasUiSkinProfilesDir = zipPaths.some(path => path.startsWith('ui-skin-profiles/'));
+  // 旧图片式自定义皮肤目录（ui-skins/、ui-skin-profiles/）已废弃，导入时静默跳过
   const hasSpecialCgsDir = zipPaths.some(path => path.startsWith('special-cgs/'));
 
   let packageInfo = null;
@@ -5245,36 +4867,6 @@ export async function processZipContents(zip, progressController, isCancelledChe
       console.log(`[${SCRIPT_NAME}] 读取到包信息:`, packageInfo);
     } catch (e) {
       console.warn(`[${SCRIPT_NAME}] 读取 package_info.json 失败:`, e);
-    }
-  }
-
-  let uiSkinProfileManifestProfiles = [];
-  let uiSkinProfileManifestActiveProfileId = '';
-  const uiSkinProfileManifestFile = zip.file('ui-skin-profiles/manifest.json');
-  if (uiSkinProfileManifestFile) {
-    try {
-      const manifestText = await uiSkinProfileManifestFile.async('text');
-      const manifestJson = JSON.parse(manifestText);
-      if (Array.isArray(manifestJson?.profiles)) {
-        uiSkinProfileManifestProfiles = manifestJson.profiles;
-      }
-      uiSkinProfileManifestActiveProfileId = String(manifestJson?.activeProfileId || '').trim();
-    } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 读取 ui-skin-profiles/manifest.json 失败:`, e);
-    }
-  }
-
-  let uiSkinManifestAssets = [];
-  const uiSkinManifestFile = zip.file('ui-skins/manifest.json');
-  if (uiSkinManifestFile) {
-    try {
-      const manifestText = await uiSkinManifestFile.async('text');
-      const manifestJson = JSON.parse(manifestText);
-      if (Array.isArray(manifestJson?.assets)) {
-        uiSkinManifestAssets = manifestJson.assets;
-      }
-    } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 读取 ui-skins/manifest.json 失败:`, e);
     }
   }
 
@@ -5305,23 +4897,6 @@ export async function processZipContents(zip, progressController, isCancelledChe
       console.warn(`[${SCRIPT_NAME}] 读取 special-cgs/manifest.json 失败:`, e);
     }
   }
-
-  const uiSkinManifestByFile = new Map();
-  const uiSkinManifestUrlOnly = [];
-  uiSkinManifestAssets.forEach(item => {
-    const meta = normalizeUiSkinMetaRecord(item);
-    if (!meta) return;
-    const fileName = String(item.file || '').trim();
-    const imageUrl = String(item.imageUrl || item.url || '').trim();
-    if (fileName) {
-      uiSkinManifestByFile.set(fileName, { ...meta, imageUrl });
-      uiSkinManifestByFile.set(`ui-skins/${fileName}`, { ...meta, imageUrl });
-      return;
-    }
-    if (imageUrl) {
-      uiSkinManifestUrlOnly.push({ ...meta, imageUrl });
-    }
-  });
 
   const mapManifestByFile = new Map();
   const mapManifestUrlOnly = [];
@@ -5364,28 +4939,15 @@ export async function processZipContents(zip, progressController, isCancelledChe
     }
   });
 
-  const importedUiSkinProfiles = uiSkinProfileManifestProfiles.length > 0
-    ? await importUiSkinProfilesIntoGlobalLibrary(uiSkinProfileManifestProfiles)
-    : [];
-  const importedUiSkinProfileIds = new Set(importedUiSkinProfiles.map(profile => profile.id));
-  const importedActiveCustomSkinProfileId = resolveImportedCustomSkinActiveProfileId(
-    uiSkinProfileManifestActiveProfileId,
-    importedUiSkinProfiles,
-  );
-
   if (
     !hasSpritesDir
     && !hasBackgroundsDir
     && !hasMapsDir
-    && !hasUiSkinsDir
-    && !hasUiSkinProfilesDir
     && !hasSpecialCgsDir
-    && uiSkinManifestUrlOnly.length === 0
     && mapManifestUrlOnly.length === 0
     && specialCgManifestUrlOnly.length === 0
-    && importedUiSkinProfiles.length === 0
   ) {
-    throw new Error('ZIP 包格式错误：需包含 sprites/、backgrounds/、special-cgs/、maps/、ui-skins/ 或 ui-skin-profiles/ 目录');
+    throw new Error('ZIP 包格式错误：需包含 sprites/、backgrounds/、special-cgs/ 或 maps/ 目录');
   }
 
   const requiresPackTarget = (
@@ -5413,32 +4975,25 @@ export async function processZipContents(zip, progressController, isCancelledChe
     const isBackground = relativePath.startsWith('backgrounds/');
     const isSpecialCg = relativePath.startsWith('special-cgs/');
     const isMap = relativePath.startsWith('maps/');
-    const isUiSkin = relativePath.startsWith('ui-skins/');
-    if (!isSprite && !isBackground && !isSpecialCg && !isMap && !isUiSkin) return;
+    if (!isSprite && !isBackground && !isSpecialCg && !isMap) return;
     const ext = relativePath.split('.').pop().toLowerCase();
     if (!['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) return;
     imageFiles.push({
       path: relativePath,
       entry: zipEntry,
-      type: isSprite ? 'sprite' : isBackground ? 'background' : isSpecialCg ? 'special-cg' : isMap ? 'map' : 'ui-skin',
+      type: isSprite ? 'sprite' : isBackground ? 'background' : isSpecialCg ? 'special-cg' : 'map',
     });
   });
 
-  const totalItems = imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length + importedUiSkinProfiles.length;
+  const totalItems = imageFiles.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
   if (totalItems === 0) {
     throw new Error('ZIP 包中未找到有效资源文件');
   }
 
-  const importedProfileCount = importedUiSkinProfiles.length;
-  progressController.update(
-    importedProfileCount > 0 ? Math.round((importedProfileCount / totalItems) * 100) : 0,
-    importedProfileCount > 0
-      ? `已恢复 ${importedProfileCount} 套自定义皮肤，继续导入其余 ${totalItems - importedProfileCount} 个资源...`
-      : `准备导入 ${totalItems} 个资源...`,
-  );
+  progressController.update(0, `准备导入 ${totalItems} 个资源...`);
 
   const BATCH_SIZE = 50;
-  let successCount = importedUiSkinProfiles.length;
+  let successCount = 0;
   const failedItems = [];
 
   for (let i = 0; i < imageFiles.length; i += BATCH_SIZE) {
@@ -5452,7 +5007,6 @@ export async function processZipContents(zip, progressController, isCancelledChe
     const backgroundBatch = [];
     const specialCgBatch = [];
     const mapBatch = [];
-    const uiSkinBatch = [];
 
     await Promise.all(
       batch.map(async item => {
@@ -5507,17 +5061,6 @@ export async function processZipContents(zip, progressController, isCancelledChe
             });
             return;
           }
-
-          const manifestMeta = uiSkinManifestByFile.get(item.path) || uiSkinManifestByFile.get(fileName);
-          const parsedMeta = manifestMeta ? normalizeUiSkinMetaRecord(manifestMeta) : parseUiSkinMetaFromFilename(fileName);
-          if (!parsedMeta) {
-            throw new Error('无法解析 UI 皮肤文件名，请提供 manifest');
-          }
-          uiSkinBatch.push({
-            ...parsedMeta,
-            imageBlob: blob,
-            imageUrl: null,
-          });
         } catch (e) {
           console.warn(`解压 ${item.path} 失败:`, e);
           failedItems.push({ path: item.path, error: e.message });
@@ -5571,67 +5114,10 @@ export async function processZipContents(zip, progressController, isCancelledChe
       await saveUnifiedMapImage(preferredMap?.imageBlob || null, preferredMap?.imageUrl || null, targetPackId);
     }
 
-    if (uiSkinBatch.length > 0) {
-      await Promise.all(
-        uiSkinBatch.map(asset =>
-          saveUiSkinAsset({
-            packId: importedUiSkinProfileIds.has(asset.skinId) || isCustomSkinProfileId(asset.skinId)
-              ? GLOBAL_CUSTOM_SKIN_PACK_ID
-              : targetPackId,
-            skinId: asset.skinId,
-            elementId: asset.elementId,
-            device: asset.device,
-            state: asset.state,
-            imageBlob: asset.imageBlob || null,
-            imageUrl: null,
-            layout: asset.layout || {},
-            scaleMode: asset.scaleMode || 'stretch',
-            slice: asset.slice || {},
-            textPadding: asset.textPadding || {},
-            meta: asset.meta || {},
-          }),
-        ),
-      );
-    }
-
-    successCount += spriteBatch.length + backgroundBatch.length + specialCgBatch.length + (mapBatch.length > 0 ? 1 : 0) + uiSkinBatch.length;
-    const processed = importedProfileCount + Math.min(i + BATCH_SIZE, imageFiles.length);
+    successCount += spriteBatch.length + backgroundBatch.length + specialCgBatch.length + (mapBatch.length > 0 ? 1 : 0);
+    const processed = Math.min(i + BATCH_SIZE, imageFiles.length);
     const percent = Math.round((processed / totalItems) * 100);
     progressController.update(percent, `导入中... ${processed}/${totalItems} (文件资源)`);
-  }
-
-  if (!isCancelledCheck || !isCancelledCheck()) {
-    for (let i = 0; i < uiSkinManifestUrlOnly.length; i++) {
-      if (isCancelledCheck && isCancelledCheck()) {
-        console.log(`[${SCRIPT_NAME}] 导入已取消`);
-        return;
-      }
-      const item = uiSkinManifestUrlOnly[i];
-      try {
-        await saveUiSkinAsset({
-          packId: importedUiSkinProfileIds.has(item.skinId) || isCustomSkinProfileId(item.skinId)
-            ? GLOBAL_CUSTOM_SKIN_PACK_ID
-            : targetPackId,
-          skinId: item.skinId,
-          elementId: item.elementId,
-          device: item.device,
-          state: item.state,
-          imageBlob: null,
-          imageUrl: item.imageUrl,
-          layout: item.layout || {},
-          scaleMode: item.scaleMode || 'stretch',
-          slice: item.slice || {},
-          textPadding: item.textPadding || {},
-          meta: item.meta || {},
-        });
-        successCount++;
-      } catch (e) {
-        failedItems.push({ path: `${item.skinId}/${item.elementId}/${item.device}/${item.state}`, error: e.message });
-      }
-      const processed = importedProfileCount + imageFiles.length + i + 1;
-      const percent = Math.round((processed / totalItems) * 100);
-      progressController.update(percent, `导入中... ${processed}/${totalItems} (皮肤链接)`);
-    }
   }
 
   if (!isCancelledCheck || !isCancelledCheck()) {
@@ -5658,7 +5144,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
       } catch (e) {
         failedItems.push({ path: `special-cgs/${item.cgId}`, error: e.message });
       }
-      const processed = importedProfileCount + imageFiles.length + uiSkinManifestUrlOnly.length + i + 1;
+      const processed = imageFiles.length + i + 1;
       const percent = Math.round((processed / totalItems) * 100);
       progressController.update(percent, `导入中... ${processed}/${totalItems} (CG链接)`);
     }
@@ -5677,17 +5163,13 @@ export async function processZipContents(zip, progressController, isCancelledChe
       } catch (e) {
         failedItems.push({ path: `maps/${preferredMap.regionKey || GLOBAL_MAP_REGION_KEY}`, error: e.message });
       }
-      const processed = importedProfileCount + imageFiles.length + uiSkinManifestUrlOnly.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
+      const processed = imageFiles.length + specialCgManifestUrlOnly.length + mapManifestUrlOnly.length;
       const percent = Math.round((processed / totalItems) * 100);
       progressController.update(percent, `导入中... ${processed}/${totalItems} (地图链接)`);
     }
   }
 
   const mapSettingsApplied = applyImportedMapSettings(packageInfo?.mapSettings);
-  let switchedCustomSkin = false;
-  if (importedActiveCustomSkinProfileId) {
-    switchedCustomSkin = await switchToImportedCustomSkinProfile(importedActiveCustomSkinProfileId);
-  }
 
   if (failedItems.length > 0) {
     showImportError([
@@ -5696,12 +5178,7 @@ export async function processZipContents(zip, progressController, isCancelledChe
     ]);
   }
 
-  if (switchedCustomSkin) {
-    const switchedProfile = importedUiSkinProfiles.find(profile => profile.id === importedActiveCustomSkinProfileId);
-    showToast(`已切换到导入的自定义皮肤：${switchedProfile?.displayName || importedActiveCustomSkinProfileId}`);
-  }
-
-  console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}, 自定义皮肤=${importedUiSkinProfiles.length}, 自动切换=${switchedCustomSkin}, 地图设置同步=${mapSettingsApplied}`);
+  console.log(`[${SCRIPT_NAME}] ZIP导入完成: 成功 ${successCount}, 失败 ${failedItems.length}, 地图设置同步=${mapSettingsApplied}`);
 }
 
 export function showImportProgress(initialText, onCancel, options = {}) {

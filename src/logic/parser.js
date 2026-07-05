@@ -1,6 +1,6 @@
 import { getCharacterTTSVoice } from '../audio/tts-config.js';
 import { RE_GAL_TAGS as CORE_RE_GAL_TAGS, SCRIPT_NAME } from '../core/constants.js';
-import { getSettings } from '../core/settings.js';
+import { getDialogFontScale, getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { splitZhJaForDisplayAndTts } from '../utils/bilingual-text.js';
@@ -32,7 +32,15 @@ const RE_SPRITE_TAG = /<sprite\b([^>]*)\/?>/gi;
 const RE_POPUP1 = /<弹窗一>([\s\S]*?)<\/弹窗一>/i;
 const RE_POPUP2 = /<弹窗二>([\s\S]*?)<\/弹窗二>/i;
 const RE_IMAGE_PLACEHOLDER_INLINE = /\[image\s*#\d+\]/gi;
-const RE_IMAGE_PLACEHOLDER_LINE = /^\s*[“”"'‘’「」『』【】\[\]（）()<>]*\s*\[image\s*#\d+\]\s*[“”"'‘’「」『』【】\[\]（）()<>]*\s*$/i;
+// st-chatu8（智绘姬）提示词标记：image###提示词###；[ \t]* 而非 \s* 防止跨行误连 markdown "### 标题"
+const RE_CHATU8_PROMPT_CLOSED = /image[ \t]*###[^\n]*?###/gi;
+// 行尾缺失闭合 ###（流式中/AI 漏写）：从 image### 删到行尾
+const RE_CHATU8_PROMPT_UNCLOSED = /image[ \t]*###[^\n]*$/gim;
+// 剥离后仅剩包裹符/标点的残壳行判定
+const RE_WRAPPER_ONLY = /^[\s“”"'‘’「」『』【】\[\]（）()<>·，,。.．…~—\-*]*$/;
+// 检测用（无 g 标志，规避 lastIndex 陷阱）
+const RE_CHATU8_PROMPT_TEST = /image[ \t]*###/i;
+const RE_IMAGE_PH_TEST = /\[image\s*#\d+\]/i;
 
 const RE_ILLEGAL_TAGS = [
   /<vn_scene[^>]*>[\s\S]*?<\/vn_scene>/gi,
@@ -63,7 +71,6 @@ const EXPRESSION_TAG_MAP = {
   搞怪: 'playful, wink, tongue out, silly face',
 };
 
-
 const PARSE_CACHE_MAX_SIZE = 30;
 const WRAPPER_QUOTES = [
   ['“', '”'],
@@ -90,6 +97,18 @@ export function setParserRefs({ getFormattedContent }) {
   if (getFormattedContent) _getFormattedContentRef = getFormattedContent;
 }
 
+// 由 UI 层实测对话框得出的每页可容纳字符数（随字号/面板尺寸变化）
+let _measuredSegLength = null;
+
+export function setMeasuredSegLength(value) {
+  const n = Math.round(Number(value));
+  _measuredSegLength = Number.isFinite(n) && n > 0 ? Math.max(60, Math.min(1200, n)) : null;
+}
+
+export function getMeasuredSegLength() {
+  return _measuredSegLength;
+}
+
 // ============================================
 // 导出常量和工具函数
 // ============================================
@@ -112,38 +131,50 @@ function cleanIllegalTags(html) {
   return result.replace(/\n{3,}/g, '\n\n');
 }
 
-function removeImagePlaceholderLines(text) {
+// 统一剥离生图提示词标记：[image#N] 与 st-chatu8 的 image###提示词###
+export function stripImagePlaceholders(text) {
   if (!text) return '';
   const lines = String(text).split(/\r?\n/);
-  return lines.filter(line => !RE_IMAGE_PLACEHOLDER_LINE.test(line.trim())).join('\n');
+  const kept = [];
+  for (const rawLine of lines) {
+    const hadMarker = RE_CHATU8_PROMPT_TEST.test(rawLine) || RE_IMAGE_PH_TEST.test(rawLine);
+    const line = rawLine
+      .replace(RE_CHATU8_PROMPT_CLOSED, '')
+      .replace(RE_CHATU8_PROMPT_UNCLOSED, '')
+      .replace(RE_IMAGE_PLACEHOLDER_INLINE, '');
+    if (hadMarker && RE_WRAPPER_ONLY.test(line)) continue; // 含标记且剥离后仅剩残壳 → 整行删
+    kept.push(line);
+  }
+  return kept.join('\n');
 }
 
 function normalizePlainStorybookText(rawText) {
-  return removeImagePlaceholderLines(String(rawText || '')
-    .replace(/<bgm>[\s\S]*?<\/bgm>/gi, '\n')
-    .replace(/<bnimg>[\s\S]*?<\/bnimg>/gi, '\n')
-    .replace(/<bgimg>[\s\S]*?<\/bgimg>/gi, '\n')
-    .replace(/<whimg>[\s\S]*?<\/whimg>/gi, '\n')
-    .replace(/<option\b[^>]*>[\s\S]*?<\/option>/gi, '\n')
-    .replace(/<background\b[^>]*\/?>/gi, '\n')
-    .replace(/<sprite\b[^>]*\/?>/gi, '\n')
-    .replace(/<pixiInit\b[^>]*\/?>/gi, '\n')
-    .replace(/<pixiPerform\b[^>]*\/?>/gi, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<p(?:\s[^>]*)?>/gi, '')
-    .replace(/<\/styled>/gi, '\n')
-    .replace(/<styled\b[^>]*>/gi, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n'))
-    .replace(RE_IMAGE_PLACEHOLDER_INLINE, '')
+  return stripImagePlaceholders(
+    String(rawText || '')
+      .replace(/<bgm>[\s\S]*?<\/bgm>/gi, '\n')
+      .replace(/<bnimg>[\s\S]*?<\/bnimg>/gi, '\n')
+      .replace(/<bgimg>[\s\S]*?<\/bgimg>/gi, '\n')
+      .replace(/<whimg>[\s\S]*?<\/whimg>/gi, '\n')
+      .replace(/<option\b[^>]*>[\s\S]*?<\/option>/gi, '\n')
+      .replace(/<background\b[^>]*\/?>/gi, '\n')
+      .replace(/<sprite\b[^>]*\/?>/gi, '\n')
+      .replace(/<pixiInit\b[^>]*\/?>/gi, '\n')
+      .replace(/<pixiPerform\b[^>]*\/?>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<p(?:\s[^>]*)?>/gi, '')
+      .replace(/<\/styled>/gi, '\n')
+      .replace(/<styled\b[^>]*>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n'),
+  )
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n[ \t]+/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -177,8 +208,7 @@ function stripOuterQuotes(text) {
 }
 
 function normalizeSpeakerName(name) {
-  return String(name || '')
-    .replace(RE_IMAGE_PLACEHOLDER_INLINE, '')
+  return stripImagePlaceholders(String(name || ''))
     .replace(/^[“”"'‘’「」『』\s]+/, '')
     .replace(/[“”"'‘’「」『』\s]+$/, '')
     .trim();
@@ -192,7 +222,8 @@ function preprocessSimplifiedFormat(html) {
 
   html = cleanIllegalTags(html);
 
-  const simplifiedPattern = /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*[""\"'「『（(]([\s\S]+?)[""\"'」』）)]\s*<\/p>/gi;
+  const simplifiedPattern =
+    /<p>\s*([^[\]<>:：]{1,20})\[([^\]]+)\]\s*[：:]\s*[""\"'「『（(]([\s\S]+?)[""\"'」』）)]\s*<\/p>/gi;
 
   let result = html;
   let match;
@@ -279,12 +310,20 @@ export function parseGalgameContent(html, messageId) {
   // 性能优化：检查缓存
   const popup1Html = popup1Match ? popup1Match[1].trim() : '';
   const popup2Html = popup2Match ? popup2Match[1].trim() : '';
+  // 每页文字量：用户手动指定 > UI 层实测容量 > 按字号反比估算兜底
+  const BASE_SEG_LENGTH = 120;
+  const segLengthOverride = Math.round(Number(settings.dialogSegLengthOverride) || 0);
+  const MAX_SEG_LENGTH =
+    segLengthOverride > 0
+      ? Math.max(40, Math.min(2000, segLengthOverride))
+      : (_measuredSegLength ?? Math.max(40, Math.min(360, Math.round(BASE_SEG_LENGTH / getDialogFontScale(settings)))));
   const cacheSource = [
     html,
     popup1Html,
     popup2Html,
     simpleStorybookMode ? 'simple-storybook' : 'standard-galgame',
     settings.ttsBilingualZhJaEnabled === true ? 'tts-bilingual-zh-ja' : 'tts-default',
+    `seg-len-${MAX_SEG_LENGTH}`,
   ].join('\n---gal-cache-boundary---\n');
   const cacheKey = `${cacheSource.length}_${hashCacheSource(cacheSource)}`;
   if (parseCache.has(cacheKey)) {
@@ -303,6 +342,8 @@ export function parseGalgameContent(html, messageId) {
     bgm: null,
     options: [],
     backgroundChanges: [],
+    // 本次分页使用的每页字符数，渲染后与实测容量比对以决定是否需要重排
+    segLength: MAX_SEG_LENGTH,
   };
 
   // 移除 highlight.js 标签
@@ -385,7 +426,9 @@ export function parseGalgameContent(html, messageId) {
       bananaPrompt: lastBg.bananaPrompt,
     };
     result.backgroundChanges = backgroundChanges;
-    console.log(`[${SCRIPT_NAME}] [DEBUG] 消息包含 ${backgroundChanges.length} 个背景切换点，最终背景: "${lastBg.scene}"`);
+    console.log(
+      `[${SCRIPT_NAME}] [DEBUG] 消息包含 ${backgroundChanges.length} 个背景切换点，最终背景: "${lastBg.scene}"`,
+    );
   }
 
   function getBackgroundAtPosition(position) {
@@ -473,10 +516,75 @@ export function parseGalgameContent(html, messageId) {
     });
   }
 
+  // 解析所有 <styled> 标签（标准模式与绘本模式共用）
+  function collectStyledBlocks(sourceContent) {
+    const blocks = [];
+    const styledRegex = /<styled\b([^>]*)>([\s\S]*?)<\/styled>/gi;
+    let styledMatch;
+    while ((styledMatch = styledRegex.exec(sourceContent)) !== null) {
+      const styledAttrs = parseTagAttributes(styledMatch[1] || '');
+      const styledType = String(styledAttrs.type || '').trim();
+      if (!styledType) continue;
+      const styledBody = styledMatch[2].trim();
+      if (!styledBody) continue;
+
+      // 解析消息行: "发送者: 内容" 或纯文本
+      // 支持字面量 "\n" / "\r\n" 作为换行（常见于用户直接输入标签文本）
+      const normalizedStyledBody = styledBody
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/\\r\\n/g, '\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\n');
+      const styledLines = normalizedStyledBody
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean);
+      const parsedLines = styledLines.map(line => {
+        const colonMatch = line.match(/^([^:：]{1,20})[：:]\s*(.+)$/);
+        if (colonMatch) {
+          return { sender: colonMatch[1].trim(), text: colonMatch[2].trim() };
+        }
+        return { sender: null, text: line };
+      });
+
+      blocks.push({
+        position: styledMatch.index,
+        endPosition: styledMatch.index + styledMatch[0].length,
+        styleType: styledType,
+        from: styledAttrs.from || null,
+        to: styledAttrs.to || null,
+        title: styledAttrs.title || null,
+        date: styledAttrs.date || null,
+        lines: parsedLines,
+      });
+      console.log(
+        `[${SCRIPT_NAME}] [DEBUG] 解析到 styled 块[${styledMatch.index}]: type="${styledType}", ${parsedLines.length}行`,
+      );
+    }
+    return blocks;
+  }
+
+  function buildStyledSegment(block) {
+    const bgAtThisPos = getBackgroundAtPosition(block.position);
+    return {
+      type: 'styled',
+      speaker: null,
+      text: block.lines.map(l => l.text).join(' '),
+      expression: null,
+      styleType: block.styleType,
+      styledFrom: block.from,
+      styledTo: block.to,
+      styledTitle: block.title,
+      styledDate: block.date,
+      styledLines: block.lines,
+      backgroundScene: bgAtThisPos ? bgAtThisPos.scene : null,
+      _sourcePos: block.position,
+    };
+  }
+
   if (simpleStorybookMode) {
-    const plainPTagRegex = /<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/gi;
-    let plainPMatch;
-    let cursor = 0;
+    const styledBlocks = collectStyledBlocks(content).sort((a, b) => a.position - b.position);
+    const allStorybookItems = [];
 
     const pushPlainStorybookText = (rawText, sourcePos) => {
       const normalizedText = normalizePlainStorybookText(rawText);
@@ -493,277 +601,260 @@ export function parseGalgameContent(html, messageId) {
         if (bgAtThisPos) {
           seg.backgroundScene = bgAtThisPos.scene;
         }
-        result.segments.push(seg);
+        allStorybookItems.push({ position: sourcePos, data: seg });
       }
     };
 
-    while ((plainPMatch = plainPTagRegex.exec(content)) !== null) {
-      if (plainPMatch.index > cursor) {
-        pushPlainStorybookText(content.substring(cursor, plainPMatch.index), cursor);
+    // 按范围处理纯文本（<p> 内外都走 pushPlainStorybookText），位置用真实偏移
+    const processPlainRange = (rangeStart, rangeEnd) => {
+      if (rangeEnd <= rangeStart) return;
+      const chunk = content.slice(rangeStart, rangeEnd);
+      const plainPTagRegex = /<p(?:\s[^>]*)?>([\s\S]*?)<\/p>/gi;
+      let plainPMatch;
+      let cursor = 0;
+      while ((plainPMatch = plainPTagRegex.exec(chunk)) !== null) {
+        if (plainPMatch.index > cursor) {
+          pushPlainStorybookText(chunk.substring(cursor, plainPMatch.index), rangeStart + cursor);
+        }
+        pushPlainStorybookText(plainPMatch[1], rangeStart + plainPMatch.index);
+        cursor = plainPTagRegex.lastIndex;
       }
-      pushPlainStorybookText(plainPMatch[1], plainPMatch.index);
-      cursor = plainPTagRegex.lastIndex;
-    }
+      if (cursor < chunk.length) {
+        pushPlainStorybookText(chunk.substring(cursor), rangeStart + cursor);
+      }
+    };
 
-    if (cursor < content.length) {
-      pushPlainStorybookText(content.substring(cursor), cursor);
+    // 以 styled 块为切点分割正文：即使正文没有 <p> 标签（自然段纯文本），
+    // styled 段也会落在它在原文中的真实位置，而不是被排到最后
+    let scanPos = 0;
+    for (const block of styledBlocks) {
+      processPlainRange(scanPos, block.position);
+      allStorybookItems.push({ position: block.position, data: buildStyledSegment(block) });
+      scanPos = block.endPosition;
+    }
+    processPlainRange(scanPos, content.length);
+
+    allStorybookItems.sort((a, b) => a.position - b.position);
+    for (const item of allStorybookItems) {
+      result.segments.push(item.data);
     }
   } else {
-  // 解析所有 <styled> 标签
-  const styledBlocks = [];
-  const styledRegex = /<styled\b([^>]*)>([\s\S]*?)<\/styled>/gi;
-  let styledMatch;
-  while ((styledMatch = styledRegex.exec(content)) !== null) {
-    const styledAttrs = parseTagAttributes(styledMatch[1] || '');
-    const styledType = String(styledAttrs.type || '').trim();
-    if (!styledType) continue;
-    const styledBody = styledMatch[2].trim();
-    if (!styledBody) continue;
+    const styledBlocks = collectStyledBlocks(content);
 
-    // 解析消息行: "发送者: 内容" 或纯文本
-    // 支持字面量 "\n" / "\r\n" 作为换行（常见于用户直接输入标签文本）
-    const normalizedStyledBody = styledBody
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/\\r\\n/g, '\n')
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\n');
-    const styledLines = normalizedStyledBody.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const parsedLines = styledLines.map(line => {
-      const colonMatch = line.match(/^([^:：]{1,20})[：:]\s*(.+)$/);
-      if (colonMatch) {
-        return { sender: colonMatch[1].trim(), text: colonMatch[2].trim() };
-      }
-      return { sender: null, text: line };
-    });
+    // 动态获取表情列表
+    const expressionNames = getAllExpressions();
+    const expressionPattern = expressionNames.map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 
-    styledBlocks.push({
-      position: styledMatch.index,
-      styleType: styledType,
-      from: styledAttrs.from || null,
-      to: styledAttrs.to || null,
-      title: styledAttrs.title || null,
-      date: styledAttrs.date || null,
-      lines: parsedLines,
-    });
-    console.log(`[${SCRIPT_NAME}] [DEBUG] 解析到 styled 块[${styledMatch.index}]: type="${styledType}", ${parsedLines.length}行`);
-  }
+    function parseTTSConfig(ttsString, defaultSpeaker) {
+      if (!ttsString) return null;
 
-  // 动态获取表情列表
-  const expressionNames = getAllExpressions();
-  const expressionPattern = expressionNames.map(e => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+      const config = {
+        speaker: defaultSpeaker,
+        context: null,
+      };
 
-  function parseTTSConfig(ttsString, defaultSpeaker) {
-    if (!ttsString) return null;
+      const pairs = ttsString.split(';');
+      for (const pair of pairs) {
+        const [key, value] = pair.trim().split('=');
+        if (key && value) {
+          const trimmedKey = key.trim();
+          const trimmedValue = value.trim();
 
-    const config = {
-      speaker: defaultSpeaker,
-      context: null,
-    };
-
-    const pairs = ttsString.split(';');
-    for (const pair of pairs) {
-      const [key, value] = pair.trim().split('=');
-      if (key && value) {
-        const trimmedKey = key.trim();
-        const trimmedValue = value.trim();
-
-        if (trimmedKey === 'speaker') config.speaker = trimmedValue;
-        else if (trimmedKey === 'context') config.context = trimmedValue;
-      }
-    }
-
-    return config;
-  }
-
-  function parseSegmentText(text, ttsConfigString = null) {
-    if (!text) return null;
-    text = text.trim();
-    if (!text) return null;
-
-    text = text.replace(/<span[^>]*>/gi, '').replace(/<\/span>/gi, '');
-    text = text.replace(/<q>([^<]*)<\/q>/gi, '$1');
-    text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, '$1');
-    text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, '$1');
-    text = text.replace(/<pixiInit\b[^>]*\/?>/gi, '');
-    text = text.replace(/<pixiPerform\b[^>]*\/?>/gi, '');
-    text = text.replace(RE_IMAGE_PLACEHOLDER_INLINE, '');
-    text = removeImagePlaceholderLines(text).trim();
-    text = stripOuterQuotes(text);
-    if (!text) return null;
-
-    let expression = null;
-    const expressionTagRegex = new RegExp(`<(${expressionPattern})>`, 'i');
-    const exprMatch = text.match(expressionTagRegex);
-    if (exprMatch) {
-      expression = exprMatch[1];
-      text = text.replace(expressionTagRegex, '').trim();
-    }
-
-    let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["'“‘「『（(]([\s\S]+)["'”’」』）)]\s*$/);
-    if (!dialogueMatch) {
-      dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
-    }
-
-    if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
-      const speaker = normalizeSpeakerName(dialogueMatch[1]);
-      const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
-      if (!speaker || !dialogue) return null;
-      const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
-
-      if (speaker === '旁白') {
-        const narrationSeg = {
-          type: 'narration',
-          speaker: null,
-          text: splitResult.displayText,
-          expression: null,
-        };
-        if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
-          narrationSeg.ttsText = splitResult.ttsText;
+          if (trimmedKey === 'speaker') config.speaker = trimmedValue;
+          else if (trimmedKey === 'context') config.context = trimmedValue;
         }
-        return narrationSeg;
       }
 
-      if (speaker.length <= 20 && speaker.length > 0) {
-        const segResult = {
-          type: 'dialogue',
-          speaker: speaker,
-          text: splitResult.displayText,
-          expression: expression || '默认',
-        };
-        if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
-          segResult.ttsText = splitResult.ttsText;
+      return config;
+    }
+
+    function parseSegmentText(text, ttsConfigString = null) {
+      if (!text) return null;
+      text = text.trim();
+      if (!text) return null;
+
+      text = text.replace(/<span[^>]*>/gi, '').replace(/<\/span>/gi, '');
+      text = text.replace(/<q>([^<]*)<\/q>/gi, '$1');
+      text = text.replace(/<q[^>]*>([^<]*)<\/q>/gi, '$1');
+      text = text.replace(/<q[^>]*>([\s\S]*?)<\/q>/gi, '$1');
+      text = text.replace(/<pixiInit\b[^>]*\/?>/gi, '');
+      text = text.replace(/<pixiPerform\b[^>]*\/?>/gi, '');
+      text = stripImagePlaceholders(text).trim();
+      text = stripOuterQuotes(text);
+      if (!text) return null;
+
+      let expression = null;
+      const expressionTagRegex = new RegExp(`<(${expressionPattern})>`, 'i');
+      const exprMatch = text.match(expressionTagRegex);
+      if (exprMatch) {
+        expression = exprMatch[1];
+        text = text.replace(expressionTagRegex, '').trim();
+      }
+
+      let dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*["'“‘「『（(]([\s\S]+)["'”’」』）)]\s*$/);
+      if (!dialogueMatch) {
+        dialogueMatch = text.match(/^(?:<[^>]+>)?([^:：]{1,20})[：:]\s*([\s\S]+)$/);
+      }
+
+      if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
+        const speaker = normalizeSpeakerName(dialogueMatch[1]);
+        const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
+        if (!speaker || !dialogue) return null;
+        const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
+
+        if (speaker === '旁白') {
+          const narrationSeg = {
+            type: 'narration',
+            speaker: null,
+            text: splitResult.displayText,
+            expression: null,
+          };
+          if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+            narrationSeg.ttsText = splitResult.ttsText;
+          }
+          return narrationSeg;
         }
-        if (ttsConfigString) {
-          segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+
+        if (speaker.length <= 20 && speaker.length > 0) {
+          const segResult = {
+            type: 'dialogue',
+            speaker: speaker,
+            text: splitResult.displayText,
+            expression: expression || '默认',
+          };
+          if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
+            segResult.ttsText = splitResult.ttsText;
+          }
+          if (ttsConfigString) {
+            segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+          }
+          return segResult;
         }
-        return segResult;
       }
-    }
 
-    const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
-    const narrationResult = {
-      type: 'narration',
-      speaker: null,
-      text: narrationSplit.displayText,
-      expression: null,
-    };
-    if (narrationSplit.ttsText && narrationSplit.ttsText !== narrationSplit.displayText) {
-      narrationResult.ttsText = narrationSplit.ttsText;
-    }
-    return narrationResult;
-  }
-
-  // 解析所有已闭合的 <p> 标签和 <styled> 块，统一按位置排序
-  const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
-  const allContentItems = []; // { position, type, data }
-
-  let match;
-  let lastClosedPTagEnd = 0;
-  while ((match = pTagRegex.exec(content)) !== null) {
-    const ttsConfig = match[1];
-    const seg = parseSegmentText(match[2], ttsConfig);
-    if (seg) {
-      seg._sourcePos = match.index;
-      const bgAtThisPos = getBackgroundAtPosition(match.index);
-      if (bgAtThisPos) {
-        seg.backgroundScene = bgAtThisPos.scene;
+      const narrationSplit = splitZhJaForDisplayAndTts(text, settings.ttsBilingualZhJaEnabled === true);
+      const narrationResult = {
+        type: 'narration',
+        speaker: null,
+        text: narrationSplit.displayText,
+        expression: null,
+      };
+      if (narrationSplit.ttsText && narrationSplit.ttsText !== narrationSplit.displayText) {
+        narrationResult.ttsText = narrationSplit.ttsText;
       }
-      allContentItems.push({ position: match.index, type: 'segment', data: seg });
+      return narrationResult;
     }
-    lastClosedPTagEnd = pTagRegex.lastIndex;
-  }
 
-  // 将 styled blocks 作为独立 segment 加入
-  for (const block of styledBlocks) {
-    const bgAtThisPos = getBackgroundAtPosition(block.position);
-    const styledSeg = {
-      type: 'styled',
-      speaker: null,
-      text: block.lines.map(l => l.text).join(' '),
-      expression: null,
-      styleType: block.styleType,
-      styledFrom: block.from,
-      styledTo: block.to,
-      styledTitle: block.title,
-      styledDate: block.date,
-      styledLines: block.lines,
-      backgroundScene: bgAtThisPos ? bgAtThisPos.scene : null,
-      _sourcePos: block.position,
-    };
-    allContentItems.push({ position: block.position, type: 'segment', data: styledSeg });
-  }
+    // 解析所有已闭合的 <p> 标签和 <styled> 块，统一按位置排序
+    const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
+    const allContentItems = []; // { position, type, data }
 
-  // 按位置排序后统一加入 segments
-  allContentItems.sort((a, b) => a.position - b.position);
-  for (const item of allContentItems) {
-    if (result.segments.length < 3) {
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${item.position} 类型:${item.data.type} 背景:${item.data.backgroundScene || 'null'} 文本:${(item.data.text || '').substring(0, 20)}...`);
-    }
-    result.segments.push(item.data);
-  }
-  // 尝试匹配末尾未闭合的 <p> 标签 (流式输出)
-  const remainingText = content.substring(lastClosedPTagEnd);
-  const unclosedPMatch = remainingText.match(/<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*)$/i);
-  if (unclosedPMatch) {
-    const rawContent = unclosedPMatch[2];
-    const ttsConfig = unclosedPMatch[1];
-    if (rawContent && rawContent.trim()) {
-      const seg = parseSegmentText(rawContent, ttsConfig);
+    let match;
+    let lastClosedPTagEnd = 0;
+    while ((match = pTagRegex.exec(content)) !== null) {
+      const ttsConfig = match[1];
+      const seg = parseSegmentText(match[2], ttsConfig);
       if (seg) {
-        const segPos = lastClosedPTagEnd + unclosedPMatch.index;
-        seg._sourcePos = segPos;
-        const bgAtThisPos = getBackgroundAtPosition(segPos);
+        seg._sourcePos = match.index;
+        const bgAtThisPos = getBackgroundAtPosition(match.index);
         if (bgAtThisPos) {
           seg.backgroundScene = bgAtThisPos.scene;
         }
-        result.segments.push(seg);
+        allContentItems.push({ position: match.index, type: 'segment', data: seg });
+      }
+      lastClosedPTagEnd = pTagRegex.lastIndex;
+    }
+
+    // 将 styled blocks 作为独立 segment 加入
+    for (const block of styledBlocks) {
+      const bgAtThisPos = getBackgroundAtPosition(block.position);
+      const styledSeg = {
+        type: 'styled',
+        speaker: null,
+        text: block.lines.map(l => l.text).join(' '),
+        expression: null,
+        styleType: block.styleType,
+        styledFrom: block.from,
+        styledTo: block.to,
+        styledTitle: block.title,
+        styledDate: block.date,
+        styledLines: block.lines,
+        backgroundScene: bgAtThisPos ? bgAtThisPos.scene : null,
+        _sourcePos: block.position,
+      };
+      allContentItems.push({ position: block.position, type: 'segment', data: styledSeg });
+    }
+
+    // 按位置排序后统一加入 segments
+    allContentItems.sort((a, b) => a.position - b.position);
+    for (const item of allContentItems) {
+      if (result.segments.length < 3) {
+        console.log(
+          `[${SCRIPT_NAME}] [DEBUG] 段落[${result.segments.length}] 位置:${item.position} 类型:${item.data.type} 背景:${item.data.backgroundScene || 'null'} 文本:${(item.data.text || '').substring(0, 20)}...`,
+        );
+      }
+      result.segments.push(item.data);
+    }
+    // 尝试匹配末尾未闭合的 <p> 标签 (流式输出)
+    const remainingText = content.substring(lastClosedPTagEnd);
+    const unclosedPMatch = remainingText.match(/<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*)$/i);
+    if (unclosedPMatch) {
+      const rawContent = unclosedPMatch[2];
+      const ttsConfig = unclosedPMatch[1];
+      if (rawContent && rawContent.trim()) {
+        const seg = parseSegmentText(rawContent, ttsConfig);
+        if (seg) {
+          const segPos = lastClosedPTagEnd + unclosedPMatch.index;
+          seg._sourcePos = segPos;
+          const bgAtThisPos = getBackgroundAtPosition(segPos);
+          if (bgAtThisPos) {
+            seg.backgroundScene = bgAtThisPos.scene;
+          }
+          result.segments.push(seg);
+        }
       }
     }
-  }
 
-  // 如果没有 <p> 标签，尝试直接解析纯文本
-  if (result.segments.length === 0) {
-    const plainText = content
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]+>/g, '\n')
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n');
-    const normalizedText = removeImagePlaceholderLines(plainText)
-      .replace(RE_IMAGE_PLACEHOLDER_INLINE, '')
-      .trim();
+    // 如果没有 <p> 标签，尝试直接解析纯文本
+    if (result.segments.length === 0) {
+      const plainText = content
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '\n')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+      const normalizedText = stripImagePlaceholders(plainText).trim();
 
-    if (normalizedText) {
-      const lines = normalizedText
-        .split('\n')
-        .map(line => line.trim())
-        .filter(Boolean);
+      if (normalizedText) {
+        const lines = normalizedText
+          .split('\n')
+          .map(line => line.trim())
+          .filter(Boolean);
 
-      for (const line of lines) {
-        const seg = parseSegmentText(line);
-        if (!seg) continue;
-        seg._sourcePos = content.length;
-        if (backgroundChanges.length > 0) {
-          seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+        for (const line of lines) {
+          const seg = parseSegmentText(line);
+          if (!seg) continue;
+          seg._sourcePos = content.length;
+          if (backgroundChanges.length > 0) {
+            seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+          }
+          result.segments.push(seg);
         }
-        result.segments.push(seg);
-      }
 
-      if (result.segments.length === 0) {
-        const seg = {
-          type: 'narration',
-          speaker: null,
-          text: normalizedText,
-          expression: null,
-          _sourcePos: content.length,
-        };
-        if (backgroundChanges.length > 0) {
-          seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+        if (result.segments.length === 0) {
+          const seg = {
+            type: 'narration',
+            speaker: null,
+            text: normalizedText,
+            expression: null,
+            _sourcePos: content.length,
+          };
+          if (backgroundChanges.length > 0) {
+            seg.backgroundScene = backgroundChanges[backgroundChanges.length - 1].scene;
+          }
+          result.segments.push(seg);
         }
-        result.segments.push(seg);
       }
     }
-  }
-
   }
 
   if (!simpleStorybookMode && spriteCommands.length > 0 && result.segments.length > 0) {
@@ -835,14 +926,42 @@ export function parseGalgameContent(html, messageId) {
     }
   }
 
-  // 切分过长段落
-  const MAX_SEG_LENGTH = 120;
+  // 合并相邻短段落：同类型同说话人的连续段落并到一页，直到接近每页容量。
+  // 段落间用 \n 分隔，渲染层按段落分行显示。绘本模式同样合并（否则一行一页浪费空间）
+  {
+    const mergedSegments = [];
+    const hasOwnTtsText = s => typeof s.ttsText === 'string' && s.ttsText.trim() && s.ttsText !== s.text;
+    for (const seg of result.segments) {
+      const prev = mergedSegments[mergedSegments.length - 1];
+      const canMerge =
+        prev &&
+        prev.type === seg.type &&
+        (seg.type === 'narration' || seg.type === 'dialogue') &&
+        (prev.speaker || null) === (seg.speaker || null) &&
+        prev.text &&
+        seg.text &&
+        !seg.spriteCommands &&
+        !seg.backgroundCommands &&
+        !seg.effectOps &&
+        (prev.backgroundScene || null) === (seg.backgroundScene || null) &&
+        !hasOwnTtsText(seg) &&
+        !hasOwnTtsText(prev) &&
+        (!seg.expression || seg.expression === prev.expression) &&
+        prev.text.length + seg.text.length + 1 <= MAX_SEG_LENGTH;
+      if (canMerge) {
+        prev.text = `${prev.text}\n${seg.text}`;
+      } else {
+        mergedSegments.push(seg);
+      }
+    }
+    result.segments = mergedSegments;
+  }
+
+  // 切分过长段落（MAX_SEG_LENGTH 在函数开头按字号计算）
   const finalSegments = [];
   result.segments.forEach(seg => {
     const hasDedicatedTtsText =
-      typeof seg.ttsText === 'string' &&
-      seg.ttsText.trim().length > 0 &&
-      seg.ttsText !== seg.text;
+      typeof seg.ttsText === 'string' && seg.ttsText.trim().length > 0 && seg.ttsText !== seg.text;
     if (hasDedicatedTtsText || seg.type === 'styled') {
       finalSegments.push(seg);
       return;

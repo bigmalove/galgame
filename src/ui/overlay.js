@@ -1,10 +1,10 @@
 import { getTTSEnabled } from '../audio/tts-config.js';
-import { CUSTOM_SKIN_ID, SCRIPT_NAME, TWILIGHT_FAMILY_SKIN_IDS } from '../core/constants.js';
+import { ANCIENT_FAMILY_SKIN_IDS, CUSTOM_SKIN_ID, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, TWILIGHT_FAMILY_SKIN_IDS, YANYUN_FAMILY_SKIN_IDS } from '../core/constants.js';
 import { buildGalMobileMenuButtonsHtml, DEFAULT_GAL_MOBILE_MENU_ACTIONS } from '../core/custom-skin-footer-buttons.js';
 import { $, topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
-import { hasUiSkinProfileId } from '../db/ui-skin-profiles.js';
+import { hasHtmlSkinId } from '../db/html-skins.js';
 import { pausePixiEffects, resizePixiEffects, resumePixiEffects } from '../effects/pixi-effect-manager.js';
 import { normalizeLocationStatusIconClass, normalizeTimeStatusIconClass } from '../utils/status-popup-icons.js';
 import {
@@ -14,6 +14,8 @@ import {
   getTwilightOverlayClasses,
   isTwilightSkinSelected,
 } from './skin-twilight.js';
+import { applyJrpgSkinAssets, clearJrpgSkinAssets, isJrpgSkinSelected } from './skin-jrpg-runtime.js';
+import { applyYanyunSkinAssets, clearYanyunSkinAssets, isYanyunSkinSelected } from './skin-yanyun-runtime.js';
 
 // ============================================
 // 全局覆盖层架构
@@ -27,7 +29,7 @@ let overlayHeightLockState = {
   lastOverlayHeight: 0,
 };
 const OVERLAY_HEIGHT_RECALC_THRESHOLD = 24;
-const BUILTIN_SKIN_CLASS_LIST = ['skin-ancient', 'skin-persona', 'skin-jrpg', 'skin-classic', ...TWILIGHT_FAMILY_SKIN_IDS];
+const BUILTIN_SKIN_CLASS_LIST = [DEFAULT_DARK_SKIN_ID, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, 'skin-classic', ...ANCIENT_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...TWILIGHT_FAMILY_SKIN_IDS];
 
 export function getCurrentDisplayMesId() {
   return currentDisplayMesId;
@@ -64,10 +66,11 @@ function syncOverlaySkinClass($overlay) {
   const rawSkin = String(settings?.skin || 'none').trim();
   BUILTIN_SKIN_CLASS_LIST.forEach(skinClass => $overlay.removeClass(skinClass));
   $overlay.removeClass(CUSTOM_SKIN_ID);
+  $overlay.removeClass('html-skin');
 
   if (!rawSkin || rawSkin === 'none' || rawSkin === 'skin-western') return;
-  if (hasUiSkinProfileId(rawSkin)) {
-    $overlay.addClass(CUSTOM_SKIN_ID);
+  if (hasHtmlSkinId(rawSkin)) {
+    $overlay.addClass('html-skin');
     return;
   }
   if (BUILTIN_SKIN_CLASS_LIST.includes(rawSkin)) {
@@ -275,11 +278,22 @@ function buildOverlayInnerHtml({ settings, locationIconClass, timeIconClass }) {
 
 function syncOverlayThemeAssets($overlay, rawSkin) {
   if (!$overlay?.length) return;
+  const overlay = $overlay[0];
   if (isTwilightSkinSelected(rawSkin)) {
-    applyTwilightSkinAssets($overlay[0]);
-    return;
+    applyTwilightSkinAssets(overlay);
+  } else {
+    clearTwilightSkinAssets(overlay);
   }
-  clearTwilightSkinAssets($overlay[0]);
+  if (isJrpgSkinSelected(rawSkin)) {
+    applyJrpgSkinAssets(overlay);
+  } else {
+    clearJrpgSkinAssets(overlay);
+  }
+  if (isYanyunSkinSelected(rawSkin)) {
+    applyYanyunSkinAssets(overlay);
+  } else {
+    clearYanyunSkinAssets(overlay);
+  }
 }
 
 function snapshotOverlayState($overlay) {
@@ -416,6 +430,32 @@ export function renderMainInterface() {
 // ============================================
 // 缩放和布局
 // ============================================
+
+// 覆盖层激活期间把 #chat 滚动位置钉在 overlay 上：
+// 生成时 ST 会程序化滚到底部（新楼层在 overlay 之后），overflow:hidden 挡不住 scrollTop 赋值，
+// 会把 overlay 滚出视野造成"界面消失几秒"。overflow 已锁死时用户本就无法滚动，钉住是安全的。
+let overlayScrollPinHandler = null;
+
+export function startOverlayScrollPin() {
+  const chatEl = topWindow.document.getElementById('chat');
+  if (!chatEl || overlayScrollPinHandler) return;
+  overlayScrollPinHandler = () => {
+    const overlay = topWindow.document.getElementById('gal-global-overlay');
+    if (!overlay || !overlay.classList.contains('active')) return;
+    const target = overlay.offsetTop;
+    if (Math.abs(chatEl.scrollTop - target) > 2) {
+      chatEl.scrollTop = target;
+    }
+  };
+  chatEl.addEventListener('scroll', overlayScrollPinHandler, { passive: true });
+}
+
+export function stopOverlayScrollPin() {
+  if (!overlayScrollPinHandler) return;
+  const chatEl = topWindow.document.getElementById('chat');
+  if (chatEl) chatEl.removeEventListener('scroll', overlayScrollPinHandler);
+  overlayScrollPinHandler = null;
+}
 
 export function setChatScrollLock(locked) {
   const targetDoc = topWindow.document;
@@ -580,6 +620,7 @@ export function showGlobalOverlay() {
     $overlay.addClass('active');
     resumePixiEffects();
     setChatScrollLock(true);
+    startOverlayScrollPin();
     overlayHeightLockState.lastViewportHeight = 0;
     overlayHeightLockState.lastOverlayHeight = 0;
     setTimeout(() => {
@@ -610,6 +651,7 @@ export function hideGlobalOverlay() {
   const targetDoc = topWindow.document;
   $(targetDoc).find('#gal-global-overlay').removeClass('active');
   pausePixiEffects();
+  stopOverlayScrollPin();
   setChatScrollLock(false);
   overlayHeightLockState.lastViewportHeight = 0;
   overlayHeightLockState.lastOverlayHeight = 0;

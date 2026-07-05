@@ -335,7 +335,7 @@ async function transferAllResourcesToDefaultPack(packId) {
   });
 
   console.log(`[${SCRIPT_NAME}] moved ${spriteCount} sprites, ${bgCount} backgrounds, ${mapCount} maps and ${cgCount} cgs from pack ${packId} to default pack`);
-  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount, uiSkins: 0 };
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
 }
 
 export async function getPackResourceCount(packId) {
@@ -394,7 +394,37 @@ export async function getPackResourceCount(packId) {
     request.onerror = () => resolve();
   });
 
-  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount, uiSkins: 0 };
+  return { sprites: spriteCount, backgrounds: bgCount, maps: mapCount, cgs: cgCount };
+}
+
+// 统计全库资源总数（不区分图包，直接整表 count，包含悬挂在已删图包上的资源）
+export async function getTotalResourceCounts() {
+  if (!getDb()) await initDB();
+  const db = getDb();
+  const countStore = (storeName) => new Promise((resolve, reject) => {
+    const transaction = db.transaction([storeName], 'readonly');
+    const request = transaction.objectStore(storeName).count();
+    request.onsuccess = () => resolve(request.result || 0);
+    request.onerror = () => reject(request.error);
+  });
+  const [sprites, backgrounds, maps, cgs] = await Promise.all([
+    countStore(STORE_SPRITES),
+    countStore(STORE_BACKGROUNDS),
+    countStore(STORE_MAP_IMAGES),
+    countStore(STORE_SPECIAL_CGS),
+  ]);
+  return { sprites, backgrounds, maps, cgs };
+}
+
+// 全库是否没有任何资源（配置向导首次使用检测用）；统计失败视为非空，避免误弹向导
+export async function isAllPacksEmpty() {
+  try {
+    const counts = await getTotalResourceCounts();
+    return counts.sprites + counts.backgrounds + counts.maps + counts.cgs === 0;
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 全库资源统计失败:`, e);
+    return false;
+  }
 }
 
 export function ensureBackgroundLayers($bgLayer) {
@@ -414,6 +444,7 @@ export function ensureBackgroundLayers($bgLayer) {
 
 export function clearBackgroundLayers($bgLayer) {
   const { $base, $front } = ensureBackgroundLayers($bgLayer);
+  $bgLayer.removeClass('bg-transitioning');
   $base.css('background-image', '');
   $front.removeClass('is-active').css('background-image', '');
 }
@@ -425,11 +456,15 @@ export function setBackgroundWithTransition($bgLayer, bgUrl) {
   if ($front[0]) void $front[0].offsetHeight;
   const token = `${Date.now()}_${Math.random()}`;
   $bgLayer.data('bgTransitionToken', token);
+  $bgLayer.removeClass('bg-transitioning');
+  if ($bgLayer[0]) void $bgLayer[0].offsetHeight;
+  $bgLayer.addClass('bg-transitioning');
   $front.addClass('is-active');
   setTimeout(() => {
     if ($bgLayer.data('bgTransitionToken') !== token) return;
     $base.css('background-image', `url(${bgUrl})`);
     $front.removeClass('is-active').css('background-image', '');
+    $bgLayer.removeClass('bg-transitioning');
   }, BG_TRANSITION_MS);
 }
 

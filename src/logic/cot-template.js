@@ -13,6 +13,71 @@ import { getAllExpressions } from '../utils/expressions.js';
 
 export async function generateCOTTemplate(options = {}) {
   const settings = getSettings();
+
+  const locationStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_LOCATION_HTML_KEY) || '').trim();
+  const timeStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_TIME_HTML_KEY) || '').trim();
+  const locationStatusTag = locationStatusHtml ? `<弹窗一>${locationStatusHtml}</弹窗一>` : '';
+  const timeStatusTag = timeStatusHtml ? `<弹窗二>${timeStatusHtml}</弹窗二>` : '';
+  const statusTagInstructions = [];
+  if (locationStatusTag) statusTagInstructions.push(`- 弹窗一（必须原样输出）: ${locationStatusTag}`);
+  if (timeStatusTag) statusTagInstructions.push(`- 弹窗二（必须原样输出）: ${timeStatusTag}`);
+  const buildStatusTagSection = placementHint =>
+    statusTagInstructions.length > 0
+      ? `
+### 状态栏标签（根据用户配置自动注入）
+${statusTagInstructions.join('\n')}
+- ${placementHint}消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
+`
+      : '';
+  const statusTagSection = buildStatusTagSection('以上标签请放在 <maintext> 内。');
+
+  const pixiEffectNames = ['rain', 'snow', 'heavySnow', 'cherryBlossoms', 'fog', 'fireflies', 'embers', 'screenFlash'];
+  const pixiEffectListText = pixiEffectNames.join(', ');
+  const pixiEffectTagSection =
+    settings.effectsEnabled === false
+      ? ''
+      : `
+### Pixi 特效标签（可选）
+- 可用特效: ${pixiEffectListText}
+- 叠加特效格式: \`<pixiPerform name="特效名" />\`
+- 新消息切换时系统会自动清空特效，无需输出 \`<pixiInit />\`
+- 使用规则:
+  - 仅在场景氛围明显变化时使用，避免每句都触发。
+  - 特效层由系统按特效名自动分配（雾固定背景层，其余固定前景层），不要输出 \`layer\`。
+  - 同一场景不要高频重复输出同一个特效。
+  - \`screenFlash\` 用于短暂强调（爆炸、雷电、强光），不要连续刷屏。
+`;
+
+  const bgmWhitelist = Array.from(
+    new Set(
+      (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : [])
+        .map(name => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+  const bgmWhitelistText = bgmWhitelist.map(name => `  - ${name}`).join('\n');
+  const bgmRuleSection =
+    settings.bgmEnabled === false
+      ? ''
+      : bgmWhitelist.length > 0
+        ? `### 背景音乐 (BGM)
+- **格式**: \`<bgm>歌曲名</bgm>\`
+- **使用规则**:
+  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
+  - **指定歌单（必须遵守）**: 仅允许从以下歌单中选择歌曲，禁止输出列表外曲名。
+${bgmWhitelistText}
+  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
+  - **示例**: \`<bgm>歌曲名</bgm>\``
+        : `### 背景音乐 (BGM)
+- **格式**: \`<bgm>歌曲名</bgm>\`
+- **使用规则**:
+  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
+  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
+  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
+  - **示例**: \`<bgm>歌曲名</bgm>\``;
+
+  const simpleStorybookMode = settings.simpleStorybookMode === true;
+
   const hasProvidedPending = !!(options && Object.prototype.hasOwnProperty.call(options, 'pendingSpecialCg'));
   let pendingSpecialCg = hasProvidedPending ? options.pendingSpecialCg : null;
   if (!hasProvidedPending) {
@@ -32,26 +97,11 @@ export async function generateCOTTemplate(options = {}) {
   } catch (e) {
     console.warn(`[${SCRIPT_NAME}] 获取场景列表失败:`, e);
   }
+  // 绘本模式同样注入图库（本地图包）场景名，模型可输出 <background> 标签切换背景图包中的背景
 
   // 获取完整表情列表（预设 + 自定义）
   const allExpressions = getAllExpressions();
   const expressionListText = allExpressions.join(', ');
-
-  const locationStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_LOCATION_HTML_KEY) || '').trim();
-  const timeStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_TIME_HTML_KEY) || '').trim();
-  const locationStatusTag = locationStatusHtml ? `<弹窗一>${locationStatusHtml}</弹窗一>` : '';
-  const timeStatusTag = timeStatusHtml ? `<弹窗二>${timeStatusHtml}</弹窗二>` : '';
-  const statusTagInstructions = [];
-  if (locationStatusTag) statusTagInstructions.push(`- 弹窗一（必须原样输出）: ${locationStatusTag}`);
-  if (timeStatusTag) statusTagInstructions.push(`- 弹窗二（必须原样输出）: ${timeStatusTag}`);
-  const statusTagSection =
-    statusTagInstructions.length > 0
-      ? `
-### 状态栏标签（根据用户配置自动注入）
-${statusTagInstructions.join('\n')}
-- 以上标签请放在 <maintext> 内。消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
-`
-      : '';
 
   // 构建场景列表说明
   let sceneListText = '';
@@ -60,11 +110,17 @@ ${statusTagInstructions.join('\n')}
   const useWallhaven = bgSrc === 'wallhaven';
   const useChatu8 = bgSrc === 'chatu8';
 
+  const imageGenCgMode = settings.imageGenCgMode === true;
+  // comfyui / novelai 的 TAG 式生图共用的 CG/纯场景模式提示
+  const tagGenCgModeHint = imageGenCgMode
+    ? `\n- 📌 **CG模式已开启**: TAGS 必须包含人物（如 1girl / 1boy、人物外观、表情、动作、构图），生成包含人物的剧情CG画面，而非纯背景。`
+    : `\n- ⚠️ **纯场景模式已开启**: TAGS 只描述环境/风景/建筑等背景元素，禁止包含人物相关标签（如 1girl、boy、person）。`;
+
   if (useBananaImageGen) {
     const bs = settings.bananaImageGen;
 
     let modeHint = '';
-    if (bs.cgMode) {
+    if (imageGenCgMode) {
       modeHint = `📌 **CG模式已开启**：请生成符合剧情的CG画面，必须包含人物（不是单纯背景）。
 - 必须包含：场景环境 + 人物外观/位置/姿态/表情/互动
 - 避免：只有背景、缺少人物`;
@@ -115,14 +171,11 @@ ${customCotText}${localSceneHint}
 - 樱花小径 → "春日午后的樱花小径，粉色花瓣随风飘落，两旁是盛开的樱花树，阳光透过花枝洒下斑驳光影"
 - 废弃工厂 → "荒废多年的工业厂房，锈迹斑斑的机器静默矗立，破碎的玻璃窗透进灰暗的光线，地上杂草丛生"`;
   } else if (useChatu8) {
-    const localSceneHint = sceneNames.length > 0
-      ? `- 可用本地背景: ${sceneNames.join(', ')}
-- 需要切换本地背景时，只输出：\`<background scene="已有场景名" />\``
-      : '- 当前未配置本地背景；画面可由 st-chatu8 插件渲染出的图片承载，可以省略背景标签。';
-
-    sceneListText = `**st-chatu8 图片识别模式**: 本插件只识别 st-chatu8 插件在消息中渲染出的图片，不调用本插件内置背景生图。
-${localSceneHint}
-- 不要输出任何本插件内置背景生图提示。`;
+    sceneListText =
+      sceneNames.length > 0
+        ? `可用背景: ${sceneNames.join(', ')}
+- 需要切换背景时输出：\`<background scene="已有场景名" />\`，只能使用上述列表中的名称。`
+        : '';
   } else if (useWallhaven) {
     const ws = settings.wallhaven;
 
@@ -143,7 +196,7 @@ ${localSceneHint}
     }
     let modeHint = '';
     let appearanceHint = '';
-    if (ws.cgMode) {
+    if (imageGenCgMode) {
       modeHint = `📌 **CG模式已开启**：可以包含人物相关关键词，特别是动漫类角色`;
     } else {
       modeHint = `⚠️ **纯场景模式已开启**：请侧重描述环境/风景/建筑，避免人物相关词汇
@@ -206,13 +259,13 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
   } else if (bgSrc === 'novelai') {
     sceneListText =
       sceneNames.length > 0
-        ? `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。\n- **判断标准**: 如果图库中的场景名称与当前剧情完全匹配，则可复用；否则必须生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的中文名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）\n- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等\n可用场景列表: ${sceneNames.join(', ')}`
-        : `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的中文名称\n- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等`;
+        ? `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。\n- **判断标准**: 如果图库中的场景名称与当前剧情完全匹配，则可复用；否则必须生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的中文名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）\n- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等${tagGenCgModeHint}\n可用场景列表: ${sceneNames.join(', ')}`
+        : `**NovelAI 实时场景生成模式**: 当剧情进入新场景时，根据当前情节生成新场景背景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>danbooru tags, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的中文名称\n- **TAG要求**: 英文逗号分隔的 Danbooru 标签，包含风格、光线、氛围、细节等${tagGenCgModeHint}`;
   } else if (bgSrc === 'comfyui') {
     sceneListText =
       sceneNames.length > 0
-        ? `**实时场景生成模式**: 当剧情进入新场景时，根据当前具体情节生成新场景。\n- **判断标准**: 如果图库中的场景名称与当前剧情时间、地点、氛围完全匹配，则可复用；否则必须生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>visual tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）\n- **TAG要求**: 英文逗号分隔，包含风格、光线、氛围、细节等\n可用场景列表: ${sceneNames.join(', ')}`
-        : `**实时场景生成模式**: 当剧情进入新场景时，根据当前具体情节生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>visual tags, scenery, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的名称，反映当前时刻的独特氛围\n- **TAG要求**: 英文逗号分隔，包含风格、光线、氛围、细节等`;
+        ? `**实时场景生成模式**: 当剧情进入新场景时，根据当前具体情节生成新场景。\n- **判断标准**: 如果图库中的场景名称与当前剧情时间、地点、氛围完全匹配，则可复用；否则必须生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>visual tags, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的名称（如"暴雨中的废弃工厂_夜晚"而非"工厂"）\n- **TAG要求**: 英文逗号分隔，包含风格、光线、氛围、细节等${tagGenCgModeHint}\n可用场景列表: ${sceneNames.join(', ')}`
+        : `**实时场景生成模式**: 当剧情进入新场景时，根据当前具体情节生成新场景。\n- **生成格式**: \`<background scene="新场景名"><bgimg>visual tags, indoors/outdoors, lighting, atmosphere, details...</bgimg>\`\n- **场景名要求**: 使用具体、描述性的名称，反映当前时刻的独特氛围\n- **TAG要求**: 英文逗号分隔，包含风格、光线、氛围、细节等${tagGenCgModeHint}`;
   } else {
     sceneListText =
       sceneNames.length > 0
@@ -223,23 +276,35 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
   const isGenerativeEngine = bgSrc === 'comfyui' || bgSrc === 'banana' || bgSrc === 'novelai';
   const exampleScene = isGenerativeEngine ? '雨夜中的都市街道' : sceneNames.length > 0 ? sceneNames[0] : '场景名';
 
-  const extraRule =
-    useChatu8
-      ? `5. **背景规则**: st-chatu8识别模式不使用本插件内置背景生图；只切换已配置本地背景，或省略背景标签。`
-      : bgSrc === 'banana'
-        ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。`
-        : isGenerativeEngine
-          ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
-          : `5. **背景场景必须使用已配置的场景名称**`;
+  const extraRule = useChatu8
+    ? sceneNames.length > 0
+      ? `5. **背景规则**: 背景标签可选，只能使用可用背景列表中的名称。`
+      : ''
+    : bgSrc === 'banana'
+      ? `5. **场景生成规则**: 优先复用本地场景名；仅在本地无匹配时，使用 \`<background scene="..."><bnimg>自然语言画面描述</bnimg>\` 生成新场景。`
+      : isGenerativeEngine
+        ? `5. **场景生成规则**: 当场景变化且图库中无匹配场景时，使用 \`<background scene="..."><bgimg>TAGS</bgimg>\` 格式生成新场景。TAGS必须是英文单词，逗号分隔，包含：场景类型、光线条件、氛围、风格、关键细节。`
+        : `5. **背景场景必须使用已配置的场景名称**`;
 
   const backgroundTagTitle = useChatu8 ? '背景标签 (可选)' : '背景标签 (场景环境强制)';
   const backgroundUsageRuleSection = useChatu8
     ? `- **使用规则**:
-  - **可选触发**: 只在需要切换已配置本地背景时输出背景标签；如果画面由 st-chatu8 图片承载，可以省略。
-  - **禁止内置生图**: 不要请求本插件生成新背景图。`
+  - **可选触发**: 只在需要切换背景时输出背景标签，也可以省略。`
     : `- **使用规则**:
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。`;
+
+  // 智绘姬模式且没有本地背景时，模型无背景可切，整个背景章节不注入；
+  // 绘本模式下"背景来源=关闭"且图库为空时，模型同样无背景可切，不注入
+  const includeBackgroundSection =
+    !(useChatu8 && sceneNames.length === 0) && !(simpleStorybookMode && bgSrc === 'none' && sceneNames.length === 0);
+  const backgroundTagSection = includeBackgroundSection
+    ? `### ${backgroundTagTitle}
+- 格式: \`<background scene="场景名" />\`
+${backgroundUsageRuleSection}
+- ${sceneListText}`
+    : '';
+  const exampleBackgroundLine = includeBackgroundSection ? `  <background scene="${exampleScene}" />\n` : '';
 
   const pendingSceneAlias = pendingSpecialCg
     ? String(pendingSpecialCg.sceneAlias || pendingSpecialCg.ruleName || pendingSpecialCg.ruleId || '规则名').trim()
@@ -250,49 +315,6 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
 - 请在此次输出适合的段落，**必须**插入一次：\`<background scene="${pendingSceneAlias}" />\`
 `
     : '';
-
-  const pixiEffectNames = ['rain', 'snow', 'heavySnow', 'cherryBlossoms', 'fog', 'fireflies', 'embers', 'screenFlash'];
-  const pixiEffectListText = pixiEffectNames.join(', ');
-  const pixiEffectTagSection =
-    settings.effectsEnabled === false
-      ? ''
-      : `
-### Pixi 特效标签（可选）
-- 可用特效: ${pixiEffectListText}
-- 叠加特效格式: \`<pixiPerform name="特效名" />\`
-- 新消息切换时系统会自动清空特效，无需输出 \`<pixiInit />\`
-- 使用规则:
-  - 仅在场景氛围明显变化时使用，避免每句都触发。
-  - 特效层由系统按特效名自动分配（雾固定背景层，其余固定前景层），不要输出 \`layer\`。
-  - 同一场景不要高频重复输出同一个特效。
-  - \`screenFlash\` 用于短暂强调（爆炸、雷电、强光），不要连续刷屏。
-`;
-
-  const bgmWhitelist = Array.from(
-    new Set(
-      (Array.isArray(settings.bgmWhitelist) ? settings.bgmWhitelist : [])
-        .map(name => String(name || '').trim())
-        .filter(Boolean),
-    ),
-  );
-  const bgmWhitelistText = bgmWhitelist.map(name => `  - ${name}`).join('\n');
-  const bgmRuleSection =
-    bgmWhitelist.length > 0
-      ? `### 背景音乐 (BGM)
-- **格式**: \`<bgm>歌曲名</bgm>\`
-- **使用规则**:
-  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
-  - **指定歌单（必须遵守）**: 仅允许从以下歌单中选择歌曲，禁止输出列表外曲名。
-${bgmWhitelistText}
-  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
-  - **示例**: \`<bgm>歌曲名</bgm>\``
-      : `### 背景音乐 (BGM)
-- **格式**: \`<bgm>歌曲名</bgm>\`
-- **使用规则**:
-  - **主动监测**: 必须根据剧情的发展、场景的气氛变化（如战斗、日常、悲伤、恐怖），**主动**输出适合的BGM标签。
-  - **真实曲名**: AI必须根据知识库中真实存在的、适合当前场景的BGM，**直接输入真实存在的bgm歌曲名称**。
-  - **时机**: 场景切换时、剧情发生重大转折时、情感基调剧烈变化时。
-  - **示例**: \`<bgm>歌曲名</bgm>\``;
 
   const ttsEnabled = getTTSEnabled();
   const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
@@ -319,8 +341,8 @@ ${bgmWhitelistText}
     ? '`<p>姐姐[害羞,女声|带着娇嗔撒娇]: "来嘛……陪我喝一杯～[JP]ねえ……一緒に飲もう？"</p>`'
     : '`<p>姐姐[害羞,女声|带着娇嗔撒娇]: "来嘛……陪我喝一杯～"</p>`';
   const ttsReminderLine1 = ttsBilingualZhJaEnabled
-    ? '1. 推荐格式: `<p>角色名[表情,男声/女声]: "中文[JP]日文"</p>`（已绑定角色可省略为 `<p>角色名[表情]: "中文[JP]日文"</p>`）'
-    : '1. 推荐格式: `<p>角色名[表情,男声/女声]: "对话"</p>`（已绑定角色可省略为 `<p>角色名[表情]: "对话"</p>`）';
+    ? '1. 推荐格式: `<p>角色名[表情,男声/女声]: "中文[JP]日文"</p>`'
+    : '1. 推荐格式: `<p>角色名[表情,男声/女声]: "对话"</p>`';
   const ttsStructureDialogueLine1 = ttsBilingualZhJaEnabled
     ? '  <p>少女[微笑,女声]: "你终于来了～[JP]やっと来たね～"</p>'
     : '  <p>少女[微笑,女声]: "你终于来了～"</p>';
@@ -331,8 +353,50 @@ ${bgmWhitelistText}
     ? '  <p>少女[难过,女声|带着心疼的语气]: "会感冒的……[JP]風邪ひいちゃうよ……"</p>'
     : '  <p>少女[难过,女声|带着心疼的语气]: "会感冒的……"</p>';
 
+  // BGM 关闭时，清理输出结构示例等处残留的 <bgm> 示例行
+  const stripBgmLinesFromCot = template =>
+    settings.bgmEnabled === false && typeof template === 'string' ? template.replace(/^.*<bgm>.*$\n?/gm, '') : template;
+
   const situationalStyleEnabled = settings.situationalStyleEnabled !== false;
-  const removeStyledSectionFromCot = (template) => {
+
+  // 简化图书绘本模式：正文按自然段落原样显示，无需任何排版规范；
+  // 注入仍然生效的功能标签：弹窗 / BGM / 特效 / 背景（含图库/背景图包与生图规范） / 情境样式。
+  if (simpleStorybookMode) {
+    const storybookStatusTagSection = buildStatusTagSection('以上标签直接输出在正文中即可。');
+    const storybookStyledSection = situationalStyleEnabled
+      ? `### 情境样式标签（可选）
+- **用途**: 当剧情中出现特殊道具或载体时（如手机短信、信件、古卷、报纸等），使用 \`<styled>\` 标签让内容以特殊样式呈现
+- **格式**: \`<styled type="类型" from="发送者" to="接收者" title="标题" date="日期">内容</styled>\`
+- **可用类型**: 手机短信、信纸、羊皮纸、新闻、终端、便签、日记、公告
+- **使用原则**:
+  - 仅在剧情明确涉及这些载体时使用，不要主动创造使用场景
+  - 一条消息中最多使用一个 styled 标签
+- **示例**:
+  - 短信: \`<styled type="手机短信" from="小明" to="主角">小明: 你到哪了？\n主角: 马上到</styled>\`
+  - 信件: \`<styled type="信纸" from="母亲" to="孩子" date="某年某月">见信如面，近来可好……</styled>\`
+  - 古卷: \`<styled type="羊皮纸" title="预言之书">当黑暗降临之时……</styled>\`
+  - 新闻: \`<styled type="新闻" title="突发新闻" from="每日快报" date="今日">据报道……</styled>\`
+  - 终端: \`<styled type="终端" title="系统日志">root: 访问被拒绝\nsystem: 检测到入侵</styled>\`
+  - 便签: \`<styled type="便签" from="留言者">钥匙在门垫下，别忘了锁门</styled>\`
+  - 日记: \`<styled type="日记" date="X月X日" title="心情复杂">今天发生了很多事……</styled>\`
+  - 公告: \`<styled type="公告" title="紧急通知" from="管理层">即日起全城实施孜禁……</styled>\``
+      : '';
+    return (
+      stripBgmLinesFromCot(`${storybookStatusTagSection}
+${bgmRuleSection}
+
+${backgroundTagSection}
+${pendingSpecialCgSection}
+${pixiEffectTagSection}
+
+${storybookStyledSection}
+`)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim() + '\n'
+    );
+  }
+
+  const removeStyledSectionFromCot = template => {
     if (situationalStyleEnabled || typeof template !== 'string' || !template) return template;
     const styledFormatMarker = '- **格式**: `<styled type="';
     const markerIndex = template.indexOf(styledFormatMarker);
@@ -349,44 +413,6 @@ ${bgmWhitelistText}
     return `${template.slice(0, start)}\n${template.slice(end + 1)}`;
   };
 
-  if (settings.simpleStorybookMode === true) {
-    const cotTemplate = `# 简化图书绘本输出规范
-
-本角色卡配合简化图书绘本模式，输出会作为纯文本显示在对话框中。
-
-## 正文输出
-- 直接输出绘本文字即可，每个自然段会显示在对话框。
-- 如需显式分段，可使用 \`<p>文本内容</p>\`；系统只会把其中内容当作普通文本。
-- 不需要区分角色对话与旁白。
-- 不要输出角色名、说话者、旁白前缀、表情、音色或语气标记。
-- 禁止输出 \`<sprite>\` 或任何立绘/Live2D 控制内容。
-${statusTagSection}
-
-## 可选控制标签
-${bgmRuleSection}
-
-### 背景标签（可选）
-- 格式: \`<background scene="场景名" />\`
-- ${sceneListText}
-${pendingSpecialCgSection}
-${pixiEffectTagSection}
-
-## 输出示例
-\`\`\`
-<background scene="${exampleScene}" />
-夜色像柔软的书页一样铺开，街灯在雨中慢慢亮起。
-
-她撑着伞站在路口，雨滴沿着伞沿落下，像一串细小的银铃。
-\`\`\`
-
-## 重要提醒
-1. 正文只写绘本文字，不写 \`角色名: "对话"\`。
-2. 不写 \`旁白:\`。
-3. 不写表情标签、音色标签、语气标签、\`<sprite>\` 标签。
-`;
-    return cotTemplate;
-  }
-
   if (ttsEnabled) {
     const cotTemplate = `# Galgame 输出格式规范
 
@@ -401,10 +427,9 @@ ${statusTagSection}
 ### 对话格式（含配音）
 ${ttsDialogueFormatLine}
 - **表情列表**: ${expressionListText}
-- **音色标注**: 每个角色标注 \`男声\` 或 \`女声\`，系统会自动随机分配并绑定
-- **兼容旧格式**: \`角色名[表情,具体音色名]\` 仍可使用
+- **音色标注**: 每个角色标注 \`男声\` 或 \`女声\`
 - **语气指导**（可选）: 在括号内用 \`|\` 分隔，添加语气描述，系统会传给TTS引擎优化语音效果
-  - 格式: \`<p>角色名[表情,男声/女声|语气描述]: "对话内容"</p>\`（已绑定角色可写 \`<p>角色名[表情|语气描述]: "对话内容"</p>\`）
+  - 格式: \`<p>角色名[表情,男声/女声|语气描述]: "对话内容"</p>\`
   - 需要结合当前语境和角色情感发挥，例如：'用撒娇的语气说'、'用反问的语气质问'、'带着哭腔委屈地说'、'压低声音神秘地说'
   - 不需要每句都加，在情感表达强烈或语气特殊的台词上使用效果最佳
 - **示例**:
@@ -419,10 +444,7 @@ ${ttsBilingualHintSection}
 
 ${bgmRuleSection}
 
-### ${backgroundTagTitle}
-- 格式: \`<background scene="场景名" />\`
-${backgroundUsageRuleSection}
-- ${sceneListText}
+${backgroundTagSection}
 ${pendingSpecialCgSection}
 ${pixiEffectTagSection}
 
@@ -447,8 +469,7 @@ ${pixiEffectTagSection}
 ## 输出结构示例
 \`\`\`
 <maintext>
-  <background scene="${exampleScene}" />
-  <pixiPerform name="rain" />
+${exampleBackgroundLine}  <pixiPerform name="rain" />
   <p>夜色深沉，街灯在雨中摇曳。</p>
 ${ttsStructureDialogueLine1}
   <bgm>歌曲名</bgm>
@@ -461,13 +482,13 @@ ${ttsStructureDialogueLine3}
 
 ## 重要提醒
 ${ttsReminderLine1}
-2. 语气指导（可选）: \`<p>角色名[表情,男声/女声|语气描述]: "对话"</p>\`（已绑定角色可写 \`<p>角色名[表情|语气描述]: "对话"</p>\`）
+2. 语气指导（可选）: \`<p>角色名[表情,男声/女声|语气描述]: "对话"</p>\`
 3. 旁白格式: \`<p>旁白内容</p>\`（无需任何标记）
 4. 新角色首次出现建议标注男声/女声，系统自动分配并绑定（旧格式具体音色名仍兼容）
 5. maintext标签包裹
 ${extraRule}
 `;
-    return removeStyledSectionFromCot(cotTemplate);
+    return stripBgmLinesFromCot(removeStyledSectionFromCot(cotTemplate));
   } else {
     const cotTemplate = `# Galgame 输出格式规范
 
@@ -494,10 +515,7 @@ ${statusTagSection}
 
 ${bgmRuleSection}
 
-### ${backgroundTagTitle}
-- 格式: \`<background scene="场景名" />\`
-${backgroundUsageRuleSection}
-- ${sceneListText}
+${backgroundTagSection}
 ${pendingSpecialCgSection}
 ${pixiEffectTagSection}
 
@@ -522,8 +540,7 @@ ${pixiEffectTagSection}
 ## 输出结构示例
 \`\`\`
 <maintext>
-  <background scene="${exampleScene}" />
-  <pixiPerform name="fog" />
+${exampleBackgroundLine}  <pixiPerform name="fog" />
   <p>第一句旁白描述。</p>
   <p>角色名: "这是角色的对话内容。"<微笑></p>
   <bgm>歌曲名</bgm>
@@ -541,6 +558,6 @@ ${pixiEffectTagSection}
 4. maintext标签包裹
 ${extraRule}
 `;
-    return removeStyledSectionFromCot(cotTemplate);
+    return stripBgmLinesFromCot(removeStyledSectionFromCot(cotTemplate));
   }
 }

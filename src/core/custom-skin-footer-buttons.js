@@ -1,8 +1,4 @@
-export const CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES = {
-  TOOLBAR: 'toolbar',
-  MENU: 'menu',
-};
-
+// 底栏按钮元数据（供移动端上拉菜单渲染使用）
 export const CUSTOM_SKIN_FOOTER_BUTTONS = [
   {
     elementId: 'footer_btn_log',
@@ -90,16 +86,8 @@ export const CUSTOM_SKIN_FOOTER_BUTTONS = [
   },
 ];
 
-export const CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS = CUSTOM_SKIN_FOOTER_BUTTONS.map(item => item.elementId);
-export const CUSTOM_SKIN_FOOTER_BUTTON_ACTIONS = CUSTOM_SKIN_FOOTER_BUTTONS.map(item => item.action);
 export const DEFAULT_GAL_MOBILE_MENU_ACTIONS = ['open-settings', 'log', 'view-original', 'save', 'load', 'timeline'];
-export const CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS = ['footer_btn_config', 'footer_btn_choices', 'footer_btn_next'];
-export const CUSTOM_SKIN_FOOTER_DISPLAY_SETTING_BUTTONS = CUSTOM_SKIN_FOOTER_BUTTONS.filter(
-  item => !['footer_btn_choices', 'footer_btn_next'].includes(item.elementId),
-);
 
-const FOOTER_BUTTON_BY_ELEMENT_ID = new Map(CUSTOM_SKIN_FOOTER_BUTTONS.map(item => [item.elementId, item]));
-const FOOTER_BUTTON_BY_ACTION = new Map(CUSTOM_SKIN_FOOTER_BUTTONS.map(item => [item.action, item]));
 const MOBILE_MENU_ACTION_META = new Map([
   [
     'open-settings',
@@ -118,56 +106,6 @@ const MOBILE_MENU_ACTION_META = new Map([
     },
   ]),
 ]);
-
-export const DEFAULT_CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY = Object.freeze(
-  CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.reduce((result, elementId) => {
-    result[elementId] = CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
-    return result;
-  }, {
-    footer_btn_config: CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR,
-  }),
-);
-
-export function getCustomSkinFooterButtonByElementId(elementId) {
-  return FOOTER_BUTTON_BY_ELEMENT_ID.get(String(elementId || '').trim()) || null;
-}
-
-export function getCustomSkinFooterButtonByAction(action) {
-  return FOOTER_BUTTON_BY_ACTION.get(String(action || '').trim()) || null;
-}
-
-export function normalizeCustomSkinFooterButtonDisplay(rawValue = null) {
-  const safeValue = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
-    ? rawValue
-    : {};
-  const normalized = {};
-  CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.forEach(elementId => {
-    const rawMode = String(safeValue[elementId] || '').trim().toLowerCase();
-    normalized[elementId] = rawMode === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU
-      ? CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU
-      : CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
-  });
-  CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS.forEach(elementId => {
-    normalized[elementId] = CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.TOOLBAR;
-  });
-  return normalized;
-}
-
-export function hasCustomSkinFooterMenuItems(rawValue = null) {
-  const normalized = normalizeCustomSkinFooterButtonDisplay(rawValue);
-  return CUSTOM_SKIN_FOOTER_BUTTON_ELEMENT_IDS.some(
-    elementId => !CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS.includes(elementId)
-      && normalized[elementId] === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU,
-  );
-}
-
-export function getCustomSkinFooterMenuActions(rawValue = null) {
-  const normalized = normalizeCustomSkinFooterButtonDisplay(rawValue);
-  return CUSTOM_SKIN_FOOTER_BUTTONS
-    .filter(item => !CUSTOM_SKIN_FOOTER_FIXED_TOOLBAR_ELEMENT_IDS.includes(item.elementId)
-      && normalized[item.elementId] === CUSTOM_SKIN_FOOTER_BUTTON_DISPLAY_MODES.MENU)
-    .map(item => item.action);
-}
 
 export function buildGalMobileMenuButtonsHtml(actions = DEFAULT_GAL_MOBILE_MENU_ACTIONS) {
   const safeActions = Array.from(new Set(

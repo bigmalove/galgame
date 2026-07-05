@@ -33,17 +33,20 @@ let _showToastRef = null;
 let _updateGlobalOverlayContentRef = null;
 let _updateNextBtnForGeneratingStateRef = null;
 let _updateGeneratingStatusRef = null;
+let _showGeneratingIndicatorRef = null;
 
 export function setEnhancedModeRefs({
   showToast,
   updateGlobalOverlayContent,
   updateNextBtnForGeneratingState,
   updateGeneratingStatus,
+  showGeneratingIndicator,
 }) {
   if (showToast) _showToastRef = showToast;
   if (updateGlobalOverlayContent) _updateGlobalOverlayContentRef = updateGlobalOverlayContent;
   if (updateNextBtnForGeneratingState) _updateNextBtnForGeneratingStateRef = updateNextBtnForGeneratingState;
   if (updateGeneratingStatus) _updateGeneratingStatusRef = updateGeneratingStatus;
+  if (showGeneratingIndicator) _showGeneratingIndicatorRef = showGeneratingIndicator;
 }
 
 export { COT_ENTRY_NAME, WORLDBOOK_NAME };
@@ -667,13 +670,17 @@ export function initWorldbookInjectionListener() {
       console.log(`[${SCRIPT_NAME}] 世界书注入: 普通模式，临时附加脚本世界书`);
       try {
         const globalWbs = getGlobalWorldbookNames();
-        worldbookInjectionState.originalWorldbooks = [...globalWbs];
         if (!globalWbs.includes(WORLDBOOK_NAME)) {
+          worldbookInjectionState.originalWorldbooks = [...globalWbs];
           await rebindGlobalWorldbooks([...globalWbs, WORLDBOOK_NAME]);
           worldbookInjectionState.isInjected = true;
           console.log(`[${SCRIPT_NAME}] 世界书注入: 已临时附加脚本世界书`);
+        } else if (worldbookInjectionState.isInjected && worldbookInjectionState.originalWorldbooks !== null) {
+          // 上次生成中断导致的挂载残留：保留已保存的原始列表，本次生成结束后照常恢复
+          console.log(`[${SCRIPT_NAME}] 世界书注入: 检测到中断残留的脚本世界书，本次生成结束后恢复`);
         } else {
           worldbookInjectionState.isInjected = false;
+          worldbookInjectionState.originalWorldbooks = null;
           console.log(`[${SCRIPT_NAME}] 世界书注入: 脚本世界书已存在，无需附加`);
         }
       } catch (e) {
@@ -681,8 +688,8 @@ export function initWorldbookInjectionListener() {
       }
     });
 
-    // 生成结束时恢复
-    eventOn(tavern_events.GENERATION_ENDED, async () => {
+    // 生成结束/中断时恢复（手动停止或生成出错时只会触发 GENERATION_STOPPED，不能只依赖 GENERATION_ENDED）
+    const restoreInjectedWorldbooks = async () => {
       if (enhancedModeState.isSecondGeneration) {
         return;
       }
@@ -697,7 +704,9 @@ export function initWorldbookInjectionListener() {
         worldbookInjectionState.isInjected = false;
         worldbookInjectionState.originalWorldbooks = null;
       }
-    });
+    };
+    eventOn(tavern_events.GENERATION_ENDED, restoreInjectedWorldbooks);
+    eventOn(tavern_events.GENERATION_STOPPED, restoreInjectedWorldbooks);
 
     // 生成开始/结束事件监听（用于生成状态跟踪）
     eventOn(tavern_events.GENERATION_STARTED, () => {
@@ -714,6 +723,10 @@ export function initWorldbookInjectionListener() {
       console.log(`[${SCRIPT_NAME}] GENERATION_STARTED - isGeneratingResponse = true`);
       startGenerationTimeout();
       if (_updateNextBtnForGeneratingStateRef) _updateNextBtnForGeneratingStateRef();
+      // 覆盖层激活时立即显示生成中占位，不必等第一个闭合段落解析出来
+      if (getIsEnabled() && _showGeneratingIndicatorRef && topWindow.document.querySelector('#gal-global-overlay.active')) {
+        _showGeneratingIndicatorRef('正在生成内容...');
+      }
     });
 
     eventOn(tavern_events.GENERATION_ENDED, () => {

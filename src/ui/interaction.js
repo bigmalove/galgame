@@ -5,9 +5,9 @@ import { getSettings } from '../core/settings.js';
 import { getIsSkipping, setIsSkipping, getSkipTimer, setSkipTimer, getIsRewinding, setIsRewinding, getIsEnabled, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
 import { TTSManager } from '../audio/tts-manager.js';
 import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
-import { parseGalgameContent } from '../logic/parser.js';
+import { parseGalgameContent, stripImagePlaceholders } from '../logic/parser.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
-import { scheduleOverlaySegmentDisplay, setCurrentDisplayMesId } from './overlay.js';
+import { scheduleOverlaySegmentDisplay, setCurrentDisplayMesId, showGeneratingIndicator } from './overlay.js';
 import { detectAndCaptureCg } from './overlay-content.js';
 import { showToast } from './toast.js';
 import { getModalMountRoot } from './fullscreen.js';
@@ -103,8 +103,9 @@ function extractMessageContent($mes, mesId) {
 }
 
 function buildFallbackParsed(fallbackText) {
+  const cleanText = stripImagePlaceholders(String(fallbackText || '')).trim() || '（当前消息无可显示内容）';
   return {
-    segments: [{ type: 'narration', speaker: null, text: fallbackText, expression: null }],
+    segments: [{ type: 'narration', speaker: null, text: cleanText, expression: null }],
     currentBackground: null,
     bgm: null,
     options: [],
@@ -315,11 +316,13 @@ export function triggerReroll() {
   const $regenerate = $(topWindow.document).find('#option_regenerate');
   if ($regenerate.length) {
     $regenerate.click();
+    showGeneratingIndicator('正在重新生成...');
     showToast('正在重新生成...');
   } else {
     try {
       if (topWindow.SillyTavern && topWindow.SillyTavern.Generate) {
         topWindow.SillyTavern.Generate();
+        showGeneratingIndicator('正在重新生成...');
         showToast('正在重新生成...');
       } else {
         console.warn(`[${SCRIPT_NAME}] 未找到 #option_regenerate`);

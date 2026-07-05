@@ -1,0 +1,1777 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>皮肤翻新提案 · 苍穹之庭 Celestial Court Ⅱ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Cinzel+Decorative:wght@700&family=Zen+Old+Mincho:wght@500;700;900&family=Noto+Serif+SC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+/* ============================================================
+   苍穹之庭 Celestial Court Ⅱ — galgame 主界面皮肤翻新提案（重制版）
+   设计语言：星降之夜 × 天穹之门 × 削角圣仪面板 × 符文魔法阵
+   —— 电影级夜穹：星云 / 银河带 / 星座连线自绘 / 周期流星 /
+      天穹之门（刻度环 + 卫星菱晶公转）/ 升腾星尘 / 神辉光柱
+   —— 面板：非对称双削角 + 双层金晶线 + 能量循环描边（@property）
+   —— 交互：鼠标视差、星光扫掠、逐字辉光打字机、符文阵召唤
+   —— 桌面 16:9 与移动端 9:19.5 双 demo（同一结构，.mobile 覆写）
+   class 命名沿用真实项目的 .gal-* 钩子，便于后续直接移植。
+   ============================================================ */
+@property --spin { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+
+:root{
+  --ui-scale: 1;
+  --font-body:   'Noto Serif SC', serif;
+  --font-disp:   'Zen Old Mincho', 'Noto Serif SC', serif;   /* 明朝体：JRPG 标题气质 */
+  --font-latin:  'Cinzel', serif;
+  --font-deco:   'Cinzel Decorative', 'Cinzel', serif;
+}
+
+/* —— 设计 token（挂在舞台上，「昼之庭」变体只覆写这里）—— */
+.gal-game-container{
+  --ct-void:      #030512;                          /* 虚空 */
+  --ct-night:     #070C24;                          /* 夜穹 */
+  --ct-zenith:    #14235f;                          /* 天顶 */
+  --ct-crystal:   #6FD4FF;                          /* 星晶蓝 */
+  --ct-ice:       #B8EDFF;                          /* 冰辉 */
+  --ct-gold:      #D9B45C;                          /* 圣金 */
+  --ct-gold-2:    #F6E3A6;                          /* 晨金 */
+  --ct-moon:      #F5F9FF;                          /* 月白 */
+  --ct-text:      #F5F9FF;
+  --ct-text-dim:  rgba(216,228,250,.6);
+  --ct-star-op:   1;
+  --neb-a:        rgba(64,110,220,.30);             /* 星云·蓝 */
+  --neb-b:        rgba(122,79,208,.20);             /* 星云·堇 */
+  --ct-const:     rgba(184,237,255,.55);            /* 星座连线 */
+  --ct-ray:       rgba(140,200,255,.10);            /* 神辉光柱 */
+  --ct-pt:        rgba(184,237,255,.85);            /* 星尘粒子 */
+  --ct-fall:      rgba(150,215,255,.5);             /* 浮岛光瀑 */
+  --ct-island:    #0b1738;
+  --ct-cloud:     rgba(90,130,215,.16);
+  --panel-opacity: .82;
+  /* 面板双层材质（变体整组覆写） */
+  --ct-frame: linear-gradient(120deg,
+      #f6e3a6 0%, #d9b45c 12%, rgba(111,212,255,.65) 34%,
+      rgba(111,212,255,.25) 52%, rgba(111,212,255,.6) 68%,
+      #d9b45c 88%, #f6e3a6 100%);
+  --ct-face:
+      radial-gradient(140% 120% at 82% -20%, rgba(111,212,255,.14) 0%, transparent 46%),
+      radial-gradient(120% 100% at 8% 120%, rgba(64,110,220,.18) 0%, transparent 44%),
+      linear-gradient(165deg, rgba(14,24,62,var(--panel-opacity)) 0%, rgba(5,9,26,calc(var(--panel-opacity) + .08)) 100%);
+  --ct-card-face:
+      radial-gradient(130% 110% at 50% -10%, rgba(111,212,255,.12) 0%, transparent 52%),
+      linear-gradient(165deg, rgba(15,26,66,.94) 0%, rgba(5,9,26,.96) 100%);
+  /* 形制 */
+  --cut-panel: polygon(0 26px, 26px 0, calc(100% - 64px) 0, calc(100% - 50px) 14px,
+                       calc(100% - 14px) 14px, 100% 28px, 100% calc(100% - 26px),
+                       calc(100% - 26px) 100%, 64px 100%, 50px calc(100% - 14px),
+                       14px calc(100% - 14px), 0 calc(100% - 28px));
+  --cut-hex:   polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%);
+  --cut-para:  polygon(16px 0, 100% 0, calc(100% - 16px) 100%, 0 100%);
+  --cut-card:  polygon(22px 0, 100% 0, calc(100% - 22px) 100%, 0 100%);
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html{ height:100%; }
+body{
+  min-height:100%;
+  font-family: var(--font-body);
+  background:
+    radial-gradient(90% 60% at 50% 0%, #0a1030 0%, transparent 60%),
+    #04060f;
+  color:#dfe6f5;
+  display:flex; flex-direction:column; align-items:center;
+  padding: clamp(12px, 3vw, 40px);
+  gap: 30px;
+}
+body > *{ flex-shrink:0; }
+
+/* ---------- 页头说明 ---------- */
+.proposal-head{ text-align:center; max-width:960px; color:#aebad4; }
+.proposal-head .latin{
+  font-family: var(--font-deco);
+  letter-spacing:.46em; font-size:12px; color:#8f7c4e;
+}
+.proposal-head h1{
+  font-family: var(--font-disp);
+  font-weight:900; font-size: clamp(23px, 3.5vw, 36px); letter-spacing:.24em;
+  margin:.35em 0 .45em; color:#f0f4ff;
+  text-shadow: 0 0 34px rgba(111,212,255,.25);
+}
+.proposal-head h1 em{ font-style:normal; color:#e8c15a; }
+.proposal-head .divider{ width:280px; height:9px; margin:2px auto 14px; position:relative; }
+.proposal-head .divider::before{
+  content:""; position:absolute; left:0; right:0; top:4px; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(217,180,92,.85), transparent);
+}
+.proposal-head .divider::after{
+  content:""; position:absolute; left:50%; top:1px; width:7px; height:7px;
+  transform: translateX(-50%) rotate(45deg);
+  background:#e8c15a; box-shadow: 0 0 10px rgba(232,193,90,.9);
+}
+.proposal-head p{ font-size:13px; line-height:2; color:#8b97b6; }
+
+/* ---------- 预览控制条 ---------- */
+.preview-controls{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+.preview-controls button{
+  font-family: var(--font-body); font-size:12px; letter-spacing:.22em;
+  padding:9px 20px; cursor:pointer; color:#b6c1dc;
+  background: linear-gradient(180deg, rgba(255,255,255,.04), transparent);
+  border:1px solid rgba(174,185,214,.24);
+  clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+  transition: all .25s ease;
+}
+.preview-controls button:hover{ border-color:rgba(232,193,90,.7); color:#f6e3a6; }
+.preview-controls button.on{
+  background: linear-gradient(120deg, #e8c15a, #d9b45c); border-color:#e8c15a; color:#141b33;
+}
+
+/* ---------- 舞台区标签 ---------- */
+.stage-label{
+  font-family: var(--font-latin); font-size:11px; letter-spacing:.44em;
+  color:#67739a; display:flex; align-items:center; gap:16px;
+  margin-bottom:-12px;
+}
+.stage-label::before, .stage-label::after{
+  content:""; width:46px; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(103,115,154,.6));
+}
+.stage-label::after{ transform: scaleX(-1); }
+
+/* ============================================================
+   舞台（对应 .gal-game-container）—— 星降之夜
+   ============================================================ */
+.gal-game-container{
+  position:relative; width:min(1280px, 97vw); aspect-ratio: 16/9;
+  overflow:hidden;
+  background: var(--ct-night);
+  box-shadow:
+    0 40px 110px -30px rgba(0,0,0,.95),
+    0 0 0 1px rgba(111,212,255,.10),
+    0 0 90px -30px rgba(64,110,220,.45);
+}
+/* 颗粒噪点：整幅画面蒙一层极淡的胶片颗粒 */
+.gal-game-container::before{
+  content:""; position:absolute; inset:0; z-index:30; pointer-events:none; opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+}
+/* 电影暗角 + 底部叙事渐晕 */
+.gal-game-container::after{
+  content:""; position:absolute; inset:0; z-index:6; pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(3,5,18,.5) 0%, transparent 14%),
+    linear-gradient(0deg, rgba(3,5,18,.88) 0%, rgba(3,5,18,.35) 22%, transparent 40%),
+    radial-gradient(140% 100% at 50% 50%, transparent 62%, rgba(3,5,18,.5) 100%);
+}
+
+/* ————————————————————————————————————————————————————————————
+   背景占位（.gal-layer-bg）—— 真实项目中有背景图时整层让位
+   ———————————————————————————————————————————————————————————— */
+.gal-layer-bg{ position:absolute; inset:0; overflow:hidden; }
+.gal-layer-bg .sky{
+  position:absolute; inset:0;
+  background:
+    radial-gradient(120% 90% at 74% -18%, #22398c 0%, rgba(34,57,140,0) 50%),
+    radial-gradient(80% 55% at 14% 106%, rgba(24,90,120,.5) 0%, rgba(24,90,120,0) 60%),
+    linear-gradient(172deg, #04061a 0%, #0a1134 42%, #122252 76%, #0e2a54 100%);
+}
+/* 地平线余辉：夜空贴近云海处的一线青色晨昏光 */
+.gal-layer-bg .horizon-glow{
+  position:absolute; left:-5%; right:-5%; bottom:13%; height:26%;
+  background: radial-gradient(56% 92% at 50% 100%, rgba(64,190,230,.17), transparent 70%);
+  filter: blur(12px); pointer-events:none;
+}
+/* 星云：两团深色彩雾（screen 叠加） */
+.gal-layer-bg .nebula{
+  position:absolute; border-radius:50%; filter: blur(46px);
+  mix-blend-mode: screen; pointer-events:none;
+  animation: neb-breathe 18s ease-in-out infinite alternate;
+}
+.gal-layer-bg .neb-a{ left:6%; top:4%; width:44%; height:52%; background: radial-gradient(circle at 40% 40%, var(--neb-a), transparent 66%); }
+.gal-layer-bg .neb-b{ right:2%; top:18%; width:38%; height:56%; background: radial-gradient(circle at 55% 45%, var(--neb-b), transparent 64%); animation-delay:-8s; }
+@keyframes neb-breathe{ from{ opacity:.7; transform:scale(1); } to{ opacity:1; transform:scale(1.06); } }
+/* 银河带：斜贯天穹的一条淡星河 */
+.gal-layer-bg .milkyway{
+  position:absolute; left:-24%; top:-8%; width:150%; height:56%;
+  transform: rotate(-14deg);
+  opacity: calc(.38 * var(--ct-star-op));
+  background:
+    radial-gradient(60% 30% at 50% 50%, rgba(184,237,255,.14), transparent 70%),
+    radial-gradient(80% 20% at 42% 52%, rgba(245,249,255,.10), transparent 70%),
+    radial-gradient(50% 16% at 62% 46%, rgba(122,79,208,.12), transparent 70%);
+  filter: blur(10px); pointer-events:none;
+}
+/* 极光：真正的「帘幕」——竖向光棱条纹（repeating-linear-gradient）
+   披挂在天侧，背景位移让光棱缓缓流动。青绿 × 冰蓝，绝不掺金。 */
+.gal-layer-bg .aurora{
+  position:absolute; pointer-events:none; mix-blend-mode: screen;
+  filter: blur(7px);
+  -webkit-mask: linear-gradient(180deg, transparent 0%, #000 16%, #000 52%, transparent 94%);
+          mask: linear-gradient(180deg, transparent 0%, #000 16%, #000 52%, transparent 94%);
+  animation: curtain-flow 18s linear infinite alternate;
+}
+.gal-layer-bg .aurora-a{
+  left:2%; top:-6%; width:58%; height:60%;
+  transform: skewX(-17deg) rotate(-7deg);
+  opacity:.75;
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(64,225,190,0) 0px, rgba(64,225,190,.20) 14px,
+      rgba(80,190,255,.10) 32px, rgba(64,225,190,0) 54px);
+}
+.gal-layer-bg .aurora-b{
+  right:4%; top:-9%; width:40%; height:46%;
+  transform: skewX(15deg) rotate(6deg);
+  opacity:.45;
+  animation-duration: 24s; animation-delay:-9s;
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(110,190,255,0) 0px, rgba(110,190,255,.16) 17px,
+      rgba(64,225,190,.09) 36px, rgba(110,190,255,0) 60px);
+}
+@keyframes curtain-flow{
+  from{ background-position: 0 0; }
+  to  { background-position: 120px 0; }
+}
+/* 星屑：两层视差（鼠标视差由 --mx/--my 驱动） */
+.gal-layer-bg .stars{ position:absolute; inset:-5%; pointer-events:none; opacity:var(--ct-star-op); }
+.gal-layer-bg .stars-far{
+  transform: translate(calc(var(--mx,0)*-8px), calc(var(--my,0)*-5px));
+  background-image:
+    radial-gradient(1px 1px at 11% 16%, rgba(245,249,255,.9), transparent 100%),
+    radial-gradient(1px 1px at 27% 7%,  rgba(184,237,255,.75), transparent 100%),
+    radial-gradient(1px 1px at 41% 21%, rgba(245,249,255,.6), transparent 100%),
+    radial-gradient(1px 1px at 55% 12%, rgba(245,249,255,.8), transparent 100%),
+    radial-gradient(1px 1px at 67% 26%, rgba(184,237,255,.6), transparent 100%),
+    radial-gradient(1px 1px at 78% 9%,  rgba(245,249,255,.85), transparent 100%),
+    radial-gradient(1px 1px at 90% 22%, rgba(184,237,255,.7), transparent 100%),
+    radial-gradient(1px 1px at 17% 38%, rgba(245,249,255,.55), transparent 100%),
+    radial-gradient(1px 1px at 48% 41%, rgba(245,249,255,.6), transparent 100%),
+    radial-gradient(1px 1px at 84% 44%, rgba(184,237,255,.55), transparent 100%);
+  animation: star-twinkle 6s ease-in-out infinite alternate;
+}
+.gal-layer-bg .stars-near{
+  transform: translate(calc(var(--mx,0)*-18px), calc(var(--my,0)*-11px));
+  background-image:
+    radial-gradient(1.7px 1.7px at 15% 24%, rgba(245,249,255,1), transparent 100%),
+    radial-gradient(1.7px 1.7px at 33% 11%, rgba(246,227,166,.95), transparent 100%),
+    radial-gradient(1.8px 1.8px at 52% 6%,  rgba(245,249,255,.95), transparent 100%),
+    radial-gradient(1.9px 1.9px at 72% 18%, rgba(184,237,255,.95), transparent 100%),
+    radial-gradient(1.7px 1.7px at 88% 34%, rgba(246,227,166,.85), transparent 100%),
+    radial-gradient(1.7px 1.7px at 7% 47%,  rgba(245,249,255,.8), transparent 100%),
+    radial-gradient(1.7px 1.7px at 44% 33%, rgba(184,237,255,.8), transparent 100%);
+  animation: star-twinkle 4.2s ease-in-out infinite alternate-reverse;
+}
+@keyframes star-twinkle{
+  from{ opacity: calc(.5 * var(--ct-star-op)); }
+  to  { opacity: var(--ct-star-op); }
+}
+/* 一等星：十字光芒（纯 CSS 光轴，不用折线星座——那个像心电图） */
+.gal-layer-bg .flare{
+  position:absolute; width:4px; height:4px; pointer-events:none;
+  border-radius:50%;
+  background:#EAF6FF;
+  box-shadow: 0 0 6px 1px rgba(214,238,255,.9), 0 0 20px 4px rgba(140,200,255,.35);
+  opacity: var(--ct-star-op);
+  transform: translate(calc(var(--mx,0)*-12px), calc(var(--my,0)*-7px));
+  animation: flare-breathe 5s ease-in-out infinite alternate;
+}
+.gal-layer-bg .flare::before,
+.gal-layer-bg .flare::after{ /* 纵横光轴 */
+  content:""; position:absolute; left:50%; top:50%;
+  background: linear-gradient(90deg, transparent, rgba(214,238,255,.85), transparent);
+  transform: translate(-50%,-50%);
+  width:56px; height:1px;
+}
+.gal-layer-bg .flare::after{ width:1px; height:34px;
+  background: linear-gradient(180deg, transparent, rgba(214,238,255,.7), transparent); }
+.gal-layer-bg .flare.f1{ left:20%; top:19%; }
+.gal-layer-bg .flare.f2{ right:30%; top:30%; scale:.6; animation-delay:-2s; }
+.gal-layer-bg .flare.f3{ left:38%; top:9%;  scale:.45; animation-delay:-3.5s; }
+@keyframes flare-breathe{
+  from{ opacity: calc(.45 * var(--ct-star-op)); }
+  to  { opacity: var(--ct-star-op); }
+}
+/* 流星：周期性划过（两颗，错峰） */
+.gal-layer-bg .shooting-star{
+  position:absolute; width:150px; height:1.5px; pointer-events:none;
+  background: linear-gradient(90deg, rgba(245,249,255,0), rgba(245,249,255,.9) 82%, #fff);
+  border-radius:2px; opacity:0;
+  filter: drop-shadow(0 0 4px rgba(184,237,255,.9));
+  transform: rotate(-28deg);
+}
+.gal-layer-bg .ss1{ left:14%; top:16%; animation: shoot 9s ease-in 2.4s infinite; }
+.gal-layer-bg .ss2{ left:56%; top:7%; width:110px; animation: shoot 13s ease-in 7s infinite; }
+@keyframes shoot{
+  0%   { opacity:0; transform: rotate(-28deg) translateX(0); }
+  1.5% { opacity:calc(1 * var(--ct-star-op)); }
+  7%   { opacity:0; transform: rotate(-28deg) translateX(46vw); }
+  100% { opacity:0; transform: rotate(-28deg) translateX(46vw); }
+}
+/* 天穹之门：一弯新月 + 极细刻度环 + 卫星菱晶公转（克制，拒绝手电筒白球） */
+.gal-layer-bg .gate{
+  position:absolute; right:9%; top:11%; width:140px; height:140px; pointer-events:none;
+  transform: translate(calc(var(--mx,0)*-26px), calc(var(--my,0)*-15px));
+}
+.gate .ring-ticks{
+  position:absolute; inset:0; border-radius:50%;
+  background:
+    repeating-conic-gradient(from 0deg,
+      rgba(217,180,92,.6) 0deg .6deg, transparent .6deg 9deg);
+  -webkit-mask: radial-gradient(circle, transparent 68%, #000 69%, #000 71.5%, transparent 72.5%);
+          mask: radial-gradient(circle, transparent 68%, #000 69%, #000 71.5%, transparent 72.5%);
+  animation: gate-spin-pure 90s linear infinite;
+  opacity:.55;
+}
+.gate .ring-line{
+  position:absolute; inset:12px; border-radius:50%;
+  border:1px solid rgba(246,227,166,.28);
+}
+.gate .ring-line::before{
+  content:""; position:absolute; inset:16px; border-radius:50%;
+  border:1px dashed rgba(184,237,255,.18);
+}
+/* 新月：透明圆 + 内偏移投影，天然月牙 */
+.gate .moon{
+  position:absolute; inset:36px; border-radius:50%;
+  background:transparent;
+  box-shadow: inset 11px -7px 0 0 #E9F2FF;
+  transform: rotate(-16deg);
+  filter: drop-shadow(0 0 10px rgba(200,225,255,.4));
+}
+.gate .orbit{ position:absolute; inset:-4px; animation: gate-spin-pure 16s linear infinite; }
+.gate .orbit i{
+  position:absolute; left:50%; top:-2.5px; width:6px; height:6px;
+  transform: translateX(-50%) rotate(45deg);
+  background: linear-gradient(135deg, var(--ct-ice), var(--ct-crystal));
+  box-shadow: 0 0 8px rgba(111,212,255,.9);
+}
+@keyframes gate-spin-pure{ to{ transform: rotate(360deg); } }
+/* 神辉光柱：极淡的一道侧光（糊在画面中央会像灰雾，移到侧面、压低强度） */
+.gal-layer-bg .godray{
+  position:absolute; top:-12%; height:110%; pointer-events:none;
+  mix-blend-mode: screen; filter: blur(10px);
+  background: linear-gradient(180deg, var(--ct-ray) 0%, transparent 66%);
+  animation: ray-pulse 12s ease-in-out infinite alternate;
+}
+.gal-layer-bg .ray-1{ left:16%; width:6%; transform: skewX(-14deg); }
+.gal-layer-bg .ray-2{ left:24%; width:3%; transform: skewX(-14deg); animation-delay:-5s; }
+@keyframes ray-pulse{ from{ opacity:.15; } to{ opacity:.5; } }
+/* 浮空岛：剪影 + 岛底星晶簇 + 垂落光瀑 */
+.gal-layer-bg .isle{ position:absolute; pointer-events:none; animation: isle-bob 13s ease-in-out infinite alternate; }
+.gal-layer-bg .isle .rock{
+  width:100%; height:100%;
+  background: linear-gradient(180deg, #16295e 0%, var(--ct-island) 40%, #050a1e 100%);
+  clip-path: polygon(0% 28%, 9% 20%, 21% 24%, 34% 12%, 47% 19%, 61% 8%, 75% 17%, 89% 13%, 100% 26%,
+                     91% 36%, 83% 58%, 71% 74%, 57% 95%, 49% 100%, 43% 86%, 33% 70%, 21% 54%, 9% 42%);
+}
+.gal-layer-bg .isle .crystals{ position:absolute; left:30%; bottom:26%; width:40%; height:30%; }
+.gal-layer-bg .isle .crystals i{
+  position:absolute; bottom:0; width:22%; height:80%;
+  background: linear-gradient(180deg, rgba(184,237,255,.9), rgba(111,212,255,.25));
+  clip-path: polygon(50% 0, 100% 78%, 78% 100%, 22% 100%, 0 78%);
+  filter: drop-shadow(0 0 8px rgba(111,212,255,.7));
+  animation: crystal-glow 4s ease-in-out infinite alternate;
+}
+.gal-layer-bg .isle .crystals i:nth-child(1){ left:0; height:58%; transform: rotate(-14deg); animation-delay:-1s; }
+.gal-layer-bg .isle .crystals i:nth-child(2){ left:34%; }
+.gal-layer-bg .isle .crystals i:nth-child(3){ left:70%; height:52%; transform: rotate(12deg); animation-delay:-2.4s; }
+@keyframes crystal-glow{ from{ opacity:.55; } to{ opacity:1; } }
+.gal-layer-bg .isle .lightfall{
+  position:absolute; left:46%; top:92%; width:2px; height:90%;
+  background: linear-gradient(180deg, var(--ct-fall), transparent 86%);
+  filter: blur(1px);
+  animation: fall-shimmer 5s ease-in-out infinite alternate;
+}
+.gal-layer-bg .isle .lightfall.f2{ left:58%; top:88%; height:66%; animation-delay:-2s; opacity:.7; }
+@keyframes fall-shimmer{ from{ opacity:.35; } to{ opacity:.95; } }
+.gal-layer-bg .isle-l{ left:2.5%; bottom:17%; width:26%; height:30%; }
+.gal-layer-bg .isle-r{ right:5%; bottom:24%; width:14%; height:17%; animation-delay:-6s; opacity:.85; }
+.gal-layer-bg .isle-far{ left:47%; bottom:33%; width:7%; height:8%; animation-delay:-9s; opacity:.4; filter: blur(1.2px); }
+@keyframes isle-bob{ from{ transform: translateY(0); } to{ transform: translateY(-1.8%); } }
+/* 云海 */
+.gal-layer-bg .cloudsea{
+  position:absolute; left:-12%; right:-12%; pointer-events:none; filter: blur(16px);
+  background: linear-gradient(180deg, transparent 0%, var(--ct-cloud) 40%, var(--ct-cloud) 66%, transparent 100%);
+  animation: cloud-drift 38s ease-in-out infinite alternate;
+}
+.gal-layer-bg .cloud-a{ bottom:9%; height:24%; }
+.gal-layer-bg .cloud-b{ bottom:-2%; height:20%; animation-duration: 50s; animation-delay:-20s; opacity:.85; }
+@keyframes cloud-drift{ from{ transform: translateX(-2.5%); } to{ transform: translateX(2.5%); } }
+/* 星尘：自云海升腾的粒子 */
+.gal-layer-bg .particles{ position:absolute; inset:0; pointer-events:none; }
+.gal-layer-bg .particles i{
+  position:absolute; bottom:6%; width:3px; height:3px; border-radius:50%;
+  background: var(--ct-pt);
+  filter: blur(.4px); opacity:0;
+  animation: rise 11s linear infinite;
+}
+.particles i:nth-child(1){ left:8%;  animation-delay:0s;    scale:.8; }
+.particles i:nth-child(2){ left:19%; animation-delay:-3.2s; scale:.55; }
+.particles i:nth-child(3){ left:31%; animation-delay:-7s;   scale:1; }
+.particles i:nth-child(4){ left:43%; animation-delay:-1.6s; scale:.6; }
+.particles i:nth-child(5){ left:56%; animation-delay:-8.6s; scale:.85; }
+.particles i:nth-child(6){ left:66%; animation-delay:-5s;   scale:.5; }
+.particles i:nth-child(7){ left:77%; animation-delay:-9.8s; scale:.95; }
+.particles i:nth-child(8){ left:88%; animation-delay:-2.4s; scale:.65; }
+.particles i:nth-child(9){ left:95%; animation-delay:-6.2s; scale:.8; }
+@keyframes rise{
+  0%  { transform: translateY(0);       opacity:0; }
+  8%  { opacity: calc(.9 * var(--ct-star-op)); }
+  85% { opacity: calc(.25 * var(--ct-star-op)); }
+  100%{ transform: translateY(-58vh);   opacity:0; }
+}
+
+/* —— 立绘占位（.gal-layer-character / .gal-char-slot）—— */
+.gal-layer-character{ position:absolute; inset:0; pointer-events:none; z-index:4; }
+.gal-char-slot.slot-center{
+  position:absolute; left:50%; bottom:-2%; width:19%; aspect-ratio: 3/7;
+  transform: translateX(-50%);
+}
+/* 环绕法阵：透视压扁的旋转刻度环（悬于身侧） */
+.gal-char-slot .sigil{
+  position:absolute; left:50%; bottom:30%; width:150%; aspect-ratio:1;
+  transform: translateX(-50%) scaleY(.2); transform-origin: 50% 100%;
+  pointer-events:none; opacity:.55;
+}
+.gal-char-slot .sigil .s-ring{
+  position:absolute; inset:0; border-radius:50%;
+  border:1px solid rgba(111,212,255,.5);
+  box-shadow: 0 0 30px rgba(111,212,255,.35), inset 0 0 40px rgba(111,212,255,.15);
+  animation: gate-spin-pure 24s linear infinite;
+}
+.gal-char-slot .sigil .s-ring::before{
+  content:""; position:absolute; inset:7%; border-radius:50%;
+  border:1px dashed rgba(246,227,166,.55);
+}
+.gal-char-slot .sigil .s-ring::after{
+  content:""; position:absolute; inset:0; border-radius:50%;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(184,237,255,.8) 0deg 1deg, transparent 1deg 12deg);
+  -webkit-mask: radial-gradient(circle, transparent 82%, #000 83%, #000 90%, transparent 91%);
+          mask: radial-gradient(circle, transparent 82%, #000 83%, #000 90%, transparent 91%);
+}
+/* 立绘占位：不再画假人形（怎么画都像葫芦）——
+   改为一枚极简的削角虚线框 + 底部渐隐，像设计稿里的资源槽位 */
+.char-silhouette{
+  width:100%; height:100%; position:relative;
+  border:1px dashed rgba(150,190,255,.22);
+  border-bottom:none;
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%, 0 14px);
+  background: linear-gradient(180deg, rgba(90,140,255,.05) 0%, rgba(90,140,255,.02) 55%, transparent 100%);
+  -webkit-mask: linear-gradient(180deg, #000 78%, transparent 100%);
+          mask: linear-gradient(180deg, #000 78%, transparent 100%);
+}
+.char-silhouette::before,
+.char-silhouette::after{ /* 上两角小角标 */
+  content:""; position:absolute; top:-1px; width:14px; height:14px;
+  border-top:1.5px solid rgba(150,190,255,.45);
+}
+.char-silhouette::before{ left:-1px; border-left:1.5px solid rgba(150,190,255,.45); }
+.char-silhouette::after{ right:-1px; border-right:1.5px solid rgba(150,190,255,.45); }
+.slot-note{
+  position:absolute; left:50%; top:44%; transform:translateX(-50%);
+  font-size:11px; letter-spacing:.3em; color:rgba(174,185,214,.4); white-space:nowrap;
+}
+
+/* ============================================================
+   顶部：场景纹章 & 章节铭牌
+   ============================================================ */
+.gal-status-bar-container{
+  position:absolute; top:0; left:0; right:0; z-index:8;
+  display:flex; align-items:flex-start; justify-content:space-between;
+  padding: calc(22px*var(--ui-scale)) calc(28px*var(--ui-scale)) 0;
+  pointer-events:none;
+}
+.gal-scene-plaque{ display:flex; flex-direction:column; gap:6px; color:var(--ct-moon); }
+.gal-scene-plaque .row{ display:flex; align-items:baseline; gap:12px; }
+.gal-scene-plaque .gal-location-text{
+  font-family: var(--font-disp);
+  font-size: calc(19px*var(--ui-scale)); font-weight:700; letter-spacing:.3em;
+  text-shadow: 0 0 18px rgba(111,212,255,.5), 0 1px 4px rgba(0,0,0,.65);
+}
+.gal-scene-plaque .diamond{
+  width:6px; height:6px; background:var(--ct-gold); transform: rotate(45deg);
+  box-shadow: 0 0 9px rgba(217,180,92,.8); align-self:center;
+}
+.gal-scene-plaque .gal-time-text{
+  font-family: var(--font-latin);
+  font-size: calc(11px*var(--ui-scale)); letter-spacing:.32em; color:var(--ct-text-dim);
+}
+.gal-scene-plaque .rule{
+  height:1px; width: calc(230px*var(--ui-scale)); position:relative;
+  background: linear-gradient(90deg, var(--ct-gold-2) 0%, rgba(217,180,92,.4) 55%, transparent 100%);
+  box-shadow: 0 0 9px rgba(217,180,92,.45);
+}
+.gal-scene-plaque .rule::after{
+  content:""; position:absolute; left:0; top:-2.5px; width:6px; height:6px;
+  transform: rotate(45deg); background: var(--ct-gold-2);
+  box-shadow: 0 0 8px rgba(246,227,166,.9);
+}
+.gal-top-actions{ display:flex; align-items:flex-start; gap:16px; pointer-events:auto; }
+.chapter-plaque{ text-align:right; color:var(--ct-text-dim); }
+.chapter-plaque .act{
+  font-family: var(--font-deco); font-size: calc(13px*var(--ui-scale));
+  letter-spacing:.4em; color: var(--ct-gold-2);
+  text-shadow: 0 0 12px rgba(246,227,166,.5);
+}
+.chapter-plaque .name{
+  font-family: var(--font-disp); font-size: calc(11.5px*var(--ui-scale));
+  letter-spacing:.34em; margin-top:3px;
+}
+.gal-fullscreen-btn{
+  width: calc(34px*var(--ui-scale)); height: calc(34px*var(--ui-scale));
+  display:grid; place-items:center; cursor:pointer;
+  color:var(--ct-text-dim); font-size:13px;
+  border:1px solid rgba(184,237,255,.28);
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  background: rgba(7,12,36,.55); backdrop-filter: blur(3px);
+  transition:all .3s ease;
+}
+.gal-fullscreen-btn:hover{ color:#071028; border-color:var(--ct-gold-2); background:var(--ct-gold-2); }
+
+/* ============================================================
+   对话框层 —— 非对称双削角圣仪面板
+   ============================================================ */
+.gal-dialog-layer{
+  position:absolute; left:50%; bottom: calc(20px*var(--ui-scale));
+  transform: translateX(-50%);
+  width: min(94%, calc(980px*var(--ui-scale)));
+  z-index:10;
+}
+/* 面板后方：巨型半透明纹章环（缓旋，制造纵深） */
+.gal-dialog-layer .watermark{
+  position:absolute; right:-110px; bottom:-130px; width:380px; height:380px;
+  pointer-events:none; opacity:.13; z-index:0;
+}
+.gal-dialog-layer .watermark .w1{
+  position:absolute; inset:0; border-radius:50%;
+  border:1px solid var(--ct-ice);
+  background: repeating-conic-gradient(from 0deg,
+    rgba(184,237,255,.9) 0deg 1deg, transparent 1deg 8deg);
+  -webkit-mask: radial-gradient(circle, transparent 74%, #000 75%, #000 82%, transparent 83%);
+          mask: radial-gradient(circle, transparent 74%, #000 75%, #000 82%, transparent 83%);
+  animation: gate-spin-pure 60s linear infinite;
+}
+.gal-dialog-layer .watermark .w2{
+  position:absolute; inset:44px; border-radius:50%;
+  border:1px dashed var(--ct-gold-2);
+  animation: gate-spin-pure 40s linear infinite reverse;
+}
+
+.gal-text-panel{
+  position:relative;
+  padding: calc(30px*var(--ui-scale)) calc(46px*var(--ui-scale)) calc(16px*var(--ui-scale));
+  filter: drop-shadow(0 28px 48px rgba(1,3,10,.85)) drop-shadow(0 0 40px rgba(64,110,220,.18));
+}
+/* 外层：金晶渐变边 */
+.gal-text-panel .panel-shape{
+  position:absolute; inset:0; z-index:0;
+  clip-path: var(--cut-panel);
+  background: var(--ct-frame);
+}
+/* 内层：夜色玻璃面 */
+.gal-text-panel .panel-shape::before{
+  content:""; position:absolute; inset:1.5px;
+  clip-path: var(--cut-panel);
+  background: var(--ct-face);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+/* 顶缘金光走线 */
+.gal-text-panel .panel-shape::after{
+  content:""; position:absolute; left:10%; right:22%; top:1.5px; height:1px;
+  background: linear-gradient(90deg, transparent, var(--ct-gold-2) 40%, rgba(184,237,255,.9) 70%, transparent);
+  box-shadow: 0 0 12px rgba(246,227,166,.85);
+}
+/* 第二道内嵌晶线 */
+.gal-text-panel .panel-line{
+  position:absolute; inset:7px; z-index:0; pointer-events:none;
+  clip-path: var(--cut-panel);
+  background: linear-gradient(120deg, rgba(246,227,166,.4), rgba(111,212,255,.28) 50%, rgba(246,227,166,.35));
+}
+.gal-text-panel .panel-line > i{
+  position:absolute; inset:1px;
+  clip-path: var(--cut-panel);
+  background: var(--ct-face);
+}
+/* 削角上的角饰：纯 CSS 双线折角 + 菱晶（非对称，左上/右下） */
+.gal-text-panel .flourish{
+  position:absolute; z-index:2; pointer-events:none;
+  width:58px; height:58px;
+  filter: drop-shadow(0 0 5px rgba(217,180,92,.55));
+}
+.gal-text-panel .flourish.tl{ left:-3px; top:-3px; }
+.gal-text-panel .flourish.br{ right:-3px; bottom:-3px; transform: rotate(180deg); }
+.gal-text-panel .flourish::before{ /* 外粗线折角 */
+  content:""; position:absolute; left:0; top:0; width:100%; height:100%;
+  border-left:2.5px solid var(--ct-gold);
+  border-top:2.5px solid var(--ct-gold);
+  clip-path: polygon(0 0, 100% 0, 100% 6px, 26px 6px, 6px 26px, 6px 100%, 0 100%);
+}
+.gal-text-panel .flourish::after{ /* 内细线折角 */
+  content:""; position:absolute; left:8px; top:8px; width:70%; height:70%;
+  border-left:1px solid rgba(246,227,166,.7);
+  border-top:1px solid rgba(246,227,166,.7);
+  clip-path: polygon(0 0, 100% 0, 100% 3px, 18px 3px, 3px 18px, 3px 100%, 0 100%);
+}
+.gal-text-panel .flourish i{ /* 折角处的菱晶 */
+  position:absolute; left:11px; top:11px; width:7px; height:7px;
+  transform: rotate(45deg);
+  background: var(--ct-gold);
+  box-shadow: 0 0 8px rgba(217,180,92,.9);
+}
+/* 削角处星晶铆钉 */
+.gal-text-panel .rivet{
+  position:absolute; z-index:2; width:8px; height:8px; transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--ct-ice), var(--ct-crystal));
+  box-shadow: 0 0 9px rgba(111,212,255,.9);
+  animation: gem-breathe 3s ease-in-out infinite;
+}
+.gal-text-panel .rivet.r1{ right:52px; top:9px; }
+.gal-text-panel .rivet.r2{ left:52px; bottom:9px; animation-delay:-1.5s; }
+@keyframes gem-breathe{
+  0%,100%{ box-shadow: 0 0 9px rgba(111,212,255,.95); }
+  50%{ box-shadow: 0 0 3px rgba(111,212,255,.4); }
+}
+
+.gal-text-panel > .gal-dialog-text,
+.gal-text-panel > .gal-bottom-toolbar,
+.gal-text-panel > .gal-progress-container{ position:relative; z-index:3; }
+
+.gal-dialog-text{
+  font-size: calc(18.5px*var(--ui-scale));
+  line-height:2.1; letter-spacing:.06em;
+  color: var(--ct-text); font-weight:500;
+  min-height: calc(18.5px * 2.1 * 2 * var(--ui-scale));
+  text-align: justify;
+  text-shadow: 0 0 18px rgba(111,212,255,.25), 0 1px 3px rgba(0,0,0,.6);
+}
+/* 逐字辉光浮现 */
+.gal-dialog-text .ch{
+  display:inline-block;
+  animation: ch-in .5s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes ch-in{
+  from{ opacity:0; transform: translateY(6px); filter: blur(4px);
+        text-shadow: 0 0 18px rgba(184,237,255,1); }
+  to  { opacity:1; transform: translateY(0); filter: blur(0);
+        text-shadow: 0 0 18px rgba(111,212,255,.25), 0 1px 3px rgba(0,0,0,.6); }
+}
+.gal-dialog-text .caret{
+  display:inline-block; margin-left:5px;
+  color: var(--ct-ice); font-style:normal; font-size:.85em;
+  text-shadow: 0 0 9px rgba(184,237,255,.95);
+  animation: caret-star 1.1s ease-in-out infinite;
+}
+@keyframes caret-star{
+  0%,100%{ opacity:1; transform: scale(1) rotate(0deg); }
+  50%{ opacity:.15; transform: scale(.7) rotate(90deg); }
+}
+
+/* —— 姓名牌：斜切纹章板 + 星晶 + 拉丁铭文 —— */
+.gal-name-badge{
+  position:absolute; left: calc(20px*var(--ui-scale)); top: calc(-44px*var(--ui-scale));
+  z-index:4;
+  clip-path: var(--cut-para);
+  background: linear-gradient(120deg, var(--ct-gold-2) 0%, var(--ct-gold) 40%, rgba(111,212,255,.85) 100%);
+  padding:1.5px;
+  filter: drop-shadow(0 8px 18px rgba(1,3,10,.7)) drop-shadow(0 0 16px rgba(111,212,255,.22));
+}
+.gal-name-badge .plate{
+  clip-path: var(--cut-para);
+  display:flex; align-items:center; gap:12px;
+  background:
+    radial-gradient(120% 160% at 8% 0%, rgba(111,212,255,.2) 0%, transparent 48%),
+    linear-gradient(120deg, #17285f 0%, #0a1436 55%, #060d26 100%);
+  padding: calc(8px*var(--ui-scale)) calc(30px*var(--ui-scale)) calc(8px*var(--ui-scale)) calc(20px*var(--ui-scale));
+}
+.gal-name-badge .gem{
+  width:10px; height:10px; transform: rotate(45deg); flex:none;
+  background: linear-gradient(135deg, var(--ct-ice), var(--ct-crystal));
+  box-shadow: 0 0 10px rgba(111,212,255,.95), 0 0 20px rgba(111,212,255,.4);
+  animation: gem-breathe 2.8s ease-in-out infinite;
+}
+.gal-name-badge .who{ display:flex; flex-direction:column; line-height:1.15; }
+.gal-name-badge .who span{
+  font-family: var(--font-disp);
+  font-size: calc(20px*var(--ui-scale)); letter-spacing:.22em; font-weight:700;
+  color: var(--ct-moon);
+  text-shadow: 0 0 14px rgba(143,227,255,.55);
+}
+.gal-name-badge .who small{
+  font-family: var(--font-latin);
+  font-size: calc(8.5px*var(--ui-scale)); letter-spacing:.42em; font-weight:600;
+  color: var(--ct-gold-2); margin-top:3px;
+  text-shadow: 0 0 8px rgba(246,227,166,.5);
+}
+.gal-name-badge.gal-narrator-label{
+  background: linear-gradient(120deg, rgba(174,185,214,.7), rgba(110,124,158,.65));
+}
+.gal-name-badge.gal-narrator-label .plate{
+  background: linear-gradient(120deg, #2a3452 0%, #1c2440 100%);
+}
+.gal-name-badge.gal-narrator-label .gem{ background:#8b97b6; box-shadow:none; animation:none; }
+
+/* —— 悬浮操作（.gal-interaction-bar）：星晶小签 + 星光扫掠 —— */
+.gal-interaction-bar{
+  position:absolute; right: calc(14px*var(--ui-scale)); top: calc(-21px*var(--ui-scale));
+  display:flex; gap:9px; z-index:4;
+}
+.gal-action-btn{
+  height: calc(33px*var(--ui-scale)); padding:0 calc(17px*var(--ui-scale));
+  display:flex; align-items:center; gap:7px; cursor:pointer;
+  font-family: var(--font-body); font-size: calc(12.5px*var(--ui-scale));
+  letter-spacing:.2em; font-weight:600;
+  color: var(--ct-ice);
+  clip-path: var(--cut-para);
+  background: rgba(7,14,42,.92);
+  border:none;
+  box-shadow: inset 0 0 0 1px rgba(184,237,255,.3);
+  position:relative; overflow:hidden;
+  transition: color .25s ease, box-shadow .25s ease;
+}
+.gal-action-btn::before{
+  content:""; position:absolute; top:0; bottom:0; left:-70%; width:44%;
+  background: linear-gradient(105deg, transparent 0%, rgba(246,227,166,.45) 46%, rgba(184,237,255,.4) 56%, transparent 100%);
+  transform: skewX(-18deg);
+  transition: left .45s ease;
+}
+.gal-action-btn:hover::before{ left:135%; }
+.gal-action-btn:hover{
+  color:var(--ct-gold-2);
+  box-shadow: inset 0 0 0 1px rgba(246,227,166,.8), 0 0 16px rgba(217,180,92,.35);
+}
+.gal-action-btn span, .gal-action-btn .ico{ position:relative; z-index:1; }
+
+/* ============================================================
+   底部工具栏 —— 星语小字 + 菱形分隔；NEXT 为能量循环晶键
+   ============================================================ */
+.gal-bottom-toolbar{
+  display:flex; align-items:center; gap: calc(1px*var(--ui-scale));
+  margin-top: calc(18px*var(--ui-scale));
+}
+.gal-footer-btn{
+  font-family: var(--font-body);
+  font-size: calc(12.5px*var(--ui-scale)); font-weight:600; letter-spacing:.1em;
+  color: var(--ct-text-dim);
+  background:none; border:none; cursor:pointer;
+  padding: calc(7px*var(--ui-scale)) calc(9px*var(--ui-scale));
+  position:relative; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:5px;
+  transition: color .25s ease, text-shadow .25s ease;
+}
+.gal-footer-btn i{ font-size:.85em; opacity:.7; }
+.gal-pending-choices-btn{ white-space:nowrap; }
+.gal-pending-choices-btn .pico{ font-style:normal; }
+.gal-footer-btn-next{ white-space:nowrap; }
+.gal-footer-btn + .gal-footer-btn::before{
+  content:""; position:absolute; left:-1.5px; top:50%;
+  width:3px; height:3px; transform: translateY(-50%) rotate(45deg);
+  background: rgba(184,237,255,.28);
+}
+.gal-footer-btn::after{
+  content:""; position:absolute; left:50%; bottom:2px; height:1px; width:0;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, var(--ct-gold-2), transparent);
+  box-shadow: 0 0 7px rgba(246,227,166,.85);
+  transition: width .28s ease;
+}
+.gal-footer-btn:hover{ color: var(--ct-moon); text-shadow: 0 0 11px rgba(111,212,255,.8); }
+.gal-footer-btn:hover::after{ width:82%; }
+.gal-toolbar-spacer{ flex:1; }
+
+/* 待选项按钮：星晶碎片 + 呼吸辉光 */
+.gal-pending-choices-btn{
+  display:flex; align-items:center; gap:8px; cursor:pointer;
+  font-family: var(--font-body);
+  font-size: calc(12.5px*var(--ui-scale)); font-weight:700; letter-spacing:.2em;
+  color:#071028;
+  clip-path: var(--cut-para);
+  background: linear-gradient(120deg, var(--ct-ice), var(--ct-crystal) 70%);
+  border:none;
+  padding: calc(9px*var(--ui-scale)) calc(19px*var(--ui-scale));
+  animation: crystal-breathe 2.4s ease-out infinite;
+}
+@keyframes crystal-breathe{
+  0%{ box-shadow: 0 0 0 0 rgba(111,212,255,.6); }
+  70%{ box-shadow: 0 0 20px 9px rgba(111,212,255,0); }
+  100%{ box-shadow: 0 0 0 0 rgba(111,212,255,0); }
+}
+
+/* NEXT：六角晶键 —— 能量沿边框循环（@property 驱动） */
+.gal-footer-btn-next{
+  position:relative; cursor:pointer; border:none; background:none;
+  padding: calc(11px*var(--ui-scale)) calc(30px*var(--ui-scale));
+  margin-left: calc(10px*var(--ui-scale));
+  display:flex; align-items:center; gap:10px;
+  filter: drop-shadow(0 6px 18px rgba(111,212,255,.4));
+  transition: filter .3s ease;
+}
+.gal-footer-btn-next .nx-frame{
+  position:absolute; inset:0; clip-path: var(--cut-hex);
+  background: conic-gradient(from var(--spin),
+    rgba(111,212,255,.0) 0deg, rgba(184,237,255,.9) 40deg, rgba(111,212,255,0) 90deg,
+    rgba(246,227,166,0) 170deg, var(--ct-gold-2) 215deg, rgba(246,227,166,0) 265deg, rgba(111,212,255,0) 360deg),
+    linear-gradient(120deg, rgba(217,180,92,.75), rgba(111,212,255,.55));
+  animation: nx-spin 3.2s linear infinite;
+}
+@keyframes nx-spin{ to{ --spin: 360deg; } }
+.gal-footer-btn-next .nx-face{
+  position:absolute; inset:2px; clip-path: var(--cut-hex);
+  background:
+    radial-gradient(130% 130% at 50% -20%, rgba(111,212,255,.35) 0%, transparent 52%),
+    linear-gradient(165deg, #1b2f6e 0%, #0a1436 60%, #071028 100%);
+}
+.gal-footer-btn-next .star{
+  position:relative; z-index:1;
+  font-style:normal; font-size:.95em; color: var(--ct-gold-2);
+  text-shadow: 0 0 9px rgba(246,227,166,.95);
+  animation: gate-spin-pure 6s linear infinite;
+}
+.gal-footer-btn-next > span:last-child{
+  position:relative; z-index:1;
+  font-family: var(--font-disp); font-weight:700;
+  font-size: calc(14.5px*var(--ui-scale)); letter-spacing:.34em; text-indent:.1em;
+  color: var(--ct-moon);
+  text-shadow: 0 0 12px rgba(111,212,255,.7);
+}
+.gal-footer-btn-next:hover{
+  filter: drop-shadow(0 6px 26px rgba(111,212,255,.75)) brightness(1.12);
+}
+
+/* —— 进度条：星轨（刻度 + 彗星头） —— */
+.gal-progress-container{
+  height:4px; margin-top: calc(13px*var(--ui-scale));
+  background:
+    repeating-linear-gradient(90deg, rgba(184,237,255,.22) 0 1px, transparent 1px 10%),
+    rgba(184,237,255,.09);
+  overflow:visible; position:relative;
+}
+.gal-progress-bar{
+  height:100%; width:64%; position:relative;
+  background: linear-gradient(90deg, rgba(111,212,255,.25) 0%, var(--ct-crystal) 55%, var(--ct-gold-2) 100%);
+  box-shadow: 0 0 10px rgba(111,212,255,.65);
+}
+.gal-progress-bar::after{
+  content:""; position:absolute; right:-3px; top:50%; transform:translateY(-50%) rotate(45deg);
+  width:8px; height:8px; background: var(--ct-gold-2);
+  box-shadow: 0 0 12px rgba(246,227,166,1), 0 0 26px rgba(246,227,166,.5);
+}
+
+/* ============================================================
+   选项浮层 —— 「命运星盘」：全幅符文魔法阵 + 水晶碎片
+   ============================================================ */
+.gal-choices-overlay{
+  position:absolute; inset:0; z-index:40;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap: calc(13px*var(--ui-scale));
+  background: rgba(2,4,14,.7); backdrop-filter: blur(5px) saturate(.9);
+  opacity:0; pointer-events:none; transition: opacity .35s ease;
+}
+.gal-choices-overlay.show{ opacity:1; pointer-events:auto; }
+/* 魔法阵：纯 CSS 三环——刻度环 / 虚线环 / 符文点环，反向缓旋 */
+.gal-choices-overlay .magic-circle{
+  position:absolute; left:50%; top:50%; width:min(88vh, 620px); aspect-ratio:1;
+  transform: translate(-50%,-50%);
+  pointer-events:none; opacity:.85;
+  filter: drop-shadow(0 0 14px rgba(184,237,255,.25));
+}
+.magic-circle .mc-o{ /* 外环：金刻度 + 细线 */
+  position:absolute; inset:0; border-radius:50%;
+  border:1px solid rgba(246,227,166,.55);
+  background: repeating-conic-gradient(from 0deg,
+    rgba(246,227,166,.85) 0deg 1deg, transparent 1deg 7.5deg);
+  -webkit-mask: radial-gradient(circle, transparent 88%, #000 88.6%, #000 92%, transparent 92.6%);
+          mask: radial-gradient(circle, transparent 88%, #000 88.6%, #000 92%, transparent 92.6%);
+  animation: gate-spin-pure 70s linear infinite;
+}
+.magic-circle .mc-o::before{
+  content:""; position:absolute; inset:0; border-radius:50%;
+  border:1px solid rgba(246,227,166,.4);
+}
+.magic-circle .mc-m{ /* 中环：冰蓝虚线双环 */
+  position:absolute; inset:11%; border-radius:50%;
+  border:1px dashed rgba(184,237,255,.42);
+  animation: gate-spin-pure 46s linear infinite reverse;
+}
+.magic-circle .mc-m::before{
+  content:""; position:absolute; inset:7%; border-radius:50%;
+  border:1px solid rgba(184,237,255,.25);
+}
+.magic-circle .mc-m::after{ /* 四方位菱晶 */
+  content:""; position:absolute; left:50%; top:-4px; width:8px; height:8px;
+  transform: translateX(-50%) rotate(45deg);
+  background:#F6E3A6; box-shadow: 0 0 10px rgba(246,227,166,.9);
+}
+.magic-circle .mc-i{ /* 内环：符文点环（点状 conic）+ 十字线 */
+  position:absolute; inset:24%; border-radius:50%;
+  background: repeating-conic-gradient(from 0deg,
+    rgba(184,237,255,.75) 0deg 2deg, transparent 2deg 24deg);
+  -webkit-mask: radial-gradient(circle, transparent 82%, #000 83%, #000 89%, transparent 90%);
+          mask: radial-gradient(circle, transparent 82%, #000 83%, #000 89%, transparent 90%);
+  animation: gate-spin-pure 30s linear infinite;
+}
+.magic-circle .mc-cross{ /* 十字定位线 */
+  position:absolute; inset:24%;
+  background:
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(184,237,255,.16) 50%, transparent calc(50% + .5px)),
+    linear-gradient(180deg, transparent calc(50% - .5px), rgba(184,237,255,.16) 50%, transparent calc(50% + .5px));
+}
+.gal-choices-overlay .mc-glow{
+  position:absolute; left:50%; top:50%; width:min(70vh, 520px); aspect-ratio:1;
+  transform: translate(-50%,-50%); border-radius:50%;
+  background: radial-gradient(circle, rgba(111,212,255,.16) 0%, rgba(111,212,255,.05) 44%, transparent 68%);
+  pointer-events:none;
+  animation: neb-breathe 6s ease-in-out infinite alternate;
+}
+.gal-choices-title{
+  position:relative; z-index:1; text-align:center;
+  color:#F5F9FF; font-family: var(--font-disp);
+  font-size: calc(17px*var(--ui-scale)); font-weight:700; letter-spacing:.62em; text-indent:.62em;
+  margin-bottom: calc(4px*var(--ui-scale));
+  text-shadow: 0 0 20px rgba(111,212,255,.7);
+}
+.gal-choices-title small{
+  display:block; font-family: var(--font-latin); font-weight:600;
+  font-size:9.5px; letter-spacing:.5em; text-indent:.5em; margin-top:7px;
+  color: rgba(246,227,166,.8);
+}
+/* 水晶碎片选项 */
+.gal-choice-card{
+  position:relative; z-index:1;
+  width: min(76%, 600px);
+  clip-path: var(--cut-card);
+  background: linear-gradient(120deg, rgba(246,227,166,.85), rgba(111,212,255,.35) 45%, rgba(184,237,255,.6));
+  padding:1.5px; border:none; cursor:pointer;
+  font-family: var(--font-body);
+  opacity:0; transform: translateY(16px) scale(.97);
+  transition: transform .22s ease, filter .22s ease;
+  filter: drop-shadow(0 16px 26px rgba(1,3,10,.7));
+}
+.gal-choice-card .card-face{
+  display:flex; align-items:center; gap: calc(18px*var(--ui-scale));
+  clip-path: var(--cut-card);
+  background: var(--ct-card-face);
+  padding: calc(14px*var(--ui-scale)) calc(26px*var(--ui-scale));
+  position:relative; overflow:hidden;
+}
+.gal-choice-card .card-face::before{
+  content:""; position:absolute; top:0; bottom:0; left:-60%; width:38%;
+  background: linear-gradient(105deg, transparent, rgba(184,237,255,.28), transparent);
+  transform: skewX(-20deg);
+  transition: left .5s ease;
+}
+.gal-choice-card:hover .card-face::before{ left:130%; }
+.gal-choices-overlay.show .gal-choice-card{ animation: card-summon .55s cubic-bezier(.18,.9,.28,1.06) forwards; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(2){ animation-delay:.1s; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(3){ animation-delay:.2s; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(4){ animation-delay:.3s; }
+@keyframes card-summon{ to{ opacity:1; transform:translateY(0) scale(1); } }
+.gal-choice-card:hover{
+  transform: translateY(-3px) scale(1.012);
+  filter: drop-shadow(0 20px 34px rgba(1,3,10,.85)) drop-shadow(0 0 22px rgba(111,212,255,.4));
+}
+.gal-choice-index{
+  flex:none; width: calc(36px*var(--ui-scale)); height: calc(36px*var(--ui-scale));
+  display:grid; place-items:center;
+  font-family: var(--font-latin);
+  font-size: calc(15px*var(--ui-scale)); font-weight:700; color: var(--ct-ice);
+  border:1px solid rgba(184,237,255,.5);
+  transform: rotate(45deg);
+  transition: all .24s ease;
+}
+.gal-choice-index b{ transform: rotate(-45deg); font-weight:inherit; }
+.gal-choice-card:hover .gal-choice-index{
+  color:#071028; background: linear-gradient(135deg, #F6E3A6, #D9B45C);
+  border-color:#F6E3A6;
+  box-shadow: 0 0 14px rgba(246,227,166,.8);
+}
+.gal-choice-card .card-face > span:last-child{
+  font-size: calc(15px*var(--ui-scale)); font-weight:600; letter-spacing:.06em;
+  color:#F5F9FF; text-align:left; position:relative; z-index:1;
+}
+.gal-choices-hint{
+  position:relative; z-index:1;
+  color:rgba(216,228,250,.42); font-size:11px; letter-spacing:.34em; margin-top:6px;
+}
+
+/* ============================================================
+   历史记录 —— 「星之回廊」
+   ============================================================ */
+.gal-history-modal{
+  position:absolute; inset:0; z-index:50;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(2,4,14,.72); backdrop-filter: blur(5px);
+  opacity:0; pointer-events:none; transition: opacity .3s ease;
+}
+.gal-history-modal.show{ opacity:1; pointer-events:auto; }
+.gal-history-panel{
+  width:min(80%, 660px); max-height:80%;
+  display:flex; flex-direction:column;
+  clip-path: var(--cut-panel);
+  background: linear-gradient(120deg, rgba(246,227,166,.9), rgba(111,212,255,.5) 44%, rgba(246,227,166,.75));
+  padding:1.5px;
+  filter: drop-shadow(0 44px 80px rgba(0,0,0,.9));
+}
+.gal-history-inner{
+  display:flex; flex-direction:column; overflow:hidden; min-height:0;
+  clip-path: var(--cut-panel);
+  background:
+    radial-gradient(140% 90% at 50% 0%, rgba(111,212,255,.1) 0%, transparent 52%),
+    linear-gradient(178deg, #0d1840 0%, #060c26 100%);
+}
+.gal-history-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 30px 15px;
+  border-bottom:1px solid transparent;
+  border-image: linear-gradient(90deg, transparent, rgba(217,180,92,.7), transparent) 1;
+}
+.gal-history-title{
+  font-family: var(--font-disp);
+  font-size:17px; font-weight:700; letter-spacing:.44em; color:#F5F9FF;
+  text-shadow: 0 0 16px rgba(111,212,255,.55);
+  display:flex; align-items:baseline;
+}
+.gal-history-title small{
+  font-family: var(--font-latin); font-weight:600;
+  letter-spacing:.3em; color:rgba(246,227,166,.75); margin-left:12px; font-size:9.5px;
+}
+.gal-history-close{
+  background:none; border:1px solid rgba(184,237,255,.4);
+  width:31px; height:31px; cursor:pointer; color:#B8EDFF;
+  clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+  transition:all .22s ease;
+}
+.gal-history-close:hover{ background:#F6E3A6; border-color:#F6E3A6; color:#071028; }
+.gal-history-body{ overflow-y:auto; padding: 10px 32px 24px; }
+.gal-history-item{ padding:17px 0 15px; border-bottom:1px dashed rgba(184,237,255,.16); }
+.gal-history-name{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family: var(--font-disp);
+  font-size:14px; letter-spacing:.18em; font-weight:700;
+  color:#B8EDFF; margin-bottom:7px;
+}
+.gal-history-name::before{
+  content:""; width:6px; height:6px; transform:rotate(45deg);
+  background: linear-gradient(135deg, #B8EDFF, #6FD4FF);
+  box-shadow: 0 0 7px rgba(111,212,255,.85);
+}
+.gal-history-name.narrator{ color:#8b97b6; }
+.gal-history-name.narrator::before{ background:#8b97b6; box-shadow:none; }
+.gal-history-content{ font-size:14px; line-height:2.05; color:rgba(245,249,255,.9); }
+.gal-history-body::-webkit-scrollbar{ width:4px; }
+.gal-history-body::-webkit-scrollbar-thumb{ background:rgba(184,237,255,.3); border-radius:4px; }
+
+/* ============================================================
+   生成中 —— 「星辰演算」：符文阵双环 + 星核
+   ============================================================ */
+.gal-generating-indicator{
+  position:absolute; left:50%; top:41%; transform:translate(-50%,-50%);
+  z-index:45; display:none; flex-direction:column; align-items:center; gap:16px;
+  padding:30px 52px;
+  clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
+  background:
+    radial-gradient(140% 100% at 50% 0%, rgba(111,212,255,.12) 0%, transparent 55%),
+    linear-gradient(178deg, rgba(13,24,64,.97), rgba(5,9,26,.97));
+  box-shadow: inset 0 0 0 1px rgba(217,180,92,.45);
+  filter: drop-shadow(0 34px 66px rgba(0,0,0,.85));
+}
+.gal-generating-indicator.show{ display:flex; }
+.gal-gen-circle{ width:72px; height:72px; position:relative; }
+.gal-gen-circle .ring-a{
+  position:absolute; inset:0; border-radius:50%;
+  background: repeating-conic-gradient(from 0deg, rgba(184,237,255,.85) 0deg 2deg, transparent 2deg 15deg);
+  -webkit-mask: radial-gradient(circle, transparent 74%, #000 75%, #000 86%, transparent 87%);
+          mask: radial-gradient(circle, transparent 74%, #000 75%, #000 86%, transparent 87%);
+  animation: gate-spin-pure 4.5s linear infinite;
+}
+.gal-gen-circle .ring-b{
+  position:absolute; inset:9px; border-radius:50%;
+  border:1px dashed rgba(246,227,166,.7);
+  animation: gate-spin-pure 7s linear infinite reverse;
+}
+.gal-gen-circle .ring-c{
+  position:absolute; inset:16px; border-radius:50%;
+  border:1px solid transparent;
+  border-top-color:#F6E3A6; border-right-color:rgba(246,227,166,.35);
+  animation: gate-spin-pure 1.6s linear infinite;
+}
+.gal-gen-circle .core{
+  position:absolute; inset:0; display:grid; place-items:center;
+  color:#B8EDFF; font-size:17px;
+  text-shadow: 0 0 14px rgba(184,237,255,1);
+  animation: caret-star 1.8s ease-in-out infinite;
+}
+.gal-gen-text{
+  font-family: var(--font-disp);
+  font-size:15.5px; font-weight:700; letter-spacing:.58em; text-indent:.58em; color:#F5F9FF;
+  text-shadow: 0 0 16px rgba(111,212,255,.55);
+}
+.gal-gen-status{ font-size:11px; letter-spacing:.3em; color:rgba(216,228,250,.55); }
+
+/* ============================================================
+   变体：昼之庭 · 黎明 (Dawn Court) —— 只覆写 token
+   ============================================================ */
+.gal-game-container.dawn{
+  --ct-void:      #cfe2f4;
+  --ct-night:     #ddecf8;
+  --ct-zenith:    #9cc4e8;
+  --ct-crystal:   #2E7EC7;
+  --ct-ice:       #5FA8DC;
+  --ct-gold:      #B9862E;
+  --ct-gold-2:    #D9A94A;
+  --ct-moon:      #223252;
+  --ct-text:      #26334f;
+  --ct-text-dim:  rgba(52,68,102,.62);
+  --ct-star-op:   .14;
+  --neb-a:        rgba(255,216,150,.4);
+  --neb-b:        rgba(150,196,240,.35);
+  --ct-const:     rgba(46,126,199,.4);
+  --ct-ray:       rgba(255,236,190,.35);
+  --ct-pt:        rgba(255,224,160,.9);
+  --ct-fall:      rgba(255,224,160,.65);
+  --ct-island:    #7590b4;
+  --ct-cloud:     rgba(255,244,222,.55);
+  --ct-frame: linear-gradient(120deg,
+      #d9a94a 0%, #b9862e 14%, rgba(95,168,220,.7) 36%,
+      rgba(95,168,220,.3) 52%, rgba(95,168,220,.6) 68%,
+      #b9862e 86%, #d9a94a 100%);
+  --ct-face:
+      radial-gradient(140% 120% at 82% -20%, rgba(95,168,220,.14) 0%, transparent 46%),
+      linear-gradient(165deg, rgba(250,252,255,calc(var(--panel-opacity) + .1)) 0%, rgba(228,240,250,calc(var(--panel-opacity) + .12)) 100%);
+  --ct-card-face:
+      radial-gradient(130% 110% at 50% -10%, rgba(95,168,220,.14) 0%, transparent 52%),
+      linear-gradient(165deg, rgba(250,252,255,.97) 0%, rgba(226,238,250,.97) 100%);
+}
+.gal-game-container.dawn .sky{
+  background:
+    radial-gradient(110% 80% at 50% -12%, #3579bd 0%, rgba(53,121,189,0) 60%),
+    radial-gradient(160% 110% at 50% 122%, #ffce8c 0%, rgba(255,206,140,0) 48%),
+    linear-gradient(178deg, #5d9ad2 0%, #a7cbe9 52%, #f7dfae 100%);
+}
+.gal-game-container.dawn .milkyway{ opacity:.1; }
+/* 亮底上 screen 混合会整片过曝：黎明改用普通混合并压低强度 */
+.gal-game-container.dawn .nebula{ mix-blend-mode: normal; filter: blur(52px); opacity:.4; }
+.gal-game-container.dawn .aurora{ mix-blend-mode: normal; opacity:.4; }
+.gal-game-container.dawn .godray{ mix-blend-mode: normal; }
+@keyframes ray-pulse-dawn{ from{ opacity:.15; } to{ opacity:.4; } }
+.gal-game-container.dawn .godray{ animation-name: ray-pulse-dawn; }
+.gal-game-container.dawn .gate .moon{
+  background: radial-gradient(circle at 50% 50%, rgba(255,250,235,.98) 0%, rgba(255,236,190,.55) 40%, transparent 70%);
+  filter: drop-shadow(0 0 34px rgba(255,224,150,.85));
+}
+.gal-game-container.dawn .gate .ring-line{
+  border-color: rgba(217,169,74,.85);
+  box-shadow: 0 0 26px rgba(255,224,150,.55), inset 0 0 22px rgba(255,236,190,.5);
+}
+.gal-game-container.dawn .isle .rock{
+  background: linear-gradient(180deg, #9db4d2 0%, var(--ct-island) 40%, #5a7096 100%);
+}
+.gal-game-container.dawn .isle .crystals i{
+  background: linear-gradient(180deg, rgba(255,240,205,.95), rgba(255,214,140,.4));
+  filter: drop-shadow(0 0 8px rgba(255,214,140,.8));
+}
+.gal-game-container.dawn .char-silhouette{
+  border-color: rgba(70,110,170,.3);
+  background: linear-gradient(180deg, rgba(70,110,170,.06) 0%, rgba(70,110,170,.02) 55%, transparent 100%);
+}
+.gal-game-container.dawn .char-silhouette::before{ border-color: rgba(70,110,170,.5); }
+.gal-game-container.dawn .char-silhouette::after{ border-color: rgba(70,110,170,.5); }
+.gal-game-container.dawn .slot-note{ color:rgba(52,68,102,.55); }
+.gal-game-container.dawn::after{
+  background:
+    linear-gradient(180deg, rgba(120,160,205,.28) 0%, transparent 14%),
+    linear-gradient(0deg, rgba(70,100,150,.35) 0%, rgba(70,100,150,.1) 20%, transparent 38%),
+    radial-gradient(140% 100% at 50% 50%, transparent 64%, rgba(90,120,170,.3) 100%);
+}
+.gal-game-container.dawn .gal-scene-plaque .gal-location-text{
+  text-shadow: 0 0 16px rgba(255,255,255,.9), 0 1px 3px rgba(255,255,255,.6);
+}
+.gal-game-container.dawn .gal-dialog-text{ text-shadow: 0 1px 2px rgba(255,255,255,.65); }
+.gal-game-container.dawn .gal-dialog-text .ch{ animation-name: ch-in-dawn; }
+@keyframes ch-in-dawn{
+  from{ opacity:0; transform: translateY(6px); filter: blur(4px); }
+  to  { opacity:1; transform: translateY(0); filter: blur(0); }
+}
+.gal-game-container.dawn .gal-name-badge .plate{
+  background:
+    radial-gradient(120% 160% at 8% 0%, rgba(95,168,220,.2) 0%, transparent 48%),
+    linear-gradient(120deg, #fbfdff 0%, #e2eefa 60%, #d4e4f4 100%);
+}
+.gal-game-container.dawn .gal-name-badge .who span{ color:#223252; text-shadow:none; }
+.gal-game-container.dawn .gal-name-badge .who small{ color:#B9862E; text-shadow:none; }
+.gal-game-container.dawn .gal-action-btn{ background: rgba(250,252,255,.94); color:#2E7EC7; }
+.gal-game-container.dawn .gal-footer-btn:hover{ text-shadow: 0 0 10px rgba(255,255,255,1); }
+.gal-game-container.dawn .gal-footer-btn-next .nx-face{
+  background:
+    radial-gradient(130% 130% at 50% -20%, rgba(255,244,215,.7) 0%, transparent 55%),
+    linear-gradient(165deg, #f2f8ff 0%, #dcebf8 100%);
+}
+.gal-game-container.dawn .gal-footer-btn-next > span:last-child{ color:#223252; text-shadow:none; }
+.gal-game-container.dawn .gal-fullscreen-btn{ background: rgba(250,252,255,.6); }
+.gal-game-container.dawn .watermark{ opacity:.2; }
+.gal-game-container.dawn .gal-pending-choices-btn{ color:#fff; }
+.gal-game-container.dawn .gal-history-inner{
+  background:
+    radial-gradient(140% 90% at 50% 0%, rgba(95,168,220,.12) 0%, transparent 52%),
+    linear-gradient(178deg, #f4f9ff 0%, #e2eefa 100%);
+}
+.gal-game-container.dawn .gal-history-title{ color:#223252; text-shadow:none; }
+.gal-game-container.dawn .gal-history-content{ color:rgba(34,50,82,.9); }
+.gal-game-container.dawn .gal-history-name{ color:#2E7EC7; }
+.gal-game-container.dawn .gal-generating-indicator{
+  background:
+    radial-gradient(140% 100% at 50% 0%, rgba(95,168,220,.14) 0%, transparent 55%),
+    linear-gradient(178deg, rgba(250,252,255,.97), rgba(228,240,250,.97));
+}
+.gal-game-container.dawn .gal-gen-text{ color:#223252; text-shadow:none; }
+.gal-game-container.dawn .gal-gen-status{ color:rgba(52,68,102,.6); }
+
+/* ============================================================
+   移动端（.gal-game-container.mobile）—— 9:19.5 竖屏
+   同一 DOM（JS 克隆桌面舞台），只做排版覆写
+   ============================================================ */
+.mobile-wrap{ display:flex; flex-direction:column; align-items:center; gap:0; }
+.phone{
+  padding:12px; border-radius:46px; position:relative;
+  background: linear-gradient(180deg, #161d33, #0a0e1e);
+  border:1px solid rgba(184,237,255,.15);
+  box-shadow: 0 44px 100px -32px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.07);
+}
+.phone::before{ /* 听筒 */
+  content:""; position:absolute; top:5px; left:50%; transform:translateX(-50%);
+  width:80px; height:4px; border-radius:3px; background:rgba(255,255,255,.1);
+}
+.phone .gal-game-container{ border-radius:34px; }
+
+.gal-game-container.mobile{
+  width:min(392px, 92vw); aspect-ratio: 9/19.5;
+  --ui-scale: .86;
+  --cut-panel: polygon(0 18px, 18px 0, calc(100% - 44px) 0, calc(100% - 34px) 10px,
+                       calc(100% - 10px) 10px, 100% 20px, 100% calc(100% - 18px),
+                       calc(100% - 18px) 100%, 44px 100%, 34px calc(100% - 10px),
+                       10px calc(100% - 10px), 0 calc(100% - 20px));
+}
+.gal-game-container.mobile .gal-status-bar-container{ padding:20px 18px 0; }
+.gal-game-container.mobile .gal-scene-plaque .gal-location-text{ font-size:15.5px; }
+.gal-game-container.mobile .gal-scene-plaque .rule{ width:132px; }
+.gal-game-container.mobile .chapter-plaque .name{ display:none; }
+.gal-game-container.mobile .gal-top-actions{ gap:10px; }
+/* 背景元素重排 */
+.gal-game-container.mobile .neb-a{ left:-14%; top:3%; width:86%; height:32%; }
+.gal-game-container.mobile .neb-b{ right:-16%; top:20%; width:76%; height:30%; }
+.gal-game-container.mobile .milkyway{ left:-40%; width:220%; height:36%; transform: rotate(-24deg); }
+.gal-game-container.mobile .gate{ right:7%; top:6%; width:92px; height:92px; }
+.gal-game-container.mobile .gate .ring-line{ inset:8px; }
+.gal-game-container.mobile .gate .moon{ inset:24px; box-shadow: inset 8px -5px 0 0 #E9F2FF; }
+.gal-game-container.mobile .ray-1{ left:18%; width:16%; }
+.gal-game-container.mobile .ray-2{ left:42%; width:9%; }
+.gal-game-container.mobile .isle-l{ left:-8%; bottom:27%; width:56%; height:15%; }
+.gal-game-container.mobile .isle-r{ right:-6%; bottom:33%; width:34%; height:9%; }
+.gal-game-container.mobile .isle-far{ left:56%; bottom:40%; width:17%; height:4.5%; }
+.gal-game-container.mobile .cloud-a{ bottom:24%; height:12%; }
+.gal-game-container.mobile .cloud-b{ bottom:16%; height:10%; }
+.gal-game-container.mobile .ss1{ left:6%; top:13%; }
+.gal-game-container.mobile .ss2{ left:40%; top:5%; }
+/* 立绘：更大，站在对话框上方 */
+.gal-game-container.mobile .gal-char-slot.slot-center{ width:56%; bottom:21%; }
+.gal-game-container.mobile .slot-note{ font-size:10px; }
+/* 对话框 */
+.gal-game-container.mobile .gal-dialog-layer{ width:94%; bottom:14px; }
+.gal-game-container.mobile .watermark{ right:-90px; bottom:-100px; width:270px; height:270px; }
+.gal-game-container.mobile .gal-text-panel{ padding:18px 20px 12px; }
+.gal-game-container.mobile .gal-text-panel .rivet.r1{ right:36px; top:6px; }
+.gal-game-container.mobile .gal-text-panel .rivet.r2{ left:36px; bottom:6px; }
+.gal-game-container.mobile .gal-text-panel .flourish svg{ width:44px; height:44px; }
+.gal-game-container.mobile .gal-dialog-text{
+  font-size:14.5px; line-height:2; min-height: calc(14.5px * 2 * 3);
+}
+.gal-game-container.mobile .gal-name-badge{ left:8px; top:-38px; }
+.gal-game-container.mobile .gal-name-badge .plate{ padding:6px 20px 6px 13px; gap:9px; }
+.gal-game-container.mobile .gal-name-badge .who span{ font-size:16px; }
+.gal-game-container.mobile .gal-name-badge .who small{ font-size:7.5px; letter-spacing:.3em; }
+.gal-game-container.mobile .gal-interaction-bar{ right:4px; top:-17px; gap:6px; }
+.gal-game-container.mobile .gal-action-btn{ height:29px; padding:0 11px; font-size:11px; letter-spacing:.1em; }
+/* 工具栏：对齐真实项目移动端紧凑模式（数据库界面插件.css @48rem 规则）——
+   1. 隐藏按钮文字，仅显示图标  2. 履历/原文/存档/读档 收进上拉菜单（点设置弹出）
+   3. 退出排最左  4. 其余按钮单行均分  5. NEXT 固定宽度居中 */
+.gal-game-container.mobile .gal-bottom-toolbar{
+  flex-wrap:nowrap; gap:4px; margin-top:12px;
+  justify-content:flex-start;
+}
+.gal-game-container.mobile .gal-btn-text{ display:none; }
+.gal-game-container.mobile .gal-footer-btn[data-action='log'],
+.gal-game-container.mobile .gal-footer-btn[data-action='view-original'],
+.gal-game-container.mobile .gal-footer-btn[data-action='save'],
+.gal-game-container.mobile .gal-footer-btn[data-action='load']{ display:none; }
+.gal-game-container.mobile .gal-footer-btn[data-action='close-mode']{ order:-1; }
+.gal-game-container.mobile .gal-footer-btn{
+  flex:1 1 0; min-width:0; padding:0; height:38px;
+  justify-content:center; gap:0;
+}
+.gal-game-container.mobile .gal-footer-btn i{ font-size:15px; opacity:.85; }
+.gal-game-container.mobile .gal-footer-btn + .gal-footer-btn::before{ display:none; }
+.gal-game-container.mobile .gal-toolbar-spacer{ display:none; }
+.gal-game-container.mobile .gal-pending-choices-btn{
+  flex:0 0 auto; padding:0 13px; height:34px; align-self:center;
+  font-size:14px; letter-spacing:0;
+}
+.gal-game-container.mobile .gal-pending-choices-btn .pico{ font-size:14px; }
+.gal-game-container.mobile .gal-footer-btn-next{
+  flex:0 0 auto; padding:0; width:64px; height:38px;
+  margin-left:4px; justify-content:center;
+}
+.gal-game-container.mobile .gal-footer-btn-next .star{ font-size:15px; }
+/* 上拉菜单（皮肤化）：点「设置」自设置按钮上方弹出 */
+.gal-mobile-menu{
+  display:none; position:absolute; z-index:200;
+  left:16px; bottom:110px;
+  flex-direction:column; gap:6px;
+  padding:9px;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  background:
+    linear-gradient(120deg, rgba(246,227,166,.5), rgba(111,212,255,.3)) border-box,
+    linear-gradient(170deg, rgba(16,28,70,.97), rgba(6,11,30,.97));
+  box-shadow: inset 0 0 0 1px rgba(217,180,92,.4), 0 18px 40px rgba(0,0,0,.7);
+  min-width:150px;
+  backdrop-filter: blur(8px);
+}
+.gal-mobile-menu.active{ display:flex; }
+.gal-mobile-menu .gal-menu-btn{
+  display:flex; align-items:center; gap:10px;
+  font-family: var(--font-body); font-size:12.5px; font-weight:600; letter-spacing:.14em;
+  color: var(--ct-ice); text-align:left;
+  background: rgba(184,237,255,.05); border:none; cursor:pointer;
+  padding:9px 13px;
+  clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
+  transition: all .2s ease;
+}
+.gal-mobile-menu .gal-menu-btn i{ width:16px; text-align:center; font-size:12px; opacity:.8; }
+.gal-mobile-menu .gal-menu-btn:hover{
+  background: linear-gradient(120deg, rgba(246,227,166,.9), rgba(217,180,92,.9));
+  color:#071028;
+}
+/* 浮层 */
+.gal-game-container.mobile .gal-choice-card{ width:88%; }
+.gal-game-container.mobile .gal-choice-card .card-face{ padding:11px 16px; gap:12px; }
+.gal-game-container.mobile .gal-choice-index{ width:30px; height:30px; font-size:13px; }
+.gal-game-container.mobile .gal-choices-overlay .magic-circle{ width:150vw; max-width:560px; }
+.gal-game-container.mobile .gal-history-panel{ width:92%; max-height:72%; }
+.gal-game-container.mobile .gal-history-header{ padding:14px 20px 12px; }
+.gal-game-container.mobile .gal-history-body{ padding:8px 20px 18px; }
+.gal-game-container.mobile .gal-generating-indicator{ padding:22px 32px; }
+
+/* ---------- 设计说明卡 ---------- */
+.spec-grid{
+  width:min(1280px, 97vw);
+  display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:14px;
+}
+.spec-card{
+  position:relative; padding:20px 22px 18px;
+  color:#aeb9d6; background:rgba(255,255,255,.02);
+  border:1px solid rgba(174,185,214,.12);
+}
+.spec-card::before{
+  content:""; position:absolute; left:0; right:0; top:0; height:1px;
+  background: linear-gradient(90deg, rgba(232,193,90,.75), transparent 65%);
+}
+.spec-card .no{
+  font-family: var(--font-deco); font-size:11px; letter-spacing:.3em;
+  color:#67739a; display:block; margin-bottom:8px;
+}
+.spec-card h3{
+  font-family: var(--font-disp);
+  font-size:13.5px; letter-spacing:.28em; color:#e8c15a;
+  margin-bottom:10px; font-weight:700;
+}
+.spec-card p{ font-size:12.5px; line-height:1.95; color:#8b97b6; }
+.swatches{ display:flex; gap:8px; margin-top:12px; }
+.swatch{ width:34px; height:34px; border:1px solid rgba(255,255,255,.15); position:relative;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.swatch i{
+  position:absolute; top:110%; left:50%; transform:translateX(-50%);
+  font-style:normal; font-size:9px; letter-spacing:.04em; color:#67739a; white-space:nowrap;
+}
+footer{
+  font-family: var(--font-latin);
+  color:#4c5470; font-size:10.5px; letter-spacing:.34em; padding:16px 0 6px; text-align:center;
+}
+</style>
+</head>
+<body>
+
+<div class="proposal-head">
+  <div class="latin">Skin Proposal · Celestial Court Ⅱ</div>
+  <h1>苍穹之庭 <em>·</em> 星降之夜</h1>
+  <div class="divider"></div>
+  <p>重制版。旧稿仍是「换色的玻璃面板」，本稿把整块舞台当作一幕开场 CG 来造：
+  斜贯天穹的银河与星云、自绘连线的星座、周期划落的流星、刻度环与卫星菱晶公转的「天穹之门」、
+  岛底星晶簇垂落光瀑的浮空岛、自云海升腾的星尘。对话框升格为非对称双削角圣仪面板
+  （双层金晶线 + 雕花角饰 + 星晶铆钉），NEXT 是能量沿边框循环的六角晶键，
+  文字逐字辉光浮现，鼠标移动时星空视差。含桌面 16:9 与移动端 9:19.5 双预览，
+  预览控制按钮同时作用于两块舞台。</p>
+</div>
+
+<div class="preview-controls">
+  <button id="btn-dawn">切换 · 昼之庭黎明变体</button>
+  <button id="btn-choices">预览 · 命运星盘</button>
+  <button id="btn-history">预览 · 星之回廊</button>
+  <button id="btn-gen">预览 · 星辰演算</button>
+  <button id="btn-type">重播 · 打字机</button>
+</div>
+
+<div class="stage-label">DESKTOP · 16 : 9</div>
+
+<!-- ═══════════════ 桌面舞台（移动端由 JS 克隆此结构） ═══════════════ -->
+<div class="gal-game-container">
+
+  <!-- 背景占位：星降之夜（真实项目中有背景图时整层让位） -->
+  <div class="gal-layer-bg">
+    <div class="sky"></div>
+    <div class="horizon-glow"></div>
+    <div class="nebula neb-a"></div>
+    <div class="nebula neb-b"></div>
+    <div class="milkyway"></div>
+    <div class="aurora aurora-a"></div>
+    <div class="aurora aurora-b"></div>
+    <div class="stars stars-far"></div>
+    <div class="stars stars-near"></div>
+    <i class="flare f1"></i><i class="flare f2"></i><i class="flare f3"></i>
+    <div class="shooting-star ss1"></div>
+    <div class="shooting-star ss2"></div>
+    <div class="gate">
+      <div class="ring-ticks"></div>
+      <div class="ring-line"></div>
+      <div class="moon"></div>
+      <div class="orbit"><i></i></div>
+    </div>
+    <div class="godray ray-1"></div>
+    <div class="godray ray-2"></div>
+    <div class="isle isle-far"><div class="rock"></div></div>
+    <div class="cloudsea cloud-a"></div>
+    <div class="isle isle-l">
+      <div class="rock"></div>
+      <div class="crystals"><i></i><i></i><i></i></div>
+      <div class="lightfall"></div><div class="lightfall f2"></div>
+    </div>
+    <div class="isle isle-r">
+      <div class="rock"></div>
+      <div class="crystals"><i></i><i></i><i></i></div>
+      <div class="lightfall"></div>
+    </div>
+    <div class="cloudsea cloud-b"></div>
+    <div class="particles"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <!-- 立绘占位 -->
+  <div class="gal-layer-character">
+    <div class="gal-char-slot slot-center">
+      <div class="sigil"><div class="s-ring"></div></div>
+      <div class="char-silhouette"></div>
+      <div class="slot-note">立绘 / LIVE2D 占位</div>
+    </div>
+  </div>
+
+  <!-- 顶部：场景纹章 & 章节铭牌 -->
+  <div class="gal-status-bar-container">
+    <div class="gal-scene-plaque">
+      <div class="row">
+        <span class="gal-location-text">星之祭坛</span>
+        <span class="diamond"></span>
+        <span class="gal-time-text">LUNA · NOX ⅩⅩⅣ</span>
+      </div>
+      <div class="rule"></div>
+    </div>
+    <div class="gal-top-actions">
+      <div class="chapter-plaque">
+        <div class="act">ACT Ⅰ</div>
+        <div class="name">星降之夜</div>
+      </div>
+      <button class="gal-fullscreen-btn" title="切换全屏">⛶</button>
+    </div>
+  </div>
+
+  <!-- 对话框层 -->
+  <div class="gal-dialog-layer">
+    <div class="watermark"><div class="w1"></div><div class="w2"></div></div>
+
+    <div class="gal-name-badge">
+      <div class="plate">
+        <i class="gem"></i>
+        <div class="who">
+          <span>菲奥蕾</span>
+          <small>FIORE · STARKEEPER</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="gal-interaction-bar">
+      <button class="gal-action-btn btn-reroll"><span class="ico">↻</span><span>重绘当前</span></button>
+      <button class="gal-action-btn btn-free"><span class="ico">✎</span><span>自由对话</span></button>
+    </div>
+
+    <div class="gal-text-panel">
+      <div class="panel-shape"></div>
+      <div class="panel-line"><i></i></div>
+      <span class="flourish tl"><i></i></span>
+      <span class="flourish br"><i></i></span>
+      <i class="rivet r1"></i><i class="rivet r2"></i>
+
+      <p class="gal-dialog-text"></p>
+
+      <div class="gal-bottom-toolbar">
+        <button class="gal-footer-btn" data-action="log"><i class="fa-solid fa-list-ul"></i><span class="gal-btn-text">履历</span></button>
+        <button class="gal-footer-btn" data-action="close-mode"><i class="fa-solid fa-power-off"></i><span class="gal-btn-text">退出</span></button>
+        <button class="gal-footer-btn" data-action="view-original"><i class="fa-solid fa-display"></i><span class="gal-btn-text">原文</span></button>
+        <button class="gal-footer-btn" data-action="config"><i class="fa-solid fa-gear"></i><span class="gal-btn-text">设置</span></button>
+        <button class="gal-footer-btn" data-action="save"><i class="fa-solid fa-floppy-disk"></i><span class="gal-btn-text">存档</span></button>
+        <button class="gal-footer-btn" data-action="load"><i class="fa-solid fa-folder-open"></i><span class="gal-btn-text">读档</span></button>
+        <button class="gal-footer-btn" data-action="timeline"><i class="fa-solid fa-diagram-project"></i><span class="gal-btn-text">图谱</span></button>
+        <button class="gal-footer-btn" data-action="prev"><i class="fa-solid fa-chevron-left"></i><span class="gal-btn-text">回溯</span></button>
+        <button class="gal-footer-btn" data-action="auto"><i class="fa-solid fa-play"></i><span class="gal-btn-text">自动</span></button>
+        <button class="gal-footer-btn" data-action="skip"><i class="fa-solid fa-forward"></i><span class="gal-btn-text">快进</span></button>
+        <div class="gal-toolbar-spacer"></div>
+        <button class="gal-pending-choices-btn"><i class="pico">✦</i><span class="gal-btn-text">剧情选项</span></button>
+        <button class="gal-footer-btn-next">
+          <span class="nx-frame"></span><span class="nx-face"></span>
+          <i class="star">✦</i><span class="gal-btn-text">继 续</span>
+        </button>
+      </div>
+
+      <div class="gal-progress-container"><div class="gal-progress-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- 选项浮层：命运星盘 -->
+  <div class="gal-choices-overlay">
+    <div class="mc-glow"></div>
+    <div class="magic-circle">
+      <div class="mc-o"></div>
+      <div class="mc-m"></div>
+      <div class="mc-i"></div>
+      <div class="mc-cross"></div>
+    </div>
+    <div class="gal-choices-title">命运的抉择<small>ELECTIO FATI</small></div>
+    <button class="gal-choice-card"><span class="card-face"><span class="gal-choice-index"><b>Ⅰ</b></span><span>登上浮空石阶，直赴圣庭中央的星之祭坛。</span></span></button>
+    <button class="gal-choice-card"><span class="card-face"><span class="gal-choice-index"><b>Ⅱ</b></span><span>先折向藏星回廊，查证预言石板上缺失的一节。</span></span></button>
+    <button class="gal-choice-card"><span class="card-face"><span class="gal-choice-index"><b>Ⅲ</b></span><span>停在云海之缘，等她把没说完的话说完。</span></span></button>
+    <div class="gal-choices-hint">点击空白处收起星盘</div>
+  </div>
+
+  <!-- 历史记录：星之回廊 -->
+  <div class="gal-history-modal">
+    <div class="gal-history-panel">
+      <div class="gal-history-inner">
+        <div class="gal-history-header">
+          <div class="gal-history-title">星之回廊<small>STELLAR CORRIDOR</small></div>
+          <button class="gal-history-close">✕</button>
+        </div>
+        <div class="gal-history-body">
+          <div class="gal-history-item">
+            <span class="gal-history-name narrator">旁白</span>
+            <div class="gal-history-content">极光在天顶缓缓流转，悬空圣庭的石阶尽头，星之祭坛正泛着微弱的辉光。</div>
+          </div>
+          <div class="gal-history-item">
+            <span class="gal-history-name">菲奥蕾</span>
+            <div class="gal-history-content">「守望者说，今夜是千年一度的合星之刻——错过了，就要再等一个千年。」</div>
+          </div>
+          <div class="gal-history-item">
+            <span class="gal-history-name narrator">旁白</span>
+            <div class="gal-history-content">她指尖的星晶忽明忽暗，仿佛在回应天穹深处某个遥远的讯号。</div>
+          </div>
+          <div class="gal-history-item">
+            <span class="gal-history-name">菲奥蕾</span>
+            <div class="gal-history-content">「所以……在祭坛的门开启之前，我想把这个托付给你。」</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 生成中：星辰演算 -->
+  <div class="gal-generating-indicator">
+    <div class="gal-gen-circle">
+      <div class="ring-a"></div>
+      <div class="ring-b"></div>
+      <div class="ring-c"></div>
+      <div class="core">✦</div>
+    </div>
+    <div class="gal-gen-text">星辰演算中</div>
+    <div class="gal-gen-status">星轨交汇，稍候片刻……</div>
+  </div>
+
+  <!-- 移动端上拉菜单（对应真实项目 #gal-mobile-menu，点「设置」弹出） -->
+  <div class="gal-mobile-menu">
+    <button class="gal-menu-btn"><i class="fa-solid fa-gear"></i>设置</button>
+    <button class="gal-menu-btn"><i class="fa-solid fa-list-ul"></i>历史</button>
+    <button class="gal-menu-btn"><i class="fa-solid fa-display"></i>原界面</button>
+    <button class="gal-menu-btn"><i class="fa-solid fa-floppy-disk"></i>存档</button>
+    <button class="gal-menu-btn"><i class="fa-solid fa-folder-open"></i>读档</button>
+    <button class="gal-menu-btn"><i class="fa-solid fa-diagram-project"></i>时间线</button>
+  </div>
+
+</div>
+
+<div class="stage-label">MOBILE · 9 : 19.5</div>
+
+<!-- ═══════════════ 移动端舞台（JS 克隆桌面结构 + .mobile 覆写） ═══════════════ -->
+<div class="mobile-wrap">
+  <div class="phone" id="phone-slot"></div>
+</div>
+
+<!-- ═══════════════ 设计说明 ═══════════════ -->
+<div class="spec-grid">
+  <div class="spec-card">
+    <span class="no">01 / SKY</span>
+    <h3>开场 CG 级夜穹</h3>
+    <p>全 CSS 作画：天穹青蓝渐入夜色、地平线一线青辉；极光是竖向光棱
+    「帘幕」（repeating-linear-gradient 背景位移流动），一等星带十字光轴，
+    流星每 9/13 秒错峰划落，星尘自云海升腾。右上「天穹之门」——
+    极细刻度环缓旋，环心一弯新月，一颗卫星菱晶 16 秒公转。
+    鼠标移动时星层三速视差。</p>
+  </div>
+  <div class="spec-card">
+    <span class="no">02 / PANEL</span>
+    <h3>非对称圣仪面板</h3>
+    <p>削角改为非对称双阶切口（180° 旋转对称），外层金晶渐变 + 内层夜色玻璃 +
+    第二道内嵌晶线，共三层材质。左上/右下各一组双线折角 + 菱晶角饰
+    （纯 CSS），削角处镶呼吸星晶铆钉，面板后方一座巨型符文环缓旋制造纵深。
+    名牌带拉丁铭文副标 FIORE · STARKEEPER。</p>
+    <div class="swatches">
+      <div class="swatch" style="background:#070C24"><i>#070C24</i></div>
+      <div class="swatch" style="background:#6FD4FF"><i>#6FD4FF</i></div>
+      <div class="swatch" style="background:#D9B45C"><i>#D9B45C</i></div>
+      <div class="swatch" style="background:#F5F9FF"><i>#F5F9FF</i></div>
+    </div>
+  </div>
+  <div class="spec-card">
+    <span class="no">03 / MOTION</span>
+    <h3>能量与逐字辉光</h3>
+    <p>NEXT 六角晶键的边框由 @property 驱动 conic-gradient 旋转——
+    两束冷暖能量沿边框循环追逐。打字机不再是字符落纸：每个字带
+    位移 + 辉光 + 模糊三重浮现。立绘身侧有透视压扁的环绕法阵，
+    选项浮层召唤全幅魔法阵（金刻度外环 / 冰蓝虚线中环 / 符文点内环，
+    三环反向缓旋，全部 conic-gradient + mask 画成）。</p>
+  </div>
+  <div class="spec-card">
+    <span class="no">04 / ADAPT</span>
+    <h3>移动端 & 黎明变体</h3>
+    <p>移动端完全对齐真实项目的紧凑模式规则：按钮只显图标、单行均分，
+    履历/原文/存档/读档收进上拉菜单（demo 中点「设置」即弹出皮肤化的
+    削角菜单，对应 #gal-mobile-menu），退出排最左，NEXT 固定宽度。
+    「昼之庭黎明」变体只覆写 CSS 变量组，落地为 skin-jrpg-dawn，零结构成本。</p>
+  </div>
+</div>
+
+<footer>CELESTIAL COURT Ⅱ · STARFALL NIGHT · SKIN PROPOSAL FOR GALGAME UI · MMXXVI</footer>
+
+<script>
+/* ============ 移动端舞台：克隆桌面结构 ============ */
+const desktopStage = document.querySelector('.gal-game-container');
+const mobileStage = desktopStage.cloneNode(true);
+mobileStage.classList.add('mobile');
+document.getElementById('phone-slot').appendChild(mobileStage);
+
+/* ============ 每块舞台独立初始化 ============ */
+const LINE = '「合星之刻将至。当七枚星晶在祭坛上连成古老的轨迹——苍穹之庭的门，就会为你敞开。」';
+const stages = [...document.querySelectorAll('.gal-game-container')];
+
+function setupStage(stage){
+  const dialogEl = stage.querySelector('.gal-dialog-text');
+  let typeTimer = null;
+  function playType(){
+    clearTimeout(typeTimer);
+    dialogEl.innerHTML = '';
+    const caret = document.createElement('i');
+    caret.className = 'caret';
+    caret.textContent = '✦';
+    dialogEl.appendChild(caret);
+    let i = 0;
+    (function step(){
+      if(i >= LINE.length) return;
+      const s = document.createElement('span');
+      s.className = 'ch';
+      s.textContent = LINE[i++];
+      dialogEl.insertBefore(s, caret);
+      typeTimer = setTimeout(step, 50);
+    })();
+  }
+  playType();
+
+  /* 鼠标视差 */
+  stage.addEventListener('mousemove', (e)=>{
+    const r = stage.getBoundingClientRect();
+    stage.style.setProperty('--mx', ((e.clientX - r.left) / r.width - .5).toFixed(3));
+    stage.style.setProperty('--my', ((e.clientY - r.top) / r.height - .5).toFixed(3));
+  });
+  stage.addEventListener('mouseleave', ()=>{
+    stage.style.setProperty('--mx', 0);
+    stage.style.setProperty('--my', 0);
+  });
+
+  /* 浮层 */
+  const choices = stage.querySelector('.gal-choices-overlay');
+  const historyM = stage.querySelector('.gal-history-modal');
+  const gen = stage.querySelector('.gal-generating-indicator');
+  stage.querySelector('.gal-pending-choices-btn').addEventListener('click', ()=> choices.classList.add('show'));
+  choices.addEventListener('click', ()=> choices.classList.remove('show'));
+  stage.querySelector('.gal-history-close').addEventListener('click', ()=> historyM.classList.remove('show'));
+  historyM.addEventListener('click', e=>{ if(e.target === historyM) historyM.classList.remove('show'); });
+
+  /* 移动端：点「设置」弹出上拉菜单（对应真实项目 events.js 的 config 行为） */
+  const mobileMenu = stage.querySelector('.gal-mobile-menu');
+  const configBtn = stage.querySelector('.gal-footer-btn[data-action="config"]');
+  if(stage.classList.contains('mobile') && configBtn && mobileMenu){
+    configBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      mobileMenu.classList.toggle('active');
+    });
+    stage.addEventListener('click', (e)=>{
+      if(!e.target.closest('.gal-mobile-menu, [data-action="config"]'))
+        mobileMenu.classList.remove('active');
+    });
+    mobileMenu.querySelectorAll('.gal-menu-btn').forEach(b=>
+      b.addEventListener('click', ()=> mobileMenu.classList.remove('active')));
+  }
+
+  return { stage, playType, choices, historyM, gen,
+           genTimer: null };
+}
+const ctrls = stages.map(setupStage);
+
+/* ============ 全局预览按钮：同时作用于两块舞台 ============ */
+const btnDawn = document.getElementById('btn-dawn');
+btnDawn.addEventListener('click', ()=>{
+  const on = !stages[0].classList.contains('dawn');
+  stages.forEach(s=> s.classList.toggle('dawn', on));
+  btnDawn.classList.toggle('on', on);
+});
+document.getElementById('btn-choices').addEventListener('click', ()=>
+  ctrls.forEach(c=> c.choices.classList.add('show')));
+document.getElementById('btn-history').addEventListener('click', ()=>
+  ctrls.forEach(c=> c.historyM.classList.add('show')));
+document.getElementById('btn-gen').addEventListener('click', ()=>
+  ctrls.forEach(c=>{
+    c.gen.classList.add('show');
+    clearTimeout(c.genTimer);
+    c.genTimer = setTimeout(()=> c.gen.classList.remove('show'), 3200);
+  }));
+document.getElementById('btn-type').addEventListener('click', ()=>
+  ctrls.forEach(c=> c.playType()));
+
+/* ---------- URL hash 直达预览（截图/分享用）：#dawn #choices #history #gen ---------- */
+(function(){
+  const h = location.hash;
+  if(!h) return;
+  if(h.includes('dawn')){ stages.forEach(s=> s.classList.add('dawn')); btnDawn.classList.add('on'); }
+  if(h.includes('choices')) ctrls.forEach(c=> c.choices.classList.add('show'));
+  if(h.includes('history')) ctrls.forEach(c=> c.historyM.classList.add('show'));
+  if(h.includes('gen')) ctrls.forEach(c=> c.gen.classList.add('show'));
+  if(h.includes('menu')) document.querySelector('.gal-game-container.mobile .gal-mobile-menu')?.classList.add('active');
+})();
+</script>
+</body>
+</html>

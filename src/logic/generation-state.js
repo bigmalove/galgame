@@ -23,22 +23,25 @@ const generationState = {
 const GENERATION_TIMEOUT_MS = 120000;
 const VERIFICATION_DELAY_MS = 2000;
 
-// 延迟引用: stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus (UI 层)
+// 延迟引用: stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus, hideGeneratingIndicator (UI 层)
 let _stopNextBtnAnimationRef = null;
 let _refreshNextBtnDisplayRef = null;
 let _updateNextBtnForGeneratingStateRef = null;
 let _updateGeneratingStatusRef = null;
+let _hideGeneratingIndicatorRef = null;
 
 export function setGenerationStateRefs({
   stopNextBtnAnimation,
   refreshNextBtnDisplay,
   updateNextBtnForGeneratingState,
   updateGeneratingStatus,
+  hideGeneratingIndicator,
 }) {
   if (stopNextBtnAnimation) _stopNextBtnAnimationRef = stopNextBtnAnimation;
   if (refreshNextBtnDisplay) _refreshNextBtnDisplayRef = refreshNextBtnDisplay;
   if (updateNextBtnForGeneratingState) _updateNextBtnForGeneratingStateRef = updateNextBtnForGeneratingState;
   if (updateGeneratingStatus) _updateGeneratingStatusRef = updateGeneratingStatus;
+  if (hideGeneratingIndicator) _hideGeneratingIndicatorRef = hideGeneratingIndicator;
 }
 
 export function getIsGeneratingResponse() {
@@ -75,6 +78,7 @@ export function resetGenerationState(reason = 'unknown') {
   generationState.pendingMessageId = null;
   if (_stopNextBtnAnimationRef) _stopNextBtnAnimationRef();
   if (_refreshNextBtnDisplayRef) _refreshNextBtnDisplayRef();
+  if (_hideGeneratingIndicatorRef) _hideGeneratingIndicatorRef();
 }
 
 /**

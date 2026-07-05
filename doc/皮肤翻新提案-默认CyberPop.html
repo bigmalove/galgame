@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>默认皮肤优化提案 · Cyber Pop Refined</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+/* ============================================================
+   默认皮肤优化提案 —— Cyber Pop Refined
+   原则：不换血统，只修毛病。保留 neo-brutalism 的硬边 / 斜切 /
+   硬阴影 / 青红双强调，修掉四个问题：
+   ① 空舞台灰白点阵刺眼 → 双色渐变 + 斜向细网格 + 大色块构成
+   ② 名牌对比度不足    → 深底白字 + 青色下划斜条
+   ③ 操作层级颠倒      → NEXT 青色实心最亮，自由对话降级白底
+   ④ 右侧竖排按钮失联  → 统一硬边白牌形制
+   另附「深色变体」：同一形制换深灰面板，夜聊不刺眼。
+   全部走 CSS 变量（落地时删掉 settings-panel.js 的内联分支）。
+   ============================================================ */
+:root{
+  --ui-scale: 1;
+  --font-eng: 'Barlow', sans-serif;
+  --font-cn:  'Noto Sans SC', sans-serif;
+}
+
+/* —— 设计 token（挂舞台，深色变体只覆写这里）—— */
+.gal-game-container{
+  --gp-accent:   #00c4ef;                      /* 青（较原 #00d2ff 微降明度提对比） */
+  --gp-accent-2: #ff2e63;                      /* 桃红（点缀，不再大面积） */
+  --gp-ink:      #22252e;                      /* 墨黑（描边/文字） */
+  --gp-surface:  #ffffff;                      /* 面板面 */
+  --gp-stage-a:  #eef1f6;                      /* 舞台渐变浅端 */
+  --gp-stage-b:  #dfe5ee;                      /* 舞台渐变深端 */
+  --gp-grid:     rgba(34, 37, 46, 0.05);       /* 细网格 */
+  --gp-blockline:rgba(34, 37, 46, 0.07);       /* 舞台构成色块描线 */
+  --gp-block-a:  rgba(0, 196, 239, 0.08);      /* 构成色块·青 */
+  --gp-block-b:  rgba(255, 46, 99, 0.05);      /* 构成色块·红 */
+  --gp-text:     #22252e;
+  --gp-text-dim: rgba(34, 37, 46, 0.55);
+  --gp-shadow:   rgba(34, 37, 46, 0.16);       /* 硬阴影 */
+  --gp-panel-op: calc(0.82 + var(--panel-opacity, 0.5) * 0.16);
+  --gp-badge-bg: #22252e;
+  --gp-badge-fg: #ffffff;
+  --gp-btn-bg:   rgba(255, 255, 255, 0.92);
+  --gp-veil:     rgba(238, 241, 246, 0.72);    /* 浮层遮罩 */
+  --gp-card-bg:  #ffffff;
+}
+/* —— 深色变体（.dark 只覆写变量）—— */
+.gal-game-container.dark{
+  --gp-accent:   #00d2ff;
+  --gp-accent-2: #ff3d6e;
+  --gp-ink:      #e8ecf4;                      /* 深色下描边/文字翻白 */
+  --gp-surface:  #232733;
+  --gp-stage-a:  #1a1d26;
+  --gp-stage-b:  #12141b;
+  --gp-grid:     rgba(232, 236, 244, 0.045);
+  --gp-blockline:rgba(232, 236, 244, 0.06);
+  --gp-block-a:  rgba(0, 210, 255, 0.07);
+  --gp-block-b:  rgba(255, 61, 110, 0.05);
+  --gp-text:     #e8ecf4;
+  --gp-text-dim: rgba(232, 236, 244, 0.55);
+  --gp-shadow:   rgba(0, 0, 0, 0.5);
+  --gp-panel-op: calc(0.84 + var(--panel-opacity, 0.5) * 0.14);
+  --gp-badge-bg: #e8ecf4;
+  --gp-badge-fg: #16181f;
+  --gp-btn-bg:   rgba(35, 39, 51, 0.92);
+  --gp-veil:     rgba(18, 20, 27, 0.72);
+  --gp-card-bg:  #232733;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  min-height:100%;
+  font-family: var(--font-cn);
+  background:#101218;
+  color:#c8cdd8;
+  display:flex; flex-direction:column; align-items:center;
+  padding: clamp(12px, 3vw, 40px);
+  gap: 30px;
+}
+body > *{ flex-shrink:0; }
+
+/* ---------- 页头 ---------- */
+.proposal-head{ text-align:center; max-width:940px; }
+.proposal-head .latin{
+  font-family: var(--font-eng); font-weight:800;
+  font-size:11px; letter-spacing:.5em; color:#5b6274;
+}
+.proposal-head h1{
+  font-weight:900; font-size: clamp(24px, 3.4vw, 36px); letter-spacing:.1em;
+  margin:.3em 0 .45em; color:#eef1f6;
+}
+.proposal-head h1 em{ font-style:normal; color:#00c4ef; }
+.proposal-head p{ font-size:13px; line-height:2; color:#828a9c; }
+
+/* ---------- 控制条 ---------- */
+.preview-controls{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+.preview-controls button{
+  font-family: var(--font-cn); font-size:12px; font-weight:700; letter-spacing:.16em;
+  padding:9px 20px; cursor:pointer; color:#aeb5c4;
+  background:transparent;
+  border:2px solid rgba(174,181,196,.3);
+  transform: skewX(-8deg);
+  transition: all .2s ease;
+}
+.preview-controls button > span{ display:block; transform: skewX(8deg); }
+.preview-controls button:hover{ border-color:#00c4ef; color:#00c4ef; }
+.preview-controls button.on{ background:#00c4ef; border-color:#00c4ef; color:#101218; }
+
+.stage-label{
+  font-family: var(--font-eng); font-weight:700;
+  font-size:11px; letter-spacing:.44em; color:#5b6274;
+  display:flex; align-items:center; gap:16px; margin-bottom:-12px;
+}
+.stage-label::before,.stage-label::after{
+  content:""; width:46px; height:2px; background:#272c38;
+}
+
+/* ============================================================
+   舞台
+   ============================================================ */
+.gal-game-container{
+  position:relative; width:min(1280px, 97vw); aspect-ratio:16/9;
+  overflow:hidden;
+  background: var(--gp-stage-a);
+  box-shadow: 0 40px 110px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.05);
+}
+
+/* ————————————————————————————————————————————————
+   空舞台背景（原点阵的替代）：
+   双色渐变 + 斜向细网格 + 三块几何构成 + 一条青色扫描带
+   有背景图时整层让位
+   ———————————————————————————————————————————————— */
+.gp-stage{
+  position:absolute; inset:0; overflow:hidden; pointer-events:none;
+}
+.gp-stage .base{
+  position:absolute; inset:0;
+  background:
+    radial-gradient(120% 90% at 78% -10%, var(--gp-block-a) 0%, transparent 52%),
+    linear-gradient(168deg, var(--gp-stage-a) 0%, var(--gp-stage-b) 100%);
+}
+/* 斜向细网格（45° 菱格，比点阵柔和有方向感） */
+.gp-stage .grid{
+  position:absolute; inset:0;
+  background:
+    repeating-linear-gradient(45deg, var(--gp-grid) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(-45deg, var(--gp-grid) 0 1px, transparent 1px 28px);
+  -webkit-mask: linear-gradient(180deg, #000 0%, rgba(0,0,0,.35) 70%, transparent 100%);
+          mask: linear-gradient(180deg, #000 0%, rgba(0,0,0,.35) 70%, transparent 100%);
+}
+/* 几何构成：三个斜切大色块，给空舞台一点「版式」 */
+.gp-stage .block{
+  position:absolute; border:2px solid var(--gp-blockline);
+}
+.gp-stage .blk-a{
+  left:-6%; top:12%; width:34%; height:52%;
+  background: var(--gp-block-a);
+  transform: skewX(-12deg);
+}
+.gp-stage .blk-b{
+  right:-4%; top:30%; width:26%; height:44%;
+  background: var(--gp-block-b);
+  transform: skewX(-12deg);
+}
+.gp-stage .blk-c{
+  left:38%; top:6%; width:16%; height:22%;
+  background: transparent;
+  transform: skewX(-12deg);
+}
+/* 青色扫描带：一条极淡的斜带每 14s 扫过一次 */
+.gp-stage .sweep{
+  position:absolute; top:-10%; bottom:-10%; left:-30%; width:18%;
+  background: linear-gradient(90deg, transparent, var(--gp-block-a), transparent);
+  transform: skewX(-12deg);
+  animation: gpSweep 14s ease-in-out infinite;
+}
+@keyframes gpSweep{
+  0%, 62%{ left:-30%; opacity:0; }
+  66%{ opacity:1; }
+  92%, 100%{ left:120%; opacity:0; }
+}
+/* 角落版式签名：像杂志页脚 */
+.gp-stage .corner-sig{
+  position:absolute; right:22px; bottom:16px;
+  font-family: var(--font-eng); font-weight:800;
+  font-size:10px; letter-spacing:.4em;
+  color: var(--gp-text-dim);
+}
+
+/* —— 立绘占位 —— */
+.gal-layer-character{ position:absolute; inset:0; pointer-events:none; z-index:4; }
+.gal-char-slot.slot-center{
+  position:absolute; left:50%; bottom:-2%; width:19%; aspect-ratio:3/7;
+  transform:translateX(-50%);
+}
+.char-slot-frame{
+  width:100%; height:100%;
+  border:2px dashed var(--gp-blockline);
+  border-bottom:none;
+  background: linear-gradient(180deg, var(--gp-block-a) 0%, transparent 60%);
+  -webkit-mask: linear-gradient(180deg, #000 76%, transparent 100%);
+          mask: linear-gradient(180deg, #000 76%, transparent 100%);
+}
+.slot-note{
+  position:absolute; left:50%; top:44%; transform:translateX(-50%);
+  font-size:11px; letter-spacing:.3em; color:var(--gp-text-dim); white-space:nowrap;
+}
+
+/* ============================================================
+   顶部状态签：白牌黑描边（对齐基线），全屏键同形制
+   ============================================================ */
+.gal-status-bar-container{
+  position:absolute; top:0; left:0; right:0; z-index:8;
+  display:flex; align-items:center; justify-content:flex-end;
+  gap:10px;
+  padding: 18px 22px 0;
+  pointer-events:none;
+}
+.gal-location-bar,.gal-time-bar{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 18px;
+  font-family: var(--font-cn); font-size:13px; font-weight:700; letter-spacing:.08em;
+  color: var(--gp-text);
+  background: var(--gp-btn-bg);
+  border:2px solid var(--gp-ink);
+  box-shadow: 4px 4px 0 var(--gp-shadow);
+  transform: skewX(-8deg);
+  pointer-events:auto;
+}
+.gal-location-bar > *,.gal-time-bar > *{ transform: skewX(8deg); }
+.gal-location-bar i,.gal-time-bar i{ color: var(--gp-accent); }
+.gal-fullscreen-btn{
+  display:inline-flex; align-items:center; gap:7px;
+  padding:8px 16px; cursor:pointer;
+  font-family: var(--font-cn); font-size:13px; font-weight:700;
+  color: var(--gp-text);
+  background: var(--gp-btn-bg);
+  border:2px solid var(--gp-ink);
+  box-shadow: 4px 4px 0 var(--gp-shadow);
+  transform: skewX(-8deg);
+  pointer-events:auto;
+  transition: all .18s ease;
+}
+.gal-fullscreen-btn > *{ transform: skewX(8deg); }
+.gal-fullscreen-btn:hover{ background: var(--gp-accent); color:#101218; border-color:var(--gp-ink); }
+
+/* ============================================================
+   对话框：白面板黑描边（吃 --panel-opacity 变量，不再 JS 内联）
+   左上角一条青色斜切「书签」压住名牌基线
+   ============================================================ */
+.gal-dialog-layer{
+  position:absolute; left:50%; bottom:20px;
+  transform:translateX(-50%);
+  width:min(94%, 1010px);
+  z-index:10;
+}
+.gal-text-panel{
+  position:relative;
+  padding: 30px 42px 18px;
+  background:
+    linear-gradient(135deg, transparent 0%, transparent 94%, color-mix(in srgb, var(--gp-accent) 16%, transparent) 94%),
+    color-mix(in srgb, var(--gp-surface) calc(var(--gp-panel-op) * 100%), transparent);
+  border:2.5px solid var(--gp-ink);
+  box-shadow: 8px 8px 0 var(--gp-shadow);
+  backdrop-filter: blur(6px);
+}
+/* 面板左上：青色书签角 */
+.gal-text-panel::before{
+  content:""; position:absolute; left:-2.5px; top:-2.5px;
+  width:64px; height:12px;
+  background: var(--gp-accent);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+}
+.gal-dialog-text{
+  font-size:18.5px; line-height:1.95; letter-spacing:.02em;
+  color: var(--gp-text); font-weight:500;
+  min-height: calc(18.5px * 1.95 * 2);
+  text-align: justify;
+}
+/* 打字机光标：青色方块闪烁（终端感） */
+.gal-dialog-text .caret{
+  display:inline-block; width:.5em; height:1em; margin-left:3px;
+  background: var(--gp-accent);
+  vertical-align:-.12em;
+  animation: gpCaret 1s steps(2) infinite;
+}
+@keyframes gpCaret{ 0%,100%{ opacity:1; } 50%{ opacity:0; } }
+
+/* —— 名牌：深底白字（对比度修复）+ 青色斜条 —— */
+.gal-name-badge{
+  position:absolute; left:0; top:-2.7rem; z-index:4;
+  background: var(--gp-badge-bg);
+  color: var(--gp-badge-fg);
+  padding:.6rem 2.2rem .6rem 1.6rem;
+  font-size:1.35rem; font-weight:900;
+  font-family: var(--font-cn);
+  transform: skewX(-15deg);
+  transform-origin: bottom left;
+  box-shadow: 5px 5px 0 var(--gp-shadow);
+}
+.gal-name-badge::after{ /* 底缘青色斜条 */
+  content:""; position:absolute; left:0; right:26%; bottom:-2px;
+  height:4px; background: var(--gp-accent);
+}
+.gal-name-badge span{ display:block; transform: skewX(15deg); letter-spacing:.1em; }
+.gal-name-badge.gal-narrator-label{
+  background: color-mix(in srgb, var(--gp-badge-bg) 55%, transparent);
+}
+.gal-name-badge.gal-narrator-label::after{ background: var(--gp-text-dim); }
+
+/* —— 悬浮操作：降级为白牌描边（不再桃红大块）—— */
+.gal-interaction-bar{
+  position:absolute; right:8px; top:-2.45rem;
+  display:flex; gap:9px; z-index:4;
+}
+.gal-action-btn{
+  height:34px; padding:0 16px;
+  display:flex; align-items:center; gap:7px; cursor:pointer;
+  font-family: var(--font-cn); font-size:12.5px; font-weight:700; letter-spacing:.06em;
+  color: var(--gp-text);
+  background: var(--gp-btn-bg);
+  border:2px solid var(--gp-ink);
+  box-shadow: 4px 4px 0 var(--gp-shadow);
+  transform: skewX(-8deg);
+  transition: all .18s ease;
+}
+.gal-action-btn > *{ transform: skewX(8deg); }
+.gal-action-btn i{ color: var(--gp-accent); }
+.gal-action-btn:hover{
+  background: var(--gp-ink); color: var(--gp-surface);
+  transform: skewX(-8deg) translate(-2px,-2px);
+  box-shadow: 6px 6px 0 var(--gp-shadow);
+}
+.gal-action-btn:hover i{ color: var(--gp-accent); }
+
+/* ============================================================
+   底部工具栏：功能键淡化为「文字签」，让位给 NEXT
+   ============================================================ */
+.gal-bottom-toolbar{
+  display:flex; align-items:center; gap:2px;
+  margin-top:16px;
+  position:relative; z-index:3;
+}
+.gal-footer-btn{
+  flex:0 1 auto; min-width:0;
+  font-family: var(--font-cn);
+  font-size:12.5px; font-weight:700; letter-spacing:.05em;
+  color: var(--gp-text-dim);
+  background:none; border:none; cursor:pointer;
+  padding:8px 9px;
+  position:relative; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:5px;
+  transition: color .18s ease;
+}
+.gal-footer-btn i{ font-size:.9em; }
+.gal-footer-btn::after{ /* 悬停：青色下划斜块 */
+  content:""; position:absolute; left:10%; bottom:2px;
+  width:0; height:3px;
+  background: var(--gp-accent);
+  transform: skewX(-20deg);
+  transition: width .18s ease;
+}
+.gal-footer-btn:hover{ color: var(--gp-text); }
+.gal-footer-btn:hover::after{ width:80%; }
+.gal-toolbar-spacer{ flex:1; }
+
+/* 剧情选项：桃红只留在这一处（有新选项时呼吸） */
+.gal-pending-choices-btn{
+  flex:0 0 auto;
+  display:flex; align-items:center; gap:8px; cursor:pointer;
+  font-family: var(--font-cn); font-size:12.5px; font-weight:800; letter-spacing:.06em;
+  color:#fff; white-space:nowrap;
+  background: var(--gp-accent-2);
+  border:2px solid var(--gp-ink);
+  padding:8px 16px;
+  transform: skewX(-8deg);
+  box-shadow: 4px 4px 0 var(--gp-shadow);
+  animation: gpPulse 2.4s ease-out infinite;
+}
+.gal-pending-choices-btn > *{ transform: skewX(8deg); }
+@keyframes gpPulse{
+  0%{ box-shadow: 4px 4px 0 var(--gp-shadow), 0 0 0 0 rgba(255,46,99,.45); }
+  70%{ box-shadow: 4px 4px 0 var(--gp-shadow), 0 0 0 10px rgba(255,46,99,0); }
+  100%{ box-shadow: 4px 4px 0 var(--gp-shadow), 0 0 0 0 rgba(255,46,99,0); }
+}
+
+/* NEXT：全场最亮 —— 青色实心 + 黑描边 + 大字 */
+.gal-footer-btn-next{
+  position:relative; cursor:pointer;
+  flex:0 0 auto; white-space:nowrap;
+  padding:10px 30px; margin-left:10px;
+  display:flex; align-items:center; gap:9px;
+  font-family: var(--font-cn); font-weight:900;
+  font-size:15px; letter-spacing:.14em;
+  color:#101218;
+  background: var(--gp-accent);
+  border:2.5px solid var(--gp-ink);
+  transform: skewX(-8deg);
+  box-shadow: 5px 5px 0 var(--gp-shadow);
+  transition: all .18s ease;
+  overflow:hidden;
+}
+.gal-footer-btn-next > *{ transform: skewX(8deg); }
+.gal-footer-btn-next::before{ /* 高光扫过 */
+  content:""; position:absolute; top:0; bottom:0; left:-40%; width:26%;
+  background: linear-gradient(105deg, transparent, rgba(255,255,255,.5), transparent);
+  animation: gpNextSheen 3.4s ease-in-out infinite;
+}
+@keyframes gpNextSheen{ 0%,58%{ left:-40%; } 100%{ left:130%; } }
+.gal-footer-btn-next:hover{
+  transform: skewX(-8deg) translate(-2px,-2px);
+  box-shadow: 7px 7px 0 var(--gp-shadow);
+}
+.gal-footer-btn-next:active{ transform: skewX(-8deg) translate(2px,2px); box-shadow:2px 2px 0 var(--gp-shadow); }
+
+/* 进度条：青色 + 斜纹动画 */
+.gal-progress-container{
+  height:5px; margin-top:14px;
+  background: color-mix(in srgb, var(--gp-ink) 12%, transparent);
+  position:relative; z-index:3;
+}
+.gal-progress-bar{
+  height:100%; width:64%;
+  background:
+    repeating-linear-gradient(-55deg, rgba(255,255,255,.28) 0 6px, transparent 6px 12px),
+    var(--gp-accent);
+  background-size: 60px 100%, 100% 100%;
+  animation: gpBarFlow 1.6s linear infinite;
+}
+@keyframes gpBarFlow{ from{ background-position: 0 0, 0 0; } to{ background-position: 60px 0, 0 0; } }
+
+/* —— 右侧竖排按钮：统一白牌形制 —— */
+.gal-side-btns{
+  position:absolute; right:-46px; top:0;
+  display:flex; flex-direction:column; gap:8px; z-index:4;
+}
+.gal-sprite-toggle,.gal-status-popup-trigger{
+  width:36px; height:36px;
+  display:grid; place-items:center; cursor:pointer;
+  color: var(--gp-text);
+  background: var(--gp-btn-bg);
+  border:2px solid var(--gp-ink);
+  box-shadow: 3px 3px 0 var(--gp-shadow);
+  transition: all .18s ease;
+}
+.gal-sprite-toggle:hover,.gal-status-popup-trigger:hover{
+  background: var(--gp-accent); color:#101218;
+}
+
+/* ============================================================
+   选项浮层：斜切白卡 + 序号方块
+   ============================================================ */
+.gal-choices-overlay{
+  position:absolute; inset:0; z-index:40;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px;
+  background: var(--gp-veil);
+  backdrop-filter: blur(6px);
+  opacity:0; pointer-events:none; transition: opacity .25s ease;
+}
+.gal-choices-overlay.show{ opacity:1; pointer-events:auto; }
+.gal-choices-title{
+  position:relative; z-index:1; text-align:center;
+  color: var(--gp-text);
+  font-size:17px; font-weight:900; letter-spacing:.5em; text-indent:.5em;
+}
+.gal-choices-title::after{
+  content:""; display:block; width:44px; height:4px; margin:12px auto 0;
+  background: var(--gp-accent);
+  transform: skewX(-20deg);
+}
+.gal-choice-card{
+  position:relative; z-index:1;
+  width:min(76%, 600px);
+  display:flex; align-items:center; gap:0;
+  background: var(--gp-card-bg);
+  border:2.5px solid var(--gp-ink);
+  box-shadow: 6px 6px 0 var(--gp-shadow);
+  transform: skewX(-8deg);
+  padding:0;
+  cursor:pointer;
+  font-family: var(--font-cn);
+  opacity:0; translate:0 14px;
+  transition: all .18s cubic-bezier(.34,1.56,.64,1);
+}
+.gal-choices-overlay.show .gal-choice-card{ animation: gpCardIn .4s cubic-bezier(.2,.9,.3,1.1) forwards; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(2){ animation-delay:.07s; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(3){ animation-delay:.14s; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(4){ animation-delay:.21s; }
+@keyframes gpCardIn{ to{ opacity:1; translate:0 0; } }
+.gal-choice-card:hover{
+  translate:-2px -2px;
+  box-shadow: 8px 8px 0 var(--gp-shadow);
+  border-color: var(--gp-accent);
+}
+.gal-choice-index{
+  flex:none; align-self:stretch;
+  display:grid; place-items:center;
+  width:46px;
+  font-family: var(--font-eng);
+  font-size:17px; font-weight:900; color:#101218;
+  background: var(--gp-accent);
+  border-right:2.5px solid var(--gp-ink);
+}
+.gal-choice-index b{ transform: skewX(8deg); font-weight:inherit; }
+.gal-choice-card > span:last-child{
+  flex:1; padding:14px 22px;
+  font-size:15px; font-weight:600; letter-spacing:.02em;
+  color: var(--gp-text); text-align:left;
+  transform: skewX(8deg);
+}
+.gal-choices-hint{
+  position:relative; z-index:1;
+  color: var(--gp-text-dim); font-size:11px; letter-spacing:.3em; margin-top:6px;
+}
+
+/* ============================================================
+   历史记录
+   ============================================================ */
+.gal-history-modal{
+  position:absolute; inset:0; z-index:50;
+  display:flex; align-items:center; justify-content:center;
+  background: var(--gp-veil);
+  backdrop-filter: blur(6px);
+  opacity:0; pointer-events:none; transition:opacity .25s ease;
+}
+.gal-history-modal.show{ opacity:1; pointer-events:auto; }
+.gal-history-panel{
+  width:min(80%, 660px); max-height:80%;
+  display:flex; flex-direction:column; overflow:hidden;
+  background: var(--gp-card-bg);
+  border:2.5px solid var(--gp-ink);
+  box-shadow: 10px 10px 0 var(--gp-shadow);
+}
+.gal-history-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 26px;
+  border-bottom:2.5px solid var(--gp-ink);
+  background: linear-gradient(135deg, transparent 92%, color-mix(in srgb, var(--gp-accent) 22%, transparent) 92%);
+}
+.gal-history-title{
+  font-size:17px; font-weight:900; letter-spacing:.3em; color:var(--gp-text);
+  display:flex; align-items:center; gap:12px;
+}
+.gal-history-title::before{
+  content:""; width:14px; height:14px;
+  background: var(--gp-accent);
+  transform: skewX(-12deg);
+}
+.gal-history-close{
+  width:32px; height:32px; cursor:pointer;
+  color:var(--gp-text);
+  background:none;
+  border:2px solid var(--gp-ink);
+  transition:all .18s ease;
+}
+.gal-history-close:hover{ background:var(--gp-accent-2); color:#fff; border-color:var(--gp-ink); }
+.gal-history-body{ overflow-y:auto; padding:8px 26px 20px; }
+.gal-history-item{
+  padding:15px 0 13px;
+  border-bottom:2px dashed color-mix(in srgb, var(--gp-ink) 18%, transparent);
+}
+.gal-history-name{
+  display:inline-block;
+  font-size:13px; font-weight:900; letter-spacing:.1em;
+  color:#fff; background: var(--gp-badge-bg); color: var(--gp-badge-fg);
+  padding:2px 12px; margin-bottom:8px;
+  transform: skewX(-10deg);
+}
+.gal-history-name.narrator{ background: var(--gp-text-dim); color:#fff; }
+.gal-history-content{ font-size:14px; line-height:1.95; color:var(--gp-text); }
+.gal-history-body::-webkit-scrollbar{ width:5px; }
+.gal-history-body::-webkit-scrollbar-thumb{ background:var(--gp-accent); }
+
+/* ============================================================
+   生成中：终端方块队列
+   ============================================================ */
+.gal-generating-indicator{
+  position:absolute; left:50%; top:41%; transform:translate(-50%,-50%);
+  z-index:45; display:none; flex-direction:column; align-items:center; gap:14px;
+  padding:28px 48px;
+  background: var(--gp-card-bg);
+  border:2.5px solid var(--gp-ink);
+  box-shadow: 8px 8px 0 var(--gp-shadow);
+}
+.gal-generating-indicator.show{ display:flex; }
+.gp-blocks{ display:flex; gap:7px; }
+.gp-blocks i{
+  width:12px; height:12px;
+  background: var(--gp-accent);
+  animation: gpBlockHop 1.2s ease-in-out infinite;
+}
+.gp-blocks i:nth-child(2){ animation-delay:.15s; background:var(--gp-accent-2); }
+.gp-blocks i:nth-child(3){ animation-delay:.3s; }
+.gp-blocks i:nth-child(4){ animation-delay:.45s; background:var(--gp-ink); }
+@keyframes gpBlockHop{
+  0%,100%{ transform: translateY(0) rotate(0); }
+  50%{ transform: translateY(-9px) rotate(90deg); }
+}
+.gal-gen-text{
+  font-size:15px; font-weight:900; letter-spacing:.4em; text-indent:.4em; color:var(--gp-text);
+}
+.gal-gen-status{ font-size:11px; letter-spacing:.2em; color:var(--gp-text-dim); }
+
+/* ============================================================
+   移动端（9:19.5 · JS 克隆 + .mobile 覆写）
+   ============================================================ */
+.mobile-wrap{ display:flex; flex-direction:column; align-items:center; }
+.phone{
+  padding:12px; border-radius:46px; position:relative;
+  background: linear-gradient(180deg, #23262f, #101218);
+  border:1px solid rgba(200,205,216,.15);
+  box-shadow: 0 44px 100px -32px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.phone::before{
+  content:""; position:absolute; top:5px; left:50%; transform:translateX(-50%);
+  width:80px; height:4px; border-radius:3px; background:rgba(255,255,255,.1);
+}
+.phone .gal-game-container{ border-radius:34px; }
+.gal-game-container.mobile{
+  width:min(392px, 92vw); aspect-ratio:9/19.5;
+}
+.gal-game-container.mobile .gal-status-bar-container{
+  justify-content:flex-start; flex-wrap:wrap; gap:8px; padding:16px 14px 0;
+}
+.gal-game-container.mobile .gal-fullscreen-btn{ margin-left:auto; }
+.gal-game-container.mobile .gp-stage .blk-a{ left:-10%; top:8%; width:56%; height:32%; }
+.gal-game-container.mobile .gp-stage .blk-b{ right:-8%; top:34%; width:44%; height:26%; }
+.gal-game-container.mobile .gp-stage .blk-c{ left:30%; top:4%; width:28%; height:12%; }
+.gal-game-container.mobile .gal-char-slot.slot-center{ width:56%; bottom:24%; }
+.gal-game-container.mobile .gal-dialog-layer{ width:94%; bottom:12px; }
+.gal-game-container.mobile .gal-text-panel{ padding:20px 18px 12px; }
+.gal-game-container.mobile .gal-dialog-text{ font-size:14.5px; line-height:1.9; min-height:calc(14.5px*1.9*3); }
+.gal-game-container.mobile .gal-name-badge{ font-size:1.1rem; top:-2.3rem; padding:.5rem 1.8rem .5rem 1.2rem; }
+.gal-game-container.mobile .gal-interaction-bar{ right:4px; top:-2.1rem; gap:6px; }
+.gal-game-container.mobile .gal-action-btn{ height:30px; padding:0 10px; font-size:11px; }
+/* 工具栏对齐真实项目紧凑模式：图标化、低频进菜单 */
+.gal-game-container.mobile .gal-btn-text{ display:none; }
+.gal-game-container.mobile .gal-footer-btn[data-action='log'],
+.gal-game-container.mobile .gal-footer-btn[data-action='view-original'],
+.gal-game-container.mobile .gal-footer-btn[data-action='save'],
+.gal-game-container.mobile .gal-footer-btn[data-action='load']{ display:none; }
+.gal-game-container.mobile .gal-footer-btn[data-action='close-mode']{ order:-1; }
+.gal-game-container.mobile .gal-footer-btn{
+  flex:1 1 0; min-width:0; padding:0; height:38px;
+  justify-content:center; gap:0;
+}
+.gal-game-container.mobile .gal-footer-btn i{ font-size:15px; }
+.gal-game-container.mobile .gal-toolbar-spacer{ display:none; }
+.gal-game-container.mobile .gal-pending-choices-btn{
+  flex:0 0 auto; padding:0 12px; height:34px; align-self:center; font-size:12px;
+}
+.gal-game-container.mobile .gal-footer-btn-next{
+  flex:0 0 auto; padding:0; width:66px; height:38px;
+  margin-left:6px; justify-content:center; font-size:13px;
+}
+.gal-game-container.mobile .gal-choice-card{ width:88%; }
+.gal-game-container.mobile .gal-choice-index{ width:38px; font-size:15px; }
+.gal-game-container.mobile .gal-choice-card > span:last-child{ padding:11px 15px; font-size:13.5px; }
+.gal-game-container.mobile .gal-history-panel{ width:92%; max-height:72%; }
+.gal-game-container.mobile .gal-side-btns{ right:2px; top:auto; bottom:calc(100% + 46px); flex-direction:column; gap:6px; }
+.gal-game-container.mobile .gal-sprite-toggle,
+.gal-game-container.mobile .gal-status-popup-trigger{ width:30px; height:30px; }
+
+/* ---------- 设计说明卡 ---------- */
+.spec-grid{
+  width:min(1280px, 97vw);
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:14px;
+}
+.spec-card{
+  position:relative; padding:20px 22px 18px;
+  color:#aeb5c4; background:rgba(255,255,255,.02);
+  border:1px solid rgba(174,181,196,.1);
+}
+.spec-card::before{
+  content:""; position:absolute; left:0; right:0; top:0; height:2px;
+  background: linear-gradient(90deg, #00c4ef, transparent 65%);
+}
+.spec-card .no{
+  font-family: var(--font-eng); font-weight:800;
+  font-size:11px; letter-spacing:.3em; color:#5b6274;
+  display:block; margin-bottom:8px;
+}
+.spec-card h3{
+  font-size:13.5px; letter-spacing:.2em; color:#00c4ef;
+  margin-bottom:10px; font-weight:900;
+}
+.spec-card p{ font-size:12.5px; line-height:1.95; color:#828a9c; }
+.swatches{ display:flex; gap:8px; margin-top:12px; }
+.swatch{
+  width:34px; height:34px; border:2px solid rgba(255,255,255,.16); position:relative;
+  transform: skewX(-8deg);
+}
+.swatch i{
+  position:absolute; top:112%; left:50%; transform:translateX(-50%) skewX(8deg);
+  font-style:normal; font-size:9px; letter-spacing:.04em; color:#5b6274; white-space:nowrap;
+}
+footer{
+  font-family: var(--font-eng); font-weight:700;
+  color:#454c5c; font-size:10.5px; letter-spacing:.34em; padding:16px 0 6px; text-align:center;
+}
+</style>
+</head>
+<body>
+
+<div class="proposal-head">
+  <div class="latin">DEFAULT SKIN PROPOSAL · CYBER POP REFINED</div>
+  <h1>默认皮肤优化 <em>·</em> Cyber Pop Refined</h1>
+  <p>不换血统，只修毛病。保留 neo-brutalism 的硬边 / 斜切 / 硬阴影 / 青红双强调，
+  修四个问题：空舞台的灰白点阵换成「双色渐变 + 斜向菱格 + 几何构成 + 青色扫描带」；
+  名牌改深底白字（对比度达标）+ 青色下划斜条；操作层级重排——NEXT 青色实心成为全场最亮，
+  「自由对话」降级白牌，桃红只留给剧情选项呼吸提示；右侧竖排按钮统一硬边白牌形制。
+  另附深色变体（同形制换深灰面板，夜聊不刺眼）。面板透明度全走 CSS 变量。</p>
+</div>
+
+<div class="preview-controls">
+  <button id="btn-dark"><span>切换 · 深色变体</span></button>
+  <button id="btn-choices"><span>预览 · 选项</span></button>
+  <button id="btn-history"><span>预览 · 历史</span></button>
+  <button id="btn-gen"><span>预览 · 生成中</span></button>
+  <button id="btn-type"><span>重播 · 打字机</span></button>
+</div>
+
+<div class="stage-label">DESKTOP · 16 : 9</div>
+
+<!-- ═══════════ 桌面舞台（移动端由 JS 克隆） ═══════════ -->
+<div class="gal-game-container">
+
+  <div class="gal-layer-bg">
+    <div class="gp-stage">
+      <div class="base"></div>
+      <div class="grid"></div>
+      <div class="block blk-a"></div>
+      <div class="block blk-b"></div>
+      <div class="block blk-c"></div>
+      <div class="sweep"></div>
+      <div class="corner-sig">GALGAME UI · DEFAULT</div>
+    </div>
+  </div>
+
+  <div class="gal-layer-character">
+    <div class="gal-char-slot slot-center">
+      <div class="char-slot-frame"></div>
+      <div class="slot-note">立绘 / LIVE2D 占位</div>
+    </div>
+  </div>
+
+  <div class="gal-status-bar-container">
+    <div class="gal-location-bar"><i class="fa-solid fa-location-dot"></i><span>星港七号站</span></div>
+    <div class="gal-time-bar"><i class="fa-regular fa-clock"></i><span>22:00</span></div>
+    <button class="gal-fullscreen-btn"><i class="fa-solid fa-expand"></i><span>全屏</span></button>
+  </div>
+
+  <div class="gal-dialog-layer">
+    <div class="gal-name-badge"><span>凛音</span></div>
+
+    <div class="gal-interaction-bar">
+      <button class="gal-action-btn"><i class="fa-solid fa-rotate"></i><span>重绘当前</span></button>
+      <button class="gal-action-btn"><i class="fa-regular fa-keyboard"></i><span>自由对话</span></button>
+    </div>
+
+    <div class="gal-side-btns">
+      <button class="gal-sprite-toggle"><i class="fa-regular fa-eye"></i></button>
+      <button class="gal-status-popup-trigger"><i class="fa-solid fa-map"></i></button>
+      <button class="gal-status-popup-trigger"><i class="fa-solid fa-clock"></i></button>
+    </div>
+
+    <div class="gal-text-panel">
+      <p class="gal-dialog-text" id="dialog-text"></p>
+
+      <div class="gal-bottom-toolbar">
+        <button class="gal-footer-btn" data-action="log"><i class="fa-solid fa-list-ul"></i><span class="gal-btn-text">LOG</span></button>
+        <button class="gal-footer-btn" data-action="close-mode"><i class="fa-solid fa-power-off"></i><span class="gal-btn-text">CLOSE</span></button>
+        <button class="gal-footer-btn" data-action="view-original"><i class="fa-solid fa-display"></i><span class="gal-btn-text">VIEW</span></button>
+        <button class="gal-footer-btn" data-action="config"><i class="fa-solid fa-gear"></i><span class="gal-btn-text">CONFIG</span></button>
+        <button class="gal-footer-btn" data-action="save"><i class="fa-solid fa-floppy-disk"></i><span class="gal-btn-text">SAVE</span></button>
+        <button class="gal-footer-btn" data-action="load"><i class="fa-solid fa-folder-open"></i><span class="gal-btn-text">LOAD</span></button>
+        <button class="gal-footer-btn" data-action="timeline"><i class="fa-solid fa-diagram-project"></i><span class="gal-btn-text">TL</span></button>
+        <button class="gal-footer-btn" data-action="prev"><i class="fa-solid fa-chevron-left"></i><span class="gal-btn-text">PREV</span></button>
+        <button class="gal-footer-btn" data-action="auto"><i class="fa-solid fa-play"></i><span class="gal-btn-text">AUTO</span></button>
+        <button class="gal-footer-btn" data-action="skip"><i class="fa-solid fa-forward"></i><span class="gal-btn-text">SKIP</span></button>
+        <div class="gal-toolbar-spacer"></div>
+        <button class="gal-pending-choices-btn"><i class="fa-solid fa-list-check"></i><span class="gal-btn-text">剧情选项</span></button>
+        <button class="gal-footer-btn-next"><span>NEXT</span><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+
+      <div class="gal-progress-container"><div class="gal-progress-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- 选项 -->
+  <div class="gal-choices-overlay">
+    <div class="gal-choices-title">请选择行动</div>
+    <button class="gal-choice-card"><span class="gal-choice-index"><b>1</b></span><span>跟着凛音去看看那台旧自贩机。</span></button>
+    <button class="gal-choice-card"><span class="gal-choice-index"><b>2</b></span><span>先回控制室，把异常信号报上去。</span></button>
+    <button class="gal-choice-card"><span class="gal-choice-index"><b>3</b></span><span>假装没听见，继续盯着屏幕。</span></button>
+    <div class="gal-choices-hint">点击空白处关闭</div>
+  </div>
+
+  <!-- 历史 -->
+  <div class="gal-history-modal">
+    <div class="gal-history-panel">
+      <div class="gal-history-header">
+        <div class="gal-history-title">对话历史</div>
+        <button class="gal-history-close">✕</button>
+      </div>
+      <div class="gal-history-body">
+        <div class="gal-history-item">
+          <span class="gal-history-name narrator">旁白</span>
+          <div class="gal-history-content">星港的夜班永远比白班安静，只有通风管在头顶嗡嗡作响。</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name">凛音</span>
+          <div class="gal-history-content">「喂，你听到了吗？B 区又在响了……这次不是通风管。」</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name narrator">旁白</span>
+          <div class="gal-history-content">她把终端往桌上一放，屏幕的青光映在她脸上。</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name">凛音</span>
+          <div class="gal-history-content">「一起去看看吧。反正……夜还长着呢。」</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 生成中 -->
+  <div class="gal-generating-indicator">
+    <div class="gp-blocks"><i></i><i></i><i></i><i></i></div>
+    <div class="gal-gen-text">生成中</div>
+    <div class="gal-gen-status">正在连接……</div>
+  </div>
+
+</div>
+
+<div class="stage-label">MOBILE · 9 : 19.5</div>
+<div class="mobile-wrap"><div class="phone" id="phone-slot"></div></div>
+
+<!-- ═══════════ 设计说明 ═══════════ -->
+<div class="spec-grid">
+  <div class="spec-card">
+    <span class="no">01 / STAGE</span>
+    <h3>空舞台不再是点阵</h3>
+    <p>原「灰白点阵」换成：双色渐变底 + 45° 斜向菱格（带纵向渐隐）+
+    三块斜切几何构成 + 一条 14 秒扫过的青色光带 + 角落版式签名。
+    空舞台从"未加载完"变成"有版式的设计"。深色变体同结构换深灰。</p>
+  </div>
+  <div class="spec-card">
+    <span class="no">02 / CONTRAST</span>
+    <h3>对比度与层级修复</h3>
+    <p>名牌从「深灰底青字」（约 3.5:1）改为深底白字 + 青色下划斜条（>12:1）。
+    操作层级重排：NEXT 青色实心 + 黑描边成为全场最亮；「自由对话」从桃红大块
+    降级为白牌描边；桃红只保留给「剧情选项」的呼吸提示——强调色回归稀缺。</p>
+    <div class="swatches">
+      <div class="swatch" style="background:#00c4ef"><i>#00C4EF</i></div>
+      <div class="swatch" style="background:#ff2e63"><i>#FF2E63</i></div>
+      <div class="swatch" style="background:#22252e"><i>#22252E</i></div>
+      <div class="swatch" style="background:#ffffff"><i>#FFFFFF</i></div>
+    </div>
+  </div>
+  <div class="spec-card">
+    <span class="no">03 / MOTION</span>
+    <h3>克制的动效</h3>
+    <p>沿用 Cyber Pop 的「位移 + 硬阴影增长」悬停；新增三处克制动效：
+    NEXT 键 3.4 秒一次高光扫过、进度条斜纹流动、生成中四个方块跳格
+    （青/红/青/黑，终端感）。打字机光标改为青色方块闪烁。
+    右侧竖排按钮统一硬边白牌，悬停青色填充。</p>
+  </div>
+  <div class="spec-card">
+    <span class="no">04 / TOKEN & DARK</span>
+    <h3>变量化 & 深色变体</h3>
+    <p>全部样式走 --gp-* 变量：落地时删掉 settings-panel.js 里
+    「activeSkin === 'none' 时 JS 内联面板背景」的分支，默认皮肤也吃
+    --panel-opacity 体系。深色变体只覆写变量组（深灰面板 / 翻白描边 /
+    同款青红），可挂 skin-default-dark 或跟随 ST 主题自动切换。</p>
+  </div>
+</div>
+
+<footer>CYBER POP REFINED · DEFAULT SKIN PROPOSAL FOR GALGAME UI · MMXXVI</footer>
+
+<script>
+/* ===== 移动端克隆 ===== */
+const desktopStage = document.querySelector('.gal-game-container');
+const mobileStage = desktopStage.cloneNode(true);
+mobileStage.classList.add('mobile');
+document.getElementById('phone-slot').appendChild(mobileStage);
+
+/* ===== 每舞台初始化 ===== */
+const LINE = '「喂，别盯着屏幕发呆啦。B 区的自贩机又开始自己吐罐子了——一起去看看？」';
+const stages = [...document.querySelectorAll('.gal-game-container')];
+
+function setup(stage){
+  const dialogEl = stage.querySelector('.gal-dialog-text');
+  let timer = null;
+  function playType(){
+    clearTimeout(timer);
+    dialogEl.innerHTML = '';
+    const caret = document.createElement('i');
+    caret.className = 'caret';
+    dialogEl.appendChild(caret);
+    let i = 0;
+    (function step(){
+      if(i >= LINE.length) return;
+      dialogEl.insertBefore(document.createTextNode(LINE[i++]), caret);
+      timer = setTimeout(step, 45);
+    })();
+  }
+  playType();
+
+  const choices = stage.querySelector('.gal-choices-overlay');
+  const hist = stage.querySelector('.gal-history-modal');
+  const gen = stage.querySelector('.gal-generating-indicator');
+  stage.querySelector('.gal-pending-choices-btn').addEventListener('click', ()=> choices.classList.add('show'));
+  choices.addEventListener('click', ()=> choices.classList.remove('show'));
+  stage.querySelector('.gal-history-close').addEventListener('click', ()=> hist.classList.remove('show'));
+  hist.addEventListener('click', e=>{ if(e.target === hist) hist.classList.remove('show'); });
+
+  return { stage, playType, choices, hist, gen, genTimer:null };
+}
+const ctrls = stages.map(setup);
+
+/* ===== 全局控制 ===== */
+const btnDark = document.getElementById('btn-dark');
+btnDark.addEventListener('click', ()=>{
+  const on = !stages[0].classList.contains('dark');
+  stages.forEach(s=> s.classList.toggle('dark', on));
+  btnDark.classList.toggle('on', on);
+});
+document.getElementById('btn-choices').addEventListener('click', ()=> ctrls.forEach(c=> c.choices.classList.add('show')));
+document.getElementById('btn-history').addEventListener('click', ()=> ctrls.forEach(c=> c.hist.classList.add('show')));
+document.getElementById('btn-gen').addEventListener('click', ()=> ctrls.forEach(c=>{
+  c.gen.classList.add('show');
+  clearTimeout(c.genTimer);
+  c.genTimer = setTimeout(()=> c.gen.classList.remove('show'), 3200);
+}));
+document.getElementById('btn-type').addEventListener('click', ()=> ctrls.forEach(c=> c.playType()));
+
+/* hash 直达：#dark #choices #history #gen */
+(function(){
+  const h = location.hash;
+  if(!h) return;
+  if(h.includes('dark')){ stages.forEach(s=> s.classList.add('dark')); btnDark.classList.add('on'); }
+  if(h.includes('choices')) ctrls.forEach(c=> c.choices.classList.add('show'));
+  if(h.includes('history')) ctrls.forEach(c=> c.hist.classList.add('show'));
+  if(h.includes('gen')) ctrls.forEach(c=> c.gen.classList.add('show'));
+})();
+</script>
+</body>
+</html>

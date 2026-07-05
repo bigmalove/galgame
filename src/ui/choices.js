@@ -1,4 +1,4 @@
-import { SCRIPT_NAME } from '../core/constants.js';
+import { ANCIENT_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, YANYUN_FAMILY_SKIN_IDS } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getIsEnabled, getPendingOptions, setPendingOptions, getGalgameChoicesVisible, setGalgameChoicesVisible, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
@@ -24,7 +24,7 @@ export function setChoicesRefs({ getIsRerolling }) {
 function syncChoicesLayerSkinClass($layer) {
   if (!$layer?.length) return;
   const $overlay = getOverlayElement();
-  TWILIGHT_FAMILY_SKIN_IDS.forEach(skinClass => {
+  [...TWILIGHT_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, 'skin-classic', 'html-skin'].forEach(skinClass => {
     $layer.toggleClass(skinClass, $overlay.hasClass(skinClass));
   });
 }

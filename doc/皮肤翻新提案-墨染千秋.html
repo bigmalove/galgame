@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>皮肤翻新提案 · 墨染千秋 Ink Wash Scroll</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;500;600;700;900&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   墨染千秋 Ink Wash Scroll — galgame 主界面皮肤翻新提案
+   设计语言：水墨长卷 × 大写意留白 × 漆木轴头 × 墨晕交互
+   与朱笺（信笺/字）的区隔：墨染千秋是「画」——
+   舞台本身是一幅水墨山水的留白，对话框是徐徐展开的手卷，
+   名牌是一笔浓墨落纸，交互反馈全部用「墨晕」而非线条。
+   class 命名沿用真实项目的 .gal-* 钩子，便于后续直接移植。
+   ============================================================ */
+:root{
+  /* —— 设计 token —— */
+  --ink-silk:      #ece5d3;              /* 绢本底（比宣纸更暖旧） */
+  --ink-silk-dark: #ddd3bc;              /* 绢的暗部 */
+  --ink-black:     #1c1a17;              /* 焦墨 */
+  --ink-deep:      #35302a;              /* 浓墨 */
+  --ink-mid:       #6e675c;              /* 淡墨 */
+  --ink-faint:     #a89f8e;              /* 渴笔 */
+  --ink-seal:      #9e2b1f;              /* 印泥朱（仅印章与落款使用） */
+  --ink-gold:      #a8863c;              /* 泥金（轴头端帽） */
+  --ink-lacquer:   #241610;              /* 漆木轴 */
+  --font-kai:      'Noto Serif SC', 'KaiTi', 'STKaiti', serif;
+  --font-brush:    'Ma Shan Zheng', 'KaiTi', cursive;    /* 行草笔意 */
+  --font-xiaowei:  'ZCOOL XiaoWei', 'Noto Serif SC', serif;
+  --ui-scale: 1;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  font-family: var(--font-kai);
+  background:#100f0d;
+  color: var(--ink-black);
+  display:flex; flex-direction:column; align-items:center;
+  padding: clamp(12px, 3vw, 40px);
+  gap: 28px;
+}
+
+/* ---------- 页头说明 ---------- */
+.proposal-head{ text-align:center; max-width:920px; color:#cdc4b0; }
+.proposal-head .latin{
+  font-family: var(--font-xiaowei);
+  letter-spacing:.5em; font-size:12px; color:#7d7566;
+}
+.proposal-head h1{
+  font-weight:900; font-size: clamp(22px, 3.4vw, 34px); letter-spacing:.2em;
+  margin:.35em 0 .4em; color:#e8e0cd;
+}
+.proposal-head h1 em{ font-style:normal; color:var(--ink-seal); }
+.proposal-head p{ font-size:13px; line-height:1.9; color:#9d9483; }
+
+/* ---------- 预览控制条 ---------- */
+.preview-controls{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+.preview-controls button{
+  font-family: var(--font-kai); font-size:12px; letter-spacing:.22em;
+  padding:8px 18px; cursor:pointer; color:#c4bba7;
+  background:transparent; border:1px solid rgba(196,187,167,.35); border-radius:2px;
+  transition: all .25s ease;
+}
+.preview-controls button:hover{ border-color:var(--ink-seal); color:#d96c5c; }
+.preview-controls button.on{ background:var(--ink-seal); border-color:var(--ink-seal); color:#f5efe0; }
+
+/* ============================================================
+   舞台（对应 .gal-game-container）
+   —— 水墨画的舞台是「纸」：浅色留白，墨山在远处
+   ============================================================ */
+.gal-game-container{
+  position:relative; width:min(1180px, 96vw); aspect-ratio: 16/9;
+  overflow:hidden; border-radius:3px;
+  background: var(--ink-silk);
+  box-shadow: 0 30px 80px -24px rgba(0,0,0,.85), 0 0 0 1px rgba(236,229,211,.06);
+}
+
+/* ————————————————————————————————————————————————————————————
+   背景占位（.gal-layer-bg）：水墨远山 + 雾带 + 孤鸟
+   真实项目中有背景图时整层让位（.has-bg）
+   ———————————————————————————————————————————————————————————— */
+.gal-layer-bg{ position:absolute; inset:0; overflow:hidden; }
+/* 绢本底色：中心亮、四角沉的旧绢 */
+.gal-layer-bg .silk{
+  position:absolute; inset:0;
+  background:
+    radial-gradient(120% 95% at 50% 30%, rgba(255,252,242,.55) 0%, rgba(236,229,211,0) 55%),
+    radial-gradient(140% 120% at 50% 110%, rgba(146,130,98,.28) 0%, rgba(146,130,98,0) 46%),
+    linear-gradient(175deg, #efe8d7 0%, var(--ink-silk) 46%, #e2d8c1 100%);
+}
+/* 远山三叠：淡墨到浓墨 */
+.gal-layer-bg .mountain{ position:absolute; left:-4%; right:-4%; pointer-events:none; }
+.gal-layer-bg .m-far{
+  bottom:34%; height:30%; opacity:.24; filter: blur(2px);
+  background: radial-gradient(58% 100% at 24% 100%, #6e675c 0 60%, transparent 61%),
+              radial-gradient(42% 82% at 55% 100%, #6e675c 0 58%, transparent 59%),
+              radial-gradient(50% 66% at 86% 100%, #6e675c 0 55%, transparent 56%);
+}
+.gal-layer-bg .m-mid{
+  bottom:26%; height:34%; opacity:.42; filter: blur(1px);
+  background: radial-gradient(44% 92% at 12% 100%, #4a443a 0 58%, transparent 59%),
+              radial-gradient(52% 100% at 46% 100%, #4a443a 0 62%, transparent 63%),
+              radial-gradient(38% 74% at 82% 100%, #4a443a 0 54%, transparent 55%);
+}
+.gal-layer-bg .m-near{
+  bottom:17%; height:32%; opacity:.68;
+  background: radial-gradient(36% 100% at 8% 100%, var(--ink-deep) 0 56%, transparent 57%),
+              radial-gradient(30% 68% at 34% 100%, var(--ink-deep) 0 52%, transparent 53%),
+              radial-gradient(46% 88% at 72% 100%, var(--ink-deep) 0 58%, transparent 59%),
+              radial-gradient(28% 58% at 97% 100%, var(--ink-deep) 0 50%, transparent 51%);
+}
+/* 雾带：两条横雾缓慢漂移，山被拦腰截断 */
+.gal-layer-bg .mist{
+  position:absolute; left:-10%; right:-10%; pointer-events:none;
+  background: linear-gradient(180deg, transparent 0%, rgba(236,229,211,.92) 30%, rgba(236,229,211,.96) 55%, transparent 100%);
+  animation: mist-drift 26s ease-in-out infinite alternate;
+}
+.gal-layer-bg .mist-a{ bottom:30%; height:14%; }
+.gal-layer-bg .mist-b{ bottom:19%; height:11%; animation-duration: 34s; animation-delay:-12s; }
+@keyframes mist-drift{
+  from{ transform: translateX(-2.5%); }
+  to  { transform: translateX(2.5%); }
+}
+/* 水面：山脚一抹淡墨倒影 */
+.gal-layer-bg .water{
+  position:absolute; left:0; right:0; bottom:0; height:18%;
+  background: linear-gradient(180deg, rgba(110,103,92,.14) 0%, rgba(110,103,92,.03) 40%, transparent 100%);
+}
+/* 飞鸟：几笔淡墨「人」字，缓缓横渡 */
+.gal-layer-bg .birds{
+  position:absolute; left:12%; top:20%;
+  font-family: var(--font-brush);
+  color: rgba(53,48,42,.55); font-size:15px; letter-spacing:14px;
+  transform: scaleY(.5);
+  animation: birds-fly 60s linear infinite;
+  pointer-events:none;
+}
+@keyframes birds-fly{
+  from{ transform: translateX(0) scaleY(.5); }
+  to  { transform: translateX(58vw) scaleY(.5); }
+}
+/* 右上：一方淡朱闲章，整幅画唯一的颜色 */
+.gal-layer-bg .idle-seal{
+  position:absolute; right:5.5%; top:9%;
+  width:34px; height:34px; opacity:.8;
+  background: var(--ink-seal); border-radius:2px;
+  display:grid; place-items:center;
+  color:#f0e4d0; font-family: var(--font-kai); font-size:15px; font-weight:700;
+  writing-mode: vertical-rl; letter-spacing:.1em; line-height:1;
+  box-shadow: 0 0 0 1px rgba(158,43,31,.3), 0 2px 6px rgba(0,0,0,.12);
+}
+
+/* —— 立绘占位（.gal-layer-character / .gal-char-slot）—— */
+.gal-layer-character{ position:absolute; inset:0; pointer-events:none; }
+.gal-char-slot.slot-center{
+  position:absolute; left:50%; bottom:-2%; width:30%; aspect-ratio: 3/7;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 18px 26px rgba(40,32,20,.35));
+}
+.char-silhouette{
+  width:100%; height:100%; position:relative;
+  background:
+    radial-gradient(48% 13% at 50% 7%, #3a342c 0 98%, transparent 100%),
+    radial-gradient(64% 9% at 50% 13.5%, #2e2922 0 98%, transparent 100%),
+    linear-gradient(180deg, transparent 15%, #423b31 16% 100%);
+  -webkit-mask: radial-gradient(140% 100% at 50% 0%, #000 62%, transparent 63%) no-repeat 50% 15%/100% 24%,
+                linear-gradient(#000, #000) no-repeat 50% 100%/74% 78%;
+          mask: radial-gradient(140% 100% at 50% 0%, #000 62%, transparent 63%) no-repeat 50% 15%/100% 24%,
+                linear-gradient(#000, #000) no-repeat 50% 100%/74% 78%;
+  opacity:.9;
+}
+.char-silhouette::after{
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(102deg, transparent 45%, rgba(236,229,211,.4) 50%, transparent 56%);
+}
+.slot-note{
+  position:absolute; left:50%; top:38%; transform:translateX(-50%);
+  font-size:11px; letter-spacing:.3em; color:rgba(53,48,42,.45); white-space:nowrap;
+}
+
+/* ============================================================
+   顶部：状态信息 —— 题跋式：竖排小字挂在画的左上角
+   ============================================================ */
+.gal-status-bar-container{
+  position:absolute; top:0; left:0; right:0; z-index:5;
+  display:flex; align-items:flex-start; justify-content:space-between;
+  padding: calc(22px*var(--ui-scale)) calc(26px*var(--ui-scale)) 0;
+  pointer-events:none;
+}
+.gal-scene-slate{
+  display:flex; gap:12px; align-items:flex-start;
+  writing-mode: vertical-rl;
+  color: var(--ink-deep);
+}
+.gal-scene-slate .gal-location-text{
+  font-family: var(--font-xiaowei);
+  font-size: calc(17px*var(--ui-scale)); font-weight:600; letter-spacing:.3em;
+}
+.gal-scene-slate .gal-time-text{
+  font-size: calc(12px*var(--ui-scale)); letter-spacing:.34em; color:var(--ink-mid);
+  margin-top:4px;
+}
+.gal-scene-slate::after{ /* 题跋下的小朱印 */
+  content:"记"; display:grid; place-items:center;
+  width:18px; height:18px; margin-top:10px;
+  background:var(--ink-seal); color:#f0e4d0;
+  font-size:10px; border-radius:2px; letter-spacing:0;
+}
+.gal-top-actions{ display:flex; gap:10px; pointer-events:auto; }
+.gal-fullscreen-btn{
+  width: calc(34px*var(--ui-scale)); height: calc(34px*var(--ui-scale));
+  display:grid; place-items:center; cursor:pointer;
+  color:var(--ink-mid); font-size:13px;
+  border:1px solid rgba(53,48,42,.3); border-radius:50%;
+  background: rgba(236,229,211,.5); backdrop-filter: blur(2px);
+  transition:all .3s ease;
+}
+.gal-fullscreen-btn:hover{ color:#f0e4d0; border-color:var(--ink-deep); background:var(--ink-deep); }
+
+/* ============================================================
+   对话框层（.gal-dialog-layer / .gal-text-panel）
+   —— 徐徐展开的手卷：上下漆木轴 + 绢面 + 两端渐隐
+   ============================================================ */
+.gal-dialog-layer{
+  position:absolute; left:50%; bottom: calc(18px*var(--ui-scale));
+  transform: translateX(-50%);
+  width: min(94%, calc(920px*var(--ui-scale)));
+  z-index:10;
+}
+
+/* 手卷纸面 */
+.gal-text-panel{
+  position:relative;
+  background:
+    radial-gradient(1.5px 1.5px at 18% 40%, rgba(110,95,60,.1), transparent 100%),
+    radial-gradient(1px 1px at 72% 70%, rgba(110,95,60,.09), transparent 100%),
+    linear-gradient(178deg, #f4eee0 0%, #eae2cd 100%);
+  padding: calc(28px*var(--ui-scale)) calc(58px*var(--ui-scale)) calc(16px*var(--ui-scale));
+  box-shadow:
+    0 -1px 0 rgba(53,48,42,.25),
+    0 1px 0 rgba(53,48,42,.25),
+    0 26px 44px -18px rgba(28,22,12,.55);
+}
+/* 上下漆木轴条 */
+.gal-text-panel::before,
+.gal-text-panel::after{
+  content:""; position:absolute; left:-1.2%; right:-1.2%;
+  height: calc(10px*var(--ui-scale));
+  background: linear-gradient(180deg, #3a281c 0%, var(--ink-lacquer) 45%, #170d08 100%);
+  border-radius: 999px;
+  box-shadow: 0 3px 8px rgba(0,0,0,.4);
+}
+.gal-text-panel::before{ top: calc(-6px*var(--ui-scale)); }
+.gal-text-panel::after{ bottom: calc(-6px*var(--ui-scale)); }
+/* 轴头端帽（泥金），由 dialog-layer 的伪元素画 */
+.gal-dialog-layer::before,
+.gal-dialog-layer::after{
+  content:""; position:absolute; top:-8px; bottom:-8px; width:9px;
+  background: linear-gradient(180deg, #c9a659 0%, var(--ink-gold) 40%, #7a5f26 100%);
+  border-radius:4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,235,190,.5);
+  z-index:3;
+}
+.gal-dialog-layer::before{ left:-14px; }
+.gal-dialog-layer::after{ right:-14px; }
+/* 卷首卷尾渐隐：像纸还没完全展开 */
+.gal-text-panel .scroll-fade-l,
+.gal-text-panel .scroll-fade-r{
+  position:absolute; top:0; bottom:0; width: calc(46px*var(--ui-scale));
+  pointer-events:none;
+}
+.gal-text-panel .scroll-fade-l{ left:0;  background: linear-gradient(90deg, rgba(216,205,178,.75), transparent); }
+.gal-text-panel .scroll-fade-r{ right:0; background: linear-gradient(-90deg, rgba(216,205,178,.75), transparent); }
+
+.gal-dialog-text{
+  font-size: calc(19px*var(--ui-scale));
+  line-height:2.1; letter-spacing:.08em;
+  color: var(--ink-black); font-weight:500;
+  min-height: calc(19px * 2.1 * 2 * var(--ui-scale));
+  text-align: justify;
+}
+/* 打字机光标：一滴将落未落的墨 */
+.gal-dialog-text .caret{
+  display:inline-block; width:.42em; height:.42em; vertical-align:.02em; margin-left:4px;
+  background: var(--ink-black); border-radius:50% 50% 50% 4%;
+  transform: rotate(45deg);
+  animation: ink-drop 1.1s ease-in-out infinite;
+}
+@keyframes ink-drop{ 0%,100%{ opacity:1; } 50%{ opacity:.15; } }
+
+/* —— 姓名牌（.gal-name-badge）：一笔浓墨落纸 + 角上小朱印 —— */
+.gal-name-badge{
+  position:absolute; left: calc(26px*var(--ui-scale)); top: calc(-34px*var(--ui-scale));
+  z-index:3;
+  background:
+    radial-gradient(140% 190% at 8% 30%, var(--ink-deep) 0%, var(--ink-black) 55%, rgba(28,26,23,.94) 100%);
+  color:#f0ead9;
+  font-family: var(--font-brush);
+  font-size: calc(23px*var(--ui-scale)); letter-spacing:.14em;
+  padding: calc(7px*var(--ui-scale)) calc(26px*var(--ui-scale)) calc(7px*var(--ui-scale)) calc(20px*var(--ui-scale));
+  /* 笔触形状：起笔顿、收笔出锋 */
+  clip-path: polygon(0% 42%, 3% 12%, 10% 0%, 88% 4%, 100% 32%, 97% 78%, 90% 100%, 12% 96%, 2% 74%);
+  transform: rotate(-1.2deg);
+  filter: drop-shadow(0 6px 12px rgba(28,22,12,.4));
+}
+.gal-name-badge::after{ /* 右下小朱印 */
+  content:""; position:absolute; right:-7px; bottom:-7px;
+  width:13px; height:13px; background:var(--ink-seal); border-radius:2px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.gal-name-badge.gal-narrator-label{
+  background: radial-gradient(140% 190% at 8% 30%, #8a8375 0%, var(--ink-mid) 60%, rgba(110,103,92,.92) 100%);
+  color:#f6f1e4;
+}
+.gal-name-badge.gal-narrator-label::after{ background:#6e675c; }
+
+/* —— 对话框右上悬浮操作（.gal-interaction-bar）：绢底墨字小签 —— */
+.gal-interaction-bar{
+  position:absolute; right: calc(8px*var(--ui-scale)); top: calc(-20px*var(--ui-scale));
+  display:flex; gap:8px; z-index:3;
+}
+.gal-action-btn{
+  height: calc(32px*var(--ui-scale)); padding:0 calc(16px*var(--ui-scale));
+  display:flex; align-items:center; gap:7px; cursor:pointer;
+  font-family: var(--font-kai); font-size: calc(12.5px*var(--ui-scale));
+  letter-spacing:.22em; font-weight:600;
+  color: var(--ink-deep);
+  background: rgba(244,238,224,.96);
+  border:1px solid rgba(53,48,42,.35); border-radius:2px;
+  box-shadow: 0 4px 10px -4px rgba(28,22,12,.4);
+  position:relative; overflow:hidden;
+  transition: color .25s ease, border-color .25s ease;
+}
+.gal-action-btn::before{ /* 墨晕从中心洇开 */
+  content:""; position:absolute; inset:0;
+  background: radial-gradient(circle at 50% 50%, var(--ink-deep) 0%, var(--ink-black) 100%);
+  border-radius:50%;
+  transform: scale(0); opacity:0;
+  transition: transform .34s ease, opacity .3s ease;
+}
+.gal-action-btn:hover::before{ transform: scale(1.6); opacity:1; border-radius:0; }
+.gal-action-btn:hover{ color:#f0ead9; border-color:var(--ink-black); }
+.gal-action-btn span, .gal-action-btn .ico{ position:relative; z-index:1; }
+
+/* ============================================================
+   底部工具栏（.gal-bottom-toolbar / .gal-footer-btn / next）
+   —— 一行淡墨小字，悬停洇出墨晕圆；NEXT 是「展卷」小手卷
+   ============================================================ */
+.gal-bottom-toolbar{
+  display:flex; align-items:center; gap: calc(2px*var(--ui-scale));
+  margin-top: calc(20px*var(--ui-scale));
+}
+.gal-footer-btn{
+  font-family: var(--font-kai);
+  font-size: calc(12.5px*var(--ui-scale)); font-weight:600; letter-spacing:.16em;
+  color: rgba(240,234,217,.72);
+  background:none; border:none; cursor:pointer;
+  padding: calc(7px*var(--ui-scale)) calc(11px*var(--ui-scale));
+  position:relative; isolation:isolate;
+  transition: color .25s ease;
+}
+.gal-footer-btn::before{ /* 墨晕 */
+  content:""; position:absolute; inset:2px; z-index:-1;
+  background: radial-gradient(circle, rgba(28,26,23,.85) 0%, rgba(28,26,23,.6) 60%, transparent 72%);
+  border-radius:50%;
+  transform: scale(.3); opacity:0;
+  transition: transform .3s ease, opacity .28s ease;
+}
+.gal-footer-btn:hover{ color:#f4eee0; }
+.gal-footer-btn:hover::before{ transform: scale(1); opacity:1; }
+.gal-toolbar-spacer{ flex:1; }
+
+/* 待选项按钮：朱印召唤 */
+.gal-pending-choices-btn{
+  display:flex; align-items:center; gap:8px; cursor:pointer;
+  font-family: var(--font-kai);
+  font-size: calc(12.5px*var(--ui-scale)); font-weight:700; letter-spacing:.2em;
+  color:#f5e9d4; background: var(--ink-seal);
+  border:none; border-radius:2px;
+  padding: calc(8px*var(--ui-scale)) calc(16px*var(--ui-scale));
+  box-shadow: 0 0 0 0 rgba(158,43,31,.5);
+  animation: seal-breathe 2.4s ease-out infinite;
+}
+@keyframes seal-breathe{
+  0%{ box-shadow: 0 0 0 0 rgba(158,43,31,.4); }
+  70%{ box-shadow: 0 0 0 11px rgba(158,43,31,0); }
+  100%{ box-shadow: 0 0 0 0 rgba(158,43,31,0); }
+}
+
+/* NEXT：展卷 —— 一枚横置小手卷，悬停两端轴头外扩 */
+.gal-footer-btn-next{
+  font-family: var(--font-kai); font-weight:700;
+  font-size: calc(14.5px*var(--ui-scale)); letter-spacing:.34em; text-indent:.34em;
+  color: #f0ead9;
+  background: linear-gradient(180deg, var(--ink-deep) 0%, var(--ink-black) 100%);
+  cursor:pointer;
+  border:none; border-radius:3px;
+  padding: calc(9px*var(--ui-scale)) calc(26px*var(--ui-scale));
+  display:flex; align-items:center; gap:8px;
+  position:relative;
+  box-shadow: 0 6px 14px -6px rgba(0,0,0,.5);
+  transition: letter-spacing .3s ease, box-shadow .3s ease;
+}
+.gal-footer-btn-next::before,
+.gal-footer-btn-next::after{ /* 两端泥金轴头 */
+  content:""; position:absolute; top:-3px; bottom:-3px; width:6px;
+  background: linear-gradient(180deg, #c9a659, #7a5f26);
+  border-radius:3px;
+  transition: transform .3s ease;
+}
+.gal-footer-btn-next::before{ left:-9px; }
+.gal-footer-btn-next::after{ right:-9px; }
+.gal-footer-btn-next:hover{ letter-spacing:.5em; box-shadow: 0 8px 20px -6px rgba(0,0,0,.6); }
+.gal-footer-btn-next:hover::before{ transform: translateX(-4px); }
+.gal-footer-btn-next:hover::after{ transform: translateX(4px); }
+
+/* —— 进度条：一笔由浓转淡的墨迹 —— */
+.gal-progress-container{
+  height:3px; margin-top: calc(12px*var(--ui-scale));
+  background: rgba(28,26,23,.14); border-radius:3px; overflow:hidden;
+}
+.gal-progress-bar{
+  height:100%; width:64%;
+  background: linear-gradient(90deg, var(--ink-black) 0%, var(--ink-deep) 55%, var(--ink-faint) 100%);
+  border-radius:3px;
+}
+
+/* ============================================================
+   选项浮层（#gal-layer-choices / .gal-choice-card）
+   —— 三幅挂轴自上垂落，悬停朱批圈点
+   ============================================================ */
+.gal-choices-overlay{
+  position:absolute; inset:0; z-index:40;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap: calc(12px*var(--ui-scale));
+  background: rgba(24,20,14,.52); backdrop-filter: blur(3px) saturate(.88);
+  opacity:0; pointer-events:none; transition: opacity .3s ease;
+}
+.gal-choices-overlay.show{ opacity:1; pointer-events:auto; }
+.gal-choices-title{
+  color:#ece5d3; font-family: var(--font-xiaowei);
+  font-size: calc(16px*var(--ui-scale)); letter-spacing:.6em; text-indent:.6em;
+  margin-bottom: calc(10px*var(--ui-scale));
+}
+.gal-choices-title::after{
+  content:""; display:block; width:1px; height:24px; margin:10px auto 0;
+  background: linear-gradient(var(--ink-seal), transparent);
+}
+/* 挂轴卡片：上木轴 + 绢面 + 下坠穗 */
+.gal-choice-card{
+  width: min(78%, 580px);
+  display:flex; align-items:center; gap: calc(16px*var(--ui-scale));
+  background: linear-gradient(178deg, #f4eee0, #e7dfc9);
+  border:none; border-radius:1px;
+  padding: calc(13px*var(--ui-scale)) calc(22px*var(--ui-scale));
+  cursor:pointer; position:relative;
+  box-shadow:
+    0 -5px 0 -1px var(--ink-lacquer),          /* 上轴 */
+    0 -8px 0 -2px #3a281c,
+    0 14px 28px -12px rgba(10,7,3,.65);
+  transition: transform .24s ease, box-shadow .24s ease;
+  opacity:0; transform: translateY(-16px);
+  font-family: var(--font-kai);
+}
+.gal-choices-overlay.show .gal-choice-card{ animation: scroll-drop .5s cubic-bezier(.2,.9,.3,1.05) forwards; }
+.gal-choices-overlay.show .gal-choice-card:nth-child(3){ animation-delay:.08s; }
+.gal-choices-overlay.show .gal-choice-card:nth-child(4){ animation-delay:.16s; }
+.gal-choices-overlay.show .gal-choice-card:nth-child(5){ animation-delay:.24s; }
+@keyframes scroll-drop{ to{ opacity:1; transform:translateY(0); } }
+.gal-choice-card:hover{
+  transform: translateY(-2px);
+  box-shadow:
+    0 -5px 0 -1px var(--ink-lacquer),
+    0 -8px 0 -2px #3a281c,
+    0 20px 34px -12px rgba(10,7,3,.75);
+}
+/* 序号：淡墨圈，悬停变朱批圈点 */
+.gal-choice-index{
+  flex:none; width: calc(34px*var(--ui-scale)); height: calc(34px*var(--ui-scale));
+  display:grid; place-items:center;
+  font-family: var(--font-xiaowei);
+  font-size: calc(16px*var(--ui-scale)); font-weight:600; color: var(--ink-deep);
+  border:1.5px solid rgba(53,48,42,.5); border-radius:50%;
+  transition: all .24s ease;
+}
+.gal-choice-card:hover .gal-choice-index{
+  color:#f5e9d4; background: var(--ink-seal); border-color: var(--ink-seal);
+  transform: rotate(-8deg);
+}
+.gal-choice-card > span{
+  font-size: calc(15.5px*var(--ui-scale)); font-weight:600; letter-spacing:.08em; color:var(--ink-black);
+}
+.gal-choices-hint{
+  color:rgba(236,229,211,.5); font-size:11px; letter-spacing:.34em; margin-top:8px;
+}
+
+/* ============================================================
+   历史记录（.gal-history-modal）—— 「千秋卷」册页
+   ============================================================ */
+.gal-history-modal{
+  position:absolute; inset:0; z-index:50;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(24,20,14,.58); backdrop-filter: blur(3px);
+  opacity:0; pointer-events:none; transition: opacity .3s ease;
+}
+.gal-history-modal.show{ opacity:1; pointer-events:auto; }
+.gal-history-panel{
+  width:min(78%, 640px); max-height:78%;
+  display:flex; flex-direction:column;
+  background: linear-gradient(178deg, #f4eee0, #e9e1cb);
+  border-radius:2px; overflow:hidden;
+  box-shadow:
+    0 -6px 0 -1px var(--ink-lacquer), 0 6px 0 -1px var(--ink-lacquer),
+    0 40px 70px -26px rgba(5,3,1,.85);
+}
+.gal-history-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 24px; border-bottom:1px solid rgba(53,48,42,.22);
+}
+.gal-history-title{
+  font-family: var(--font-xiaowei);
+  font-size:16px; font-weight:700; letter-spacing:.44em; color:var(--ink-black);
+}
+.gal-history-title small{
+  font-family: var(--font-kai); font-weight:400;
+  letter-spacing:.2em; color:var(--ink-mid); margin-left:10px; font-size:11px;
+}
+.gal-history-close{
+  background:none; border:1px solid rgba(53,48,42,.35); border-radius:50%;
+  width:30px; height:30px; cursor:pointer; color:var(--ink-mid);
+  transition:all .22s ease;
+}
+.gal-history-close:hover{ background:var(--ink-seal); border-color:var(--ink-seal); color:#f5e9d4; }
+.gal-history-body{ overflow-y:auto; padding: 8px 26px 20px; }
+.gal-history-item{ padding:16px 0 14px; border-bottom:1px dashed rgba(53,48,42,.22); }
+.gal-history-name{
+  display:inline-block; font-family: var(--font-brush);
+  font-size:16px; letter-spacing:.1em;
+  color:#f0ead9; background: var(--ink-black);
+  padding:1px 12px 2px 10px; margin-bottom:7px;
+  clip-path: polygon(0% 40%, 4% 8%, 12% 0%, 90% 5%, 100% 36%, 96% 82%, 88% 100%, 8% 94%);
+}
+.gal-history-name.narrator{ background: var(--ink-mid); }
+.gal-history-content{ font-size:14px; line-height:2; color:var(--ink-black); font-family: var(--font-kai); }
+.gal-history-body::-webkit-scrollbar{ width:4px; }
+.gal-history-body::-webkit-scrollbar-thumb{ background:rgba(53,48,42,.3); border-radius:4px; }
+
+/* ============================================================
+   生成中指示器（#gal-generating-indicator）—— 「运笔之中」
+   ============================================================ */
+.gal-generating-indicator{
+  position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
+  z-index:45; display:none; flex-direction:column; align-items:center; gap:15px;
+  padding:26px 46px;
+  background: linear-gradient(178deg, #f4eee0, #e9e1cb);
+  border-radius:2px;
+  box-shadow:
+    0 -5px 0 -1px var(--ink-lacquer), 0 5px 0 -1px var(--ink-lacquer),
+    0 30px 60px -20px rgba(5,3,1,.8);
+}
+.gal-generating-indicator.show{ display:flex; }
+/* 墨滴入水：一圈圈墨晕荡开 */
+.gal-gen-inkpool{ width:46px; height:46px; position:relative; }
+.gal-gen-inkpool::before,
+.gal-gen-inkpool::after{
+  content:""; position:absolute; inset:0; border-radius:50%;
+  border:1.5px solid var(--ink-deep);
+  animation: ink-ripple 1.8s ease-out infinite;
+}
+.gal-gen-inkpool::after{ animation-delay:.9s; }
+.gal-gen-inkpool i{
+  position:absolute; inset:16px; border-radius:50%;
+  background: radial-gradient(circle at 38% 32%, #4a443a, var(--ink-black));
+  animation: ink-core 1.8s ease-in-out infinite;
+}
+@keyframes ink-ripple{
+  from{ transform: scale(.36); opacity:.85; }
+  to  { transform: scale(1.15); opacity:0; }
+}
+@keyframes ink-core{ 0%,100%{ transform: scale(1); } 50%{ transform: scale(.82); } }
+.gal-gen-text{
+  font-family: var(--font-xiaowei);
+  font-size:15px; font-weight:700; letter-spacing:.56em; text-indent:.56em; color:var(--ink-black);
+}
+.gal-gen-status{ font-size:11px; letter-spacing:.3em; color:var(--ink-mid); }
+
+/* ============================================================
+   变体：青绿 (Blue-Green Landscape) —— 千里江山设色
+   同一套结构，只换 token
+   ============================================================ */
+.gal-game-container.qinglv{
+  --ink-silk:      #e8e6d5;
+  --ink-silk-dark: #d5d2ba;
+  --ink-black:     #14231f;
+  --ink-deep:      #1f4a41;
+  --ink-mid:       #4e7a6b;
+  --ink-faint:     #8aa898;
+  --ink-seal:      #9e2b1f;
+  --ink-gold:      #b3893a;
+  --ink-lacquer:   #12251f;
+}
+.gal-game-container.qinglv .silk{
+  background:
+    radial-gradient(120% 95% at 50% 30%, rgba(250,250,238,.6) 0%, rgba(232,230,213,0) 55%),
+    radial-gradient(140% 120% at 50% 110%, rgba(78,122,107,.22) 0%, rgba(78,122,107,0) 46%),
+    linear-gradient(175deg, #ecebdb 0%, #e8e6d5 46%, #d9d8c0 100%);
+}
+.gal-game-container.qinglv .m-far{
+  background: radial-gradient(58% 100% at 24% 100%, #4e7a6b 0 60%, transparent 61%),
+              radial-gradient(42% 82% at 55% 100%, #4e7a6b 0 58%, transparent 59%),
+              radial-gradient(50% 66% at 86% 100%, #4e7a6b 0 55%, transparent 56%);
+}
+.gal-game-container.qinglv .m-mid{
+  background: radial-gradient(44% 92% at 12% 100%, #2b5c72 0 58%, transparent 59%),
+              radial-gradient(52% 100% at 46% 100%, #2b5c72 0 62%, transparent 63%),
+              radial-gradient(38% 74% at 82% 100%, #2b5c72 0 54%, transparent 55%);
+}
+.gal-game-container.qinglv .m-near{
+  background: radial-gradient(36% 100% at 8% 100%, #1f4a41 0 56%, transparent 57%),
+              radial-gradient(30% 68% at 34% 100%, #1f4a41 0 52%, transparent 53%),
+              radial-gradient(46% 88% at 72% 100%, #1f4a41 0 58%, transparent 59%),
+              radial-gradient(28% 58% at 97% 100%, #1f4a41 0 50%, transparent 51%);
+}
+.gal-game-container.qinglv .mist{
+  background: linear-gradient(180deg, transparent 0%, rgba(232,230,213,.92) 30%, rgba(232,230,213,.96) 55%, transparent 100%);
+}
+.gal-game-container.qinglv .gal-text-panel{
+  background:
+    radial-gradient(1.5px 1.5px at 18% 40%, rgba(60,95,80,.1), transparent 100%),
+    radial-gradient(1px 1px at 72% 70%, rgba(60,95,80,.09), transparent 100%),
+    linear-gradient(178deg, #f0efe0 0%, #e2e0cb 100%);
+}
+.gal-game-container.qinglv .birds{ color: rgba(31,74,65,.55); }
+
+/* ---------- 设计说明卡 ---------- */
+.spec-grid{
+  width:min(1180px, 96vw);
+  display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:14px;
+}
+.spec-card{
+  border:1px solid rgba(196,187,167,.16); border-radius:3px; padding:18px 20px;
+  color:#c4bba7; background:rgba(255,255,255,.02);
+}
+.spec-card h3{
+  font-size:12px; letter-spacing:.3em; color:#d96c5c;
+  margin-bottom:10px; font-weight:700;
+}
+.spec-card p{ font-size:12.5px; line-height:1.9; color:#9d9483; }
+.swatches{ display:flex; gap:8px; margin-top:10px; }
+.swatch{ width:34px; height:34px; border-radius:3px; border:1px solid rgba(255,255,255,.15); position:relative; }
+.swatch i{
+  position:absolute; top:110%; left:50%; transform:translateX(-50%);
+  font-style:normal; font-size:9px; letter-spacing:.05em; color:#7d7566; white-space:nowrap;
+}
+footer{ color:#645d4f; font-size:11px; letter-spacing:.25em; padding:14px 0 6px; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="proposal-head">
+  <div class="latin">Skin Proposal · Ink Wash Scroll</div>
+  <h1>墨染千秋 <em>·</em> 主界面皮肤翻新稿</h1>
+  <p>方向：水墨长卷。与朱笺（信笺 / 字）明确区隔——墨染千秋是「画」：
+  舞台本身是一幅留白的水墨山水（远山三叠、雾带漂移、飞鸟横渡），对话框是一段徐徐展开的手卷
+  （上下漆木轴 + 泥金端帽 + 卷首卷尾渐隐），名牌是一笔浓墨落纸带小朱印，
+  所有交互反馈都用「墨晕洇开」而非线条。下方为可交互预览。</p>
+</div>
+
+<div class="preview-controls">
+  <button id="btn-qinglv">切换 · 青绿设色变体</button>
+  <button id="btn-choices">预览 · 选项挂轴</button>
+  <button id="btn-history">预览 · 千秋卷</button>
+  <button id="btn-gen">预览 · 运笔之中</button>
+  <button id="btn-type">重播 · 打字机</button>
+</div>
+
+<!-- ═══════════════ 舞台 ═══════════════ -->
+<div class="gal-game-container" id="stage">
+
+  <!-- 背景占位：水墨山水（真实项目中有背景图时整层让位） -->
+  <div class="gal-layer-bg">
+    <div class="silk"></div>
+    <div class="mountain m-far"></div>
+    <div class="mist mist-a"></div>
+    <div class="mountain m-mid"></div>
+    <div class="mist mist-b"></div>
+    <div class="mountain m-near"></div>
+    <div class="water"></div>
+    <div class="birds">人人人</div>
+    <div class="idle-seal">秋</div>
+  </div>
+
+  <!-- 立绘占位 -->
+  <div class="gal-layer-character">
+    <div class="gal-char-slot slot-center">
+      <div class="char-silhouette"></div>
+      <div class="slot-note">立绘 / LIVE2D 占位</div>
+    </div>
+  </div>
+
+  <!-- 顶部场景信息：题跋式竖排 -->
+  <div class="gal-status-bar-container">
+    <div class="gal-scene-slate">
+      <div>
+        <div class="gal-location-text">烟雨江渡</div>
+        <div class="gal-time-text">暮春 · 酉时</div>
+      </div>
+    </div>
+    <div class="gal-top-actions">
+      <button class="gal-fullscreen-btn" title="切换全屏">⛶</button>
+    </div>
+  </div>
+
+  <!-- 对话框层：手卷 -->
+  <div class="gal-dialog-layer">
+    <div class="gal-name-badge" id="name-badge">沈青梧</div>
+
+    <div class="gal-interaction-bar">
+      <button class="gal-action-btn btn-reroll"><span class="ico">↻</span><span>重绘当前</span></button>
+      <button class="gal-action-btn btn-free"><span class="ico">✎</span><span>自由对话</span></button>
+    </div>
+
+    <div class="gal-text-panel">
+      <div class="scroll-fade-l"></div>
+      <div class="scroll-fade-r"></div>
+      <p class="gal-dialog-text" id="dialog-text"></p>
+
+      <div class="gal-bottom-toolbar">
+        <button class="gal-footer-btn">履历</button>
+        <button class="gal-footer-btn">退出</button>
+        <button class="gal-footer-btn">原文</button>
+        <button class="gal-footer-btn">设置</button>
+        <button class="gal-footer-btn">存档</button>
+        <button class="gal-footer-btn">读档</button>
+        <button class="gal-footer-btn">图谱</button>
+        <button class="gal-footer-btn">回溯</button>
+        <button class="gal-footer-btn">自动</button>
+        <button class="gal-footer-btn">快进</button>
+        <div class="gal-toolbar-spacer"></div>
+        <button class="gal-pending-choices-btn" id="btn-pending">❖ 剧情选项</button>
+        <button class="gal-footer-btn-next">展 卷</button>
+      </div>
+
+      <div class="gal-progress-container"><div class="gal-progress-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- 选项浮层：挂轴 -->
+  <div class="gal-choices-overlay" id="choices">
+    <div class="gal-choices-title">何去何从</div>
+    <button class="gal-choice-card"><span class="gal-choice-index">一</span><span>撑伞过桥，去渡口寻那艘乌篷船。</span></button>
+    <button class="gal-choice-card"><span class="gal-choice-index">二</span><span>折返茶寮，等雨停了再作打算。</span></button>
+    <button class="gal-choice-card"><span class="gal-choice-index">三</span><span>立于檐下，静观来人是敌是友。</span></button>
+    <div class="gal-choices-hint">点击空白处收起挂轴</div>
+  </div>
+
+  <!-- 历史记录：千秋卷 -->
+  <div class="gal-history-modal" id="history">
+    <div class="gal-history-panel">
+      <div class="gal-history-header">
+        <div class="gal-history-title">千秋卷<small>INK CHRONICLE</small></div>
+        <button class="gal-history-close" id="history-close">✕</button>
+      </div>
+      <div class="gal-history-body">
+        <div class="gal-history-item">
+          <span class="gal-history-name narrator">旁白</span>
+          <div class="gal-history-content">暮春的雨丝斜斜掠过江面，渡口的灯笼在烟水里晕成一团昏黄。</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name">沈青梧</span>
+          <div class="gal-history-content">「船家说酉时三刻开船——你若再犹豫，便只能等明日了。」</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name narrator">旁白</span>
+          <div class="gal-history-content">她收了伞，侧身望向雨幕深处，袖口的墨梅在潮气里若隐若现。</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name">沈青梧</span>
+          <div class="gal-history-content">「此去千里，山高水长。你，当真想好了么？」</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 生成中：运笔之中 -->
+  <div class="gal-generating-indicator" id="gen">
+    <div class="gal-gen-inkpool"><i></i></div>
+    <div class="gal-gen-text">运笔之中</div>
+    <div class="gal-gen-status">墨落如雨，稍候片刻……</div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ 设计说明 ═══════════════ -->
+<div class="spec-grid">
+  <div class="spec-card">
+    <h3>画，而不是纸</h3>
+    <p>朱笺已经占了「信笺与字」的位置，墨染千秋改走「画」：无背景图时舞台
+    就是一幅留白的水墨山水——远山三叠（淡墨/中墨/浓墨各一层）、两条雾带
+    26 秒缓慢漂移、几笔「人」字飞鸟一分钟横渡整个画面。留白即纸，UI 全部
+    伏低在画面下缘。</p>
+  </div>
+  <div class="spec-card">
+    <h3>手卷对话框</h3>
+    <p>对话框是一段展开的手卷：上下两根漆木轴（渐变圆柱），左右泥金端帽，
+    卷首卷尾用渐隐模拟「纸未完全展开」。NEXT 按钮本身也是一枚小手卷，
+    悬停时字距拉开、两端轴头外扩——「展卷」这个动词做进了交互里。</p>
+  </div>
+  <div class="spec-card">
+    <h3>墨晕交互</h3>
+    <p>朱笺的悬停是「划一条朱线」，墨染千秋的悬停统一为「墨晕洇开」：
+    底栏文字按钮悬停时一团淡墨从字底荡开，操作按钮悬停时墨色从中心
+    涨满整个按钮。生成中指示器是「墨滴入水」的双圈涟漪。</p>
+    <div class="swatches">
+      <div class="swatch" style="background:#1c1a17"><i>#1C1A17</i></div>
+      <div class="swatch" style="background:#ece5d3"><i>#ECE5D3</i></div>
+      <div class="swatch" style="background:#9e2b1f"><i>#9E2B1F</i></div>
+      <div class="swatch" style="background:#a8863c"><i>#A8863C</i></div>
+    </div>
+  </div>
+  <div class="spec-card">
+    <h3>青绿设色变体</h3>
+    <p>与朱笺·墨夜、怪盗·天鹅绒同理，变体只覆写 CSS 变量：焦墨 → 石青
+    石绿（千里江山设色），绢本微调冷调，朱印不变。落地为
+    skin-ancient-qinglv，零额外结构成本。名牌用行草字体（Ma Shan Zheng），
+    人名像是画上题的款。</p>
+  </div>
+</div>
+
+<footer>INK WASH SCROLL · SKIN PROPOSAL FOR GALGAME UI · 2026</footer>
+
+<script>
+/* ---------- 打字机 ---------- */
+const LINE = '「渡口的雨快停了。此去山高水长，千秋事，不过一卷墨痕——你可愿与我同行？」';
+const dialogEl = document.getElementById('dialog-text');
+let typeTimer = null;
+function playType(){
+  clearTimeout(typeTimer);
+  dialogEl.innerHTML = '';
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  dialogEl.appendChild(caret);
+  let i = 0;
+  (function step(){
+    if(i >= LINE.length) return;
+    dialogEl.insertBefore(document.createTextNode(LINE[i++]), caret);
+    typeTimer = setTimeout(step, 52);
+  })();
+}
+playType();
+document.getElementById('btn-type').addEventListener('click', playType);
+
+/* ---------- 变体切换 ---------- */
+const stage = document.getElementById('stage');
+const btnQinglv = document.getElementById('btn-qinglv');
+btnQinglv.addEventListener('click', ()=>{
+  stage.classList.toggle('qinglv');
+  btnQinglv.classList.toggle('on');
+});
+
+/* ---------- 浮层预览 ---------- */
+const choices = document.getElementById('choices');
+document.getElementById('btn-choices').addEventListener('click', ()=> choices.classList.add('show'));
+document.getElementById('btn-pending').addEventListener('click', ()=> choices.classList.add('show'));
+choices.addEventListener('click', ()=> choices.classList.remove('show'));
+
+const history = document.getElementById('history');
+document.getElementById('btn-history').addEventListener('click', ()=> history.classList.add('show'));
+document.getElementById('history-close').addEventListener('click', ()=> history.classList.remove('show'));
+history.addEventListener('click', e=>{ if(e.target === history) history.classList.remove('show'); });
+
+const gen = document.getElementById('gen');
+let genTimer = null;
+document.getElementById('btn-gen').addEventListener('click', ()=>{
+  gen.classList.add('show');
+  clearTimeout(genTimer);
+  genTimer = setTimeout(()=> gen.classList.remove('show'), 3200);
+});
+</script>
+</body>
+</html>

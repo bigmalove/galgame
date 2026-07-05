@@ -5,15 +5,17 @@ export const SCRIPT_ID = 'galgame-ui-plugin';
 export const SCRIPT_NAME = 'Galgame界面插件';
 export const VERSION = typeof __GALGAME_VERSION__ !== 'undefined' ? __GALGAME_VERSION__ : '2.2.5';
 export const DB_NAME = 'GalgameUIPluginDB';
-export const DB_VERSION = 9;
+export const DB_VERSION = 10;
 export const STORE_SPRITES = 'sprites';
 export const STORE_BACKGROUNDS = 'backgrounds';
 export const STORE_MAP_IMAGES = 'mapImages';
 export const STORE_IMAGE_PACKS = 'imagePacks';
 export const STORE_LIVE2D_MODELS = 'live2dModels';
 export const STORE_SDK_CACHE = 'sdkCache';
+// legacy: 旧图片式自定义皮肤存储，仅用于 v10 升级时删除
 export const STORE_UI_SKINS = 'uiSkins';
 export const STORE_UI_SKIN_PROFILES = 'uiSkinProfiles';
+export const STORE_HTML_SKINS = 'htmlSkins';
 export const STORE_SPECIAL_CGS = 'specialCgs';
 export const DEFAULT_PACK_ID = 'pack_default';
 export const DEFAULT_PACK_NAME = '未定义';
@@ -40,8 +42,25 @@ export const TWILIGHT_VARIANT_SKIN_IDS = [
   ROSY_TWILIGHT_SKIN_ID,
 ];
 export const TWILIGHT_FAMILY_SKIN_IDS = [TWILIGHT_SKIN_ID, ...TWILIGHT_VARIANT_SKIN_IDS];
-export const GLOBAL_CUSTOM_SKIN_PACK_ID = '__global_custom_skin__';
-export const CUSTOM_SKIN_PROFILE_ID_PREFIX = 'custom-profile::';
+export const SHUJIAN_SKIN_ID = 'skin-shujian';
+export const SHUJIAN_NIGHT_SKIN_ID = 'skin-shujian-night';
+export const SHUJIAN_FAMILY_SKIN_IDS = [SHUJIAN_SKIN_ID, SHUJIAN_NIGHT_SKIN_ID];
+export const PERSONA_SKIN_ID = 'skin-persona';
+export const PERSONA_VELVET_SKIN_ID = 'skin-persona-velvet';
+export const PERSONA_FAMILY_SKIN_IDS = [PERSONA_SKIN_ID, PERSONA_VELVET_SKIN_ID];
+export const ANCIENT_SKIN_ID = 'skin-ancient';
+export const ANCIENT_QINGLV_SKIN_ID = 'skin-ancient-qinglv';
+export const ANCIENT_FAMILY_SKIN_IDS = [ANCIENT_SKIN_ID, ANCIENT_QINGLV_SKIN_ID];
+export const JRPG_SKIN_ID = 'skin-jrpg';
+export const JRPG_DAWN_SKIN_ID = 'skin-jrpg-dawn';
+export const JRPG_FAMILY_SKIN_IDS = [JRPG_SKIN_ID, JRPG_DAWN_SKIN_ID];
+export const YANYUN_SKIN_ID = 'skin-yanyun';
+export const YANYUN_XUEJI_SKIN_ID = 'skin-yanyun-xueji';
+export const YANYUN_FAMILY_SKIN_IDS = [YANYUN_SKIN_ID, YANYUN_XUEJI_SKIN_ID];
+export const DEFAULT_DARK_SKIN_ID = 'skin-default-dark';
+// HTML 模板皮肤
+export const HTML_SKIN_ID_PREFIX = 'html-skin::';
+export const HTML_SKIN_ACTIVE_CLASS = 'html-skin';
 
 // 样式主题常量 (Cyber Pop)
 export const THEME = {
@@ -54,7 +73,7 @@ export const THEME = {
   fontEng: "'Barlow', sans-serif",
 };
 
-export const BG_TRANSITION_MS = 450;
+export const BG_TRANSITION_MS = 900;
 
 // 世界书配置
 export const WORLDBOOK_NAME = 'galgame界面插件';

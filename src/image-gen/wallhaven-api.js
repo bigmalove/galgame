@@ -58,7 +58,7 @@ export const WallhavenAPI = {
       }
     }
 
-    if (!ws.cgMode) {
+    if (getSettings().imageGenCgMode !== true) {
       queryParts.push('-girl', '-people', '-person');
     }
 

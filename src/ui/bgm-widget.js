@@ -1,11 +1,20 @@
 import { $ } from '../core/env.js';
 import { BGMManager } from '../audio/bgm-manager.js';
+import { getSettings } from '../core/settings.js';
 
 // ============================================
 // BGM UI 组件渲染
 // ============================================
 
+export function removeBGMWidget() {
+  $('#gal-global-overlay .gal-bgm-widget').remove();
+}
+
 export function renderBGMWidget() {
+  if (getSettings().bgmEnabled === false) {
+    removeBGMWidget();
+    return;
+  }
   let $widget = $('#gal-global-overlay .gal-bgm-widget');
   if ($widget.length > 0) return;
 

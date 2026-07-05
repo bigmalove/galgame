@@ -103,7 +103,8 @@ export async function injectCOTToWorldbook() {
         await updateWorldbookWith(WORLDBOOK_NAME, entries => {
           return entries.map(entry => {
             if (entry.name === COT_ENTRY_NAME) {
-              return Object.assign({}, entry, { content: cotTemplate });
+              // enabled 必须一并恢复：条目一旦被手动/意外禁用，仅更新 content 会导致 COT 永远不再注入
+              return Object.assign({}, entry, { content: cotTemplate, enabled: true });
             }
             return entry;
           });

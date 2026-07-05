@@ -134,6 +134,7 @@ function sidebarGuide() {
       collapsed: false,
       items: [
         { text: '资源管理器', link: '/resources/asset-manager' },
+        { text: '内置背景图包', link: '/resources/builtin-bg-packs' },
         { text: '导入与导出', link: '/resources/import-export' },
       ],
     },

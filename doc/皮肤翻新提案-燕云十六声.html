@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>皮肤提案 · 燕云十六声 · 夜雪听风</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700;900&family=Zhi+Mang+Xing&family=Liu+Jian+Mao+Cao&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+/* ============================================================
+   燕云十六声 · 夜雪听风 —— galgame 主界面皮肤提案
+   设计语言：宋代武侠 × 风雪夜戏 × 墨甲鎏铜 × 剑光朱砂
+   —— 舞台是一幕武侠电影的夜戏：暮雪苍山三叠、雾纱孤月、
+      雁阵横渡、风雪斜掠（两层粒子 + 风痕）、山腰客栈灯火
+   —— UI 形制「墨甲」：厚重的深墨面板 + 鎏铜细线 + 刀裁斜角，
+      名牌是一方铜印拓，交互反馈统一为「剑光扫过」
+   —— 变体「雪霁」：晨光初照，雪山转暖，铜线转金
+   class 沿用真实项目 .gal-* 钩子，装饰节点 = 移植时的注入 DOM
+   ============================================================ */
+:root{
+  --ui-scale: 1;
+  --font-song:  'Noto Serif SC', 'Source Han Serif SC', serif;
+  --font-brush: 'Zhi Mang Xing', 'Liu Jian Mao Cao', 'KaiTi', cursive;
+}
+
+/* —— 设计 token（挂舞台，变体只覆写这里）—— */
+.gal-game-container{
+  /* 夜雪 */
+  --yx-ink-0:   #07090d;                          /* 玄墨（最深） */
+  --yx-ink-1:   #0d1117;                          /* 夜墨 */
+  --yx-ink-2:   #161c26;                          /* 山墨 */
+  --yx-mist:    #2a3646;                          /* 雾青 */
+  --yx-snow:    #dbe3ec;                          /* 雪色 */
+  --yx-snow-dim:rgba(219, 227, 236, 0.55);
+  --yx-bronze:  #a67c3d;                          /* 鎏铜 */
+  --yx-bronze-2:#d9b06a;                          /* 铜光 */
+  --yx-cinnabar:#b03a2e;                          /* 朱砂（唯一的暖色重音） */
+  --yx-blade:   rgba(199, 222, 244, 0.85);        /* 剑光 */
+  --yx-text:    #e8edf4;
+  --yx-dim:     rgba(210, 220, 232, 0.55);
+  --yx-sky:
+      radial-gradient(130% 80% at 72% -10%, #1c2735 0%, rgba(28, 39, 53, 0) 55%),
+      radial-gradient(90% 50% at 22% 108%, rgba(42, 54, 70, 0.65) 0%, rgba(42, 54, 70, 0) 60%),
+      linear-gradient(176deg, #05070b 0%, #0b0f16 40%, #131a24 78%, #1a2330 100%);
+  --yx-moon-core: rgba(226, 233, 241, 0.92);
+  --yx-moon-halo: rgba(196, 209, 224, 0.2);
+  --yx-mtn-far:  #232e3d;
+  --yx-mtn-mid:  #182131;
+  --yx-mtn-near: #0d1220;
+  --yx-snowcap:  rgba(219, 227, 236, 0.34);
+  --yx-lamp:     #e8a24a;                          /* 客栈灯火 */
+  --yx-flake:    rgba(224, 231, 240, 0.9);
+  --yx-wind:     rgba(205, 216, 230, 0.14);
+  --yx-panel:    rgba(10, 13, 18, calc(0.86 + var(--panel-opacity, 0.5) * 0.12));
+  --yx-panel-hi: rgba(199, 222, 244, 0.05);
+  --yx-plate:    linear-gradient(170deg, #131922 0%, #0a0e14 100%);
+  --yx-choice:   linear-gradient(172deg, rgba(19, 25, 34, 0.96), rgba(9, 12, 17, 0.97));
+  --yx-btnface:  rgba(13, 17, 23, 0.92);
+  --yx-seal-text:#f0e6d6;
+  /* 刀裁斜角：面板右上/左下被"削"一刀 */
+  --yx-cut: polygon(0 0, calc(100% - 34px) 0, 100% 34px, 100% 100%, 34px 100%, 0 calc(100% - 34px));
+  --yx-cut-s: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  --yx-cut-tab: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+}
+/* —— 变体：雪霁（晨光） —— */
+.gal-game-container.xueji{
+  --yx-ink-0:   #b9c6d4;
+  --yx-ink-1:   #cdd8e4;
+  --yx-ink-2:   #dfe7ef;
+  --yx-mist:    #eef3f8;
+  --yx-snow:    #ffffff;
+  --yx-snow-dim:rgba(70, 88, 108, 0.55);
+  --yx-bronze:  #9a6f2f;
+  --yx-bronze-2:#c99a4b;
+  --yx-cinnabar:#a33327;
+  --yx-blade:   rgba(120, 150, 185, 0.6);
+  --yx-text:    #2a3646;
+  --yx-dim:     rgba(52, 68, 88, 0.6);
+  --yx-sky:
+      radial-gradient(120% 70% at 74% -8%, #f6e7c8 0%, rgba(246, 231, 200, 0) 52%),
+      radial-gradient(90% 55% at 20% 110%, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0) 60%),
+      linear-gradient(176deg, #adc2d8 0%, #cfdce9 45%, #eef3f8 100%);
+  --yx-moon-core: rgba(255, 244, 220, 0.95);
+  --yx-moon-halo: rgba(246, 231, 200, 0.45);
+  --yx-mtn-far:  #b3c2d2;
+  --yx-mtn-mid:  #93a7bc;
+  --yx-mtn-near: #6d8298;
+  --yx-snowcap:  rgba(255, 255, 255, 0.75);
+  --yx-lamp:     #d98f35;
+  --yx-flake:    rgba(255, 255, 255, 0.95);
+  --yx-wind:     rgba(255, 255, 255, 0.35);
+  --yx-panel:    rgba(248, 250, 253, calc(0.88 + var(--panel-opacity, 0.5) * 0.1));
+  --yx-panel-hi: rgba(154, 111, 47, 0.05);
+  --yx-plate:    linear-gradient(170deg, #ffffff 0%, #e9eff5 100%);
+  --yx-choice:   linear-gradient(172deg, rgba(255, 255, 255, 0.97), rgba(235, 241, 247, 0.97));
+  --yx-btnface:  rgba(255, 255, 255, 0.94);
+  --yx-seal-text:#fff8ec;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  min-height:100%;
+  font-family: var(--font-song);
+  background:
+    radial-gradient(80% 50% at 50% 0%, #10151d 0%, transparent 65%),
+    #05070b;
+  color:#c9d2de;
+  display:flex; flex-direction:column; align-items:center;
+  padding: clamp(12px, 3vw, 40px);
+  gap: 30px;
+}
+body > *{ flex-shrink:0; }
+
+/* ---------- 页头 ---------- */
+.proposal-head{ text-align:center; max-width:940px; }
+.proposal-head .latin{
+  font-size:11px; letter-spacing:.52em; color:#5d6b7e;
+}
+.proposal-head h1{
+  font-weight:900; font-size: clamp(24px, 3.6vw, 38px); letter-spacing:.22em;
+  margin:.32em 0 .1em; color:#e8edf4;
+}
+.proposal-head h1 em{ font-style:normal; color:#c9985a; }
+.proposal-head .sub{
+  font-family: var(--font-brush);
+  font-size: clamp(15px, 1.6vw, 19px); color:#8d9aab; letter-spacing:.3em;
+  margin-bottom:14px;
+}
+.proposal-head p{ font-size:13px; line-height:2; color:#7d8a9c; }
+
+/* ---------- 控制条 ---------- */
+.preview-controls{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+.preview-controls button{
+  font-family: var(--font-song); font-size:12px; letter-spacing:.22em;
+  padding:9px 20px; cursor:pointer; color:#a9b5c4;
+  background:transparent;
+  border:1px solid rgba(169, 181, 196, 0.25);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  transition: all .25s ease;
+}
+.preview-controls button:hover{ border-color:#c9985a; color:#d9b06a; }
+.preview-controls button.on{ background:#a67c3d; border-color:#a67c3d; color:#0d1117; }
+
+.stage-label{
+  font-size:11px; letter-spacing:.46em; color:#5d6b7e;
+  display:flex; align-items:center; gap:16px; margin-bottom:-12px;
+}
+.stage-label::before,.stage-label::after{
+  content:""; width:46px; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(93,107,126,.6));
+}
+.stage-label::after{ transform: scaleX(-1); }
+
+/* ============================================================
+   舞台
+   ============================================================ */
+.gal-game-container{
+  position:relative; width:min(1280px, 97vw); aspect-ratio:16/9;
+  overflow:hidden;
+  background: var(--yx-ink-1);
+  box-shadow:
+    0 40px 110px -30px rgba(0,0,0,.95),
+    0 0 0 1px rgba(166, 124, 61, 0.14);
+}
+/* 颗粒 + 电影暗角 */
+.gal-game-container::before{
+  content:""; position:absolute; inset:0; z-index:30; pointer-events:none; opacity:.06;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+}
+.gal-game-container::after{
+  content:""; position:absolute; inset:0; z-index:6; pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(5,7,11,.55) 0%, transparent 16%),
+    linear-gradient(0deg, rgba(5,7,11,.9) 0%, rgba(5,7,11,.4) 20%, transparent 38%),
+    radial-gradient(140% 100% at 50% 50%, transparent 60%, rgba(5,7,11,.55) 100%);
+}
+.gal-game-container.xueji::after{
+  background:
+    linear-gradient(180deg, rgba(120,140,165,.22) 0%, transparent 16%),
+    linear-gradient(0deg, rgba(90,110,135,.32) 0%, rgba(90,110,135,.08) 20%, transparent 38%),
+    radial-gradient(140% 100% at 50% 50%, transparent 62%, rgba(100,120,145,.28) 100%);
+}
+
+/* ————————————————————————————————————————————————
+   背景（.gal-layer-bg 装饰 = 移植时注入的 yx-scene）
+   ———————————————————————————————————————————————— */
+.gal-layer-bg{ position:absolute; inset:0; overflow:hidden; }
+.yx-sky{ position:absolute; inset:0; background: var(--yx-sky); }
+/* 孤月：清亮满月 + 大圈冷晕；一条窄雾横过月面 */
+.yx-moon{
+  position:absolute; right:14%; top:13%;
+  width:72px; height:72px; border-radius:50%;
+  background: radial-gradient(circle at 42% 38%, #f2f6fa 0%, var(--yx-moon-core) 55%, rgba(226,233,241,.75) 100%);
+  box-shadow:
+    0 0 34px 10px var(--yx-moon-halo),
+    0 0 110px 44px rgba(196, 209, 224, 0.1);
+}
+.yx-moon::before{ /* 月面极淡的斑 */
+  content:""; position:absolute; inset:0; border-radius:50%;
+  background:
+    radial-gradient(13px 10px at 32% 36%, rgba(158,172,188,.16), transparent 72%),
+    radial-gradient(8px 7px at 60% 60%, rgba(158,172,188,.12), transparent 72%);
+}
+.yx-moon::after{ /* 一缕薄云斜过月面下缘 */
+  content:""; position:absolute; left:-30%; top:58%;
+  width:130%; height:26%;
+  border-radius:50%;
+  background: radial-gradient(60% 100% at 50% 50%, rgba(13,17,23,.32), transparent 78%);
+  filter: blur(4px);
+  transform: rotate(-6deg);
+  animation: yxMist 24s ease-in-out infinite alternate;
+}
+.gal-game-container.xueji .yx-moon::after{
+  background: radial-gradient(60% 100% at 50% 50%, rgba(205,216,228,.4), transparent 78%);
+}
+@keyframes yxMist{
+  from{ transform: rotate(-6deg) translateX(-14%); opacity:.85; }
+  to  { transform: rotate(-6deg) translateX(16%); opacity:.4; }
+}
+/* 雁阵：几笔淡影排成人字，缓缓横渡 */
+.yx-geese{
+  position:absolute; left:8%; top:20%;
+  display:flex; gap:14px;
+  opacity:.5;
+  animation: yxGeese 70s linear infinite;
+}
+.yx-geese i{
+  width:13px; height:5px; position:relative;
+}
+.yx-geese i::before,.yx-geese i::after{
+  content:""; position:absolute; top:0; width:8px; height:1.6px;
+  background: var(--yx-snow-dim); border-radius:2px;
+}
+.yx-geese i::before{ left:0; transform:rotate(-24deg); transform-origin:right center; }
+.yx-geese i::after{ right:0; transform:rotate(24deg); transform-origin:left center; }
+.yx-geese i:nth-child(2){ margin-top:9px; }
+.yx-geese i:nth-child(3){ margin-top:18px; }
+.yx-geese i:nth-child(4){ margin-top:9px; }
+@keyframes yxGeese{
+  from{ transform:translateX(0); }
+  to{ transform:translateX(76vw); }
+}
+/* 暮雪苍山三叠（雪脊用顶部渐变亮线） */
+.yx-mtn{ position:absolute; left:-4%; right:-4%; pointer-events:none; }
+.yx-mtn i{ position:absolute; bottom:0; }
+.yx-mtn-far{ bottom:24%; height:34%; }
+.yx-mtn-far i{
+  width:100%; height:100%;
+  background:
+    linear-gradient(180deg, var(--yx-snowcap) 0%, transparent 14%),
+    var(--yx-mtn-far);
+  clip-path: polygon(0 62%, 7% 44%, 15% 56%, 24% 30%, 33% 52%, 44% 18%, 55% 48%, 66% 26%, 77% 50%, 88% 34%, 100% 55%, 100% 100%, 0 100%);
+  opacity:.95; filter: blur(.6px);
+}
+.yx-mtn-mid{ bottom:15%; height:37%; }
+.yx-mtn-mid i{
+  width:100%; height:100%;
+  background:
+    linear-gradient(180deg, var(--yx-snowcap) 0%, transparent 11%),
+    var(--yx-mtn-mid);
+  clip-path: polygon(0 70%, 9% 40%, 19% 58%, 30% 22%, 40% 50%, 52% 34%, 63% 12%, 74% 44%, 86% 28%, 100% 48%, 100% 100%, 0 100%);
+}
+.yx-mtn-near{ bottom:0; height:36%; }
+.yx-mtn-near i{
+  width:100%; height:100%;
+  background:
+    linear-gradient(180deg, var(--yx-snowcap) 0%, transparent 8%),
+    var(--yx-mtn-near);
+  clip-path: polygon(0 55%, 10% 78%, 22% 40%, 36% 66%, 48% 30%, 60% 62%, 73% 46%, 85% 72%, 100% 42%, 100% 100%, 0 100%);
+}
+/* 山腰客栈：两点暖灯（整幅画唯一暖色，与朱砂呼应） */
+.yx-lamp{
+  position:absolute; width:4px; height:5px;
+  background: var(--yx-lamp);
+  box-shadow: 0 0 8px 2px rgba(232, 162, 74, .75), 0 0 26px 8px rgba(232, 162, 74, .22);
+  animation: yxLamp 4.2s ease-in-out infinite alternate;
+}
+.yx-lamp-a{ left:23.5%; bottom:26%; }
+.yx-lamp-b{ left:25.2%; bottom:24.6%; animation-delay:-2s; scale:.7; }
+@keyframes yxLamp{ from{ opacity:.65; } to{ opacity:1; } }
+/* 谷间雾带 */
+.yx-fog{
+  position:absolute; left:-10%; right:-10%; pointer-events:none;
+  background: linear-gradient(180deg, transparent 0%, var(--yx-mist) 45%, transparent 100%);
+  opacity:.34; filter: blur(18px);
+  animation: yxFog 40s ease-in-out infinite alternate;
+}
+.yx-fog-a{ bottom:18%; height:16%; }
+.yx-fog-b{ bottom:6%; height:13%; animation-duration:52s; animation-delay:-20s; opacity:.26; }
+@keyframes yxFog{ from{ transform:translateX(-3%);} to{ transform:translateX(3%);} }
+/* 风雪：两层雪粒斜掠（背景位移循环，风向一致） */
+.yx-snowfall{
+  position:absolute; inset:-10%;
+  pointer-events:none;
+  background-image:
+    radial-gradient(1.6px 1.6px at 12% 8%,  var(--yx-flake), transparent 100%),
+    radial-gradient(1.3px 1.3px at 34% 28%, var(--yx-flake), transparent 100%),
+    radial-gradient(1.8px 1.8px at 56% 12%, var(--yx-flake), transparent 100%),
+    radial-gradient(1.2px 1.2px at 78% 32%, var(--yx-flake), transparent 100%),
+    radial-gradient(1.5px 1.5px at 90% 6%,  var(--yx-flake), transparent 100%),
+    radial-gradient(1.2px 1.2px at 22% 52%, var(--yx-flake), transparent 100%),
+    radial-gradient(1.6px 1.6px at 66% 58%, var(--yx-flake), transparent 100%),
+    radial-gradient(1.2px 1.2px at 44% 76%, var(--yx-flake), transparent 100%);
+  background-size: 480px 480px;
+  animation: yxSnow 11s linear infinite;
+  opacity:.8;
+}
+.yx-snowfall.yx-sf2{
+  background-size: 300px 300px;
+  animation-duration: 7s;
+  opacity:.5; filter: blur(1px);
+}
+@keyframes yxSnow{
+  from{ background-position: 0 -480px; }
+  to{ background-position: -170px 480px; }
+}
+/* 风痕：两道柔和的风迹（模糊短弧，不是流星线） */
+.yx-wind{
+  position:absolute; height:5px; pointer-events:none;
+  background: linear-gradient(90deg, transparent, var(--yx-wind) 45%, var(--yx-wind) 55%, transparent);
+  border-radius:50%;
+  filter: blur(3px);
+  transform: rotate(-7deg);
+  opacity:0;
+  animation: yxWind 9s ease-in-out infinite;
+}
+.yx-wind-a{ left:8%; top:38%; width:17%; }
+.yx-wind-b{ left:56%; top:56%; width:14%; animation-delay:-4.5s; }
+@keyframes yxWind{
+  0%,100%{ opacity:0; transform: rotate(-7deg) translateX(0); }
+  14%{ opacity:.55; }
+  44%{ opacity:0; transform: rotate(-7deg) translateX(13vw); }
+}
+
+/* —— 立绘占位 —— */
+.gal-layer-character{ position:absolute; inset:0; pointer-events:none; z-index:4; }
+.gal-char-slot.slot-center{
+  position:absolute; left:50%; bottom:-2%; width:19%; aspect-ratio:3/7;
+  transform:translateX(-50%);
+}
+.char-slot-frame{
+  width:100%; height:100%;
+  border:1px dashed rgba(199, 222, 244, 0.18);
+  border-bottom:none;
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%, 0 12px);
+  background: linear-gradient(180deg, rgba(199,222,244,.04) 0%, transparent 100%);
+  -webkit-mask: linear-gradient(180deg, #000 76%, transparent 100%);
+          mask: linear-gradient(180deg, #000 76%, transparent 100%);
+}
+.slot-note{
+  position:absolute; left:50%; top:44%; transform:translateX(-50%);
+  font-size:11px; letter-spacing:.3em; color:rgba(169,181,196,.4); white-space:nowrap;
+}
+
+/* ============================================================
+   顶部：地点 / 时间 —— 竖排题字 + 铜线
+   ============================================================ */
+.gal-status-bar-container{
+  position:absolute; top:0; left:0; right:0; z-index:8;
+  display:flex; align-items:flex-start; justify-content:space-between;
+  padding: 22px 26px 0;
+  pointer-events:none;
+}
+.yx-scene-title{ display:flex; gap:14px; align-items:flex-start; }
+.yx-scene-title .vert{
+  writing-mode: vertical-rl;
+  font-size:19px; font-weight:700; letter-spacing:.3em;
+  color: var(--yx-text);
+  text-shadow: 0 1px 6px rgba(0,0,0,.6);
+}
+.gal-game-container.xueji .yx-scene-title .vert{ text-shadow: 0 1px 6px rgba(255,255,255,.6); }
+.yx-scene-title .rule{
+  width:1px; height:74px; margin-top:3px;
+  background: linear-gradient(180deg, var(--yx-bronze-2) 0%, rgba(166,124,61,.25) 70%, transparent 100%);
+}
+.yx-scene-title .time{
+  writing-mode: vertical-rl;
+  font-size:11.5px; letter-spacing:.32em; color:var(--yx-dim);
+  margin-top:4px;
+}
+.gal-top-actions{ display:flex; gap:10px; pointer-events:auto; }
+.gal-fullscreen-btn{
+  width:34px; height:34px;
+  display:grid; place-items:center; cursor:pointer;
+  color:var(--yx-dim); font-size:13px;
+  background: var(--yx-btnface);
+  border:1px solid rgba(166, 124, 61, 0.35);
+  clip-path: var(--yx-cut-s);
+  transition:all .3s ease;
+}
+.gal-fullscreen-btn:hover{ color:#0d1117; background:var(--yx-bronze-2); border-color:var(--yx-bronze-2); }
+
+/* ============================================================
+   对话框 —— 「墨甲」：厚重深墨面板，刀裁斜角，鎏铜细线
+   ============================================================ */
+.gal-dialog-layer{
+  position:absolute; left:50%; bottom:22px;
+  transform:translateX(-50%);
+  width:min(94%, 1000px);
+  z-index:10;
+}
+/* 面板后方：一竖行淡淡的行草题诗（水印） */
+.yx-verse{
+  position:absolute; right:-34px; bottom:-10px; z-index:0;
+  writing-mode: vertical-rl;
+  font-family: var(--font-brush);
+  font-size:64px; line-height:1.06;
+  color: rgba(199, 222, 244, 0.05);
+  pointer-events:none; user-select:none;
+  letter-spacing:.06em;
+}
+.gal-game-container.xueji .yx-verse{ color: rgba(52, 68, 88, 0.08); }
+
+.gal-text-panel{
+  position:relative;
+  padding: 30px 44px 18px;
+  filter: drop-shadow(0 22px 42px rgba(0,0,0,.8));
+}
+/* 墨甲本体 */
+.yx-panel-body{
+  position:absolute; inset:0; z-index:0;
+  clip-path: var(--yx-cut);
+  background:
+    radial-gradient(140% 110% at 80% -14%, var(--yx-panel-hi) 0%, transparent 50%),
+    var(--yx-panel);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+}
+/* 鎏铜细线：沿刀裁形走一圈（双线：外亮内暗） */
+.yx-panel-line{
+  position:absolute; inset:0; z-index:1; pointer-events:none;
+  clip-path: var(--yx-cut);
+  background:
+    linear-gradient(135deg, var(--yx-bronze-2), var(--yx-bronze) 30%, rgba(166,124,61,.4) 60%, var(--yx-bronze-2));
+  -webkit-mask:
+    linear-gradient(#000,#000) content-box,
+    linear-gradient(#000,#000);
+  -webkit-mask-composite: xor;
+          mask:
+    linear-gradient(#000,#000) content-box,
+    linear-gradient(#000,#000);
+          mask-composite: exclude;
+  padding:1.5px;
+}
+.yx-panel-line2{
+  position:absolute; inset:6px; z-index:1; pointer-events:none;
+  clip-path: var(--yx-cut);
+  background: rgba(166, 124, 61, 0.28);
+  -webkit-mask:
+    linear-gradient(#000,#000) content-box,
+    linear-gradient(#000,#000);
+  -webkit-mask-composite: xor;
+          mask:
+    linear-gradient(#000,#000) content-box,
+    linear-gradient(#000,#000);
+          mask-composite: exclude;
+  padding:1px;
+}
+/* 刀裁角上的铜楔：右上 & 左下 */
+.yx-wedge{
+  position:absolute; z-index:2; pointer-events:none;
+  width:34px; height:34px;
+}
+.yx-wedge::before{
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(135deg, var(--yx-bronze-2), var(--yx-bronze));
+}
+.yx-wedge-tr{ right:-1px; top:-1px; }
+.yx-wedge-tr::before{ clip-path: polygon(100% 0, 0 0, 100% 100%); opacity:.9; }
+.yx-wedge-tr::after{
+  content:""; position:absolute; right:7px; top:7px;
+  width:7px; height:7px; transform:rotate(45deg);
+  background: var(--yx-ink-0);
+}
+.yx-wedge-bl{ left:-1px; bottom:-1px; }
+.yx-wedge-bl::before{ clip-path: polygon(0 100%, 0 0, 100% 100%); opacity:.9; }
+.yx-wedge-bl::after{
+  content:""; position:absolute; left:7px; bottom:7px;
+  width:7px; height:7px; transform:rotate(45deg);
+  background: var(--yx-ink-0);
+}
+/* 剑光：面板顶缘一线寒光缓缓来回 */
+.yx-blade-line{
+  position:absolute; left:8%; right:8%; top:0; height:1px; z-index:2;
+  overflow:hidden; pointer-events:none;
+}
+.yx-blade-line::after{
+  content:""; position:absolute; top:0; width:34%; height:100%;
+  background: linear-gradient(90deg, transparent, var(--yx-blade), transparent);
+  animation: yxBladeLine 7s ease-in-out infinite alternate;
+}
+@keyframes yxBladeLine{ from{ left:-34%; } to{ left:100%; } }
+
+.gal-text-panel > .gal-dialog-text{ position:relative; z-index:3; }
+.gal-dialog-text{
+  font-size:18.5px;
+  line-height:2.05; letter-spacing:.05em;
+  color: var(--yx-text); font-weight:500;
+  min-height: calc(18.5px * 2.05 * 2);
+  text-align:justify;
+  text-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+.gal-game-container.xueji .gal-dialog-text{ text-shadow: 0 1px 3px rgba(255,255,255,.5); }
+/* 打字机光标：一滴将坠的朱砂 */
+.gal-dialog-text .caret{
+  display:inline-block; width:.4em; height:.4em; margin-left:5px;
+  background: var(--yx-cinnabar);
+  border-radius:50% 50% 50% 4%;
+  transform: rotate(45deg);
+  vertical-align:.02em;
+  animation: yxDrip 1.2s ease-in-out infinite;
+}
+@keyframes yxDrip{ 0%,100%{ opacity:1; } 50%{ opacity:.2; } }
+
+/* —— 姓名牌：铜印拓 —— 深墨方牌 + 铜缘 + 左上一方朱砂印 */
+.gal-name-badge{
+  position:absolute; left:18px; top:-2.6rem; z-index:4;
+  clip-path: var(--yx-cut-tab);
+  background: linear-gradient(135deg, var(--yx-bronze-2) 0%, var(--yx-bronze) 55%, rgba(166,124,61,.75) 100%);
+  padding:1.5px;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,.75));
+}
+.gal-name-badge .plate{
+  clip-path: var(--yx-cut-tab);
+  display:flex; align-items:center; gap:11px;
+  background: var(--yx-plate);
+  padding: 9px 30px 9px 14px;
+}
+.gal-name-badge .seal{
+  width:22px; height:22px; flex:none;
+  background: var(--yx-cinnabar);
+  display:grid; place-items:center;
+  font-family: var(--font-brush);
+  font-size:14px; color:var(--yx-seal-text); line-height:1;
+  box-shadow: inset 0 0 0 1px rgba(240, 230, 214, 0.25), 0 1px 4px rgba(0,0,0,.4);
+}
+.gal-name-badge span{
+  font-size:19px; letter-spacing:.24em; font-weight:700;
+  color: var(--yx-text);
+}
+/* 旁白：素墨无印 */
+.gal-name-badge.gal-narrator-label{
+  background: linear-gradient(135deg, rgba(141,154,171,.6), rgba(93,107,126,.6));
+}
+.gal-name-badge.gal-narrator-label .seal{ background:#5d6b7e; box-shadow:none; }
+
+/* —— 悬浮操作：墨签 + 剑光扫过 —— */
+.gal-interaction-bar{
+  position:absolute; right:12px; top:-21px;
+  display:flex; gap:9px; z-index:4;
+}
+.gal-action-btn{
+  height:33px; padding:0 17px;
+  display:flex; align-items:center; gap:7px; cursor:pointer;
+  font-family: var(--font-song); font-size:12.5px;
+  letter-spacing:.18em; font-weight:600;
+  color: var(--yx-snow-dim);
+  clip-path: var(--yx-cut-tab);
+  background: var(--yx-btnface);
+  border:none;
+  box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.3);
+  position:relative; overflow:hidden;
+  transition: color .25s ease, box-shadow .25s ease;
+}
+.gal-action-btn::before{ /* 剑光 */
+  content:""; position:absolute; top:0; bottom:0; left:-60%; width:36%;
+  background: linear-gradient(105deg, transparent, var(--yx-blade), transparent);
+  transform: skewX(-20deg);
+  transition:left .4s ease;
+}
+.gal-action-btn:hover::before{ left:130%; }
+.gal-action-btn:hover{
+  color: var(--yx-bronze-2);
+  box-shadow: inset 0 0 0 1px rgba(217, 176, 106, 0.7);
+}
+.gal-action-btn span,.gal-action-btn i{ position:relative; z-index:1; }
+
+/* ============================================================
+   底部工具栏：淡墨小字 + 铜点分隔；hover 朱砂点亮
+   ============================================================ */
+.gal-bottom-toolbar{
+  display:flex; align-items:center; gap:1px;
+  margin-top:18px;
+  position:relative; z-index:3;
+}
+.gal-footer-btn{
+  font-family: var(--font-song);
+  font-size:12.5px; font-weight:600; letter-spacing:.1em;
+  color: var(--yx-dim);
+  background:none; border:none; cursor:pointer;
+  padding:7px 11px;
+  position:relative; white-space:nowrap;
+  display:inline-flex; align-items:center; gap:5px;
+  transition: color .22s ease;
+}
+.gal-footer-btn i{ font-size:.85em; opacity:.65; }
+.gal-footer-btn + .gal-footer-btn::before{
+  content:""; position:absolute; left:-1px; top:50%;
+  width:2.5px; height:2.5px; transform:translateY(-50%) rotate(45deg);
+  background: rgba(166, 124, 61, 0.4);
+}
+.gal-footer-btn::after{ /* 足下朱砂短线 */
+  content:""; position:absolute; left:50%; bottom:2px;
+  height:2px; width:0; transform:translateX(-50%);
+  background: var(--yx-cinnabar);
+  transition: width .24s ease;
+}
+.gal-footer-btn:hover{ color: var(--yx-text); }
+.gal-footer-btn:hover::after{ width:70%; }
+.gal-toolbar-spacer{ flex:1; }
+
+/* 剧情选项：朱砂令牌（呼吸） */
+.gal-pending-choices-btn{
+  display:flex; align-items:center; gap:8px; cursor:pointer;
+  font-family: var(--font-song);
+  font-size:12.5px; font-weight:700; letter-spacing:.18em;
+  color: var(--yx-seal-text);
+  clip-path: var(--yx-cut-tab);
+  background: linear-gradient(160deg, #c14a3c, var(--yx-cinnabar) 60%);
+  border:none;
+  padding:9px 18px;
+  animation: yxSealBreathe 2.6s ease-out infinite;
+}
+@keyframes yxSealBreathe{
+  0%{ box-shadow: 0 0 0 0 rgba(176, 58, 46, 0.5); }
+  70%{ box-shadow: 0 0 0 11px rgba(176, 58, 46, 0); }
+  100%{ box-shadow: 0 0 0 0 rgba(176, 58, 46, 0); }
+}
+
+/* NEXT：出鞘 —— 墨鞘铜缘，悬停一道剑光横贯 */
+.gal-footer-btn-next{
+  position:relative; cursor:pointer; border:none;
+  padding:11px 30px; margin-left:10px;
+  display:flex; align-items:center; gap:9px;
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
+  background: linear-gradient(135deg, var(--yx-bronze-2), var(--yx-bronze) 45%, rgba(166,124,61,.8));
+  isolation:isolate;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,.6));
+  transition: filter .3s ease;
+  overflow:hidden;
+}
+.gal-footer-btn-next::before{ /* 鞘身 */
+  content:""; position:absolute; inset:1.5px; z-index:-1;
+  clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 50%, calc(100% - 15px) 100%, 0 100%);
+  background: var(--yx-plate);
+}
+.gal-footer-btn-next::after{ /* 常驻缓慢剑光 */
+  content:""; position:absolute; top:0; bottom:0; left:-46%; width:30%;
+  background: linear-gradient(105deg, transparent, var(--yx-blade), transparent);
+  transform: skewX(-18deg);
+  animation: yxNextBlade 3.6s ease-in-out infinite;
+}
+@keyframes yxNextBlade{ 0%,55%{ left:-46%; } 100%{ left:130%; } }
+.gal-footer-btn-next span{
+  position:relative; z-index:1;
+  font-family: var(--font-song); font-weight:700;
+  font-size:14.5px; letter-spacing:.32em; text-indent:.1em;
+  color: var(--yx-text);
+}
+.gal-footer-btn-next:hover{ filter: drop-shadow(0 6px 22px rgba(217,176,106,.4)) brightness(1.1); }
+
+/* 进度条：一痕墨迹 + 朱砂行至处 */
+.gal-progress-container{
+  height:3px; margin-top:13px;
+  background: rgba(199, 222, 244, 0.1);
+  position:relative; z-index:3; overflow:visible;
+}
+.gal-game-container.xueji .gal-progress-container{ background: rgba(52,68,88,.15); }
+.gal-progress-bar{
+  height:100%; width:64%;
+  background: linear-gradient(90deg, rgba(166,124,61,.4) 0%, var(--yx-bronze-2) 78%, var(--yx-cinnabar) 100%);
+  position:relative;
+}
+.gal-progress-bar::after{
+  content:""; position:absolute; right:-2.5px; top:50%;
+  width:7px; height:7px; transform:translateY(-50%) rotate(45deg);
+  background: var(--yx-cinnabar);
+  box-shadow: 0 0 8px rgba(176, 58, 46, 0.8);
+}
+
+/* ============================================================
+   选项浮层 —— 「抉择」：令牌自上而下压下
+   ============================================================ */
+.gal-choices-overlay{
+  position:absolute; inset:0; z-index:40;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:13px;
+  background: rgba(4, 6, 9, 0.72);
+  backdrop-filter: blur(5px) saturate(.9);
+  opacity:0; pointer-events:none; transition: opacity .3s ease;
+}
+.gal-game-container.xueji .gal-choices-overlay{ background: rgba(190, 205, 220, 0.55); }
+.gal-choices-overlay.show{ opacity:1; pointer-events:auto; }
+/* 背景：一个巨大的淡"武"字行草水印 */
+.gal-choices-overlay .yx-mark{
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-52%);
+  font-family: var(--font-brush);
+  font-size:min(56vh, 430px); line-height:1;
+  color: rgba(199, 222, 244, 0.045);
+  pointer-events:none; user-select:none;
+}
+.gal-game-container.xueji .gal-choices-overlay .yx-mark{ color: rgba(42, 54, 70, 0.06); }
+.gal-choices-title{
+  position:relative; z-index:1; text-align:center;
+  color: var(--yx-text);
+  font-size:17px; font-weight:700; letter-spacing:.6em; text-indent:.6em;
+  text-shadow: 0 2px 10px rgba(0,0,0,.7);
+}
+.gal-game-container.xueji .gal-choices-title{ text-shadow: 0 2px 10px rgba(255,255,255,.7); }
+.gal-choices-title::after{
+  content:""; display:block; width:1px; height:26px; margin:10px auto 0;
+  background: linear-gradient(180deg, var(--yx-cinnabar, #b03a2e), transparent);
+}
+/* 令牌：深墨横牌，左端铜楔，悬停朱砂沁边 + 剑光 */
+.gal-choice-card{
+  position:relative; z-index:1;
+  width:min(76%, 590px);
+  display:flex; align-items:center; gap:16px;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  background: linear-gradient(135deg, rgba(217,176,106,.8), rgba(166,124,61,.5) 40%, rgba(166,124,61,.75));
+  padding:1.5px;
+  border:none; cursor:pointer;
+  font-family: var(--font-song);
+  opacity:0; transform: translateY(-14px);
+  transition: transform .22s ease, filter .22s ease;
+  filter: drop-shadow(0 14px 26px rgba(0,0,0,.7));
+}
+.gal-choice-card .face{
+  flex:1; display:flex; align-items:center; gap:16px;
+  clip-path: polygon(0 0, calc(100% - 17px) 0, 100% 17px, 100% 100%, 17px 100%, 0 calc(100% - 17px));
+  background: var(--yx-choice, linear-gradient(172deg, rgba(19,25,34,.96), rgba(9,12,17,.97)));
+  padding:14px 24px;
+  position:relative; overflow:hidden;
+}
+.gal-choice-card .face::before{ /* 悬停剑光 */
+  content:""; position:absolute; top:0; bottom:0; left:-50%; width:32%;
+  background: linear-gradient(105deg, transparent, rgba(199,222,244,.22), transparent);
+  transform: skewX(-20deg);
+  transition:left .45s ease;
+}
+.gal-choice-card:hover .face::before{ left:125%; }
+.gal-choices-overlay.show .gal-choice-card{ animation: yxCardDrop .48s cubic-bezier(.2,.85,.3,1.05) forwards; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(2){ animation-delay:.09s; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(3){ animation-delay:.18s; }
+.gal-choices-overlay.show .gal-choice-card:nth-of-type(4){ animation-delay:.27s; }
+@keyframes yxCardDrop{ to{ opacity:1; transform:translateY(0); } }
+.gal-choice-card:hover{
+  transform: translateY(-2px);
+  filter: drop-shadow(0 18px 32px rgba(0,0,0,.85)) drop-shadow(0 0 14px rgba(176,58,46,.25));
+}
+/* 序号：小朱印 */
+.gal-choice-index{
+  flex:none; width:30px; height:30px;
+  display:grid; place-items:center;
+  font-family: var(--font-brush);
+  font-size:16px; color: var(--yx-seal-text, #f0e6d6);
+  background: var(--yx-cinnabar, #b03a2e);
+  box-shadow: inset 0 0 0 1px rgba(240, 230, 214, 0.22);
+  transition: transform .22s ease;
+}
+.gal-choice-card:hover .gal-choice-index{ transform: rotate(-6deg) scale(1.06); }
+.gal-choice-card .face > span{
+  font-size:15px; font-weight:600; letter-spacing:.05em;
+  color: var(--yx-text); text-align:left; position:relative; z-index:1;
+}
+.gal-choices-hint{
+  position:relative; z-index:1;
+  color: var(--yx-dim); font-size:11px; letter-spacing:.34em; margin-top:6px;
+}
+
+/* ============================================================
+   历史 —— 「江湖录」
+   ============================================================ */
+.gal-history-modal{
+  position:absolute; inset:0; z-index:50;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(4, 6, 9, 0.74);
+  backdrop-filter: blur(5px);
+  opacity:0; pointer-events:none; transition:opacity .3s ease;
+}
+.gal-history-modal.show{ opacity:1; pointer-events:auto; }
+.gal-history-panel{
+  width:min(80%, 660px); max-height:80%;
+  display:flex; flex-direction:column;
+  clip-path: var(--yx-cut, polygon(0 0, calc(100% - 34px) 0, 100% 34px, 100% 100%, 34px 100%, 0 calc(100% - 34px)));
+  background: linear-gradient(135deg, rgba(217,176,106,.85), rgba(166,124,61,.5) 45%, rgba(166,124,61,.8));
+  padding:1.5px;
+  filter: drop-shadow(0 44px 80px rgba(0,0,0,.9));
+}
+.gal-history-inner{
+  display:flex; flex-direction:column; overflow:hidden; min-height:0;
+  clip-path: var(--yx-cut, polygon(0 0, calc(100% - 34px) 0, 100% 34px, 100% 100%, 34px 100%, 0 calc(100% - 34px)));
+  background:
+    radial-gradient(140% 90% at 50% 0%, rgba(199,222,244,.05) 0%, transparent 52%),
+    var(--yx-choice, linear-gradient(178deg, #10151d 0%, #090c11 100%));
+}
+.gal-history-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:18px 30px 14px;
+  border-bottom:1px solid rgba(166, 124, 61, 0.35);
+}
+.gal-history-title{
+  font-size:17px; font-weight:700; letter-spacing:.44em; color: var(--yx-text, #e8edf4);
+  display:flex; align-items:center; gap:12px;
+}
+.gal-history-title::before{
+  content:"录"; display:grid; place-items:center;
+  width:22px; height:22px;
+  font-family: var(--font-brush); font-size:13px; letter-spacing:0;
+  color:#f0e6d6; background:#b03a2e;
+  box-shadow: inset 0 0 0 1px rgba(240,230,214,.22);
+}
+.gal-history-close{
+  background:none; border:1px solid rgba(166,124,61,.45);
+  width:31px; height:31px; cursor:pointer; color:#a67c3d;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  transition:all .22s ease;
+}
+.gal-history-close:hover{ background:#d9b06a; border-color:#d9b06a; color:#0d1117; }
+.gal-history-body{ overflow-y:auto; padding:10px 30px 22px; }
+.gal-history-item{ padding:16px 0 14px; border-bottom:1px dashed rgba(166,124,61,.22); }
+.gal-history-name{
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:14px; letter-spacing:.2em; font-weight:700;
+  color:#d9b06a; margin-bottom:7px;
+}
+.gal-history-name::before{
+  content:""; width:5px; height:5px; transform:rotate(45deg);
+  background:#b03a2e;
+}
+.gal-history-name.narrator{ color:#8d9aab; }
+.gal-history-name.narrator::before{ background:#5d6b7e; }
+.gal-history-content{ font-size:14px; line-height:2.05; color: var(--yx-text, rgba(232,237,244,.88)); }
+.gal-history-body::-webkit-scrollbar{ width:4px; }
+.gal-history-body::-webkit-scrollbar-thumb{ background:rgba(166,124,61,.4); border-radius:4px; }
+
+/* ============================================================
+   生成中 —— 「听风」：一柄悬剑微颤，剑尖坠朱砂
+   ============================================================ */
+.gal-generating-indicator{
+  position:absolute; left:50%; top:41%; transform:translate(-50%,-50%);
+  z-index:45; display:none; flex-direction:column; align-items:center; gap:16px;
+  padding:30px 52px;
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+  background:
+    radial-gradient(140% 100% at 50% 0%, rgba(199,222,244,.06) 0%, transparent 55%),
+    var(--yx-choice, linear-gradient(178deg, rgba(16,21,29,.97), rgba(9,12,17,.97)));
+  box-shadow: inset 0 0 0 1px rgba(166,124,61,.4);
+  filter: drop-shadow(0 34px 66px rgba(0,0,0,.85));
+}
+.gal-generating-indicator.show{ display:flex; }
+.yx-sword{
+  width:2.5px; height:56px; position:relative;
+  background: linear-gradient(180deg, rgba(199,222,244,.2) 0%, var(--yx-blade, rgba(199,222,244,.85)) 55%, rgba(199,222,244,.95) 100%);
+  animation: yxSwordSway 2.2s ease-in-out infinite alternate;
+  transform-origin: top center;
+}
+.yx-sword::before{ /* 剑格 */
+  content:""; position:absolute; left:50%; top:8px; transform:translateX(-50%);
+  width:14px; height:2.5px; background: var(--yx-bronze-2, #d9b06a);
+}
+.yx-sword::after{ /* 剑尖坠珠 */
+  content:""; position:absolute; left:50%; bottom:-7px; transform:translateX(-50%) rotate(45deg);
+  width:6px; height:6px; background:#b03a2e;
+  animation: yxDrip 1.6s ease-in-out infinite;
+}
+@keyframes yxSwordSway{ from{ transform:rotate(-3deg);} to{ transform:rotate(3deg);} }
+.gal-gen-text{
+  font-size:15.5px; font-weight:700; letter-spacing:.56em; text-indent:.56em; color: var(--yx-text, #e8edf4);
+}
+.gal-gen-status{ font-size:11px; letter-spacing:.3em; color: var(--yx-dim, rgba(210,220,232,.5)); }
+
+/* ============================================================
+   移动端（9:19.5 · JS 克隆 + .mobile 覆写）
+   ============================================================ */
+.mobile-wrap{ display:flex; flex-direction:column; align-items:center; }
+.phone{
+  padding:12px; border-radius:46px; position:relative;
+  background: linear-gradient(180deg, #1a212c, #0a0e14);
+  border:1px solid rgba(166,124,61,.2);
+  box-shadow: 0 44px 100px -32px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.phone::before{
+  content:""; position:absolute; top:5px; left:50%; transform:translateX(-50%);
+  width:80px; height:4px; border-radius:3px; background:rgba(255,255,255,.1);
+}
+.phone .gal-game-container{ border-radius:34px; }
+.gal-game-container.mobile{
+  width:min(392px, 92vw); aspect-ratio:9/19.5;
+  --yx-cut: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+}
+.gal-game-container.mobile .gal-status-bar-container{ padding:20px 18px 0; }
+.gal-game-container.mobile .yx-scene-title .vert{ font-size:16px; }
+.gal-game-container.mobile .yx-scene-title .rule{ height:56px; }
+.gal-game-container.mobile .yx-moon{ right:10%; top:8%; width:78px; height:78px; }
+.gal-game-container.mobile .yx-geese{ left:5%; top:16%; scale:.8; }
+.gal-game-container.mobile .yx-mtn-far{ bottom:34%; height:20%; }
+.gal-game-container.mobile .yx-mtn-mid{ bottom:26%; height:22%; }
+.gal-game-container.mobile .yx-mtn-near{ bottom:14%; height:22%; }
+.gal-game-container.mobile .yx-lamp-a{ left:20%; bottom:33%; }
+.gal-game-container.mobile .yx-lamp-b{ left:23%; bottom:31.6%; }
+.gal-game-container.mobile .yx-fog-a{ bottom:28%; }
+.gal-game-container.mobile .yx-fog-b{ bottom:18%; }
+.gal-game-container.mobile .gal-char-slot.slot-center{ width:56%; bottom:22%; }
+.gal-game-container.mobile .gal-dialog-layer{ width:94%; bottom:14px; }
+.gal-game-container.mobile .yx-verse{ font-size:44px; right:-20px; }
+.gal-game-container.mobile .gal-text-panel{ padding:20px 20px 13px; }
+.gal-game-container.mobile .gal-dialog-text{ font-size:14.5px; line-height:2; min-height:calc(14.5px*2*3); }
+.gal-game-container.mobile .gal-name-badge{ left:8px; top:-2.2rem; }
+.gal-game-container.mobile .gal-name-badge .plate{ padding:7px 20px 7px 11px; gap:8px; }
+.gal-game-container.mobile .gal-name-badge .seal{ width:18px; height:18px; font-size:11px; }
+.gal-game-container.mobile .gal-name-badge span{ font-size:15.5px; }
+.gal-game-container.mobile .gal-interaction-bar{ right:4px; top:-17px; gap:6px; }
+.gal-game-container.mobile .gal-action-btn{ height:29px; padding:0 11px; font-size:11px; letter-spacing:.08em; }
+/* 工具栏：图标化单行（对齐真实项目紧凑模式），低频键收进上拉菜单 */
+.gal-game-container.mobile .gal-btn-text{ display:none; }
+.gal-game-container.mobile .gal-footer-btn[data-action='log'],
+.gal-game-container.mobile .gal-footer-btn[data-action='view-original'],
+.gal-game-container.mobile .gal-footer-btn[data-action='save'],
+.gal-game-container.mobile .gal-footer-btn[data-action='load']{ display:none; }
+.gal-game-container.mobile .gal-footer-btn[data-action='close-mode']{ order:-1; }
+.gal-game-container.mobile .gal-footer-btn{
+  flex:1 1 0; min-width:0; padding:0; height:38px;
+  justify-content:center; gap:0;
+}
+.gal-game-container.mobile .gal-footer-btn i{ font-size:15px; opacity:.8; }
+.gal-game-container.mobile .gal-footer-btn + .gal-footer-btn::before{ display:none; }
+.gal-game-container.mobile .gal-toolbar-spacer{ display:none; }
+.gal-game-container.mobile .gal-pending-choices-btn{
+  flex:0 0 auto; padding:0 13px; height:34px; align-self:center;
+  font-size:13px; letter-spacing:0;
+}
+.gal-game-container.mobile .gal-footer-btn-next{
+  flex:0 0 auto; padding:0; width:64px; height:38px;
+  margin-left:6px; justify-content:center;
+}
+.gal-game-container.mobile .gal-footer-btn-next span{ font-size:13px; letter-spacing:.1em; text-indent:0; }
+.gal-game-container.mobile .gal-choice-card{ width:88%; }
+.gal-game-container.mobile .gal-choice-card .face{ padding:12px 16px; gap:12px; }
+.gal-game-container.mobile .gal-choice-index{ width:26px; height:26px; font-size:14px; }
+.gal-game-container.mobile .gal-history-panel{ width:92%; max-height:72%; }
+
+/* ---------- 设计说明卡 ---------- */
+.spec-grid{
+  width:min(1280px, 97vw);
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:14px;
+}
+.spec-card{
+  position:relative; padding:20px 22px 18px;
+  color:#a9b5c4; background:rgba(255,255,255,.02);
+  border:1px solid rgba(169,181,196,.1);
+}
+.spec-card::before{
+  content:""; position:absolute; left:0; right:0; top:0; height:1px;
+  background: linear-gradient(90deg, rgba(201,152,90,.7), transparent 65%);
+}
+.spec-card .no{
+  font-size:11px; letter-spacing:.3em; color:#5d6b7e;
+  display:block; margin-bottom:8px;
+}
+.spec-card h3{
+  font-size:13.5px; letter-spacing:.28em; color:#c9985a;
+  margin-bottom:10px; font-weight:700;
+}
+.spec-card p{ font-size:12.5px; line-height:1.95; color:#7d8a9c; }
+.swatches{ display:flex; gap:8px; margin-top:12px; }
+.swatch{
+  width:34px; height:34px; border:1px solid rgba(255,255,255,.14); position:relative;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+}
+.swatch i{
+  position:absolute; top:110%; left:50%; transform:translateX(-50%);
+  font-style:normal; font-size:9px; letter-spacing:.04em; color:#5d6b7e; white-space:nowrap;
+}
+footer{
+  color:#485566; font-size:10.5px; letter-spacing:.34em; padding:16px 0 6px; text-align:center;
+}
+</style>
+</head>
+<body>
+
+<div class="proposal-head">
+  <div class="latin">SKIN PROPOSAL · SIXTEEN SOUNDS OF YANYUN</div>
+  <h1>燕云十六声 <em>·</em> 夜雪听风</h1>
+  <div class="sub">朔风卷地雪满刀，孤灯照我过燕云</div>
+  <p>宋代武侠的一幕夜戏：暮雪苍山三叠、雾纱缓掩孤月、雁阵横渡、两层风雪斜掠、
+  山腰客栈两点灯火是整幅画唯一的暖。UI 形制「墨甲」——厚重深墨面板被刀裁去两角，
+  鎏铜双线沿形走一圈，右上左下各嵌一枚铜楔；名牌是一方铜印拓（左侧朱砂小印），
+  所有交互反馈统一为「剑光扫过」，剧情选项是一枚呼吸的朱砂令牌，NEXT 是「出鞘」。
+  变体「雪霁」：晨光初照，雪山转暖。含桌面 16:9 与移动端 9:19.5 双预览。</p>
+</div>
+
+<div class="preview-controls">
+  <button id="btn-xueji">切换 · 雪霁（晨光）变体</button>
+  <button id="btn-choices">预览 · 抉择</button>
+  <button id="btn-history">预览 · 江湖录</button>
+  <button id="btn-gen">预览 · 听风</button>
+  <button id="btn-type">重播 · 打字机</button>
+</div>
+
+<div class="stage-label">DESKTOP · 16 : 9</div>
+
+<!-- ═══════════ 桌面舞台（移动端由 JS 克隆） ═══════════ -->
+<div class="gal-game-container">
+
+  <div class="gal-layer-bg">
+    <div class="yx-sky"></div>
+    <div class="yx-moon"></div>
+    <div class="yx-geese"><i></i><i></i><i></i><i></i></div>
+    <div class="yx-mtn yx-mtn-far"><i></i></div>
+    <div class="yx-fog yx-fog-a"></div>
+    <div class="yx-mtn yx-mtn-mid"><i></i></div>
+    <div class="yx-lamp yx-lamp-a"></div>
+    <div class="yx-lamp yx-lamp-b"></div>
+    <div class="yx-fog yx-fog-b"></div>
+    <div class="yx-mtn yx-mtn-near"><i></i></div>
+    <div class="yx-snowfall"></div>
+    <div class="yx-snowfall yx-sf2"></div>
+    <div class="yx-wind yx-wind-a"></div>
+    <div class="yx-wind yx-wind-b"></div>
+  </div>
+
+  <div class="gal-layer-character">
+    <div class="gal-char-slot slot-center">
+      <div class="char-slot-frame"></div>
+      <div class="slot-note">立绘 / LIVE2D 占位</div>
+    </div>
+  </div>
+
+  <div class="gal-status-bar-container">
+    <div class="yx-scene-title">
+      <div class="vert">雁门关外</div>
+      <div class="rule"></div>
+      <div class="time">大雪 · 子时</div>
+    </div>
+    <div class="gal-top-actions">
+      <button class="gal-fullscreen-btn" title="切换全屏"><i class="fa-solid fa-expand"></i></button>
+    </div>
+  </div>
+
+  <div class="gal-dialog-layer">
+    <div class="yx-verse">十六声里论英雄</div>
+
+    <div class="gal-name-badge">
+      <div class="plate">
+        <i class="seal">沈</i>
+        <span>沈孤鸿</span>
+      </div>
+    </div>
+
+    <div class="gal-interaction-bar">
+      <button class="gal-action-btn"><i class="fa-solid fa-rotate"></i><span>重绘当前</span></button>
+      <button class="gal-action-btn"><i class="fa-regular fa-keyboard"></i><span>自由对话</span></button>
+    </div>
+
+    <div class="gal-text-panel">
+      <div class="yx-panel-body"></div>
+      <div class="yx-panel-line"></div>
+      <div class="yx-panel-line2"></div>
+      <i class="yx-wedge yx-wedge-tr"></i>
+      <i class="yx-wedge yx-wedge-bl"></i>
+      <div class="yx-blade-line"></div>
+
+      <p class="gal-dialog-text" id="dialog-text"></p>
+
+      <div class="gal-bottom-toolbar">
+        <button class="gal-footer-btn" data-action="log"><i class="fa-solid fa-list-ul"></i><span class="gal-btn-text">履历</span></button>
+        <button class="gal-footer-btn" data-action="close-mode"><i class="fa-solid fa-power-off"></i><span class="gal-btn-text">退出</span></button>
+        <button class="gal-footer-btn" data-action="view-original"><i class="fa-solid fa-display"></i><span class="gal-btn-text">原文</span></button>
+        <button class="gal-footer-btn" data-action="config"><i class="fa-solid fa-gear"></i><span class="gal-btn-text">设置</span></button>
+        <button class="gal-footer-btn" data-action="save"><i class="fa-solid fa-floppy-disk"></i><span class="gal-btn-text">存档</span></button>
+        <button class="gal-footer-btn" data-action="load"><i class="fa-solid fa-folder-open"></i><span class="gal-btn-text">读档</span></button>
+        <button class="gal-footer-btn" data-action="timeline"><i class="fa-solid fa-diagram-project"></i><span class="gal-btn-text">图谱</span></button>
+        <button class="gal-footer-btn" data-action="prev"><i class="fa-solid fa-chevron-left"></i><span class="gal-btn-text">回溯</span></button>
+        <button class="gal-footer-btn" data-action="auto"><i class="fa-solid fa-play"></i><span class="gal-btn-text">自动</span></button>
+        <button class="gal-footer-btn" data-action="skip"><i class="fa-solid fa-forward"></i><span class="gal-btn-text">快进</span></button>
+        <div class="gal-toolbar-spacer"></div>
+        <button class="gal-pending-choices-btn"><i class="fa-solid fa-list-check"></i><span class="gal-btn-text">剧情选项</span></button>
+        <button class="gal-footer-btn-next"><span>出 鞘</span></button>
+      </div>
+
+      <div class="gal-progress-container"><div class="gal-progress-bar"></div></div>
+    </div>
+  </div>
+
+  <!-- 抉择 -->
+  <div class="gal-choices-overlay">
+    <div class="yx-mark">武</div>
+    <div class="gal-choices-title">何 去 何 从</div>
+    <button class="gal-choice-card"><span class="face"><span class="gal-choice-index">一</span><span>提刀出门，雪夜追那道黑影。</span></span></button>
+    <button class="gal-choice-card"><span class="face"><span class="gal-choice-index">二</span><span>守住客栈，护好屋里的人再说。</span></span></button>
+    <button class="gal-choice-card"><span class="face"><span class="gal-choice-index">三</span><span>吹熄灯火，且听风雪里的第十六声。</span></span></button>
+    <div class="gal-choices-hint">点击空白处收起</div>
+  </div>
+
+  <!-- 江湖录 -->
+  <div class="gal-history-modal">
+    <div class="gal-history-panel">
+      <div class="gal-history-inner">
+        <div class="gal-history-header">
+          <div class="gal-history-title">江湖录</div>
+          <button class="gal-history-close">✕</button>
+        </div>
+        <div class="gal-history-body">
+          <div class="gal-history-item">
+            <span class="gal-history-name narrator">旁白</span>
+            <div class="gal-history-content">雪下了三日，雁门关外的官道早被埋了。客栈的灯笼在风里晃，把影子拉得很长。</div>
+          </div>
+          <div class="gal-history-item">
+            <span class="gal-history-name">沈孤鸿</span>
+            <div class="gal-history-content">「刀是凶器，可这世道，不带刀的人先死。」</div>
+          </div>
+          <div class="gal-history-item">
+            <span class="gal-history-name narrator">旁白</span>
+            <div class="gal-history-content">他把刀横在膝上，指腹擦过刃口的缺——那是雁门一战留下的。</div>
+          </div>
+          <div class="gal-history-item">
+            <span class="gal-history-name">沈孤鸿</span>
+            <div class="gal-history-content">「听，风里有第十六声。今夜……有人要过关。」</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 听风 -->
+  <div class="gal-generating-indicator">
+    <div class="yx-sword"></div>
+    <div class="gal-gen-text">听风之中</div>
+    <div class="gal-gen-status">雪落有声，稍候片刻……</div>
+  </div>
+
+</div>
+
+<div class="stage-label">MOBILE · 9 : 19.5</div>
+<div class="mobile-wrap"><div class="phone" id="phone-slot"></div></div>
+
+<!-- ═══════════ 设计说明 ═══════════ -->
+<div class="spec-grid">
+  <div class="spec-card">
+    <span class="no">01 / SCENE</span>
+    <h3>一幕武侠夜戏</h3>
+    <p>不是"画"，是"戏"：暮雪苍山三叠（雪脊留一线亮），雾纱 26 秒缓掩孤月，
+    雁阵 70 秒横渡整幅画，两层雪粒风向一致地斜掠，风痕偶尔掠过山谷。
+    山腰客栈两点暖灯是整幅画唯一的暖色——与 UI 的朱砂互为呼应。
+    电影颗粒 + 暗角统一收束。</p>
+  </div>
+  <div class="spec-card">
+    <span class="no">02 / PANEL</span>
+    <h3>墨甲 · 刀裁鎏铜</h3>
+    <p>对话框是一块被刀裁去右上/左下两角的厚重墨甲：鎏铜双线沿形走一圈
+    （mask-composite 空心描边），裁角处各嵌一枚铜楔（楔心一点玄墨），
+    顶缘一线剑寒光七秒缓缓来回。面板右下压一竖行行草题诗水印。
+    名牌是铜印拓：铜缘深墨牌 + 左侧一方朱砂姓氏小印。</p>
+    <div class="swatches">
+      <div class="swatch" style="background:#0d1117"><i>#0D1117</i></div>
+      <div class="swatch" style="background:#a67c3d"><i>#A67C3D</i></div>
+      <div class="swatch" style="background:#b03a2e"><i>#B03A2E</i></div>
+      <div class="swatch" style="background:#dbe3ec"><i>#DBE3EC</i></div>
+    </div>
+  </div>
+  <div class="spec-card">
+    <span class="no">03 / MOTION</span>
+    <h3>剑光与朱砂</h3>
+    <p>交互反馈统一为「剑光扫过」：操作按钮悬停一道寒光横贯，底栏按钮悬停
+    足下点亮一段朱砂短线，NEXT「出鞘」常驻缓慢剑光。剧情选项是呼吸的朱砂令牌；
+    「抉择」浮层的令牌自上压下（背景一个巨大的行草"武"字水印）；
+    生成中是一柄悬剑微颤、剑尖将坠一滴朱砂——「听风」。</p>
+  </div>
+  <div class="spec-card">
+    <span class="no">04 / ADAPT</span>
+    <h3>雪霁变体 & 移动端</h3>
+    <p>「雪霁」只覆写 CSS 变量：夜墨 → 晨雪青灰，天际透出一线晨金，
+    铜线转暖、朱砂加深，雪山由剪影转为受光。移动端沿用真实项目紧凑模式
+    （图标化单行 + 低频键入上拉菜单），山与灯火按竖屏重排，
+    题字竖排缩短。落地方式与苍穹之庭相同：runtime 注入装饰 DOM + 皮肤 CSS。</p>
+  </div>
+</div>
+
+<footer>YANYUN SIXTEEN SOUNDS · NIGHT SNOW PROPOSAL FOR GALGAME UI · MMXXVI</footer>
+
+<script>
+/* ===== 移动端克隆 ===== */
+const desktopStage = document.querySelector('.gal-game-container');
+const mobileStage = desktopStage.cloneNode(true);
+mobileStage.classList.add('mobile');
+document.getElementById('phone-slot').appendChild(mobileStage);
+
+/* ===== 每舞台初始化 ===== */
+const LINE = '「刀鞘上的雪还没化。走过雁门十六里，风里每一声，都是故人。」';
+const stages = [...document.querySelectorAll('.gal-game-container')];
+
+function setup(stage){
+  const dialogEl = stage.querySelector('.gal-dialog-text');
+  let timer = null;
+  function playType(){
+    clearTimeout(timer);
+    dialogEl.innerHTML = '';
+    const caret = document.createElement('i');
+    caret.className = 'caret';
+    dialogEl.appendChild(caret);
+    let i = 0;
+    (function step(){
+      if(i >= LINE.length) return;
+      dialogEl.insertBefore(document.createTextNode(LINE[i++]), caret);
+      timer = setTimeout(step, 52);
+    })();
+  }
+  playType();
+
+  const choices = stage.querySelector('.gal-choices-overlay');
+  const hist = stage.querySelector('.gal-history-modal');
+  const gen = stage.querySelector('.gal-generating-indicator');
+  stage.querySelector('.gal-pending-choices-btn').addEventListener('click', ()=> choices.classList.add('show'));
+  choices.addEventListener('click', ()=> choices.classList.remove('show'));
+  stage.querySelector('.gal-history-close').addEventListener('click', ()=> hist.classList.remove('show'));
+  hist.addEventListener('click', e=>{ if(e.target === hist) hist.classList.remove('show'); });
+
+  return { stage, playType, choices, hist, gen, genTimer:null };
+}
+const ctrls = stages.map(setup);
+
+/* ===== 全局控制 ===== */
+const btnXueji = document.getElementById('btn-xueji');
+btnXueji.addEventListener('click', ()=>{
+  const on = !stages[0].classList.contains('xueji');
+  stages.forEach(s=> s.classList.toggle('xueji', on));
+  btnXueji.classList.toggle('on', on);
+});
+document.getElementById('btn-choices').addEventListener('click', ()=> ctrls.forEach(c=> c.choices.classList.add('show')));
+document.getElementById('btn-history').addEventListener('click', ()=> ctrls.forEach(c=> c.hist.classList.add('show')));
+document.getElementById('btn-gen').addEventListener('click', ()=> ctrls.forEach(c=>{
+  c.gen.classList.add('show');
+  clearTimeout(c.genTimer);
+  c.genTimer = setTimeout(()=> c.gen.classList.remove('show'), 3200);
+}));
+document.getElementById('btn-type').addEventListener('click', ()=> ctrls.forEach(c=> c.playType()));
+
+/* hash 直达：#xueji #choices #history #gen */
+(function(){
+  const h = location.hash;
+  if(!h) return;
+  if(h.includes('xueji')){ stages.forEach(s=> s.classList.add('xueji')); btnXueji.classList.add('on'); }
+  if(h.includes('choices')) ctrls.forEach(c=> c.choices.classList.add('show'));
+  if(h.includes('history')) ctrls.forEach(c=> c.hist.classList.add('show'));
+  if(h.includes('gen')) ctrls.forEach(c=> c.gen.classList.add('show'));
+})();
+</script>
+</body>
+</html>

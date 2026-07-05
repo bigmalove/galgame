@@ -10,6 +10,7 @@ import {
   STORE_SDK_CACHE,
   STORE_UI_SKINS,
   STORE_UI_SKIN_PROFILES,
+  STORE_HTML_SKINS,
   STORE_SPECIAL_CGS,
   DEFAULT_PACK_ID,
   DEFAULT_PACK_NAME,
@@ -223,6 +224,25 @@ export function initDB() {
           console.log(`[${SCRIPT_NAME}] 已创建自定义皮肤 profile 存储`);
         }
         console.log(`[${SCRIPT_NAME}] 数据库升级到版本9: 已新增自定义皮肤 profile 存储`);
+      }
+
+      // 版本10: 移除图片式自定义皮肤存储，新增 HTML 皮肤存储
+      if (oldVersion < 10) {
+        if (database.objectStoreNames.contains(STORE_UI_SKINS)) {
+          database.deleteObjectStore(STORE_UI_SKINS);
+          console.log(`[${SCRIPT_NAME}] 已删除旧 UI 皮肤元素存储`);
+        }
+        if (database.objectStoreNames.contains(STORE_UI_SKIN_PROFILES)) {
+          database.deleteObjectStore(STORE_UI_SKIN_PROFILES);
+          console.log(`[${SCRIPT_NAME}] 已删除旧自定义皮肤 profile 存储`);
+        }
+        if (!database.objectStoreNames.contains(STORE_HTML_SKINS)) {
+          const htmlSkinStore = database.createObjectStore(STORE_HTML_SKINS, { keyPath: 'id' });
+          htmlSkinStore.createIndex('name', 'name', { unique: false });
+          htmlSkinStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          console.log(`[${SCRIPT_NAME}] 已创建 HTML 皮肤存储`);
+        }
+        console.log(`[${SCRIPT_NAME}] 数据库升级到版本10: 已切换为 HTML 皮肤存储`);
       }
     };
   });

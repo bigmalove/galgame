@@ -91,6 +91,13 @@ export const DEFAULT_SETTINGS = {
   dialogOpacity: 0.5,
   textEffect: 'none',
   dialogFontFamily: 'sans',
+  // 段落排版：每页字数（0=自动实测）、行距（0=皮肤默认，其余为 10 倍值如 18=1.8）、段间距（0.1em 单位）
+  dialogSegLengthOverride: 0,
+  dialogLineHeight: 0,
+  dialogParagraphGap: 6,
+  // 文本区头/尾间距（0.1em 单位，0=跟随皮肤默认）
+  dialogPadTop: 0,
+  dialogPadBottom: 0,
   typewriterEnabled: true,
   typewriterSpeed: 30,
   typewriterSoundEnabled: true,
@@ -99,6 +106,8 @@ export const DEFAULT_SETTINGS = {
   autoPlaySpeed: 2,
   // 显示设置
   showSprites: true,
+  // CG 直接替换背景层（开启后对话框不再显示缩略图）
+  cgAsBackground: false,
   simpleStorybookMode: false,
   hideOtherFloors: true,
   fullscreenMode: false,
@@ -135,8 +144,13 @@ export const DEFAULT_SETTINGS = {
   realTimeBackgroundGen: false,
   // 背景图来源: 'none' | 'comfyui' | 'banana' | 'novelai' | 'wallhaven' | 'chatu8'
   bgImageSource: 'none',
+  // 生成剧情CG（通用开关，适用于 comfyui/banana/novelai/wallhaven；智绘姬由 st-chatu8 插件自行生成，不受此开关影响）
+  // 开启：生成包含人物的剧情CG | 关闭：生成纯场景背景
+  imageGenCgMode: false,
   // 指定可用 BGM 歌单（为空表示不限制）
   bgmWhitelist: [],
+  // 是否在 COT 中注入 BGM 标签规范（关闭后 AI 不再被要求输出 <bgm>）
+  bgmEnabled: true,
   mapSystemEnabled: true,
   mapUseLocationBarClick: true,
   mapMarkerStyle: 'pin',
@@ -932,6 +946,12 @@ ensureTitleScreenSettings();
 export function getSettings() { return _settings; }
 export function setSettings(v) { _settings = v; }
 
+// 对话文本字号缩放系数（fontSize 1-30 → 0.53-1.5），CSS 变量 --font-scale 与分页长度共用
+export function getDialogFontScale(settings = getSettings()) {
+  const fontSize = Number(settings?.fontSize);
+  return 0.5 + (Number.isFinite(fontSize) && fontSize > 0 ? fontSize : DEFAULT_SETTINGS.fontSize) / 30;
+}
+
 // 每个角色卡的开关状态
 let _charEnabledMap = {};
 const CHAR_ENABLED_VAR_PATH = ['galgame_ui_plugin', 'runtime', 'enabled'];
@@ -1290,6 +1310,7 @@ export function loadSettings() {
       _settings.uiScalePercentVersion = UI_SCALE_PERCENT_VERSION;
       _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
       _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
+      _settings.bgmEnabled = _settings.bgmEnabled !== false;
       _settings.simpleStorybookMode = _settings.simpleStorybookMode === true;
       _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
       _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);
@@ -1312,6 +1333,11 @@ export function loadSettings() {
         }
         delete _settings.wallhaven.sceneMode;
       }
+      // 迁移旧版各来源独立 CG 模式到统一 imageGenCgMode（任一开启即视为开启）
+      if (_settings.imageGenCgMode === undefined) {
+        _settings.imageGenCgMode = _settings.bananaImageGen?.cgMode === true || _settings.wallhaven?.cgMode === true;
+      }
+      _settings.imageGenCgMode = _settings.imageGenCgMode === true;
       // 迁移旧版独立开关到统一 bgImageSource（一次性，迁移后清除旧标志）
       if (!_settings.bgImageSource || _settings.bgImageSource === 'none') {
         let migrated = false;

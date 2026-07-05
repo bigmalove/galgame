@@ -1,23 +1,27 @@
+import { BGMManager } from '../audio/bgm-manager.js';
 import { TTS_PROVIDER, getGptSoVitsVoiceList, getTTSEnabled, getTTSProvider, getTTSVoiceListAsync, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice, setTTSEnabled } from '../audio/tts-config.js';
 import { TTSManager } from '../audio/tts-manager.js';
-import { CUSTOM_SKIN_ID, SCRIPT_NAME, THEME } from '../core/constants.js';
+import { ANCIENT_QINGLV_SKIN_ID, ANCIENT_SKIN_ID, CUSTOM_SKIN_ID, DEFAULT_DARK_SKIN_ID, JRPG_DAWN_SKIN_ID, JRPG_SKIN_ID, PERSONA_SKIN_ID, PERSONA_VELVET_SKIN_ID, SCRIPT_NAME, SHUJIAN_NIGHT_SKIN_ID, SHUJIAN_SKIN_ID, THEME, YANYUN_SKIN_ID, YANYUN_XUEJI_SKIN_ID } from '../core/constants.js';
 import { setGlobalDebugEnabled } from '../core/debug.js';
 import { $, topWindow } from '../core/env.js';
-import { UI_SCALE_PERCENT_MAX, UI_SCALE_PERCENT_MIN, dialogScalePercentToScaleFactorForSkin, ensureEnhancedModeSettings, ensureTitleScreenSettings, getSettings, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled, uiScalePercentToScaleFactor } from '../core/settings.js';
+import { UI_SCALE_PERCENT_MAX, UI_SCALE_PERCENT_MIN, dialogScalePercentToScaleFactorForSkin, ensureEnhancedModeSettings, ensureTitleScreenSettings, getDialogFontScale, getSettings, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled, uiScalePercentToScaleFactor } from '../core/settings.js';
 import { getIsEnabled, setHideOtherFloors, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { saveBackground } from '../db/backgrounds.js';
-import { getCachedUiSkinProfiles, hasUiSkinProfileId, refreshUiSkinProfilesCache } from '../db/ui-skin-profiles.js';
+import { getCachedHtmlSkins, hasHtmlSkinId } from '../db/html-skins.js';
 import { clearAllPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { getAvailableModels, getAvailablePresets, getAvailableProfiles, getAvailableWorldbooks } from '../logic/enhanced-mode.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
 import { SpriteManager } from '../sprite/sprite-manager.js';
 import { getModalMountRoot } from './fullscreen.js';
+import { removeBGMWidget, renderBGMWidget } from './bgm-widget.js';
 import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloors } from './galgame-mode.js';
 import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
 import { updateButtonState } from './menu-button.js';
+import { repaginateCurrentMessageForFontChange } from './overlay-content.js';
 import { ensureGlobalOverlay } from './overlay.js';
-import { applyCustomSkinRuntime, clearCustomSkinRuntime } from './custom-skin-runtime.js';
+import { applyHtmlSkinRuntime, clearHtmlSkinRuntime } from './html-skin-runtime.js';
+import { showSetupWizard } from './setup-wizard.js';
 import { TWILIGHT_SKIN_OPTION_ITEMS } from './skin-twilight.js';
 import { showToast } from './toast.js';
 import { finishActiveTypewriter, isTypewriterActive } from './typewriter.js';
@@ -36,6 +40,10 @@ function getLive2DManagerRef() {
 let _buildAssetsPaneRef = null;
 let _bindAssetsPaneRef = null;
 let _assetStylesRef = null;
+
+// 基础设置 L2 分类:记住上次停留的 tab(面板重建时恢复)
+const SETTINGS_L2_TABS = ['general', 'text', 'visual', 'sprite', 'tts', 'cot', 'advanced'];
+let lastSettingsL2Tab = 'general';
 
 export function setSettingsPanelRefs({ buildAssetsPane, bindAssetsPane, assetStyles }) {
   if (buildAssetsPane) _buildAssetsPaneRef = buildAssetsPane;
@@ -88,22 +96,30 @@ function buildAboutPane() {
 // 皮肤列表定义
 const BUILTIN_SKIN_LIST = [
   { value: 'none',    label: '默认' },
-  { value: 'skin-ancient', label: '墨染千秋（中国古风）' },
-  { value: 'skin-persona', label: '心之怪盗（女神异闻录）' },
-  { value: 'skin-jrpg',    label: '苍穹之庭（日式奇幻）' },
+  { value: DEFAULT_DARK_SKIN_ID, label: '默认 · 深色' },
+  { value: ANCIENT_SKIN_ID, label: '墨染千秋（水墨长卷）' },
+  { value: ANCIENT_QINGLV_SKIN_ID, label: '墨染千秋 · 青绿设色' },
+  { value: PERSONA_SKIN_ID, label: '心之怪盗（女神异闻录）' },
+  { value: PERSONA_VELVET_SKIN_ID, label: '心之怪盗 · 天鹅绒房间' },
+  { value: JRPG_SKIN_ID,    label: '苍穹之庭（星降之夜）' },
+  { value: JRPG_DAWN_SKIN_ID, label: '苍穹之庭 · 昼之庭黎明' },
+  { value: YANYUN_SKIN_ID,  label: '燕云十六声（夜雪听风）' },
+  { value: YANYUN_XUEJI_SKIN_ID, label: '燕云十六声 · 雪霁' },
   { value: 'skin-classic',  label: '樱色物语（经典Galgame）' },
+  { value: SHUJIAN_SKIN_ID, label: '朱笺（宣纸墨印）' },
+  { value: SHUJIAN_NIGHT_SKIN_ID, label: '朱笺 · 墨夜' },
   ...TWILIGHT_SKIN_OPTION_ITEMS,
 ];
 
 function getEffectiveSkinList() {
-  const profileItems = getCachedUiSkinProfiles().map(profile => ({
-    value: profile.id,
-    label: `自定义 · ${profile.displayName}`,
+  const htmlSkinItems = getCachedHtmlSkins().map(skin => ({
+    value: skin.id,
+    label: `自定义 · ${skin.name}`,
   }));
-  return [...BUILTIN_SKIN_LIST, ...profileItems];
+  return [...BUILTIN_SKIN_LIST, ...htmlSkinItems];
 }
 
-function getSkinOptionHtml(currentSkin) {
+export function getSkinOptionHtml(currentSkin) {
   return getEffectiveSkinList()
     .map(item => `<option value="${escapeHtml(item.value)}" ${normalizeSkinValue(currentSkin) === item.value ? 'selected' : ''}>${escapeHtml(item.label)}</option>`)
     .join('');
@@ -120,7 +136,7 @@ function normalizeSkinValue(rawSkin) {
   const skin = String(rawSkin || 'none').trim();
   if (skin === 'skin-western' || skin === CUSTOM_SKIN_ID) return 'none';
   if (BUILTIN_SKIN_LIST.some(item => item.value === skin)) return skin;
-  if (hasUiSkinProfileId(skin)) return skin;
+  if (hasHtmlSkinId(skin)) return skin;
   return 'none';
 }
 
@@ -181,23 +197,56 @@ function cleanupAssetManagerDocumentEvents() {
   $(topWindow.document).off('.galPackMenu').off('.galMenus').off('.galImportMenu');
 }
 
+// 主开关副作用统一入口（设置面板 #gal-main-toggle 与配置向导共用，防止逻辑漂移）
+export async function setGalgameMasterEnabled(newEnabled) {
+  setIsEnabled(newEnabled);
+  setCurrentCharEnabled(newEnabled);
+  updateButtonState();
+  if (newEnabled) {
+    await injectCOTToWorldbook();
+    applyGalgameMode();
+    if (getSettings().hideOtherFloors) setTimeout(hideNonLastFloors, 80);
+  } else {
+    await disableWorldbookGlobally();
+    restoreOriginalViews();
+  }
+}
+
+// 简化图书绘本模式切换副作用统一入口（#gal-simple-storybook-mode 与配置向导共用）
+// COT 注入失败会 reject，由调用方决定提示方式
+export async function applySimpleStorybookMode(enabled) {
+  const settings = getSettings();
+  settings.simpleStorybookMode = !!enabled;
+  if (settings.simpleStorybookMode) {
+    SpriteManager.reset($('#gal-global-overlay'));
+  }
+  applySettingsToUI();
+  saveSettings();
+  if (getIsEnabled()) {
+    applyGalgameMode().catch(error => console.warn(`[${SCRIPT_NAME}] 切换简化图书绘本模式后刷新失败`, error));
+  }
+  await injectCOTToWorldbook();
+}
+
 // 应用皮肤到覆盖层
 export function applySkin() {
   const settings = getSettings();
   const skin = normalizeSkinValue(settings.skin);
   const $overlay = $('#gal-global-overlay');
-  const isCustomSkinProfile = hasUiSkinProfileId(skin);
+  const isHtmlSkin = hasHtmlSkinId(skin);
   // 移除所有皮肤 class
   BUILTIN_SKIN_LIST.forEach(s => { if (s.value !== 'none') $overlay.removeClass(s.value); });
-  getCachedUiSkinProfiles().forEach(profile => $overlay.removeClass(profile.id));
   $overlay.removeClass(CUSTOM_SKIN_ID);
   $overlay.removeClass('skin-western');
+  $overlay.removeClass('html-skin');
   // 添加选中的皮肤 class
   if (skin !== 'none') {
-    $overlay.addClass(isCustomSkinProfile ? CUSTOM_SKIN_ID : skin);
+    $overlay.addClass(isHtmlSkin ? 'html-skin' : skin);
   }
-  if (!isCustomSkinProfile) {
-    clearCustomSkinRuntime();
+  if (isHtmlSkin) {
+    applyHtmlSkinRuntime(skin);
+  } else {
+    clearHtmlSkinRuntime();
   }
   if ($overlay.length) {
     ensureGlobalOverlay();
@@ -208,32 +257,47 @@ export function applySkin() {
 export function applySettingsToUI() {
   const settings = getSettings();
   const activeSkin = normalizeSkinValue(settings.skin);
-  const fontScale = 0.5 + (settings.fontSize / 30) * 1.0;
+  const fontScale = getDialogFontScale(settings);
   const dialogScalePercent = normalizeUiScalePercent(settings.dialogScalePercent);
   const toolbarScalePercent = normalizeUiScalePercent(settings.toolbarScalePercent);
   settings.dialogScalePercent = dialogScalePercent;
   settings.toolbarScalePercent = toolbarScalePercent;
   const dialogFontStack = getDialogFontStack(settings.dialogFontFamily);
-  $('#gal-global-overlay').css({
+  const paragraphGap = Math.max(0, Math.min(30, Number(settings.dialogParagraphGap) || 0));
+  const lineHeightTenths = Math.round(Number(settings.dialogLineHeight) || 0);
+  const padTopTenths = Math.max(0, Math.min(30, Math.round(Number(settings.dialogPadTop) || 0)));
+  const padBottomTenths = Math.max(0, Math.min(30, Math.round(Number(settings.dialogPadBottom) || 0)));
+  const $overlayEl = $('#gal-global-overlay');
+  $overlayEl.css({
     '--gal-dialog-scale-user': dialogScalePercentToScaleFactorForSkin(dialogScalePercent, activeSkin),
     '--gal-toolbar-scale-user': uiScalePercentToScaleFactor(toolbarScalePercent),
     '--font-scale': fontScale,
     '--gal-dialog-font-family': dialogFontStack,
+    '--gal-paragraph-gap': `${paragraphGap / 10}em`,
   });
+  // 行距：0 表示跟随皮肤默认；12-30 表示 1.2-3.0
+  if (lineHeightTenths >= 10) {
+    $overlayEl.addClass('gal-custom-line-height').css('--gal-dialog-line-height', String(lineHeightTenths / 10));
+  } else {
+    $overlayEl.removeClass('gal-custom-line-height').css('--gal-dialog-line-height', '');
+  }
+  // 头/尾间距：0 表示跟随皮肤默认，>0 时在文本区追加上/下内边距
+  if (padTopTenths > 0) {
+    $overlayEl.addClass('gal-custom-pad-top').css('--gal-text-pad-top', `${padTopTenths / 10}em`);
+  } else {
+    $overlayEl.removeClass('gal-custom-pad-top').css('--gal-text-pad-top', '');
+  }
+  if (padBottomTenths > 0) {
+    $overlayEl.addClass('gal-custom-pad-bottom').css('--gal-text-pad-bottom', `${padBottomTenths / 10}em`);
+  } else {
+    $overlayEl.removeClass('gal-custom-pad-bottom').css('--gal-text-pad-bottom', '');
+  }
 
   const opacity = settings.dialogOpacity;
-  // 只在非皮肤模式下应用默认面板样式
-  if (activeSkin === 'none') {
-    $('.gal-text-panel').css({
-      'background-color': `rgba(255, 255, 255, ${opacity})`,
-      'background-image': `linear-gradient(135deg, transparent 0%, transparent 95%, rgba(0, 210, 255, ${0.1 * opacity}) 95%, rgba(0, 210, 255, ${0.1 * opacity}) 100%)`
-    });
-  } else {
-    // 皮肤模式：将透明度存为 CSS 变量供皮肤 CSS 引用
-    $('#gal-global-overlay').css('--panel-opacity', opacity);
-    // 清除内联的 background 样式，让皮肤 CSS 接管
-    $('.gal-text-panel').css({ 'background-color': '', 'background-image': '' });
-  }
+  // 统一透明度体系：默认皮肤与所有皮肤一样只写 CSS 变量，
+  // 面板背景由 CSS 规则消费（默认面板规则见 数据库界面插件.css .gal-text-panel）
+  $('#gal-global-overlay').css('--panel-opacity', opacity);
+  $('.gal-text-panel').css({ 'background-color': '', 'background-image': '' });
 
   if (settings.showSprites && settings.simpleStorybookMode !== true) {
     $('.gal-layer-character').show();
@@ -270,9 +334,6 @@ export function applySettingsToUI() {
   applyBgFillMode();
   applySkin();
   applyTextEffect();
-  applyCustomSkinRuntime().catch(error => {
-    console.warn(`[${SCRIPT_NAME}] custom-skin runtime apply failed:`, error);
-  });
   syncPixiEffectsSettings();
 }
 
@@ -387,7 +448,6 @@ export function applyTextEffect() {
 }
 
 export async function showSettingsPanel(topTab, subTab) {
-  await refreshUiSkinProfilesCache();
   const $existing = $('#gal-unified-panel');
   if ($existing.length) {
     cleanupAssetManagerDocumentEvents();
@@ -451,12 +511,12 @@ export async function showSettingsPanel(topTab, subTab) {
   ].join('');
 
   const worldbookListHtml = worldbookNames.length === 0
-    ? '<div style="font-size: 0.85rem; color: #333; margin-left: 24px; font-weight: 500;">暂无可用的世界书</div>'
-    : `<div style="margin-left: 24px; max-height: 150px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 10px; background: var(--SmartThemeFormBg, #fff); color: var(--SmartThemeBodyColor, #333);">
+    ? '<div style="font-size: 0.85rem; color: var(--gal-text-2, #333); margin-left: 24px; font-weight: 500;">暂无可用的世界书</div>'
+    : `<div style="margin-left: 24px; max-height: 150px; overflow-y: auto; border: 1px solid var(--gal-border, #e3e7eb); border-radius: 6px; padding: 10px; background: var(--gal-panel-bg, #fff); color: var(--gal-text, #333);">
         ${worldbookNames.map(wb => `
-          <label style="display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; font-size: 0.9rem; color: #222; font-weight: 500;">
-            <input type="checkbox" class="gal-enhanced-worldbook-item" value="${escapeHtml(wb)}" ${savedWorldbooks.includes(wb) ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
-            <span style="color: #333;">${escapeHtml(wb)}</span>
+          <label class="gal-check" style="padding: 6px 0; font-size: 0.9rem; font-weight: 500;">
+            <input type="checkbox" class="gal-enhanced-worldbook-item" value="${escapeHtml(wb)}" ${savedWorldbooks.includes(wb) ? 'checked' : ''}>
+            <span style="color: var(--gal-text, #333);">${escapeHtml(wb)}</span>
           </label>
         `).join('')}
       </div>`;
@@ -471,6 +531,9 @@ export async function showSettingsPanel(topTab, subTab) {
   }
   const assetStyles = _assetStylesRef ? _assetStylesRef() : '';
 
+  // 基础设置 L2 分类:恢复上次停留的 tab
+  const activeL2 = SETTINGS_L2_TABS.includes(lastSettingsL2Tab) ? lastSettingsL2Tab : 'general';
+
   const panelHtml = `
     <div class="gal-config-modal" id="gal-unified-panel">
       <div class="gal-config-panel">
@@ -484,20 +547,45 @@ export async function showSettingsPanel(topTab, subTab) {
         </div>
 
         <!-- L1 Pane: 基础设置 -->
-        <div class="gal-config-body" data-l1-pane="settings" style="padding: 24px; overflow-y: auto; flex: 1; ${topTab !== 'settings' ? 'display: none;' : ''}">
-          <!-- 主开关 -->
-          <div style="text-align: center; margin-bottom: 24px;">
-            <button id="gal-main-toggle" class="${isEnabled ? 'gal-toggle-on' : 'gal-toggle-off'}"
-                    style="padding: 14px 40px; font-size: 1.1rem; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s; display: inline-flex; align-items: center; gap: 10px;">
-              <i class="fa-solid ${isEnabled ? 'fa-toggle-on' : 'fa-toggle-off'}" style="font-size: 1.3rem;"></i>
+        <div class="gal-config-body" data-l1-pane="settings" style="${topTab !== 'settings' ? 'display: none;' : ''}">
+          <!-- 主开关常驻条（任何 L2 分类下都可见） -->
+          <div class="gal-master-bar">
+            <button id="gal-main-toggle" class="${isEnabled ? 'gal-toggle-on' : 'gal-toggle-off'}">
+              <i class="fa-solid ${isEnabled ? 'fa-toggle-on' : 'fa-toggle-off'}" style="font-size: 1.1rem;"></i>
               <span>${isEnabled ? 'Galgame 模式已开启' : 'Galgame 模式已关闭'}</span>
             </button>
-            <p style="margin-top: 8px; font-size: 0.8rem; color: #999;">当前角色卡独立设置</p>
+            <span class="gal-master-note">当前角色卡独立设置</span>
           </div>
 
-          <div class="gal-settings-divider"></div>
+          <!-- L2 分类导航 -->
+          <div class="gal-l2-tab-header">
+            <button class="gal-l2-tab-btn ${activeL2 === 'general' ? 'active' : ''}" data-l2-tab="general"><i class="fa-solid fa-sliders"></i> 通用</button>
+            <button class="gal-l2-tab-btn ${activeL2 === 'text' ? 'active' : ''}" data-l2-tab="text"><i class="fa-solid fa-font"></i> 文本显示</button>
+            <button class="gal-l2-tab-btn ${activeL2 === 'visual' ? 'active' : ''}" data-l2-tab="visual"><i class="fa-solid fa-display"></i> 画面与特效</button>
+            <button class="gal-l2-tab-btn ${activeL2 === 'sprite' ? 'active' : ''}" data-l2-tab="sprite"><i class="fa-solid fa-user"></i> 立绘</button>
+            <button class="gal-l2-tab-btn ${activeL2 === 'tts' ? 'active' : ''}" data-l2-tab="tts"><i class="fa-solid fa-volume-high"></i> TTS配音</button>
+            <button class="gal-l2-tab-btn ${activeL2 === 'cot' ? 'active' : ''}" data-l2-tab="cot"><i class="fa-solid fa-wand-magic-sparkles"></i> 生成/COT</button>
+            <button class="gal-l2-tab-btn ${activeL2 === 'advanced' ? 'active' : ''}" data-l2-tab="advanced"><i class="fa-solid fa-flask"></i> 高级</button>
+          </div>
 
-          <!-- 文本显示 -->
+          <div class="gal-l2-body">
+
+          <!-- L2 Pane: 文本显示 -->
+          <div data-l2-pane="text" style="${activeL2 === 'text' ? '' : 'display: none;'}">
+          <!-- 实时预览：迷你对话框模型，消费与真实对话框相同的设置值 -->
+          <div class="gal-preview-wrap">
+            <div class="gal-preview-stage">
+              <div class="gal-preview-panel" id="gal-text-preview-panel">
+                <div class="gal-preview-badge" id="gal-text-preview-badge">少女</div>
+                <div class="gal-preview-text" id="gal-text-preview-text">
+                  <p>晕染着樱色的天空下，风轻轻拂过发梢。</p>
+                  <p>——这就是与你相遇的季节。</p>
+                </div>
+              </div>
+            </div>
+            <p class="gal-hint" style="margin: 6px 0 0;">实时预览：字体大小 / 对话字体 / 行距 / 段间距 / 头尾间距 / 透明度 / 文字特效 调整立即生效。</p>
+          </div>
+          <div class="gal-settings-divider"></div>
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-font"></i> 文本显示</div>
             <div class="gal-settings-row">
@@ -505,6 +593,41 @@ export async function showSettingsPanel(topTab, subTab) {
               <div class="gal-settings-control">
                 <input type="range" id="gal-font-size" min="1" max="30" step="1" value="${escapeHtml(settings.fontSize)}">
                 <span class="gal-range-value" id="gal-font-size-value">${settings.fontSize}</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">每页字数</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-seg-length" min="0" max="1000" step="20" value="${escapeHtml(settings.dialogSegLengthOverride || 0)}">
+                <span class="gal-range-value" id="gal-seg-length-value">${(Number(settings.dialogSegLengthOverride) || 0) > 0 ? settings.dialogSegLengthOverride : '自动'}</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">行距</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-line-height" min="0" max="30" step="1" value="${escapeHtml(settings.dialogLineHeight || 0)}">
+                <span class="gal-range-value" id="gal-line-height-value">${(Number(settings.dialogLineHeight) || 0) >= 10 ? (Number(settings.dialogLineHeight) / 10).toFixed(1) : '默认'}</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">段间距</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-paragraph-gap" min="0" max="30" step="1" value="${escapeHtml(settings.dialogParagraphGap ?? 6)}">
+                <span class="gal-range-value" id="gal-paragraph-gap-value">${((Number(settings.dialogParagraphGap) || 0) / 10).toFixed(1)}em</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">头间距</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-pad-top" min="0" max="30" step="1" value="${escapeHtml(settings.dialogPadTop || 0)}">
+                <span class="gal-range-value" id="gal-pad-top-value">${(Number(settings.dialogPadTop) || 0) > 0 ? ((Number(settings.dialogPadTop) || 0) / 10).toFixed(1) + 'em' : '默认'}</span>
+              </div>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">尾间距</span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-pad-bottom" min="0" max="30" step="1" value="${escapeHtml(settings.dialogPadBottom || 0)}">
+                <span class="gal-range-value" id="gal-pad-bottom-value">${(Number(settings.dialogPadBottom) || 0) > 0 ? ((Number(settings.dialogPadBottom) || 0) / 10).toFixed(1) + 'em' : '默认'}</span>
               </div>
             </div>
             <div class="gal-settings-row">
@@ -574,9 +697,10 @@ export async function showSettingsPanel(topTab, subTab) {
             </div>
           </div>
 
-          <div class="gal-settings-divider"></div>
+          </div><!-- /L2 text -->
 
-          <!-- 自动播放 -->
+          <!-- L2 Pane: 通用（播放节奏） -->
+          <div data-l2-pane="general" style="${activeL2 === 'general' ? '' : 'display: none;'}">
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-play"></i> 自动播放</div>
             <div class="gal-settings-row">
@@ -587,46 +711,86 @@ export async function showSettingsPanel(topTab, subTab) {
               </div>
             </div>
           </div>
+          </div><!-- /L2 general -->
 
-          <div class="gal-settings-divider"></div>
-
-          <!-- 显示设置 -->
+          <!-- L2 Pane: 立绘（显示开关） -->
+          <div data-l2-pane="sprite" style="${activeL2 === 'sprite' ? '' : 'display: none;'}">
           <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-display"></i> 显示设置</div>
+            <div class="gal-settings-section-title"><i class="fa-solid fa-user"></i> 立绘显示</div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">显示立绘</span>
               <label class="gal-switch"><input type="checkbox" id="gal-show-sprites" ${settings.showSprites ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
+          </div>
+          </div><!-- /L2 sprite -->
+
+          <!-- L2 Pane: 通用（显示行为） -->
+          <div data-l2-pane="general" style="${activeL2 === 'general' ? '' : 'display: none;'}">
+          <div class="gal-settings-divider"></div>
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-eye"></i> 显示行为</div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">简化图书绘本模式 <small style="color: var(--SmartThemeEmColor, #9ac7ff);">(纯文本对话框，不解析角色/旁白/表情，不显示立绘/Live2D)</small></span>
-              <label class="gal-switch"><input type="checkbox" id="gal-simple-storybook-mode" ${settings.simpleStorybookMode ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">沉浸模式 <small style="color:#999;">(隐藏其他楼层)</small></span>
+              <span class="gal-settings-label">沉浸模式</span>
               <label class="gal-switch"><input type="checkbox" id="gal-hide-floors" ${settings.hideOtherFloors ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
+            <p class="gal-hint">隐藏其他楼层，仅保留当前对话。</p>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">背景图填充 <small style="color:#999;">(cover填满/contain完整)</small></span>
-              <select id="gal-bg-fill-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+              <span class="gal-settings-label">简化图书绘本模式</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-simple-storybook-mode" ${settings.simpleStorybookMode ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p class="gal-hint">纯文本对话框，不解析角色/旁白/表情，不显示立绘/Live2D；背景（含背景图包）照常切换。</p>
+          </div>
+          </div><!-- /L2 general -->
+
+          <!-- L2 Pane: 画面与特效 -->
+          <div data-l2-pane="visual" style="${activeL2 === 'visual' ? '' : 'display: none;'}">
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-display"></i> 画面</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">界面皮肤</span>
+              <select id="gal-skin-select" class="gal-select">
+                ${getSkinOptionHtml(settings.skin)}
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">背景图填充</span>
+              <select id="gal-bg-fill-mode" class="gal-select">
                 <option value="cover" ${settings.bgFillMode === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
                 <option value="contain" ${settings.bgFillMode === 'contain' ? 'selected' : ''}>Contain (完整显示)</option>
               </select>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">界面皮肤</span>
-              <select id="gal-skin-select" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 200px;">
-                ${getSkinOptionHtml(settings.skin)}
-              </select>
+              <span class="gal-settings-label">CG直接替换背景</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-cg-as-background" ${settings.cgAsBackground ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
+            <p class="gal-hint">CG段落全屏铺为背景，对话框不再显示缩略图。</p>
+          </div>
+          </div><!-- /L2 visual -->
+
+          <!-- L2 Pane: 生成/COT（输出规范） -->
+          <div data-l2-pane="cot" style="${activeL2 === 'cot' ? '' : 'display: none;'}">
+          <div class="gal-subcard" style="margin-bottom: 16px; font-size: 0.8rem; color: var(--gal-text-2, #5c6470); line-height: 1.6;">
+            <i class="fa-solid fa-circle-info" style="color: ${THEME.accent};"></i>
+            本页设置影响 AI 输出格式（世界书 COT 注入）与二次生成流程。
+          </div>
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-file-pen"></i> 输出规范</div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">情境样式 <small style="color:#999;">(控制 COT 是否包含 &lt;styled&gt; 规范)</small></span>
+              <span class="gal-settings-label">情境样式</span>
               <label class="gal-switch"><input type="checkbox" id="gal-situational-style-enabled" ${settings.situationalStyleEnabled !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
+            <p class="gal-hint">控制 COT 是否包含 &lt;styled&gt; 规范。</p>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">启用BGM</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-bgm-cot-enabled" ${settings.bgmEnabled !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p class="gal-hint">控制 COT 是否包含 &lt;bgm&gt; 规范。</p>
           </div>
+          </div><!-- /L2 cot -->
 
+          <!-- L2 Pane: 画面与特效（Pixi） -->
+          <div data-l2-pane="visual" style="${activeL2 === 'visual' ? '' : 'display: none;'}">
           <div class="gal-settings-divider"></div>
-
-          <!-- Pixi 特效 -->
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Pixi特效</div>
             <div class="gal-settings-row">
@@ -635,7 +799,7 @@ export async function showSettingsPanel(topTab, subTab) {
             </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">质量档位</span>
-              <select id="gal-effects-quality" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem;">
+              <select id="gal-effects-quality" class="gal-select">
                 <option value="mobile" ${effectQuality === 'mobile' ? 'selected' : ''}>Mobile（省电）</option>
                 <option value="balanced" ${effectQuality === 'balanced' ? 'selected' : ''}>Balanced（默认）</option>
                 <option value="high" ${effectQuality === 'high' ? 'selected' : ''}>High（高画质）</option>
@@ -653,10 +817,11 @@ export async function showSettingsPanel(topTab, subTab) {
               </div>
             </div>
           </div>
+          </div><!-- /L2 visual (Pixi) -->
 
+          <!-- L2 Pane: 立绘（布局与指示器） -->
+          <div data-l2-pane="sprite" style="${activeL2 === 'sprite' ? '' : 'display: none;'}">
           <div class="gal-settings-divider"></div>
-
-          <!-- 立绘设置 -->
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-user"></i> 立绘设置</div>
             <div class="gal-settings-row">
@@ -667,66 +832,66 @@ export async function showSettingsPanel(topTab, subTab) {
               </div>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">垂直位置 <small style="color:#999;">(底部偏移)</small></span>
+              <span class="gal-settings-label">垂直位置 <small style="color: var(--gal-text-3, #999);">(底部偏移)</small></span>
               <div class="gal-settings-control">
                 <input type="range" id="gal-sprite-bottom" min="0" max="50" step="1" value="${escapeHtml(settings.spriteBottomOffset)}">
                 <span class="gal-range-value" id="gal-sprite-bottom-value">${settings.spriteBottomOffset}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">立绘间距 <small style="color:#999;">(左右距离)</small></span>
+              <span class="gal-settings-label">立绘间距 <small style="color: var(--gal-text-3, #999);">(左右距离)</small></span>
               <div class="gal-settings-control">
                 <input type="range" id="gal-sprite-spacing" min="0" max="20" step="1" value="${escapeHtml(settings.spriteSpacing)}">
                 <span class="gal-range-value" id="gal-sprite-spacing-value">${settings.spriteSpacing}%</span>
               </div>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">无立绘时显示添加框 <small style="color:#999;">(关闭后不可点击上传)</small></span>
+              <span class="gal-settings-label">无立绘时显示添加框 <small style="color: var(--gal-text-3, #999);">(关闭后不可点击上传)</small></span>
               <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings.showMissingSpritePlaceholder ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">说话者光晕 <small style="color:#999;">(轮廓发光)</small></span>
+              <span class="gal-settings-label">说话者光晕 <small style="color: var(--gal-text-3, #999);">(轮廓发光)</small></span>
               <label class="gal-switch"><input type="checkbox" id="gal-speaker-glow" ${settings.speakerGlow ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">气泡指示器 <small style="color:#999;">(漫画风格)</small></span>
+              <span class="gal-settings-label">气泡指示器 <small style="color: var(--gal-text-3, #999);">(漫画风格)</small></span>
               <label class="gal-switch"><input type="checkbox" id="gal-speaker-bubble" ${settings.speakerBubble ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
           </div>
+          </div><!-- /L2 sprite (layout) -->
 
-          <div class="gal-settings-divider"></div>
-
-          <!-- TTS配音 -->
+          <!-- L2 Pane: TTS配音 -->
+          <div data-l2-pane="tts" style="${activeL2 === 'tts' ? '' : 'display: none;'}">
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-volume-high"></i> TTS配音</div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">启用TTS配音</span>
               <label class="gal-switch"><input type="checkbox" id="gal-tts-enabled" ${getTTSEnabled() ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
-            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">开启：对话格式含TTS属性，表情在开头<br>关闭：简单对话格式，表情在结尾</p>
+            <p class="gal-hint">开启：对话格式含TTS属性，表情在开头；关闭：简单对话格式，表情在结尾。此开关会同步更新 COT 输出格式。</p>
             <div class="gal-settings-row">
               <span class="gal-settings-label">TTS引擎</span>
-              <select id="gal-tts-provider" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
+              <select id="gal-tts-provider" class="gal-select">
                 <option value="littlewhitebox" ${settings.ttsProvider === 'littlewhitebox' ? 'selected' : ''}>小白X（豆包火山）</option>
                 <option value="gpt_sovits_v2" ${settings.ttsProvider === 'gpt_sovits_v2' ? 'selected' : ''}>GPT-SoVITS v2ProPlus</option>
               </select>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">自动播放 <small style="color:#999;">(切段自动朗读)</small></span>
+              <span class="gal-settings-label">自动播放 <small style="color: var(--gal-text-3, #999);">(切段自动朗读)</small></span>
               <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings.ttsAutoPlay ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">中日双语模式 <small style="color:#999;">(显示中文，TTS发送日文)</small></span>
+              <span class="gal-settings-label">中日双语模式</span>
               <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings.ttsBilingualZhJaEnabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
-            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">按“中文文本[JP]日文文本”输出（兼容【JP】）；未命中时自动回退原文朗读。</p>
+            <p class="gal-hint">显示中文，TTS发送日文。按“中文文本[JP]日文文本”输出（兼容【JP】）；未命中时自动回退原文朗读。</p>
             <div class="gal-settings-row">
               <span class="gal-settings-label">默认音色</span>
-              <select id="gal-tts-default-speaker" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; min-width: 220px;">
+              <select id="gal-tts-default-speaker" class="gal-select">
                 <option value="">（不指定）</option>
               </select>
             </div>
-            <p id="gal-tts-default-speaker-hint" style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;"></p>
+            <p id="gal-tts-default-speaker-hint" class="gal-hint"></p>
             <div class="gal-settings-row" style="align-items: flex-start;">
               <span class="gal-settings-label">默认男声列表</span>
               <div class="gal-settings-control" style="flex-direction: column; align-items: stretch; width: min(100%, 480px); gap: 8px;">
@@ -735,8 +900,8 @@ export async function showSettingsPanel(topTab, subTab) {
                     <option value="">选择后立即加入列表</option>
                   </select>
                 </div>
-                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
-                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
+                <small class="gal-hint" style="margin: 0;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
+                <div style="font-size: 0.78rem; color: var(--gal-text-2, #666);">已添加音色：</div>
                 <div id="gal-tts-default-male-list" class="gal-voice-chip-list"></div>
               </div>
             </div>
@@ -748,23 +913,23 @@ export async function showSettingsPanel(topTab, subTab) {
                     <option value="">选择后立即加入列表</option>
                   </select>
                 </div>
-                <small style="font-size: 0.75rem; color: #888;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
-                <div style="font-size: 0.78rem; color: #666;">已添加音色：</div>
+                <small class="gal-hint" style="margin: 0;">上方仅用于挑选候选音色，选中后会立即加入下方列表。</small>
+                <div style="font-size: 0.78rem; color: var(--gal-text-2, #666);">已添加音色：</div>
                 <div id="gal-tts-default-female-list" class="gal-voice-chip-list"></div>
               </div>
             </div>
-            <p style="font-size: 0.75rem; color: #888; margin: 8px 0 0 0;">
+            <p class="gal-hint">
               当 COT 使用 <code>男声/女声</code> 标签且角色未绑定时，将从对应列表随机分配并自动绑定。
             </p>
 
-            <div id="gal-gpt-sovits-config" style="margin-top: 10px; padding: 12px; border: 1px dashed #ddd; border-radius: 8px; background: #fafafa; ${settings.ttsProvider === 'gpt_sovits_v2' ? '' : 'display: none;'}">
-              <div style="font-weight: 700; margin-bottom: 10px; color: ${THEME.dark}; display:flex; align-items:center; gap:8px;">
+            <div id="gal-gpt-sovits-config" class="gal-subcard" style="margin-top: 10px; ${settings.ttsProvider === 'gpt_sovits_v2' ? '' : 'display: none;'}">
+              <div style="font-weight: 700; margin-bottom: 10px; color: var(--gal-text, ${THEME.dark}); display:flex; align-items:center; gap:8px;">
                 <i class="fa-solid fa-microchip" style="color:${THEME.accent};"></i>
                 <span>GPT-SoVITS（api_v2.py）设置</span>
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">API地址</span>
-                <input type="text" id="gal-gpt-sovits-url" value="${escapeHtml(settings.gptSoVits?.apiUrl || '')}" placeholder="http://127.0.0.1:9880" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <input type="text" id="gal-gpt-sovits-url" class="gal-input" value="${escapeHtml(settings.gptSoVits?.apiUrl || '')}" placeholder="http://127.0.0.1:9880">
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">使用酒馆代理</span>
@@ -772,7 +937,7 @@ export async function showSettingsPanel(topTab, subTab) {
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">模型切换模式</span>
-                <select id="gal-gpt-sovits-switch-mode" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; min-width: 210px;">
+                <select id="gal-gpt-sovits-switch-mode" class="gal-select">
                   <option value="set_weights" ${(settings.gptSoVits?.modelSwitchMode || 'set_weights') === 'set_weights' ? 'selected' : ''}>set_weights (api_v2.py)</option>
                   <option value="set_model" ${(settings.gptSoVits?.modelSwitchMode || '') === 'set_model' ? 'selected' : ''}>set_model (api.py)</option>
                   <option value="none" ${(settings.gptSoVits?.modelSwitchMode || '') === 'none' ? 'selected' : ''}>none（不自动切换）</option>
@@ -780,10 +945,10 @@ export async function showSettingsPanel(topTab, subTab) {
               </div>
               <div class="gal-settings-row">
                 <span class="gal-settings-label">set_model 接口</span>
-                <input type="text" id="gal-gpt-sovits-set-model-endpoint" value="${escapeHtml(settings.gptSoVits?.setModelEndpoint || '/set_model')}" placeholder="/set_model" style="flex: 1; margin-left: 10px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem;">
+                <input type="text" id="gal-gpt-sovits-set-model-endpoint" class="gal-input" value="${escapeHtml(settings.gptSoVits?.setModelEndpoint || '/set_model')}" placeholder="/set_model">
               </div>
               <div class="gal-settings-row">
-                <span class="gal-settings-label">严格切换 <small style="color:#999;">(失败不回退)</small></span>
+                <span class="gal-settings-label">严格切换 <small style="color: var(--gal-text-3, #999);">(失败不回退)</small></span>
                 <label class="gal-switch"><input type="checkbox" id="gal-gpt-sovits-strict-switch" ${settings.gptSoVits?.strictWeightSwitch ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
               </div>
               <div class="gal-settings-row">
@@ -793,20 +958,21 @@ export async function showSettingsPanel(topTab, subTab) {
                 </button>
               </div>
               <div style="margin-top: 10px;">
-                <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: ${THEME.dark};">音色列表（JSON）</div>
-                <textarea id="gal-gpt-sovits-voices-json" rows="6" placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh"}]' style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8rem;"></textarea>
+                <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 6px; color: var(--gal-text, ${THEME.dark});">音色列表（JSON）</div>
+                <textarea id="gal-gpt-sovits-voices-json" class="gal-textarea" rows="6" placeholder='[{"name":"示例音色","refAudioPath":"wavs/xxx.wav","promptText":"示例参考文本","promptLang":"zh"}]'></textarea>
                 <div style="display:flex; gap:10px; margin-top: 10px;">
                   <button class="gal-panel-btn secondary" id="gal-gpt-sovits-voices-save" style="flex: 1; padding: 10px;"><i class="fa-solid fa-floppy-disk"></i><span>保存音色列表</span></button>
                   <button class="gal-panel-btn" id="gal-gpt-sovits-test" style="flex: 1; padding: 10px;"><i class="fa-solid fa-play"></i><span>试听</span></button>
                 </div>
-                <input type="text" id="gal-gpt-sovits-test-text" value="你好，这是一段 GPT-SoVITS 配音测试。" style="width: 100%; margin-top: 10px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.85rem;" placeholder="试听文本">
+                <input type="text" id="gal-gpt-sovits-test-text" class="gal-input" value="你好，这是一段 GPT-SoVITS 配音测试。" style="width: 100%; margin-top: 10px;" placeholder="试听文本">
               </div>
             </div>
           </div>
+          </div><!-- /L2 tts -->
 
+          <!-- L2 Pane: 通用（快捷键 + 刷新视图） -->
+          <div data-l2-pane="general" style="${activeL2 === 'general' ? '' : 'display: none;'}">
           <div class="gal-settings-divider"></div>
-
-          <!-- 快捷键 -->
           <div class="gal-settings-section">
             <div class="gal-settings-section-title"><i class="fa-solid fa-keyboard"></i> 快捷键</div>
             <div class="gal-settings-row">
@@ -821,21 +987,6 @@ export async function showSettingsPanel(topTab, subTab) {
               <span class="gal-settings-label">Ctrl长按 -> 快进</span>
               <label class="gal-switch"><input type="checkbox" id="gal-ctrl-skip" ${settings.ctrlKeySkip ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
-          </div>
-
-          <div class="gal-settings-divider"></div>
-
-          <!-- 快进设置 -->
-          <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-forward"></i> 快进设置</div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label" title="开启后，只有检测到Galgame标签才会显示界面；关闭则总是显示">智能判断主界面显示</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings.smartDetection ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
-            </div>
-            <div class="gal-settings-row">
-              <span class="gal-settings-label">全局Debug日志</span>
-              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings.globalDebug ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
-            </div>
             <div class="gal-settings-row">
               <span class="gal-settings-label">快进速度</span>
               <div class="gal-settings-control">
@@ -847,75 +998,99 @@ export async function showSettingsPanel(topTab, subTab) {
 
           <div class="gal-settings-divider"></div>
 
-          <!-- 加强模式 -->
+          <!-- 刷新视图 -->
+          <div style="margin-top: 16px;">
+            <button class="gal-panel-btn secondary" id="gal-refresh-views" style="width: 100%;"><i class="fa-solid fa-sync"></i><span>刷新视图</span></button>
+          </div>
+          <!-- 配置向导 -->
+          <div style="margin-top: 10px;">
+            <button class="gal-panel-btn secondary" id="gal-setup-wizard-btn" style="width: 100%;"><i class="fa-solid fa-wand-magic-sparkles"></i><span>配置向导</span></button>
+          </div>
+          </div><!-- /L2 general (shortcuts) -->
+
+          <!-- L2 Pane: 高级 -->
+          <div data-l2-pane="advanced" style="${activeL2 === 'advanced' ? '' : 'display: none;'}">
           <div class="gal-settings-section">
-            <div class="gal-settings-section-title"><i class="fa-solid fa-bolt" style="color: #ff9800;"></i> 加强模式</div>
+            <div class="gal-settings-section-title"><i class="fa-solid fa-flask"></i> 高级</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label" title="开启后，只有检测到Galgame标签才会显示界面；关闭则总是显示">智能判断主界面显示</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-smart-detection" ${settings.smartDetection ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p class="gal-hint">开启后，只有检测到 Galgame 标签才会显示界面；关闭则总是显示。</p>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">全局Debug日志</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-global-debug" ${settings.globalDebug ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+          </div>
+          </div><!-- /L2 advanced -->
+
+          <!-- L2 Pane: 生成/COT（加强模式） -->
+          <div data-l2-pane="cot" style="${activeL2 === 'cot' ? '' : 'display: none;'}">
+          <div class="gal-settings-divider"></div>
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-bolt"></i> 加强模式</div>
             <div class="gal-settings-row" style="margin-bottom: 12px;">
               <div style="display: flex; flex-direction: column; gap: 4px;">
                 <span class="gal-settings-label" style="font-weight: 600;">启用加强模式</span>
-                <small style="color: #888; font-size: 0.75rem;">两次生成策略：内容创作 + COT格式化</small>
+                <small class="gal-hint" style="margin: 0;">两次生成策略：内容创作 + COT格式化</small>
               </div>
               <label class="gal-switch"><input type="checkbox" id="gal-enhanced-mode" ${settings.enhancedMode?.enabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
-            <div id="gal-enhanced-hint" style="${settings.enhancedMode?.enabled ? '' : 'display: none;'} padding: 12px; background: #fff8e1; border-radius: 6px; margin-bottom: 16px; font-size: 0.8rem; color: #666; line-height: 1.5;">
-              <i class="fa-solid fa-lightbulb" style="color: #ff9800;"></i>
+            <div id="gal-enhanced-hint" style="${settings.enhancedMode?.enabled ? '' : 'display: none;'} padding: 12px; background: var(--gal-accent-soft, rgba(0,210,255,0.1)); border: 1px solid var(--gal-accent-border, rgba(0,210,255,0.35)); border-radius: 6px; margin-bottom: 16px; font-size: 0.8rem; color: var(--gal-text-2, #666); line-height: 1.5;">
+              <i class="fa-solid fa-lightbulb" style="color: var(--gal-accent-strong, #00a8cc);"></i>
               第一次生成专注内容，第二次切换API进行COT格式化。
             </div>
-            <div id="gal-enhanced-config" style="${settings.enhancedMode?.enabled ? '' : 'display: none;'} padding-left: 12px; border-left: 2px solid #ffe0b2;">
-              <div style="font-weight: 600; margin-bottom: 12px; color: #e65100; font-size: 0.9rem;">第二次生成配置</div>
+            <div id="gal-enhanced-config" style="${settings.enhancedMode?.enabled ? '' : 'display: none;'} padding-left: 12px; border-left: 2px solid var(--gal-accent-border, rgba(0,210,255,0.35));">
+              <div style="font-weight: 600; margin-bottom: 12px; color: var(--gal-accent-strong, #00a8cc); font-size: 0.9rem;">第二次生成配置</div>
               <div style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-profile" ${settings.enhancedMode?.secondGenerate?.useProfile ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
-                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">连接配置</span>
+                <label class="gal-check" style="margin-bottom: 6px;">
+                  <input type="checkbox" id="gal-enhanced-use-profile" ${settings.enhancedMode?.secondGenerate?.useProfile ? 'checked' : ''}>
+                  <span style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222);">连接配置</span>
                 </label>
-                <select id="gal-enhanced-profile-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${profileOptions}</select>
+                <select id="gal-enhanced-profile-name" class="gal-select" style="width: calc(100% - 24px); margin-left: 24px;">${profileOptions}</select>
               </div>
               <div style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-model" ${settings.enhancedMode?.secondGenerate?.useModel ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
-                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">模型</span>
+                <label class="gal-check" style="margin-bottom: 6px;">
+                  <input type="checkbox" id="gal-enhanced-use-model" ${settings.enhancedMode?.secondGenerate?.useModel ? 'checked' : ''}>
+                  <span style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222);">模型</span>
                 </label>
-                <select id="gal-enhanced-model-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${modelOptions}</select>
+                <select id="gal-enhanced-model-name" class="gal-select" style="width: calc(100% - 24px); margin-left: 24px;">${modelOptions}</select>
               </div>
               <div style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
-                  <input type="checkbox" id="gal-enhanced-use-preset" ${settings.enhancedMode?.secondGenerate?.usePreset ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
-                  <span style="font-size: 0.9rem; font-weight: 600; color: #222;">预设</span>
+                <label class="gal-check" style="margin-bottom: 6px;">
+                  <input type="checkbox" id="gal-enhanced-use-preset" ${settings.enhancedMode?.secondGenerate?.usePreset ? 'checked' : ''}>
+                  <span style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222);">预设</span>
                 </label>
-                <select id="gal-enhanced-preset-name" style="width: calc(100% - 24px); padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; margin-left: 24px; background: var(--SmartThemeFormBg, #fff); color: #333;">${presetOptions}</select>
+                <select id="gal-enhanced-preset-name" class="gal-select" style="width: calc(100% - 24px); margin-left: 24px;">${presetOptions}</select>
               </div>
               <div style="margin-bottom: 10px;">
-                <div style="font-size: 0.9rem; font-weight: 600; color: #222; margin-bottom: 8px;">世界书设置</div>
+                <div style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222); margin-bottom: 8px;">世界书设置</div>
                 <div style="margin-left: 24px;">
-                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="default" ${!settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? 'checked' : ''} style="cursor: pointer;">
+                  <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="default" ${!settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? 'checked' : ''}>
                     <span>不使用自定义世界书(默认选择)</span>
                   </label>
-                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="none" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? 'checked' : ''} style="cursor: pointer;">
+                  <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="none" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? 'checked' : ''}>
                     <span>不使用任何世界书</span>
                   </label>
-                  <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="custom" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? 'checked' : ''} style="cursor: pointer;">
+                  <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
+                    <input type="radio" name="gal-enhanced-worldbook-mode" value="custom" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? 'checked' : ''}>
                     <span>使用以下世界书：</span>
                   </label>
                   <div id="gal-enhanced-worldbooks-list" style="margin-left: 24px; ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? '' : 'display: none;'}">${worldbookListHtml}</div>
                 </div>
               </div>
-              <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #ffe0b2;">
+              <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--gal-accent-border, rgba(0,210,255,0.35));">
                 <button id="gal-enhanced-view-prompts" class="gal-panel-btn secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
                   <i class="fa-solid fa-eye"></i><span>查看提示词</span>
                 </button>
               </div>
             </div>
           </div>
+          </div><!-- /L2 cot (enhanced) -->
 
-          <div class="gal-settings-divider"></div>
-
-          <!-- 刷新视图 -->
-          <div style="margin-top: 16px;">
-            <button class="gal-panel-btn secondary" id="gal-refresh-views" style="width: 100%;"><i class="fa-solid fa-sync"></i><span>刷新视图</span></button>
-          </div>
+          </div><!-- /.gal-l2-body -->
         </div>
 
         <!-- L1 Pane: 资源管理 -->
@@ -931,48 +1106,78 @@ export async function showSettingsPanel(topTab, subTab) {
     </div>
 
     <style>
-      .gal-toggle-on { background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); color: #fff; box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4); }
-      .gal-toggle-off { background: #e0e0e0; color: #666; }
-      .gal-toggle-on:hover, .gal-toggle-off:hover { transform: scale(1.02); }
-      .gal-settings-divider { border-top: 1px solid #e0e0e0; margin: 16px 0; }
+      /* ═══ 扁平化组件体系（token 定义见 数据库界面插件.css :root） ═══ */
+      .gal-toggle-on { background: var(--gal-accent, ${THEME.accent}); color: #04303a; box-shadow: var(--gal-shadow-sm, 0 1px 3px rgba(20,30,40,0.08)); }
+      .gal-toggle-off { background: var(--gal-panel-bg-sub, #f6f8fa); color: var(--gal-text-2, #5c6470); border: 1px solid var(--gal-border, #e3e7eb) !important; }
+      .gal-toggle-on:hover { background: var(--gal-accent-strong, #00a8cc); }
+      .gal-toggle-off:hover { background: var(--gal-border, #e3e7eb); }
+      .gal-settings-divider { border-top: 1px solid var(--gal-border, #e3e7eb); margin: 16px 0; }
       .gal-settings-section { margin-bottom: 8px; }
-      .gal-settings-section-title { font-weight: 700; font-size: 0.95rem; color: ${THEME.dark}; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+      .gal-settings-section-title { font-weight: 700; font-size: 0.95rem; color: var(--gal-text, ${THEME.dark}); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
       .gal-settings-section-title i { color: ${THEME.accent}; }
-      .gal-settings-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+      .gal-settings-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gal-panel-bg-sub, #f6f8fa); }
       .gal-settings-row:last-child { border-bottom: none; }
-      .gal-settings-label { font-size: 0.9rem; color: #444; }
+      .gal-settings-label { font-size: 0.9rem; color: var(--gal-text, #2b2e38); }
       .gal-settings-control { display: flex; align-items: center; gap: 10px; }
       .gal-settings-control input[type="range"] { width: 120px; accent-color: ${THEME.accent}; }
-      .gal-range-value { min-width: 45px; text-align: right; font-weight: 600; font-size: 0.85rem; color: ${THEME.accent}; }
-      .gal-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
+      .gal-range-value { min-width: 45px; text-align: right; font-weight: 600; font-size: 0.85rem; color: var(--gal-accent-strong, #00a8cc); }
+      .gal-hint { font-size: 0.75rem; color: var(--gal-text-3, #8a929c); margin: 2px 0 8px; line-height: 1.5; }
+      .gal-switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
       .gal-switch input { opacity: 0; width: 0; height: 0; }
-      .gal-switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: 0.3s; border-radius: 26px; }
-      .gal-switch-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-      .gal-switch input:checked + .gal-switch-slider { background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); }
+      .gal-switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccd2d9; transition: 0.3s; border-radius: 26px; }
+      .gal-switch-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+      .gal-switch input:checked + .gal-switch-slider { background: var(--gal-accent, ${THEME.accent}); }
       .gal-switch input:checked + .gal-switch-slider:before { transform: translateX(22px); }
-      .gal-panel-btn { padding: 14px; background: linear-gradient(135deg, ${THEME.accent} 0%, #00a8cc 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: all 0.2s; }
-      .gal-panel-btn.secondary { background: linear-gradient(135deg, #666 0%, #444 100%); }
-      .gal-panel-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-      .gal-panel-btn i { font-size: 1.3rem; }
+      .gal-panel-btn { padding: 12px 14px; background: var(--gal-accent, ${THEME.accent}); color: #04303a; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: background 0.2s; box-shadow: var(--gal-shadow-sm, 0 1px 3px rgba(20,30,40,0.08)); }
+      .gal-panel-btn:hover { background: var(--gal-accent-strong, #00a8cc); }
+      .gal-panel-btn.secondary { background: var(--gal-panel-bg, #fff); color: var(--gal-text, #2b2e38); border: 1px solid var(--gal-border, #e3e7eb); }
+      .gal-panel-btn.secondary:hover { background: var(--gal-panel-bg-sub, #f6f8fa); border-color: var(--gal-accent, ${THEME.accent}); }
+      .gal-panel-btn i { font-size: 1.1rem; }
+      #gal-unified-panel .gal-select,
+      #gal-unified-panel .gal-input,
+      #gal-unified-panel .gal-textarea {
+        padding: 6px 10px;
+        border: 1px solid var(--gal-border, #e3e7eb);
+        border-radius: 6px;
+        font-size: 0.85rem;
+        background: var(--gal-panel-bg, #fff);
+        color: var(--gal-text, #2b2e38);
+        box-sizing: border-box;
+        max-width: 100%;
+        min-width: 0;
+      }
+      #gal-unified-panel .gal-select { width: clamp(160px, 40%, 280px); }
+      #gal-unified-panel .gal-input { flex: 1; }
+      #gal-unified-panel .gal-textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.8rem; resize: vertical; }
+      #gal-unified-panel .gal-select:focus,
+      #gal-unified-panel .gal-input:focus,
+      #gal-unified-panel .gal-textarea:focus {
+        outline: none;
+        border-color: var(--gal-accent, ${THEME.accent});
+        box-shadow: 0 0 0 3px var(--gal-accent-soft, rgba(0,210,255,0.1));
+      }
+      .gal-subcard { background: var(--gal-panel-bg-sub, #f6f8fa); border: 1px solid var(--gal-border, #e3e7eb); border-radius: 8px; padding: 12px; }
+      .gal-check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      .gal-check input[type="checkbox"], .gal-check input[type="radio"] { cursor: pointer; width: 16px; height: 16px; accent-color: ${THEME.accent}; }
       .gal-title-settings-input,
       .gal-title-settings-select {
         width: min(100%, 460px);
         min-height: 36px;
         border-radius: 8px;
-        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-        color: var(--SmartThemeBodyColor, #f5f7fa);
+        border: 1px solid var(--gal-border, #e3e7eb);
+        background: var(--gal-panel-bg, #fff);
+        color: var(--gal-text, #2b2e38);
         padding: 7px 10px;
         box-sizing: border-box;
         outline: none;
       }
       .gal-title-settings-input::placeholder {
-        color: rgba(245, 247, 250, 0.74);
+        color: var(--gal-text-3, #8a929c);
       }
       .gal-title-settings-input:focus,
       .gal-title-settings-select:focus {
-        border-color: var(--SmartThemeEmColor, #9ac7ff);
-        box-shadow: 0 0 0 3px rgba(154, 199, 255, 0.22);
+        border-color: var(--gal-accent, ${THEME.accent});
+        box-shadow: 0 0 0 3px var(--gal-accent-soft, rgba(0,210,255,0.1));
       }
       .gal-title-settings-input:disabled,
       .gal-title-settings-select:disabled {
@@ -981,28 +1186,28 @@ export async function showSettingsPanel(topTab, subTab) {
       }
       .gal-voice-pool-select {
         padding: 8px 10px;
-        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
+        border: 1px solid var(--gal-border, #e3e7eb);
         border-radius: 6px;
         font-size: 0.85rem;
-        color: var(--SmartThemeBodyColor, #f5f7fa);
-        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
+        color: var(--gal-text, #2b2e38);
+        background: var(--gal-panel-bg, #fff);
       }
       .gal-voice-pool-select:focus {
         outline: none;
-        border-color: var(--SmartThemeEmColor, #9ac7ff);
-        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
+        border-color: var(--gal-accent, ${THEME.accent});
+        box-shadow: 0 0 0 2px var(--gal-accent-soft, rgba(0,210,255,0.1));
       }
       .gal-voice-chip-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 28px; }
-      .gal-voice-chip-empty { font-size: 0.78rem; color: #888; }
+      .gal-voice-chip-empty { font-size: 0.78rem; color: var(--gal-text-3, #8a929c); }
       .gal-voice-chip {
         display: inline-flex;
         align-items: center;
         gap: 8px;
         padding: 4px 10px;
         border-radius: 999px;
-        border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28));
-        background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));
-        color: var(--SmartThemeBodyColor, #f5f7fa);
+        border: 1px solid var(--gal-border, #e3e7eb);
+        background: var(--gal-panel-bg-sub, #f6f8fa);
+        color: var(--gal-text, #2b2e38);
         font-size: 0.8rem;
         max-width: 100%;
       }
@@ -1015,13 +1220,13 @@ export async function showSettingsPanel(topTab, subTab) {
         line-height: 18px;
         padding: 0;
         cursor: pointer;
-        background: rgba(220, 53, 69, 0.2);
-        color: var(--SmartThemeBodyColor, #f5f7fa);
+        background: rgba(217, 58, 74, 0.12);
+        color: var(--gal-danger, #d93a4a);
         font-weight: 700;
       }
       .gal-voice-chip-remove:focus {
         outline: none;
-        box-shadow: 0 0 0 2px rgba(154, 199, 255, 0.35);
+        box-shadow: 0 0 0 2px var(--gal-accent-soft, rgba(0,210,255,0.1));
       }
 
       /* L1 Tab Header */
@@ -1029,9 +1234,80 @@ export async function showSettingsPanel(topTab, subTab) {
       .gal-l1-tab-btn { padding:14px 28px; border:none; background:transparent; color:rgba(255,255,255,0.5); font-size:1rem; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; display:flex; align-items:center; gap:8px; transition:all 0.2s; user-select:none; }
       .gal-l1-tab-btn:hover { color:rgba(255,255,255,0.85); }
       .gal-l1-tab-btn.active { color:${THEME.accent}; border-bottom-color:${THEME.accent}; }
+
+      /* 基础设置 L1 pane：flex 纵向骨架（master-bar + L2 tab + 滚动主体） */
+      #gal-unified-panel .gal-config-body[data-l1-pane="settings"] { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+
+      /* 主开关常驻条 */
+      .gal-master-bar { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--gal-border, #e3e7eb); background: var(--gal-panel-bg, #fff); flex-shrink: 0; }
+      .gal-master-bar #gal-main-toggle { padding: 8px 22px; font-size: 0.95rem; font-weight: 700; border: none; border-radius: 999px; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+      .gal-master-bar .gal-master-note { font-size: 0.75rem; color: var(--gal-text-3, #8a929c); }
+
+      /* 文本显示实时预览（迷你对话框模型） */
+      .gal-preview-wrap { margin-bottom: 4px; }
+      .gal-preview-stage {
+        position: relative;
+        border-radius: 10px;
+        padding: 34px 14px 14px;
+        background:
+          radial-gradient(ellipse at 70% 20%, rgba(255, 183, 213, 0.55) 0%, transparent 55%),
+          linear-gradient(180deg, #a7c8ef 0%, #dcc8e8 55%, #f4d9e2 100%);
+        overflow: hidden;
+      }
+      .gal-preview-panel {
+        position: relative;
+        border-radius: 8px;
+        padding: 14px 16px 12px;
+        background-color: rgba(255, 255, 255, calc(0.6 + var(--gal-preview-opacity, 0.5) * 0.38));
+        box-shadow: 0 2px 10px rgba(20, 30, 40, 0.18);
+      }
+      .gal-preview-badge {
+        position: absolute;
+        top: -12px;
+        left: 10px;
+        background: var(--gal-dark, #2b2e38);
+        color: #fff;
+        padding: 3px 14px;
+        font-size: calc(0.8rem * var(--gal-preview-font-scale, 1));
+        font-weight: 800;
+        transform: skewX(-12deg);
+        box-shadow: 2px 2px 0 rgba(0, 210, 255, 0.5);
+        font-family: var(--gal-preview-font-family, inherit);
+      }
+      .gal-preview-text {
+        font-size: calc(0.95rem * var(--gal-preview-font-scale, 1));
+        font-family: var(--gal-preview-font-family, inherit);
+        line-height: var(--gal-preview-line-height, 1.7);
+        color: #2b2e38;
+        margin-top: 4px;
+        padding-top: var(--gal-preview-pad-top, 0em);
+        padding-bottom: var(--gal-preview-pad-bottom, 0em);
+        transition: font-size 0.1s linear;
+      }
+      .gal-preview-text p { margin: 0; }
+      .gal-preview-text p + p { margin-top: var(--gal-preview-paragraph-gap, 0.6em); }
+      /* 文字特效映射（与 applyTextEffect 同款视觉） */
+      .gal-preview-panel.pv-shadow .gal-preview-text { color: #fff; text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 0 2px 4px rgba(0,0,0,0.5); }
+      .gal-preview-panel.pv-glow .gal-preview-text { color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(0,210,255,0.4); }
+      .gal-preview-panel.pv-stroke .gal-preview-text { color: #fff; -webkit-text-stroke: 1.5px rgba(0,0,0,0.8); text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+      .gal-preview-panel.pv-glass { background-color: rgba(255, 255, 255, 0.35); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+      .gal-preview-panel.pv-glass .gal-preview-text { color: #333; }
+      .gal-preview-panel.pv-gradient { background-color: transparent; background-image: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.72) 100%); box-shadow: none; }
+      .gal-preview-panel.pv-gradient .gal-preview-text { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+      .gal-preview-panel.pv-text-bg { background-color: transparent; box-shadow: none; }
+      .gal-preview-panel.pv-text-bg .gal-preview-text { background-color: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 8px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.3); display: inline-block; }
+
+      /* L2 Tab（类名刻意区别于资源管理的 .gal-tab-btn，避免事件串扰） */
+      .gal-l2-tab-header { display: flex; align-items: center; gap: 2px; padding: 0 24px; border-bottom: 1px solid var(--gal-border, #e3e7eb); background: var(--gal-panel-bg, #fff); overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-shrink: 0; }
+      .gal-l2-tab-header::-webkit-scrollbar { display: none; width: 0; height: 0; }
+      .gal-l2-tab-btn { padding: 11px 16px; border: none; background: transparent; font-size: 0.9rem; font-weight: 600; color: var(--gal-text-2, #5c6470); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; user-select: none; flex-shrink: 0; }
+      .gal-l2-tab-btn:hover { color: var(--gal-accent-strong, #00a8cc); }
+      .gal-l2-tab-btn.active { color: var(--gal-accent-strong, #00a8cc); border-bottom-color: var(--gal-accent, ${THEME.accent}); }
+      .gal-l2-body { flex: 1; overflow-y: auto; padding: 16px 24px 24px; }
+
       .gal-about-pane { display: flex; flex-direction: column; gap: 14px; }
-      .gal-about-card { background: #f8fbff; border: 1px solid #dce9ff; border-radius: 10px; padding: 16px; color: #2f3a4a; line-height: 1.7; }
-      .gal-about-card h3 { margin: 0 0 8px 0; color: ${THEME.dark}; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+      .gal-about-card { background: var(--gal-panel-bg-sub, #f6f8fa); border: 1px solid var(--gal-border, #e3e7eb); border-radius: 10px; padding: 16px; color: var(--gal-text, #2f3a4a); line-height: 1.7; }
+      .gal-about-card h3 { margin: 0 0 8px 0; color: var(--gal-text, ${THEME.dark}); font-size: 1rem; display: flex; align-items: center; gap: 8px; }
       .gal-about-card h3 i { color: ${THEME.accent}; }
       .gal-about-card p { margin: 0 0 8px 0; }
       .gal-about-card p:last-child { margin-bottom: 0; }
@@ -1134,6 +1410,37 @@ export async function showSettingsPanel(topTab, subTab) {
     $panel.find(`[data-l1-pane="${tab}"]`).show();
   });
 
+  // L2 tab 切换（基础设置分类；同一分类可能拆分为多个 pane 块，全部一起显隐）
+  $panel.find('.gal-l2-tab-btn').on('click', function () {
+    const tab = String($(this).data('l2-tab') || 'general');
+    lastSettingsL2Tab = tab;
+    $panel.find('.gal-l2-tab-btn').removeClass('active');
+    $(this).addClass('active');
+    $panel.find('[data-l2-pane]').hide();
+    $panel.find(`[data-l2-pane="${tab}"]`).show();
+  });
+
+  // 文本显示实时预览：把当前设置映射到预览框的 CSS 变量（与真实对话框同一套取值逻辑）
+  const syncTextPreview = () => {
+    const pvEl = $panel.find('#gal-text-preview-panel').get(0);
+    if (!pvEl) return;
+    const lineHeightTenths = Math.round(Number(settings.dialogLineHeight) || 0);
+    const paragraphGap = Math.max(0, Math.min(30, Number(settings.dialogParagraphGap) || 0));
+    pvEl.style.setProperty('--gal-preview-font-scale', String(getDialogFontScale(settings)));
+    pvEl.style.setProperty('--gal-preview-font-family', getDialogFontStack(settings.dialogFontFamily));
+    pvEl.style.setProperty('--gal-preview-line-height', lineHeightTenths >= 10 ? String(lineHeightTenths / 10) : '1.7');
+    pvEl.style.setProperty('--gal-preview-paragraph-gap', `${paragraphGap / 10}em`);
+    const pvPadTop = Math.max(0, Math.min(30, Math.round(Number(settings.dialogPadTop) || 0)));
+    const pvPadBottom = Math.max(0, Math.min(30, Math.round(Number(settings.dialogPadBottom) || 0)));
+    pvEl.style.setProperty('--gal-preview-pad-top', pvPadTop > 0 ? `${pvPadTop / 10}em` : '0em');
+    pvEl.style.setProperty('--gal-preview-pad-bottom', pvPadBottom > 0 ? `${pvPadBottom / 10}em` : '0em');
+    pvEl.style.setProperty('--gal-preview-opacity', String(settings.dialogOpacity));
+    pvEl.className = pvEl.className.replace(/\bpv-[a-z-]+\b/g, '').trim();
+    const effect = settings.textEffect || 'none';
+    if (effect !== 'none') pvEl.classList.add(`pv-${effect}`);
+  };
+  syncTextPreview();
+
   // 关闭
   $('#gal-settings-close').on('click', () => {
     cleanupAssetManagerDocumentEvents();
@@ -1149,26 +1456,68 @@ export async function showSettingsPanel(topTab, subTab) {
   // 主开关
   $('#gal-main-toggle').on('click', async function () {
     const newEnabled = !getIsEnabled();
-    setIsEnabled(newEnabled);
-    setCurrentCharEnabled(newEnabled);
-    updateButtonState();
     if (newEnabled) {
       $(this).removeClass('gal-toggle-off').addClass('gal-toggle-on').html('<i class="fa-solid fa-toggle-on" style="font-size: 1.3rem;"></i><span>Galgame 模式已开启</span>');
-      await injectCOTToWorldbook();
-      applyGalgameMode();
-      if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80);
+      await setGalgameMasterEnabled(true);
       showToast('Galgame 模式已开启');
     } else {
       $(this).removeClass('gal-toggle-on').addClass('gal-toggle-off').html('<i class="fa-solid fa-toggle-off" style="font-size: 1.3rem;"></i><span>Galgame 模式已关闭</span>');
-      await disableWorldbookGlobally();
-      restoreOriginalViews();
+      await setGalgameMasterEnabled(false);
       setTimeout(() => { const $lastMes = $('#chat > .mes').last(); if ($lastMes.length) $lastMes[0].scrollIntoView({ behavior: 'smooth', block: 'end' }); }, 150);
       showToast('Galgame 模式已关闭');
     }
   });
 
   // 滑块设置
-  $('#gal-font-size').on('input', function () { settings.fontSize = parseInt($(this).val()); $('#gal-font-size-value').text(settings.fontSize); applySettingsToUI(); saveSettings(); });
+  // 排版类滑块共用：先即时预览样式，停止拖动 300ms 后重新分页当前消息
+  let fontRepaginateTimer = null;
+  const scheduleRepaginate = () => {
+    clearTimeout(fontRepaginateTimer);
+    fontRepaginateTimer = setTimeout(() => {
+      repaginateCurrentMessageForFontChange().catch(e => console.warn(`[${SCRIPT_NAME}] 排版重分页失败`, e));
+    }, 300);
+  };
+  $('#gal-font-size').on('input', function () {
+    settings.fontSize = parseInt($(this).val());
+    $('#gal-font-size-value').text(settings.fontSize);
+    applySettingsToUI();
+    saveSettings();
+    scheduleRepaginate();
+  });
+  $('#gal-seg-length').on('input', function () {
+    settings.dialogSegLengthOverride = parseInt($(this).val()) || 0;
+    $('#gal-seg-length-value').text(settings.dialogSegLengthOverride > 0 ? settings.dialogSegLengthOverride : '自动');
+    saveSettings();
+    scheduleRepaginate();
+  });
+  $('#gal-line-height').on('input', function () {
+    settings.dialogLineHeight = parseInt($(this).val()) || 0;
+    $('#gal-line-height-value').text(settings.dialogLineHeight >= 10 ? (settings.dialogLineHeight / 10).toFixed(1) : '默认');
+    applySettingsToUI();
+    saveSettings();
+    scheduleRepaginate();
+  });
+  $('#gal-paragraph-gap').on('input', function () {
+    settings.dialogParagraphGap = parseInt($(this).val()) || 0;
+    $('#gal-paragraph-gap-value').text(`${(settings.dialogParagraphGap / 10).toFixed(1)}em`);
+    applySettingsToUI();
+    saveSettings();
+    scheduleRepaginate();
+  });
+  $('#gal-pad-top').on('input', function () {
+    settings.dialogPadTop = parseInt($(this).val()) || 0;
+    $('#gal-pad-top-value').text(settings.dialogPadTop > 0 ? `${(settings.dialogPadTop / 10).toFixed(1)}em` : '默认');
+    applySettingsToUI();
+    saveSettings();
+    scheduleRepaginate();
+  });
+  $('#gal-pad-bottom').on('input', function () {
+    settings.dialogPadBottom = parseInt($(this).val()) || 0;
+    $('#gal-pad-bottom-value').text(settings.dialogPadBottom > 0 ? `${(settings.dialogPadBottom / 10).toFixed(1)}em` : '默认');
+    applySettingsToUI();
+    saveSettings();
+    scheduleRepaginate();
+  });
   $('#gal-dialog-scale-percent').on('input', function () {
     settings.dialogScalePercent = normalizeUiScalePercent($(this).val());
     $('#gal-dialog-scale-percent-value').text(`${settings.dialogScalePercent}%`);
@@ -1211,19 +1560,16 @@ export async function showSettingsPanel(topTab, subTab) {
 
   // 开关设置
   $('#gal-show-sprites').on('change', function () { settings.showSprites = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
-  $('#gal-simple-storybook-mode').on('change', function () {
-    settings.simpleStorybookMode = $(this).is(':checked');
-    if (settings.simpleStorybookMode) {
-      SpriteManager.reset($('#gal-global-overlay'));
-    }
-    applySettingsToUI();
+  $('#gal-cg-as-background').on('change', function () {
+    settings.cgAsBackground = $(this).is(':checked');
     saveSettings();
-    if (getIsEnabled()) {
-      applyGalgameMode().catch(error => console.warn(`[${SCRIPT_NAME}] 切换简化图书绘本模式后刷新失败`, error));
-    }
-    injectCOTToWorldbook()
-      .then(() => showToast(settings.simpleStorybookMode ? '简化图书绘本模式已开启，COT已更新' : '简化图书绘本模式已关闭，COT已更新'))
-      .catch(() => showToast(settings.simpleStorybookMode ? '简化图书绘本模式已开启' : '简化图书绘本模式已关闭'));
+    showToast(settings.cgAsBackground ? 'CG将直接替换背景显示' : 'CG恢复为对话框缩略图显示');
+  });
+  $('#gal-simple-storybook-mode').on('change', function () {
+    const enabled = $(this).is(':checked');
+    applySimpleStorybookMode(enabled)
+      .then(() => showToast(enabled ? '简化图书绘本模式已开启，COT已更新' : '简化图书绘本模式已关闭，COT已更新'))
+      .catch(() => showToast(enabled ? '简化图书绘本模式已开启' : '简化图书绘本模式已关闭'));
   });
   $('#gal-hide-floors').on('change', function () {
     settings.hideOtherFloors = $(this).is(':checked');
@@ -1427,20 +1773,20 @@ export async function showSettingsPanel(topTab, subTab) {
     if (!prompts) { showToast('暂无提示词记录'); return; }
     const esc = str => (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const html = `<div id="gal-prompts-modal" class="gal-z-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
-      <div style="background:var(--SmartThemeFormBg,#fff);border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
-        <div style="padding:16px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,#ff9800,#ff5722);color:#fff;border-radius:12px 12px 0 0;">
-          <div style="font-weight:700;font-size:1.1rem;"><i class="fa-solid fa-eye"></i> 加强模式提示词</div>
-          <button id="gal-prompts-modal-close" style="background:rgba(255,255,255,0.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1rem;"><i class="fa-solid fa-times"></i></button>
+      <div style="background:var(--gal-panel-bg,#fff);border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+        <div style="padding:16px 20px;border-bottom:2px solid var(--gal-accent,#00d2ff);display:flex;justify-content:space-between;align-items:center;background:var(--gal-dark,#2b2e38);color:#fff;border-radius:12px 12px 0 0;">
+          <div style="font-weight:700;font-size:1.1rem;"><i class="fa-solid fa-eye" style="color:var(--gal-accent,#00d2ff);"></i> 加强模式提示词</div>
+          <button id="gal-prompts-modal-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1rem;"><i class="fa-solid fa-times"></i></button>
         </div>
         <div style="padding:20px;overflow-y:auto;flex:1;">
-          <div style="margin-bottom:8px;color:#888;font-size:0.85rem;"><i class="fa-solid fa-clock"></i> ${prompts.timestamp}</div>
-          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:#e65100;">System Prompt</div><pre style="background:#f5f5f5;border:1px solid #ddd;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.systemPrompt)}</pre></div>
-          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:#1976d2;">First Result</div><pre style="background:#e3f2fd;border:1px solid #bbdefb;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.firstResult)}</pre></div>
-          <div><div style="font-weight:600;margin-bottom:8px;color:#388e3c;">User Prompt</div><pre style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:#333;">${esc(prompts.userPrompt)}</pre></div>
+          <div style="margin-bottom:8px;color:var(--gal-text-3,#888);font-size:0.85rem;"><i class="fa-solid fa-clock"></i> ${prompts.timestamp}</div>
+          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:var(--gal-accent-strong,#00a8cc);">System Prompt</div><pre style="background:var(--gal-panel-bg-sub,#f6f8fa);border:1px solid var(--gal-border,#e3e7eb);border-left:3px solid var(--gal-accent,#00d2ff);border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto;margin:0;color:var(--gal-text,#333);">${esc(prompts.systemPrompt)}</pre></div>
+          <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:var(--gal-accent-strong,#00a8cc);">First Result</div><pre style="background:var(--gal-panel-bg-sub,#f6f8fa);border:1px solid var(--gal-border,#e3e7eb);border-left:3px solid var(--gal-accent,#00d2ff);border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:var(--gal-text,#333);">${esc(prompts.firstResult)}</pre></div>
+          <div><div style="font-weight:600;margin-bottom:8px;color:var(--gal-accent-strong,#00a8cc);">User Prompt</div><pre style="background:var(--gal-panel-bg-sub,#f6f8fa);border:1px solid var(--gal-border,#e3e7eb);border-left:3px solid var(--gal-accent,#00d2ff);border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:var(--gal-text,#333);">${esc(prompts.userPrompt)}</pre></div>
         </div>
-        <div style="padding:12px 20px;border-top:1px solid #e0e0e0;text-align:right;">
-          <button id="gal-prompts-modal-copy" style="background:#2196f3;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;margin-right:8px;"><i class="fa-solid fa-copy"></i> 复制全部</button>
-          <button id="gal-prompts-modal-ok" style="background:#4caf50;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-check"></i> 确定</button>
+        <div style="padding:12px 20px;border-top:1px solid var(--gal-border,#e3e7eb);text-align:right;">
+          <button id="gal-prompts-modal-copy" style="background:var(--gal-panel-bg,#fff);color:var(--gal-text,#2b2e38);border:1px solid var(--gal-border,#e3e7eb);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;margin-right:8px;"><i class="fa-solid fa-copy"></i> 复制全部</button>
+          <button id="gal-prompts-modal-ok" style="background:var(--gal-accent,#00d2ff);color:#04303a;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:0.9rem;font-weight:700;"><i class="fa-solid fa-check"></i> 确定</button>
         </div>
       </div>
     </div>`;
@@ -1507,6 +1853,19 @@ export async function showSettingsPanel(topTab, subTab) {
     injectCOTToWorldbook()
       .then(() => showToast(settings.situationalStyleEnabled ? '情境样式已开启，COT已更新' : '情境样式已关闭，COT已更新'))
       .catch(() => showToast(settings.situationalStyleEnabled ? '情境样式已开启' : '情境样式已关闭'));
+  });
+  $('#gal-bgm-cot-enabled').on('change', function () {
+    settings.bgmEnabled = $(this).is(':checked');
+    saveSettings();
+    if (settings.bgmEnabled) {
+      renderBGMWidget();
+    } else {
+      BGMManager.stopForDisabled();
+      removeBGMWidget();
+    }
+    injectCOTToWorldbook()
+      .then(() => showToast(settings.bgmEnabled ? 'BGM已启用，COT已更新' : 'BGM已关闭，COT已更新'))
+      .catch(() => showToast(settings.bgmEnabled ? 'BGM已启用' : 'BGM已关闭'));
   });
   $('#gal-tts-default-speaker').on('change', function () { settings.ttsDefaultSpeaker = $(this).val(); saveSettings(); });
 
@@ -1606,6 +1965,17 @@ export async function showSettingsPanel(topTab, subTab) {
 
   // 刷新视图
   $('#gal-refresh-views').on('click', () => { if (getIsEnabled()) { applyGalgameMode(); if (settings.hideOtherFloors) setTimeout(hideNonLastFloors, 80); showToast('视图已刷新'); } else { showToast('请先开启 Galgame 模式'); } });
+
+  // 配置向导（关闭设置面板后打开，避免两层弹窗叠加）
+  $('#gal-setup-wizard-btn').on('click', () => {
+    cleanupAssetManagerDocumentEvents();
+    $panel.remove();
+    showSetupWizard({ trigger: 'manual' });
+  });
+
+  // 文本显示实时预览联动（放在所有设置 handler 之后绑定，保证读到的是更新后的值）
+  $panel.find('#gal-font-size, #gal-line-height, #gal-paragraph-gap, #gal-pad-top, #gal-pad-bottom, #gal-dialog-opacity').on('input', syncTextPreview);
+  $panel.find('#gal-dialog-font-family, #gal-text-effect').on('change', syncTextPreview);
 
   // 绑定资源管理事件
   if (_bindAssetsPaneRef) {

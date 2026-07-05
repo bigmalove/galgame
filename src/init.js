@@ -1,13 +1,13 @@
 import { BGMManager } from './audio/bgm-manager.js';
 import { TTSManager } from './audio/tts-manager.js';
-import { CUSTOM_SKIN_ID, SCRIPT_NAME, TWILIGHT_FAMILY_SKIN_IDS, VERSION } from './core/constants.js';
+import { ANCIENT_FAMILY_SKIN_IDS, CUSTOM_SKIN_ID, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, TWILIGHT_FAMILY_SKIN_IDS, VERSION, YANYUN_FAMILY_SKIN_IDS } from './core/constants.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
 import { $, topWindow } from './core/env.js';
 import { ensureTitleScreenSettings, getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings, saveSettings, setCurrentCharEnabled } from './core/settings.js';
 import { getIsEnabled, getIsLoadingSave, setHideOtherFloors, setIsEnabled } from './core/state.js';
 import { loadAllBackgroundsToCache } from './db/backgrounds.js';
 import { initDB } from './db/init.js';
-import { hasUiSkinProfileId, refreshUiSkinProfilesCache } from './db/ui-skin-profiles.js';
+import { hasHtmlSkinId, loadHtmlSkinsToCache } from './db/html-skins.js';
 import { loadAllSpritesToCache } from './db/sprites.js';
 import { applyPixiEffectOps, clearAllPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
 import { LipSyncManager } from './live2d/lip-sync.js';
@@ -26,8 +26,10 @@ import { setupFullscreenChangeListener } from './ui/fullscreen.js';
 import { applyGalgameMode, restoreOriginalViews } from './ui/galgame-mode.js';
 import { setupKeyboardShortcuts } from './ui/interaction.js';
 import { addMenuButton, injectGalgameButton, updateButtonState } from './ui/menu-button.js';
+import { cleanupCgObservers } from './ui/overlay-content.js';
 import { ensureGlobalOverlay, setupGameContentResizeListener, showGlobalOverlay } from './ui/overlay.js';
 import { processNewMessage } from './ui/process-message.js';
+import { maybeAutoShowSetupWizard, showSetupWizard } from './ui/setup-wizard.js';
 import { injectStyles } from './ui/styles.js';
 import { isTitleScreenVisible, maybeShowTitleScreen, resetTitleScreenSession } from './ui/title-screen.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from './utils/html.js';
@@ -44,9 +46,10 @@ let initStarted = false;
 
 function sanitizeLoadedSkinSetting(settings) {
   const rawSkin = String(settings?.skin || 'none').trim();
-  const builtinSkinSet = new Set(['none', 'skin-ancient', 'skin-persona', 'skin-jrpg', 'skin-classic', ...TWILIGHT_FAMILY_SKIN_IDS]);
+  const builtinSkinSet = new Set(['none', DEFAULT_DARK_SKIN_ID, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, 'skin-classic', ...ANCIENT_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...TWILIGHT_FAMILY_SKIN_IDS]);
   if (builtinSkinSet.has(rawSkin)) return false;
-  if (hasUiSkinProfileId(rawSkin)) return false;
+  if (hasHtmlSkinId(rawSkin)) return false;
+  // 旧图片式自定义皮肤（custom-profile::）、skin-western、custom-skin 及一切未知值回退默认
   if (rawSkin === 'skin-western' || rawSkin === CUSTOM_SKIN_ID || rawSkin) {
     settings.skin = 'none';
     return true;
@@ -71,7 +74,7 @@ export async function init() {
     console.log(`[${SCRIPT_NAME}] v${VERSION} 开始初始化...`);
     setHideOtherFloors(settings.hideOtherFloors);
     await initDB();
-    await refreshUiSkinProfilesCache();
+    await loadHtmlSkinsToCache();
     if (sanitizeLoadedSkinSetting(settings)) {
       saveSettings();
     }
@@ -197,6 +200,8 @@ export async function init() {
               return;
             }
             resetSpecialCgTriggerForChat();
+            // 清理上一聊天的 CG observer 与图片缓存（节点已失效且 mesId 跨聊天撞号）
+            cleanupCgObservers();
             // 清理上一聊天的立绘状态，避免新聊天首段错误复用旧槽位
             const $overlay = $('#gal-global-overlay');
             SpriteManager.reset($overlay.length ? $overlay : null);
@@ -357,6 +362,11 @@ export async function init() {
       } else {
         console.log(`[${SCRIPT_NAME}] 角色切换轮询兜底已存在，跳过重复注册`);
       }
+
+      // 首次使用检测：所有图包均无任何资源时自动弹出配置向导（不阻塞初始化流程）
+      maybeAutoShowSetupWizard().catch(error => {
+        console.warn(`[${SCRIPT_NAME}] 配置向导自动弹出检测失败:`, error);
+      });
     }, 1500);
 
     console.log(`[${SCRIPT_NAME}] v${VERSION} 初始化完成`);
@@ -381,6 +391,7 @@ export function installGalgameGlobals() {
   topWindow.galgame.Live2DManager = Live2DManager;
   topWindow.galgame.TTSManager = TTSManager;
   topWindow.galgame.BGMManager = BGMManager;
+  topWindow.galgame.showSetupWizard = showSetupWizard;
   topWindow.galgame.effects = {
     help() {
       console.log('[galgame.effects] commands:');

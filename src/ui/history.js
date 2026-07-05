@@ -1,6 +1,14 @@
-import { SCRIPT_NAME } from '../core/constants.js';
+import { ANCIENT_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, YANYUN_FAMILY_SKIN_IDS } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
 import { getModalMountRoot } from './fullscreen.js';
+
+function syncHistoryModalSkinClass($modal) {
+  if (!$modal?.length) return;
+  const $overlay = $('#gal-global-overlay');
+  [...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID].forEach(skinClass => {
+    $modal.toggleClass(skinClass, $overlay.hasClass(skinClass));
+  });
+}
 
 // ============================================
 // 历史记录功能
@@ -152,6 +160,7 @@ export function showHistoryModal(historyData) {
   `;
 
   $modal.html(modalHtml);
+  syncHistoryModalSkinClass($modal);
   $(getModalMountRoot()).append($modal);
 
   $modal.find('.gal-history-close').on('click', function () {

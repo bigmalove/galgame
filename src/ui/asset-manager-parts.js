@@ -12,7 +12,10 @@ import { getCharacterListFromDatabase } from '../utils/chat.js';
 import { getAllExpressions, getCustomExpressions, saveCustomExpressions } from '../utils/expressions.js';
 import { getCharacterNameKeywords, setCharacterNameKeywords } from '../utils/character-name-keywords.js';
 import { getBananaCharacterAppearances, setBananaCharacterAppearances, buildBananaAppearanceMultimodalContent } from '../image-gen/comfyui-helpers.js';
-import { getTTSVoiceListAsync, getCharacterTTSVoice, setCharacterTTSVoice } from '../audio/tts-config.js';
+import { getTTSVoiceListAsync, getCharacterTTSVoice, setCharacterTTSVoice, getCharacterTTSEnabled, setCharacterTTSEnabled } from '../audio/tts-config.js';
+import { getCharacterSpriteVisible, setCharacterSpriteVisible } from '../sprite/sprite-visibility.js';
+import { SpriteManager } from '../sprite/sprite-manager.js';
+import { TTSManager } from '../audio/tts-manager.js';
 import { saveLive2DModel, hasLive2DModel, getLive2DModel, deleteLive2DModel } from '../db/live2d-models.js';
 import { getCharacterUseLive2D, setCharacterUseLive2D } from '../live2d/render-mode.js';
 import { Live2DManager } from '../live2d/manager.js';
@@ -547,11 +550,17 @@ function showLive2DModelSourceDialog(characterId, onSaved) {
 // ============================================
 
 export async function showCharacterSpritesModal(characterId, onCloseCallback) {
-  const allSpritesData = await getAllSprites();
-  const characterSpritesData = allSpritesData.filter(s => s.characterId === characterId);
+  // 宽容比较：characterId 可能经 DOM data 属性往返（类型/空白差异），统一转字符串再比
+  const targetCharacterId = String(characterId ?? '').trim();
+  const allSpritesData = await getAllSprites(getCurrentPackId());
+  const characterSpritesData = allSpritesData.filter(
+    s => String(s.characterId ?? '').trim() === targetCharacterId,
+  );
 
   const ttsVoiceList = await getTTSVoiceListAsync();
   const boundVoice = getCharacterTTSVoice(characterId);
+  const charTTSEnabled = getCharacterTTSEnabled(characterId);
+  const charSpriteVisible = getCharacterSpriteVisible(characterId);
   const characterKeywords = getCharacterNameKeywords(characterId);
   const characterKeywordsInputValue = characterKeywords.join(', ');
   const ttsVoiceOptions = ttsVoiceList
@@ -569,7 +578,13 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-      <div class="gal-char-keywords-section" style="margin: 12px 25px 0 25px; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));">
+      <div style="flex: 1; overflow-y: auto; padding: 0 25px 20px;">
+      <details id="gal-char-settings-collapse" style="margin-top: 12px; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); border-radius: 8px; background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.5));">
+        <summary style="cursor: pointer; padding: 10px 14px; font-weight: 700; color: var(--SmartThemeBodyColor, #f5f7fa); user-select: none; list-style-position: inside;">
+          <i class="fa-solid fa-gear"></i> 角色设置（关键字 / TTS / 开关 / Live2D）
+        </summary>
+        <div style="padding: 0 12px 12px;">
+      <div class="gal-char-keywords-section" style="margin: 12px 0 0; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.28)); background: var(--SmartThemeBlurTintColor, rgba(20, 24, 32, 0.92));">
         <div class="gal-char-keywords-label" style="font-size: 0.92rem; font-weight: 700; color: var(--SmartThemeBodyColor, #f5f7fa); margin-bottom: 8px;">
           <i class="fa-solid fa-tags"></i> 角色名关键字
         </div>
@@ -583,7 +598,7 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
           支持分隔符：<code>,</code>、<code>，</code>、<code>、</code>、<code>|</code>。用于立绘、TTS、Live2D 的角色名匹配。
         </small>
       </div>
-      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0 25px; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0; margin-top: 15px; padding: 15px; border-radius: 8px; color: #fff;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
           <i class="fa-solid fa-microphone-lines" style="font-size: 1.2rem;"></i>
           <span style="font-weight: 600;">TTS 配音音色绑定</span>
@@ -601,7 +616,26 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
           <i class="fa-solid fa-circle-info"></i> 绑定后 AI 会自动为该角色使用此音色配音
         </small>
       </div>
-      <div id="gal-char-live2d-section" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #fff; padding: 15px 20px; border-radius: 10px; margin: 0 25px 15px 25px;">
+      <div id="gal-char-toggles-section" style="background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%); color: #fff; padding: 15px 20px; border-radius: 8px; margin: 15px 0 0;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+          <i class="fa-solid fa-sliders" style="font-size: 1.2rem;"></i>
+          <span style="font-weight: 600;">角色开关</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="gal-char-tts-enabled-toggle" data-char-id="${escapeHtml(characterId)}" ${charTTSEnabled ? 'checked' : ''} style="margin-right: 6px; width: 16px; height: 16px;">
+            <span>启用 TTS 配音</span>
+          </label>
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="gal-char-sprite-visible-toggle" data-char-id="${escapeHtml(characterId)}" ${charSpriteVisible ? 'checked' : ''} style="margin-right: 6px; width: 16px; height: 16px;">
+            <span>显示立绘 / Live2D</span>
+          </label>
+        </div>
+        <small style="opacity: 0.9; margin-top: 8px; display: block; font-size: 0.8rem;">
+          <i class="fa-solid fa-circle-info"></i> 仅对该角色生效；默认全部启用
+        </small>
+      </div>
+      <div id="gal-char-live2d-section" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #fff; padding: 15px 20px; border-radius: 10px; margin: 15px 0 0;">
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
           <i class="fa-solid fa-cube" style="font-size: 1.2rem;"></i>
           <span style="font-weight: 600;">Live2D 模型</span>
@@ -648,8 +682,9 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
           <i class="fa-solid fa-circle-info"></i> 上传 .zip 格式 Live2D 模型包（支持 Cubism 2.1/3.x/4.x）
         </small>
       </div>
-      <div style="flex: 1; overflow-y: auto; padding: 20px 25px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        </div>
+      </details>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin: 18px 0 15px;">
           <span style="font-weight: 700; color: ${THEME.dark};">
             共 ${characterSpritesData.length} 个表情
           </span>
@@ -830,6 +865,26 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
     showToast(useLive2D ? `已为 ${characterId} 启用 Live2D` : `已为 ${characterId} 关闭 Live2D`);
   });
 
+  $('#gal-char-tts-enabled-toggle').on('change', function() {
+    const enabled = this.checked;
+    setCharacterTTSEnabled(characterId, enabled);
+    if (!enabled) {
+      try { TTSManager.stop(); } catch (e) {}
+    }
+    showToast(enabled ? `已为 ${characterId} 启用 TTS 配音` : `已为 ${characterId} 关闭 TTS 配音`);
+  });
+
+  $('#gal-char-sprite-visible-toggle').on('change', async function() {
+    const visible = this.checked;
+    setCharacterSpriteVisible(characterId, visible);
+    if (!visible) {
+      // refreshGalgameViews 只重渲当前段，在屏但非当前说话人的槽位需显式移除
+      try { await SpriteManager.removeCharacter(characterId, { animate: false }); } catch (e) {}
+    }
+    refreshLive2DDisplayForCurrentScene();
+    showToast(visible ? `已为 ${characterId} 显示立绘` : `已为 ${characterId} 隐藏立绘`);
+  });
+
     $('#gal-char-live2d-upload').on('click', function() {
     showLive2DModelSourceDialog(characterId, async () => {
       removeModal();
@@ -1000,8 +1055,8 @@ export async function showCharacterSpritesModal(characterId, onCloseCallback) {
 
   $modal.find('.gal-sprite-card').on('click', async function (e) {
     if ($(e.target).closest('.gal-sprite-delete').length) return;
-    const charId = $(this).data('char');
-    const expr = $(this).data('expr');
+    const charId = $(this).attr('data-char');
+    const expr = $(this).attr('data-expr');
     removeModal();
     if (_showSpriteUploadDialogRef) await _showSpriteUploadDialogRef(charId, expr, () => showCharacterSpritesModal(charId));
   });
@@ -1053,7 +1108,7 @@ export async function showPackManagerModal() {
           </div>
           <div class="gal-pack-list" style="display: flex; flex-direction: column; gap: 10px;">
             ${allPacks.map(pack => {
-              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0, cgs: 0, uiSkins: 0 };
+              const stats = packStats.get(pack.id) || { sprites: 0, backgrounds: 0, maps: 0, cgs: 0 };
               const isDefault = pack.id === DEFAULT_PACK_ID;
               const isCurrent = pack.id === currentPackId;
               return `
@@ -1070,8 +1125,7 @@ export async function showPackManagerModal() {
                         <i class="fa-solid fa-user"></i> ${stats.sprites} 个立绘&nbsp;|&nbsp;
                         <i class="fa-solid fa-image"></i> ${stats.backgrounds} 个背景&nbsp;|&nbsp;
                         <i class="fa-solid fa-map-location-dot"></i> ${stats.maps || 0} 张地图&nbsp;|&nbsp;
-                        <i class="fa-solid fa-photo-film"></i> ${stats.cgs || 0} 张CG&nbsp;|&nbsp;
-                        <i class="fa-solid fa-palette"></i> ${stats.uiSkins || 0} 组皮肤
+                        <i class="fa-solid fa-photo-film"></i> ${stats.cgs || 0} 张CG
                       </div>
                     </div>
                   </div>

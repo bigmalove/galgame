@@ -171,9 +171,9 @@ export const SpriteAnimationManager = {
     if (!this.gsap || !element) return;
     const el = element instanceof jQuery ? element[0] : element;
     if (isSpeaking) {
-      this.gsap.to(el, { filter: "brightness(1.05)", scale: 1.02, opacity: 1, duration: 0.3, ease: "power2.out" });
+      this.gsap.to(el, { filter: "brightness(1.05) saturate(1) blur(0px)", scale: 1.02, opacity: 1, duration: 0.35, ease: "power2.out" });
     } else {
-      this.gsap.to(el, { filter: "brightness(0.7)", scale: 0.98, opacity: 0.9, duration: 0.3, ease: "power2.out" });
+      this.gsap.to(el, { filter: "brightness(0.7) saturate(0.85) blur(2px)", scale: 0.98, opacity: 0.9, duration: 0.35, ease: "power2.out" });
     }
   },
 

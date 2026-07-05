@@ -28,6 +28,54 @@ function toDomNode(target) {
   return null;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// 引号配对：开引号 → 闭引号（直引号 " 开闭同形）
+const QUOTE_PAIRS = { '“': '”', '"': '"', '「': '」', '『': '』' };
+
+// 单行渲染：引号（含引号本身）内的对话用 .gal-quote 变色；未闭合的引号染色到行尾。
+// 引号着色仅绘本模式启用（标准模式对话本身就是独立 segment，无需行内区分）
+function renderLineHtml(line, colorQuotes) {
+  if (!colorQuotes) return escapeHtml(line);
+  let html = '';
+  let i = 0;
+  while (i < line.length) {
+    const close = QUOTE_PAIRS[line[i]];
+    if (close) {
+      let end = line.indexOf(close, i + 1);
+      if (end === -1) end = line.length - 1;
+      html += `<span class="gal-quote">${escapeHtml(line.slice(i, end + 1))}</span>`;
+      i = end + 1;
+    } else {
+      let next = i;
+      while (next < line.length && !QUOTE_PAIRS[line[next]]) next++;
+      html += escapeHtml(line.slice(i, next));
+      i = next;
+    }
+  }
+  return html;
+}
+
+// 文本按 \n 分段渲染为块级 span，段间距由 CSS 变量 --gal-paragraph-gap 控制
+function renderTextSlice(node, text) {
+  const raw = String(text ?? '');
+  const colorQuotes = getSettings()?.simpleStorybookMode === true;
+  const lines = raw.split('\n');
+  if (lines.length === 1) {
+    node.innerHTML = renderLineHtml(raw, colorQuotes);
+    return;
+  }
+  node.innerHTML = lines
+    .map(line => `<span class="gal-para">${renderLineHtml(line, colorQuotes)}</span>`)
+    .join('');
+}
+
 function getRuntimeSettings() {
   const settings = getSettings();
   const speed = clampNumber(settings?.typewriterSpeed, MIN_SPEED, MAX_SPEED, DEFAULT_SPEED);
@@ -48,7 +96,7 @@ function completeSession(session, { commitText }) {
     session.timer = null;
   }
   if (commitText && session.node) {
-    session.node.textContent = session.fullText;
+    renderTextSlice(session.node, session.fullText);
   }
   if (activeSession && activeSession.id === session.id) {
     activeSession = null;
@@ -138,7 +186,7 @@ function scheduleTyping(session) {
   }
 
   session.index += 1;
-  session.node.textContent = session.fullText.slice(0, session.index);
+  renderTextSlice(session.node, session.fullText.slice(0, session.index));
   playTypeSound();
 
   if (session.index >= session.fullText.length) {
@@ -177,7 +225,7 @@ export function renderTypewriterText(target, text, options = {}) {
   if (!node) return Promise.resolve(fullText);
 
   if (instant) {
-    node.textContent = fullText;
+    renderTextSlice(node, fullText);
     return Promise.resolve(fullText);
   }
 

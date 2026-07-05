@@ -1,0 +1,119 @@
+{
+  "greenscreen": "standing on pure flat chroma key green background (#00FF00), solid uniform green backdrop, no shadows on background, full body visible from head to mid-thigh, centered composition, character sheet style",
+  "diffInstruction": "Using the reference image: keep the EXACT same character, same art style, same outfit, same hair, same lighting, same framing and same pure green (#00FF00) background. Change the facial expression AND give a matching natural upper-body gesture (arms/hands/head may move; keep the body centered at the same scale) to:",
+  "sheetInstruction": "Fill the 10 cells with a character expression-and-gesture sheet: the SAME character repeated in every cell — identical art style, identical outfit, identical hairstyle, identical body proportions, identical scale, identical framing (head-to-waist bust-up, feet position unchanged); but each cell has a DIFFERENT facial expression WITH a matching upper-body gesture (arm, hand, head and shoulder pose may change per cell; torso stays centered). Each cell: character centered with clear margin on all sides, on pure flat chroma key green (#00FF00) cell background — no text, no labels, no watermark. Expressions and gestures in reading order — top row left to right: 1) neutral calm face, arms relaxed at sides; 2) gentle warm smile, hands clasped in front; 3) angry with furrowed brows, hands on hips or clenched fists; 4) sad teary downcast eyes, drooping shoulders, hands clutched low; 5) surprised wide eyes open mouth, both hands raised near chest. Bottom row left to right: 6) smug mocking smirk, arms crossed, chin raised; 7) shy blushing, averted eyes, one hand touching cheek; 8) thoughtful, looking up, one hand on chin with elbow supported; 9) laughing heartily eyes closed, head tilted back, one hand near mouth; 10) playful wink with tongue out, making a peace sign near face.",
+  "sheetOrder": [
+    "默认",
+    "微笑",
+    "生气",
+    "难过",
+    "惊讶",
+    "嘲讽",
+    "害羞",
+    "思考",
+    "大笑",
+    "搞怪"
+  ],
+  "expressions": {
+    "默认": "neutral calm expression, relaxed face, arms resting naturally at sides",
+    "微笑": "gentle warm smile, soft happy eyes, hands clasped lightly in front",
+    "生气": "angry expression, furrowed brows, puffed cheeks or gritted teeth, both hands on hips or fists clenched at sides",
+    "难过": "sad expression, downcast teary eyes, shoulders drooping, hands held low and clutched together",
+    "惊讶": "surprised expression, wide eyes, open mouth, both hands raised near chest in startle, slight lean back",
+    "嘲讽": "smug mocking smirk, half-lidded eyes, arms crossed confidently, chin slightly raised",
+    "害羞": "shy blushing expression, averted eyes, one hand touching own cheek or fidgeting with hair, shoulders turned slightly",
+    "思考": "thoughtful pondering expression, looking upward slightly, one hand on chin, other arm folded supporting elbow",
+    "大笑": "laughing heartily, eyes closed with joy, big open smile, head tilted back slightly, one hand near mouth or holding stomach",
+    "搞怪": "playful silly expression, winking, tongue slightly out, making a peace sign or finger heart near face"
+  },
+  "packs": [
+    {
+      "id": "jp",
+      "repo": "galgame-bg-jp",
+      "style": "high quality japanese anime visual novel character sprite (tachi-e), clean cel shading with soft gradients, detailed anime eyes, crisp lineart, vivid colors, professional galgame character art",
+      "characters": {
+        "黑长直少女": "beautiful japanese high school girl, long straight black hair with blunt bangs, large expressive amber eyes, fair skin, wearing navy blue sailor school uniform (seifuku) with white collar and red ribbon, knee-length pleated skirt, slim graceful figure",
+        "元气双马尾": "energetic japanese high school girl, bright orange hair in high twin tails with red ribbons, big lively round eyes, small fang visible when smiling, wearing sailor uniform with slightly loose red scarf and sporty vibe, athletic slim figure, bursting with genki energy",
+        "金发大小姐": "elegant wealthy japanese high school lady, long golden blonde drill curls (ringlets), sharp confident blue eyes, wearing luxurious private academy uniform with frilled blouse and ribbon accents, poised aristocratic bearing, ojou-sama aura",
+        "银发冷学姐": "cool aloof japanese high school senior girl, long silver-white hair with a loose side braid, calm violet-grey eyes, wearing long-sleeved winter uniform blazer with black tights, composed distant elegance, student council president aura",
+        "栗发温柔学妹": "sweet gentle japanese high school junior girl, chestnut brown bob hair with a small hairpin, warm brown puppy eyes, wearing oversized beige cardigan over sailor uniform, petite figure, timid soft smile, healing kouhai aura",
+        "黑短发运动少女": "sporty tomboyish japanese high school girl, short black pixie hair, lightly tanned skin, bright confident grin, wearing school track jacket half-zipped over gym shirt, athletic toned figure, sports tape on fingers, cheerful boyish charm",
+        "眼镜文学少女": "quiet bookish japanese high school girl, long dark blue hair in low twin braids, red-framed glasses over gentle downcast eyes, wearing neat sailor uniform, holding a paperback book against her chest, shy intellectual air",
+        "粉发艺术少女": "dreamy artistic japanese high school girl, wavy pastel pink medium hair under a dark beret, heterochromatic eyes (one gold one blue), wearing paint-splattered apron over school uniform, spacey wonder-filled expression, natural airhead artist vibe",
+        "阳光男同学": "cheerful japanese high school boy, messy dark brown short hair, friendly bright eyes, wearing black gakuran uniform jacket open over a white T-shirt, school bag slung over one shoulder, tall lean build, easygoing grin, reliable best-friend aura",
+        "黑发学生会长": "sharp elite japanese high school boy, neat black hair parted at side, thin frameless glasses over piercing calm eyes, wearing impeccably buttoned blazer uniform with student council armband, tall composed posture, cold intellectual charisma"
+      },
+      "npc": {
+        "路人": "featureless flat dark gray silhouette of a japanese high school student, gender-neutral, school uniform outline, completely solid single color #4a5568 silhouette with no facial features no details, clean vector-like shape",
+        "路人男": "featureless flat dark gray silhouette of a male japanese high school student, gakuran uniform outline, short hair outline, completely solid single color #4a5568 silhouette with no facial features, clean vector-like shape",
+        "路人女": "featureless flat dark gray silhouette of a female japanese high school student, sailor uniform and skirt outline, shoulder-length hair outline, completely solid single color #4a5568 silhouette with no facial features, clean vector-like shape"
+      }
+    },
+    {
+      "id": "xianxia",
+      "repo": "galgame-bg-xianxia",
+      "style": "elegant chinese ink wash painting (shuimo) style character illustration, flowing brushstroke linework, subtle ink gradients with selective soft color washes, ethereal immortal aura, traditional chinese aesthetics, masterful guofeng art",
+      "characters": {
+        "白发剑仙子": "beautiful chinese immortal cultivator woman, elegant and aloof, long flowing white-silver hair partially tied with a jade hairpin, delicate features with phoenix eyes, wearing layered flowing white and pale-cyan hanfu robes with wide sleeves and silk sash, a slender sword at her back, graceful bearing",
+        "红衣魔女": "alluring dangerous chinese demonic cultivator woman, long crimson-black hair loose and wild, sharp seductive eyes with red eyeliner, wearing flowing blood-red and black robes with gold trim, delicate chain ornaments, confident wicked charm",
+        "青衣医师": "gentle chinese immortal healer woman, soft moss-green hair in a loose braid over shoulder, kind warm eyes, wearing celadon-green layered hanfu with herb pouch at waist and bamboo medicine basket, serene compassionate presence",
+        "灵狐少女": "playful fox-spirit girl in human form, long fluffy pale-gold hair with fox ears, bright mischievous golden eyes, wearing light apricot and white short hanfu with fluffy fox tail visible, nimble petite figure, impish charm",
+        "紫衣琴仙": "serene chinese immortal musician woman, long deep-purple hair with silver streaks flowing freely, gentle distant eyes, wearing elegant lavender gradient hanfu with long trailing sleeves, carrying a guqin wrapped in silk on her back, tranquil artistic aura",
+        "剑道大师兄": "upright heroic chinese male cultivator, eldest disciple of a sword sect, black hair in high ponytail with white ribbon, resolute clear eyes, wearing white and slate-blue sword robes with leather bracers, longsword at waist, tall righteous bearing",
+        "黑袍魔尊": "intimidating powerful chinese demonic lord, long black hair flowing loose, cold crimson eyes, pale skin, wearing majestic black robes with dark silver armor plates and flowing cape, commanding sinister presence",
+        "折扇公子": "charming roguish chinese wandering cultivator, brown hair half-tied casually, warm smiling fox-like eyes, wearing teal and ivory scholar robes slightly loose at collar, holding a folded paper fan, carefree witty air",
+        "白眉老祖": "wise ancient chinese sect elder, long white hair and long white beard and long white eyebrows, kind but penetrating eyes, wearing ceremonial grey-white daoist robes with wide sleeves, holding a gnarled wooden staff, venerable dignified aura",
+        "少年剑童": "innocent eager chinese cultivator boy in early teens, short black hair with small topknot, big bright determined eyes, wearing simple grey-blue disciple robes, carrying a wooden practice sword, youthful energetic spirit"
+      },
+      "npc": {
+        "路人": "featureless flat ink-gray silhouette of a chinese daoist cultivator, gender-neutral, long hair tied in a high topknot bun with hairpin clearly visible in silhouette outline, flowing wide-sleeved daoist robe outline, painted in single dark ink-teal color #3d4f52, subtle ink wash edge, NOT bald, no facial features no details, clean silhouette",
+        "路人男": "featureless flat ink-gray silhouette of a male chinese cultivator, daoist robe and topknot hair outline, single dark ink-teal color #3d4f52, subtle ink wash edge, no facial features, clean silhouette",
+        "路人女": "featureless flat ink-gray silhouette of a female chinese cultivator, flowing hanfu skirt and long hair outline, single dark ink-teal color #3d4f52, subtle ink wash edge, no facial features, clean silhouette"
+      }
+    },
+    {
+      "id": "guzhuang",
+      "repo": "galgame-bg-guzhuang",
+      "style": "high-end 3D rendered character in the style of DAZ Studio / modern chinese historical drama game cinematic render, realistic PBR skin shading, detailed fabric simulation, subsurface scattering, studio quality lighting, photoreal 3DCG",
+      "characters": {
+        "玉冠公子": "handsome young chinese nobleman from a prestigious ancient family, refined elegant features, sharp jawline, long black hair tied high with a white jade crown (guan), deep intelligent eyes, wearing luxurious dark teal brocade hanfu robe with silver cloud embroidery and white inner robe, jade pendant at waist, holding a folded fan",
+        "将军虎女": "valiant chinese female general, strong beautiful features with a small scar on brow, black hair in high warrior ponytail with red cord, fierce determined eyes, wearing silver lamellar armor over crimson battle robe with fur-trimmed cloak, commanding martial presence",
+        "温婉皇后": "graceful dignified chinese empress in her late 20s, elegant oval face with gentle composed eyes, elaborate updo hairstyle with golden phoenix hairpins and pearl strands, wearing magnificent vermilion and gold embroidered court gown, regal serene bearing",
+        "刁蛮郡主": "spoiled lively chinese princess, cute round face with bright willful eyes, double-loop hairstyle with red silk flowers and tassels, wearing bright peach-pink layered ruqun dress with butterfly embroidery, pouty confident charm",
+        "冷面锦衣卫": "cold deadly chinese imperial guard, sharp handsome angular face, black hair tied severely back, narrow piercing eyes, wearing black and gold embroidered flying-fish uniform (feiyufu) with an embroidered-spring blade at waist, silent lethal presence",
+        "白衣书生": "gentle scholarly chinese young man, soft refined features, black hair in simple scholar topknot with plain wooden pin, mild warm eyes, wearing plain white and pale-blue cotton scholar robes, holding a bamboo scroll, humble bookish charm",
+        "老太傅": "venerable chinese imperial tutor in his 60s, kind wrinkled face with long grey beard, wearing official black gauze hat (wushamao) and navy court official robe with crane rank badge, holding a wooden ruler, strict but warm scholarly dignity",
+        "江湖侠女": "free-spirited chinese swordswoman of the jianghu, sun-kissed healthy skin, black hair in practical braid with a bamboo hat hanging at her back, bright bold eyes, wearing practical dark-green short robe with leg wraps and twin sabers, adventurous daring spirit",
+        "富商掌柜": "shrewd jovial chinese merchant in his 40s, round friendly face with thin mustache and small sharp eyes, wearing expensive maroon silk robe with golden waist sash and jade thumb ring, holding an abacus, warm calculating charm",
+        "小宫女": "timid sweet chinese palace maid in her late teens, delicate small face with cautious gentle eyes, hair in double buns with simple green ribbons, wearing pale celadon palace maid uniform with apron, hands folded low, careful demure manner"
+      },
+      "npc": {
+        "路人": "featureless flat dark gray 3D silhouette of an ancient chinese person, gender-neutral, plain hanfu robe outline, completely solid single color #4b4238 matte silhouette with no facial features no details, clean shape",
+        "路人男": "featureless flat dark gray 3D silhouette of an ancient chinese man, plain robe and topknot outline, completely solid single color #4b4238 matte silhouette, no facial features, clean shape",
+        "路人女": "featureless flat dark gray 3D silhouette of an ancient chinese woman, ruqun dress and bun hairstyle outline, completely solid single color #4b4238 matte silhouette, no facial features, clean shape"
+      }
+    },
+    {
+      "id": "city",
+      "repo": "galgame-bg-city",
+      "style": "premium 3DCG otome game male lead in the exact style of Love and Deepspace (恋与深空), high-end realtime 3D character render, Unreal Engine 5 quality, hyper-detailed stylized-realistic 3D face with east-asian idol features, physically based skin shading with subtle subsurface scattering and pore-level detail, individually rendered hair strands with soft specular, detailed PBR fabric materials, cinematic studio lighting with soft rim light, shallow depth of field feel, official character card render quality, NOT 2D illustration, NOT painting",
+      "characters": {
+        "西装总裁": "devastatingly handsome young chinese man in his late 20s, mature and composed like a Love and Deepspace love interest, tall lean elegant build, precisely styled slightly tousled black hair, deep piercing dark phoenix eyes with double eyelids, defined jawline and high nose bridge, flawless realistic skin, wearing an impeccably tailored dark navy three-piece suit with faint pinstripe, crisp white shirt slightly open at collar, loosened dark silk tie, luxury silver wristwatch, CEO romance aesthetic",
+        "温柔医生": "gentle handsome chinese male doctor in his early 30s, soft warm features with kind reassuring eyes behind thin silver glasses, neat ash-brown hair, wearing white doctor coat over light-blue shirt and grey slacks, stethoscope around neck, calm healing warmth",
+        "冷峻刑警": "sharp intense chinese male detective in his late 20s, angular handsome face with alert piercing eyes and faint stubble, short black undercut hair, wearing black leather jacket over dark shirt with shoulder holster strap, badge on belt, dangerous protective aura",
+        "阳光大学生": "energetic sunny chinese male college student in his early 20s, boyish fresh face with sparkling eyes and bright grin, fluffy medium brown hair, wearing varsity jacket over white hoodie and jeans, backpack on one shoulder, holding a basketball under arm, youthful puppy charm",
+        "电竞少年": "cool sharp-tongued chinese male esports pro player in his early 20s, delicate androgynous handsome face with sly cat-like eyes, silver-dyed messy hair with dark roots, wearing oversized team jersey jacket with gaming headphones around neck, fingerless glove, cocky genius vibe",
+        "钢琴艺术家": "elegant melancholic chinese male pianist in his late 20s, ethereal beautiful features with long lashes and distant dreamy eyes, slightly long wavy black hair touching collar, wearing black turtleneck under charcoal long coat, slender pianist fingers, artistic aristocratic aura",
+        "痞帅酒吧老板": "roguishly handsome chinese man in his early 30s, laid-back smirk with sharp knowing eyes, tousled dark hair with a few strands over forehead, wearing black shirt with sleeves rolled up, loosened collar with thin silver chain, holding a mixing glass, dangerous laid-back charm",
+        "干练女律师": "sharp elegant chinese female lawyer in her late 20s, refined beautiful face with confident piercing eyes and bold red lips, sleek black hair in low chignon, wearing fitted white blazer suit with pencil skirt, carrying a slim briefcase, formidable professional glamour",
+        "甜美咖啡师": "sweet lovely chinese female barista in her early 20s, soft round face with warm sparkling eyes and dimpled smile, chestnut hair in loose low ponytail with bangs, wearing brown apron over cream sweater, holding a latte-art cup, cozy sunshine warmth",
+        "酷飒女骑手": "cool stylish chinese female motorcyclist in her mid 20s, striking beautiful face with sharp confident eyes, black short bob with red highlights, wearing fitted black-red racing leather jacket, holding a helmet under arm, fingerless gloves, fearless streetwise edge"
+      },
+      "npc": {
+        "路人": "featureless flat dark gray silhouette of a modern city person, gender-neutral, casual jacket outline, completely solid single color #475569 silhouette with no facial features no details, clean vector-like shape",
+        "路人男": "featureless flat dark gray silhouette of a modern man, suit jacket and short hair outline, completely solid single color #475569 silhouette, no facial features, clean vector-like shape",
+        "路人女": "featureless flat dark gray silhouette of a modern woman, coat and long hair outline, completely solid single color #475569 silhouette, no facial features, clean vector-like shape"
+      }
+    }
+  ]
+}

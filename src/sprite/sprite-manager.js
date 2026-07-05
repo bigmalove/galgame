@@ -8,6 +8,7 @@ import { Live2DManager } from '../live2d/manager.js';
 import { updateCharacterFocus } from '../live2d/preload.js';
 import { getCharacterUseLive2D } from '../live2d/render-mode.js';
 import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
+import { getCharacterSpriteVisible } from './sprite-visibility.js';
 
 // 延迟引用: getSprite, getBackground, saveBackground, sceneBackgrounds,
 //           messageSegmentState, setBackgroundWithTransition, clearBackgroundLayers,
@@ -447,7 +448,7 @@ export const SpriteManager = {
     }
   },
 
-  async updateSprite($overlay, characterId, expression, renderToken = null) {
+  async updateSprite($overlay, characterId, expression, renderToken = null, voiceHint = null) {
     this.ensureSlots($overlay);
     this.syncSlotOwners();
     if (!characterId) {
@@ -468,10 +469,34 @@ export const SpriteManager = {
     if (existingSameCharacter) {
       characterId = existingSameCharacter;
     }
+    // 每角色立绘开关：被禁用的角色不渲染任何视觉呈现（普通立绘/占位符/Live2D）
+    if (!getCharacterSpriteVisible(characterId)) {
+      if (this.activeCharacters.has(characterId)) {
+        await this.removeCharacter(characterId, { animate: false });
+      }
+      this.setSpeaker(null);
+      return;
+    }
     await this.rehydrateDisconnectedCharacters($overlay, characterId, renderToken);
-    const spriteUrl = _getSpriteRef ? await _getSpriteRef(characterId, expression) : null;
+    let spriteUrl = _getSpriteRef ? await _getSpriteRef(characterId, expression) : null;
     const useLive2DForCurrent = getCharacterUseLive2D(characterId);
     const hasLive2DForCurrent = useLive2DForCurrent ? await hasLive2DModel(characterId) : false;
+    // NPC 剪影回退：角色查无立绘且非 Live2D 时，使用图包内的「路人」剪影（内置图包提供）。
+    // 按对白声线匹配性别（男声→路人男、女声→路人女），无声线信息用中性「路人」；候选缺失时依次降级。
+    if (!spriteUrl && !hasLive2DForCurrent && _getSpriteRef && !/^路人/.test(characterId) && !this.isProtagonist(characterId)) {
+      let fallbackNames;
+      if (voiceHint === '男声') fallbackNames = ['路人男', '路人', '路人女'];
+      else if (voiceHint === '女声') fallbackNames = ['路人女', '路人', '路人男'];
+      else fallbackNames = ['路人', '路人男', '路人女'];
+      for (const npcName of fallbackNames) {
+        const npcUrl = await _getSpriteRef(npcName, '默认');
+        if (npcUrl) {
+          spriteUrl = npcUrl;
+          console.log(`[${SCRIPT_NAME}] NPC 剪影回退: "${characterId}" -> ${npcName}${voiceHint ? `（${voiceHint}）` : ''}`);
+          break;
+        }
+      }
+    }
     const canRenderVisualForCurrent = !!(hasLive2DForCurrent || spriteUrl);
     const shouldShowMissingPlaceholder = !!getSettings().showMissingSpritePlaceholder;
     if (!canRenderVisualForCurrent && !shouldShowMissingPlaceholder) {
@@ -534,6 +559,23 @@ export const SpriteManager = {
     this.applyEmotionEffect(characterId, expression);
   },
 
+  // 预加载图片（带超时兜底，失败/超时不阻塞渲染）
+  _preloadImage(url, timeoutMs = 3000) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const timer = setTimeout(() => resolve(), timeoutMs);
+      img.onload = img.onerror = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      img.src = url;
+      if (img.complete) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+  },
+
   async updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, isEntering, renderToken = null) {
     const $charLayer = this.ensureSlots($overlay);
     let $slot = $charLayer.find(`.gal-char-slot.slot-${slot}`);
@@ -592,6 +634,48 @@ export const SpriteManager = {
         info.element = $existingContainer;
       }
       return;
+    }
+
+    // 同角色换表情/立绘：预加载新图后交叉溶解，避免硬切与闪白
+    if (!hasLive2D && !isEntering && spriteUrl && $existingContainer.length
+      && $existingContainer.attr('data-live2d') !== 'true') {
+      const $oldImgs = $existingContainer.find('.gal-char-img');
+      if ($oldImgs.length) {
+        await this._preloadImage(spriteUrl);
+        if (this.slotOwners.get(slot) === characterId && $existingContainer[0]?.isConnected) {
+          $existingContainer.attr('data-expression', expression);
+          if (emotion) $existingContainer.attr('data-emotion', emotion);
+          else $existingContainer.removeAttr('data-emotion');
+
+          const currentSrc = $oldImgs.last().attr('src');
+          if (currentSrc !== spriteUrl) {
+            const $newImg = $(`<img class="gal-char-img gal-img-in" src="${spriteUrl}" alt="${characterId}">`);
+            $existingContainer.append($newImg);
+            if ($newImg[0]) void $newImg[0].offsetHeight;
+            $newImg.addClass('is-in');
+            $oldImgs.addClass('gal-img-out');
+            setTimeout(() => {
+              if (!$existingContainer[0]?.isConnected) return;
+              $oldImgs.remove();
+              $newImg.removeClass('gal-img-in is-in');
+            }, 320);
+          }
+
+          const infoRef = this.activeCharacters.get(characterId);
+          if (infoRef) infoRef.element = $existingContainer;
+          if (useGSAP) {
+            SpriteAnimationManager.playExpressionTransition($existingContainer, () => {
+              SpriteAnimationManager.startBreathing($existingContainer, characterId);
+            });
+          }
+          return;
+        }
+      }
+    }
+
+    // 全量替换前预加载立绘，避免插入 DOM 后闪白
+    if (!hasLive2D && spriteUrl) {
+      await this._preloadImage(spriteUrl);
     }
 
     let spriteHtml;

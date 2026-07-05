@@ -78,6 +78,8 @@ export const GalgameStore = {
     SETTINGS: `${SCRIPT_ID}_settings`,
     CHAR_ENABLED: `${SCRIPT_ID}_char_enabled`,
     CHAR_TTS_VOICE: `${SCRIPT_ID}_char_tts_voice`,
+    CHAR_TTS_ENABLED: `${SCRIPT_ID}_char_tts_enabled`,
+    CHAR_SPRITE_VISIBLE: `${SCRIPT_ID}_char_sprite_visible`,
     CHAR_NAME_KEYWORDS: `${SCRIPT_ID}_char_name_keywords`,
     TTS_ENABLED: `${SCRIPT_ID}_tts_enabled`,
     CUSTOM_EXPRESSIONS: `${SCRIPT_ID}_custom_expressions`,
@@ -94,6 +96,7 @@ export const GalgameStore = {
     RENDER_SCOPE: `${SCRIPT_ID}_render_scope`,
     MAP_SETTINGS: `${SCRIPT_ID}_map_settings`,
     TIMELINE_PREFS: `${SCRIPT_ID}_timeline_prefs`,
+    SETUP_WIZARD_OPTOUT: `${SCRIPT_ID}_setup_wizard_optout`,
   },
 
   // ===== 方法 =====

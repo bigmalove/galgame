@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>皮肤翻新提案 · 朱笺 Vermilion Letter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Serif+SC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   朱笺 Vermilion Letter — galgame 主界面皮肤翻新提案
+   设计语言：宣纸 × 墨 × 朱砂印章 × 发丝细线 × 衬线排印
+   与现有 Cyber Pop（青品红/斜切/硬投影）、Twilight（暗色毛玻璃/暖金）
+   完全区隔的第三条路线：文学的、安静的、把画面让给故事。
+   class 命名沿用真实项目的 .gal-* 钩子，便于后续直接移植。
+   ============================================================ */
+:root{
+  /* —— 设计 token —— */
+  --shu-paper:        #f6f1e6;                 /* 宣纸底 */
+  --shu-paper-warm:   #efe7d6;                 /* 纸的暗部 */
+  --shu-ink:          #26221c;                 /* 墨色正文 */
+  --shu-ink-soft:     #5d564a;                 /* 淡墨/辅助文字 */
+  --shu-vermilion:    #c8452c;                 /* 朱砂红（唯一强调色） */
+  --shu-vermilion-dk: #a5341f;
+  --shu-gold:         #b08d4f;                 /* 泥金，仅作细节点缀 */
+  --shu-hairline:     rgba(38,34,28,.28);      /* 发丝线 */
+  --shu-shadow:       0 24px 60px -18px rgba(24,18,10,.45);
+  --font-serif-sc:    'Noto Serif SC', 'Songti SC', serif;
+  --font-latin:       'Cormorant Garamond', 'Noto Serif SC', serif;
+  --ui-scale: 1;      /* 与真实项目的无级缩放变量对齐 */
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  font-family: var(--font-serif-sc);
+  background:#141210;
+  color: var(--shu-ink);
+  display:flex; flex-direction:column; align-items:center;
+  padding: clamp(12px, 3vw, 40px);
+  gap: 28px;
+}
+
+/* ---------- 页头说明 ---------- */
+.proposal-head{ text-align:center; color:#d8cfbf; max-width:900px; }
+.proposal-head .latin{
+  font-family: var(--font-latin); font-style:italic; font-weight:400;
+  letter-spacing:.35em; font-size:13px; color:#8f8674; text-transform:uppercase;
+}
+.proposal-head h1{
+  font-weight:900; font-size: clamp(22px, 3.4vw, 34px); letter-spacing:.18em;
+  margin:.35em 0 .4em; color:#f0e9da;
+}
+.proposal-head h1 em{ font-style:normal; color:var(--shu-vermilion); }
+.proposal-head p{ font-size:13px; line-height:1.9; color:#a49a87; }
+
+/* ---------- 预览控制条 ---------- */
+.preview-controls{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+.preview-controls button{
+  font-family: var(--font-serif-sc); font-size:12px; letter-spacing:.2em;
+  padding:8px 18px; cursor:pointer; color:#cfc5b2;
+  background:transparent; border:1px solid rgba(207,197,178,.35); border-radius:999px;
+  transition: all .25s ease;
+}
+.preview-controls button:hover{ border-color:var(--shu-vermilion); color:var(--shu-vermilion); }
+.preview-controls button.on{ background:var(--shu-vermilion); border-color:var(--shu-vermilion); color:#fff; }
+
+/* ============================================================
+   舞台（对应 .gal-game-container）
+   ============================================================ */
+.gal-game-container{
+  position:relative; width:min(1180px, 96vw); aspect-ratio: 16/9;
+  overflow:hidden; border-radius:6px;
+  box-shadow: var(--shu-shadow), 0 0 0 1px rgba(240,233,218,.08);
+  background:#0d0c0a;
+}
+
+/* —— 背景占位：黄昏教室氛围（真实项目里是背景图层 .gal-layer-bg）—— */
+.gal-layer-bg{ position:absolute; inset:0; }
+.gal-layer-bg .sky{
+  position:absolute; inset:0;
+  background:
+    radial-gradient(120% 90% at 70% 18%, #f4b56a 0%, #d97e4a 30%, #8a4a3f 55%, #3c2f38 80%, #211d26 100%);
+}
+.gal-layer-bg .sun{
+  position:absolute; width:16%; aspect-ratio:1; border-radius:50%;
+  left:62%; top:14%;
+  background: radial-gradient(circle, #fff3d6 0%, #ffd591 45%, rgba(255,180,110,0) 72%);
+  filter: blur(2px);
+}
+.gal-layer-bg .clouds{
+  position:absolute; inset:0;
+  background:
+    radial-gradient(40% 7% at 30% 30%, rgba(255,214,160,.5), transparent 70%),
+    radial-gradient(50% 6% at 75% 42%, rgba(255,190,140,.4), transparent 70%),
+    radial-gradient(36% 5% at 18% 48%, rgba(90,60,70,.55), transparent 70%);
+}
+.gal-layer-bg .cityline{
+  position:absolute; left:0; right:0; bottom:0; height:34%;
+  background:
+    linear-gradient(to top, #17141a 0%, #241d24 55%, rgba(52,38,48,.0) 100%);
+}
+.gal-layer-bg .cityline::before{
+  content:""; position:absolute; left:0; right:0; bottom:26%;
+  height:44%;
+  background:
+    linear-gradient(to top, rgba(28,22,30,.95), rgba(28,22,30,0)),
+    repeating-linear-gradient(90deg,
+      rgba(24,19,26,.95) 0 6%, rgba(35,27,35,.9) 6% 9%,
+      rgba(24,19,26,.95) 9% 17%, rgba(41,31,38,.9) 17% 19%,
+      rgba(24,19,26,.95) 19% 30%, rgba(35,27,35,.9) 30% 34%);
+  -webkit-mask: linear-gradient(to top, #000 60%, transparent);
+          mask: linear-gradient(to top, #000 60%, transparent);
+}
+/* 窗格剪影，暗示"在室内看夕阳" */
+.gal-layer-bg .window{
+  position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(90deg, rgba(20,16,14,.88) 0 3.2%, transparent 3.2% 31.8%,
+      rgba(20,16,14,.88) 31.8% 34.4%, transparent 34.4% 65.4%,
+      rgba(20,16,14,.88) 65.4% 68%, transparent 68% 96.8%, rgba(20,16,14,.88) 96.8% 100%),
+    linear-gradient(0deg, transparent 0 78%, rgba(20,16,14,.88) 78% 81%, transparent 81% 100%);
+  opacity:.55;
+}
+/* 尘埃微粒 */
+.gal-layer-bg .dust{
+  position:absolute; inset:0; pointer-events:none; opacity:.7;
+  background-image:
+    radial-gradient(1.5px 1.5px at 22% 34%, rgba(255,230,190,.8), transparent 100%),
+    radial-gradient(1px 1px at 48% 22%, rgba(255,230,190,.7), transparent 100%),
+    radial-gradient(1.5px 1.5px at 71% 47%, rgba(255,230,190,.6), transparent 100%),
+    radial-gradient(1px 1px at 84% 30%, rgba(255,230,190,.7), transparent 100%),
+    radial-gradient(1px 1px at 36% 55%, rgba(255,230,190,.5), transparent 100%);
+  animation: dust-drift 14s linear infinite alternate;
+}
+@keyframes dust-drift{
+  from{ transform: translate3d(0, 0, 0); }
+  to  { transform: translate3d(-14px, 10px, 0); }
+}
+
+/* —— 立绘占位（.gal-layer-character / .gal-char-slot）—— */
+.gal-layer-character{ position:absolute; inset:0; pointer-events:none; }
+.gal-char-slot.slot-center{
+  position:absolute; left:50%; bottom:-2%; width:30%; aspect-ratio: 3/7;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 18px 30px rgba(0,0,0,.45));
+}
+.char-silhouette{
+  width:100%; height:100%;
+  background:
+    radial-gradient(48% 13% at 50% 7%, #2a2027 0 98%, transparent 100%),                /* 头 */
+    radial-gradient(64% 9% at 50% 13.5%, #241b22 0 98%, transparent 100%),              /* 发 */
+    linear-gradient(180deg, transparent 15%, #2e232b 16% 100%);                         /* 身 */
+  -webkit-mask: radial-gradient(140% 100% at 50% 0%, #000 62%, transparent 63%) no-repeat 50% 15%/100% 24%,
+                linear-gradient(#000, #000) no-repeat 50% 100%/74% 78%;
+          mask: radial-gradient(140% 100% at 50% 0%, #000 62%, transparent 63%) no-repeat 50% 15%/100% 24%,
+                linear-gradient(#000, #000) no-repeat 50% 100%/74% 78%;
+  opacity:.92;
+}
+.char-silhouette::after{ /* 逆光轮廓 */
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(105deg, transparent 46%, rgba(255,190,130,.35) 50%, transparent 56%);
+}
+.slot-note{
+  position:absolute; left:50%; top:38%; transform:translateX(-50%);
+  font-size:11px; letter-spacing:.3em; color:rgba(255,236,205,.55); white-space:nowrap;
+}
+
+/* ============================================================
+   顶部：状态信息（对应 .gal-status-bar-container / .gal-fullscreen-btn）
+   —— 从"深色胶囊块"改为电影字幕式细线文字，几乎不占画面
+   ============================================================ */
+.gal-status-bar-container{
+  position:absolute; top:0; left:0; right:0; z-index:5;
+  display:flex; align-items:flex-start; justify-content:space-between;
+  padding: calc(20px*var(--ui-scale)) calc(26px*var(--ui-scale)) 0;
+  pointer-events:none;
+}
+.gal-scene-slate{ color:#f4ecdc; text-shadow:0 1px 8px rgba(0,0,0,.5); }
+.gal-scene-slate .gal-location-text{
+  font-size: calc(15px*var(--ui-scale)); font-weight:600; letter-spacing:.34em;
+}
+.gal-scene-slate .gal-time-text{
+  display:block; margin-top:6px;
+  font-family: var(--font-latin); font-style:italic; font-weight:400;
+  font-size: calc(12px*var(--ui-scale)); letter-spacing:.28em; color:rgba(244,236,220,.75);
+}
+.gal-scene-slate::after{
+  content:""; display:block; width:52px; height:1px; margin-top:10px;
+  background: linear-gradient(90deg, var(--shu-vermilion), transparent);
+}
+.gal-top-actions{ display:flex; gap:10px; pointer-events:auto; }
+.gal-fullscreen-btn{
+  width: calc(34px*var(--ui-scale)); height: calc(34px*var(--ui-scale));
+  display:grid; place-items:center; cursor:pointer;
+  color:rgba(244,236,220,.8); font-size:14px;
+  border:1px solid rgba(244,236,220,.35); border-radius:50%;
+  background: rgba(20,16,14,.25); backdrop-filter: blur(3px);
+  transition:all .25s ease;
+}
+.gal-fullscreen-btn:hover{ color:#fff; border-color:var(--shu-vermilion); background:var(--shu-vermilion); }
+
+/* ============================================================
+   对话框层（.gal-dialog-layer / .gal-text-panel）
+   —— 宣纸质感 + 双细线框 + 朱砂印章名牌
+   ============================================================ */
+.gal-dialog-layer{
+  position:absolute; left:50%; bottom: calc(22px*var(--ui-scale));
+  transform: translateX(-50%);
+  width: min(92%, calc(880px*var(--ui-scale)));
+  z-index:10;
+}
+
+/* —— 姓名牌：竖排朱砂印章 —— */
+.gal-name-badge{
+  position:absolute; left: calc(-14px*var(--ui-scale)); top: calc(-30px*var(--ui-scale));
+  z-index:3;
+  background: linear-gradient(160deg, var(--shu-vermilion) 0%, var(--shu-vermilion-dk) 100%);
+  color:#fdf6ea;
+  writing-mode: vertical-rl; text-orientation: upright;
+  padding: calc(14px*var(--ui-scale)) calc(9px*var(--ui-scale));
+  font-size: calc(17px*var(--ui-scale)); font-weight:700; letter-spacing:.32em;
+  line-height:1;
+  border-radius:3px;
+  box-shadow: 0 8px 20px -6px rgba(165,52,31,.55), inset 0 0 0 1px rgba(253,246,234,.35);
+}
+.gal-name-badge::after{ /* 印泥毛边 */
+  content:""; position:absolute; inset:-3px; border-radius:5px;
+  border:1px solid rgba(200,69,44,.4);
+}
+.gal-name-badge.gal-narrator-label{
+  background:#4a443a; box-shadow: 0 8px 20px -6px rgba(0,0,0,.4), inset 0 0 0 1px rgba(253,246,234,.25);
+}
+
+/* —— 正文纸面 —— */
+.gal-text-panel{
+  position:relative;
+  background:
+    /* 纸的纤维噪点 */
+    radial-gradient(1px 1px at 12% 30%, rgba(120,100,70,.12), transparent 100%),
+    radial-gradient(1px 1px at 67% 62%, rgba(120,100,70,.10), transparent 100%),
+    radial-gradient(1.5px 1.5px at 40% 80%, rgba(120,100,70,.08), transparent 100%),
+    linear-gradient(175deg, var(--shu-paper) 0%, var(--shu-paper-warm) 100%);
+  border-radius:4px;
+  padding: calc(30px*var(--ui-scale)) calc(46px*var(--ui-scale)) calc(18px*var(--ui-scale)) calc(52px*var(--ui-scale));
+  box-shadow:
+    0 30px 50px -20px rgba(15,10,5,.55),
+    0 0 0 1px var(--shu-hairline);
+}
+.gal-text-panel::before{ /* 内圈第二道细线，装帧感 */
+  content:""; position:absolute; inset:6px; pointer-events:none;
+  border:1px solid rgba(38,34,28,.14); border-radius:2px;
+}
+.gal-text-panel::after{ /* 右下角泥金落款线 */
+  content:""; position:absolute; right:14px; bottom:14px;
+  width:34px; height:1px; background: var(--shu-gold); opacity:.6;
+}
+
+.gal-dialog-text{
+  font-size: calc(19px*var(--ui-scale));
+  line-height:2.05; letter-spacing:.045em;
+  color: var(--shu-ink); font-weight:500;
+  min-height: calc(19px * 2.05 * 2 * var(--ui-scale));
+  text-align: justify;
+}
+.gal-dialog-text .caret{
+  display:inline-block; width:.5em; height:1em; vertical-align:-.12em; margin-left:2px;
+  background: var(--shu-vermilion);
+  animation: caret-blink 1s steps(1) infinite;
+}
+@keyframes caret-blink{ 50%{ opacity:0; } }
+
+/* —— 对话框右上悬浮操作（.gal-interaction-bar）—— */
+.gal-interaction-bar{
+  position:absolute; right: calc(10px*var(--ui-scale)); top: calc(-16px*var(--ui-scale));
+  display:flex; gap:8px; z-index:3;
+}
+.gal-action-btn{
+  height: calc(32px*var(--ui-scale)); padding:0 calc(15px*var(--ui-scale));
+  display:flex; align-items:center; gap:7px; cursor:pointer;
+  font-family: var(--font-serif-sc); font-size: calc(12px*var(--ui-scale));
+  letter-spacing:.22em; font-weight:600;
+  color: var(--shu-ink-soft);
+  background: var(--shu-paper); border:1px solid var(--shu-hairline); border-radius:999px;
+  box-shadow: 0 6px 14px -6px rgba(15,10,5,.4);
+  transition: all .22s ease;
+}
+.gal-action-btn:hover{ color:#fff; background:var(--shu-ink); border-color:var(--shu-ink); }
+.gal-action-btn.btn-free:hover{ background:var(--shu-vermilion); border-color:var(--shu-vermilion); }
+.gal-action-btn .ico{ font-family:var(--font-latin); font-style:italic; }
+
+/* ============================================================
+   底部工具栏（.gal-bottom-toolbar / .gal-footer-btn / next）
+   —— 从九个白色斜切块，收敛为一行安静的衬线文字按钮 + 一个主按钮
+   ============================================================ */
+.gal-bottom-toolbar{
+  display:flex; align-items:center; gap: calc(4px*var(--ui-scale));
+  margin-top: calc(16px*var(--ui-scale));
+  padding-top: calc(12px*var(--ui-scale));
+  border-top:1px solid rgba(38,34,28,.18);
+}
+.gal-footer-btn{
+  font-family: var(--font-serif-sc);
+  font-size: calc(12.5px*var(--ui-scale)); font-weight:600; letter-spacing:.18em;
+  color: var(--shu-ink-soft);
+  background:none; border:none; cursor:pointer;
+  padding: calc(6px*var(--ui-scale)) calc(10px*var(--ui-scale));
+  position:relative; transition: color .2s ease;
+}
+.gal-footer-btn::after{
+  content:""; position:absolute; left:10px; right:10px; bottom:2px; height:1px;
+  background: var(--shu-vermilion); transform: scaleX(0); transform-origin:left;
+  transition: transform .25s ease;
+}
+.gal-footer-btn:hover{ color: var(--shu-vermilion); }
+.gal-footer-btn:hover::after{ transform: scaleX(1); }
+.gal-toolbar-divider{ width:1px; height:14px; background:rgba(38,34,28,.2); margin:0 6px; }
+.gal-toolbar-spacer{ flex:1; }
+
+/* 待选项按钮：唯一允许"跳"的元素 */
+.gal-pending-choices-btn{
+  display:flex; align-items:center; gap:8px; cursor:pointer;
+  font-size: calc(12.5px*var(--ui-scale)); font-weight:700; letter-spacing:.2em;
+  color:#fff; background: var(--shu-vermilion);
+  border:none; border-radius:999px;
+  padding: calc(7px*var(--ui-scale)) calc(16px*var(--ui-scale));
+  box-shadow: 0 0 0 0 rgba(200,69,44,.5);
+  animation: seal-pulse 2.2s ease-out infinite;
+}
+@keyframes seal-pulse{
+  0%{ box-shadow: 0 0 0 0 rgba(200,69,44,.45); }
+  70%{ box-shadow: 0 0 0 12px rgba(200,69,44,0); }
+  100%{ box-shadow: 0 0 0 0 rgba(200,69,44,0); }
+}
+
+/* NEXT 主按钮：朱砂描边 + 悬停灌墨 */
+.gal-footer-btn-next{
+  font-family: var(--font-latin); font-style:italic; font-weight:600;
+  font-size: calc(15px*var(--ui-scale)); letter-spacing:.3em;
+  color: var(--shu-vermilion);
+  background:none; cursor:pointer;
+  border:1px solid var(--shu-vermilion); border-radius:999px;
+  padding: calc(8px*var(--ui-scale)) calc(26px*var(--ui-scale)) calc(8px*var(--ui-scale)) calc(30px*var(--ui-scale));
+  display:flex; align-items:center; gap:10px;
+  position:relative; overflow:hidden;
+  transition: color .25s ease;
+}
+.gal-footer-btn-next::before{
+  content:""; position:absolute; inset:0; background:var(--shu-vermilion);
+  transform: translateX(-101%); transition: transform .3s cubic-bezier(.7,0,.2,1);
+}
+.gal-footer-btn-next:hover{ color:#fdf6ea; }
+.gal-footer-btn-next:hover::before{ transform: translateX(0); }
+.gal-footer-btn-next span{ position:relative; }
+.gal-footer-btn-next .arrow{ transition: transform .3s ease; }
+.gal-footer-btn-next:hover .arrow{ transform: translateX(4px); }
+
+/* —— 进度条：一根朱砂墨线 —— */
+.gal-progress-container{
+  height:2px; margin-top: calc(10px*var(--ui-scale));
+  background: rgba(246,241,230,.18); border-radius:2px; overflow:hidden;
+}
+.gal-progress-bar{
+  height:100%; width:64%;
+  background: linear-gradient(90deg, var(--shu-gold), var(--shu-vermilion));
+}
+
+/* ============================================================
+   选项浮层（#gal-layer-choices / .gal-choice-card）
+   —— 中式书目样式：汉字序号 + 纸签，悬停朱批
+   ============================================================ */
+.gal-choices-overlay{
+  position:absolute; inset:0; z-index:40;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap: calc(14px*var(--ui-scale));
+  background: rgba(18,14,12,.55); backdrop-filter: blur(4px) saturate(.9);
+  opacity:0; pointer-events:none; transition: opacity .3s ease;
+}
+.gal-choices-overlay.show{ opacity:1; pointer-events:auto; }
+.gal-choices-title{
+  color:#f0e9da; font-size: calc(15px*var(--ui-scale)); letter-spacing:.5em;
+  margin-bottom: calc(10px*var(--ui-scale)); text-indent:.5em;
+}
+.gal-choices-title::after{
+  content:""; display:block; width:1px; height:26px; margin:12px auto 0;
+  background: linear-gradient(var(--shu-vermilion), transparent);
+}
+.gal-choice-card{
+  width: min(76%, 560px);
+  display:flex; align-items:center; gap: calc(18px*var(--ui-scale));
+  background: linear-gradient(175deg, var(--shu-paper), var(--shu-paper-warm));
+  border:1px solid var(--shu-hairline); border-radius:3px;
+  padding: calc(14px*var(--ui-scale)) calc(22px*var(--ui-scale));
+  cursor:pointer;
+  box-shadow: 0 14px 30px -14px rgba(10,6,3,.6);
+  transition: transform .22s ease, box-shadow .22s ease;
+  opacity:0; transform: translateY(14px);
+}
+.gal-choices-overlay.show .gal-choice-card{ animation: card-in .45s cubic-bezier(.2,.9,.3,1) forwards; }
+.gal-choices-overlay.show .gal-choice-card:nth-child(2){ animation-delay:.06s; }
+.gal-choices-overlay.show .gal-choice-card:nth-child(3){ animation-delay:.12s; }
+.gal-choices-overlay.show .gal-choice-card:nth-child(4){ animation-delay:.18s; }
+@keyframes card-in{ to{ opacity:1; transform:translateY(0); } }
+.gal-choice-card:hover{ transform: translateY(-2px); box-shadow: 0 20px 36px -14px rgba(10,6,3,.7); }
+.gal-choice-index{
+  flex:none; width: calc(34px*var(--ui-scale)); height: calc(34px*var(--ui-scale));
+  display:grid; place-items:center;
+  font-size: calc(15px*var(--ui-scale)); font-weight:700; color: var(--shu-vermilion);
+  border:1px solid var(--shu-vermilion); border-radius:50%;
+  transition: all .22s ease;
+}
+.gal-choice-card:hover .gal-choice-index{ background: var(--shu-vermilion); color:#fdf6ea; }
+.gal-choice-card > span{
+  font-size: calc(15.5px*var(--ui-scale)); font-weight:600; letter-spacing:.06em; color:var(--shu-ink);
+}
+.gal-choices-hint{
+  color:rgba(240,233,218,.55); font-size:11px; letter-spacing:.3em; margin-top:8px;
+}
+
+/* ============================================================
+   历史记录（.gal-history-modal）—— 册页样式
+   ============================================================ */
+.gal-history-modal{
+  position:absolute; inset:0; z-index:50;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(18,14,12,.6); backdrop-filter: blur(4px);
+  opacity:0; pointer-events:none; transition: opacity .3s ease;
+}
+.gal-history-modal.show{ opacity:1; pointer-events:auto; }
+.gal-history-panel{
+  width:min(78%, 640px); max-height:78%;
+  display:flex; flex-direction:column;
+  background: linear-gradient(178deg, var(--shu-paper), var(--shu-paper-warm));
+  border-radius:4px; overflow:hidden;
+  box-shadow: 0 40px 80px -30px rgba(5,3,1,.8), 0 0 0 1px var(--shu-hairline);
+}
+.gal-history-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 24px; border-bottom:1px solid rgba(38,34,28,.18);
+}
+.gal-history-title{ font-size:15px; font-weight:700; letter-spacing:.4em; text-indent:.4em; }
+.gal-history-title small{
+  font-family:var(--font-latin); font-style:italic; font-weight:400;
+  letter-spacing:.2em; color:var(--shu-ink-soft); margin-left:10px; font-size:11px;
+}
+.gal-history-close{
+  background:none; border:1px solid var(--shu-hairline); border-radius:50%;
+  width:30px; height:30px; cursor:pointer; color:var(--shu-ink-soft);
+  transition:all .2s ease;
+}
+.gal-history-close:hover{ background:var(--shu-vermilion); border-color:var(--shu-vermilion); color:#fff; }
+.gal-history-body{ overflow-y:auto; padding: 8px 24px 20px; }
+.gal-history-item{ padding:16px 0 14px; border-bottom:1px dashed rgba(38,34,28,.18); }
+.gal-history-name{
+  display:inline-block; font-size:12px; font-weight:700; letter-spacing:.2em;
+  color:var(--shu-vermilion); border-left:2px solid var(--shu-vermilion);
+  padding-left:8px; margin-bottom:6px;
+}
+.gal-history-name.narrator{ color:var(--shu-ink-soft); border-color:var(--shu-ink-soft); }
+.gal-history-content{ font-size:14px; line-height:1.95; color:var(--shu-ink); }
+.gal-history-body::-webkit-scrollbar{ width:4px; }
+.gal-history-body::-webkit-scrollbar-thumb{ background:rgba(38,34,28,.25); border-radius:4px; }
+
+/* ============================================================
+   生成中指示器（#gal-generating-indicator）—— 磨墨中
+   ============================================================ */
+.gal-generating-indicator{
+  position:absolute; left:50%; top:42%; transform:translate(-50%,-50%);
+  z-index:45; display:none; flex-direction:column; align-items:center; gap:14px;
+  padding:26px 44px;
+  background: linear-gradient(178deg, var(--shu-paper), var(--shu-paper-warm));
+  border-radius:4px; box-shadow: 0 30px 60px -20px rgba(5,3,1,.75), 0 0 0 1px var(--shu-hairline);
+}
+.gal-generating-indicator.show{ display:flex; }
+.gal-gen-brush{
+  width:40px; height:40px; border-radius:50%;
+  border:1.5px solid rgba(38,34,28,.25); border-top-color: var(--shu-vermilion);
+  animation: ink-spin 1.1s linear infinite;
+  position:relative;
+}
+.gal-gen-brush::after{
+  content:""; position:absolute; inset:9px; border-radius:50%;
+  background: radial-gradient(circle at 40% 35%, #46403a, #26221c);
+}
+@keyframes ink-spin{ to{ transform: rotate(360deg); } }
+.gal-gen-text{ font-size:14px; font-weight:700; letter-spacing:.5em; text-indent:.5em; }
+.gal-gen-status{ font-family:var(--font-latin); font-style:italic; font-size:11px; letter-spacing:.25em; color:var(--shu-ink-soft); }
+
+/* ============================================================
+   夜间变体：一键切换到「墨夜」——同一套结构，只换 token
+   （演示皮肤系统可以像 Twilight 变体一样仅覆写变量）
+   ============================================================ */
+.gal-game-container.night{
+  --shu-paper:      #211f24;
+  --shu-paper-warm: #1a181d;
+  --shu-ink:        #ece5d8;
+  --shu-ink-soft:   #9a917f;
+  --shu-vermilion:  #e0603f;
+  --shu-vermilion-dk:#b8482c;
+  --shu-hairline:   rgba(236,229,216,.22);
+}
+.gal-game-container.night .sky{
+  background: radial-gradient(120% 90% at 70% 18%, #2b3450 0%, #1d2438 40%, #12131f 75%, #0b0b12 100%);
+}
+.gal-game-container.night .sun{
+  background: radial-gradient(circle, #fdfbf2 0%, #cfd8ec 40%, rgba(160,180,220,0) 70%);
+  width:9%; left:66%; top:12%; filter:none;
+}
+.gal-game-container.night .clouds{ opacity:.35; filter: hue-rotate(180deg) brightness(.6); }
+.gal-game-container.night .gal-text-panel{
+  box-shadow: 0 30px 50px -20px rgba(0,0,0,.8), 0 0 0 1px var(--shu-hairline);
+}
+.gal-game-container.night .gal-scene-slate{ color:#e8e2d3; }
+
+/* ---------- 设计说明卡 ---------- */
+.spec-grid{
+  width:min(1180px, 96vw);
+  display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:14px;
+}
+.spec-card{
+  border:1px solid rgba(207,197,178,.18); border-radius:6px; padding:18px 20px;
+  color:#cfc5b2; background:rgba(255,255,255,.02);
+}
+.spec-card h3{
+  font-size:12px; letter-spacing:.3em; color:var(--shu-vermilion);
+  margin-bottom:10px; font-weight:700;
+}
+.spec-card p{ font-size:12.5px; line-height:1.9; color:#a49a87; }
+.swatches{ display:flex; gap:8px; margin-top:10px; }
+.swatch{ width:34px; height:34px; border-radius:4px; border:1px solid rgba(255,255,255,.15); position:relative; }
+.swatch i{
+  position:absolute; top:110%; left:50%; transform:translateX(-50%);
+  font-style:normal; font-size:9px; letter-spacing:.05em; color:#8f8674; white-space:nowrap;
+}
+footer{ color:#6d6555; font-size:11px; letter-spacing:.25em; padding:14px 0 6px; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="proposal-head">
+  <div class="latin">Skin Proposal · Vermilion Letter</div>
+  <h1>朱笺 <em>·</em> 主界面皮肤翻新稿</h1>
+  <p>方向：宣纸 × 墨 × 朱砂印章。UI 全面退后，把画面还给立绘与文字——名牌做成竖排印章，工具栏收敛为一行衬线文字按钮，全界面只保留一个强调色。下方为可交互预览：可切换「昼／夜」变体、打开选项浮层与履历册页。</p>
+</div>
+
+<div class="preview-controls">
+  <button id="btn-night">切换 · 墨夜变体</button>
+  <button id="btn-choices">预览 · 选项浮层</button>
+  <button id="btn-history">预览 · 对话履历</button>
+  <button id="btn-gen">预览 · 生成中</button>
+  <button id="btn-type">重播 · 打字机</button>
+</div>
+
+<!-- ═══════════════ 舞台 ═══════════════ -->
+<div class="gal-game-container" id="stage">
+
+  <!-- 背景占位 -->
+  <div class="gal-layer-bg">
+    <div class="sky"></div>
+    <div class="sun"></div>
+    <div class="clouds"></div>
+    <div class="cityline"></div>
+    <div class="window"></div>
+    <div class="dust"></div>
+  </div>
+
+  <!-- 立绘占位 -->
+  <div class="gal-layer-character">
+    <div class="gal-char-slot slot-center">
+      <div class="char-silhouette"></div>
+      <div class="slot-note">立绘 / LIVE2D 占位</div>
+    </div>
+  </div>
+
+  <!-- 顶部场景信息：电影字幕式 -->
+  <div class="gal-status-bar-container">
+    <div class="gal-scene-slate">
+      <div class="gal-location-text">旧校舍 · 天台</div>
+      <span class="gal-time-text">Autumn — After School, 17:42</span>
+    </div>
+    <div class="gal-top-actions">
+      <button class="gal-fullscreen-btn" title="全屏">⛶</button>
+    </div>
+  </div>
+
+  <!-- 对话框层 -->
+  <div class="gal-dialog-layer">
+    <div class="gal-name-badge"><span id="speaker">绫音</span></div>
+
+    <div class="gal-interaction-bar">
+      <button class="gal-action-btn btn-reroll"><span class="ico">↻</span>重新生成</button>
+      <button class="gal-action-btn btn-free"><span class="ico">✎</span>自由对话</button>
+    </div>
+
+    <div class="gal-text-panel">
+      <p class="gal-dialog-text"><span id="typed"></span><span class="caret" id="caret"></span></p>
+
+      <div class="gal-bottom-toolbar">
+        <button class="gal-footer-btn">履历</button>
+        <button class="gal-footer-btn">存档</button>
+        <button class="gal-footer-btn">读档</button>
+        <button class="gal-footer-btn">设置</button>
+        <span class="gal-toolbar-divider"></span>
+        <button class="gal-footer-btn">回看</button>
+        <button class="gal-footer-btn">自动</button>
+        <button class="gal-footer-btn">快进</button>
+        <span class="gal-toolbar-spacer"></span>
+        <button class="gal-pending-choices-btn" id="pending-btn">◈ 抉择之时</button>
+        <button class="gal-footer-btn-next" id="next-btn"><span>NEXT</span><span class="arrow">→</span></button>
+      </div>
+    </div>
+
+    <div class="gal-progress-container"><div class="gal-progress-bar"></div></div>
+  </div>
+
+  <!-- 选项浮层 -->
+  <div class="gal-choices-overlay" id="choices">
+    <div class="gal-choices-title">此刻，你——</div>
+    <div class="gal-choice-card"><span class="gal-choice-index">一</span><span>「其实我也一样。从很久以前开始，就……」</span></div>
+    <div class="gal-choice-card"><span class="gal-choice-index">二</span><span>沉默地望向远处的晚霞，不去打破这份安静。</span></div>
+    <div class="gal-choice-card"><span class="gal-choice-index">三</span><span>「风变凉了，我们回教室吧。」装作没有听见。</span></div>
+    <div class="gal-choices-hint">选择将改变故事的走向</div>
+  </div>
+
+  <!-- 历史记录 -->
+  <div class="gal-history-modal" id="history">
+    <div class="gal-history-panel">
+      <div class="gal-history-header">
+        <div class="gal-history-title">对话履历<small>Backlog</small></div>
+        <button class="gal-history-close" id="history-close">✕</button>
+      </div>
+      <div class="gal-history-body">
+        <div class="gal-history-item">
+          <span class="gal-history-name narrator">旁白</span>
+          <div class="gal-history-content">放学后的天台，风里已经有了秋天的味道。晾晒的床单在风中轻轻鼓动，像一页页翻开的白纸。</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name">绫音</span>
+          <div class="gal-history-content">「你知道吗，从这里看出去，整个城市都会被夕阳染成同一种颜色。」</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name narrator">主角</span>
+          <div class="gal-history-content">「所以你每天放学都躲在这里？就为了看这个？」</div>
+        </div>
+        <div class="gal-history-item">
+          <span class="gal-history-name">绫音</span>
+          <div class="gal-history-content">「才不是『躲』。是……预约。这片风景，每天只上演一次哦。」</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 生成中指示器 -->
+  <div class="gal-generating-indicator" id="gen">
+    <div class="gal-gen-brush"></div>
+    <div class="gal-gen-text">研墨之中</div>
+    <div class="gal-gen-status">weaving the next scene…</div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ 设计说明 ═══════════════ -->
+<div class="spec-grid">
+  <div class="spec-card">
+    <h3>色彩 · TOKEN</h3>
+    <p>纸、墨、朱砂三色构成，全界面唯一强调色是朱砂红；泥金只用于毫米级细节。夜间变体仅覆写 CSS 变量即可整套换肤，与项目现有 Twilight 变体机制一致。</p>
+    <div class="swatches">
+      <div class="swatch" style="background:#f6f1e6"><i>纸 #f6f1e6</i></div>
+      <div class="swatch" style="background:#26221c"><i>墨 #26221c</i></div>
+      <div class="swatch" style="background:#c8452c"><i>朱砂 #c8452c</i></div>
+      <div class="swatch" style="background:#b08d4f"><i>泥金 #b08d4f</i></div>
+    </div>
+  </div>
+  <div class="spec-card">
+    <h3>排印 · 字体</h3>
+    <p>正文与界面统一用 Noto Serif SC（衬线，行高 2.05，两端对齐），拉丁与数字用 Cormorant Garamond 斜体点缀，营造"装帧书页"的阅读感，取代现在的 Barlow 运动感。</p>
+  </div>
+  <div class="spec-card">
+    <h3>层级 · 收敛</h3>
+    <p>原皮肤九个白色斜切按钮全部在争夺注意力。新稿把工具栏降为一行文字按钮（悬停朱线），只允许两个元素发声：NEXT（描边→灌墨）与「抉择之时」（印章脉冲）。</p>
+  </div>
+  <div class="spec-card">
+    <h3>标识 · 记忆点</h3>
+    <p>竖排朱砂印章姓名牌是整套皮肤的签名元素；旁白自动转为墨灰印。顶部地点/时间从深色胶囊改为电影字幕式细线文字，几乎不遮挡画面。</p>
+  </div>
+</div>
+
+<footer>朱笺 VERMILION LETTER · 静态提案稿 · CLASS 命名与真实项目 .GAL-* 钩子对齐，可直接移植为 SKIN-SHUJIAN</footer>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const stage = $('stage');
+
+  /* 打字机 */
+  const LINE = '「呐——如果说，这片晚霞每天只上演一次的话。那么现在站在这里、和你一起看着它的我，是不是也是……只有今天才有的、限定的我呢？」';
+  let timer = null;
+  function typewrite(){
+    clearInterval(timer);
+    const el = $('typed'); el.textContent = '';
+    let i = 0;
+    timer = setInterval(() => {
+      el.textContent = LINE.slice(0, ++i);
+      if(i >= LINE.length) clearInterval(timer);
+    }, 55);
+  }
+  typewrite();
+  $('btn-type').addEventListener('click', typewrite);
+
+  /* 昼/夜 */
+  $('btn-night').addEventListener('click', function(){
+    stage.classList.toggle('night');
+    this.classList.toggle('on');
+    this.textContent = stage.classList.contains('night') ? '切换 · 朱笺（昼）' : '切换 · 墨夜变体';
+  });
+
+  /* 选项浮层 */
+  const choices = $('choices');
+  function toggleChoices(force){
+    choices.classList.toggle('show', force);
+    $('btn-choices').classList.toggle('on', choices.classList.contains('show'));
+  }
+  $('btn-choices').addEventListener('click', () => toggleChoices());
+  $('pending-btn').addEventListener('click', () => toggleChoices(true));
+  choices.addEventListener('click', e => {
+    if(e.target === choices || e.target.closest('.gal-choice-card')) toggleChoices(false);
+  });
+
+  /* 历史 */
+  const history = $('history');
+  function toggleHistory(force){
+    history.classList.toggle('show', force);
+    $('btn-history').classList.toggle('on', history.classList.contains('show'));
+  }
+  $('btn-history').addEventListener('click', () => toggleHistory());
+  $('history-close').addEventListener('click', () => toggleHistory(false));
+  history.addEventListener('click', e => { if(e.target === history) toggleHistory(false); });
+
+  /* 生成中 */
+  $('btn-gen').addEventListener('click', function(){
+    const g = $('gen');
+    g.classList.toggle('show');
+    this.classList.toggle('on', g.classList.contains('show'));
+  });
+
+  /* NEXT 重播打字机，模拟推进 */
+  $('next-btn').addEventListener('click', typewrite);
+})();
+</script>
+</body>
+</html>

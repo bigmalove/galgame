@@ -1,4 +1,5 @@
 import { SCRIPT_NAME, SCRIPT_ID } from '../core/constants.js';
+import { getSettings } from '../core/settings.js';
 
 // 延迟引用: showToast (来自 UI 层)
 let _showToastRef = null;
@@ -63,6 +64,7 @@ export const BGMManager = {
 
   async play(keyword) {
     if (!this.isLoaded || !keyword) return;
+    if (getSettings().bgmEnabled === false) return;
 
     if (this.userPaused) {
       this.pendingKeyword = keyword;
@@ -116,6 +118,18 @@ export const BGMManager = {
     this.isPlaying = false;
     this.userPaused = true;
     localStorage.setItem(`${SCRIPT_ID}_bgm_user_paused`, '1');
+    this.updateUI();
+  },
+
+  // 设置层禁用 BGM 时调用：停止播放并清空待播队列（不写入 userPaused）
+  stopForDisabled() {
+    this.audio.pause();
+    if (this.audio.src) {
+      this.audio.currentTime = 0;
+    }
+    this.isPlaying = false;
+    this.pendingKeyword = null;
+    this.currentKeyword = null;
     this.updateUI();
   },
 

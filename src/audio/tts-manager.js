@@ -8,6 +8,7 @@ import {
   getTTSVoiceListAsync,
   getCharacterTTSVoice,
   setCharacterTTSVoice,
+  getCharacterTTSEnabled,
   resolveVoiceByName,
   inferResourceId,
   normalizeGptSoVitsSwitchMode,
@@ -2082,6 +2083,13 @@ export const TTSManager = {
     }
     const speakText = getSegmentSpeakText(segment);
     if (!speakText) return;
+
+    // 每角色 TTS 开关：被禁用的角色直接跳过（在打断当前播放的副作用之前）
+    const gateSpeaker = String(segment.speaker || '').trim();
+    if (gateSpeaker && !getCharacterTTSEnabled(resolveTTSCharacterId(gateSpeaker))) {
+      console.log(`[${SCRIPT_NAME}] TTS: 角色已禁用配音，跳过 - ${gateSpeaker}`);
+      return;
+    }
 
     const normalizedSegmentId = String(segmentId || '');
     if ((this.isLoading || this.isPlaying) && normalizedSegmentId && this.currentSegmentId === normalizedSegmentId) {

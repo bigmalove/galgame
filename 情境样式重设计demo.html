@@ -1,0 +1,1804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>九相文書 KYUSO BUNSHO — 情境样式电影级重设计</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@400;500;700&family=Ma+Shan+Zheng&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css" />
+
+<style>
+/* ═══════════════ 深夜放映室 · Demo 页面外壳（不属于插件样式） ═══════════════ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --ink: #EDE7DA;
+  --ink-dim: #7E7869;
+  --accent: #E0483C;
+  --fx-accent: #4D9FFF; /* 随载体切换 */
+}
+html, body { height: 100%; }
+body.sd-page {
+  background: #060608;
+  color: var(--ink);
+  font-family: "Noto Sans SC", sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 30px 18px 60px;
+}
+/* 全页胶片颗粒 */
+body.sd-page::after {
+  content: ''; position: fixed; inset: -100px; pointer-events: none; z-index: 999;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  animation: sdGrain 0.5s steps(3) infinite;
+}
+@keyframes sdGrain {
+  0% { transform: translate(0,0); } 33% { transform: translate(-40px,20px); }
+  66% { transform: translate(30px,-30px); } 100% { transform: translate(0,0); }
+}
+
+.sd-frame { max-width: 1180px; margin: 0 auto; position: relative; }
+
+/* 片名：左侧竖排毛笔字 */
+.sd-title-block {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 20px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.sd-title {
+  display: flex; align-items: center; gap: 18px;
+}
+.sd-title h1 {
+  font-family: "Ma Shan Zheng", "Noto Serif SC", serif;
+  font-weight: 400;
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  text-shadow: 0 0 34px rgba(224, 72, 60, 0.35);
+}
+.sd-title h1 em { font-style: normal; color: var(--accent); }
+.sd-title .sd-title-meta {
+  border-left: 1px solid rgba(237, 231, 218, 0.25);
+  padding-left: 18px;
+  font-size: 0.68rem; letter-spacing: 0.42em; line-height: 2.2;
+  color: var(--ink-dim); text-transform: uppercase;
+  font-family: "JetBrains Mono", monospace;
+}
+.sd-kbd-hint {
+  font-size: 0.68rem; color: var(--ink-dim); letter-spacing: 0.14em;
+  font-family: "JetBrains Mono", monospace;
+}
+.sd-kbd-hint b {
+  display: inline-block; border: 1px solid rgba(237,231,218,0.3); border-radius: 4px;
+  padding: 1px 7px; margin: 0 3px; color: var(--ink); font-weight: 400;
+}
+
+/* 场记板标签轨 */
+.sd-tabs {
+  display: flex; flex-wrap: wrap; gap: 7px;
+  margin: 0 0 14px;
+}
+.sd-tab {
+  --dot: #888;
+  position: relative;
+  border: 1px solid rgba(237, 231, 218, 0.14);
+  background: rgba(237, 231, 218, 0.03);
+  color: #A9A395; padding: 8px 15px 8px 26px; border-radius: 3px;
+  font-size: 0.84rem; letter-spacing: 0.12em; cursor: pointer;
+  transition: all 0.22s ease; font-family: inherit;
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+}
+.sd-tab::before {
+  content: ''; position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dot); box-shadow: 0 0 8px var(--dot);
+  opacity: 0.55; transition: opacity 0.2s;
+}
+.sd-tab:hover { color: var(--ink); border-color: rgba(237, 231, 218, 0.4); }
+.sd-tab:hover::before { opacity: 1; }
+.sd-tab.active {
+  background: var(--ink); color: #101014; border-color: var(--ink); font-weight: 700;
+}
+.sd-tab.active::before { opacity: 1; }
+.sd-tab-act {
+  border-style: dashed; color: #C9A96A; border-color: rgba(201, 169, 106, 0.4);
+  padding-left: 15px;
+}
+.sd-tab-act::before { display: none; }
+.sd-tab-act:hover { color: #EFD9A8; border-color: rgba(201, 169, 106, 0.85); }
+.sd-tab-act.on { background: rgba(201, 169, 106, 0.16); }
+
+/* 舞台外框：银幕 */
+.sd-stage-wrap {
+  position: relative; margin: 0 auto;
+  aspect-ratio: 16 / 9; min-height: 560px;
+  border-radius: 10px; overflow: hidden;
+  border: 1px solid rgba(237, 231, 218, 0.10);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.8),
+    0 60px 120px -40px rgba(0, 0, 0, 0.9),
+    0 0 90px -30px color-mix(in srgb, var(--fx-accent) 45%, transparent);
+  transition: box-shadow 0.9s ease;
+}
+@media (max-width: 760px) {
+  .sd-stage-wrap { aspect-ratio: auto; height: 82vh; min-height: 580px; }
+}
+.sd-stage-wrap.shake { animation: sdShake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@keyframes sdShake {
+  10%, 90% { transform: translate(-2px, 1px); }
+  20%, 80% { transform: translate(4px, -2px); }
+  30%, 50%, 70% { transform: translate(-7px, 3px); }
+  40%, 60% { transform: translate(6px, -3px); }
+}
+
+/* 模拟 galgame 舞台：黄昏天空 + 山影 + 立绘剪影 */
+.sd-scene {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, #232D4E 0%, #3D4B7E 34%, #7A6C9E 62%, #C98A74 84%, #DCA382 100%);
+}
+.sd-scene::before {
+  content: ''; position: absolute; left: 50%; top: 54%;
+  width: 140px; height: 140px; margin-left: -70px; border-radius: 50%;
+  background: radial-gradient(circle, #FFE9C4 0%, rgba(255, 214, 150, 0.6) 45%, transparent 72%);
+  filter: blur(2px);
+}
+.sd-hill {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+  background: #10162A; opacity: 0.94;
+  clip-path: polygon(0 58%, 12% 44%, 26% 60%, 40% 38%, 56% 58%, 70% 30%, 84% 52%, 100% 40%, 100% 100%, 0 100%);
+}
+.sd-doll {
+  position: absolute; bottom: -4%; width: 24%; height: 72%;
+  border-radius: 46% 46% 0 0 / 30% 30% 0 0;
+  background: linear-gradient(180deg, rgba(14, 18, 32, 0.55), rgba(14, 18, 32, 0.88));
+  filter: blur(1px);
+}
+.sd-doll.l { left: 13%; transform: rotate(-1deg); }
+.sd-doll.r { right: 13%; height: 63%; opacity: 0.85; }
+
+/* 底部工程说明 */
+.sd-note {
+  max-width: 1180px; margin: 20px auto 0;
+  font-size: 0.75rem; line-height: 2.15; color: var(--ink-dim); letter-spacing: 0.04em;
+}
+.sd-note code {
+  color: #C9A96A; background: rgba(201, 169, 106, 0.08);
+  border: 1px solid rgba(201, 169, 106, 0.22);
+  border-radius: 4px; padding: 0 0.45em; font-family: "JetBrains Mono", monospace; font-size: 0.9em;
+}
+.sd-note strong { color: #B9B3A4; font-weight: 700; }
+</style>
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   ▼▼▼ styledCss 电影级重设计本体 ▼▼▼
+   概念: 九件真实的「物」，各自携带一场戏。
+         入场是揭幕，离场是谢幕，粒子与光是舞台机械。
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* === Styled 舞台布局 === */
+.gal-styled-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(16px, 4vw, 44px);
+    background: radial-gradient(120% 90% at 50% 8%,
+        rgba(6, 8, 14, 0.34) 0%,
+        rgba(5, 7, 12, 0.62) 55%,
+        rgba(2, 3, 6, 0.84) 100%);
+    backdrop-filter: blur(14px) saturate(1.12);
+    -webkit-backdrop-filter: blur(14px) saturate(1.12);
+    opacity: 0;
+    transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    perspective: 1400px;
+}
+.gal-styled-stage.show { display: flex; opacity: 1; }
+.gal-styled-stage.hiding { opacity: 0; pointer-events: none; }
+
+/* 粒子画布（three.js 挂载点，缺席也不影响布局） */
+.gal-styled-stage .fx-particles {
+    position: absolute; inset: 0;
+    pointer-events: none;
+}
+
+/* 神光：卡片背后缓转的光轮 */
+.gal-styled-stage .fx-rays {
+    position: absolute; left: 50%; top: 50%;
+    width: 160vmin; height: 160vmin;
+    margin: -80vmin 0 0 -80vmin;
+    pointer-events: none;
+    background: repeating-conic-gradient(from 0deg,
+        transparent 0deg 14deg,
+        color-mix(in srgb, var(--fx-accent, #4D9FFF) 7%, transparent) 17deg 21deg,
+        transparent 24deg 36deg);
+    -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 62%);
+    mask-image: radial-gradient(circle, #000 0%, transparent 62%);
+    animation: fxRaysSpin 60s linear infinite;
+    opacity: 0.75;
+    transition: opacity 1s ease;
+    mix-blend-mode: screen;
+}
+@keyframes fxRaysSpin { to { transform: rotate(360deg); } }
+
+/* 白闪（报纸落版 / 印章砸落等冲击帧） */
+.gal-styled-stage .fx-flash {
+    position: absolute; inset: 0; pointer-events: none;
+    background: #FFF;
+    opacity: 0; z-index: 60;
+}
+.gal-styled-stage .fx-flash.go { animation: fxFlash 0.5s ease-out both; }
+@keyframes fxFlash {
+    0% { opacity: 0; } 8% { opacity: 0.85; } 100% { opacity: 0; }
+}
+
+/* 内容容器：承载鼠标视差 */
+.gal-styled-stage-content {
+    width: 100%;
+    max-width: 640px;
+    max-height: 86vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 51;
+    perspective: 1200px;
+    overflow: visible;
+    transform: rotateY(calc(var(--par-x, 0) * 1deg)) rotateX(calc(var(--par-y, 0) * -1deg));
+    transform-style: preserve-3d;
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* === Styled 通用基础 === */
+.gal-dialog-text .gal-styled,
+.gal-styled-stage-content .gal-styled {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 1rem;
+    line-height: 1.7;
+    transform-origin: 50% 62%;
+    will-change: transform, opacity, filter;
+}
+/* 绘本模式内联回退：仍走通用浮起 */
+.gal-dialog-text .gal-styled { animation: gal-styled-pop 0.9s cubic-bezier(0.19, 1.25, 0.27, 1) both; }
+@keyframes gal-styled-pop {
+    from { opacity: 0; transform: translateY(60px) scale(0.9); filter: blur(10px); }
+    to   { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes gal-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .gal-styled-stage *, .gal-styled-stage-content .gal-styled,
+    .gal-styled-stage .fx-rays { animation: none !important; transition: none !important; }
+}
+/* 细滚动条 */
+.gal-styled *::-webkit-scrollbar, .gal-styled::-webkit-scrollbar { width: 5px; height: 5px; }
+.gal-styled *::-webkit-scrollbar-thumb, .gal-styled::-webkit-scrollbar-thumb { background: rgba(125,125,135,0.35); border-radius: 99px; }
+.gal-styled *::-webkit-scrollbar-track, .gal-styled::-webkit-scrollbar-track { background: transparent; }
+
+/* =========================================================
+   1. 手机短信 (SMS) — Frosted OS Dark
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-sms {
+    background: rgba(22, 24, 31, 0.86) !important;
+    backdrop-filter: blur(28px) saturate(1.5);
+    -webkit-backdrop-filter: blur(28px) saturate(1.5);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 28px;
+    padding: 0;
+    overflow: hidden;
+    max-height: 76vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow:
+        0 34px 68px -18px rgba(0, 0, 0, 0.65),
+        0 2px 6px rgba(0, 0, 0, 0.35),
+        0 0 44px -8px rgba(61, 139, 255, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    width: 100%; max-width: 390px;
+    font-family: "Noto Sans SC", -apple-system, "PingFang SC", sans-serif;
+    position: relative;
+}
+.gal-sms-header {
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    color: #F4F5F7;
+    padding: 16px 20px 13px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 1rem; flex-shrink: 0; position: relative;
+}
+.gal-sms-header::before {
+    content: ''; position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+    width: 52px; height: 4px; border-radius: 99px;
+    background: rgba(255, 255, 255, 0.16);
+}
+.gal-sms-contact {
+    font-weight: 700; letter-spacing: 0.03em; padding-top: 5px;
+    display: flex; align-items: center; gap: 8px;
+}
+.gal-sms-contact::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%;
+    background: #34D399; box-shadow: 0 0 8px rgba(52, 211, 153, 0.8);
+    flex-shrink: 0;
+    animation: gal-blink 2.4s ease infinite;
+}
+.gal-sms-time {
+    font-size: 0.74rem; color: rgba(235, 235, 245, 0.45);
+    font-weight: 500; letter-spacing: 0.04em; padding-top: 5px;
+    font-variant-numeric: tabular-nums;
+}
+.gal-sms-body {
+    padding: 20px 16px 22px;
+    display: flex; flex-direction: column; gap: 10px;
+    overflow-y: auto; flex: 1; background: transparent;
+    min-height: 180px;
+}
+.gal-sms-row { display: flex; flex-direction: column; max-width: 82%; }
+.gal-sms-row-other { align-self: flex-start; align-items: flex-start; }
+.gal-sms-row-self { align-self: flex-end; align-items: flex-end; }
+.gal-sms-name {
+    font-size: 0.7rem; color: rgba(235, 235, 245, 0.42);
+    margin: 2px 0 5px; padding-left: 14px; letter-spacing: 0.05em;
+}
+.gal-sms-bubble-other, .gal-sms-bubble-self {
+    padding: 10px 15px; border-radius: 19px; font-size: 0.94rem;
+    line-height: 1.5; word-break: break-word;
+}
+.gal-sms-bubble-other {
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    color: #F0F1F4;
+    border-bottom-left-radius: 6px;
+}
+.gal-sms-bubble-self {
+    background: linear-gradient(135deg, #3D8BFF 0%, #2E6BFF 100%);
+    color: #fff;
+    border-bottom-right-radius: 6px;
+    box-shadow: 0 4px 14px -4px rgba(46, 107, 255, 0.55);
+}
+/* JS 编排：行初始隐藏，逐条揭示 */
+.gal-styled-sms .gal-sms-row.hide { opacity: 0; }
+.gal-styled-sms .gal-sms-row.pop [class*="gal-sms-bubble"] {
+    animation: gal-sms-bubble-in 0.4s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+}
+@keyframes gal-sms-bubble-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.7); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* 正在输入…指示气泡（demo/接入均由 JS 插入） */
+.gal-sms-typing {
+    align-self: flex-start;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 19px; border-bottom-left-radius: 6px;
+    padding: 12px 16px; display: inline-flex; gap: 5px;
+    animation: gal-sms-bubble-in 0.25s ease both;
+}
+.gal-sms-typing i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: rgba(235, 235, 245, 0.65);
+    animation: galTypingDot 1s ease-in-out infinite;
+}
+.gal-sms-typing i:nth-child(2) { animation-delay: 0.16s; }
+.gal-sms-typing i:nth-child(3) { animation-delay: 0.32s; }
+@keyframes galTypingDot {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30% { transform: translateY(-5px); opacity: 1; }
+}
+
+/* =========================================================
+   2. 信纸 (Letter) — Warm Stationery
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-letter {
+    --letter-line: 30px;
+    background:
+        linear-gradient(90deg, transparent 46px, rgba(214, 126, 126, 0.5) 46px, rgba(214, 126, 126, 0.5) 47.5px, transparent 47.5px),
+        radial-gradient(140% 100% at 20% 0%, #FFFDF7 0%, #FBF4E4 70%, #F6EBD5 100%);
+    border-radius: 3px 3px 5px 5px;
+    padding: 54px 44px 40px 66px !important;
+    position: relative;
+    box-shadow:
+        0 1px 2px rgba(70, 50, 20, 0.12),
+        0 12px 28px -8px rgba(60, 40, 15, 0.30),
+        0 36px 70px -24px rgba(0, 0, 0, 0.45);
+    max-height: 80vh; overflow-y: auto;
+    width: 100%; max-width: 560px;
+}
+.gal-styled-stage-content .gal-styled-letter::after {
+    content: '✦';
+    position: absolute; top: 16px; right: 22px;
+    width: 44px; height: 52px;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(178, 108, 108, 0.85); font-size: 1rem;
+    background: linear-gradient(160deg, rgba(214, 126, 126, 0.13), rgba(214, 126, 126, 0.05));
+    border: 1px dashed rgba(178, 108, 108, 0.5);
+    border-radius: 2px;
+    transform: rotate(4deg);
+    pointer-events: none;
+}
+.gal-letter-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 16px; margin-bottom: 26px; padding-right: 52px;
+    position: relative; z-index: 1;
+}
+.gal-letter-to {
+    font-weight: 700; color: #4A3B2E; font-size: 1.25rem;
+    font-family: "LXGW WenKai Screen", "KaiTi", "STKaiti", cursive;
+    letter-spacing: 0.06em;
+}
+.gal-letter-date {
+    font-size: 0.85rem; color: #A08B72; font-style: italic;
+    letter-spacing: 0.05em; white-space: nowrap;
+}
+.gal-letter-body { position: relative; z-index: 1; }
+.gal-letter-line {
+    margin: 0;
+    min-height: var(--letter-line);
+    line-height: var(--letter-line);
+    text-indent: 2em; color: #4E4234;
+    font-family: "LXGW WenKai Screen", "KaiTi", "STKaiti", cursive;
+    font-size: 1.06rem; letter-spacing: 0.045em;
+    background-image: repeating-linear-gradient(180deg,
+        transparent 0, transparent calc(var(--letter-line) - 1px),
+        rgba(96, 116, 160, 0.18) calc(var(--letter-line) - 1px), rgba(96, 116, 160, 0.18) var(--letter-line));
+}
+.gal-letter-signature {
+    display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+    margin-top: 30px; color: #4A3B2E;
+    font-weight: 700;
+    font-family: "LXGW WenKai Screen", "KaiTi", "STKaiti", cursive;
+    font-size: 1.2rem; letter-spacing: 0.08em;
+    position: relative; z-index: 1;
+}
+.gal-letter-signature::after {
+    content: '緘';
+    width: 40px; height: 40px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    color: rgba(255, 244, 235, 0.92); font-size: 0.9rem; font-weight: 700;
+    background: radial-gradient(circle at 32% 28%, #C86060 0%, #A63838 55%, #7E2424 100%);
+    box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.3),
+        inset 0 -3px 5px rgba(60, 10, 10, 0.55),
+        0 3px 7px rgba(126, 36, 36, 0.4);
+    transform: rotate(-6deg);
+}
+
+/* =========================================================
+   3. 羊皮纸 (Parchment) — Aged Vellum
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-parchment {
+    background:
+        radial-gradient(120% 90% at 50% 0%, rgba(120, 86, 40, 0) 55%, rgba(96, 62, 24, 0.32) 100%),
+        radial-gradient(circle at 12% 18%, rgba(126, 94, 46, 0.16) 0%, transparent 34%),
+        radial-gradient(circle at 86% 78%, rgba(126, 94, 46, 0.20) 0%, transparent 42%),
+        radial-gradient(circle at 62% 30%, rgba(255, 240, 200, 0.32) 0%, transparent 46%),
+        linear-gradient(140deg, #E9D3A4 0%, #DFC28C 48%, #D2B075 100%);
+    border-radius: 10px 16px 8px 18px / 14px 8px 16px 10px;
+    padding: 44px 52px 40px !important;
+    position: relative;
+    box-shadow:
+        0 26px 52px -14px rgba(20, 12, 4, 0.6),
+        0 3px 9px rgba(20, 12, 4, 0.3),
+        0 0 46px -8px rgba(255, 179, 71, 0.3),
+        inset 0 0 72px rgba(110, 72, 28, 0.35),
+        inset 0 0 14px rgba(80, 46, 14, 0.4);
+    max-height: 80vh; overflow-y: auto;
+    width: 100%; max-width: 580px;
+}
+.gal-styled-stage-content .gal-styled-parchment::before {
+    content: ''; position: absolute;
+    top: 14px; left: 14px; right: 14px; bottom: 14px;
+    border: 1px solid rgba(110, 72, 28, 0.55);
+    outline: 1px solid rgba(110, 72, 28, 0.22);
+    outline-offset: 3px;
+    border-radius: 6px 10px 5px 12px;
+    pointer-events: none;
+}
+.gal-parchment-title {
+    text-align: center; font-family: "Noto Serif SC", "KaiTi", "STKaiti", serif;
+    font-size: 1.7rem; font-weight: 900; color: #433012;
+    margin-bottom: 24px; padding-bottom: 16px;
+    letter-spacing: 0.28em; text-indent: 0.28em;
+    text-shadow: 0 1px 0 rgba(255, 246, 220, 0.55);
+    position: relative; z-index: 1;
+}
+.gal-parchment-title::after {
+    content: '';
+    position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    width: 168px; height: 7px;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(122, 42, 42, 0.9) 0 2.6px, transparent 3px),
+        linear-gradient(90deg, transparent, rgba(96, 62, 24, 0.75) 18%, rgba(96, 62, 24, 0.75) 82%, transparent) 50% 50% / 100% 1px no-repeat;
+}
+.gal-parchment-body { position: relative; z-index: 1; }
+.gal-parchment-line {
+    margin: 0 0 11px; text-indent: 2em; color: #3E2C10;
+    font-family: "Noto Serif SC", "KaiTi", "STKaiti", serif;
+    font-size: 1.08rem; line-height: 1.95;
+    text-shadow: 0 1px 0 rgba(255, 246, 220, 0.3);
+    font-weight: 600;
+}
+.gal-parchment-line:first-of-type::first-letter {
+    font-size: 2.3em; line-height: 1; font-weight: 900;
+    color: #7A2A2A; padding-right: 2px;
+}
+.gal-parchment-seal {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    text-align: center; margin-top: 28px;
+    color: #7A2A2A; font-family: "Noto Serif SC", "KaiTi", "STKaiti", serif;
+    font-weight: 900; font-size: 1.3rem; letter-spacing: 0.42em; text-indent: 0.42em;
+    position: relative; z-index: 1; opacity: 0.92;
+}
+.gal-parchment-seal::before, .gal-parchment-seal::after {
+    content: ''; width: 44px; height: 1px; flex-shrink: 0;
+    background: linear-gradient(90deg, transparent, rgba(122, 42, 42, 0.6));
+}
+.gal-parchment-seal::after { background: linear-gradient(270deg, transparent, rgba(122, 42, 42, 0.6)); }
+
+/* 卷轴木轴（demo 由 JS 注入 .fx-roller 于舞台层） */
+.fx-roller {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    width: min(640px, 92%); height: 26px;
+    border-radius: 13px;
+    background: linear-gradient(180deg, #8A5A2B 0%, #5C3714 45%, #3E230B 100%);
+    box-shadow:
+        0 4px 12px rgba(0,0,0,0.6),
+        inset 0 2px 2px rgba(255, 220, 160, 0.35);
+    z-index: 55; pointer-events: none;
+}
+.fx-roller::before, .fx-roller::after {
+    content: ''; position: absolute; top: 50%; transform: translateY(-50%);
+    width: 30px; height: 34px; border-radius: 8px;
+    background: radial-gradient(circle at 40% 35%, #C9A06A, #6B4520 70%);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+}
+.fx-roller::before { left: -18px; }
+.fx-roller::after { right: -18px; }
+</style>
+<style>
+/* =========================================================
+   4. 新闻 (Newspaper) — Broadsheet Ink
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-newspaper {
+    background:
+        radial-gradient(100% 70% at 50% 0%, rgba(255, 255, 250, 0.65) 0%, transparent 60%),
+        #F1EBDB;
+    border-radius: 2px;
+    padding: 22px 28px 26px !important;
+    position: relative;
+    box-shadow:
+        0 2px 4px rgba(24, 20, 12, 0.18),
+        0 22px 48px -16px rgba(0, 0, 0, 0.55);
+    max-height: 82vh; overflow-y: auto;
+    color: #1C1B17;
+    width: 100%; max-width: 660px;
+    --gal-styled-rot: -0.5deg;
+    transform: rotate(var(--gal-styled-rot));
+}
+.gal-styled-stage-content .gal-styled-newspaper::before {
+    content: 'DAILY · EXTRA EDITION · 号外';
+    display: block; text-align: center;
+    font-family: "JetBrains Mono", "Noto Serif SC", monospace;
+    font-size: 0.62rem; letter-spacing: 0.42em; text-indent: 0.42em;
+    color: #524E42;
+    padding-bottom: 8px; margin-bottom: 12px;
+    border-bottom: 1px solid #1C1B17;
+}
+/* 半调网点质感 */
+.gal-styled-stage-content .gal-styled-newspaper::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(28, 27, 23, 0.14) 1px, transparent 1.4px);
+    background-size: 5px 5px;
+    mix-blend-mode: multiply; opacity: 0.35;
+}
+.gal-newspaper-headline {
+    font-family: "Noto Serif SC", "Georgia", "Times New Roman", serif;
+    font-size: 2.1rem; font-weight: 900; color: #14130F; text-align: center;
+    margin: 0 0 14px; line-height: 1.25; letter-spacing: 0.06em;
+    padding-bottom: 14px;
+    border-bottom: 4px double #14130F;
+}
+.gal-newspaper-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 2px; border-bottom: 1px solid #14130F;
+    border-top: 1px solid rgba(20, 19, 15, 0.35);
+    margin-bottom: 16px; font-size: 0.78rem; color: #3C3A32;
+    font-family: "Noto Serif SC", serif; letter-spacing: 0.1em;
+}
+.gal-newspaper-source { font-weight: 900; }
+.gal-newspaper-date { font-weight: 500; font-variant-numeric: tabular-nums; }
+.gal-newspaper-body {
+    columns: 2; column-gap: 26px;
+    column-rule: 1px solid rgba(20, 19, 15, 0.25);
+    text-align: justify; hyphens: auto;
+}
+.gal-newspaper-paragraph {
+    margin: 0 0 12px; text-indent: 2em; color: #26241E;
+    font-family: "Noto Serif SC", "Georgia", "Times New Roman", serif;
+    font-size: 0.93rem; line-height: 1.75;
+}
+.gal-newspaper-paragraph:first-of-type::first-letter {
+    font-size: 3.1rem; line-height: 0.85; float: left; margin: 4px 8px 0 0;
+    font-weight: 900; color: #14130F; font-family: "Noto Serif SC", "Georgia", serif;
+}
+@media (max-width: 560px) {
+    .gal-newspaper-body { columns: 1; }
+    .gal-newspaper-headline { font-size: 1.6rem; }
+}
+
+/* =========================================================
+   5. 终端 (Terminal) — Phosphor CRT
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-terminal {
+    background:
+        linear-gradient(180deg, rgba(16, 22, 18, 0.5), rgba(6, 10, 8, 0.5)),
+        rgba(7, 11, 9, 0.94) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(84, 214, 126, 0.18);
+    border-radius: 12px;
+    overflow: hidden;
+    max-height: 72vh;
+    display: flex; flex-direction: column;
+    box-shadow:
+        0 30px 60px -14px rgba(0, 0, 0, 0.75),
+        0 0 42px -10px rgba(64, 210, 120, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+    width: 100%; max-width: 620px;
+    position: relative;
+}
+.gal-styled-stage-content .gal-styled-terminal::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(180deg,
+        rgba(0, 0, 0, 0) 0px, rgba(0, 0, 0, 0) 2px,
+        rgba(0, 0, 0, 0.14) 2px, rgba(0, 0, 0, 0.14) 3px);
+    pointer-events: none; z-index: 2;
+    mix-blend-mode: multiply;
+}
+.gal-terminal-titlebar {
+    background: rgba(255, 255, 255, 0.035);
+    border-bottom: 1px solid rgba(84, 214, 126, 0.14);
+    padding: 11px 15px;
+    display: flex; align-items: center; gap: 10px;
+    position: relative; z-index: 3;
+}
+.gal-terminal-dots { display: flex; gap: 7px; }
+.gal-terminal-dots i { width: 11px; height: 11px; border-radius: 50%; }
+.gal-terminal-dots i:nth-child(1) { background: #FF5F57; box-shadow: 0 0 6px rgba(255, 95, 87, 0.6); }
+.gal-terminal-dots i:nth-child(2) { background: #FEBC2E; box-shadow: 0 0 6px rgba(254, 188, 46, 0.6); }
+.gal-terminal-dots i:nth-child(3) { background: #28C840; box-shadow: 0 0 6px rgba(40, 200, 64, 0.6); }
+.gal-terminal-title {
+    color: rgba(160, 230, 180, 0.55); font-size: 0.78rem;
+    text-align: center; flex: 1; margin-right: 47px;
+    letter-spacing: 0.12em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gal-terminal-body {
+    padding: 20px 22px 22px; overflow-y: auto; flex: 1;
+    position: relative; z-index: 1;
+    min-height: 190px;
+    background: radial-gradient(110% 90% at 50% 0%, rgba(64, 210, 120, 0.05) 0%, transparent 62%);
+}
+.gal-terminal-line {
+    color: #7BE39A; font-size: 0.88rem; line-height: 1.72; margin-bottom: 5px;
+    text-shadow: 0 0 6px rgba(90, 220, 140, 0.45);
+    word-break: break-word;
+}
+.gal-terminal-line.fx-glitch {
+    animation: galTermGlitch 0.14s steps(2) both;
+}
+@keyframes galTermGlitch {
+    0% { transform: translateX(-3px) skewX(-6deg); text-shadow: -3px 0 #FF3B6B, 3px 0 #37D5FF; }
+    50% { transform: translateX(3px) skewX(4deg); text-shadow: 3px 0 #FF3B6B, -3px 0 #37D5FF; }
+    100% { transform: none; }
+}
+.gal-terminal-prompt {
+    color: #59B8FF; font-weight: 700;
+    text-shadow: 0 0 6px rgba(89, 184, 255, 0.5);
+}
+.gal-terminal-cursor {
+    display: inline-block;
+    width: 0.62em; height: 1.05em;
+    background: #7BE39A;
+    box-shadow: 0 0 8px rgba(90, 220, 140, 0.8);
+    color: transparent;
+    vertical-align: text-bottom;
+    animation: gal-blink 1.06s step-end infinite;
+}
+
+/* =========================================================
+   6. 便签 (Sticky Note) — Paper & Tape
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-note {
+    --note-line: 34px;
+    background: linear-gradient(148deg, #FFF4B8 0%, #FFEC9C 58%, #F7DD80 100%);
+    border-radius: 2px 3px 26px 3px / 2px 3px 22px 3px;
+    padding: 46px 28px 24px !important;
+    position: relative;
+    box-shadow:
+        0 1px 2px rgba(90, 70, 20, 0.16),
+        0 14px 30px -10px rgba(60, 45, 10, 0.42),
+        inset 0 -18px 24px -18px rgba(146, 118, 60, 0.35);
+    --gal-styled-rot: -2.2deg;
+    transform: rotate(var(--gal-styled-rot));
+    transform-origin: 50% 0;
+    overflow: visible;
+    width: 100%; max-width: 340px;
+}
+.gal-styled-note .gal-note-body { max-height: 48vh; overflow-y: auto; }
+.gal-styled-stage-content .gal-styled-note::before {
+    content: ''; position: absolute;
+    top: -13px; left: 50%;
+    width: 112px; height: 30px;
+    background:
+        repeating-linear-gradient(45deg,
+            rgba(255, 255, 255, 0) 0 7px,
+            rgba(255, 255, 255, 0.35) 7px 14px),
+        rgba(214, 182, 186, 0.62);
+    box-shadow: 0 2px 5px rgba(60, 45, 10, 0.18);
+    z-index: 2;
+    transform: translateX(-50%) rotate(2.6deg);
+    -webkit-mask: linear-gradient(90deg, transparent 0, #000 5%, #000 95%, transparent 100%);
+    mask: linear-gradient(90deg, transparent 0, #000 5%, #000 95%, transparent 100%);
+}
+.gal-styled-stage-content .gal-styled-note::after {
+    content: ''; position: absolute;
+    right: 0; bottom: 0;
+    width: 34px; height: 34px;
+    background: linear-gradient(315deg, transparent 48%, rgba(200, 168, 90, 0.55) 50%, #FFF2AC 54%, #FFF8CE 100%);
+    border-radius: 0 0 24px 0;
+    box-shadow: -3px -3px 6px -2px rgba(90, 70, 20, 0.22);
+    pointer-events: none;
+}
+.gal-note-line {
+    margin: 0; min-height: var(--note-line); line-height: var(--note-line);
+    color: #4B3A20;
+    font-family: "LXGW WenKai Screen", "Comic Sans MS", cursive;
+    font-size: 1.12rem; font-weight: 600;
+    letter-spacing: 0.03em;
+    background-image: repeating-linear-gradient(180deg,
+        transparent 0, transparent calc(var(--note-line) - 1px),
+        rgba(146, 118, 60, 0.22) calc(var(--note-line) - 1px), rgba(146, 118, 60, 0.22) var(--note-line));
+}
+.gal-note-sign {
+    text-align: right; margin-top: 18px; padding-right: 20px; color: #6B532C;
+    font-family: "LXGW WenKai Screen", cursive;
+    font-style: italic; font-size: 1rem; font-weight: 700;
+}
+
+/* =========================================================
+   7. 日记 (Diary) — Linen Journal
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-diary {
+    --diary-line: 32px;
+    background: linear-gradient(120deg, #FCF9F2 0%, #F7F1E4 100%);
+    border: 1px solid rgba(150, 132, 108, 0.4);
+    border-left: 22px solid #4E5D4A;
+    border-radius: 5px 14px 14px 5px;
+    padding: 26px 34px 28px 28px !important;
+    position: relative;
+    box-shadow:
+        0 24px 48px -14px rgba(30, 24, 14, 0.5),
+        0 3px 8px rgba(30, 24, 14, 0.2),
+        inset 6px 0 12px -6px rgba(30, 24, 14, 0.28);
+    overflow: visible;
+    width: 100%; max-width: 500px;
+    transform-origin: 0 50%;
+}
+.gal-styled-diary .gal-diary-body { max-height: 54vh; overflow-y: auto; }
+.gal-styled-stage-content .gal-styled-diary::before {
+    content: ''; position: absolute;
+    top: 12px; bottom: 12px; left: -14px;
+    width: 2px;
+    background: repeating-linear-gradient(180deg,
+        rgba(252, 249, 242, 0.85) 0 7px,
+        transparent 7px 15px);
+    pointer-events: none; z-index: 2;
+    border-radius: 2px;
+}
+.gal-styled-stage-content .gal-styled-diary::after {
+    content: ''; position: absolute;
+    top: -6px; right: 34px;
+    width: 22px; height: 72px;
+    background: linear-gradient(180deg, #B4543E 0%, #9E4230 100%);
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%);
+    box-shadow: 0 4px 8px -2px rgba(120, 40, 20, 0.5);
+    z-index: 2;
+    transform-origin: 50% 0;
+    animation: galRibbonSway 5s ease-in-out infinite;
+}
+@keyframes galRibbonSway {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(2.5deg); }
+}
+.gal-diary-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 14px; margin-bottom: 22px; padding: 0 0 12px;
+    border-bottom: 2px solid rgba(78, 93, 74, 0.75);
+    position: relative; z-index: 1;
+}
+.gal-diary-date {
+    font-family: "LXGW WenKai Screen", "KaiTi", cursive;
+    font-weight: 700; color: #35402F; font-size: 1.22rem;
+    letter-spacing: 0.05em;
+    display: flex; align-items: center; gap: 9px;
+}
+.gal-diary-date::before {
+    content: ''; width: 9px; height: 9px; border-radius: 50% 46% 52% 48%;
+    background: #B4543E; flex-shrink: 0;
+    transform: rotate(12deg);
+}
+.gal-diary-mood {
+    font-size: 0.95rem; color: #7A7260; font-style: italic; font-weight: 600;
+    padding-right: 52px;
+}
+.gal-diary-body { position: relative; z-index: 1; }
+.gal-diary-line {
+    margin: 0; min-height: var(--diary-line); line-height: var(--diary-line);
+    text-indent: 1.5em; color: #3B3226;
+    font-family: "LXGW WenKai Screen", "KaiTi", cursive;
+    font-size: 1.06rem; letter-spacing: 0.02em;
+    background-image: repeating-linear-gradient(180deg,
+        transparent 0, transparent calc(var(--diary-line) - 1px),
+        rgba(150, 132, 108, 0.22) calc(var(--diary-line) - 1px), rgba(150, 132, 108, 0.22) var(--diary-line));
+}
+/* 手写显现：入场时逐行从左到右揭开 */
+.gal-styled-diary.entering .gal-diary-line { animation: galInkReveal 0.9s ease-out both; }
+.gal-styled-diary.entering .gal-diary-line:nth-child(1) { animation-delay: 0.9s; }
+.gal-styled-diary.entering .gal-diary-line:nth-child(2) { animation-delay: 1.25s; }
+.gal-styled-diary.entering .gal-diary-line:nth-child(3) { animation-delay: 1.6s; }
+.gal-styled-diary.entering .gal-diary-line:nth-child(4) { animation-delay: 1.95s; }
+.gal-styled-diary.entering .gal-diary-line:nth-child(n+5) { animation-delay: 2.3s; }
+@keyframes galInkReveal {
+    from { clip-path: inset(0 100% 0 0); }
+    to   { clip-path: inset(0 0 0 0); }
+}
+
+/* =========================================================
+   8. 公告 (Bulletin) — Civic Notice
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-bulletin {
+    background: linear-gradient(180deg, #FFFFFF 0%, #FBF9F4 100%);
+    border: 1px solid rgba(60, 50, 40, 0.14);
+    border-top: none;
+    border-radius: 8px;
+    padding: 0 !important;
+    overflow: hidden;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+    box-shadow:
+        0 26px 52px -16px rgba(10, 8, 6, 0.5),
+        0 2px 6px rgba(10, 8, 6, 0.18);
+    width: 100%; max-width: 560px;
+    position: relative;
+    transform-origin: 50% 0;
+}
+.gal-styled-stage-content .gal-styled-bulletin::before {
+    content: ''; display: block; flex-shrink: 0;
+    height: 10px;
+    background: linear-gradient(90deg, #B3271E 0%, #D03A2B 50%, #B3271E 100%);
+    box-shadow: inset 0 -2px 3px rgba(90, 12, 8, 0.4);
+}
+.gal-bulletin-header {
+    background: transparent;
+    color: #B3271E;
+    padding: 24px 24px 14px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px;
+    position: relative;
+    flex-shrink: 0;
+}
+.gal-bulletin-header::after {
+    content: ''; position: absolute;
+    left: 24px; right: 24px; bottom: 0;
+    height: 5px;
+    border-top: 3px solid #B3271E;
+    border-bottom: 1px solid #B3271E;
+}
+.gal-bulletin-icon {
+    font-size: 1.5rem;
+    filter: grayscale(0.15) drop-shadow(0 2px 3px rgba(179, 39, 30, 0.25));
+}
+.gal-bulletin-title {
+    font-weight: 900; font-size: 1.55rem;
+    letter-spacing: 0.34em; text-indent: 0.34em;
+    font-family: "Noto Serif SC", "SimSun", serif;
+    text-align: center; line-height: 1.35;
+}
+.gal-bulletin-meta {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 12px 26px;
+    font-size: 0.85rem; color: #6E655A; font-weight: 600;
+    border-bottom: 1px dashed rgba(110, 101, 90, 0.35);
+    font-family: "Noto Serif SC", serif;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+}
+.gal-bulletin-body {
+    padding: 24px 30px 26px; overflow-y: auto;
+    position: relative;
+}
+.gal-bulletin-body::after {
+    content: '公 示';
+    margin: 18px 6px 0 auto; width: 84px; height: 84px;
+    display: flex; align-items: center; justify-content: center;
+    border: 3px solid rgba(179, 39, 30, 0.5);
+    border-radius: 50%;
+    color: rgba(179, 39, 30, 0.58);
+    font-family: "Noto Serif SC", "SimSun", serif;
+    font-weight: 900; font-size: 1.15rem; letter-spacing: 0.3em; text-indent: 0.3em;
+    transform: rotate(-14deg);
+    pointer-events: none;
+}
+/* 印章砸落 */
+.gal-styled-bulletin.entering .gal-bulletin-body::after {
+    animation: galSealSlam 0.55s cubic-bezier(0.34, 1.2, 0.64, 1) 1s both;
+}
+@keyframes galSealSlam {
+    0%  { opacity: 0; transform: rotate(-30deg) scale(5); filter: blur(4px); }
+    62% { opacity: 1; transform: rotate(-14deg) scale(0.94); filter: blur(0); }
+    80% { transform: rotate(-14deg) scale(1.05); }
+    100%{ opacity: 1; transform: rotate(-14deg) scale(1); }
+}
+.gal-bulletin-line {
+    margin: 0 0 14px; text-indent: 2em; color: #2E2A24;
+    font-size: 1.04rem; line-height: 1.9; font-weight: 500;
+    font-family: "Noto Serif SC", "SimSun", serif;
+}
+
+/* =========================================================
+   9. 回退 (Fallback) — Hologram
+   ========================================================= */
+.gal-styled-stage-content .gal-styled-fallback {
+    background:
+        linear-gradient(115deg,
+            rgba(109, 240, 255, 0.10) 0%,
+            rgba(24, 26, 33, 0.9) 28%,
+            rgba(24, 26, 33, 0.9) 72%,
+            rgba(190, 120, 255, 0.10) 100%),
+        rgba(20, 22, 30, 0.85);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid rgba(109, 240, 255, 0.35);
+    border-radius: 18px; padding: 26px 30px !important;
+    color: #EDF6F8;
+    box-shadow:
+        0 30px 60px -18px rgba(0, 0, 0, 0.65),
+        0 0 46px -8px rgba(109, 240, 255, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    position: relative;
+    overflow: hidden;
+}
+/* 全息扫光 */
+.gal-styled-stage-content .gal-styled-fallback::after {
+    content: ''; position: absolute; inset: -60% -20%;
+    background: linear-gradient(105deg,
+        transparent 42%, rgba(160, 250, 255, 0.16) 49%,
+        rgba(255, 255, 255, 0.26) 50%,
+        rgba(160, 250, 255, 0.16) 51%, transparent 58%);
+    animation: galHoloSheen 3.6s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes galHoloSheen {
+    0%, 100% { transform: translateX(-38%); }
+    50% { transform: translateX(38%); }
+}
+.gal-styled-fallback-title {
+    font-weight: 800; margin-bottom: 16px; font-size: 1.25rem;
+    letter-spacing: 0.1em;
+    color: #A9F4FF;
+    text-shadow: 0 0 12px rgba(109, 240, 255, 0.6);
+    border-bottom: 1px solid rgba(109, 240, 255, 0.25); padding-bottom: 12px;
+}
+.gal-styled-fallback p {
+    margin: 0 0 10px; line-height: 1.75; font-size: 0.98rem;
+    color: rgba(237, 246, 248, 0.88);
+}
+
+/* === Styled 皮肤适配 === */
+#gal-global-overlay[class*="skin-ancient"] .gal-styled-letter .gal-letter-line,
+#gal-global-overlay[class*="skin-ancient"] .gal-styled-parchment .gal-parchment-line {
+    font-family: "KaiTi", "STKaiti", "楷体", serif !important;
+}
+</style>
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   九场入场 / 九场谢幕 — 每种载体独一无二的编舞
+   JS 在挂载时加 .entering，卸载前加 .leaving
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. SMS：手机自景深处 3D 翻转到位 ── */
+.gal-styled-sms.entering {
+    animation: galInSms 1s cubic-bezier(0.2, 1.2, 0.32, 1) both;
+}
+@keyframes galInSms {
+    0%   { opacity: 0; transform: perspective(1200px) rotateY(48deg) translateZ(-420px) translateX(120px); filter: blur(10px); }
+    60%  { opacity: 1; filter: blur(0); }
+    82%  { transform: perspective(1200px) rotateY(-5deg) translateZ(12px); }
+    100% { opacity: 1; transform: none; filter: blur(0); }
+}
+.gal-styled-sms.leaving {
+    animation: galOutSms 0.6s cubic-bezier(0.6, -0.2, 0.8, 0.4) both;
+}
+@keyframes galOutSms {
+    0%   { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: perspective(1200px) rotateY(-46deg) translateZ(-380px) translateX(-140px); filter: blur(10px); }
+}
+
+/* ── 2. 信纸：对折的信展开 ── */
+.gal-styled-letter.entering {
+    animation: galInLetter 1.5s cubic-bezier(0.25, 1, 0.4, 1) both;
+}
+@keyframes galInLetter {
+    0%   { opacity: 0; transform: perspective(1000px) rotateX(-88deg) translateY(60px) scale(0.92); transform-origin: 50% 100%; filter: brightness(0.55); }
+    30%  { opacity: 1; }
+    62%  { transform: perspective(1000px) rotateX(8deg) translateY(-6px) scale(1); transform-origin: 50% 100%; filter: brightness(1.06); }
+    82%  { transform: perspective(1000px) rotateX(-3deg); transform-origin: 50% 100%; }
+    100% { opacity: 1; transform: none; filter: brightness(1); }
+}
+/* 火漆印在信纸展开后落下 */
+.gal-styled-letter.entering .gal-letter-signature::after {
+    animation: galSealSlam 0.5s cubic-bezier(0.34, 1.2, 0.64, 1) 1.35s both;
+}
+.gal-styled-letter.leaving {
+    animation: galOutLetter 0.65s cubic-bezier(0.55, 0, 0.8, 0.4) both;
+    transform-origin: 50% 100%;
+}
+@keyframes galOutLetter {
+    0%   { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: perspective(1000px) rotateX(-80deg) translateY(70px) scale(0.9); filter: brightness(0.5); }
+}
+
+/* ── 3. 羊皮纸：卷轴自中线向上下展开 ── */
+.gal-styled-parchment.entering {
+    animation: galInParchment 1.4s cubic-bezier(0.3, 1, 0.4, 1) both;
+}
+@keyframes galInParchment {
+    0%   { opacity: 0; clip-path: inset(49.5% 2% 49.5% 2% round 10px); transform: scale(1.02); }
+    18%  { opacity: 1; clip-path: inset(48% 0 48% 0 round 10px); }
+    100% { opacity: 1; clip-path: inset(0 0 0 0 round 10px); transform: scale(1); }
+}
+.gal-styled-parchment.leaving {
+    animation: galOutParchment 0.7s cubic-bezier(0.6, 0, 0.75, 0.35) both;
+}
+@keyframes galOutParchment {
+    0%   { opacity: 1; clip-path: inset(0 0 0 0 round 10px); }
+    72%  { opacity: 1; clip-path: inset(48.5% 0 48.5% 0 round 10px); transform: translateY(0); }
+    100% { opacity: 0; clip-path: inset(49.5% 3% 49.5% 3% round 10px); transform: translateY(60px); }
+}
+
+/* ── 4. 报纸：新闻片旋转飞入 ── */
+.gal-styled-newspaper.entering {
+    animation: galInNews 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes galInNews {
+    0%   { opacity: 0; transform: rotate(-900deg) scale(0.02); filter: blur(8px); }
+    55%  { opacity: 1; filter: blur(2px); }
+    78%  { transform: rotate(6deg) scale(1.04); filter: blur(0); }
+    100% { opacity: 1; transform: rotate(-0.5deg) scale(1); filter: blur(0); }
+}
+.gal-styled-newspaper.leaving {
+    animation: galOutNews 0.6s cubic-bezier(0.6, -0.1, 0.9, 0.4) both;
+}
+@keyframes galOutNews {
+    0%   { opacity: 1; transform: rotate(-0.5deg) scale(1); }
+    100% { opacity: 0; transform: rotate(720deg) scale(0.02); filter: blur(8px); }
+}
+
+/* ── 5. 终端：CRT 开机 / 关机 ── */
+.gal-styled-terminal.entering {
+    animation: galInCrt 0.9s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes galInCrt {
+    0%   { opacity: 0; transform: scaleX(0) scaleY(0.006); filter: brightness(6); }
+    28%  { opacity: 1; transform: scaleX(1) scaleY(0.006); filter: brightness(5); }
+    36%  { transform: scaleX(1) scaleY(0.006); }
+    72%  { transform: scaleX(1) scaleY(1.04); filter: brightness(1.8); }
+    100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
+.gal-styled-terminal.leaving {
+    animation: galOutCrt 0.55s cubic-bezier(0.7, 0, 0.85, 0.4) both;
+}
+@keyframes galOutCrt {
+    0%   { opacity: 1; transform: scale(1); filter: brightness(1); }
+    45%  { opacity: 1; transform: scaleX(1) scaleY(0.006); filter: brightness(6); }
+    80%  { opacity: 1; transform: scaleX(0.12) scaleY(0.006); filter: brightness(8); }
+    100% { opacity: 0; transform: scaleX(0.001) scaleY(0.004); filter: brightness(10); }
+}
+
+/* ── 6. 便签：从天而降，以胶带为轴摆动衰减 ── */
+.gal-styled-note.entering {
+    animation: galInNote 1.7s cubic-bezier(0.32, 0.9, 0.4, 1) both;
+}
+@keyframes galInNote {
+    0%   { opacity: 0; transform: translateY(-120vh) rotate(14deg); }
+    32%  { opacity: 1; transform: translateY(0) rotate(-16deg); }
+    48%  { transform: rotate(9deg); }
+    62%  { transform: rotate(-9deg); }
+    74%  { transform: rotate(3.5deg); }
+    85%  { transform: rotate(-5.5deg); }
+    94%  { transform: rotate(-0.8deg); }
+    100% { opacity: 1; transform: rotate(-2.2deg); }
+}
+.gal-styled-note.leaving {
+    animation: galOutNote 0.8s cubic-bezier(0.5, 0, 0.8, 0.5) both;
+}
+@keyframes galOutNote {
+    0%   { opacity: 1; transform: rotate(-2.2deg); }
+    25%  { transform: rotate(6deg) translateY(6px); }
+    100% { opacity: 0; transform: rotate(38deg) translate(90px, 110vh); }
+}
+
+/* ── 7. 日记：以布脊为轴，封面翻开 ── */
+.gal-styled-diary.entering {
+    animation: galInDiary 1.3s cubic-bezier(0.25, 1, 0.35, 1) both;
+}
+@keyframes galInDiary {
+    0%   { opacity: 0; transform: perspective(1400px) rotateY(-105deg); filter: brightness(0.35); }
+    25%  { opacity: 1; }
+    72%  { transform: perspective(1400px) rotateY(7deg); filter: brightness(1.08); }
+    100% { opacity: 1; transform: none; filter: brightness(1); }
+}
+.gal-styled-diary.leaving {
+    animation: galOutDiary 0.65s cubic-bezier(0.55, 0, 0.8, 0.4) both;
+}
+@keyframes galOutDiary {
+    0%   { opacity: 1; transform: none; filter: brightness(1); }
+    100% { opacity: 0; transform: perspective(1400px) rotateY(-100deg); filter: brightness(0.3); }
+}
+
+/* ── 8. 公告：告示垂降上墙，印章随后砸落（见 galSealSlam） ── */
+.gal-styled-bulletin.entering {
+    animation: galInBulletin 1s cubic-bezier(0.22, 1.25, 0.36, 1) both;
+}
+@keyframes galInBulletin {
+    0%   { opacity: 0; transform: translateY(-115%) rotate(1.5deg); }
+    62%  { opacity: 1; transform: translateY(10px) rotate(-0.6deg); }
+    82%  { transform: translateY(-5px) rotate(0.3deg); }
+    100% { opacity: 1; transform: none; }
+}
+.gal-styled-bulletin.leaving {
+    animation: galOutBulletin 0.6s cubic-bezier(0.6, -0.15, 0.85, 0.45) both;
+}
+@keyframes galOutBulletin {
+    0%   { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: translateY(115%) rotate(-2deg); }
+}
+
+/* ── 9. 回退：全息投影闪烁凝聚 / 解体 ── */
+.gal-styled-fallback.entering {
+    animation: galInHolo 0.9s steps(1) both;
+}
+@keyframes galInHolo {
+    0%   { opacity: 0; transform: scaleY(0.6) skewX(-10deg); filter: blur(8px) hue-rotate(40deg); }
+    12%  { opacity: 0.7; transform: scaleY(1.05) skewX(6deg); }
+    22%  { opacity: 0.25; transform: scaleY(0.92) skewX(-4deg); }
+    34%  { opacity: 0.9; transform: scaleY(1.02) skewX(2deg); filter: blur(2px); }
+    46%  { opacity: 0.5; transform: scaleY(0.98); }
+    60%  { opacity: 1; transform: none; filter: blur(0) hue-rotate(0deg); }
+    100% { opacity: 1; transform: none; filter: none; }
+}
+.gal-styled-fallback.leaving {
+    animation: galOutHolo 0.55s steps(1) both;
+}
+@keyframes galOutHolo {
+    0%   { opacity: 1; }
+    20%  { opacity: 0.4; transform: scaleY(1.04) skewX(5deg); filter: blur(2px); }
+    40%  { opacity: 0.8; transform: scaleY(0.9) skewX(-6deg); }
+    60%  { opacity: 0.25; transform: scaleY(1.1) skewX(3deg); filter: blur(6px) hue-rotate(60deg); }
+    100% { opacity: 0; transform: scaleY(0.05) skewX(0); filter: blur(12px); }
+}
+</style>
+</head>
+<body class="sd-page">
+
+<div class="sd-frame">
+  <header class="sd-title-block">
+    <div class="sd-title">
+      <h1>九<em>相</em>文書</h1>
+      <div class="sd-title-meta">NINE ARTIFACTS<br/>STYLED CONTEXT · CINEMA CUT</div>
+    </div>
+    <div class="sd-kbd-hint"><b>←</b><b>→</b> 切换 · <b>Space</b> 重播 · <b>Esc</b> 落幕</div>
+  </header>
+
+  <div class="sd-tabs" id="sd-tabs">
+    <button class="sd-tab active" data-type="sms" style="--dot:#4D9FFF">手机短信</button>
+    <button class="sd-tab" data-type="letter" style="--dot:#FFB7C9">信纸</button>
+    <button class="sd-tab" data-type="parchment" style="--dot:#FFB347">羊皮纸</button>
+    <button class="sd-tab" data-type="newspaper" style="--dot:#D8D2C0">新闻</button>
+    <button class="sd-tab" data-type="terminal" style="--dot:#4DFF88">终端</button>
+    <button class="sd-tab" data-type="note" style="--dot:#FFE066">便签</button>
+    <button class="sd-tab" data-type="diary" style="--dot:#A8C686">日记</button>
+    <button class="sd-tab" data-type="bulletin" style="--dot:#FF5A4D">公告</button>
+    <button class="sd-tab" data-type="fallback" style="--dot:#6DF0FF">回退</button>
+    <button class="sd-tab sd-tab-act" id="sd-replay">↻ 重播</button>
+    <button class="sd-tab sd-tab-act" id="sd-toggle">⏏ 落幕</button>
+    <button class="sd-tab sd-tab-act" id="sd-tour">▶ 巡演</button>
+  </div>
+
+  <div class="sd-stage-wrap" id="sd-wrap">
+    <div class="sd-scene">
+      <div class="sd-hill"></div>
+      <div class="sd-doll l"></div>
+      <div class="sd-doll r"></div>
+    </div>
+
+    <!-- ══════ 与 ensureStyledStage 同构的舞台 DOM（fx-* 为演出机械） ══════ -->
+    <div class="gal-styled-stage show" id="sd-stage">
+      <div class="fx-particles" id="fx-particles"></div>
+      <div class="fx-rays"></div>
+      <div class="gal-styled-stage-content" id="sd-slot"></div>
+      <div class="fx-flash" id="fx-flash"></div>
+    </div>
+  </div>
+
+  <p class="sd-note">
+    <strong>九场戏：</strong>短信 = 手机自景深 3D 翻入，「正在输入…」三点指示后气泡逐条弹出；信纸 = 折信以底边为轴展开、火漆印落下；
+    羊皮纸 = 双木轴自中线拉开卷轴；新闻 = 老电影旋转飞入 + 白闪定格 + 半调网点；终端 = CRT 开机（横线亮起→纵向展开）、逐字打印、随机 RGB 故障；
+    便签 = 从天而降以胶带为轴摆动衰减；日记 = 以布脊为轴翻开封面、字迹逐行洇出；公告 = 告示垂降上墙、朱红「公示」印章砸落震屏；
+    回退 = 全息投影闪烁凝聚。谢幕各有其道：合拢、卷起、关机、撕落、合书、飞出……
+    舞台机械：Canvas 2D 粒子场（零依赖）随载体换色换势（数据流↑ / 花瓣↓ / 余烬↑ / 代码雨↓…），神光轮转，鼠标视差 3D。
+    卡片 DOM 与 <code>renderStyledContent()</code> 输出一致；接入时 <code>showStyledStage</code> 挂载后加
+    <code>.entering</code>，<code>hideStyledStage</code> 先加 <code>.leaving</code> 等 700ms 再卸载；
+    终端打字 / 短信气泡编排为可选 JS 增强（本页脚本即参考实现），粒子层缺席不影响布局。
+  </p>
+</div>
+
+<!-- ═══════════ 各类型模板（卡片 DOM 与 renderStyledContent 输出一致） ═══════════ -->
+<template id="tpl-sms">
+  <div class="gal-styled gal-styled-sms">
+    <div class="gal-sms-header">
+      <span class="gal-sms-contact">小满</span>
+      <span class="gal-sms-time">23:47</span>
+    </div>
+    <div class="gal-sms-body">
+      <div class="gal-sms-row gal-sms-row-other">
+        <span class="gal-sms-name">小满</span>
+        <div class="gal-sms-bubble-other">你到哪了？雨好像越下越大了</div>
+      </div>
+      <div class="gal-sms-row gal-sms-row-self">
+        <div class="gal-sms-bubble-self">马上到，在便利店躲了一会儿雨</div>
+      </div>
+      <div class="gal-sms-row gal-sms-row-other">
+        <span class="gal-sms-name">小满</span>
+        <div class="gal-sms-bubble-other">笨蛋，我带了两把伞……</div>
+      </div>
+      <div class="gal-sms-row gal-sms-row-other">
+        <span class="gal-sms-name">小满</span>
+        <div class="gal-sms-bubble-other">在老地方等你，别跑，路滑</div>
+      </div>
+      <div class="gal-sms-row gal-sms-row-self">
+        <div class="gal-sms-bubble-self">好，等我 (๑•̀ㅂ•́)و✧</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-letter">
+  <div class="gal-styled gal-styled-letter">
+    <div class="gal-letter-header">
+      <span class="gal-letter-to">致 远方的孩子</span>
+      <span class="gal-letter-date">四月十二日 夜</span>
+    </div>
+    <div class="gal-letter-body">
+      <p class="gal-letter-line">见信如面，近来可好。</p>
+      <p class="gal-letter-line">院子里的樱花开了，今年开得格外早，落在信纸上的这一瓣，便是窗前那一株的。</p>
+      <p class="gal-letter-line">你走后家里安静了许多，你父亲嘴上不说，每天却总要往车站的方向望上一眼。</p>
+      <p class="gal-letter-line">在外面照顾好自己，天冷记得添衣，钱不够用了就写信回来，不要硬撑。</p>
+      <p class="gal-letter-line">等花落尽的时候，就回来看看吧。</p>
+    </div>
+    <div class="gal-letter-signature">—— 母亲 手书</div>
+  </div>
+</template>
+
+<template id="tpl-parchment">
+  <div class="gal-styled gal-styled-parchment">
+    <div class="gal-parchment-title">终焉之预言</div>
+    <div class="gal-parchment-body">
+      <p class="gal-parchment-line">当双月于苍穹交叠，沉睡于地脉深处的古龙将睁开它的第三只眼。</p>
+      <p class="gal-parchment-line">彼时，圣都的钟声将连响十三下，河水倒流，星辰坠入西海。</p>
+      <p class="gal-parchment-line">唯有持有「晨曦之证」的旅人，方能踏入封印之门，于万物终焉之前，点燃最后的灯火。</p>
+    </div>
+    <div class="gal-parchment-seal">先知 阿露涅</div>
+  </div>
+</template>
+
+<template id="tpl-newspaper">
+  <div class="gal-styled gal-styled-newspaper">
+    <div class="gal-newspaper-headline">港湾区惊现百年灯塔复明</div>
+    <div class="gal-newspaper-meta">
+      <span class="gal-newspaper-source">每日快报</span>
+      <span class="gal-newspaper-date">星历 1024 年 4 月 12 日</span>
+    </div>
+    <div class="gal-newspaper-body">
+      <p class="gal-newspaper-paragraph">据本报记者凌晨发回的消息，废弃近百年的白鲸岬灯塔于昨夜十一时许突然亮起，光束扫过整个港湾区，持续约一刻钟后熄灭。</p>
+      <p class="gal-newspaper-paragraph">多名目击者称，灯塔亮起前曾听到海面传来类似汽笛的低鸣。港务局表示灯塔早已断电数十年，内部机械亦已锈蚀，「从工程角度无法解释」。</p>
+      <p class="gal-newspaper-paragraph">值得注意的是，这已是本月第三起类似事件。市议会已成立特别调查组，并呼吁市民入夜后避免靠近岬角一带。</p>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-terminal">
+  <div class="gal-styled gal-styled-terminal">
+    <div class="gal-terminal-titlebar">
+      <span class="gal-terminal-dots"><i></i><i></i><i></i></span>
+      <span class="gal-terminal-title">ARK-OS — /var/log/secure</span>
+    </div>
+    <div class="gal-terminal-body">
+      <div class="gal-terminal-line"><span class="gal-terminal-prompt">root$</span> access --vault 07 --key ██████</div>
+      <div class="gal-terminal-line"><span class="gal-terminal-prompt">&gt;</span> 身份验证失败：访问被拒绝 (0x0403)</div>
+      <div class="gal-terminal-line"><span class="gal-terminal-prompt">system$</span> 检测到未授权入侵 · 追踪协议已启动</div>
+      <div class="gal-terminal-line"><span class="gal-terminal-prompt">&gt;</span> 警告：该终端将在 60 秒后自毁</div>
+      <div class="gal-terminal-line"><span class="gal-terminal-prompt">unknown$</span> ……你以为这样就能拦住我吗？</div>
+      <span class="gal-terminal-cursor">_</span>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-note">
+  <div class="gal-styled gal-styled-note">
+    <div class="gal-note-body">
+      <p class="gal-note-line">钥匙在门垫下面。</p>
+      <p class="gal-note-line">冰箱里有给你留的布丁，微波炉热 30 秒。</p>
+      <p class="gal-note-line">别熬夜，台灯记得关。</p>
+    </div>
+    <div class="gal-note-sign">— 姐姐</div>
+  </div>
+</template>
+
+<template id="tpl-diary">
+  <div class="gal-styled gal-styled-diary">
+    <div class="gal-diary-header">
+      <span class="gal-diary-date">四月八日 · 晴转小雨</span>
+      <span class="gal-diary-mood">心情复杂</span>
+    </div>
+    <div class="gal-diary-body">
+      <p class="gal-diary-line">今天在河堤又遇到了那个人。</p>
+      <p class="gal-diary-line">他还是坐在老位置上画画，画的好像是对岸的樱花树。风把他的画纸吹跑了一张，正好落在我脚边。</p>
+      <p class="gal-diary-line">捡起来的时候看到了——画的根本不是樱花树，是站在树下的我。</p>
+      <p class="gal-diary-line">明天……要不要假装路过，再去一次呢。</p>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-bulletin">
+  <div class="gal-styled gal-styled-bulletin">
+    <div class="gal-bulletin-header">
+      <span class="gal-bulletin-icon">📢</span>
+      <span class="gal-bulletin-title">紧急通知</span>
+    </div>
+    <div class="gal-bulletin-meta">
+      <span>市政厅危机管理科</span>
+      <span>即日</span>
+    </div>
+    <div class="gal-bulletin-body">
+      <p class="gal-bulletin-line">因港湾区连日发生原因不明的异常现象，经市议会特别会议决定，即日起全城实施宵禁。</p>
+      <p class="gal-bulletin-line">每日二十一时至翌日五时，除持有特别通行证者外，任何人不得在户外逗留。</p>
+      <p class="gal-bulletin-line">请市民保持镇静，储备三日份饮水与食物，如目击异常光象请立即拨打专线上报，切勿自行接近。</p>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-fallback">
+  <div class="gal-styled gal-styled-fallback">
+    <div class="gal-styled-fallback-title">无线电残响</div>
+    <p>……滋滋……听得到吗……这里是第七观测站……</p>
+    <p>不要相信灯塔的光……重复一遍，不要相信……</p>
+    <p>……滋……（信号中断）</p>
+  </div>
+</template>
+<script>
+/* ═══════════════ 演出编排（导演台） ═══════════════ */
+(function () {
+  var stage = document.getElementById('sd-stage');
+  var slot = document.getElementById('sd-slot');
+  var wrap = document.getElementById('sd-wrap');
+  var flash = document.getElementById('fx-flash');
+  var tabs = document.getElementById('sd-tabs');
+  var toggleBtn = document.getElementById('sd-toggle');
+  var tourBtn = document.getElementById('sd-tour');
+  var TYPES = ['sms', 'letter', 'parchment', 'newspaper', 'terminal', 'note', 'diary', 'bulletin', 'fallback'];
+
+  // 每种载体：主题色（神光/粒子/银幕辉光）、粒子行为、入离场时长、专属编排钩子
+  var SHOW = {
+    sms:       { accent: '#4D9FFF', enter: 1000, leave: 620,
+                 particles: { c1: 0x4d9fff, c2: 0x9ad0ff, dir: 1,  speed: 5,  sway: 0.6, size: 2.0 } },
+    letter:    { accent: '#FFB7C9', enter: 1550, leave: 680,
+                 particles: { c1: 0xffb7c9, c2: 0xffe3ec, dir: -1, speed: 2.4, sway: 2.6, size: 3.2 } },
+    parchment: { accent: '#FFB347', enter: 1450, leave: 720,
+                 particles: { c1: 0xffb347, c2: 0xff7a3c, dir: 1,  speed: 3.2, sway: 1.2, size: 2.4 } },
+    newspaper: { accent: '#D8D2C0', enter: 1150, leave: 620,
+                 particles: { c1: 0xd8d2c0, c2: 0x8f8a7a, dir: -1, speed: 1.6, sway: 1.8, size: 2.2 } },
+    terminal:  { accent: '#4DFF88', enter: 950,  leave: 580,
+                 particles: { c1: 0x4dff88, c2: 0x1a7a3f, dir: -1, speed: 14, sway: 0.15, size: 1.7 } },
+    note:      { accent: '#FFE066', enter: 1750, leave: 820,
+                 particles: { c1: 0xffe066, c2: 0xfff6c8, dir: 1,  speed: 1.4, sway: 2.2, size: 2.6 } },
+    diary:     { accent: '#A8C686', enter: 1350, leave: 680,
+                 particles: { c1: 0xa8c686, c2: 0xe4f0c8, dir: 1,  speed: 1.8, sway: 1.6, size: 2.4 } },
+    bulletin:  { accent: '#FF5A4D', enter: 1650, leave: 620,
+                 particles: { c1: 0xff5a4d, c2: 0xffa094, dir: 1,  speed: 8,  sway: 0.5, size: 1.8 } },
+    fallback:  { accent: '#6DF0FF', enter: 950,  leave: 580,
+                 particles: { c1: 0x6df0ff, c2: 0xbe78ff, dir: 1,  speed: 2.6, sway: 1.0, size: 2.1 } },
+  };
+
+  var currentType = 'sms';
+  var token = 0;         // 演出令牌：新演出开始即作废旧编排
+  var subTimers = [];    // 子编排定时器
+  var tourTimer = null;
+
+  function clearSubTimers() {
+    subTimers.forEach(clearTimeout);
+    subTimers = [];
+  }
+  function later(fn, ms, myToken) {
+    subTimers.push(setTimeout(function () { if (myToken === token) fn(); }, ms));
+  }
+  function setAccent(hex) {
+    document.documentElement.style.setProperty('--fx-accent', hex);
+  }
+  function doFlash() {
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+  }
+  function shake() {
+    wrap.classList.remove('shake');
+    void wrap.offsetWidth;
+    wrap.classList.add('shake');
+  }
+  function removeFx() {
+    stage.querySelectorAll('.fx-roller').forEach(function (n) { n.remove(); });
+  }
+
+  /* ── 类型专属子编排 ── */
+
+  // 短信：气泡逐条揭示，对方消息前先出「正在输入…」
+  function playSms(card, myToken) {
+    var body = card.querySelector('.gal-sms-body');
+    var rows = [].slice.call(card.querySelectorAll('.gal-sms-row'));
+    rows.forEach(function (r) { r.classList.add('hide'); });
+    var t = 650; // 手机翻入落定后开始
+    rows.forEach(function (row) {
+      var isOther = row.classList.contains('gal-sms-row-other');
+      if (isOther) {
+        later(function () {
+          var ty = document.createElement('div');
+          ty.className = 'gal-sms-typing';
+          ty.innerHTML = '<i></i><i></i><i></i>';
+          body.insertBefore(ty, row);
+          body.scrollTop = body.scrollHeight;
+          row.__typing = ty;
+        }, t, myToken);
+        t += 620;
+        later(function () {
+          if (row.__typing) row.__typing.remove();
+          row.classList.remove('hide');
+          row.classList.add('pop');
+          body.scrollTop = body.scrollHeight;
+        }, t, myToken);
+      } else {
+        t += 260;
+        later(function () {
+          row.classList.remove('hide');
+          row.classList.add('pop');
+          body.scrollTop = body.scrollHeight;
+        }, t, myToken);
+      }
+      t += 340;
+    });
+  }
+
+  // 终端：CRT 开机后逐字打印，随机 RGB 故障
+  function playTerminal(card, myToken) {
+    var body = card.querySelector('.gal-terminal-body');
+    var cursor = card.querySelector('.gal-terminal-cursor');
+    var lines = [].slice.call(card.querySelectorAll('.gal-terminal-line'));
+    var data = lines.map(function (ln) {
+      var prompt = ln.querySelector('.gal-terminal-prompt');
+      var promptHTML = prompt ? prompt.outerHTML : '';
+      var text = ln.textContent.replace(prompt ? prompt.textContent : '', '').replace(/^\s+/, '');
+      ln.innerHTML = promptHTML + '<span class="tw"></span>';
+      ln.style.display = 'none';
+      return { el: ln, span: ln.querySelector('.tw'), text: ' ' + text };
+    });
+    var li = 0;
+    function typeLine() {
+      if (li >= data.length) {
+        // 打完后随机故障
+        later(function tick() {
+          var pick = data[Math.floor(Math.random() * data.length)].el;
+          pick.classList.add('fx-glitch');
+          later(function () { pick.classList.remove('fx-glitch'); }, 150, myToken);
+          later(tick, 1200 + Math.random() * 2600, myToken);
+        }, 900, myToken);
+        return;
+      }
+      var d = data[li++];
+      d.el.style.display = '';
+      if (cursor) d.el.appendChild(cursor);
+      var ci = 0;
+      (function typeChar() {
+        if (myToken !== token) return;
+        if (ci <= d.text.length) {
+          d.span.textContent = d.text.slice(0, ci++);
+          body.scrollTop = body.scrollHeight;
+          subTimers.push(setTimeout(typeChar, 14 + Math.random() * 26));
+        } else {
+          later(typeLine, 220, myToken);
+        }
+      })();
+    }
+    later(function () { if (cursor) body.appendChild(cursor); typeLine(); }, 720, myToken); // CRT 开机后
+  }
+
+  // 羊皮纸：注入上下木轴，与卷轴展开同步拉开
+  function playParchment(card, myToken) {
+    var top = document.createElement('div');
+    var bot = document.createElement('div');
+    top.className = 'fx-roller';
+    bot.className = 'fx-roller';
+    var mid = 'calc(50% - 13px)';
+    [top, bot].forEach(function (r) {
+      r.style.top = mid;
+      r.style.transition = 'top 1.1s cubic-bezier(0.3, 1, 0.4, 1) 0.18s, opacity 0.5s ease 1.4s';
+      stage.appendChild(r);
+    });
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        var h = card.getBoundingClientRect().height / 2;
+        top.style.top = 'calc(50% - ' + (h + 26) + 'px)';
+        bot.style.top = 'calc(50% + ' + h + 'px)';
+        top.style.opacity = '0';
+        bot.style.opacity = '0';
+      });
+    });
+    later(function () { top.remove(); bot.remove(); }, 2200, myToken);
+  }
+
+  // 报纸：旋转落定瞬间白闪 + 微震
+  function playNewspaper(card, myToken) {
+    later(function () { doFlash(); shake(); }, 780, myToken);
+  }
+
+  // 公告：印章砸落时白闪 + 震屏（印章动画 delay 1s + 0.34 落点）
+  function playBulletin(card, myToken) {
+    later(function () { doFlash(); shake(); if (window.SDParticles) window.SDParticles.burst(3.5); }, 1340, myToken);
+  }
+
+  var SUBPLAY = { sms: playSms, terminal: playTerminal, parchment: playParchment, newspaper: playNewspaper, bulletin: playBulletin };
+
+  /* ── 主流程 ── */
+  function mount(type, myToken) {
+    removeFx();
+    var tpl = document.getElementById('tpl-' + type);
+    slot.innerHTML = '';
+    slot.appendChild(tpl.content.cloneNode(true));
+    var card = slot.querySelector('.gal-styled');
+    card.classList.add('entering');
+    var show = SHOW[type];
+    if (window.SDParticles) { window.SDParticles.setTheme(show.particles); window.SDParticles.burst(2); }
+    if (SUBPLAY[type]) SUBPLAY[type](card, myToken);
+    later(function () { card.classList.remove('entering'); }, Math.max(show.enter, 2600), myToken);
+  }
+
+  function swapTo(type) {
+    token++;
+    var myToken = token;
+    clearSubTimers();
+    currentType = type;
+    setAccent(SHOW[type].accent);
+    var leavingCard = slot.querySelector('.gal-styled');
+    if (!leavingCard) { mount(type, myToken); return; }
+    var prevType = leavingCard.className.match(/gal-styled-(\w+)/);
+    var leaveMs = prevType && SHOW[prevType[1]] ? SHOW[prevType[1]].leave : 650;
+    leavingCard.classList.remove('entering');
+    leavingCard.classList.add('leaving');
+    setTimeout(function () { if (myToken === token) mount(type, myToken); }, leaveMs);
+  }
+
+  function hideStage() {
+    token++;
+    clearSubTimers();
+    var card = slot.querySelector('.gal-styled');
+    var myToken = token;
+    if (card) { card.classList.remove('entering'); card.classList.add('leaving'); }
+    stage.classList.add('hiding');
+    setTimeout(function () {
+      if (myToken !== token) return;
+      stage.classList.remove('show', 'hiding');
+      slot.innerHTML = '';
+      removeFx();
+    }, 700);
+  }
+  function showStage(type) {
+    token++;
+    stage.classList.add('show');
+    stage.classList.remove('hiding');
+    mount(type, token);
+  }
+
+  /* ── 控制 ── */
+  function selectTab(type) {
+    tabs.querySelectorAll('.sd-tab[data-type]').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.type === type);
+    });
+  }
+  tabs.addEventListener('click', function (e) {
+    var btn = e.target.closest('.sd-tab');
+    if (!btn || !btn.dataset.type) return;
+    stopTour();
+    selectTab(btn.dataset.type);
+    if (!stage.classList.contains('show')) showStage(btn.dataset.type);
+    else swapTo(btn.dataset.type);
+    currentType = btn.dataset.type;
+    setAccent(SHOW[currentType].accent);
+    toggleBtn.textContent = '⏏ 落幕';
+  });
+  document.getElementById('sd-replay').addEventListener('click', function () {
+    stopTour();
+    if (!stage.classList.contains('show')) { showStage(currentType); toggleBtn.textContent = '⏏ 落幕'; }
+    else swapTo(currentType);
+  });
+  toggleBtn.addEventListener('click', function () {
+    stopTour();
+    if (stage.classList.contains('show')) { hideStage(); toggleBtn.textContent = '▶ 开幕'; }
+    else { showStage(currentType); toggleBtn.textContent = '⏏ 落幕'; }
+  });
+  function stopTour() {
+    if (tourTimer) { clearInterval(tourTimer); tourTimer = null; tourBtn.classList.remove('on'); tourBtn.textContent = '▶ 巡演'; }
+  }
+  tourBtn.addEventListener('click', function () {
+    if (tourTimer) { stopTour(); return; }
+    tourBtn.classList.add('on');
+    tourBtn.textContent = '⏸ 巡演中';
+    if (!stage.classList.contains('show')) { showStage(currentType); toggleBtn.textContent = '⏏ 落幕'; }
+    tourTimer = setInterval(function () {
+      var next = TYPES[(TYPES.indexOf(currentType) + 1) % TYPES.length];
+      selectTab(next);
+      swapTo(next);
+    }, 4600);
+  });
+  // 点击舞台空白（卡片之外）= 落幕退出（插件内对应行为是「点击空白=NEXT」）
+  stage.addEventListener('click', function (e) {
+    if (e.target.closest('.gal-styled-stage-content')) return;
+    stopTour();
+    hideStage();
+    toggleBtn.textContent = '▶ 开幕';
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      stopTour();
+      var d = e.key === 'ArrowRight' ? 1 : -1;
+      var next = TYPES[(TYPES.indexOf(currentType) + d + TYPES.length) % TYPES.length];
+      selectTab(next);
+      if (!stage.classList.contains('show')) showStage(next); else swapTo(next);
+      currentType = next;
+    } else if (e.key === ' ') {
+      e.preventDefault(); stopTour();
+      if (stage.classList.contains('show')) swapTo(currentType);
+      else { showStage(currentType); toggleBtn.textContent = '⏏ 落幕'; }
+    } else if (e.key === 'Escape') {
+      stopTour(); hideStage(); toggleBtn.textContent = '▶ 开幕';
+    }
+  });
+
+  /* ── 鼠标视差 ── */
+  wrap.addEventListener('mousemove', function (e) {
+    var r = wrap.getBoundingClientRect();
+    var x = (e.clientX - r.left) / r.width - 0.5;
+    var y = (e.clientY - r.top) / r.height - 0.5;
+    slot.style.setProperty('--par-x', (x * 7).toFixed(2));
+    slot.style.setProperty('--par-y', (y * 5).toFixed(2));
+    if (window.SDParticles) window.SDParticles.parallax(x, y);
+  });
+  wrap.addEventListener('mouseleave', function () {
+    slot.style.setProperty('--par-x', 0);
+    slot.style.setProperty('--par-y', 0);
+    if (window.SDParticles) window.SDParticles.parallax(0, 0);
+  });
+
+  // 开演
+  setAccent(SHOW.sms.accent);
+  showStage('sms');
+})();
+</script>
+
+<script>
+/* ═══════════════ Canvas 2D 粒子舞台机械（零依赖，同 src/ui/styled-fx.js） ═══════════════ */
+(function () {
+  var holder = document.getElementById('fx-particles');
+  var canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+  holder.appendChild(canvas);
+  var ctx = canvas.getContext('2d');
+
+  var cur = { c1: [77,159,255], c2: [154,208,255], dir: 1, speed: 5, sway: 0.6, size: 2 };
+  var tgt = { c1: [77,159,255], c2: [154,208,255], dir: 1, speed: 5, sway: 0.6, size: 2 };
+  var burstMul = 1, ps = [], lastT = 0;
+  var sp1 = document.createElement('canvas'), sp2 = document.createElement('canvas');
+  sp1.width = sp1.height = sp2.width = sp2.height = 64;
+
+  function tint(cv, rgb) {
+    var c = cv.getContext('2d');
+    c.clearRect(0, 0, 64, 64);
+    var g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(' + (rgb[0]|0) + ',' + (rgb[1]|0) + ',' + (rgb[2]|0) + ',1)');
+    g.addColorStop(0.4, 'rgba(' + (rgb[0]|0) + ',' + (rgb[1]|0) + ',' + (rgb[2]|0) + ',0.45)');
+    g.addColorStop(1, 'rgba(' + (rgb[0]|0) + ',' + (rgb[1]|0) + ',' + (rgb[2]|0) + ',0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, 64, 64);
+  }
+  function resize() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = holder.clientWidth, h = holder.clientHeight;
+    if (!w || !h) return;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function spawn() {
+    var w = holder.clientWidth || 900, h = holder.clientHeight || 550;
+    var n = Math.max(70, Math.min(160, Math.round(w * h / 6000)));
+    ps = [];
+    for (var i = 0; i < n; i++) {
+      ps.push({ x: Math.random()*w, y: Math.random()*h, sp: 0.5+Math.random(),
+        phase: Math.random()*Math.PI*2, mix: Math.random() < 0.5 ? 0 : 1, r: 0.6+Math.random()*0.9 });
+    }
+  }
+  resize(); spawn();
+  new ResizeObserver(function(){ resize(); }).observe(holder);
+
+  window.SDParticles = {
+    setTheme: function (p) {
+      // demo SHOW 表用 0x 数值色，转 rgb
+      function toRgb(v){ return [(v>>16)&255, (v>>8)&255, v&255]; }
+      tgt.c1 = Array.isArray(p.c1) ? p.c1.slice() : toRgb(p.c1);
+      tgt.c2 = Array.isArray(p.c2) ? p.c2.slice() : toRgb(p.c2);
+      tgt.dir = p.dir; tgt.speed = p.speed; tgt.sway = p.sway; tgt.size = p.size;
+    },
+    burst: function (m) { burstMul = Math.max(burstMul, m || 2.5); },
+    parallax: function () {},
+  };
+
+  (function loop(t) {
+    requestAnimationFrame(loop);
+    var dt = Math.min((t - lastT) / 1000 || 0.016, 0.05);
+    lastT = t;
+    var w = holder.clientWidth, h = holder.clientHeight;
+    if (!w || !h) return;
+    ['dir','speed','sway','size'].forEach(function (k) { cur[k] += (tgt[k] - cur[k]) * 0.04; });
+    for (var i = 0; i < 3; i++) {
+      cur.c1[i] += (tgt.c1[i] - cur.c1[i]) * 0.045;
+      cur.c2[i] += (tgt.c2[i] - cur.c2[i]) * 0.045;
+    }
+    burstMul += (1 - burstMul) * 0.03;
+    tint(sp1, cur.c1); tint(sp2, cur.c2);
+    ctx.clearRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    var sec = t / 1000;
+    for (var j = 0; j < ps.length; j++) {
+      var p = ps[j];
+      p.y -= cur.dir * cur.speed * p.sp * burstMul * dt * 13;
+      p.x += Math.sin(sec * 0.7 + p.phase) * cur.sway * dt * 13;
+      if (p.y < -20) p.y = h + 20;
+      if (p.y > h + 20) p.y = -20;
+      if (p.x < -20) p.x = w + 20;
+      if (p.x > w + 20) p.x = -20;
+      var tw = 0.5 + 0.5 * Math.sin(sec * (1.2 + p.sp) + p.phase * 3);
+      var s = cur.size * p.r * 3.4;
+      ctx.globalAlpha = 0.25 + 0.5 * tw;
+      ctx.drawImage(p.mix ? sp2 : sp1, p.x - s, p.y - s, s * 2, s * 2);
+    }
+    ctx.globalAlpha = 1;
+  })(0);
+})();
+</script>
+</body>
+</html>

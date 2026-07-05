@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>花霞 HANAGASUMI — 樱色物语皮肤重设计 Demo</title>
+
+<!-- 宿主基础样式：数据库界面插件.css -->
+<link rel="stylesheet" href="数据库界面插件.css" />
+
+<!-- 图标与字体 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Italiana&display=swap" rel="stylesheet" />
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   樱色物语 (skin-classic) — 重设计「花霞 HANAGASUMI」
+   概念: 春晓的霞。晨光穿过花雾，落在温白的玻璃上。
+   语言: 暖白磨砂玻璃 · 樱渐变点睛 · 明朝体名牌 · 柔光景深
+   拒绝: 糖果粉刷墙 / 塑料描边 / 拥挤装饰 / 廉价阴影
+   配色:
+     霞白  #FFFAF8      晨粉  #FFE3EB      樱    #F2739B
+     绯    #DE5585      梅黑  #46293A      雾紫  #C3AEDC
+     蜜金  #E4B36A
+   ═══════════════════════════════════════════════════════════════════ */
+
+#gal-global-overlay.skin-classic,
+#gal-layer-choices.skin-classic {
+  --sk-white:     #FFFAF8;
+  --sk-blush:     #FFE3EB;
+  --sk-sakura:    #F2739B;
+  --sk-deep:      #DE5585;
+  --sk-plum:      #46293A;
+  --sk-plum-soft: #8A6478;
+  --sk-lav:       #C3AEDC;
+  --sk-gold:      #E4B36A;
+  --sk-glass:     rgba(255, 250, 248, 0.80);
+  --sk-glass-line:rgba(255, 255, 255, 0.95);
+  --sk-shadow:    rgba(222, 85, 133, 0.16);
+  --sk-serif:     'Shippori Mincho', 'Noto Serif SC', serif;
+  --sk-sans:      'Zen Kaku Gothic New', 'Noto Sans SC', sans-serif;
+  --sk-latin:     'Italiana', serif;
+  --sk-grad:      linear-gradient(120deg, #F58FAF 0%, #EE6E99 55%, #E05C8C 100%);
+}
+
+/* ─────────── 对话主面板：暖白磨砂玻璃 ─────────── */
+#gal-global-overlay.skin-classic .gal-text-panel {
+  background: var(--sk-glass) !important;
+  background-image: none !important;
+  border: 1px solid var(--sk-glass-line) !important;
+  border-radius: calc(22px * var(--ui-scale, 1)) !important;
+  box-shadow:
+      0 calc(24px * var(--ui-scale, 1)) calc(64px * var(--ui-scale, 1)) var(--sk-shadow),
+      0 calc(2px * var(--ui-scale, 1)) calc(8px * var(--ui-scale, 1)) rgba(70, 41, 58, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(22px) saturate(1.35) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.35) !important;
+  overflow: visible !important;
+}
+/* 顶缘一线樱霞渐变 —— 面板唯一的彩色装饰 */
+#gal-global-overlay.skin-classic .gal-text-panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(22px * var(--ui-scale, 1));
+  right: calc(22px * var(--ui-scale, 1));
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #F58FAF 18%, #E05C8C 50%, #C3AEDC 86%, transparent);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+#gal-global-overlay.skin-classic .gal-dialog-text {
+  color: var(--sk-plum) !important;
+  font-family: var(--sk-serif) !important;
+  font-weight: 500 !important;
+  line-height: 2.05 !important;
+  letter-spacing: 0.035em !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+/* ─────────── 名字：樱渐变浮签 + 明朝体 ─────────── */
+#gal-global-overlay.skin-classic .gal-name-badge {
+  top: calc(-1.35rem * var(--ui-scale, 1)) !important;
+  left: calc(1.6rem * var(--ui-scale, 1)) !important;
+  padding: calc(0.42rem * var(--ui-scale, 1)) calc(1.55rem * var(--ui-scale, 1)) !important;
+  background: var(--sk-grad) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 999px !important;
+  box-shadow:
+      0 calc(8px * var(--ui-scale, 1)) calc(22px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+  transform: scale(var(--ui-scale, 1)) !important;
+  transform-origin: bottom left !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.55rem;
+  font-family: var(--sk-serif) !important;
+  font-size: 1.18rem !important;
+  font-weight: 700 !important;
+}
+/* 花瓣印 */
+#gal-global-overlay.skin-classic .gal-name-badge::before {
+  content: '';
+  width: 0.72rem;
+  height: 0.66rem;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 100% 4% 100% 100%;
+  transform: rotate(-32deg);
+  flex-shrink: 0;
+}
+#gal-global-overlay.skin-classic .gal-name-badge span {
+  transform: none !important;
+  letter-spacing: 0.22em;
+  text-shadow: 0 1px 6px rgba(158, 44, 88, 0.35);
+}
+
+/* ─────────── 交互按钮（重绘/自由对话）：白玻璃药丸 ─────────── */
+#gal-global-overlay.skin-classic .gal-action-btn {
+  transform: none !important;
+  background: rgba(255, 250, 248, 0.78) !important;
+  color: var(--sk-plum-soft) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 calc(6px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.12) !important;
+  font-family: var(--sk-sans) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.14em !important;
+  padding: 0.6rem 1.5rem !important;
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  transition: color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease, background 0.25s ease !important;
+}
+#gal-global-overlay.skin-classic .gal-action-btn span,
+#gal-global-overlay.skin-classic .gal-action-btn i {
+  transform: none !important;
+}
+#gal-global-overlay.skin-classic .gal-action-btn i { color: var(--sk-sakura); opacity: 0.85; }
+#gal-global-overlay.skin-classic .gal-action-btn:hover {
+  background: #fff !important;
+  color: var(--sk-deep) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 calc(10px * var(--ui-scale, 1)) calc(26px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.22) !important;
+}
+#gal-global-overlay.skin-classic .gal-action-btn.btn-free {
+  color: var(--sk-deep) !important;
+  border-color: rgba(242, 115, 155, 0.4) !important;
+}
+
+/* ─────────── 底部工具栏：幽灵文字按钮 · 悬停晕开樱色 ─────────── */
+#gal-global-overlay.skin-classic .gal-bottom-toolbar {
+  border-top: 1px solid rgba(222, 85, 133, 0.10);
+  padding-top: calc(0.5rem * var(--ui-scale, 1)) !important;
+}
+#gal-global-overlay.skin-classic .gal-footer-btn {
+  transform: none !important;
+  background: transparent !important;
+  color: var(--sk-plum-soft) !important;
+  border: none !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  font-family: var(--sk-sans) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  transition: color 0.22s ease, background 0.22s ease !important;
+}
+#gal-global-overlay.skin-classic .gal-footer-btn i,
+#gal-global-overlay.skin-classic .gal-footer-btn span {
+  transform: none !important;
+}
+#gal-global-overlay.skin-classic .gal-footer-btn i {
+  font-size: calc(0.72rem * var(--ui-scale, 1)) !important;
+  opacity: 0.55;
+}
+#gal-global-overlay.skin-classic .gal-footer-btn:hover {
+  background: rgba(242, 115, 155, 0.10) !important;
+  color: var(--sk-deep) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+#gal-global-overlay.skin-classic .gal-nav-btn.active {
+  background: rgba(242, 115, 155, 0.14) !important;
+  color: var(--sk-deep) !important;
+  box-shadow: none !important;
+}
+
+/* 剧情选项：樱线框药丸 · 柔和呼吸 */
+#gal-global-overlay.skin-classic .gal-pending-choices-btn {
+  transform: none !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  color: var(--sk-deep) !important;
+  border: 1px solid rgba(242, 115, 155, 0.55) !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+  font-family: var(--sk-sans) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  animation: none !important;
+  transition: all 0.28s ease !important;
+}
+#gal-global-overlay.skin-classic .gal-pending-choices-btn i,
+#gal-global-overlay.skin-classic .gal-pending-choices-btn span {
+  transform: none !important;
+}
+#gal-global-overlay.skin-classic .gal-pending-choices-btn.show {
+  animation: skBloom 2.8s ease-in-out infinite !important;
+}
+@keyframes skBloom {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242, 115, 155, 0.0); }
+  50%      { box-shadow: 0 0 0 6px rgba(242, 115, 155, 0.14); }
+}
+#gal-global-overlay.skin-classic .gal-pending-choices-btn:hover {
+  background: var(--sk-grad) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  transform: translateY(-1px) !important;
+  filter: none !important;
+  box-shadow: 0 8px 22px rgba(222, 85, 133, 0.35) !important;
+}
+
+/* ─────────── NEXT：樱渐变主按钮 · 箭头前探 ─────────── */
+#gal-global-overlay.skin-classic .gal-footer-btn-next {
+  clip-path: none !important;
+  border-radius: 999px !important;
+  background: var(--sk-grad) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow:
+      0 calc(10px * var(--ui-scale, 1)) calc(26px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
+  font-family: var(--sk-latin) !important;
+  font-weight: 400 !important;
+  font-size: calc(1.12rem * var(--ui-scale, 1)) !important;
+  letter-spacing: 0.3em !important;
+  text-indent: 0.3em;
+  transition: box-shadow 0.28s ease, transform 0.28s ease, filter 0.28s ease !important;
+}
+#gal-global-overlay.skin-classic .gal-footer-btn-next i {
+  font-size: calc(0.78rem * var(--ui-scale, 1)) !important;
+  transition: transform 0.28s ease;
+}
+#gal-global-overlay.skin-classic .gal-footer-btn-next:hover {
+  background: var(--sk-grad) !important;
+  transform: translateY(-2px) !important;
+  filter: brightness(1.06);
+  box-shadow:
+      0 calc(14px * var(--ui-scale, 1)) calc(34px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+#gal-global-overlay.skin-classic .gal-footer-btn-next:hover i {
+  transform: translateX(4px);
+}
+
+/* 按压：轻沉 */
+#gal-global-overlay.skin-classic .gal-action-btn:active,
+#gal-global-overlay.skin-classic .gal-footer-btn:active,
+#gal-global-overlay.skin-classic .gal-pending-choices-btn:active,
+#gal-global-overlay.skin-classic .gal-footer-btn-next:active {
+  transform: translateY(1px) !important;
+  filter: brightness(0.94) !important;
+}
+
+/* ─────────── 进度：晨光丝带 ─────────── */
+#gal-global-overlay.skin-classic .gal-progress-container {
+  background: rgba(222, 85, 133, 0.10) !important;
+  height: calc(3px * var(--ui-scale, 1)) !important;
+  border-radius: 999px !important;
+}
+#gal-global-overlay.skin-classic .gal-progress-bar {
+  background: linear-gradient(90deg, #F5A6BE, #EE6E99, #C3AEDC) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 10px rgba(242, 115, 155, 0.55) !important;
+}
+
+/* ─────────── 顶部状态：白玻璃小签 ─────────── */
+#gal-global-overlay.skin-classic .gal-fullscreen-btn,
+#gal-global-overlay.skin-classic .gal-location-bar,
+#gal-global-overlay.skin-classic .gal-time-bar {
+  background: rgba(255, 250, 248, 0.66) !important;
+  color: var(--sk-plum-soft) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 4px 14px rgba(222, 85, 133, 0.10) !important;
+  font-family: var(--sk-sans) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.08em !important;
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  transition: color 0.25s ease, box-shadow 0.25s ease !important;
+}
+#gal-global-overlay.skin-classic .gal-fullscreen-btn {
+  font-size: 0.72rem !important;
+  letter-spacing: 0.22em !important;
+  padding: 0.42rem 0.95rem !important;
+}
+#gal-global-overlay.skin-classic .gal-fullscreen-btn:hover {
+  background: #fff !important;
+  color: var(--sk-deep) !important;
+  box-shadow: 0 8px 20px rgba(222, 85, 133, 0.2) !important;
+}
+#gal-global-overlay.skin-classic .gal-location-bar i,
+#gal-global-overlay.skin-classic .gal-time-bar i {
+  color: var(--sk-sakura) !important;
+  font-size: 0.72rem !important;
+}
+
+#gal-global-overlay.skin-classic .gal-bgm-widget {
+  background: rgba(255, 250, 248, 0.7) !important;
+  color: var(--sk-plum-soft) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 4px 14px rgba(222, 85, 133, 0.10) !important;
+  font-family: var(--sk-sans) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+#gal-global-overlay.skin-classic .gal-bgm-icon  { color: var(--sk-sakura) !important; }
+#gal-global-overlay.skin-classic .gal-bgm-title { color: var(--sk-plum) !important; font-weight: 700; letter-spacing: 0.06em; }
+#gal-global-overlay.skin-classic .gal-bgm-btn:hover { color: var(--sk-deep) !important; }
+
+/* 侧边小按钮：白玻璃圆钮 */
+#gal-global-overlay.skin-classic .gal-sprite-toggle,
+#gal-global-overlay.skin-classic .gal-status-popup-trigger {
+  background: rgba(255, 250, 248, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 4px 14px rgba(222, 85, 133, 0.12) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: box-shadow 0.25s ease, transform 0.25s ease !important;
+}
+#gal-global-overlay.skin-classic .gal-eye-icon { color: var(--sk-plum-soft) !important; font-size: 1rem; }
+#gal-global-overlay.skin-classic .gal-status-popup-icon { color: var(--sk-plum-soft) !important; }
+#gal-global-overlay.skin-classic .gal-sprite-toggle:hover,
+#gal-global-overlay.skin-classic .gal-status-popup-trigger:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px rgba(222, 85, 133, 0.22) !important;
+}
+#gal-global-overlay.skin-classic .gal-sprite-toggle:hover .gal-eye-icon,
+#gal-global-overlay.skin-classic .gal-status-popup-trigger:hover .gal-status-popup-icon {
+  color: var(--sk-deep) !important;
+}
+
+/* ─────────── 选项层：花雾玻璃 · 白卡浮升 ─────────── */
+#gal-layer-choices.skin-classic {
+  background: linear-gradient(160deg, rgba(255, 236, 241, 0.82), rgba(238, 228, 248, 0.82)) !important;
+  backdrop-filter: blur(20px) saturate(1.3) !important;
+}
+#gal-layer-choices.skin-classic .gal-choices-title {
+  transform: none !important;
+  font-family: var(--sk-latin);
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: var(--sk-deep);
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  text-transform: uppercase;
+  margin-bottom: 1.6rem;
+  position: relative;
+}
+#gal-layer-choices.skin-classic .gal-choices-title span { transform: none !important; }
+#gal-layer-choices.skin-classic .gal-choice-card {
+  transform: none !important;
+  background: rgba(255, 252, 251, 0.9) !important;
+  color: var(--sk-plum) !important;
+  border: 1px solid rgba(255, 255, 255, 1) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 10px 30px rgba(222, 85, 133, 0.12) !important;
+  font-family: var(--sk-serif);
+  font-size: 1.04rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em;
+  padding: 1.1rem 2.6rem !important;
+  min-width: 24rem;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease, color 0.3s ease !important;
+}
+#gal-layer-choices.skin-classic .gal-choice-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--sk-grad);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+#gal-layer-choices.skin-classic .gal-choice-card span { transform: none !important; }
+#gal-layer-choices.skin-classic .gal-choice-card:hover {
+  background: #fff !important;
+  color: var(--sk-deep) !important;
+  transform: translateY(-4px) !important;
+  box-shadow: 0 18px 44px rgba(222, 85, 133, 0.24) !important;
+}
+#gal-layer-choices.skin-classic .gal-choice-card:hover::before { transform: scaleY(1); }
+#gal-layer-choices.skin-classic .gal-choices-hint {
+  color: var(--sk-plum-soft);
+  font-family: var(--sk-sans);
+  font-size: 0.74rem;
+  letter-spacing: 0.24em;
+}
+
+/* ─────────── 生成中指示器 ─────────── */
+#gal-global-overlay.skin-classic .gal-generating-indicator {
+  background: rgba(255, 250, 248, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 20px 50px rgba(222, 85, 133, 0.2) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-icon   { color: var(--sk-sakura) !important; }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-text   { color: var(--sk-plum) !important; font-family: var(--sk-serif); letter-spacing: 0.18em; }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-status { color: var(--sk-plum-soft) !important; }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-dot    { background: var(--sk-sakura) !important; }
+
+/* ══════════════ 以下为 Demo 页面自身演示样式（非皮肤部分） ══════════════ */
+html, body { height: 100%; }
+body.sk-demo-page {
+  margin: 0;
+  background: linear-gradient(180deg, #F9F1EC 0%, #F6EAE8 100%);
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  padding: 2.2rem clamp(0.75rem, 3vw, 3rem) 1.5rem;
+  box-sizing: border-box;
+  min-height: 100vh;
+}
+.sk-demo-head {
+  max-width: 74rem;
+  margin: 0 auto 1.3rem;
+  display: flex;
+  align-items: baseline;
+  gap: 1.3rem;
+  flex-wrap: wrap;
+}
+.sk-demo-head h1 {
+  font-family: 'Shippori Mincho', serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #46293A;
+  margin: 0;
+  letter-spacing: 0.5em;
+}
+.sk-demo-head .sk-latin {
+  font-family: 'Italiana', serif;
+  color: #DE5585;
+  font-size: 1.08rem;
+  letter-spacing: 0.4em;
+}
+.sk-demo-head p { color: #A38B96; font-size: 0.75rem; margin: 0; letter-spacing: 0.1em; }
+.sk-demo-stage { max-width: 74rem; margin: 0 auto; }
+
+/* ─────────── Demo 舞台背景：春晓 · 花雾 · 远山 ─────────── */
+#gal-global-overlay.skin-classic .gal-layer-bg {
+  background:
+      radial-gradient(56% 46% at 26% 20%, rgba(255, 246, 230, 0.9) 0%, rgba(255, 240, 226, 0) 62%),
+      radial-gradient(70% 60% at 80% 8%, rgba(255, 214, 227, 0.75) 0%, rgba(255, 214, 227, 0) 65%),
+      radial-gradient(120% 80% at 50% 118%, rgba(213, 196, 236, 0.55) 0%, rgba(213, 196, 236, 0) 58%),
+      linear-gradient(180deg, #FFF3EA 0%, #FFE4EA 42%, #F3DEEE 76%, #E7DCF2 100%) !important;
+}
+#gal-global-overlay.skin-classic .gal-layer-bg::before { display: none; }
+
+.sk-scenery { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* 晨阳柔晕 */
+.sk-sun {
+  position: absolute;
+  top: 10%; left: 20%;
+  width: clamp(7rem, 17vw, 12rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 251, 235, 0.95) 0%, rgba(255, 233, 205, 0.55) 45%, rgba(255, 233, 205, 0) 72%);
+  filter: blur(2px);
+  animation: skSunBreath 9s ease-in-out infinite;
+}
+@keyframes skSunBreath {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.05); }
+}
+.sk-scenery svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* 花雾横带 */
+.sk-mist {
+  position: absolute;
+  left: -10%; right: -10%;
+  height: 22%;
+  background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255, 250, 250, 0.75) 50%, rgba(255,255,255,0) 100%);
+  filter: blur(6px);
+  animation: skMistDrift 26s ease-in-out infinite alternate;
+}
+.sk-mist.m1 { top: 46%; animation-duration: 30s; }
+.sk-mist.m2 { top: 60%; opacity: 0.7; animation-duration: 22s; animation-delay: -8s; }
+@keyframes skMistDrift {
+  from { transform: translateX(-3%); }
+  to   { transform: translateX(3%);  }
+}
+
+/* 巨型直书水印 */
+.sk-vertical-mark {
+  position: absolute;
+  top: 7%; right: 2.6%;
+  writing-mode: vertical-rl;
+  font-family: 'Shippori Mincho', serif;
+  font-size: clamp(3rem, 8vw, 6.5rem);
+  font-weight: 800;
+  color: rgba(222, 85, 133, 0.07);
+  letter-spacing: 0.26em;
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
+/* 立绘占位剪影 */
+.sk-figure {
+  width: min(28vh, 14rem);
+  height: 94%;
+  border-radius: 46% 46% 6px 6px / 24% 24% 6px 6px;
+  background: linear-gradient(180deg, rgba(122, 84, 104, 0.5), rgba(90, 58, 80, 0.62));
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+.sk-figure::before {
+  content: '';
+  position: absolute;
+  top: -12%; left: 50%;
+  transform: translateX(-50%);
+  width: 50%; aspect-ratio: 1;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(122, 84, 104, 0.5), rgba(98, 64, 86, 0.6));
+}
+.sk-figure.lit {
+  background: linear-gradient(180deg, rgba(151, 92, 120, 0.62), rgba(107, 62, 90, 0.72));
+  box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+      0 0 60px rgba(242, 115, 155, 0.3);
+}
+.sk-figure.lit::before {
+  background: linear-gradient(180deg, rgba(155, 96, 124, 0.62), rgba(115, 70, 96, 0.7));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+}
+
+/* ─────────── 花瓣：三层景深 ─────────── */
+.sk-petal-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 8; }
+.sk-petal {
+  position: absolute;
+  top: -5%;
+  width: 12px; height: 11px;
+  background: linear-gradient(135deg, #FCD8E2, #F4A9C1);
+  border-radius: 100% 4% 100% 100%;
+  animation: skFall linear infinite, skSway ease-in-out infinite alternate;
+}
+.sk-petal.far  { filter: blur(0.5px); opacity: 0.45; }
+.sk-petal.near { filter: blur(2.5px); opacity: 0.6; width: 20px; height: 18px; z-index: 40; }
+@keyframes skFall {
+  0%   { transform: translate3d(0, -8vh, 0) rotate(-20deg); }
+  100% { transform: translate3d(-6vw, 112vh, 0) rotate(340deg); }
+}
+@keyframes skSway {
+  from { margin-left: 0; }
+  to   { margin-left: 3vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-petal, .sk-mist, .sk-sun { animation: none !important; }
+  .sk-petal { display: none; }
+}
+
+.sk-demo-note {
+  max-width: 74rem;
+  margin: 1.1rem auto 0;
+  color: #A18C97;
+  font-size: 0.74rem;
+  line-height: 1.9;
+  letter-spacing: 0.05em;
+}
+.sk-demo-note code {
+  border: 1px solid rgba(222, 85, 133, 0.3);
+  border-radius: 4px;
+  padding: 0.02rem 0.4rem;
+  color: #DE5585;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.6);
+}
+</style>
+</head>
+<body class="sk-demo-page">
+
+<header class="sk-demo-head">
+  <h1>花霞</h1>
+  <span class="sk-latin">HANAGASUMI — Sakura Monogatari Redesign</span>
+  <p>晨光 × 花雾 × 暖白玻璃 · 加载宿主 数据库界面插件.css · NEXT 播放台词 / 选项 打开选择层</p>
+</header>
+
+<div class="sk-demo-stage">
+  <!-- ══════ 复刻 overlay.js 的实际 DOM 结构 ══════ -->
+  <div id="gal-global-overlay" class="active skin-classic">
+
+    <div class="gal-status-bar-container">
+      <div class="gal-location-bar" title="当前地点">
+        <i class="fa-solid fa-location-dot"></i>
+        <span class="gal-location-text">河畔并木道 · 花霞之下</span>
+      </div>
+      <div class="gal-time-bar" title="当前时间">
+        <i class="fa-regular fa-clock"></i>
+        <span class="gal-time-text">四月八日 · 清晨</span>
+      </div>
+    </div>
+
+    <button class="gal-fullscreen-btn" title="切换全屏">
+      <i class="fa-solid fa-expand"></i>
+      <span>FULL</span>
+    </button>
+
+    <div class="gal-game-container" data-skin-shell="default">
+      <div class="gal-layer-bg has-bg">
+        <div class="sk-scenery">
+          <div class="sk-sun"></div>
+          <svg viewBox="0 0 1200 640" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <!-- 远山：雾紫 → 樱灰 -->
+            <path d="M0,430 Q160,340 340,400 T700,392 Q900,350 1040,404 T1200,398 L1200,640 L0,640 Z"
+                  fill="#D9C4E0" opacity="0.55"/>
+            <path d="M0,480 Q220,404 460,458 T900,450 Q1060,420 1200,462 L1200,640 L0,640 Z"
+                  fill="#E4BBD0" opacity="0.6"/>
+            <!-- 近岸草坡 -->
+            <path d="M0,556 Q300,512 640,542 T1200,534 L1200,640 L0,640 Z" fill="#F2D7E3" opacity="0.9"/>
+
+            <!-- 垂樱枝：自右上角伸入 -->
+            <g fill="none" stroke="#7C4A62" stroke-linecap="round" opacity="0.9">
+              <path d="M1230,30 Q1040,80 930,180 T780,330" stroke-width="12"/>
+              <path d="M1030,110 Q950,145 910,225" stroke-width="6"/>
+              <path d="M910,205 Q830,245 812,326" stroke-width="5"/>
+              <path d="M1120,64 Q1060,134 1068,214" stroke-width="6"/>
+            </g>
+            <!-- 花团：柔光樱 -->
+            <g>
+              <circle cx="924" cy="188" r="34" fill="#F9C6D6" opacity="0.9"/>
+              <circle cx="880" cy="238" r="26" fill="#F6B2C9" opacity="0.85"/>
+              <circle cx="962" cy="150" r="24" fill="#FBD5E1" opacity="0.9"/>
+              <circle cx="822" cy="300" r="28" fill="#F6B2C9" opacity="0.8"/>
+              <circle cx="792" cy="336" r="18" fill="#F19CBB" opacity="0.75"/>
+              <circle cx="1062" cy="196" r="26" fill="#F9C6D6" opacity="0.85"/>
+              <circle cx="1092" cy="150" r="20" fill="#FBD5E1" opacity="0.85"/>
+              <circle cx="1148" cy="84"  r="30" fill="#F9C6D6" opacity="0.9"/>
+              <circle cx="1006" cy="120" r="18" fill="#F6B2C9" opacity="0.7"/>
+            </g>
+            <!-- 花团点缀：深樱 -->
+            <g fill="#E87FA5">
+              <circle cx="936" cy="196" r="5" opacity="0.9"/>
+              <circle cx="884" cy="248" r="4" opacity="0.8"/>
+              <circle cx="826" cy="308" r="4.5" opacity="0.8"/>
+              <circle cx="1066" cy="204" r="4" opacity="0.8"/>
+              <circle cx="1146" cy="92" r="5" opacity="0.85"/>
+            </g>
+          </svg>
+        </div>
+        <div class="sk-mist m1"></div>
+        <div class="sk-mist m2"></div>
+        <div class="sk-vertical-mark">花霞物語</div>
+      </div>
+
+      <div class="gal-game-content">
+        <div class="sk-petal-layer" id="sk-petals"></div>
+
+        <div class="gal-layer-character">
+          <div class="gal-char-slot slot-left">
+            <div class="gal-char-container silent"><div class="sk-figure"></div></div>
+          </div>
+          <div class="gal-char-slot slot-center">
+            <div class="gal-char-container speaking"><div class="sk-figure lit"></div></div>
+          </div>
+          <div class="gal-char-slot slot-right"></div>
+        </div>
+
+        <div class="gal-dialog-layer">
+          <button class="gal-sprite-toggle" title="显示/隐藏立绘"><span class="gal-eye-icon">&#128065;</span></button>
+          <button class="gal-status-popup-trigger gal-location-popup-trigger" title="弹窗一">
+            <i class="gal-status-popup-icon fa-solid fa-map-location-dot"></i>
+          </button>
+          <button class="gal-status-popup-trigger gal-time-popup-trigger" title="弹窗二">
+            <i class="gal-status-popup-icon fa-regular fa-sun"></i>
+          </button>
+
+          <div class="gal-name-badge"><span id="sk-name">小春</span></div>
+
+          <div class="gal-interaction-bar">
+            <button class="gal-action-btn btn-reroll" title="重新生成">
+              <i class="fa-solid fa-rotate-right"></i><span>重绘</span>
+            </button>
+            <button class="gal-action-btn btn-free" title="自由输入">
+              <i class="fa-regular fa-keyboard"></i><span>对话</span>
+            </button>
+          </div>
+
+          <div class="gal-text-panel">
+            <p class="gal-dialog-text" id="sk-text"></p>
+            <div class="gal-bottom-toolbar">
+              <button class="gal-footer-btn"><i class="fa-solid fa-list-ul"></i> <span class="gal-btn-text">LOG</span></button>
+              <button class="gal-footer-btn"><i class="fa-solid fa-power-off"></i> <span class="gal-btn-text">CLOSE</span></button>
+              <button class="gal-footer-btn"><i class="fa-solid fa-gear"></i> <span class="gal-btn-text">CONFIG</span></button>
+              <button class="gal-footer-btn"><i class="fa-solid fa-floppy-disk"></i> <span class="gal-btn-text">SAVE</span></button>
+              <button class="gal-footer-btn gal-nav-btn"><i class="fa-solid fa-chevron-left"></i> <span class="gal-btn-text">PREV</span></button>
+              <button class="gal-footer-btn gal-nav-btn" id="sk-auto"><i class="fa-solid fa-play"></i> <span class="gal-btn-text">AUTO</span></button>
+              <button class="gal-footer-btn gal-nav-btn"><i class="fa-solid fa-forward"></i> <span class="gal-btn-text">SKIP</span></button>
+              <button class="gal-pending-choices-btn show" id="sk-choices-btn">
+                <i class="fa-solid fa-list-check" style="font-size:0.85rem"></i> <span class="gal-btn-text">选项</span>
+              </button>
+              <button class="gal-footer-btn-next" id="sk-next">
+                <span class="gal-btn-text">NEXT</span> <i class="fa-solid fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="gal-progress-container">
+            <div class="gal-progress-bar" id="sk-progress" style="width:25%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 选项层（宿主中为独立节点） -->
+  <div id="gal-layer-choices" class="skin-classic">
+    <div class="gal-choices-title"><span>Choice</span></div>
+    <div class="gal-choices-container">
+      <div class="gal-choice-card"><span>「一起去看河堤尽头那棵最大的樱花树吧。」</span></div>
+      <div class="gal-choice-card"><span>悄悄把落在她发间的花瓣摘下来收好</span></div>
+      <div class="gal-choice-card"><span>「今年的樱花……好像开得比去年更好看。」</span></div>
+    </div>
+    <div class="gal-choices-hint">点击任意处关闭</div>
+  </div>
+</div>
+
+<p class="sk-demo-note">
+  设计语言：暖白磨砂玻璃承载全部信息，彩色只出现在三处 —— 名牌与 NEXT 的樱渐变、面板顶缘一线花霞。
+  名字是花瓣印 + 明朝体浮签；工具栏为幽灵文字按钮，hover 晕开一层樱色；NEXT 悬停时箭头前探、投影加深；
+  选项层是花雾玻璃上的白卡，hover 浮升并自顶垂下一条樱色侧线。花瓣分远/中/近三层景深（近景大而虚焦）。
+  皮肤本体挂在 <code>#gal-global-overlay.skin-classic</code>，与 styles.js 第 5 号皮肤同构，确认后可直接替换对应区块接入插件。
+</p>
+
+<script>
+(function () {
+  // ── 花瓣：三层景深 ──
+  var layer = document.getElementById('sk-petals');
+  var depths = ['far', 'far', 'far', 'far', '', '', '', '', '', 'near', 'near', 'near'];
+  for (var i = 0; i < depths.length; i++) {
+    var p = document.createElement('span');
+    p.className = 'sk-petal' + (depths[i] ? ' ' + depths[i] : '');
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDuration = (11 + Math.random() * 10) + 's, ' + (3 + Math.random() * 3) + 's';
+    p.style.animationDelay = (-Math.random() * 22) + 's, ' + (-Math.random() * 4) + 's';
+    if (!depths[i]) { p.style.opacity = 0.5 + Math.random() * 0.35; }
+    layer.appendChild(p);
+  }
+
+  // ── 台词与打字机 ──
+  var lines = [
+    { name: '小春', text: '「你看——」她伸出手，一枚花瓣正好落在掌心，「连风都是粉色的哦。」' },
+    { name: '旁白', text: '晨光穿过花枝，在河面上洒下细碎的光。整条并木道浮在淡淡的花雾里，像一场还没醒的梦。' },
+    { name: '小春', text: '「每年只有一个星期能看到这样的景色。所以啊，今天翘掉的第一节课……就当是被春天没收了吧？」' },
+    { name: '小春', text: '她回过头来，笑得比满树的花还要亮：「明年、后年，也要一起来看哦。约好了。」' },
+  ];
+  var idx = 0, timer = null, autoTimer = null;
+  var elText = document.getElementById('sk-text');
+  var elName = document.getElementById('sk-name');
+  var elProgress = document.getElementById('sk-progress');
+
+  function show(i) {
+    var line = lines[i % lines.length];
+    elName.textContent = line.name;
+    elProgress.style.width = ((i % lines.length) + 1) / lines.length * 100 + '%';
+    clearInterval(timer);
+    var chars = Array.from(line.text), pos = 0;
+    elText.textContent = '';
+    timer = setInterval(function () {
+      if (pos >= chars.length) { clearInterval(timer); return; }
+      elText.textContent += chars[pos++];
+    }, 34);
+  }
+
+  document.getElementById('sk-next').addEventListener('click', function () { show(++idx); });
+  show(0);
+
+  // ── AUTO ──
+  var autoBtn = document.getElementById('sk-auto');
+  autoBtn.addEventListener('click', function () {
+    autoBtn.classList.toggle('active');
+    if (autoBtn.classList.contains('active')) {
+      autoTimer = setInterval(function () { show(++idx); }, 4200);
+    } else {
+      clearInterval(autoTimer);
+    }
+  });
+
+  // ── 选项层 ──
+  var choicesLayer = document.getElementById('gal-layer-choices');
+  document.getElementById('sk-choices-btn').addEventListener('click', function () {
+    choicesLayer.classList.add('active');
+  });
+  choicesLayer.addEventListener('click', function () {
+    choicesLayer.classList.remove('active');
+  });
+})();
+</script>
+</body>
+</html>

@@ -63,7 +63,8 @@ export async function handleRealTimeBackgroundGeneration(sceneName, tags) {
         throw new Error(`未找到默认背景生成工作流: ${workflowId || 'default_bg'}。请在设置-ComfyUI中配置。`);
       }
 
-      const positive = `${tags}, (high quality, masterpiece, best quality, 4k, 8k:1.2), no humans`;
+      // 剧情CG模式下不强制 no humans，允许生成包含人物的画面
+      const positive = `${tags}, (high quality, masterpiece, best quality, 4k, 8k:1.2)${settings.imageGenCgMode === true ? '' : ', no humans'}`;
       const negative = settings.comfyui.negativePrompt || 'nsfw, lowres, bad anatomy, bad hands, text, error';
       const seed = Math.floor(Math.random() * 10000000000);
 
@@ -201,18 +202,19 @@ export function handleBananaBackgroundGeneration(sceneName, prompt) {
       console.log(`[${SCRIPT_NAME}] 大香蕉生图: 开始生成场景「${sceneName}」`);
       console.log(`[${SCRIPT_NAME}] 大香蕉生图: 原始描述 = ${prompt.substring(0, 100)}...`);
 
+      const cgMode = settings.imageGenCgMode === true;
       let finalPrompt = prompt;
       if (bs.defaultPromptPrefix) {
         finalPrompt = bs.defaultPromptPrefix + finalPrompt;
       }
-      if (!bs.cgMode) {
+      if (!cgMode) {
         const defaultSceneSuffix = ', no humans, scenery, background';
         const suffixToUse = bs.defaultPromptSuffix || defaultSceneSuffix;
         if (suffixToUse) {
           finalPrompt = finalPrompt + suffixToUse;
         }
       }
-      if (bs.cgMode) {
+      if (cgMode) {
         finalPrompt = finalPrompt + '\n请生成符合剧情的CG画面，必须包含人物。';
 
         const appearances = getBananaCharacterAppearances();
@@ -238,7 +240,7 @@ export function handleBananaBackgroundGeneration(sceneName, prompt) {
 
       let messageContent = finalPrompt;
       const appearances = getBananaCharacterAppearances();
-      if (bs.cgMode && appearances.length > 0) {
+      if (cgMode && appearances.length > 0) {
         console.log(`[${SCRIPT_NAME}] 大香蕉生图: CG模式，准备添加 ${appearances.length} 个角色立绘到多模态消息`);
         messageContent = await buildBananaAppearanceMultimodalContent(finalPrompt);
         if (Array.isArray(messageContent)) {

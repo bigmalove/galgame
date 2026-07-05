@@ -16,6 +16,7 @@ export const TTS_PROVIDER = {
 
 const TTS_ENABLED_KEY = GalgameStore.STORAGE_KEYS.TTS_ENABLED;
 const CHAR_TTS_VOICE_KEY = GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE;
+const CHAR_TTS_ENABLED_KEY = GalgameStore.STORAGE_KEYS.CHAR_TTS_ENABLED;
 
 export function normalizeGptSoVitsSwitchMode(mode) {
   const s = String(mode || '').trim().toLowerCase();
@@ -1328,6 +1329,53 @@ export function setCharacterTTSVoice(characterId, voiceName) {
     localStorage.setItem(CHAR_TTS_VOICE_KEY, JSON.stringify(map));
   } catch (e) {
     console.error(`[${SCRIPT_NAME}] 保存角色TTS音色失败:`, e);
+  }
+}
+
+// 每角色 TTS 开关：map 中不存在该角色 = 启用（只存禁用项）
+export function getCharacterTTSEnabled(characterId) {
+  try {
+    const map = JSON.parse(localStorage.getItem(CHAR_TTS_ENABLED_KEY) || '{}');
+    const rawCharacterId = String(characterId || '').trim();
+    if (!rawCharacterId) return true;
+    if (Object.prototype.hasOwnProperty.call(map, rawCharacterId)) {
+      return map[rawCharacterId] !== false;
+    }
+    const resolvedCharacterId = resolveCharacterIdByKeywords(rawCharacterId, Object.keys(map));
+    if (resolvedCharacterId && Object.prototype.hasOwnProperty.call(map, resolvedCharacterId)) {
+      return map[resolvedCharacterId] !== false;
+    }
+    return true;
+  } catch (e) {
+    return true;
+  }
+}
+
+export function setCharacterTTSEnabled(characterId, enabled) {
+  try {
+    const map = JSON.parse(localStorage.getItem(CHAR_TTS_ENABLED_KEY) || '{}');
+    const rawCharacterId = String(characterId || '').trim();
+    if (!rawCharacterId) return;
+    const candidateIds = Array.from(new Set([
+      ...Object.keys(map),
+      ...Object.keys(getAllCharacterNameKeywords()),
+      rawCharacterId,
+    ]));
+    const resolvedCharacterId = resolveCharacterIdByKeywords(rawCharacterId, candidateIds) || rawCharacterId;
+    if (enabled) {
+      delete map[rawCharacterId];
+      if (resolvedCharacterId !== rawCharacterId) {
+        delete map[resolvedCharacterId];
+      }
+    } else {
+      map[resolvedCharacterId] = false;
+      if (resolvedCharacterId !== rawCharacterId) {
+        delete map[rawCharacterId];
+      }
+    }
+    localStorage.setItem(CHAR_TTS_ENABLED_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.error(`[${SCRIPT_NAME}] 保存角色TTS开关失败:`, e);
   }
 }
 

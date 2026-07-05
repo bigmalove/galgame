@@ -6,7 +6,7 @@ import { getIsLoadingSave, getPendingOptions, setIsLoadingSave } from '../core/s
 import { GalgameStore } from '../core/store.js';
 import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
 import { resetEnhancedModeState } from '../logic/enhanced-mode.js';
-import { parseGalgameContent } from '../logic/parser.js';
+import { parseGalgameContent, stripImagePlaceholders } from '../logic/parser.js';
 import { clearSpecialCgOverlayAndQueue } from '../logic/special-cg-trigger.js';
 import { SpriteManager } from '../sprite/sprite-manager.js';
 import { detectAndCaptureCg, updateGlobalOverlayContent } from '../ui/overlay-content.js';
@@ -675,8 +675,9 @@ async function executeChatFork(targetMessageId) {
 }
 
 function createFallbackParsed(text) {
+  const cleanText = stripImagePlaceholders(String(text || '')).trim();
   return {
-    segments: [{ type: 'narration', speaker: null, text: text || '（当前消息无可显示内容）', expression: null }],
+    segments: [{ type: 'narration', speaker: null, text: cleanText || '（当前消息无可显示内容）', expression: null }],
     currentBackground: null,
     bgm: null,
     options: [],

@@ -76,17 +76,38 @@ async function extractImageFromZip(arrayBuffer) {
 // 请求体构建
 // ============================================
 
+// 剧情CG模式下需要从提示词前后缀中剔除强制纯场景的标签，否则与"包含人物"要求冲突
+const SCENERY_ONLY_TAGS = new Set(['no humans', 'scenery', 'background']);
+
+function removeSceneryOnlyTags(text) {
+  return String(text || '')
+    .split(',')
+    .map(t => t.trim())
+    .filter(t => t && !SCENERY_ONLY_TAGS.has(t.toLowerCase()))
+    .join(', ');
+}
+
 function buildRequestBody(tags, settings) {
   const ns = settings.novelai;
+  const cgMode = settings.imageGenCgMode === true;
   const negativePrompt = ns.negativePrompt ||
     'nsfw, lowres, artistic error, worst quality, bad quality, jpeg artifacts, very displeasing, text, watermark';
 
-  let finalPrompt = tags;
-  if (ns.defaultPromptPrefix) {
-    finalPrompt = ns.defaultPromptPrefix + finalPrompt;
+  let prefix = ns.defaultPromptPrefix || '';
+  let suffix = ns.defaultPromptSuffix || '';
+  if (cgMode) {
+    prefix = removeSceneryOnlyTags(prefix);
+    if (prefix) prefix = prefix + ', ';
+    suffix = removeSceneryOnlyTags(suffix);
+    if (suffix) suffix = ', ' + suffix;
   }
-  if (ns.defaultPromptSuffix) {
-    finalPrompt = finalPrompt + ns.defaultPromptSuffix;
+
+  let finalPrompt = tags;
+  if (prefix) {
+    finalPrompt = prefix + finalPrompt;
+  }
+  if (suffix) {
+    finalPrompt = finalPrompt + suffix;
   }
 
   const seed = Math.floor(Math.random() * 4294967295);

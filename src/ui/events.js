@@ -5,7 +5,7 @@ import { getMapSettings, getSettings, setCurrentCharEnabled } from '../core/sett
 import { getIsRewinding, getPendingOptions, REWIND_HOLD_DELAY, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
-import { parseGalgameContent } from '../logic/parser.js';
+import { parseGalgameContent, stripImagePlaceholders } from '../logic/parser.js';
 import { clearSpecialCgOverlayAndQueue } from '../logic/special-cg-trigger.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from '../logic/worldbook.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
@@ -270,7 +270,7 @@ export function setupGlobalEventListeners() {
     }
 
     const buildFallbackParsed = () => {
-      const fallbackText = String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）';
+      const fallbackText = stripImagePlaceholders(String($mes.find('.mes_text').text() || '')).trim() || '（当前消息无可显示内容）';
       return {
         segments: [{ type: 'narration', speaker: null, text: fallbackText, expression: null }],
         currentBackground: null,
@@ -371,15 +371,8 @@ export function setupGlobalEventListeners() {
     return isNarrowViewport || isShortViewport;
   }
 
-  function hasCustomSkinFooterMenuItems() {
-    const $overlay = $('#gal-global-overlay');
-    if (!$overlay.length) return false;
-    if (String($overlay.attr('data-custom-skin-active-profile') || '') !== 'true') return false;
-    return Number($overlay.attr('data-custom-skin-footer-menu-count') || 0) > 0;
-  }
-
   function shouldOpenConfigMenu() {
-    return isViewportMobileMenuMode() || hasCustomSkinFooterMenuItems();
+    return isViewportMobileMenuMode();
   }
 
   // 设置按钮

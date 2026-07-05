@@ -6,7 +6,7 @@ import { getHideOtherFloors, getIsEnabled, getPendingOptions } from '../core/sta
 import { GalgameStore } from '../core/store.js';
 import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.js';
 import { Live2DPreloadManager } from '../live2d/preload.js';
-import { parseGalgameContent, RE_GAL_TAGS } from '../logic/parser.js';
+import { parseGalgameContent, RE_GAL_TAGS, stripImagePlaceholders } from '../logic/parser.js';
 import { consumePendingSpecialCgByScene } from '../logic/special-cg-trigger.js';
 import { markTimelineCacheDirty } from '../timeline/data.js';
 import { getFormattedSwipeContent, getMesTextContentForGalgame, getRawMessageContent } from '../utils/html.js';
@@ -14,7 +14,7 @@ import { renderBGMWidget } from './bgm-widget.js';
 import { hideNonLastFloors, showAllFloors } from './galgame-mode.js';
 import { injectGalgameButton } from './menu-button.js';
 import { detectAndCaptureCg } from './overlay-content.js';
-import { adjustToolbarForSpace, ensureGlobalOverlay, showGlobalOverlay } from './overlay.js';
+import { adjustToolbarForSpace, ensureGlobalOverlay, showGeneratingIndicator, showGlobalOverlay } from './overlay.js';
 import { cancelTypewriter } from './typewriter.js';
 
 // ============================================
@@ -41,8 +41,9 @@ export function setProcessMessageRefs({ updateGlobalOverlayContent, applySetting
 }
 
 function buildFallbackParsed(text) {
+  const cleanText = stripImagePlaceholders(String(text || '')).trim();
   return {
-    segments: [{ type: 'narration', speaker: null, text: text || '（当前消息无可显示内容）', expression: null }],
+    segments: [{ type: 'narration', speaker: null, text: cleanText || '（当前消息无可显示内容）', expression: null }],
     currentBackground: null,
     bgm: null,
     options: [],
@@ -139,6 +140,7 @@ export async function processNewMessage(mesNode, options = {}) {
       } else {
         renderFallbackOverlay(mesId, '生成中...');
       }
+      showGeneratingIndicator('正在生成内容...');
       const pending = getPendingOptions();
       if (pending && pending.length > 0) {
         $('.gal-game-container .gal-pending-choices-btn').addClass('show');
@@ -238,7 +240,7 @@ export async function processNewMessage(mesNode, options = {}) {
   const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
   if (isLastAi) {
     cancelTypewriter();
-    const fallbackText = String($mes.find('.mes_text').text() || '').trim() || '（当前消息无可显示内容）';
+    const fallbackText = stripImagePlaceholders(String($mes.find('.mes_text').text() || '')).trim() || '（当前消息无可显示内容）';
 
     if (_updateGlobalOverlayContentRef) {
       try {

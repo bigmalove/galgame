@@ -21,7 +21,6 @@ import { saveLive2DModel, getLive2DModel, hasLive2DModel, deleteLive2DModel, get
 import { saveSprite, saveSpritesBatch, getSprite, getCharacterSprites, deleteSprite, getAllSprites, loadAllSpritesToCache } from './db/sprites.js';
 import { saveBackground, saveBackgroundsBatch, getBackground, deleteBackground, getAllBackgrounds, loadAllBackgroundsToCache } from './db/backgrounds.js';
 import { getCurrentPackId, setCurrentPack, getRenderScope, setRenderScope, getAllImagePacks, getDefaultPack, createImagePack, renameImagePack, deleteImagePack, transferSpritesToPack, transferBackgroundsToPack, getPackResourceCount, ensureBackgroundLayers, clearBackgroundLayers, setBackgroundWithTransition } from './db/image-packs.js';
-import { buildUiSkinAssetId, saveUiSkinAsset, getUiSkinAssetById, getUiSkinAsset, getUiSkinAssetsByPackSkin, getAllUiSkinAssets, deleteUiSkinAssetById, deleteUiSkinAsset, deleteUiSkinAssetsByPackSkin } from './db/ui-skins.js';
 
 // === Phase 3: 独立功能模块 ===
 import { SpriteAnimationManager } from './animation/sprite-animation.js';
@@ -89,7 +88,10 @@ import { applyGalgameMode, restoreOriginalViews, hideNonLastFloors, showAllFloor
 import { injectGalgameButton, addMenuButton, updateButtonState, setMenuButtonRefs } from './ui/menu-button.js';
 import { processNewMessage, showGeneratingStatus, setProcessMessageRefs } from './ui/process-message.js';
 import { setupGlobalEventListeners, setEventsRefs } from './ui/events.js';
-import { showSettingsPanel, applySettingsToUI, applyBgFillMode, applyTextEffect, setSettingsPanelRefs } from './ui/settings-panel.js';
+import { showSettingsPanel, applySettingsToUI, applyBgFillMode, applyTextEffect, refreshSkinSelectElement, setSettingsPanelRefs, applySkin, getSkinOptionHtml, setGalgameMasterEnabled, applySimpleStorybookMode } from './ui/settings-panel.js';
+import { setSetupWizardRefs } from './ui/setup-wizard.js';
+import { isTitleScreenVisible } from './ui/title-screen.js';
+import { setHtmlSkinManagerRefs } from './ui/html-skin-manager.js';
 import { showLive2DSettingsModal } from './ui/live2d-settings-modal.js';
 import { showSpriteConfigModal, setSpriteConfigRefs } from './ui/sprite-config.js';
 import { showBatchBackgroundUploadDialog, showBackgroundUploadDialog } from './ui/bg-upload.js';
@@ -133,7 +135,7 @@ setEnhancedModeRefs({ showToast });
 setFullscreenRefs({ adjustGameContentScale, resetGameContentScale, adjustToolbarForSpace, showToast });
 
 // Phase 8 延迟引用: generation-state -> next-btn
-setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus });
+setGenerationStateRefs({ stopNextBtnAnimation, refreshNextBtnDisplay, updateNextBtnForGeneratingState, updateGeneratingStatus, hideGeneratingIndicator });
 
 // Phase 8 延迟引用: overlay -> overlay-content
 setOverlayRefs({ updateOverlaySegmentDisplay, applySettingsToUI });
@@ -164,7 +166,7 @@ setEventsRefs({ showSettingsPanel, showSpriteUploadDialog, updateGlobalOverlayCo
 setMenuButtonRefs({ showSettingsPanel });
 
 // Phase 8 延迟引用: enhanced-mode -> overlay-content
-setEnhancedModeRefs({ showToast, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus });
+setEnhancedModeRefs({ showToast, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus, showGeneratingIndicator });
 
 // Phase 8 延迟引用: settings-panel -> asset-manager-modal (content builder)
 setSettingsPanelRefs({ buildAssetsPane: buildAssetManagerContent, bindAssetsPane: bindAssetManagerContentEvents, assetStyles: buildAssetManagerStyles });
@@ -195,6 +197,12 @@ setAssetManagerModalRefs({
   showBatchSpecialCgUploadDialog,
   showSettingsPanel,
 });
+
+// Phase 8 延迟引用: html-skin-manager -> settings-panel (避免循环依赖)
+setHtmlSkinManagerRefs({ applySettingsToUI, refreshSkinSelectElement });
+
+// Phase 8 延迟引用: setup-wizard -> settings-panel + title-screen (避免循环依赖，settings-panel 正向 import 向导绑定按钮)
+setSetupWizardRefs({ applySkin, applySettingsToUI, applyBgFillMode, getSkinOptionHtml, setGalgameMasterEnabled, applySimpleStorybookMode, isTitleScreenVisible });
 
 // Phase 8 延迟引用: image-gen-config -> sprite-upload (banana appearance picker)
 setImageGenConfigRefs({ showBananaAppearancePicker });

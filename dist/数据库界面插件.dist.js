@@ -10506,11 +10506,14 @@
   function clearBackgroundLayers($bgLayer) {
     const { $base, $front } = ensureBackgroundLayers($bgLayer);
     $bgLayer.removeClass("bg-transitioning");
+    $bgLayer.removeData("bgCurrentUrl");
     $base.css("background-image", "");
     $front.removeClass("is-active").css("background-image", "");
   }
   function setBackgroundWithTransition($bgLayer, bgUrl) {
     const { $base, $front } = ensureBackgroundLayers($bgLayer);
+    if ($bgLayer.data("bgCurrentUrl") === bgUrl) return;
+    $bgLayer.data("bgCurrentUrl", bgUrl);
     $bgLayer.find(".gal-gen-indicator").remove();
     $front.removeClass("is-active").css("background-image", `url(${bgUrl})`);
     if ($front[0]) void $front[0].offsetHeight;

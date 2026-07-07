@@ -2192,7 +2192,7 @@ function bindPackSelectorEvents($modal, activeTab) {
     const $item = $(this);
     $item.css('pointer-events', 'none').find('i').removeClass('fa-cloud-arrow-down').addClass('fa-spinner fa-spin');
     try {
-      const result = await importBuiltinBgPack(pack, { autoSwitch: true });
+      const result = await importBuiltinBgPack(pack, { ownPack: true });
       if (result) {
         $modal.remove();
         $(topWindow.document).off('.galMenus').off('.galImportMenu').off('.galPackMenu');

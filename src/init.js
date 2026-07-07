@@ -15,9 +15,11 @@ import { Live2DManager } from './live2d/manager.js';
 import { Live2DPreloadManager } from './live2d/preload.js';
 import { initEnhancedModeListener, initWorldbookInjectionListener } from './logic/enhanced-mode.js';
 import { getGenerationState, getVerificationDelayMs, resetGenerationState, verifyGenerationComplete } from './logic/generation-state.js';
+import { setupMapAutoPregen } from './map/auto-pregen.js';
 import { setupMessageObserver } from './logic/message-observer.js';
 import { RE_GAL_TAGS } from './logic/parser.js';
 import { detectSpecialCgPendingNow, initSpecialCgTrigger, resetSpecialCgTriggerForChat, setSpecialCgTriggerRefs } from './logic/special-cg-trigger.js';
+import { resetSpriteAutoAssignSession } from './logic/sprite-auto-assign.js';
 import { disableWorldbookGlobally, injectCOTToWorldbook } from './logic/worldbook.js';
 import { SpriteManager } from './sprite/sprite-manager.js';
 import { setupOptionsPanelObserver } from './ui/choices.js';
@@ -97,6 +99,7 @@ export async function init() {
       setupOptionsPanelObserver();
       setupFullscreenChangeListener();
       setupGameContentResizeListener();
+      setupMapAutoPregen();
       initEnhancedModeListener();
       initWorldbookInjectionListener();
       setSpecialCgTriggerRefs({ injectCOTToWorldbook });
@@ -200,6 +203,8 @@ export async function init() {
               return;
             }
             resetSpecialCgTriggerForChat();
+            // 自动立绘的已处理记录按 mesId 记账，跨聊天撞号需清空
+            resetSpriteAutoAssignSession();
             // 清理上一聊天的 CG observer 与图片缓存（节点已失效且 mesId 跨聊天撞号）
             cleanupCgObservers();
             // 清理上一聊天的立绘状态，避免新聊天首段错误复用旧槽位

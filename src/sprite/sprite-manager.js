@@ -1,7 +1,9 @@
 import { SpriteAnimationManager } from '../animation/sprite-animation.js';
+import { getCharacterTTSVoice } from '../audio/tts-config.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
+import { GalgameStore } from '../core/store.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { setLive2DCharacterExpression } from '../live2d/expression-motion.js';
 import { Live2DManager } from '../live2d/manager.js';
@@ -37,6 +39,43 @@ export function setSpriteManagerRefs({
   if (setBackgroundWithTransition) _setBackgroundWithTransitionRef = setBackgroundWithTransition;
   if (clearBackgroundLayers) _clearBackgroundLayersRef = clearBackgroundLayers;
   if (BGMManager) _BGMManagerRef = BGMManager;
+}
+
+// 推断角色声线性别：显式提示 > 本会话解析过的性别标签 > 已绑定音色所属的默认音色池
+function inferVoiceGender(characterId, voiceHint = null) {
+  if (voiceHint === '男声' || voiceHint === '女声') return voiceHint;
+  const cached = GalgameStore.cache.voiceGenders.get(characterId);
+  if (cached === '男声' || cached === '女声') return cached;
+  try {
+    const boundVoice = String(getCharacterTTSVoice(characterId) || '').trim();
+    if (!boundVoice) return null;
+    const settings = getSettings();
+    const inPool = list => Array.isArray(list) && list.some(v => String(v).trim() === boundVoice);
+    if (inPool(settings.ttsDefaultMaleVoices) || /^male_/i.test(boundVoice)) return '男声';
+    if (inPool(settings.ttsDefaultFemaleVoices) || /^female_/i.test(boundVoice)) return '女声';
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 推断角色声线性别失败: ${characterId}`, e);
+  }
+  return null;
+}
+
+// NPC 剪影回退：角色查无立绘时使用图包内的「路人」剪影（内置图包提供）。
+// 按声线性别匹配（男声→路人男、女声→路人女），无性别信息用中性「路人」；候选缺失时依次降级。
+async function resolveNpcSilhouetteUrl(characterId, voiceHint = null) {
+  if (!_getSpriteRef) return null;
+  const gender = inferVoiceGender(characterId, voiceHint);
+  let fallbackNames;
+  if (gender === '男声') fallbackNames = ['路人男', '路人', '路人女'];
+  else if (gender === '女声') fallbackNames = ['路人女', '路人', '路人男'];
+  else fallbackNames = ['路人', '路人男', '路人女'];
+  for (const npcName of fallbackNames) {
+    const npcUrl = await _getSpriteRef(npcName, '默认');
+    if (npcUrl) {
+      console.log(`[${SCRIPT_NAME}] NPC 剪影回退: "${characterId}" -> ${npcName}${gender ? `（${gender}）` : ''}`);
+      return npcUrl;
+    }
+  }
+  return null;
 }
 
 // ============================================
@@ -87,7 +126,7 @@ export const SpriteManager = {
       }
       const tableData = api.exportTableAsJson();
       if (!tableData) return null;
-      const protagonistSheets = ['主角信息', '主角', '玩家信息', 'User', 'user', '用户'];
+      const protagonistSheets = ['主角信息', '主角信息表', '主角', '玩家信息', 'User', 'user', '用户'];
       const nameCols = ['人物名称', '姓名', '名字', '角色名', 'name', 'Name'];
       for (const sheetKey of Object.keys(tableData)) {
         if (!sheetKey.startsWith('sheet_')) continue;
@@ -220,8 +259,17 @@ export const SpriteManager = {
         continue;
       }
       this.slotOwners.set(info.slot, charId);
-      const spriteUrl = _getSpriteRef ? await _getSpriteRef(charId, info.expression || '默认') : null;
-      await this.updateCharacterSprite($overlay, charId, info.expression || '默认', spriteUrl, info.slot, false, renderToken);
+      let spriteUrl = _getSpriteRef ? await _getSpriteRef(charId, info.expression || '默认') : null;
+      let isNpcSilhouette = false;
+      // 重挂载时同样走 NPC 剪影回退，避免路人角色翻页后剪影退化为占位符
+      if (!spriteUrl && !/^路人/.test(charId) && !this.isProtagonist(charId)) {
+        const hasLive2D = getCharacterUseLive2D(charId) ? await hasLive2DModel(charId) : false;
+        if (!hasLive2D) {
+          spriteUrl = await resolveNpcSilhouetteUrl(charId);
+          isNpcSilhouette = !!spriteUrl;
+        }
+      }
+      await this.updateCharacterSprite($overlay, charId, info.expression || '默认', spriteUrl, info.slot, false, renderToken, isNpcSilhouette);
     }
   },
 
@@ -479,23 +527,13 @@ export const SpriteManager = {
     }
     await this.rehydrateDisconnectedCharacters($overlay, characterId, renderToken);
     let spriteUrl = _getSpriteRef ? await _getSpriteRef(characterId, expression) : null;
+    let isNpcSilhouette = false;
     const useLive2DForCurrent = getCharacterUseLive2D(characterId);
     const hasLive2DForCurrent = useLive2DForCurrent ? await hasLive2DModel(characterId) : false;
-    // NPC 剪影回退：角色查无立绘且非 Live2D 时，使用图包内的「路人」剪影（内置图包提供）。
-    // 按对白声线匹配性别（男声→路人男、女声→路人女），无声线信息用中性「路人」；候选缺失时依次降级。
-    if (!spriteUrl && !hasLive2DForCurrent && _getSpriteRef && !/^路人/.test(characterId) && !this.isProtagonist(characterId)) {
-      let fallbackNames;
-      if (voiceHint === '男声') fallbackNames = ['路人男', '路人', '路人女'];
-      else if (voiceHint === '女声') fallbackNames = ['路人女', '路人', '路人男'];
-      else fallbackNames = ['路人', '路人男', '路人女'];
-      for (const npcName of fallbackNames) {
-        const npcUrl = await _getSpriteRef(npcName, '默认');
-        if (npcUrl) {
-          spriteUrl = npcUrl;
-          console.log(`[${SCRIPT_NAME}] NPC 剪影回退: "${characterId}" -> ${npcName}${voiceHint ? `（${voiceHint}）` : ''}`);
-          break;
-        }
-      }
+    // NPC 剪影回退：角色查无立绘且非 Live2D 时，使用图包内的「路人」剪影
+    if (!spriteUrl && !hasLive2DForCurrent && !/^路人/.test(characterId) && !this.isProtagonist(characterId)) {
+      spriteUrl = await resolveNpcSilhouetteUrl(characterId, voiceHint);
+      isNpcSilhouette = !!spriteUrl;
     }
     const canRenderVisualForCurrent = !!(hasLive2DForCurrent || spriteUrl);
     const shouldShowMissingPlaceholder = !!getSettings().showMissingSpritePlaceholder;
@@ -534,10 +572,10 @@ export const SpriteManager = {
 
       if (!isElementValid) {
         info.expression = expression;
-        await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken);
+        await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken, isNpcSilhouette);
       } else if (info.expression !== expression || renderModeChanged) {
         info.expression = expression;
-        await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken);
+        await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, false, renderToken, isNpcSilhouette);
       }
     } else {
       isNewCharacter = true;
@@ -552,7 +590,7 @@ export const SpriteManager = {
         lastSpokenTick: 0,
       });
       this.slotOwners.set(slot, characterId);
-      await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, true, renderToken);
+      await this.updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, true, renderToken, isNpcSilhouette);
     }
 
     this.setSpeaker(characterId);
@@ -576,7 +614,7 @@ export const SpriteManager = {
     });
   },
 
-  async updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, isEntering, renderToken = null) {
+  async updateCharacterSprite($overlay, characterId, expression, spriteUrl, slot, isEntering, renderToken = null, isNpcSilhouette = false) {
     const $charLayer = this.ensureSlots($overlay);
     let $slot = $charLayer.find(`.gal-char-slot.slot-${slot}`);
     if (!$slot.length) {
@@ -607,6 +645,9 @@ export const SpriteManager = {
     const enterClass = (!useGSAP && isEntering) ? `entering-${slot}` : '';
     const emotion = this.emotionMap[expression] || '';
     const emotionAttr = emotion ? `data-emotion="${emotion}"` : '';
+    // 剪影标记：回退剪影与直接以「路人」为名的角色都按背景路人缩小渲染
+    const isSilhouette = isNpcSilhouette || /^路人/.test(characterId);
+    const silhouetteAttr = isSilhouette ? 'data-npc-silhouette="true"' : '';
 
     const useLive2D = getCharacterUseLive2D(characterId);
     const hasLive2D = useLive2D ? await hasLive2DModel(characterId) : false;
@@ -646,6 +687,8 @@ export const SpriteManager = {
           $existingContainer.attr('data-expression', expression);
           if (emotion) $existingContainer.attr('data-emotion', emotion);
           else $existingContainer.removeAttr('data-emotion');
+          if (isSilhouette) $existingContainer.attr('data-npc-silhouette', 'true');
+          else $existingContainer.removeAttr('data-npc-silhouette');
 
           const currentSrc = $oldImgs.last().attr('src');
           if (currentSrc !== spriteUrl) {
@@ -687,7 +730,7 @@ export const SpriteManager = {
     `;
     } else if (spriteUrl) {
       spriteHtml = `
-      <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr}>
+      <div class="gal-char-container ${enterClass}" data-character="${characterId}" data-expression="${expression}" ${emotionAttr} ${silhouetteAttr}>
         <img class="gal-char-img" src="${spriteUrl}" alt="${characterId}">
       </div>
     `;

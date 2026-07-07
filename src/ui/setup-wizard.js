@@ -227,6 +227,7 @@ const STEPS = [
         effectsEnabled: settings.effectsEnabled !== false,
         situationalStyleEnabled: settings.situationalStyleEnabled !== false,
         bgmEnabled: settings.bgmEnabled !== false,
+        autoSpriteAssignEnabled: settings.autoSpriteAssignEnabled !== false,
         bgFillMode: settings.bgFillMode === 'contain' ? 'contain' : 'cover',
       };
       const prefs = ctx.state.prefs;
@@ -248,6 +249,11 @@ const STEPS = [
         </div>
         <p class="gal-wizard-setting-hint">允许 AI 输出 &lt;bgm&gt; 标签自动切换背景音乐。</p>
         <div class="gal-wizard-setting-row">
+          <span class="gal-wizard-setting-label">AI 自动套用立绘</span>
+          <label class="gal-switch"><input type="checkbox" id="gal-wizard-auto-sprite-assign" ${prefs.autoSpriteAssignEnabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+        </div>
+        <p class="gal-wizard-setting-hint">剧情出现新主要角色/重要配角时，AI 自动从内置图包挑选气质匹配的立绘模板套用。</p>
+        <div class="gal-wizard-setting-row">
           <span class="gal-wizard-setting-label">背景图填充</span>
           <select id="gal-wizard-bg-fill-mode" class="gal-select">
             <option value="cover" ${prefs.bgFillMode === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
@@ -263,6 +269,7 @@ const STEPS = [
       ctx.$body.find('#gal-wizard-effects-enabled').on('change', function () { prefs.effectsEnabled = $(this).is(':checked'); });
       ctx.$body.find('#gal-wizard-situational-style').on('change', function () { prefs.situationalStyleEnabled = $(this).is(':checked'); });
       ctx.$body.find('#gal-wizard-bgm-enabled').on('change', function () { prefs.bgmEnabled = $(this).is(':checked'); });
+      ctx.$body.find('#gal-wizard-auto-sprite-assign').on('change', function () { prefs.autoSpriteAssignEnabled = $(this).is(':checked'); });
       ctx.$body.find('#gal-wizard-bg-fill-mode').on('change', function () { prefs.bgFillMode = String($(this).val() || 'cover'); });
     },
     async onNext(ctx) {
@@ -289,6 +296,10 @@ const STEPS = [
           BGMManager.stopForDisabled();
           removeBGMWidget();
         }
+        cotDirty = true;
+      }
+      if ((settings.autoSpriteAssignEnabled !== false) !== prefs.autoSpriteAssignEnabled) {
+        settings.autoSpriteAssignEnabled = prefs.autoSpriteAssignEnabled;
         cotDirty = true;
       }
       if ((settings.bgFillMode || 'cover') !== prefs.bgFillMode) {

@@ -14,10 +14,9 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 
-const BASE_URL =
-  process.env.BG_GEN_BASE_URL ||
-  'https://8000-f9w6uq284kkj2y32h32mha3ebaf2z1ruyzm3o8ao0pagb4ycodb.tunnel.runloop.ai/v1';
-const MODEL = process.env.BG_GEN_MODEL || 'google/gemini-3-pro-image-preview';
+const BASE_URL = process.env.BG_GEN_BASE_URL || 'https://reapi-mainzip--userae0aaf.replit.app/v1';
+const API_KEY = process.env.BG_GEN_API_KEY || '613613';
+const MODEL = process.env.BG_GEN_MODEL || 'google/gemini-3-pro-image';
 // 表情表专用模型：gemini 排版不严格（网格不均/自画分隔线），gpt-5.4-image-2 指令遵循更好
 const SHEET_MODEL = process.env.BG_GEN_SHEET_MODEL || 'openai/gpt-5.4-image-2';
 const REQUEST_TIMEOUT_MS = 180000;
@@ -56,7 +55,8 @@ function curlPostJson(url, bodyObj) {
     execFileSync(
       'curl',
       ['-s', '-m', String(Math.floor(REQUEST_TIMEOUT_MS / 1000)), '-X', 'POST', url,
-        '-H', 'Content-Type: application/json', '--data-binary', `@${tmpReq}`, '-o', tmpResp],
+        '-H', 'Content-Type: application/json', '-H', `Authorization: Bearer ${API_KEY}`,
+        '--data-binary', `@${tmpReq}`, '-o', tmpResp],
       { stdio: 'pipe' },
     );
     const text = fs.readFileSync(tmpResp, 'utf8').trim();

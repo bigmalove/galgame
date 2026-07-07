@@ -261,8 +261,20 @@ function preprocessSimplifiedFormat(html) {
       voice = sessionVoiceCache.get(speaker);
     }
 
+    // 性别标签独立透传：绑定音色后 speaker 会被具体音色名覆盖，
+    // 路人剪影仍需 男声/女声 信息按性别回退，故单独携带并做会话级缓存
+    const genderCache = GalgameStore.cache.voiceGenders;
+    let voiceGenderTag = null;
+    if (specifiedVoice === '男声' || specifiedVoice === '女声') {
+      voiceGenderTag = specifiedVoice;
+      genderCache.set(speaker, specifiedVoice);
+    } else if (genderCache.has(speaker)) {
+      voiceGenderTag = genderCache.get(speaker);
+    }
+
     const ttsParts = [];
     if (voice) ttsParts.push(`speaker=${voice}`);
+    if (voiceGenderTag && voiceGenderTag !== voice) ttsParts.push(`voiceTag=${voiceGenderTag}`);
     if (context) ttsParts.push(`context=${context}`);
     const ttsAttr = ttsParts.length > 0 ? ` tts="${ttsParts.join(';')}"` : '';
 
@@ -291,12 +303,9 @@ export function parseGalgameContent(html, messageId) {
   if (popup1Match) html = html.replace(RE_POPUP1, '');
   if (popup2Match) html = html.replace(RE_POPUP2, '');
 
-  // 预处理简化格式
-  if (!simpleStorybookMode) {
-    html = preprocessSimplifiedFormat(html);
-  }
-
-  // 加强模式：优先使用格式化版本
+  // 加强模式：优先使用格式化版本（必须在 preprocessSimplifiedFormat 之前替换，
+  // 否则格式化文本里的简化格式行「角色[表情,男声/女声]: "对话"」会漏掉预处理，
+  // 标签泄漏进说话人名，路人剪影也拿不到性别信息）
   if (isEnabled && settings.enhancedMode?.enabled && messageId) {
     const formatData = _getFormattedContentRef ? _getFormattedContentRef(messageId) : null;
     if (formatData) {
@@ -305,6 +314,11 @@ export function parseGalgameContent(html, messageId) {
       html = html.replace(RE_THINK_CLOSED, '');
       html = html.replace(RE_THINK_UNCLOSED, '');
     }
+  }
+
+  // 预处理简化格式
+  if (!simpleStorybookMode) {
+    html = preprocessSimplifiedFormat(html);
   }
 
   // 性能优化：检查缓存
@@ -455,19 +469,34 @@ export function parseGalgameContent(html, messageId) {
   }
 
   const spriteCommands = [];
+  const spriteAssignments = [];
   let spriteTagMatch;
   while ((spriteTagMatch = RE_SPRITE_TAG.exec(content)) !== null) {
     const attrs = parseTagAttributes(spriteTagMatch[1] || '');
-    if (String(attrs.action || '').toLowerCase() !== 'exit') continue;
+    const action = String(attrs.action || '').toLowerCase();
     const targetCharacter = String(attrs.character || attrs.char || '').trim();
     if (!targetCharacter) continue;
-    spriteCommands.push({
-      position: spriteTagMatch.index,
-      action: 'exit',
-      character: targetCharacter,
-    });
+    if (action === 'exit') {
+      spriteCommands.push({
+        position: spriteTagMatch.index,
+        action: 'exit',
+        character: targetCharacter,
+      });
+    } else if (action === 'assign') {
+      // AI 自动分配立绘：<sprite action="assign" character="角色名" template="模板名" />
+      const templateName = String(attrs.template || attrs.tpl || '').trim();
+      if (!templateName) continue;
+      spriteAssignments.push({
+        position: spriteTagMatch.index,
+        character: targetCharacter,
+        template: templateName,
+      });
+    }
   }
   RE_SPRITE_TAG.lastIndex = 0;
+  if (spriteAssignments.length > 0) {
+    result.spriteAssignments = spriteAssignments;
+  }
 
   const pixiCommands = [];
   const pixiInitRegex = /<pixiInit\b[^>]*\/?>/gi;
@@ -651,6 +680,7 @@ export function parseGalgameContent(html, messageId) {
       const config = {
         speaker: defaultSpeaker,
         context: null,
+        voiceTag: null,
       };
 
       const pairs = ttsString.split(';');
@@ -662,6 +692,7 @@ export function parseGalgameContent(html, messageId) {
 
           if (trimmedKey === 'speaker') config.speaker = trimmedValue;
           else if (trimmedKey === 'context') config.context = trimmedValue;
+          else if (trimmedKey === 'voiceTag') config.voiceTag = trimmedValue;
         }
       }
 
@@ -697,7 +728,23 @@ export function parseGalgameContent(html, messageId) {
       }
 
       if (dialogueMatch && dialogueMatch[1] && dialogueMatch[2]) {
-        const speaker = normalizeSpeakerName(dialogueMatch[1]);
+        let speaker = normalizeSpeakerName(dialogueMatch[1]);
+        // 兼容漏掉预处理的简化格式行：说话人内联「名字[表情,男声/女声|语气]」标签，
+        // 剥离标签还原真实角色名，并回收表情与性别信息
+        let inlineVoiceTag = null;
+        const inlineTagMatch = speaker.match(/^([^[\]]{1,20})\[([^\]]+)\]$/);
+        if (inlineTagMatch) {
+          speaker = normalizeSpeakerName(inlineTagMatch[1]);
+          if (!speaker) return null;
+          const inlineParts = inlineTagMatch[2].split('|')[0].split(',').map(s => s.trim());
+          if (!expression && inlineParts[0] && expressionNames.includes(inlineParts[0])) {
+            expression = inlineParts[0];
+          }
+          if (inlineParts[1] === '男声' || inlineParts[1] === '女声') {
+            inlineVoiceTag = inlineParts[1];
+            GalgameStore.cache.voiceGenders.set(speaker, inlineVoiceTag);
+          }
+        }
         const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
         if (!speaker || !dialogue) return null;
         const splitResult = splitZhJaForDisplayAndTts(dialogue, settings.ttsBilingualZhJaEnabled === true);
@@ -727,6 +774,14 @@ export function parseGalgameContent(html, messageId) {
           }
           if (ttsConfigString) {
             segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+          }
+          if (inlineVoiceTag) {
+            if (!segResult.tts) {
+              // 与 preprocessSimplifiedFormat 一致：男声/女声 标签作为 speaker 透传给 TTS 随机分配
+              segResult.tts = { speaker: inlineVoiceTag, context: null, voiceTag: inlineVoiceTag };
+            } else if (!segResult.tts.voiceTag) {
+              segResult.tts.voiceTag = inlineVoiceTag;
+            }
           }
           return segResult;
         }

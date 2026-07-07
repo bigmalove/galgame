@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>场景地图线稿 · 风格对比 Demo</title>
+<script src="https://unpkg.com/roughjs@4.6.6/bundled/rough.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Microsoft YaHei', sans-serif;
+    background: #1a1a22;
+    color: #e5e2da;
+    padding: 32px 24px 64px;
+  }
+  h1 { text-align: center; font-size: 22px; letter-spacing: 2px; margin-bottom: 8px; }
+  .subtitle { text-align: center; color: #9a96a8; font-size: 13px; margin-bottom: 36px; line-height: 1.8; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+    gap: 28px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #26242f;
+    border: 1px solid #3a3746;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0,0,0,.35);
+  }
+  .card-head { padding: 14px 18px 12px; display: flex; align-items: baseline; gap: 10px; }
+  .card-head .tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: #4c4660; color: #cfc8e8; white-space: nowrap;
+  }
+  .card-head .tag.rec { background: #7c5c26; color: #ffe9b8; }
+  .card-head h2 { font-size: 16px; letter-spacing: 1px; }
+  .card-head p { font-size: 12px; color: #9a96a8; }
+  .map-wrap { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; }
+  .map-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .marker-layer { position: absolute; inset: 0; pointer-events: none; }
+  .char-marker {
+    position: absolute; transform: translate(-50%, -100%);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    pointer-events: auto; cursor: pointer;
+  }
+  .char-avatar {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: bold; color: #fff;
+    border: 2.5px solid #fff;
+    box-shadow: 0 3px 8px rgba(0,0,0,.35);
+    transition: transform .15s;
+  }
+  .char-marker:hover .char-avatar { transform: scale(1.15); }
+  .char-marker.protagonist .char-avatar { border-color: #f5c542; box-shadow: 0 0 0 2px rgba(245,197,66,.45), 0 3px 8px rgba(0,0,0,.35); }
+  .char-name {
+    font-size: 11px; padding: 1px 8px; border-radius: 999px;
+    background: rgba(20,18,26,.78); color: #fff; white-space: nowrap;
+    letter-spacing: 1px;
+  }
+  .char-marker.protagonist .char-name { background: rgba(122,89,10,.88); }
+  .foot-note { text-align:center; margin-top: 40px; color:#7d7990; font-size:12px; line-height: 2; }
+</style>
+</head>
+<body>
+
+<h1>场景地图线稿 · 风格对比</h1>
+<p class="subtitle">
+  同一份「御苑」布局 JSON（LLM 生成的结构化数据）在 5 种风格下的 rough.js 渲染效果。<br>
+  圆形头像为立绘缩略图占位（实际会显示角色立绘），金框 ☆ 为主角。请选择你喜欢的风格。
+</p>
+
+<div class="grid" id="grid"></div>
+
+<p class="foot-note">
+  说明：所有风格使用完全相同的布局数据与固定随机种子，渲染 100% 确定不会出错；<br>
+  实际实现中地图支持缩放/平移，点击角色标记弹出交互窗口。
+</p>
+
+<script>
+// ============================================
+// 示例布局 JSON（模拟 LLM 输出，画布 1000 x 750）
+// ============================================
+const LAYOUT = {
+  location: '御苑',
+  elements: [
+    // 围墙（留南侧入口）
+    { name: '苑墙', type: 'wall', shape: 'polyline',
+      points: [[430,700],[60,700],[60,60],[940,60],[940,700],[570,700]] },
+    // 园门
+    { name: '园门', type: 'door', shape: 'rect', x: 500, y: 700, w: 140, h: 26 },
+    // 凉亭（八角）
+    { name: '凉亭', type: 'building', shape: 'polygon',
+      points: [[195,205],[255,175],[325,205],[350,270],[325,335],[255,365],[195,335],[170,270]] },
+    // 茶室
+    { name: '茶室', type: 'building', shape: 'rect', x: 760, y: 210, w: 240, h: 170 },
+    // 锦鲤池
+    { name: '锦鲤池', type: 'water', shape: 'ellipse', x: 620, y: 540, w: 300, h: 180 },
+    // 樱树林
+    { name: '樱树林', type: 'plant', shape: 'circle', x: 500, y: 165, w: 120, h: 120 },
+    { name: '', type: 'plant', shape: 'circle', x: 590, y: 130, w: 84, h: 84 },
+    { name: '', type: 'plant', shape: 'circle', x: 425, y: 120, w: 76, h: 76 },
+    // 草坪区域
+    { name: '芝草坪', type: 'area', shape: 'rect', x: 250, y: 555, w: 280, h: 210 },
+    // 石板小径：园门 → 中心 → 凉亭 / 茶室
+    { name: '石径', type: 'road', shape: 'polyline', points: [[500,690],[500,470],[350,400],[280,360]] },
+    { name: '', type: 'road', shape: 'polyline', points: [[500,470],[640,430],[730,300]] },
+    // 石凳
+    { name: '石凳', type: 'furniture', shape: 'rect', x: 415, y: 425, w: 70, h: 26 },
+    // 石灯笼
+    { name: '石灯笼', type: 'landmark', shape: 'circle', x: 560, y: 640, w: 40, h: 40 },
+  ],
+  anchors: [
+    { x: 500, y: 585, hint: '石径旁' },
+    { x: 262, y: 300, hint: '凉亭中' },
+    { x: 762, y: 415, hint: '茶室门前' },
+  ],
+};
+
+// 模拟在场角色（实际来自「重要角色表」+ 立绘库）
+const CHARACTERS = [
+  { name: '主角', isProtagonist: true, color: 'linear-gradient(135deg,#e8a33d,#c97b2d)', label: '主' },
+  { name: '莉娜', isProtagonist: false, color: 'linear-gradient(135deg,#e77fa8,#b8578a)', label: '莉' },
+  { name: '店主', isProtagonist: false, color: 'linear-gradient(135deg,#5f8dd3,#3f5f9e)', label: '店' },
+];
+
+// ============================================
+// 5 种风格定义
+// ============================================
+const STYLES = [
+  {
+    id: 'sumi', name: '素笺墨线', tag: '推荐 · 浅色', rec: true,
+    desc: '米白纸面 + 墨色手绘，经典手账线稿感',
+    paper: '#f7f2e7', ink: '#3a3630', water: '#4a6f8a', plant: '#5d7a4f', accent: '#a0616a',
+    roughness: 1.2, bowing: 1.1,
+    font: "'KaiTi','楷体','Segoe Print',cursive",
+    paperTexture: 'noise',
+  },
+  {
+    id: 'night', name: '夜幕墨稿', tag: '深色皮肤适配',
+    desc: '深底浅线的反色墨稿，适合暗色界面',
+    paper: '#211f2a', ink: '#d8d4c8', water: '#7fa8c9', plant: '#8fae7f', accent: '#c9a86a',
+    roughness: 1.2, bowing: 1.1,
+    font: "'KaiTi','楷体','Segoe Print',cursive",
+    paperTexture: 'noise',
+  },
+  {
+    id: 'blueprint', name: '蓝图制图', tag: '工整',
+    desc: '工程蓝图：深蓝底、白线、网格底纹，线条更工整',
+    paper: '#163a63', ink: '#e3eefb', water: '#a8cdf0', plant: '#bfe3c8', accent: '#ffd97a',
+    roughness: 0.7, bowing: 0.5,
+    font: "'Courier New','SimHei',monospace",
+    paperTexture: 'grid',
+  },
+  {
+    id: 'parchment', name: '古卷舆图', tag: '冒险感',
+    desc: '茶褐羊皮纸 + 粗犷笔触，RPG 古地图味道',
+    paper: '#e8d5ae', ink: '#5b4226', water: '#6b7c5e', plant: '#71683a', accent: '#8b2f2f',
+    roughness: 1.9, bowing: 1.8,
+    font: "'KaiTi','楷体',serif",
+    paperTexture: 'vignette',
+  },
+  {
+    id: 'minimal', name: '淡彩极简', tag: '清爽',
+    desc: '白底细灰线 + 分类淡彩填充，信息图般清爽',
+    paper: '#ffffff', ink: '#8a8f99', water: '#c7dcf5', plant: '#d3ecd8', accent: '#e9c46a',
+    roughness: 0.6, bowing: 0.4, solidFill: true,
+    solidColors: { building: '#f6e7c8', area: '#f1f2f4', water: '#d5e6f7', plant: '#ddf0e0', furniture: '#ece3d3', landmark: '#f3dede', door: '#e4d9c4' },
+    font: "'Microsoft YaHei',sans-serif",
+    paperTexture: 'none',
+  },
+];
+
+// ============================================
+// FNV-1a 固定种子（同布局同风格渲染完全一致）
+// ============================================
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) % 2147483647 || 1;
+}
+
+// ============================================
+// 单元素渲染（type → rough.js 图形映射）
+// ============================================
+function drawElement(rc, svg, el, idx, style) {
+  const seed = fnv1a(`${LAYOUT.location}|${el.name}|${idx}`);
+  const base = { seed, roughness: style.roughness, bowing: style.bowing, stroke: style.ink };
+  const cx = el.x, cy = el.y, w = el.w, h = el.h;
+  let node = null;
+
+  const fill = (color, fillStyle, extra = {}) => style.solidFill
+    ? { fill: (style.solidColors[el.type] || '#eee'), fillStyle: 'solid', ...extra }
+    : { fill: color, fillStyle, ...extra };
+
+  switch (el.type) {
+    case 'wall':
+      node = rc.linearPath(el.points, { ...base, strokeWidth: 3 });
+      break;
+    case 'road':
+      node = rc.linearPath(el.points, { ...base, strokeWidth: 2, strokeLineDash: [12, 10] });
+      break;
+    case 'building':
+      if (el.shape === 'polygon') {
+        node = rc.polygon(el.points, { ...base, strokeWidth: 2.5, ...fill(style.ink, 'cross-hatch', { hachureGap: 11, fillWeight: 0.6 }) });
+      } else {
+        node = rc.rectangle(cx - w/2, cy - h/2, w, h, { ...base, strokeWidth: 2.5, ...fill(style.ink, 'cross-hatch', { hachureGap: 11, fillWeight: 0.6 }) });
+      }
+      break;
+    case 'water':
+      node = rc.ellipse(cx, cy, w, h, { ...base, stroke: style.water, strokeWidth: 2, ...fill(style.water, 'zigzag', { hachureAngle: 0, hachureGap: 9, fillWeight: 0.8 }) });
+      if (style.solidFill) node.querySelectorAll('path').forEach(p => p.setAttribute('stroke', style.water));
+      break;
+    case 'plant':
+      node = rc.circle(cx, cy, w, { ...base, stroke: style.plant, strokeWidth: 1.5, ...fill(style.plant, 'dots', { hachureGap: 10, fillWeight: 1.2 }) });
+      break;
+    case 'area':
+      node = rc.rectangle(cx - w/2, cy - h/2, w, h, { ...base, strokeWidth: 1, strokeLineDash: [6, 6], ...fill(style.ink, 'hachure', { hachureGap: 15, fillWeight: 0.4 }) });
+      break;
+    case 'furniture':
+      node = rc.rectangle(cx - w/2, cy - h/2, w, h, { ...base, strokeWidth: 1.5, ...fill(style.ink, 'hachure', { hachureGap: 6, fillWeight: 0.5 }) });
+      break;
+    case 'door':
+      node = rc.rectangle(cx - w/2, cy - h/2, w, h, { ...base, strokeWidth: 1.5, fill: style.accent, fillStyle: 'solid' });
+      break;
+    case 'landmark':
+    default:
+      node = rc.circle(cx, cy, w || 46, { ...base, strokeWidth: 2, ...fill(style.ink, 'cross-hatch', { hachureGap: 6, fillWeight: 0.6 }) });
+      break;
+  }
+  if (node) svg.appendChild(node);
+}
+
+// 标注文字（带纸色晕圈）
+function drawLabel(svg, el, style) {
+  if (!el.name) return;
+  let lx = el.x, ly = el.y;
+  if (el.shape === 'polyline' && el.points) {
+    const mid = el.points[Math.floor(el.points.length / 2)];
+    lx = mid[0]; ly = mid[1] - 10;
+  } else if (el.type === 'building' || el.type === 'area') {
+    ly = el.y + 6;
+  } else {
+    ly = el.y - (el.h || 40) / 2 - 10;
+  }
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t.setAttribute('x', lx); t.setAttribute('y', ly);
+  t.setAttribute('text-anchor', 'middle');
+  t.setAttribute('font-size', el.type === 'building' ? 30 : 24);
+  t.setAttribute('font-family', style.font);
+  t.setAttribute('fill', style.ink);
+  t.setAttribute('stroke', style.paper);
+  t.setAttribute('stroke-width', 5);
+  t.setAttribute('paint-order', 'stroke');
+  t.setAttribute('font-weight', '600');
+  t.textContent = el.name;
+  svg.appendChild(t);
+}
+
+// ============================================
+// 渲染一张风格卡片
+// ============================================
+function renderCard(style) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="card-head">
+      <span class="tag ${style.rec ? 'rec' : ''}">${style.tag}</span>
+      <h2>${style.name}</h2>
+      <p>${style.desc}</p>
+    </div>`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'map-wrap';
+  wrap.style.background = style.paper;
+
+  // 纸面纹理
+  if (style.paperTexture === 'noise') {
+    wrap.style.backgroundImage =
+      `radial-gradient(ellipse at 30% 20%, rgba(255,255,255,.06), transparent 60%),` +
+      `radial-gradient(ellipse at 75% 80%, rgba(0,0,0,.05), transparent 55%)`;
+  } else if (style.paperTexture === 'grid') {
+    wrap.style.backgroundImage =
+      `linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px),` +
+      `linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px)`;
+    wrap.style.backgroundSize = '28px 28px';
+  } else if (style.paperTexture === 'vignette') {
+    wrap.style.backgroundImage =
+      `radial-gradient(ellipse at center, transparent 55%, rgba(91,66,38,.28) 100%)`;
+  }
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 1000 750');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const rc = rough.svg(svg);
+
+  // 地形层 → 结构层 → 标注层
+  const order = { area: 0, water: 1, road: 2, wall: 3, building: 4, door: 5, plant: 6, furniture: 7, landmark: 8 };
+  const sorted = LAYOUT.elements.map((el, i) => [el, i]).sort((a, b) => (order[a[0].type] ?? 9) - (order[b[0].type] ?? 9));
+  sorted.forEach(([el, i]) => { try { drawElement(rc, svg, el, i, style); } catch (e) { console.warn('元素渲染失败', el, e); } });
+  sorted.forEach(([el]) => drawLabel(svg, el, style));
+
+  // 地点标题（左上角）
+  const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  title.setAttribute('x', 40); title.setAttribute('y', 48);
+  title.setAttribute('font-size', 40);
+  title.setAttribute('font-family', style.font);
+  title.setAttribute('fill', style.ink);
+  title.setAttribute('font-weight', 'bold');
+  title.setAttribute('letter-spacing', '6');
+  title.textContent = `‹ ${LAYOUT.location} ›`;
+  svg.appendChild(title);
+
+  wrap.appendChild(svg);
+
+  // 角色标记层（HTML overlay，anchors 定位）
+  const layer = document.createElement('div');
+  layer.className = 'marker-layer';
+  CHARACTERS.forEach((ch, i) => {
+    const anchor = LAYOUT.anchors[i % LAYOUT.anchors.length];
+    const m = document.createElement('div');
+    m.className = 'char-marker' + (ch.isProtagonist ? ' protagonist' : '');
+    m.style.left = (anchor.x / 1000 * 100) + '%';
+    m.style.top = (anchor.y / 750 * 100) + '%';
+    m.innerHTML = `
+      <div class="char-avatar" style="background:${ch.color}">${ch.label}</div>
+      <div class="char-name">${ch.isProtagonist ? '☆ ' : ''}${ch.name}</div>`;
+    m.title = ch.isProtagonist ? '点击查看主角状态（信息/技能/背包/任务）' : `点击与 ${ch.name} 交互（对话/送礼/技能）`;
+    layer.appendChild(m);
+  });
+  wrap.appendChild(layer);
+
+  card.appendChild(wrap);
+  return card;
+}
+
+const grid = document.getElementById('grid');
+STYLES.forEach(s => grid.appendChild(renderCard(s)));
+</script>
+</body>
+</html>

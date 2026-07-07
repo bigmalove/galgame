@@ -129,6 +129,9 @@ export const DEFAULT_SETTINGS = {
   // 说话者效果
   speakerGlow: true,
   speakerBubble: true,
+  // 景深聚焦：非说话者失焦模糊（px）
+  speakerFocus: true,
+  speakerFocusBlur: 1,
   // 快捷键
   spaceKeyNext: true,
   enterKeyNext: true,
@@ -151,11 +154,15 @@ export const DEFAULT_SETTINGS = {
   bgmWhitelist: [],
   // 是否在 COT 中注入 BGM 标签规范（关闭后 AI 不再被要求输出 <bgm>）
   bgmEnabled: true,
+  // AI 自动为无立绘的新主要角色/重要配角套用内置立绘模板（COT 注入可用模板名 + 消费 <sprite action="assign">）
+  autoSpriteAssignEnabled: true,
   mapSystemEnabled: true,
   mapUseLocationBarClick: true,
   mapMarkerStyle: 'pin',
   mapLayoutSeed: 'default',
   mapCoordsByRegion: {},
+  // 场景线稿地图风格：auto=跟随皮肤深浅 / sumi / night / blueprint / parchment / minimal
+  mapSceneStyle: 'auto',
   titleScreen: Object.assign({}, DEFAULT_TITLE_SCREEN_SETTINGS),
   titleScreenByChar: {},
   specialCg: Object.assign({}, DEFAULT_SPECIAL_CG_SETTINGS),
@@ -564,13 +571,22 @@ export function ensureMapSettings() {
   _settings.mapMarkerStyle = normalizeMapMarkerStyle(_settings.mapMarkerStyle);
   _settings.mapLayoutSeed = String(_settings.mapLayoutSeed || DEFAULT_SETTINGS.mapLayoutSeed || 'default').trim() || 'default';
   _settings.mapCoordsByRegion = normalizeMapCoordsByRegion(_settings.mapCoordsByRegion);
+  _settings.mapSceneStyle = normalizeMapSceneStyle(_settings.mapSceneStyle);
   return {
     mapSystemEnabled: _settings.mapSystemEnabled,
     mapUseLocationBarClick: _settings.mapUseLocationBarClick,
     mapMarkerStyle: _settings.mapMarkerStyle,
     mapLayoutSeed: _settings.mapLayoutSeed,
     mapCoordsByRegion: _settings.mapCoordsByRegion,
+    mapSceneStyle: _settings.mapSceneStyle,
   };
+}
+
+const MAP_SCENE_STYLE_IDS = ['auto', 'sumi', 'night', 'blueprint', 'parchment', 'minimal'];
+
+function normalizeMapSceneStyle(value) {
+  const style = String(value || '').trim();
+  return MAP_SCENE_STYLE_IDS.includes(style) ? style : 'auto';
 }
 
 export function getMapSettings() {
@@ -594,6 +610,9 @@ export function updateMapSettings(patch = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(safePatch, 'mapCoordsByRegion')) {
     _settings.mapCoordsByRegion = normalizeMapCoordsByRegion(safePatch.mapCoordsByRegion);
+  }
+  if (Object.prototype.hasOwnProperty.call(safePatch, 'mapSceneStyle')) {
+    _settings.mapSceneStyle = normalizeMapSceneStyle(safePatch.mapSceneStyle);
   }
   saveSettings();
   return getMapSettings();
@@ -1311,6 +1330,7 @@ export function loadSettings() {
       _settings.ttsBilingualZhJaEnabled = _settings.ttsBilingualZhJaEnabled === true;
       _settings.situationalStyleEnabled = _settings.situationalStyleEnabled !== false;
       _settings.bgmEnabled = _settings.bgmEnabled !== false;
+      _settings.autoSpriteAssignEnabled = _settings.autoSpriteAssignEnabled !== false;
       _settings.simpleStorybookMode = _settings.simpleStorybookMode === true;
       _settings.ttsDefaultMaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultMaleVoices);
       _settings.ttsDefaultFemaleVoices = normalizeTtsVoiceNameList(_settings.ttsDefaultFemaleVoices);

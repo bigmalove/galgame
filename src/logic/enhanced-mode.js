@@ -635,7 +635,19 @@ export function initWorldbookInjectionListener() {
 
   if (typeof eventOn === 'function' && typeof tavern_events !== 'undefined') {
     // 生成开始时
-    eventOn(tavern_events.GENERATION_STARTED, async () => {
+    // 事件参数: (type, option, dry_run)。dry run（切角色/切预设时的 token 计算）和
+    // quiet 后台静默生成（总结/数据库等插件调用）不是真实的对话生成，必须跳过，
+    // 否则会误改全局世界书且等不到配对的 GENERATION_ENDED 来恢复
+    eventOn(tavern_events.GENERATION_STARTED, async (type, option, dry_run) => {
+      if (dry_run) {
+        console.log(`[${SCRIPT_NAME}] 世界书注入: dry run，跳过`);
+        return;
+      }
+      if (type === 'quiet' && !option?.quietToLoud) {
+        console.log(`[${SCRIPT_NAME}] 世界书注入: 后台静默生成，跳过`);
+        return;
+      }
+
       const currentSettings = getSettings();
       const isEnabled = getIsEnabled();
 
@@ -709,7 +721,18 @@ export function initWorldbookInjectionListener() {
     eventOn(tavern_events.GENERATION_STOPPED, restoreInjectedWorldbooks);
 
     // 生成开始/结束事件监听（用于生成状态跟踪）
-    eventOn(tavern_events.GENERATION_STARTED, () => {
+    // 同样过滤 dry run 和 quiet 后台生成：它们会触发 GENERATION_STARTED 但没有对应的
+    // 对话消息，导致"生成中"图标误显示并挂到 120s 超时才消失
+    eventOn(tavern_events.GENERATION_STARTED, (type, option, dry_run) => {
+      if (dry_run) {
+        console.log(`[${SCRIPT_NAME}] GENERATION_STARTED 被忽略（dry run）`);
+        return;
+      }
+      if (type === 'quiet' && !option?.quietToLoud) {
+        console.log(`[${SCRIPT_NAME}] GENERATION_STARTED 被忽略（后台静默生成 type=quiet）`);
+        return;
+      }
+
       const timeSinceInit = Date.now() - getInitializationTime();
       if (timeSinceInit < 3000) {
         console.log(`[${SCRIPT_NAME}] GENERATION_STARTED 被忽略（页面刚加载 ${timeSinceInit}ms）`);

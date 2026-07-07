@@ -19,7 +19,7 @@ import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloor
 import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
 import { updateButtonState } from './menu-button.js';
 import { repaginateCurrentMessageForFontChange } from './overlay-content.js';
-import { ensureGlobalOverlay } from './overlay.js';
+import { adjustToolbarForSpace, ensureGlobalOverlay } from './overlay.js';
 import { applyHtmlSkinRuntime, clearHtmlSkinRuntime } from './html-skin-runtime.js';
 import { showSetupWizard } from './setup-wizard.js';
 import { TWILIGHT_SKIN_OPTION_ITEMS } from './skin-twilight.js';
@@ -331,10 +331,31 @@ export function applySettingsToUI() {
     $('.gal-layer-character').removeClass('bubble-enabled');
   }
 
+  // 说话者景深聚焦：CSS 降级路径的类开关 + 模糊强度变量（GSAP 路径在 setFocus 内读取设置）
+  if (settings.speakerFocus !== false) {
+    $charLayer.addClass('dof-enabled');
+  } else {
+    $charLayer.removeClass('dof-enabled');
+  }
+  if (el) {
+    const dofBlur = Number(settings.speakerFocusBlur);
+    el.style.setProperty('--gal-dof-blur', `${Number.isFinite(dofBlur) ? Math.max(0, dofBlur) : 1}px`);
+  }
+  // GSAP 路径的 filter 是内联样式，改设置后立即同步在场的非说话者，不等下一次切换
+  $('.gal-char-container.silent.gsap-animated').each(function () {
+    const dofBlur = Number(settings.speakerFocusBlur);
+    const blurPx = Number.isFinite(dofBlur) ? Math.max(0, dofBlur) : 1;
+    this.style.filter = settings.speakerFocus !== false
+      ? `brightness(0.7) saturate(0.85) blur(${blurPx}px)`
+      : 'brightness(0.7) saturate(1) blur(0px)';
+  });
+
   applyBgFillMode();
   applySkin();
   applyTextEffect();
   syncPixiEffectsSettings();
+  // 对话框/工具栏缩放变化会影响底栏是否放得下，重新实测降级档位
+  adjustToolbarForSpace();
 }
 
 export function applyBgFillMode() {
@@ -785,6 +806,11 @@ export async function showSettingsPanel(topTab, subTab) {
               <label class="gal-switch"><input type="checkbox" id="gal-bgm-cot-enabled" ${settings.bgmEnabled !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <p class="gal-hint">控制 COT 是否包含 &lt;bgm&gt; 规范。</p>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">AI自动套用立绘</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-auto-sprite-assign-enabled" ${settings.autoSpriteAssignEnabled !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <p class="gal-hint">新主要角色/重要配角登场时，AI 自动从内置图包挑选气质匹配的立绘模板套用。</p>
           </div>
           </div><!-- /L2 cot -->
 
@@ -856,6 +882,17 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">气泡指示器 <small style="color: var(--gal-text-3, #999);">(漫画风格)</small></span>
               <label class="gal-switch"><input type="checkbox" id="gal-speaker-bubble" ${settings.speakerBubble ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">景深聚焦 <small style="color: var(--gal-text-3, #999);">(非说话者失焦)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-speaker-focus" ${settings.speakerFocus !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">失焦模糊强度 <small style="color: var(--gal-text-3, #999);">(非说话者)</small></span>
+              <div class="gal-settings-control">
+                <input type="range" id="gal-speaker-focus-blur" min="0" max="4" step="0.5" value="${escapeHtml(settings.speakerFocusBlur)}">
+                <span class="gal-range-value" id="gal-speaker-focus-blur-value">${settings.speakerFocusBlur}px</span>
+              </div>
             </div>
           </div>
           </div><!-- /L2 sprite (layout) -->
@@ -1821,6 +1858,8 @@ export async function showSettingsPanel(topTab, subTab) {
   $('#gal-sprite-spacing').on('input', function () { settings.spriteSpacing = parseInt($(this).val()); $('#gal-sprite-spacing-value').text(settings.spriteSpacing + '%'); applySettingsToUI(); saveSettings(); });
   $('#gal-show-missing-sprite-placeholder').on('change', function () { settings.showMissingSpritePlaceholder = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
   $('#gal-speaker-glow').on('change', function () { settings.speakerGlow = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
+  $('#gal-speaker-focus').on('change', function () { settings.speakerFocus = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
+  $('#gal-speaker-focus-blur').on('input', function () { settings.speakerFocusBlur = parseFloat($(this).val()); $('#gal-speaker-focus-blur-value').text(settings.speakerFocusBlur + 'px'); applySettingsToUI(); saveSettings(); });
   $('#gal-speaker-bubble').on('change', function () { settings.speakerBubble = $(this).is(':checked'); applySettingsToUI(); saveSettings(); });
 
   // TTS
@@ -1866,6 +1905,13 @@ export async function showSettingsPanel(topTab, subTab) {
     injectCOTToWorldbook()
       .then(() => showToast(settings.bgmEnabled ? 'BGM已启用，COT已更新' : 'BGM已关闭，COT已更新'))
       .catch(() => showToast(settings.bgmEnabled ? 'BGM已启用' : 'BGM已关闭'));
+  });
+  $('#gal-auto-sprite-assign-enabled').on('change', function () {
+    settings.autoSpriteAssignEnabled = $(this).is(':checked');
+    saveSettings();
+    injectCOTToWorldbook()
+      .then(() => showToast(settings.autoSpriteAssignEnabled ? 'AI自动套用立绘已开启，COT已更新' : 'AI自动套用立绘已关闭，COT已更新'))
+      .catch(() => showToast(settings.autoSpriteAssignEnabled ? 'AI自动套用立绘已开启' : 'AI自动套用立绘已关闭'));
   });
   $('#gal-tts-default-speaker').on('change', function () { settings.ttsDefaultSpeaker = $(this).val(); saveSettings(); });
 

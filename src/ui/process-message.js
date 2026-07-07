@@ -8,6 +8,7 @@ import { handleWallhavenBackgroundSearch } from '../image-gen/wallhaven-handler.
 import { Live2DPreloadManager } from '../live2d/preload.js';
 import { parseGalgameContent, RE_GAL_TAGS, stripImagePlaceholders } from '../logic/parser.js';
 import { consumePendingSpecialCgByScene } from '../logic/special-cg-trigger.js';
+import { handleSpriteAssignments } from '../logic/sprite-auto-assign.js';
 import { markTimelineCacheDirty } from '../timeline/data.js';
 import { getFormattedSwipeContent, getMesTextContentForGalgame, getRawMessageContent } from '../utils/html.js';
 import { renderBGMWidget } from './bgm-widget.js';
@@ -166,6 +167,18 @@ export async function processNewMessage(mesNode, options = {}) {
         break;
       }
     }
+  }
+
+  // AI 自动分配立绘：仅消费最后一条 AI 消息（防历史楼层重渲重复写库），内部幂等
+  if (
+    !simpleStorybookMode &&
+    settings.autoSpriteAssignEnabled !== false &&
+    parsed &&
+    Array.isArray(parsed.spriteAssignments) &&
+    parsed.spriteAssignments.length > 0 &&
+    $mes.nextAll('.mes[is_user!="true"]').length === 0
+  ) {
+    handleSpriteAssignments(parsed.spriteAssignments, { mesId });
   }
 
   // 实时背景生成处理 (根据 bgImageSource 单选分派)

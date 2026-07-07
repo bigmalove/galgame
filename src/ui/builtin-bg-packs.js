@@ -2,7 +2,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
 import { getAllBackgrounds, saveBackgroundsBatch } from '../db/backgrounds.js';
 import { saveSpritesBatch } from '../db/sprites.js';
-import { createImagePack, getAllImagePacks, setCurrentPack } from '../db/image-packs.js';
+import { createImagePack, getAllImagePacks, getCurrentPackId, setCurrentPack } from '../db/image-packs.js';
 import { showInAppConfirmDialog } from './asset-io.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { makeDraggable } from './interaction.js';
@@ -47,9 +47,9 @@ export const BUILTIN_BG_PACKS = [
   {
     id: 'city',
     name: '内置图包·现代都市',
-    desc: '街道 / 咖啡厅 / 雨夜街头等 30 场景 + 10 套立绘模板与路人剪影',
+    desc: '街道 / 咖啡厅 / 雨夜街头等 30 场景 + 20 套立绘模板（含 NPC 配角）与路人剪影',
     repo: 'bigmalove/galgame-bg-city',
-    tag: 'v1.3.0',
+    tag: 'v1.4.0',
     sceneCount: 30,
     coverFile: 'thumbs/街道.webp',
   },
@@ -114,9 +114,9 @@ async function fetchPackManifest(pack) {
   throw new Error(`无法获取图包清单: ${lastError?.message || lastError}`);
 }
 
-// 幂等导入：同名图包复用，背景按 sceneName 覆盖（backgrounds 表主键即 sceneName）
-// autoSwitch: true 时导入后直接切换为当前图包，不再弹「是否切换」确认（图包切换列表点击内置包时用）
-export async function importBuiltinBgPack(pack, { autoSwitch = false } = {}) {
+// 幂等导入：默认一键并入当前启用的图包，背景按 sceneName 覆盖（backgrounds 表主键即 sceneName）
+// ownPack: true 时保持旧行为——导入到以内置包名命名的独立图包（同名复用）并切换为当前图包（图包切换列表点击内置包时用）
+export async function importBuiltinBgPack(pack, { ownPack = false } = {}) {
   const { manifest, hostIndex } = await fetchPackManifest(pack);
   const entries = manifest.backgrounds
     .map(bg => ({
@@ -126,14 +126,14 @@ export async function importBuiltinBgPack(pack, { autoSwitch = false } = {}) {
     .filter(e => e.sceneName && e.imageUrl);
   if (!entries.length) throw new Error('图包清单为空');
 
-  // 覆盖预警：sceneName 是全局主键，会把用户已有同名背景改挂到本包
+  // 覆盖预警：sceneName 是全局主键，会把用户已有同名背景改挂到目标图包
   const existing = await getAllBackgrounds(null, true);
   const existingNames = new Set(existing.map(bg => bg.sceneName));
   const conflicts = entries.filter(e => existingNames.has(e.sceneName)).map(e => e.sceneName);
   if (conflicts.length > 0) {
     const confirmed = await showInAppConfirmDialog({
       title: '存在同名场景',
-      message: `以下 ${conflicts.length} 个场景已存在，导入将覆盖它们（并移入本图包）：\n${conflicts.join('、')}`,
+      message: `以下 ${conflicts.length} 个场景已存在，导入将覆盖它们（并归入${ownPack ? '本图包' : '当前图包'}）：\n${conflicts.join('、')}`,
       confirmText: '覆盖导入',
       cancelText: '取消',
       iconClass: 'fa-solid fa-triangle-exclamation',
@@ -142,16 +142,26 @@ export async function importBuiltinBgPack(pack, { autoSwitch = false } = {}) {
     if (!confirmed) return null;
   }
 
-  // 同名图包复用（重复导入不产生重复包）
   const allPacks = await getAllImagePacks();
-  let targetPack = allPacks.find(p => p.name === pack.name);
-  if (!targetPack) {
-    targetPack = await createImagePack(pack.name);
+  let targetPackId;
+  let targetPackName;
+  if (ownPack) {
+    // 同名图包复用（重复导入不产生重复包）
+    let targetPack = allPacks.find(p => p.name === pack.name);
+    if (!targetPack) {
+      targetPack = await createImagePack(pack.name);
+    }
+    targetPackId = targetPack.id;
+    targetPackName = targetPack.name;
+  } else {
+    // 直接导入到当前启用的图包
+    targetPackId = getCurrentPackId();
+    targetPackName = allPacks.find(p => p.id === targetPackId)?.name || '当前图包';
   }
 
   await saveBackgroundsBatch(
     entries.map(e => ({ sceneName: e.sceneName, imageBlob: null, imageUrl: e.imageUrl })),
-    targetPack.id,
+    targetPackId,
   );
 
   // 立绘：template 条目是「立绘模板」不自动入库（用户建角色时在立绘上传弹窗「内置模板」tab 套用）；
@@ -170,28 +180,16 @@ export async function importBuiltinBgPack(pack, { autoSwitch = false } = {}) {
   if (npcSprites.length) {
     await saveSpritesBatch(
       npcSprites.map(e => ({ characterId: e.characterId, expression: e.expression, imageBlob: null, imageUrl: e.imageUrl })),
-      targetPack.id,
+      targetPackId,
     );
   }
 
-  const spriteNote = npcSprites.length ? `、${npcSprites.length} 张路人剪影` : '';
-  const templateNote = templateCount ? `\n包内含 ${templateCount} 套立绘模板：给角色配立绘时，在「上传立绘 → 内置模板」中选用。` : '';
-  if (autoSwitch) {
-    setCurrentPack(targetPack.id);
-  } else {
-    const switchToPack = await showInAppConfirmDialog({
-      title: '导入完成',
-      message: `已导入 ${entries.length} 个背景${spriteNote}到「${pack.name}」。${templateNote}\n是否切换为当前图包？`,
-      confirmText: '切换',
-      cancelText: '暂不',
-      iconClass: 'fa-solid fa-images',
-      accent: '#28a745',
-    });
-    if (switchToPack) setCurrentPack(targetPack.id);
-  }
+  if (ownPack) setCurrentPack(targetPackId);
 
-  showToast(`「${pack.name}」导入完成（${entries.length} 个背景${spriteNote}）`);
-  return { packId: targetPack.id, count: entries.length + npcSprites.length };
+  const spriteNote = npcSprites.length ? `、${npcSprites.length} 张路人剪影` : '';
+  const templateNote = templateCount ? `；含 ${templateCount} 套立绘模板，可在「上传立绘 → 内置模板」中选用` : '';
+  showToast(`「${pack.name}」已导入到「${targetPackName}」（${entries.length} 个背景${spriteNote}${templateNote}）`, templateCount ? 5000 : 2500);
+  return { packId: targetPackId, count: entries.length + npcSprites.length };
 }
 
 // ============================================
@@ -225,7 +223,8 @@ export async function listBuiltinSpriteTemplates() {
 }
 
 // 把模板整套表情以 URL 引用套用到用户角色名下（存入当前图包）
-export async function applySpriteTemplateToCharacter(template, targetCharacterId) {
+// silent: 自动流程（AI 自动分配立绘）自行提示，跳过内置 toast
+export async function applySpriteTemplateToCharacter(template, targetCharacterId, { silent = false } = {}) {
   const characterId = String(targetCharacterId || '').trim();
   if (!characterId) throw new Error('角色名不能为空');
   await saveSpritesBatch(
@@ -236,7 +235,9 @@ export async function applySpriteTemplateToCharacter(template, targetCharacterId
       imageUrl: e.url,
     })),
   );
-  showToast(`已将模板「${template.characterId}」套用到角色「${characterId}」（${template.expressions.length} 个表情）`);
+  if (!silent) {
+    showToast(`已将模板「${template.characterId}」套用到角色「${characterId}」（${template.expressions.length} 个表情）`);
+  }
   return template.expressions.length;
 }
 
@@ -291,7 +292,7 @@ export function showBuiltinBgPackBrowser({ onImported } = {}) {
         </div>
         <div id="gal-builtin-bg-body" style="padding: 16px 20px; overflow-y: auto;">
           <div style="font-size: 0.82rem; color: #64748b; margin-bottom: 12px;">
-            背景托管在 GitHub（jsDelivr CDN），导入仅保存链接、不占本地存储；显示时按需加载。
+            背景托管在 GitHub（jsDelivr CDN），导入仅保存链接、不占本地存储；显示时按需加载。点击「一键导入」将直接导入到当前启用的图包。
           </div>
           <div id="gal-builtin-bg-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px;">
             ${BUILTIN_BG_PACKS.map(buildPackCardHtml).join('')}
@@ -393,7 +394,7 @@ export function showBuiltinBgPackBrowser({ onImported } = {}) {
     try {
       const result = await importBuiltinBgPack(pack);
       if (result) {
-        $status.text(`导入完成：${result.count} 个背景`);
+        $status.text(`导入完成：${result.count} 项资源已加入当前图包`);
         closeDialog();
         if (typeof onImported === 'function') onImported(result.packId);
       } else {

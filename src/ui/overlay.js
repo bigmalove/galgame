@@ -606,6 +606,21 @@ export function adjustToolbarForSpace() {
   overlay.classList.remove('icon-only');
   overlay.classList.remove('gal-toolbar-compact');
   overlay.classList.remove('gal-toolbar-tight');
+
+  // twilight 家族底栏是 grid 自适应布局，HTML 皮肤布局由皮肤自理，均不参与降级
+  const overlayClassName = String(overlay.className || '');
+  if (overlayClassName.includes('twilight') || overlay.classList.contains('html-skin')) return;
+
+  const toolbar = overlay.querySelector('.gal-dialog-layer .gal-bottom-toolbar');
+  if (!toolbar || !toolbar.isConnected) return;
+
+  // 底栏按钮均不可换行收缩，总宽超出面板时会伸出容器被裁（如 NEXT 只剩半截）。
+  // 逐级降级：常规 → 紧凑 → 仅图标；每级读取 scrollWidth 强制重排取新值
+  const overflows = () => toolbar.scrollWidth > toolbar.clientWidth + 1;
+  if (!overflows()) return;
+  overlay.classList.add('gal-toolbar-compact');
+  if (!overflows()) return;
+  overlay.classList.add('icon-only');
 }
 
 // ============================================

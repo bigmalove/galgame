@@ -1,6 +1,8 @@
 // ============================================
 // GSAP 立绘动画管理器
 // ============================================
+import { getSettings } from '../core/settings.js';
+
 export const SpriteAnimationManager = {
   animations: new Map(),
   gsap: null,
@@ -170,10 +172,21 @@ export const SpriteAnimationManager = {
   setFocus(element, isSpeaking, characterId) {
     if (!this.gsap || !element) return;
     const el = element instanceof jQuery ? element[0] : element;
+    // 景深聚焦（可在设置中开关/调节模糊强度）：关闭时退回单纯压暗
+    let focusEnabled = true;
+    let focusBlur = 1;
+    try {
+      const s = getSettings();
+      focusEnabled = s.speakerFocus !== false;
+      const parsed = Number(s.speakerFocusBlur);
+      focusBlur = Number.isFinite(parsed) ? Math.max(0, parsed) : 1;
+    } catch (e) { /* 设置不可用时用默认值 */ }
     if (isSpeaking) {
       this.gsap.to(el, { filter: "brightness(1.05) saturate(1) blur(0px)", scale: 1.02, opacity: 1, duration: 0.35, ease: "power2.out" });
+    } else if (focusEnabled) {
+      this.gsap.to(el, { filter: `brightness(0.7) saturate(0.85) blur(${focusBlur}px)`, scale: 0.98, opacity: 0.9, duration: 0.35, ease: "power2.out" });
     } else {
-      this.gsap.to(el, { filter: "brightness(0.7) saturate(0.85) blur(2px)", scale: 0.98, opacity: 0.9, duration: 0.35, ease: "power2.out" });
+      this.gsap.to(el, { filter: "brightness(0.7) saturate(1) blur(0px)", scale: 0.98, opacity: 0.9, duration: 0.35, ease: "power2.out" });
     }
   },
 

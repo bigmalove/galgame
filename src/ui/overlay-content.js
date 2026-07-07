@@ -27,6 +27,15 @@ const messageSegmentState = GalgameStore.cache.segments;
 const TYPEWRITER_INSTANT_SOURCES = new Set(['skip', 'rewind', 'auto-play']);
 const DEFAULT_TWILIGHT_BRAND = 'TWILIGHT';
 
+// 提取段落的 男声/女声 声线提示（供路人剪影按性别回退）。
+// 优先 voiceTag（角色绑定具体音色后 speaker 不再是性别标签，voiceTag 仍保留原始标签）
+function getSegmentVoiceHint(segment) {
+  const tts = segment?.tts || {};
+  if (/^(男声|女声)$/.test(tts.voiceTag || '')) return tts.voiceTag;
+  if (/^(男声|女声)$/.test(tts.speaker || '')) return tts.speaker;
+  return null;
+}
+
 function shouldUseTypewriterForSegment(segment) {
   return segment?.type === 'dialogue' || segment?.type === 'narration';
 }
@@ -457,7 +466,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
     await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
     clearSpritesOnBackgroundCommand($overlay, displaySegment);
     const expression = displaySegment.expression || '默认';
-    const voiceHint = /^(男声|女声)$/.test(displaySegment.tts?.speaker || '') ? displaySegment.tts.speaker : null;
+    const voiceHint = getSegmentVoiceHint(displaySegment);
     await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken, voiceHint);
   }
 
@@ -647,7 +656,7 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
 
     clearSpritesOnBackgroundCommand($overlay, segment);
     const expression = segment.expression || '默认';
-    const voiceHint = /^(男声|女声)$/.test(segment.tts?.speaker || '') ? segment.tts.speaker : null;
+    const voiceHint = getSegmentVoiceHint(segment);
     await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken, voiceHint);
     if (isRenderTokenStale()) return false;
   }

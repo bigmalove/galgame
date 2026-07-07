@@ -52,10 +52,10 @@ export function getCharacterListFromDatabase() {
       return characters;
     }
     // 主角相关表名和列名变体
-    const protagonistSheets = ['主角信息', '主角', '玩家信息', 'User', 'user', '用户'];
+    const protagonistSheets = ['主角信息', '主角信息表', '主角', '玩家信息', 'User', 'user', '用户'];
     const protagonistNameCols = ['人物名称', '姓名', '名字', '角色名', 'name', 'Name'];
     // NPC相关表名和列名变体
-    const npcSheets = ['重要人物表', '重要人物', 'NPC', 'npc', '角色列表', '人物列表'];
+    const npcSheets = ['重要人物表', '重要角色表', '重要人物', 'NPC', 'npc', '角色列表', '人物列表'];
     const npcNameCols = ['姓名', '人物名称', '角色名', '名字', 'name', 'Name'];
     // 遍历所有表格查找角色信息
     Object.keys(tableData).forEach(sheetKey => {

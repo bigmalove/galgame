@@ -18,6 +18,7 @@
   "dependencies": {
     "cytoscape": "^3.33.1",
     "cytoscape-dagre": "^2.5.0",
-    "dagre": "^0.8.5"
+    "dagre": "^0.8.5",
+    "roughjs": "^4.6.6"
   }
 }

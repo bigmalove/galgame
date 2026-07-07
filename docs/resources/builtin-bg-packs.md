@@ -38,19 +38,19 @@
 https://cdn.jsdelivr.net/gh/bigmalove/galgame-bg-jp@v1.3.0/remote_assets.json
 https://cdn.jsdelivr.net/gh/bigmalove/galgame-bg-xianxia@v1.3.0/remote_assets.json
 https://cdn.jsdelivr.net/gh/bigmalove/galgame-bg-guzhuang@v1.3.0/remote_assets.json
-https://cdn.jsdelivr.net/gh/bigmalove/galgame-bg-city@v1.3.0/remote_assets.json
+https://cdn.jsdelivr.net/gh/bigmalove/galgame-bg-city@v1.4.0/remote_assets.json
 ```
 
 ## 立绘模板与路人剪影（v1.2.0+）
 
-每个图包附带 **10 套原型角色立绘模板**（各 10 个表情+动作差分，透明 webp）与 **3 张路人剪影**：
+每个图包附带 **10-20 套原型角色立绘模板**（各 10 个表情+动作差分，透明 webp）与 **3 张路人剪影**：
 
 | 图包 | 画风 | 立绘模板角色 |
 |---|---|---|
 | 日式学园 | 动漫 galgame 立绘 | 黑长直少女、元气双马尾、金发大小姐、银发冷学姐、栗发温柔学妹、黑短发运动少女、眼镜文学少女、粉发艺术少女、阳光男同学、黑发学生会长 |
 | 仙侠 | 2D 水墨 | 白发剑仙子、红衣魔女、青衣医师、灵狐少女、紫衣琴仙、剑道大师兄、黑袍魔尊、折扇公子、白眉老祖、少年剑童 |
 | 古装 | 3D 渲染（DAZ 风） | 玉冠公子、将军虎女、温婉皇后、刁蛮郡主、冷面锦衣卫、白衣书生、老太傅、江湖侠女、富商掌柜、小宫女 |
-| 现代都市 | 恋与深空式 3D | 西装总裁、温柔医生、冷峻刑警、阳光大学生、电竞少年、钢琴艺术家、痞帅酒吧老板、干练女律师、甜美咖啡师、酷飒女骑手 |
+| 现代都市 | 恋与深空式 3D | 主角：西装总裁、温柔医生、冷峻刑警、阳光大学生、电竞少年、钢琴艺术家、痞帅酒吧老板、干练女律师、甜美咖啡师、酷飒女骑手；NPC 配角：房东阿姨、部门经理、前台小姐、保安大叔、外卖小哥、便利店店员、护士小姐、出租车司机、老教授、街头混混 |
 
 **立绘模板不会自动入库**——它是给你自己的角色用的素材：
 

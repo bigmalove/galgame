@@ -1027,9 +1027,14 @@
 
 .gal-char-container.silent {
   --state-scale: 0.95;
-  /* 景深聚焦：非说话者轻微失焦、降饱和、压暗 */
-  filter: drop-shadow(0 0.313rem 0.938rem rgba(0, 0, 0, 0.3)) brightness(0.75) saturate(0.85) blur(2px);
+  filter: drop-shadow(0 0.313rem 0.938rem rgba(0, 0, 0, 0.3));
   z-index: 4;
+}
+
+/* 景深聚焦（设置项开关）：非说话者轻微失焦、降饱和、压暗；模糊强度由 --gal-dof-blur 控制 */
+.gal-layer-character.dof-enabled .gal-char-container.silent {
+  filter: drop-shadow(0 0.313rem 0.938rem rgba(0, 0, 0, 0.3)) brightness(0.75) saturate(0.85)
+    blur(var(--gal-dof-blur, 1px));
 }
 
 /* 说话者光晕效果 - 仅在启用时生效 */
@@ -1125,11 +1130,16 @@
   object-fit: contain;
   object-position: bottom center;
   /* Apply scale here to avoid conflict with container animations */
-  transform: scale(calc(var(--base-scale, 1) * var(--state-scale)));
+  transform: scale(calc(var(--base-scale, 1) * var(--state-scale) * var(--gal-npc-sil-scale, 1)));
   transform-origin: bottom center;
   transition:
     opacity 0.3s ease,
     transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* 路人剪影：作为背景路人整体缩小，避免与主立绘同尺寸占满整屏（以底部为基准缩放，保持贴地） */
+.gal-char-container[data-npc-silhouette='true'] {
+  --gal-npc-sil-scale: 0.7;
 }
 
 /* 表情/立绘交叉溶解：新图绝对定位叠在旧图上淡入，完成后回归文档流 */
@@ -1187,7 +1197,9 @@
   bottom: calc(1.25rem * var(--gal-dialog-scale-user, 1));
   left: 50%;
   right: auto;
-  width: min(96%, calc(80% * var(--gal-dialog-scale-user, 1)));
+  /* 上限留出 3rem/侧：右侧立绘开关与弹窗小钮悬挂在层外 right:-2.5rem（含阴影），
+     对话框放大到贴边时它们会越过游戏容器边界被裁掉 */
+  width: min(calc(100% - 6rem), calc(80% * var(--gal-dialog-scale-user, 1)));
   height: calc(30% * var(--gal-dialog-scale-user, 1)); /* 相对高度 */
   min-height: 9rem;
   max-height: 72%;
@@ -1694,10 +1706,11 @@
   box-shadow: 0.5rem 0.5rem 0 var(--gp-shadow, rgba(0, 0, 0, 0.15));
   border-radius: 0;
 
-  /* 内边距 */
+  /* 内边距。底部为绝对定位底栏预留：底栏高度跟随「工具栏大小」而非「对话框大小」，
+     取两者较大值防止两个滑块不一致时底栏盖住正文 */
   padding: calc(2.5rem * var(--gal-dialog-scale-user, 1))
     calc(3.75rem * var(--gal-dialog-scale-user, 1))
-    calc(5rem * var(--gal-dialog-scale-user, 1))
+    calc(5rem * max(var(--gal-dialog-scale-user, 1), var(--gal-toolbar-scale-user, 1)))
     calc(3.75rem * var(--gal-dialog-scale-user, 1));
 
   /* 行为控制：允许垂直滚动以防内容被截断，但隐藏滚动条保持美观 */
@@ -2026,6 +2039,32 @@
   margin-right: 0 !important;
   min-width: calc(7.25rem * var(--ui-scale)) !important;
   padding: 0 calc(1.9rem * var(--ui-scale)) !important;
+}
+
+/* ── 底栏空间不足时的两级降级（adjustToolbarForSpace 实测溢出后逐级加 class）──
+   级别1 gal-toolbar-compact：压缩按钮内距与字号；
+   级别2 icon-only：功能/导航按钮只留图标，NEXT 与「剧情选项」保留文字。 */
+#gal-global-overlay.gal-toolbar-compact .gal-footer-btn {
+  padding: 0 calc(0.4rem * var(--ui-scale)) !important;
+  gap: calc(0.2rem * var(--ui-scale)) !important;
+}
+#gal-global-overlay.gal-toolbar-compact .gal-footer-btn i,
+#gal-global-overlay.gal-toolbar-compact .gal-footer-btn span {
+  font-size: calc(0.8rem * var(--ui-scale)) !important;
+}
+#gal-global-overlay.gal-toolbar-compact .gal-pending-choices-btn {
+  padding: 0 calc(0.5rem * var(--ui-scale)) !important;
+}
+#gal-global-overlay.gal-toolbar-compact .gal-footer-btn-next {
+  min-width: calc(6rem * var(--ui-scale)) !important;
+  padding: 0 calc(1.2rem * var(--ui-scale)) !important;
+}
+#gal-global-overlay.icon-only .gal-footer-btn .gal-btn-text {
+  display: none !important;
+}
+#gal-global-overlay.icon-only .gal-footer-btn {
+  min-width: calc(2.1rem * var(--ui-scale)) !important;
+  justify-content: center !important;
 }
 
 /* 进度指示器 */

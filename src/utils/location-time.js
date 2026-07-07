@@ -1,5 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
+import { getLatestGeneratedLocation } from '../map/scene-data.js';
 
 // ============================================
 // 从全局数据表获取地点和时间信息
@@ -32,7 +33,7 @@ export function getGlobalLocationAndTime() {
     const columnMappings = {
       primaryRegion: ['当前主要地区', '主要地区', '主地区'],
       secondaryRegion: ['当前次要地区', '次要地区', '副地区'],
-      detailedLocation: ['当前详细地点', '详细地点', '具体地点', '地点'],
+      detailedLocation: ['当前详细地点', '详细地点', '具体地点', '地点', '主角当前所在地点', '当前所在地点', '所在地点', '当前位置', '当前地点'],
       currentTime: ['当前时间', '时间', '游戏时间'],
     };
 
@@ -72,6 +73,26 @@ export function getGlobalLocationAndTime() {
             }
           }
         }
+
+        // 地点列模糊兜底：兼容各种模板的列命名（任何包含「地点/位置」的列）
+        if (!result.detailedLocation) {
+          const fuzzyIdx = headers.findIndex(h => {
+            const t = String(h || '').trim();
+            return (t.includes('地点') || t.includes('位置')) && !t.includes('时间');
+          });
+          if (fuzzyIdx !== -1 && dataRow[fuzzyIdx]) {
+            result.detailedLocation = String(dataRow[fuzzyIdx]).trim();
+          }
+        }
+      }
+    }
+
+    // 全局数据表地点为空/漏填时，回退「地图生成表」最新生成的地点
+    if (!result.detailedLocation) {
+      const generated = getLatestGeneratedLocation(tableData);
+      if (generated) {
+        result.detailedLocation = generated;
+        console.log(`[${SCRIPT_NAME}] 全局数据表地点为空，已回退地图生成表: ${generated}`);
       }
     }
   } catch (e) {

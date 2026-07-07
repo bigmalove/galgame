@@ -18,6 +18,7 @@ export const GalgameStore = {
     specialCgs: new Map(),   // cgId -> blobUrl
     segments: new Map(),     // mesId -> { currentIndex, segments }
     voices: new Map(),       // 角色名 -> 音色名 (会话级)
+    voiceGenders: new Map(), // 角色名 -> '男声'/'女声' (会话级，供路人剪影按性别回退)
     parse: new Map(),        // 解析结果缓存
     timeline: new Map(),     // characterKey -> { data, dirty, updatedAt }
     dom: {
@@ -95,6 +96,7 @@ export const GalgameStore = {
     CURRENT_PACK: `${SCRIPT_ID}_current_pack`,
     RENDER_SCOPE: `${SCRIPT_ID}_render_scope`,
     MAP_SETTINGS: `${SCRIPT_ID}_map_settings`,
+    MAP_SCENE_LAYOUTS: `${SCRIPT_ID}_map_scene_layouts`,
     TIMELINE_PREFS: `${SCRIPT_ID}_timeline_prefs`,
     SETUP_WIZARD_OPTOUT: `${SCRIPT_ID}_setup_wizard_optout`,
   },

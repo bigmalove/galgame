@@ -58,6 +58,7 @@ import { getIsGeneratingResponse, setIsGeneratingResponse, getInitializationTime
 import { parseGalgameContent, EXPRESSION_LIST, EXPRESSION_TAG_MAP, getExpressionTag, setParserRefs } from './logic/parser.js';
 import { WORLDBOOK_NAME, COT_ENTRY_NAME, isCotFormatted, getFormattedContent, saveFormatToSwipe, resetEnhancedModeState, getAvailablePresets, getAvailableProfiles, getAvailableModels, getAvailableWorldbooks, initWorldbookInjectionListener, initEnhancedModeListener, registerTestFunctions, setEnhancedModeRefs } from './logic/enhanced-mode.js';
 import { checkWorldbookExists, injectCOTToWorldbook, enableWorldbookGlobally, disableWorldbookGlobally, setWorldbookRefs } from './logic/worldbook.js';
+import { setSpriteAutoAssignRefs } from './logic/sprite-auto-assign.js';
 import { setupMessageObserver, setMessageObserverRefs } from './logic/message-observer.js';
 
 // === 延迟引用连接 ===
@@ -98,6 +99,7 @@ import { showBatchBackgroundUploadDialog, showBackgroundUploadDialog } from './u
 import { showBatchSpecialCgUploadDialog, showSpecialCgUploadDialog } from './ui/cg-upload.js';
 import { ImageCropper, showCharAppearancePromptEditor, showBananaAppearancePicker, showSpriteUploadDialog, showBatchUploadDialog, showCustomExpressionManager } from './ui/sprite-upload.js';
 import { importAssetsFromJson, AssetIO, showRemoteZipImportDialog, importFromZipFile, importFromRemoteZip, showImportPackSelector, processZipContents, showImportProgress, showImportError } from './ui/asset-io.js';
+import { listBuiltinSpriteTemplates, applySpriteTemplateToCharacter } from './ui/builtin-bg-packs.js';
 import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog, setAssetManagerRefs, setAssetManagerModalRef, renderBananaAppearanceList, refreshBananaAppearancePreviews } from './ui/asset-manager-parts.js';
 import { showAssetManagerModal, setAssetManagerModalRefs, buildAssetManagerContent, bindAssetManagerContentEvents, buildAssetManagerStyles } from './ui/asset-manager-modal.js';
 import { setImageGenConfigRefs } from './ui/image-gen-config.js';
@@ -154,6 +156,9 @@ setGalgameModeRefs({ processNewMessage, applySettingsToUI });
 
 // Phase 8 延迟引用: process-message -> overlay-content + banana-image + novelai-image + settings-panel
 setProcessMessageRefs({ updateGlobalOverlayContent, applySettingsToUI, handleRealTimeBackgroundGeneration, handleBananaBackgroundGeneration, handleNovelAIBackgroundGeneration });
+
+// Phase 8 延迟引用: sprite-auto-assign -> builtin-bg-packs + worldbook + galgame-mode + toast
+setSpriteAutoAssignRefs({ listBuiltinSpriteTemplates, applySpriteTemplateToCharacter, injectCOTToWorldbook, refreshGalgameViews, showToast });
 
 
 // Phase 8 延迟引用: message-observer -> process-message + menu-button

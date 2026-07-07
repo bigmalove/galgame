@@ -1,7 +1,7 @@
 {
   "id": "galgame-live-dev-001",
   "name": "galgame界面插件-实时修改",
-  "content": "import 'http://127.0.0.1:5500/dist/数据库界面插件.dist.js?v=20260702213920'",
+  "content": "import 'http://127.0.0.1:5500/dist/数据库界面插件.dist.js?v=20260707101042'",
   "info": "galgame界面插件 v1.1-dev",
   "buttons": []
 }

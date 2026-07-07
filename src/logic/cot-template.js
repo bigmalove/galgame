@@ -5,6 +5,7 @@ import { getSettings } from '../core/settings.js';
 import { CUSTOM_LOCATION_HTML_KEY, CUSTOM_TIME_HTML_KEY } from '../core/store.js';
 import { getAllBackgrounds } from '../db/backgrounds.js';
 import { getPendingSpecialCg } from './special-cg-trigger.js';
+import { buildAutoSpriteAssignCotSection } from './sprite-auto-assign.js';
 import { getAllExpressions } from '../utils/expressions.js';
 
 // ============================================
@@ -316,6 +317,17 @@ ${backgroundUsageRuleSection}
 `
     : '';
 
+  // AI 自动分配立绘：注入可用内置模板名列表（绘本模式无立绘，不注入）
+  let autoSpriteAssignSection = '';
+  if (!simpleStorybookMode && settings.autoSpriteAssignEnabled !== false) {
+    try {
+      autoSpriteAssignSection = await buildAutoSpriteAssignCotSection();
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] 生成自动立绘COT段失败:`, error);
+      autoSpriteAssignSection = '';
+    }
+  }
+
   const ttsEnabled = getTTSEnabled();
   const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
   const ttsDialogueFormatLine = ttsBilingualZhJaEnabled
@@ -446,6 +458,7 @@ ${bgmRuleSection}
 
 ${backgroundTagSection}
 ${pendingSpecialCgSection}
+${autoSpriteAssignSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）
@@ -517,6 +530,7 @@ ${bgmRuleSection}
 
 ${backgroundTagSection}
 ${pendingSpecialCgSection}
+${autoSpriteAssignSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）

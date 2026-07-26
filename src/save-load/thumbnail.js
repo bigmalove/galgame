@@ -105,7 +105,9 @@ async function drawBackgroundLayers(ctx, overlay, width, height) {
 
   for (const layer of layers) {
     const style = topWindow.getComputedStyle(layer);
-    const src = extractCssUrl(style.backgroundImage);
+    // 「避开对话框」模式下图片由伪元素绘制、元素自身 background-image 为 none，
+    // 因此优先读 --gal-bg-url，保证三种填充模式都能截到背景
+    const src = extractCssUrl(style.getPropertyValue('--gal-bg-url')) || extractCssUrl(style.backgroundImage);
     if (!src) continue;
     const image = await loadImage(src);
     if (!image) continue;

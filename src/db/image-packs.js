@@ -427,6 +427,24 @@ export async function isAllPacksEmpty() {
   }
 }
 
+// 背景图统一走 CSS 变量 --gal-bg-url（而非内联 background-image）：
+// 「避开对话框」模式下同一张图要被 ::before(模糊铺底) 与 ::after(清晰图) 各渲染一次，
+// 内联 background-image 无法喂给伪元素。
+function toCssUrlValue(url) {
+  const safe = String(url || '')
+    .replace(/[\r\n]/g, '')
+    .replace(/[\\"]/g, '\\$&');
+  return `url("${safe}")`;
+}
+
+function setBgLayerUrl($layer, cssUrlValue) {
+  $layer.each(function () {
+    if (!this || !this.style) return;
+    if (cssUrlValue) this.style.setProperty('--gal-bg-url', cssUrlValue);
+    else this.style.removeProperty('--gal-bg-url');
+  });
+}
+
 export function ensureBackgroundLayers($bgLayer) {
   if (!$bgLayer || !$bgLayer.length) return { $base: $(), $front: $() };
   let $base = $bgLayer.find('.gal-bg-base');
@@ -446,8 +464,8 @@ export function clearBackgroundLayers($bgLayer) {
   const { $base, $front } = ensureBackgroundLayers($bgLayer);
   $bgLayer.removeClass('bg-transitioning');
   $bgLayer.removeData('bgCurrentUrl');
-  $base.css('background-image', '');
-  $front.removeClass('is-active').css('background-image', '');
+  setBgLayerUrl($base, '');
+  setBgLayerUrl($front.removeClass('is-active'), '');
 }
 
 export function setBackgroundWithTransition($bgLayer, bgUrl) {
@@ -456,7 +474,8 @@ export function setBackgroundWithTransition($bgLayer, bgUrl) {
   if ($bgLayer.data('bgCurrentUrl') === bgUrl) return;
   $bgLayer.data('bgCurrentUrl', bgUrl);
   $bgLayer.find('.gal-gen-indicator').remove();
-  $front.removeClass('is-active').css('background-image', `url(${bgUrl})`);
+  const cssUrl = toCssUrlValue(bgUrl);
+  setBgLayerUrl($front.removeClass('is-active'), cssUrl);
   if ($front[0]) void $front[0].offsetHeight;
   const token = `${Date.now()}_${Math.random()}`;
   $bgLayer.data('bgTransitionToken', token);
@@ -466,8 +485,8 @@ export function setBackgroundWithTransition($bgLayer, bgUrl) {
   $front.addClass('is-active');
   setTimeout(() => {
     if ($bgLayer.data('bgTransitionToken') !== token) return;
-    $base.css('background-image', `url(${bgUrl})`);
-    $front.removeClass('is-active').css('background-image', '');
+    setBgLayerUrl($base, cssUrl);
+    setBgLayerUrl($front.removeClass('is-active'), '');
     $bgLayer.removeClass('bg-transitioning');
   }, BG_TRANSITION_MS);
 }

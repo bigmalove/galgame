@@ -52,7 +52,8 @@ export const DEFAULT_TITLE_SCREEN_SETTINGS = {
 export const UI_SCALE_PERCENT_LEGACY_MIN = 70;
 export const UI_SCALE_PERCENT_LEGACY_MAX = 130;
 export const UI_SCALE_PERCENT_BASELINE_OFFSET = 30;
-export const UI_SCALE_PERCENT_MIN = 100;
+// 60 而非 100：100% 对应 CSS 基线（缩放系数 1.0），下限卡在 100 会让滑块只能放大不能缩小
+export const UI_SCALE_PERCENT_MIN = 60;
 export const UI_SCALE_PERCENT_MAX = 160;
 export const UI_SCALE_PERCENT_DEFAULT = 130;
 export const UI_SCALE_PERCENT_VERSION = 2;
@@ -111,6 +112,7 @@ export const DEFAULT_SETTINGS = {
   simpleStorybookMode: false,
   hideOtherFloors: true,
   fullscreenMode: false,
+  // 背景图/CG 填充：cover(填满裁剪) | contain(完整显示) | avoid-dialog(完全显示·避开对话框)
   bgFillMode: 'cover',
   skin: 'none',
   effectsEnabled: true,
@@ -964,6 +966,12 @@ ensureTitleScreenSettings();
 
 export function getSettings() { return _settings; }
 export function setSettings(v) { _settings = v; }
+
+// 背景图/CG 填充模式白名单，非法值一律回落 cover
+export const BG_FILL_MODES = ['cover', 'contain', 'avoid-dialog'];
+export function normalizeBgFillMode(value) {
+  return BG_FILL_MODES.includes(value) ? value : 'cover';
+}
 
 // 对话文本字号缩放系数（fontSize 1-30 → 0.53-1.5），CSS 变量 --font-scale 与分页长度共用
 export function getDialogFontScale(settings = getSettings()) {

@@ -1,7 +1,7 @@
 import { BGMManager } from '../audio/bgm-manager.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $ } from '../core/env.js';
-import { getSettings, saveSettings } from '../core/settings.js';
+import { getSettings, normalizeBgFillMode, saveSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { getTotalResourceCounts, isAllPacksEmpty } from '../db/image-packs.js';
@@ -228,7 +228,7 @@ const STEPS = [
         situationalStyleEnabled: settings.situationalStyleEnabled !== false,
         bgmEnabled: settings.bgmEnabled !== false,
         autoSpriteAssignEnabled: settings.autoSpriteAssignEnabled !== false,
-        bgFillMode: settings.bgFillMode === 'contain' ? 'contain' : 'cover',
+        bgFillMode: normalizeBgFillMode(settings.bgFillMode),
       };
       const prefs = ctx.state.prefs;
       return `
@@ -258,9 +258,10 @@ const STEPS = [
           <select id="gal-wizard-bg-fill-mode" class="gal-select">
             <option value="cover" ${prefs.bgFillMode === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
             <option value="contain" ${prefs.bgFillMode === 'contain' ? 'selected' : ''}>Contain (完整显示)</option>
+            <option value="avoid-dialog" ${prefs.bgFillMode === 'avoid-dialog' ? 'selected' : ''}>完全显示（避开对话框）</option>
           </select>
         </div>
-        <p class="gal-wizard-setting-hint">背景图与屏幕比例不一致时，填满裁剪或完整显示留边。</p>
+        <p class="gal-wizard-setting-hint">背景图与屏幕比例不一致时，填满裁剪或完整显示留边；「完全显示」则让图片避开对话框，下方留白用同图模糊铺底。</p>
         <p class="gal-wizard-hint">进入下一步时统一应用；之后可在「设置 → 画面与特效 / 生成COT」中随时调整。</p>
       `;
     },
@@ -270,7 +271,7 @@ const STEPS = [
       ctx.$body.find('#gal-wizard-situational-style').on('change', function () { prefs.situationalStyleEnabled = $(this).is(':checked'); });
       ctx.$body.find('#gal-wizard-bgm-enabled').on('change', function () { prefs.bgmEnabled = $(this).is(':checked'); });
       ctx.$body.find('#gal-wizard-auto-sprite-assign').on('change', function () { prefs.autoSpriteAssignEnabled = $(this).is(':checked'); });
-      ctx.$body.find('#gal-wizard-bg-fill-mode').on('change', function () { prefs.bgFillMode = String($(this).val() || 'cover'); });
+      ctx.$body.find('#gal-wizard-bg-fill-mode').on('change', function () { prefs.bgFillMode = normalizeBgFillMode($(this).val()); });
     },
     async onNext(ctx) {
       // 与设置面板对应开关的副作用保持一致，差异仅在于合并为一次 COT 注入
@@ -302,7 +303,7 @@ const STEPS = [
         settings.autoSpriteAssignEnabled = prefs.autoSpriteAssignEnabled;
         cotDirty = true;
       }
-      if ((settings.bgFillMode || 'cover') !== prefs.bgFillMode) {
+      if (normalizeBgFillMode(settings.bgFillMode) !== prefs.bgFillMode) {
         settings.bgFillMode = prefs.bgFillMode;
         if (typeof _refs.applyBgFillMode === 'function') _refs.applyBgFillMode();
       }

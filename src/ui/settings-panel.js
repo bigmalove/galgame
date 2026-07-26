@@ -4,7 +4,7 @@ import { TTSManager } from '../audio/tts-manager.js';
 import { ANCIENT_QINGLV_SKIN_ID, ANCIENT_SKIN_ID, CUSTOM_SKIN_ID, DEFAULT_DARK_SKIN_ID, JRPG_DAWN_SKIN_ID, JRPG_SKIN_ID, PERSONA_SKIN_ID, PERSONA_VELVET_SKIN_ID, SCRIPT_NAME, SHUJIAN_NIGHT_SKIN_ID, SHUJIAN_SKIN_ID, THEME, YANYUN_SKIN_ID, YANYUN_XUEJI_SKIN_ID } from '../core/constants.js';
 import { setGlobalDebugEnabled } from '../core/debug.js';
 import { $, topWindow } from '../core/env.js';
-import { UI_SCALE_PERCENT_MAX, UI_SCALE_PERCENT_MIN, dialogScalePercentToScaleFactorForSkin, ensureEnhancedModeSettings, ensureTitleScreenSettings, getDialogFontScale, getSettings, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled, uiScalePercentToScaleFactor } from '../core/settings.js';
+import { UI_SCALE_PERCENT_MAX, UI_SCALE_PERCENT_MIN, dialogScalePercentToScaleFactorForSkin, ensureEnhancedModeSettings, ensureTitleScreenSettings, getDialogFontScale, getSettings, normalizeBgFillMode, normalizeUiScalePercent, saveSettings, setCurrentCharEnabled, uiScalePercentToScaleFactor } from '../core/settings.js';
 import { getIsEnabled, setHideOtherFloors, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { saveBackground } from '../db/backgrounds.js';
@@ -19,7 +19,7 @@ import { applyGalgameMode, hideNonLastFloors, restoreOriginalViews, showAllFloor
 import { openGptSoVitsModelManager } from './gpt-sovits-model-manager.js';
 import { updateButtonState } from './menu-button.js';
 import { repaginateCurrentMessageForFontChange } from './overlay-content.js';
-import { adjustToolbarForSpace, ensureGlobalOverlay } from './overlay.js';
+import { adjustToolbarForSpace, ensureGlobalOverlay, updateBgSafeInset } from './overlay.js';
 import { applyHtmlSkinRuntime, clearHtmlSkinRuntime } from './html-skin-runtime.js';
 import { showSetupWizard } from './setup-wizard.js';
 import { TWILIGHT_SKIN_OPTION_ITEMS } from './skin-twilight.js';
@@ -356,18 +356,31 @@ export function applySettingsToUI() {
   syncPixiEffectsSettings();
   // 对话框/工具栏缩放变化会影响底栏是否放得下，重新实测降级档位
   adjustToolbarForSpace();
+  // 上面的皮肤/缩放/底栏变化都会改变对话框高度，
+  // 「避开对话框」模式的背景让位高度需在布局稳定后重测
+  updateBgSafeInset();
 }
 
 export function applyBgFillMode() {
   const settings = getSettings();
-  const fillMode = settings.bgFillMode || 'cover';
-  const $bgLayers = $('.gal-bg-layer');
-  $bgLayers.css('background-size', fillMode);
-  if (fillMode === 'contain') {
-    $bgLayers.css('background-position', 'center top');
-  } else {
-    $bgLayers.css('background-position', 'center');
+  const mode = normalizeBgFillMode(settings.bgFillMode);
+  const overlay = $('#gal-global-overlay').get(0);
+  if (!overlay) return;
+
+  // 变量写在 overlay 根节点上，由 .gal-bg-layer 继承消费：
+  // ensureBackgroundLayers() 会动态新建背景层，写在层上的内联样式会丢失
+  overlay.classList.toggle('gal-bg-avoid-dialog', mode === 'avoid-dialog');
+  if (mode === 'avoid-dialog') {
+    // 尺寸/位置由「避开对话框」的伪元素规则接管，清掉普通模式的变量避免残留
+    overlay.style.removeProperty('--gal-bg-fit');
+    overlay.style.removeProperty('--gal-bg-pos');
+    updateBgSafeInset();
+    return;
   }
+
+  overlay.style.setProperty('--gal-bg-fit', mode);
+  overlay.style.setProperty('--gal-bg-pos', mode === 'contain' ? 'center top' : 'center');
+  overlay.style.removeProperty('--gal-bg-safe-inset');
 }
 
 export function applyTextEffect() {
@@ -776,10 +789,12 @@ export async function showSettingsPanel(topTab, subTab) {
             <div class="gal-settings-row">
               <span class="gal-settings-label">背景图填充</span>
               <select id="gal-bg-fill-mode" class="gal-select">
-                <option value="cover" ${settings.bgFillMode === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
-                <option value="contain" ${settings.bgFillMode === 'contain' ? 'selected' : ''}>Contain (完整显示)</option>
+                <option value="cover" ${normalizeBgFillMode(settings.bgFillMode) === 'cover' ? 'selected' : ''}>Cover (填满裁剪)</option>
+                <option value="contain" ${normalizeBgFillMode(settings.bgFillMode) === 'contain' ? 'selected' : ''}>Contain (完整显示)</option>
+                <option value="avoid-dialog" ${normalizeBgFillMode(settings.bgFillMode) === 'avoid-dialog' ? 'selected' : ''}>完全显示（避开对话框）</option>
               </select>
             </div>
+            <p class="gal-hint">「完全显示」下背景图/CG 只占对话框上方区域，绝不被遮挡；下方留白用同图模糊铺底。</p>
             <div class="gal-settings-row">
               <span class="gal-settings-label">CG直接替换背景</span>
               <label class="gal-switch"><input type="checkbox" id="gal-cg-as-background" ${settings.cgAsBackground ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
@@ -1614,7 +1629,7 @@ export async function showSettingsPanel(topTab, subTab) {
     if (getIsEnabled()) { if (settings.hideOtherFloors) hideNonLastFloors(); else showAllFloors(); }
     saveSettings();
   });
-  $('#gal-bg-fill-mode').on('change', function () { settings.bgFillMode = $(this).val(); applyBgFillMode(); saveSettings(); });
+  $('#gal-bg-fill-mode').on('change', function () { settings.bgFillMode = normalizeBgFillMode($(this).val()); applyBgFillMode(); saveSettings(); });
   $('#gal-skin-select').on('change', function () { settings.skin = normalizeSkinValue($(this).val()); applySkin(); applySettingsToUI(); saveSettings(); });
   const getTitleSettingsState = () => {
     const normalized = ensureTitleScreenSettings();

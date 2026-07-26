@@ -468,8 +468,11 @@
   position: absolute;
   inset: 0;
   background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center;
+  /* 图片 URL 与填充方式统一走 CSS 变量：JS 只写变量，动态新建的背景层自动继承，
+     且「避开对话框」模式能把同一张图喂给 ::before / ::after 两个伪元素 */
+  background-image: var(--gal-bg-url, none);
+  background-size: var(--gal-bg-fit, cover);
+  background-position: var(--gal-bg-pos, center);
   opacity: 1;
   transform: scale(1);
   filter: blur(0) brightness(1) saturate(1);
@@ -478,6 +481,51 @@
     transform 1.1s cubic-bezier(0.22, 1, 0.36, 1),
     filter 0.9s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform, filter;
+}
+
+/* ── 完全显示模式：图片避开对话框 ────────────────────────────────
+   清晰图只落在对话框上沿以上的区域（bottom 由 JS 实测对话框位置写入
+   --gal-bg-safe-inset），留白区用同一张图 cover + 模糊压暗铺底，避免硬黑边。
+   利用伪元素天然绘制顺序分层（::before 在 ::after 之下），无需 z-index；
+   filter 只作用于 ::before，不会糊到清晰层。父层的 opacity/transform 过渡
+   对伪元素同样生效，交叉溶解与光扫动画不受影响。 */
+#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer {
+  background-image: none;
+}
+
+#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer::before,
+#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer::after {
+  content: '';
+  position: absolute;
+  background-image: var(--gal-bg-url, none);
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+/* 模糊铺底：放大 1.15 遮住 blur 产生的透明边缘 */
+#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer::before {
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(var(--gal-bg-backdrop-blur, 2rem)) brightness(0.5) saturate(1.05);
+  transform: scale(1.15);
+}
+
+/* 清晰图：底边停在对话框上沿 */
+#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer::after {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--gal-bg-safe-inset, 0px);
+  background-size: contain;
+  background-position: center;
+  transition: bottom 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer::after {
+    transition: none;
+  }
 }
 
 /* 旧图退场：轻微推远 + 变暗失焦，制造纵深感 */
@@ -1201,7 +1249,8 @@
      对话框放大到贴边时它们会越过游戏容器边界被裁掉 */
   width: min(calc(100% - 6rem), calc(80% * var(--gal-dialog-scale-user, 1)));
   height: calc(30% * var(--gal-dialog-scale-user, 1)); /* 相对高度 */
-  min-height: 9rem;
+  /* min-height 需跟随缩放：写死 9rem 会在小容器上盖过缩小后的 height，导致滑块调小无效 */
+  min-height: calc(9rem * min(var(--gal-dialog-scale-user, 1), 1));
   max-height: 72%;
   transform: translateX(-50%);
   transform-origin: bottom center;
@@ -1241,6 +1290,14 @@
 .gal-name-badge span {
   display: block;
   transform: skewX(15deg);
+}
+
+/* 顶栏包裹层：桌面端 display:contents 完全隐形，
+   三个小钮与交互栏仍按各自 absolute 值挂在 .gal-dialog-layer 上。
+   仅移动端（见文末 @media）才把它变成真正的 flex 横排行。 */
+.gal-dialog-topbar,
+.gal-dialog-quick-actions {
+  display: contents;
 }
 
 /* 隐藏立绘按钮 - 位于名字标签右侧 */
@@ -4000,7 +4057,7 @@
     width: min(98%, calc(96% * var(--gal-dialog-scale-user, 1))) !important;
     bottom: calc(0.625rem * var(--gal-dialog-scale-user, 1)) !important;
     height: calc(40% * var(--gal-dialog-scale-user, 1)) !important; /* 增加高度占比至40% */
-    min-height: 11rem !important;
+    min-height: calc(11rem * min(var(--gal-dialog-scale-user, 1), 1)) !important;
     max-height: 84% !important;
     transform: translateX(-50%) !important;
     padding-bottom: env(safe-area-inset-bottom); /* 底部安全区 */
@@ -6217,6 +6274,79 @@
 
   .gal-status-popup-icon {
     font-size: 0.95rem !important;
+  }
+}
+
+/* 移动端：三个小钮改为横排，与「重绘当前 / 自由对话」同处一行、右对齐。
+   上面那块 6239 保留不动，作为「自写 HTML 皮肤没有 .gal-dialog-topbar」时的兜底；
+   下面的规则特异性更高（0,2,0 > 0,1,0），有包裹层时自然覆盖它。 */
+@media screen and (max-width: 48rem) {
+  .gal-dialog-topbar {
+    display: flex !important;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 0.15rem); /* 贴在对话框上沿，无需硬编码 top */
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.45rem;
+    z-index: 36;
+    pointer-events: none; /* 空白区不挡住下方立绘/名牌 */
+  }
+
+  .gal-dialog-quick-actions {
+    display: flex !important;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 0 0 auto;
+    pointer-events: auto;
+  }
+
+  /* 三个小钮：脱离绝对定位，进入 flex 流并缩小 */
+  .gal-dialog-topbar .gal-sprite-toggle,
+  .gal-dialog-topbar .gal-status-popup-trigger {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important; /* 覆盖上一块的 scale(...) */
+    width: 1.55rem !important;
+    height: 1.55rem !important;
+    flex: 0 0 auto;
+    z-index: auto !important;
+    box-shadow: 0.125rem 0.125rem 0 var(--gp-shadow, rgba(0, 0, 0, 0.2));
+  }
+
+  .gal-dialog-topbar .gal-eye-icon,
+  .gal-dialog-topbar .gal-status-popup-icon {
+    font-size: 0.8rem !important;
+  }
+
+  /* 交互栏：同样进入 flex 流 */
+  .gal-dialog-topbar .gal-interaction-bar {
+    position: static !important;
+    inset: auto !important;
+    /* 去掉 scale(0.85)：transform 不改布局盒，留着会在行内空出一条缝 */
+    transform: none !important;
+    flex: 0 1 auto;
+    gap: 0.4rem !important;
+    z-index: auto !important;
+    pointer-events: auto;
+  }
+
+  /* 用 padding / font-size 补回被去掉的 0.85 缩放 */
+  .gal-dialog-topbar .gal-interaction-bar .gal-action-btn {
+    padding: 0.3rem 0.6rem !important;
+    font-size: 0.82rem !important;
+  }
+}
+
+/* 超窄屏（≤360px）：动作按钮只留图标，保证整行放得下不换行 */
+@media screen and (max-width: 22.5rem) {
+  .gal-dialog-topbar .gal-interaction-bar .gal-action-btn span {
+    display: none !important;
+  }
+
+  .gal-dialog-topbar .gal-interaction-bar .gal-action-btn {
+    padding: 0.3rem 0.5rem !important;
   }
 }
 

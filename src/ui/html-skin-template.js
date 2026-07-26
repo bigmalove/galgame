@@ -25,6 +25,8 @@ export const HTML_SKIN_ALLOWED_SELECTOR_HINTS = [
   { selector: '.gal-char-container > .gal-char-img', desc: '立绘容器与立绘图片' },
   { selector: '.gal-dialog-layer', desc: '对话框整层（含姓名牌、文本面板、底栏、进度条）' },
   { selector: '.gal-name-badge', desc: '角色姓名牌（内含 span；::after 为底部强调线）' },
+  { selector: '.gal-dialog-topbar', desc: '对话框上沿包裹层（桌面 display:contents 隐形；≤768px 变 flex 横排行）' },
+  { selector: '.gal-dialog-quick-actions', desc: '立绘开关 / 弹窗小按钮的分组容器（移动端横排）' },
   { selector: '.gal-sprite-toggle / .gal-status-popup-trigger', desc: '对话框右上方的立绘开关 / 弹窗小按钮' },
   { selector: '.gal-interaction-bar .gal-action-btn', desc: '重绘/自由对话按钮（.btn-reroll / .btn-free）' },
   { selector: '.gal-text-panel', desc: '对话文本面板' },
@@ -283,28 +285,35 @@ ${EXAMPLE_SKIN_CSS}
             <div class="gal-layer-effect-fg"></div>
             <!-- 对话框层 -->
             <div class="gal-dialog-layer">
-              <button class="gal-sprite-toggle" title="显示/隐藏立绘">
-                <span class="gal-eye-icon">\u{1F441}</span>
-              </button>
-              <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="弹窗一">
-                <i class="gal-status-popup-icon fa-solid fa-location-dot"></i>
-              </button>
-              <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="弹窗二">
-                <i class="gal-status-popup-icon fa-regular fa-clock"></i>
-              </button>
-              <div class="gal-name-badge">
-                <span>千夏</span>
+              <!-- 顶栏包裹层：桌面端 display:contents 隐形，子元素仍各自 absolute；
+                   移动端变为 flex 行，小钮横排在交互栏左侧 -->
+              <div class="gal-dialog-topbar">
+                <div class="gal-dialog-quick-actions">
+                  <button class="gal-sprite-toggle" title="显示/隐藏立绘">
+                    <span class="gal-eye-icon">\u{1F441}</span>
+                  </button>
+                  <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="弹窗一">
+                    <i class="gal-status-popup-icon fa-solid fa-location-dot"></i>
+                  </button>
+                  <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="弹窗二">
+                    <i class="gal-status-popup-icon fa-regular fa-clock"></i>
+                  </button>
+                </div>
+
+                <div class="gal-interaction-bar">
+                  <button class="gal-action-btn btn-reroll" data-action="reroll" title="重新生成">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>重绘当前</span>
+                  </button>
+                  <button class="gal-action-btn btn-free" data-action="free-input" title="自由输入">
+                    <i class="fa-regular fa-keyboard"></i>
+                    <span>自由对话</span>
+                  </button>
+                </div>
               </div>
 
-              <div class="gal-interaction-bar">
-                <button class="gal-action-btn btn-reroll" data-action="reroll" title="重新生成">
-                  <i class="fa-solid fa-rotate-right"></i>
-                  <span>重绘当前</span>
-                </button>
-                <button class="gal-action-btn btn-free" data-action="free-input" title="自由输入">
-                  <i class="fa-regular fa-keyboard"></i>
-                  <span>自由对话</span>
-                </button>
+              <div class="gal-name-badge">
+                <span>千夏</span>
               </div>
 
               <div class="gal-text-panel">
@@ -505,11 +514,13 @@ export const HTML_SKIN_PROMPT = `以下是 Galgame 游戏界面皮肤模板的�
         ├─ .gal-layer-character > .gal-char-slot ×3   立绘槽（slot-left/center/right）
         │   └─ .gal-char-container > img.gal-char-img 立绘
         └─ .gal-dialog-layer                 对话框整层
-            ├─ .gal-sprite-toggle            立绘显隐开关（小按钮）
-            ├─ .gal-status-popup-trigger ×2  弹窗触发小按钮
+            ├─ .gal-dialog-topbar            上沿包裹层（桌面 display:contents 隐形；≤768px 变 flex 横排行）
+            │   ├─ .gal-dialog-quick-actions 小按钮分组
+            │   │   ├─ .gal-sprite-toggle            立绘显隐开关（小按钮）
+            │   │   └─ .gal-status-popup-trigger ×2  弹窗触发小按钮
+            │   └─ .gal-interaction-bar      交互按钮组（对话框右上方）
+            │       └─ .gal-action-btn（.btn-reroll 重绘 / .btn-free 自由对话）
             ├─ .gal-name-badge > span        角色姓名牌（::after 为底部强调线）
-            ├─ .gal-interaction-bar          交互按钮组（对话框右上方）
-            │   └─ .gal-action-btn（.btn-reroll 重绘 / .btn-free 自由对话）
             ├─ .gal-text-panel               对话文本面板
             │   ├─ .gal-dialog-text          对话正文
             │   ├─ .gal-generating-indicator 生成中指示器（.active 时显示）

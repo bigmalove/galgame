@@ -149,28 +149,35 @@ function buildDefaultOverlayInnerHtml({
             <div class="gal-layer-effect-fg"></div>
             <!-- 对话框层 -->
             <div class="gal-dialog-layer">
-              <button class="gal-sprite-toggle" title="显示/隐藏立绘">
-                <span class="gal-eye-icon">\u{1F441}</span>
-              </button>
-              <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="弹窗一">
-                <i class="gal-status-popup-icon ${locationIconClass}"></i>
-              </button>
-              <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="弹窗二">
-                <i class="gal-status-popup-icon ${timeIconClass}"></i>
-              </button>
-              <div class="gal-name-badge">
-                <span>旁白</span>
+              <!-- 顶栏包裹层：桌面端 display:contents 隐形，子元素仍各自 absolute；
+                   移动端变为 flex 行，小钮横排在交互栏左侧 -->
+              <div class="gal-dialog-topbar">
+                <div class="gal-dialog-quick-actions">
+                  <button class="gal-sprite-toggle" title="显示/隐藏立绘">
+                    <span class="gal-eye-icon">\u{1F441}</span>
+                  </button>
+                  <button class="gal-status-popup-trigger gal-location-popup-trigger" id="gal-location-popup-trigger" title="弹窗一">
+                    <i class="gal-status-popup-icon ${locationIconClass}"></i>
+                  </button>
+                  <button class="gal-status-popup-trigger gal-time-popup-trigger" id="gal-time-popup-trigger" title="弹窗二">
+                    <i class="gal-status-popup-icon ${timeIconClass}"></i>
+                  </button>
+                </div>
+
+                <div class="gal-interaction-bar">
+                  <button class="gal-action-btn btn-reroll" data-action="reroll" title="重新生成">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>重绘当前</span>
+                  </button>
+                  <button class="gal-action-btn btn-free" data-action="free-input" title="自由输入">
+                    <i class="fa-regular fa-keyboard"></i>
+                    <span>自由对话</span>
+                  </button>
+                </div>
               </div>
 
-              <div class="gal-interaction-bar">
-                <button class="gal-action-btn btn-reroll" data-action="reroll" title="重新生成">
-                  <i class="fa-solid fa-rotate-right"></i>
-                  <span>重绘当前</span>
-                </button>
-                <button class="gal-action-btn btn-free" data-action="free-input" title="自由输入">
-                  <i class="fa-regular fa-keyboard"></i>
-                  <span>自由对话</span>
-                </button>
+              <div class="gal-name-badge">
+                <span>旁白</span>
               </div>
 
               <div class="gal-text-panel">
@@ -526,7 +533,49 @@ export function syncOverlayHeightToChatViewport(overlay, { force = false } = {})
   resizePixiEffects();
 }
 
+// 「完全显示（避开对话框）」模式：实测对话框顶边，算出背景清晰图需要让出的底部高度。
+// 对话框高度是百分比 + --gal-dialog-scale-user + min/max 夹逼，移动端有 @media 覆写，
+// 各皮肤还有 !important 调整（twilight 甚至是 position:relative 流式布局），
+// 因此只能量真实矩形，不能按公式推算。
+const BG_SAFE_INSET_GAP_PX = 8;
+
+export function updateBgSafeInset() {
+  const targetDoc = topWindow.document;
+  const overlay = targetDoc.getElementById('gal-global-overlay');
+  if (!overlay || !overlay.classList.contains('gal-bg-avoid-dialog')) return;
+
+  const container = overlay.querySelector('.gal-game-container');
+  if (!container) return;
+
+  const dialog = overlay.querySelector('.gal-dialog-layer');
+  const containerRect = container.getBoundingClientRect();
+  if (!(containerRect.height > 0)) return;
+
+  let inset = 0;
+  // 对话框被隐藏（display:none / 高度为 0）时不让位，图片用满整个容器
+  if (dialog) {
+    const dialogRect = dialog.getBoundingClientRect();
+    if (dialogRect.height > 0) {
+      inset = containerRect.bottom - dialogRect.top + BG_SAFE_INSET_GAP_PX;
+    }
+  }
+
+  const maxInset = containerRect.height * 0.85;
+  inset = Math.max(0, Math.min(maxInset, inset));
+  overlay.style.setProperty('--gal-bg-safe-inset', `${Math.round(inset)}px`);
+}
+
 export function adjustGameContentScale() {
+  // 内部有多条提前返回路径（全屏 / 宽度无效 / 缩放未变），
+  // 背景让位高度依赖对话框实际位置，必须每次都重测
+  try {
+    applyGameContentScale();
+  } finally {
+    updateBgSafeInset();
+  }
+}
+
+function applyGameContentScale() {
   const targetDoc = topWindow.document;
   const overlay = targetDoc.getElementById('gal-global-overlay');
   if (!overlay) return;
@@ -583,7 +632,10 @@ export function resetGameContentScale() {
   }
 
   const $gameContainer = $(targetDoc).find('.gal-game-container');
-  if (!$gameContainer.length) return;
+  if (!$gameContainer.length) {
+    updateBgSafeInset();
+    return;
+  }
 
   $gameContainer.css({
     transform: '',
@@ -597,6 +649,7 @@ export function resetGameContentScale() {
     margin: '',
   });
   resizePixiEffects();
+  updateBgSafeInset();
 }
 
 export function adjustToolbarForSpace() {

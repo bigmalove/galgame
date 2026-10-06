@@ -1,4 +1,5 @@
 import { $, topWindow } from '../core/env.js';
+import { ensureWebFonts, STYLED_STAGE_FONTS } from './web-fonts.js';
 
 // 酒馆助手脚本运行在隐藏 iframe 中：DOM 创建 / rAF / matchMedia 必须走顶层窗口，
 // 否则 requestAnimationFrame 会被挂起（粒子、木轴动画全部冻结）
@@ -320,6 +321,7 @@ export function showStyledStage($overlay, styledHtml, styleType) {
   }
   const $stage = ensureStyledStage($overlay);
   if (!$stage.length) return;
+  ensureWebFonts(STYLED_STAGE_FONTS).catch(() => {});
   token++;
   const myToken = token;
   clearSubTimers();

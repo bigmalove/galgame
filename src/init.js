@@ -1,6 +1,6 @@
 import { BGMManager } from './audio/bgm-manager.js';
 import { TTSManager } from './audio/tts-manager.js';
-import { ANCIENT_FAMILY_SKIN_IDS, CUSTOM_SKIN_ID, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, TWILIGHT_FAMILY_SKIN_IDS, VERSION, YANYUN_FAMILY_SKIN_IDS } from './core/constants.js';
+import { ANCIENT_FAMILY_SKIN_IDS, CUSTOM_SKIN_ID, CYBERPOP_DARK_SKIN_ID, CYBERPOP_SKIN_ID, DEFAULT_DARK_SKIN_ID, DEFAULT_SOFT_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, TWILIGHT_FAMILY_SKIN_IDS, VERSION, YANYUN_FAMILY_SKIN_IDS } from './core/constants.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
 import { $, topWindow } from './core/env.js';
 import { ensureTitleScreenSettings, getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings, saveSettings, setCurrentCharEnabled } from './core/settings.js';
@@ -9,7 +9,7 @@ import { loadAllBackgroundsToCache } from './db/backgrounds.js';
 import { initDB } from './db/init.js';
 import { hasHtmlSkinId, loadHtmlSkinsToCache } from './db/html-skins.js';
 import { loadAllSpritesToCache } from './db/sprites.js';
-import { applyPixiEffectOps, clearAllPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
+import { applyPixiEffectOps, clearAllPixiEffects, destroyPixiEffects, preloadPixiEffectsRuntime, syncPixiEffectsSettings } from './effects/pixi-effect-manager.js';
 import { LipSyncManager } from './live2d/lip-sync.js';
 import { Live2DManager } from './live2d/manager.js';
 import { Live2DPreloadManager } from './live2d/preload.js';
@@ -29,7 +29,7 @@ import { applyGalgameMode, restoreOriginalViews } from './ui/galgame-mode.js';
 import { setupKeyboardShortcuts } from './ui/interaction.js';
 import { addMenuButton, injectGalgameButton, updateButtonState } from './ui/menu-button.js';
 import { cleanupCgObservers } from './ui/overlay-content.js';
-import { ensureGlobalOverlay, setupGameContentResizeListener, showGlobalOverlay } from './ui/overlay.js';
+import { ensureGlobalOverlay, setupGameContentResizeListener, showGlobalOverlay, stopOverlayScrollPin } from './ui/overlay.js';
 import { processNewMessage } from './ui/process-message.js';
 import { maybeAutoShowSetupWizard, showSetupWizard } from './ui/setup-wizard.js';
 import { injectStyles } from './ui/styles.js';
@@ -48,7 +48,7 @@ let initStarted = false;
 
 function sanitizeLoadedSkinSetting(settings) {
   const rawSkin = String(settings?.skin || 'none').trim();
-  const builtinSkinSet = new Set(['none', DEFAULT_DARK_SKIN_ID, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, 'skin-classic', ...ANCIENT_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...TWILIGHT_FAMILY_SKIN_IDS]);
+  const builtinSkinSet = new Set(['none', DEFAULT_DARK_SKIN_ID, DEFAULT_SOFT_SKIN_ID, CYBERPOP_SKIN_ID, CYBERPOP_DARK_SKIN_ID, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, 'skin-classic', ...ANCIENT_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...TWILIGHT_FAMILY_SKIN_IDS]);
   if (builtinSkinSet.has(rawSkin)) return false;
   if (hasHtmlSkinId(rawSkin)) return false;
   // 旧图片式自定义皮肤（custom-profile::）、skin-western、custom-skin 及一切未知值回退默认
@@ -462,8 +462,24 @@ export function installGalgameGlobals() {
   console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager, effects}`);
 }
 
+// 酒馆助手脚本卸载（关闭脚本 / 实时修改热重载）时回收挂在酒馆主页面上的资源。
+// 实测每次重载会遗留：两个 Pixi 应用（各自的 ticker 持续空转渲染，交互管理器在 window/document 上
+// 留下 pointermove/pointerup/pointercancel/keydown 监听）与 #chat 的滚动锁定监听。
+// 酒馆事件经 eventOn 订阅，由酒馆助手在卸载时自动退订，无需在此处理。
+function installUnloadCleanup() {
+  $(window).on('pagehide', () => {
+    try {
+      destroyPixiEffects();
+    } catch (error) {
+      console.warn(`[${SCRIPT_NAME}] 卸载时销毁 Pixi 特效失败`, error);
+    }
+    stopOverlayScrollPin();
+  });
+}
+
 export function startGalgamePlugin() {
   installGalgameGlobals();
+  installUnloadCleanup();
   if ($ && topWindow.document.readyState === 'complete') {
     init();
   } else {

@@ -4,6 +4,8 @@ import { topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
 import { CUSTOM_LOCATION_HTML_KEY, CUSTOM_TIME_HTML_KEY } from '../core/store.js';
 import { getAllBackgrounds } from '../db/backgrounds.js';
+import { getAllLive2DModels } from '../db/live2d-models.js';
+import { getAllSprites } from '../db/sprites.js';
 import { getPendingSpecialCg } from './special-cg-trigger.js';
 import { buildAutoSpriteAssignCotSection } from './sprite-auto-assign.js';
 import { getAllExpressions } from '../utils/expressions.js';
@@ -11,6 +13,47 @@ import { getAllExpressions } from '../utils/expressions.js';
 // ============================================
 // COT (Chain of Thought) 模板生成
 // ============================================
+
+// 未揭示姓名角色的临时立绘：列出已有立绘 / Live2D 的角色，供 AI 以「显示名@角色名」调用
+async function buildTempSpriteAliasSection({ ttsEnabled, canAssignTemplate }) {
+  let characterIds = [];
+  try {
+    const [sprites, live2dModels] = await Promise.all([getAllSprites(null, false), getAllLive2DModels()]);
+    characterIds = Array.from(
+      new Set(
+        [...sprites.map(sp => sp?.characterId), ...live2dModels.map(m => m?.modelId || m?.characterId)]
+          .map(id => String(id || '').trim())
+          .filter(Boolean),
+      ),
+    );
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] 获取可临时指定立绘的角色失败:`, error);
+  }
+  if (characterIds.length === 0 && !canAssignTemplate) return '';
+
+  const formatLine = ttsEnabled
+    ? '`<p>显示名@角色名[表情,男声/女声]: "对话"</p>`'
+    : '`<p>显示名@角色名: "对话"<表情名></p>`';
+  const exampleTarget = characterIds[0] || '星野雫';
+  const exampleLine = ttsEnabled
+    ? `\`<p>神秘少女@${exampleTarget}[微笑,女声]: "我们……以前见过吗？"</p>\``
+    : `\`<p>神秘少女@${exampleTarget}: "我们……以前见过吗？"<微笑></p>\``;
+  const characterListLine = characterIds.length > 0 ? `\n- **可指定的角色**: ${characterIds.join(', ')}` : '';
+  const assignLine = canAssignTemplate
+    ? '\n  - 该角色尚无立绘时，可先按「新角色立绘模板」规则以**真名**分配模板，再用本格式出场。'
+    : '';
+
+  return `
+### 未揭示姓名角色的立绘（临时指定）
+- **用途**: 角色已登场、但姓名尚未在剧情中揭示（如"神秘少女""蒙面人""???"）时，用 \`显示名@角色名\` 临时调用其真实身份的立绘/Live2D与音色；对话框只显示 @ 前的名字
+- **格式**: ${formatLine}${characterListLine}
+- **使用规则**:
+  - @ 后必须是该角色的**真名**，且该角色已有立绘（在可指定列表中原样选取），禁止自创。
+  - 未揭示期间该角色的**每句**台词都带上 \`@角色名\`；姓名揭示后直接使用真名，不再加 @。
+  - 已知姓名的角色、路人与无立绘的角色不要使用本格式。${assignLine}
+- **示例**: ${exampleLine}
+`;
+}
 
 export async function generateCOTTemplate(options = {}) {
   const settings = getSettings();
@@ -32,7 +75,7 @@ ${statusTagInstructions.join('\n')}
       : '';
   const statusTagSection = buildStatusTagSection('以上标签请放在 <maintext> 内。');
 
-  const pixiEffectNames = ['rain', 'snow', 'heavySnow', 'cherryBlossoms', 'fog', 'fireflies', 'embers', 'screenFlash'];
+  const pixiEffectNames = ['rain', 'snow', 'heavySnow', 'cherryBlossoms', 'fog', 'fireflies', 'embers', 'lightning', 'bokeh', 'dust', 'screenFlash', 'screenShake'];
   const pixiEffectListText = pixiEffectNames.join(', ');
   const pixiEffectTagSection =
     settings.effectsEnabled === false
@@ -47,6 +90,8 @@ ${statusTagInstructions.join('\n')}
   - 特效层由系统按特效名自动分配（雾固定背景层，其余固定前景层），不要输出 \`layer\`。
   - 同一场景不要高频重复输出同一个特效。
   - \`screenFlash\` 用于短暂强调（爆炸、雷电、强光），不要连续刷屏。
+  - \`screenShake\` 为一次性震屏（撞击、爆炸、地震、拍桌怒吼），放在对应台词前，一条消息最多一两次。
+  - \`lightning\` 为持续的远处雷暴（常与 rain 同用）；\`bokeh\` 为散景光斑（夜景灯火、祭典、浪漫时刻）；\`dust\` 为光束中的浮尘（旧屋、书库、清晨室内）。
 `;
 
   const bgmWhitelist = Array.from(
@@ -299,10 +344,16 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
   // 绘本模式下"背景来源=关闭"且图库为空时，模型同样无背景可切，不注入
   const includeBackgroundSection =
     !(useChatu8 && sceneNames.length === 0) && !(simpleStorybookMode && bgSrc === 'none' && sceneNames.length === 0);
+  // 可选转场属性（stage/background.js 转场库）：只在换章 / 时间跳跃等节点使用，平常省略走默认转场
+  const backgroundTransitionHint = settings.bgTransitionAiHint !== false
+    ? `
+- 可选转场（仅在关键节点添加，平常省略）: \`<background scene="场景名" transition="black" />\`
+  - black: 黑场 + 地点字幕，用于时间流逝、换章、次日；dissolve: 墨迹溶解，用于回忆、梦境；iris: 光圈展开；wipe: 斜切擦除，用于快节奏移动`
+    : '';
   const backgroundTagSection = includeBackgroundSection
     ? `### ${backgroundTagTitle}
 - 格式: \`<background scene="场景名" />\`
-${backgroundUsageRuleSection}
+${backgroundUsageRuleSection}${backgroundTransitionHint}
 - ${sceneListText}`
     : '';
   const exampleBackgroundLine = includeBackgroundSection ? `  <background scene="${exampleScene}" />\n` : '';
@@ -329,6 +380,9 @@ ${backgroundUsageRuleSection}
   }
 
   const ttsEnabled = getTTSEnabled();
+  const tempSpriteAliasSection = simpleStorybookMode
+    ? ''
+    : await buildTempSpriteAliasSection({ ttsEnabled, canAssignTemplate: !!autoSpriteAssignSection });
   const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
   const ttsDialogueFormatLine = ttsBilingualZhJaEnabled
     ? '- **格式**: `<p>角色名[表情,男声/女声]: "中文文本[JP]日文文本"</p>`'
@@ -459,6 +513,7 @@ ${bgmRuleSection}
 ${backgroundTagSection}
 ${pendingSpecialCgSection}
 ${autoSpriteAssignSection}
+${tempSpriteAliasSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）
@@ -531,6 +586,7 @@ ${bgmRuleSection}
 ${backgroundTagSection}
 ${pendingSpecialCgSection}
 ${autoSpriteAssignSection}
+${tempSpriteAliasSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）

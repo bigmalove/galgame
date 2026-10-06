@@ -154,3 +154,8 @@ export function resolveCharacterIdByKeywords(inputName, candidateIds) {
 
   return null;
 }
+
+// 段落的立绘 / Live2D / 配音角色：LLM 以「显示名@角色名」临时指定立绘时取 @ 后的角色，否则即说话人
+export function getSegmentCharacterId(segment) {
+  return String(segment?.spriteCharacter || segment?.speaker || '').trim();
+}

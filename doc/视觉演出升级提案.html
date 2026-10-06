@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>视觉演出升级提案 · Stage FX 2.0</title>
+<!-- 字体走 jsDelivr fontsource（unicode-range 分片，国内可达；只下载用到的字） -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/barlow@5/600.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/barlow@5/800.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/barlow@5/900.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/500.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5/900.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5/500.css">
+<style>
+/* ============================================================
+   视觉演出升级提案 —— Stage FX 2.0
+   论点：皮肤已有 20+ 套，「外观」不缺；缺的是与皮肤无关的「演出层」：
+   ① 镜头（Ken Burns 漂移 / 多层视差 / 说话人推镜 / 阻尼震屏）
+   ② 转场库（叠化 / 斜切擦除 / 光圈 / 黑场字幕 / 硬切条带 / 规则图溶解）
+   ③ 光影（背景采样自动环境光 → 立绘染色 + 轮廓光；时段调色；暗角颗粒）
+   ④ 粒子（真·加色发光 + 三层景深）
+   ⑤ 文字节奏（逐字淡入 / 标点停顿 / 行内强调 / 收尾光标）
+   ⑥ 编排（名牌擦入 / 角色色 / 选项错峰 / CG 揭示）
+   右上角 A/B 切换「现状 v2.2」对照：现状模式按线上实际行为降级。
+   ============================================================ */
+:root{
+  --font-eng: 'Barlow', 'Noto Sans SC', sans-serif;
+  --font-cn: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --page-bg: #0c0e13;
+  --page-line: rgba(255,255,255,.08);
+  --page-dim: rgba(232,236,244,.55);
+  --ease-out: cubic-bezier(.22,1,.36,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page-bg);color:#e8ecf4;font-family:var(--font-cn)}
+body{min-height:100vh}
+button{font:inherit;color:inherit}
+
+/* ---------- 页面框架 ---------- */
+.hero{padding:44px 24px 18px;text-align:center}
+.hero .kicker{font:600 11px/1 var(--font-eng);letter-spacing:.5em;color:#6f7a8c}
+.hero h1{margin:18px 0 10px;font:900 clamp(26px,3.4vw,40px)/1.15 var(--font-eng);letter-spacing:.04em}
+.hero h1 em{font-style:normal;color:#00c4ef}
+.hero p{max-width:900px;margin:0 auto;color:var(--page-dim);font-size:13.5px;line-height:1.9}
+.ab{display:inline-flex;margin-top:20px;border:1px solid var(--page-line);padding:4px;gap:4px;border-radius:999px;background:#13161d}
+.ab button{border:0;background:transparent;padding:8px 20px;border-radius:999px;cursor:pointer;font:800 13px/1 var(--font-eng);letter-spacing:.08em;color:#8a93a3;transition:background .25s,color .25s}
+.ab button.on{background:#00c4ef;color:#0c0e13}
+body.legacy .ab button.on{background:#e8ecf4}
+
+.lab{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;max-width:1500px;margin:0 auto;padding:16px 24px 24px;align-items:start}
+@media (max-width:1100px){.lab{grid-template-columns:1fr}}
+.stage-hint{margin:10px 2px 0;font:500 12px/1.6 var(--font-cn);color:#6f7a8c;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.stage-hint b{color:#9fe9ff;font-weight:500}
+
+/* ---------- 控制面板 ---------- */
+.panel{background:#12151c;border:1px solid var(--page-line);border-radius:14px;padding:16px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;scrollbar-width:thin}
+.grp{padding:12px 0;border-bottom:1px solid var(--page-line)}
+.grp:last-child{border-bottom:0}
+.grp h3{margin:0 0 10px;font:800 11px/1 var(--font-eng);letter-spacing:.28em;color:#6f7a8c;display:flex;justify-content:space-between}
+.grp h3 small{letter-spacing:0;font:500 11px/1 var(--font-cn);color:#4d5666}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.btns button{border:1px solid var(--page-line);background:#181c25;padding:8px 6px;border-radius:8px;cursor:pointer;font-size:12.5px;transition:border-color .2s,background .2s,transform .15s}
+.btns button:hover{border-color:rgba(0,196,239,.5);background:#1b2230}
+.btns button:active{transform:scale(.97)}
+.btns button.on{border-color:#00c4ef;background:rgba(0,196,239,.12);color:#9fe9ff}
+.btns button .tag{display:block;font:600 10px/1.4 var(--font-mono);color:#5d6778;margin-top:2px}
+.btns button.legacy-only{border-style:dashed}
+.tgl{display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:12.5px;color:#c4cad6;cursor:pointer;user-select:none}
+.tgl input{appearance:none;width:34px;height:20px;border-radius:999px;background:#2a303c;position:relative;cursor:pointer;transition:background .2s;margin:0}
+.tgl input::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#e8ecf4;transition:transform .25s var(--ease-spring)}
+.tgl input:checked{background:#00c4ef}
+.tgl input:checked::after{transform:translateX(14px)}
+body.legacy .up-only{opacity:.35;pointer-events:none}
+.amb-readout{display:flex;gap:8px;align-items:center;font:500 11px/1.4 var(--font-mono);color:#7d8696;margin-top:8px}
+.amb-readout i{width:18px;height:18px;border-radius:5px;display:inline-block;border:1px solid var(--page-line)}
+
+/* ============================================================
+   舞台（16:9）
+   ============================================================ */
+.stage{
+  position:relative;aspect-ratio:16/9;width:100%;overflow:hidden;border-radius:12px;
+  background:#0a0b0f;isolation:isolate;cursor:pointer;user-select:none;
+  box-shadow:0 30px 80px -30px rgba(0,0,0,.8),0 0 0 1px var(--page-line);
+  container-type:inline-size;
+  /* 运行时变量：视差（-1~1）、推镜、震屏 */
+  --mx:0;--my:0;--cam-x:0;--cam-zoom:1;--shake-x:0px;--shake-y:0px;
+  /* 环境光（JS 采样背景图写入） */
+  --amb:#ffffff;--amb-op:0;--rim:#ffffff;--rim-op:0;--rim-dir:90deg;--char-bri:1;--char-sat:1;
+  /* 当前说话人色 */
+  --spk:#00c4ef;
+}
+.layer{position:absolute;inset:0;pointer-events:none}
+
+/* 镜头：所有「世界内」图层放在 .cam 里；对话框等 UI 不跟镜头动 */
+.cam{
+  position:absolute;inset:0;
+  transform:translate3d(calc(var(--shake-x) + var(--cam-x) * 1%),var(--shake-y),0) scale(var(--cam-zoom));
+  transition:transform 1.4s var(--ease-out);
+  will-change:transform;
+}
+.cam.shaking{transition:none}
+
+/* 背景层：外层吃视差，内层 .kb 吃 Ken Burns 漂移，两者 transform 不打架 */
+.bg-par{position:absolute;inset:-4%;transform:translate3d(calc(var(--mx) * -1.1%),calc(var(--my) * -0.9%),0)}
+.slide{position:absolute;inset:0;overflow:hidden}
+.slide .kb{position:absolute;inset:0;background:var(--img) center/cover no-repeat #111;transform-origin:var(--kb-origin,50% 50%)}
+body:not(.legacy) .stage.kb-on .slide .kb{animation:kb 34s ease-in-out infinite alternate}
+@keyframes kb{from{transform:scale(1.02) translate3d(0,0,0)}to{transform:scale(1.11) translate3d(var(--kb-dx,-1.6%),var(--kb-dy,-1%),0)}}
+.slide.front{opacity:0}
+
+/* —— 转场：现状（线上 gal-bg-front 的实际参数）—— */
+.slide.t-cross{transition:opacity .9s var(--ease-out),transform 1.1s var(--ease-out),filter .9s var(--ease-out);transform:scale(1.08);filter:blur(16px) brightness(1.15) saturate(1.15)}
+.slide.t-cross.go{opacity:1;transform:scale(1);filter:none}
+.slide.base.dim{transition:transform 1.1s var(--ease-out),filter .9s var(--ease-out);transform:scale(.985);filter:blur(4px) brightness(.85) saturate(.9)}
+.sweep{position:absolute;inset:-20%;opacity:0;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.18) 48%,rgba(255,255,255,.35) 50%,rgba(255,255,255,.18) 52%,transparent 60%);transform:translateX(-60%) skewX(-8deg)}
+.sweep.go{animation:sweep .9s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes sweep{0%{transform:translateX(-60%) skewX(-8deg);opacity:1}70%{opacity:.9}100%{transform:translateX(60%) skewX(-8deg);opacity:0}}
+
+/* —— 斜切擦除：@property 让渐变停靠点可插值 —— */
+@property --wp{syntax:'<percentage>';inherits:false;initial-value:-20%}
+.slide.t-wipe{opacity:1;--wp:-20%;
+  -webkit-mask-image:linear-gradient(110deg,#000 calc(var(--wp) - 6%),transparent calc(var(--wp) + 6%));
+          mask-image:linear-gradient(110deg,#000 calc(var(--wp) - 6%),transparent calc(var(--wp) + 6%));
+  transition:--wp 1s cubic-bezier(.65,0,.35,1)}
+.slide.t-wipe.go{--wp:125%}
+.wipe-edge{position:absolute;top:-20%;bottom:-20%;width:9%;left:-20%;opacity:0;
+  background:linear-gradient(90deg,transparent,rgba(160,240,255,.55) 45%,#fff 50%,rgba(255,160,200,.45) 55%,transparent);
+  mix-blend-mode:screen;filter:blur(2px);transform:skewX(-20deg)}
+.wipe-edge.go{animation:wipeEdge 1s cubic-bezier(.65,0,.35,1) forwards}
+@keyframes wipeEdge{0%{left:-22%;opacity:1}90%{opacity:1}100%{left:118%;opacity:0}}
+
+/* —— 光圈 —— */
+.slide.t-iris{opacity:1;clip-path:circle(0% at var(--iris-x,50%) var(--iris-y,46%));transition:clip-path 1.05s cubic-bezier(.7,0,.2,1)}
+.slide.t-iris.go{clip-path:circle(120% at var(--iris-x,50%) var(--iris-y,46%))}
+
+/* —— 硬切条带（ZZZ / 明日方舟式）：N 条斜带交错滑入 —— */
+.strips{position:absolute;inset:0;pointer-events:none}
+.strip{position:absolute;inset:0;background:var(--img) center/cover no-repeat;transform:translateX(var(--from));transition:transform .62s cubic-bezier(.8,0,.15,1) var(--d)}
+.strip.go{transform:translateX(0)}
+.strip::after{content:'';position:absolute;inset:0;background:var(--strip-tint,transparent);mix-blend-mode:screen;opacity:.0;transition:opacity .5s ease calc(var(--d) + .3s)}
+
+/* —— 规则图溶解（canvas 合成，见 JS dissolve）—— */
+canvas.dissolve{position:absolute;inset:0;width:100%;height:100%;opacity:0}
+canvas.dissolve.on{opacity:1}
+</style>
+<style>
+/* ============================================================
+   立绘：环境光染色 + 轮廓光 + 地面阴影 + 说话人聚焦
+   ============================================================ */
+.chars-par{position:absolute;inset:0;transform:translate3d(calc(var(--mx) * -2.2%),calc(var(--my) * -1.2%),0)}
+.char{position:absolute;bottom:-2%;height:86%;aspect-ratio:1093/1536;transform-origin:50% 100%;
+  transition:transform .5s var(--ease-out),filter .45s ease,opacity .45s ease;--x:0px;--s:1;--y:0px}
+.char.left{left:17%}
+.char.right{right:15%}
+.char .body,.char .tint,.char .rim{position:absolute;inset:0;width:100%;height:100%}
+.char .body{object-fit:contain;object-position:50% 100%;transition:opacity .32s ease}
+.char .body.old{opacity:0}
+.char .tint,.char .rim{
+  -webkit-mask:var(--sprite) 50% 100%/contain no-repeat;mask:var(--sprite) 50% 100%/contain no-repeat;
+  opacity:0;transition:opacity .9s ease,background .9s ease}
+/* 环境光：用背景主色 multiply 到立绘上（只染立绘像素，靠 mask 保 alpha） */
+.char .tint{background:var(--amb);mix-blend-mode:multiply}
+/* 轮廓光：从光源方向打一道亮边（screen） */
+.char .rim{background:linear-gradient(var(--rim-dir),var(--rim) 0%,transparent 22%,transparent 80%,color-mix(in srgb,var(--rim) 40%,transparent) 100%);mix-blend-mode:screen}
+body:not(.legacy) .stage.amb-on .char .tint{opacity:var(--amb-op)}
+body:not(.legacy) .stage.amb-on .char .rim{opacity:var(--rim-op)}
+body:not(.legacy) .stage.amb-on .char .body{filter:brightness(var(--char-bri)) saturate(var(--char-sat))}
+.char .shadow{position:absolute;left:12%;right:12%;bottom:2%;height:7%;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(0,0,0,.45),transparent);opacity:0;transition:opacity .6s}
+body:not(.legacy) .char .shadow{opacity:.8}
+/* 线上现状：按场景名关键词才有的夜间滤镜（名字不含「夜」就不生效） */
+body.legacy .stage.legacy-night .chars-par{filter:hue-rotate(-10deg) brightness(.85) saturate(.9)}
+
+/* 聚焦：说话人亮 / 其余压暗。升级版不再 blur 立绘（GPU 贵且发糊），改用暗 + 降饱和 + 微缩 */
+.char{transform:translate3d(var(--x),var(--y),0) scale(var(--s))}
+.char.silent{--s:.975;filter:brightness(.62) saturate(.7)}
+.char.speaking{--s:1.015}
+body.legacy .char.silent{filter:brightness(.7) saturate(.85) blur(1px);opacity:.9}
+.char.out-left{--x:-40%;opacity:0}
+.char.out-right{--x:40%;opacity:0}
+.char.breathe .inner{animation:breathe 4.2s ease-in-out infinite}
+.char .inner{position:absolute;inset:0;transform-origin:50% 100%}
+@keyframes breathe{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-.35%) scaleY(1.006)}}
+.char.hop .inner{animation:hop .5s cubic-bezier(.3,0,.3,1)}
+@keyframes hop{0%,100%{transform:translateY(0)}35%{transform:translateY(-4%)}65%{transform:translateY(0)}80%{transform:translateY(-1%)}}
+.char.jolt .inner{animation:jolt .45s ease-out}
+@keyframes jolt{0%{transform:scale(1)}30%{transform:scale(1.04) translateY(-1.5%)}100%{transform:scale(1)}}
+
+/* ============================================================
+   粒子 / 光束 / 调色 / 暗角颗粒 / 闪白 / 黑场
+   ============================================================ */
+.fx-par-back{position:absolute;inset:0;transform:translate3d(calc(var(--mx) * -1.6%),calc(var(--my) * -1%),0)}
+.fx-par-front{position:absolute;inset:-3%;transform:translate3d(calc(var(--mx) * -3.6%),calc(var(--my) * -2.2%),0)}
+canvas.fx{position:absolute;inset:0;width:100%;height:100%}
+
+/* 体积光束：repeating-conic + screen，mask 让光从左上角渐隐 */
+.rays{position:absolute;inset:-30%;opacity:0;transition:opacity 1.2s ease;mix-blend-mode:screen;
+  background:repeating-conic-gradient(from 200deg at 12% 0%,rgba(255,244,214,.0) 0deg,rgba(255,244,214,.22) 3deg,rgba(255,244,214,0) 7deg,rgba(255,244,214,0) 12deg);
+  -webkit-mask:radial-gradient(ellipse at 15% 0%,#000 0%,transparent 62%);mask:radial-gradient(ellipse at 15% 0%,#000 0%,transparent 62%);
+  animation:raysway 18s ease-in-out infinite alternate}
+.rays.on{opacity:1}
+@keyframes raysway{from{transform:rotate(-2deg)}to{transform:rotate(3deg)}}
+
+/* 时段调色：整屏覆盖（背景+立绘一起调，统一光照） */
+.grade{position:absolute;inset:0;opacity:0;transition:opacity 1.4s ease;pointer-events:none}
+.grade.dusk{background:linear-gradient(180deg,rgba(255,138,76,.42),rgba(170,60,120,.28) 70%,rgba(60,20,80,.35));mix-blend-mode:soft-light}
+.grade.night{background:linear-gradient(180deg,rgba(18,26,80,.62),rgba(10,14,40,.5));mix-blend-mode:multiply}
+.grade.night2{background:radial-gradient(ellipse at 50% 120%,rgba(90,140,255,.18),transparent 60%);mix-blend-mode:screen}
+.grade.memory{background:linear-gradient(rgba(255,226,170,.5),rgba(255,226,170,.5));mix-blend-mode:color}
+.grade.memory2{background:radial-gradient(ellipse at center,transparent 45%,rgba(255,250,235,.85) 100%)}
+.stage.tod-dusk .grade.dusk,.stage.tod-night .grade.night,.stage.tod-night .grade.night2,
+.stage.tod-memory .grade.memory,.stage.tod-memory .grade.memory2{opacity:1}
+body.legacy .grade{opacity:0!important}
+
+.vignette{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .8s;
+  background:radial-gradient(ellipse 75% 70% at 50% 45%,transparent 55%,rgba(0,0,0,.55) 100%)}
+.grain{position:absolute;inset:-50%;pointer-events:none;opacity:0;transition:opacity .8s;background-image:var(--grain);background-size:180px;mix-blend-mode:overlay;animation:grain .9s steps(6) infinite}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-4%)}60%{transform:translate(-4%,-1%)}80%{transform:translate(3%,3%)}100%{transform:translate(0,0)}}
+body:not(.legacy) .stage.post-on .vignette{opacity:1}
+body:not(.legacy) .stage.post-on .grain{opacity:.16}
+body:not(.legacy) .stage.post-on.tod-memory .grain{opacity:.32}
+
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:40}
+.flash.go{animation:flash .65s cubic-bezier(.2,0,.2,1)}
+@keyframes flash{0%{opacity:.95}100%{opacity:0}}
+.flash.bolt{background:#dfe8ff}
+.flash.bolt.go{animation:bolt .7s linear}
+@keyframes bolt{0%{opacity:.9}8%{opacity:.1}14%{opacity:.75}30%{opacity:0}100%{opacity:0}}
+
+/* 黑场 + 地点字幕卡（章节 / 时间跳跃 eyecatch） */
+.blackout{position:absolute;inset:0;background:#07080b;opacity:0;pointer-events:none;z-index:45;display:grid;place-items:center;transition:opacity .45s ease}
+.blackout.on{opacity:1}
+.loc-card{text-align:center;opacity:0;transform:translateY(8px);transition:opacity .5s ease .15s,transform .7s var(--ease-out) .15s}
+.blackout.on .loc-card{opacity:1;transform:none}
+.loc-card .t{font:500 clamp(10px,1.1cqi,13px)/1 var(--font-mono);letter-spacing:.5em;color:#00c4ef}
+.loc-card .n{margin:14px 0;font:900 clamp(22px,4cqi,52px)/1 var(--font-cn);letter-spacing:.3em;color:#fff}
+.loc-card .l{width:0;height:2px;margin:0 auto;background:linear-gradient(90deg,transparent,#00c4ef,#ff2e63,transparent);transition:width .9s var(--ease-out) .3s}
+.blackout.on .loc-card .l{width:min(320px,40cqi)}
+
+/* ---------- HUD 顶栏（沿用现状 Cyber Pop 胶囊，升级：玻璃 + 细线） ---------- */
+.hud{position:absolute;top:2.2cqi;right:2.2cqi;display:flex;gap:.8cqi;z-index:30;pointer-events:none}
+.pill{display:flex;align-items:center;gap:.6cqi;padding:.7cqi 1.3cqi;font:800 max(10px,1.05cqi)/1 var(--font-eng);color:#fff;
+  background:rgba(43,46,56,.9);border:2px solid #00d2ff;border-radius:4px;transition:all .4s}
+.pill.pink{border-color:#ff0055}
+.pill .dot{width:.55cqi;height:.55cqi;min-width:6px;min-height:6px;border-radius:50%;background:currentColor}
+body:not(.legacy) .pill{background:rgba(16,18,24,.42);backdrop-filter:blur(14px) saturate(1.5);-webkit-backdrop-filter:blur(14px) saturate(1.5);
+  border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 6px 20px -8px rgba(0,0,0,.5);border-radius:999px;font-weight:600;letter-spacing:.06em}
+body:not(.legacy) .pill .dot{color:#00e0ff;box-shadow:0 0 8px #00e0ff}
+body:not(.legacy) .pill.pink .dot{color:#ff4f84;box-shadow:0 0 8px #ff4f84}
+body:not(.legacy) .pill .k{font:500 max(9px,.8cqi)/1 var(--font-mono);opacity:.55;letter-spacing:.12em}
+body.legacy .pill .k{display:none}
+</style>
+<style>
+/* ============================================================
+   对话框：现状 = 线上 Cyber Pop Refined 参数；升级 = 同血统 + 材质/编排
+   尺寸全部用 cqi（舞台宽度百分比），模拟线上 --ui-scale
+   ============================================================ */
+.dlg{position:absolute;left:50%;bottom:1.7cqi;width:80%;height:30%;min-height:120px;transform:translateX(-50%);z-index:30;
+  --u:1cqi;transition:opacity .35s ease,transform .45s var(--ease-out)}
+.dlg.hidden{opacity:0;transform:translateX(-50%) translateY(14px);pointer-events:none}
+.panel-box{position:absolute;inset:0;padding:2.7cqi 4.4cqi 4.8cqi;
+  background-color:rgb(255 255 255 / .79);
+  background-image:linear-gradient(135deg,#00c4ef 0,#00c4ef 3.2cqi,transparent 3.2cqi),linear-gradient(135deg,transparent 94%,rgba(0,196,239,.14) 94%);
+  background-size:4cqi .85cqi,100% 100%;background-repeat:no-repeat;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  border:2.5px solid #22252e;box-shadow:.55cqi .55cqi 0 rgba(34,37,46,.16)}
+/* 升级材质：亚克力（更高模糊+饱和）+ 顶部内高光 + 细噪点；书签角取说话人色 */
+body:not(.legacy) .panel-box{
+  background-color:rgb(255 255 255 / .74);
+  background-image:
+    linear-gradient(135deg,var(--spk) 0,var(--spk) 3.2cqi,transparent 3.2cqi),
+    linear-gradient(180deg,rgba(255,255,255,.65),rgba(255,255,255,0) 38%);
+  background-size:4cqi .85cqi,100% 100%;background-repeat:no-repeat,no-repeat;
+  backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);
+  box-shadow:.55cqi .55cqi 0 rgba(34,37,46,.18),inset 0 0 0 1px rgba(255,255,255,.7),0 20px 50px -20px rgba(0,0,0,.45);
+  transition:background-color .4s}
+/* 说话人切换时面板边缘的一次「呼吸」脉冲 */
+body:not(.legacy) .panel-box.pulse{animation:panelPulse .55s ease-out}
+@keyframes panelPulse{0%{box-shadow:.55cqi .55cqi 0 rgba(34,37,46,.18),inset 0 0 0 1px rgba(255,255,255,.7),0 0 0 0 color-mix(in srgb,var(--spk) 55%,transparent)}100%{box-shadow:.55cqi .55cqi 0 rgba(34,37,46,.18),inset 0 0 0 1px rgba(255,255,255,.7),0 0 0 14px transparent}}
+
+/* —— 名牌 —— */
+.badge{position:absolute;top:-1.9cqi;left:0;z-index:35;padding:.65cqi 2.9cqi .65cqi 2.1cqi;background:#22252e;color:#fff;
+  font:900 max(13px,1.85cqi)/1.15 var(--font-eng);transform:skewX(-15deg);transform-origin:bottom left;box-shadow:.4cqi .4cqi 0 rgba(34,37,46,.2)}
+.badge::after{content:'';position:absolute;left:0;right:26%;bottom:-2px;height:4px;background:#00c4ef;transform-origin:left}
+.badge span{display:block;transform:skewX(15deg);white-space:nowrap}
+.badge.narr{background:#666}
+body:not(.legacy) .badge::after{background:var(--spk);transition:background .3s}
+body:not(.legacy) .badge.narr{background:rgba(34,37,46,.72);backdrop-filter:blur(8px)}
+/* 擦入：clip-path 从左向右展开，下划条延迟伸出 */
+body:not(.legacy) .badge.enter{animation:badgeIn .48s cubic-bezier(.2,.9,.1,1) both}
+body:not(.legacy) .badge.enter::after{animation:barIn .5s var(--ease-out) .18s both}
+body:not(.legacy) .badge.enter span{animation:nameIn .45s var(--ease-out) .08s both}
+@keyframes badgeIn{from{clip-path:inset(0 100% 0 0);transform:skewX(-15deg) translateX(-12px)}to{clip-path:inset(-20% -20% -40% -10%);transform:skewX(-15deg)}}
+@keyframes barIn{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes nameIn{from{opacity:0;letter-spacing:.35em;transform:skewX(15deg) translateX(-6px)}to{opacity:1;letter-spacing:0;transform:skewX(15deg)}}
+
+/* —— 正文 —— */
+.txt{margin:0;font:500 max(13px,1.62cqi)/1.9 var(--font-cn);color:#22252e;height:100%;overflow:hidden;text-wrap:pretty}
+body.legacy .txt{font-family:sans-serif}
+/* 逐字淡入保持 display:inline（inline-block 会破坏中文避头尾，句号可能跑到行首）：
+   不用 transform/filter，改用「透明字 + 模糊 text-shadow → 实字」做出失焦聚焦感 */
+.txt .ch{--c:#22252e;display:inline}
+.txt .em{--c:var(--spk);color:var(--c);font-weight:900;background:linear-gradient(transparent 62%,color-mix(in srgb,var(--spk) 22%,transparent) 62%)}
+body:not(.legacy) .stage.char-fx .txt .ch{opacity:0;color:transparent;text-shadow:0 0 .4em color-mix(in srgb,var(--c) 70%,transparent);
+  transition:opacity .16s ease,color .34s ease,text-shadow .34s ease}
+body:not(.legacy) .stage.char-fx .txt .ch.on{opacity:1;color:var(--c);text-shadow:0 0 0 transparent}
+body.legacy .txt .em{color:inherit;font-weight:inherit;background:none}
+/* 颤抖 / 波浪只作用于短片段，这里允许 inline-block 以便位移 */
+body:not(.legacy) .txt .shake,body:not(.legacy) .txt .wave{display:inline-block}
+body:not(.legacy) .txt .shake.on{animation:chShake .12s steps(2) infinite}
+@keyframes chShake{0%{translate:0 0}50%{translate:.04em -.05em}100%{translate:-.05em .04em}}
+body:not(.legacy) .txt .wave.on{animation:chWave 1.4s ease-in-out infinite;animation-delay:calc(var(--i) * -90ms)}
+@keyframes chWave{0%,100%{translate:0 0}50%{translate:0 -.18em}}
+/* 收尾指示：打完字后出现，说话人色闪烁下箭头 */
+.caret{display:none}
+body:not(.legacy) .caret{display:inline-block;width:.5em;height:1em;margin-left:.2em;vertical-align:-.12em;background:var(--spk);opacity:0}
+body:not(.legacy) .caret.done{opacity:1;animation:caretBlink 1s steps(1) infinite;clip-path:polygon(0 30%,100% 30%,50% 100%);width:.7em}
+@keyframes caretBlink{50%{opacity:0}}
+
+/* —— 底栏 —— */
+.bar{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:flex-end;padding:0 2.3cqi;pointer-events:none}
+.bar .grp-l{display:flex;gap:.6cqi;margin-bottom:1.1cqi}
+.fb{pointer-events:auto;height:max(22px,2.8cqi);padding:0 1cqi;display:flex;align-items:center;font:800 max(10px,1.05cqi)/1 var(--font-eng);color:#22252e;
+  background:rgba(255,255,255,.9);border:2px solid #22252e;transform:skewX(-10deg);box-shadow:2px 2px 0 rgba(0,0,0,.1);cursor:pointer;transition:background .2s,color .2s,transform .2s}
+.fb span{transform:skewX(10deg)}
+.fb:hover{background:#22252e;color:#fff;transform:skewX(-10deg) translateY(-2px)}
+.next{pointer-events:auto;position:relative;overflow:hidden;height:max(30px,4.3cqi);min-width:max(90px,10.9cqi);padding:0 3cqi;display:flex;align-items:center;justify-content:center;gap:.8cqi;
+  font:900 max(12px,1.62cqi)/1 var(--font-eng);color:#101218;background:#00c4ef;border:2px solid #22252e;
+  clip-path:polygon(1.95cqi 0,100% 0,100% 100%,0 100%);transition:transform .2s;cursor:pointer}
+.next:hover{transform:translate(-2px,-2px)}
+/* 升级：每 3.4s 一道高光扫过（原 Refined 提案 gpNextSheen，未落地） */
+body:not(.legacy) .next::before{content:'';position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.75),transparent);animation:sheen 3.4s ease-in-out infinite}
+@keyframes sheen{0%,62%{left:-60%}100%{left:130%}}
+body:not(.legacy) .next{background:linear-gradient(135deg,#00d8ff,#00b4e6)}
+.prog{position:absolute;left:0;right:0;bottom:-2px;height:5px;background:rgba(34,37,46,.12);overflow:hidden}
+.prog i{position:absolute;inset:0 auto 0 0;width:var(--p,0%);background:linear-gradient(90deg,#00c4ef,#7fe6ff);transition:width .3s}
+body:not(.legacy) .prog i{background:repeating-linear-gradient(-45deg,#00c4ef 0 8px,#3fd8ff 8px 16px);background-size:22.6px 100%;animation:barFlow 1s linear infinite;box-shadow:0 0 10px rgba(0,196,239,.7)}
+@keyframes barFlow{to{background-position:22.6px 0}}
+</style>
+<style>
+/* ============================================================
+   选项：现状 = 黑罩淡入 + 白卡；升级 = 模糊遮罩 + 错峰入场 + 序号 + 选中编排
+   ============================================================ */
+.choices{position:absolute;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;gap:1.1cqi;background:rgba(0,0,0,.4)}
+.choices.on{display:flex;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0}}
+body:not(.legacy) .choices{background:radial-gradient(ellipse at center,rgba(10,12,18,.35),rgba(10,12,18,.72));backdrop-filter:blur(6px) saturate(.8);-webkit-backdrop-filter:blur(6px) saturate(.8)}
+.ch-title{font:900 max(12px,1.5cqi)/1 var(--font-eng);color:#fff;letter-spacing:.15em;transform:skewX(-10deg);margin-bottom:.6cqi}
+body:not(.legacy) .ch-title{letter-spacing:.5em;font-weight:600;font-family:var(--font-mono);font-size:max(10px,1cqi);color:#9fe9ff;transform:none;animation:titleIn .5s var(--ease-out) both}
+@keyframes titleIn{from{opacity:0;letter-spacing:1.2em}}
+.card{position:relative;min-width:34cqi;max-width:60%;padding:1cqi 3cqi;text-align:center;font:600 max(12px,1.25cqi)/1.4 var(--font-cn);color:#22252e;background:#fff;
+  border:2px solid #22252e;box-shadow:.45cqi .45cqi 0 rgba(0,0,0,.15);transform:skewX(-8deg);cursor:pointer;overflow:hidden;
+  transition:all .2s cubic-bezier(.34,1.56,.64,1)}
+.card>span{display:block;transform:skewX(8deg)}
+.card:hover{background:#00d2ff;color:#fff;transform:skewX(-8deg) translate(-3px,-3px);box-shadow:.7cqi .7cqi 0 #22252e}
+body:not(.legacy) .card{text-align:left;padding-left:5.4cqi;animation:cardIn .55s var(--ease-out) both;animation-delay:calc(var(--i) * 70ms + 120ms)}
+@keyframes cardIn{from{opacity:0;transform:skewX(-8deg) translateX(-40px)}}
+body:not(.legacy) .card::before{content:attr(data-no);position:absolute;left:1.4cqi;top:50%;transform:translateY(-50%) skewX(8deg);font:900 max(12px,1.4cqi)/1 var(--font-eng);color:#00c4ef;transition:color .2s}
+body:not(.legacy) .card::after{content:'';position:absolute;top:0;bottom:0;width:35%;left:-50%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.6),transparent);transition:none}
+body:not(.legacy) .card:hover{background:#22252e;color:#fff;box-shadow:.7cqi .7cqi 0 #00c4ef}
+body:not(.legacy) .card:hover::before{color:#ff2e63}
+body:not(.legacy) .card:hover::after{left:120%;transition:left .55s ease}
+body:not(.legacy) .card.picked{animation:picked .5s ease forwards}
+body:not(.legacy) .card.dropped{animation:dropped .35s ease-in forwards}
+@keyframes picked{0%{background:#00c4ef;color:#101218}40%{transform:skewX(-8deg) scale(1.04)}100%{transform:skewX(-8deg) scale(1.04);opacity:0}}
+@keyframes dropped{to{opacity:0;transform:skewX(-8deg) translateY(16px)}}
+.ch-hint{font-size:max(10px,.9cqi);color:rgba(255,255,255,.7);margin-top:.6cqi}
+
+/* ============================================================
+   CG 揭示：闪白 → 推远聚焦 → 宽银幕黑边 → NEW CG 横幅 → 缓慢平移
+   ============================================================ */
+.cg{position:absolute;inset:0;z-index:60;display:none;background:#000;overflow:hidden}
+.cg.on{display:block}
+.cg .img{position:absolute;inset:-6%;background:var(--img) center/cover no-repeat}
+.cg.on .img{animation:cgLegacy .4s ease both}
+@keyframes cgLegacy{from{opacity:0}}
+body:not(.legacy) .cg.on .img{animation:cgIn 1.6s var(--ease-out) both,cgPan 22s ease-in-out 1.6s infinite alternate}
+@keyframes cgIn{from{transform:scale(1.18);filter:blur(18px) brightness(1.8)}to{transform:scale(1.04);filter:none}}
+@keyframes cgPan{from{transform:scale(1.04) translateX(0)}to{transform:scale(1.1) translateX(-2.5%)}}
+.cg .lb{position:absolute;left:0;right:0;height:0;background:#000;transition:height .9s var(--ease-out) .5s}
+.cg .lb.t{top:0}.cg .lb.b{bottom:0}
+body:not(.legacy) .cg.on .lb{height:9%}
+.cg .banner{position:absolute;left:0;bottom:14%;display:none;align-items:stretch;filter:drop-shadow(0 10px 30px rgba(0,0,0,.5))}
+body:not(.legacy) .cg.on .banner{display:flex}
+.cg .banner .tag{background:#ff2e63;color:#fff;font:900 max(11px,1.2cqi)/1 var(--font-eng);letter-spacing:.2em;padding:1.1cqi 1.6cqi;display:grid;place-items:center;
+  animation:slideR .6s var(--ease-out) 1.1s both}
+.cg .banner .tt{position:relative;overflow:hidden;background:rgba(16,18,24,.78);backdrop-filter:blur(10px);color:#fff;padding:.9cqi 3.4cqi .9cqi 1.8cqi;
+  clip-path:polygon(0 0,100% 0,calc(100% - 1.6cqi) 100%,0 100%);animation:slideR .7s var(--ease-out) 1.25s both}
+.cg .banner .tt b{display:block;font:900 max(14px,2cqi)/1.2 var(--font-cn);letter-spacing:.12em}
+.cg .banner .tt small{font:500 max(9px,.85cqi)/1 var(--font-mono);color:#9fe9ff;letter-spacing:.3em}
+.cg .banner .tt::after{content:'';position:absolute;inset:0 auto 0 -40%;width:30%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);animation:sheenOnce 1s ease 2s both}
+@keyframes slideR{from{transform:translateX(-110%)}}
+@keyframes sheenOnce{to{left:130%}}
+.cg .close{position:absolute;right:2cqi;bottom:3cqi;font:500 max(10px,.9cqi)/1 var(--font-mono);color:rgba(255,255,255,.6);letter-spacing:.2em}
+
+/* ============================================================
+   下方说明卡
+   ============================================================ */
+.notes{max-width:1500px;margin:8px auto 60px;padding:0 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.note{background:#12151c;border:1px solid var(--page-line);border-radius:14px;padding:18px 18px 16px}
+.note .no{font:900 12px/1 var(--font-eng);color:#00c4ef;letter-spacing:.2em}
+.note h4{margin:8px 0 8px;font-size:15px}
+.note p{margin:0 0 10px;font-size:12.5px;line-height:1.8;color:var(--page-dim)}
+.note code{font:500 11.5px/1.6 var(--font-mono);color:#9fe9ff;background:rgba(0,196,239,.08);padding:1px 5px;border-radius:4px}
+.note .meta{display:flex;gap:6px;flex-wrap:wrap}
+.note .meta span{font:600 10.5px/1 var(--font-mono);padding:4px 7px;border-radius:999px;border:1px solid var(--page-line);color:#8a93a3}
+.note .meta .hi{border-color:rgba(255,46,99,.5);color:#ff7aa0}
+.note .meta .ok{border-color:rgba(0,196,239,.5);color:#7fe6ff}
+
+@media (prefers-reduced-motion:reduce){
+  .stage *,.stage *::before,.stage *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="kicker">STAGE FX 2.0 · PRESENTATION LAYER PROPOSAL</div>
+  <h1>视觉演出升级 <em>·</em> 一次接入，全皮肤受益</h1>
+  <p>皮肤已有 20 多套，「外观」并不缺；拉开与现代 Galgame / 二游差距的是<b>与皮肤无关的演出层</b>——镜头、转场、光影、粒子、文字节奏与编排。
+  本页保留默认 Cyber Pop Refined 外形，只叠加演出层；右侧按钮逐项体验，点上方切换按钮可与<b>线上现状</b>对照（现状模式按 v2.2 实际行为降级：字体未加载、逐字硬跳、仅叠化转场、夜间滤镜靠场景名关键词）。</p>
+  <div class="ab" role="tablist">
+    <button data-mode="legacy">现状 v2.2</button>
+    <button data-mode="up" class="on">升级后 STAGE FX 2.0</button>
+  </div>
+</header>
+
+<main class="lab">
+  <section>
+    <div class="stage kb-on par-on push-on amb-on post-on char-fx" id="stage">
+      <div class="cam" id="cam">
+        <div class="bg-par">
+          <div class="slide base" id="slideBase"><div class="kb"></div></div>
+          <div class="slide front" id="slideFront"><div class="kb"></div></div>
+          <div class="strips" id="strips"></div>
+          <canvas class="dissolve" id="dissolve"></canvas>
+          <div class="sweep" id="sweep"></div>
+          <div class="wipe-edge" id="wipeEdge"></div>
+        </div>
+        <div class="rays" id="rays"></div>
+        <div class="fx-par-back"><canvas class="fx" id="fxBack"></canvas></div>
+        <div class="chars-par" id="chars"></div>
+        <div class="fx-par-front"><canvas class="fx" id="fxFront"></canvas></div>
+      </div>
+      <div class="grade dusk"></div><div class="grade night"></div><div class="grade night2"></div>
+      <div class="grade memory"></div><div class="grade memory2"></div>
+      <div class="vignette"></div><div class="grain"></div>
+
+      <div class="hud">
+        <div class="pill"><span class="dot"></span><span class="k">LOC</span><span id="hudLoc">樱花道</span></div>
+        <div class="pill pink"><span class="dot"></span><span class="k">TIME</span><span id="hudTime">16:40</span></div>
+      </div>
+
+      <div class="dlg" id="dlg">
+        <div class="badge" id="badge"><span id="badgeName">栞</span></div>
+        <div class="panel-box" id="panelBox">
+          <p class="txt" id="txt"></p>
+          <div class="bar">
+            <div class="grp-l"><div class="fb"><span>LOG</span></div><div class="fb"><span>AUTO</span></div><div class="fb"><span>SKIP</span></div><div class="fb"><span>SAVE</span></div></div>
+            <div class="next" id="nextBtn"><span>NEXT</span><span>›</span></div>
+          </div>
+          <div class="prog"><i id="prog"></i></div>
+        </div>
+      </div>
+
+      <div class="choices" id="choices"></div>
+      <div class="cg" id="cg"><div class="img"></div><div class="lb t"></div><div class="lb b"></div>
+        <div class="banner"><div class="tag">NEW CG</div><div class="tt"><small>MEMORY · 03</small><b>浪花与约定</b></div></div>
+        <div class="close">CLICK TO CLOSE</div></div>
+      <div class="flash" id="flash"></div>
+      <div class="blackout" id="blackout"><div class="loc-card"><div class="t" id="locT">CHAPTER 02 · 17:50</div><div class="n" id="locN">放学路</div><div class="l"></div></div></div>
+    </div>
+    <div class="stage-hint"><span>点击画面推进对话 · <b>移动鼠标</b>感受三层视差 · 对话中含 <b>强调 / 颤抖 / 波浪</b> 行内标签示例</span><span id="fpsInfo"></span></div>
+  </section>
+
+  <aside class="panel">
+    <div class="grp"><h3>TRANSITION <small>切到下一场景</small></h3>
+      <div class="btns" id="transBtns">
+        <button data-t="cross" class="legacy-only">叠化+光扫<span class="tag">现状唯一</span></button>
+        <button data-t="wipe" class="up-only">斜切擦除<span class="tag">@property mask</span></button>
+        <button data-t="iris" class="up-only">光圈<span class="tag">clip-path</span></button>
+        <button data-t="black" class="up-only">黑场字幕<span class="tag">eyecatch</span></button>
+        <button data-t="strips" class="up-only">硬切条带<span class="tag">ZZZ / 方舟</span></button>
+        <button data-t="dissolve" class="up-only">规则溶解<span class="tag">rule image</span></button>
+      </div></div>
+    <div class="grp up-only"><h3>LIGHTING <small>时段光影</small></h3>
+      <div class="btns" id="todBtns">
+        <button data-tod="auto" class="on">自动采样<span class="tag">bg → 环境光</span></button>
+        <button data-tod="day">白天</button><button data-tod="dusk">黄昏</button>
+        <button data-tod="night">夜晚</button><button data-tod="memory">回忆</button>
+      </div>
+      <div class="amb-readout"><i id="ambSw"></i><span id="ambTxt">amb —</span><i id="rimSw"></i><span id="rimTxt">rim —</span></div></div>
+    <div class="grp"><h3>PARTICLES <small>天气粒子</small></h3>
+      <div class="btns" id="fxBtns">
+        <button data-fx="scene" class="on">随场景</button><button data-fx="sakura">樱花景深</button>
+        <button data-fx="dust">浮尘光束</button><button data-fx="bokeh">灯会光斑</button>
+        <button data-fx="rain">雨夜雷电</button><button data-fx="none">关闭</button>
+      </div></div>
+    <div class="grp"><h3>DIRECTION <small>演出指令</small></h3>
+      <div class="btns">
+        <button data-act="shake" class="up-only">阻尼震屏</button><button data-act="flash">闪白</button>
+        <button data-act="enter">角色入场</button><button data-act="hop">情绪跳跃</button>
+        <button data-act="choices">弹出选项</button><button data-act="cg">CG 揭示</button>
+      </div></div>
+    <div class="grp up-only"><h3>LAYERS <small>逐项开关</small></h3>
+      <label class="tgl">镜头漂移 Ken Burns<input type="checkbox" data-cls="kb-on" checked></label>
+      <label class="tgl">鼠标 / 陀螺仪视差<input type="checkbox" data-cls="par-on" checked></label>
+      <label class="tgl">推镜跟随说话人<input type="checkbox" data-cls="push-on" checked></label>
+      <label class="tgl">环境光匹配立绘<input type="checkbox" data-cls="amb-on" checked></label>
+      <label class="tgl">暗角 + 胶片颗粒<input type="checkbox" data-cls="post-on" checked></label>
+      <label class="tgl">逐字淡入 + 标点停顿<input type="checkbox" data-cls="char-fx" checked></label>
+    </div>
+  </aside>
+</main>
+
+<section class="notes">
+  <div class="note"><div class="no">01 · CAMERA</div><h4>镜头：漂移 / 视差 / 推镜 / 阻尼震屏</h4>
+    <p>在 <code>.gal-layer-bg</code>、<code>.gal-layer-character</code>、两块 Pixi 画布外各包一层视差容器，一个 rAF 把指针 / <code>deviceorientation</code> 平滑插值后写入 <code>--mx/--my</code>；Ken Burns 放在 <code>.gal-bg-layer</code> 内层，避免和转场的 transform 冲突。说话人切换时 <code>--cam-x</code> 轻推 1.5%。</p>
+    <div class="meta"><span class="ok">纯 CSS 变量</span><span>overlay.js / image-packs.js</span><span>低成本</span></div></div>
+  <div class="note"><div class="no">02 · TRANSITIONS</div><h4>转场库 + 先解码再转场</h4>
+    <p><code>setBackgroundWithTransition(layer, url, {type})</code> 扩成 6 种；COT 允许 <code>&lt;background scene="…" transition="wipe"/&gt;</code>，场景名换「黑场字幕」做章节感。现状不等图片加载就开播 900ms 动画，远程 2560×1440 图常在动画结束后才硬切出现——先 <code>await img.decode()</code>（带超时）。</p>
+    <div class="meta"><span class="hi">修 bug</span><span>image-packs.js:471</span><span>中成本</span></div></div>
+  <div class="note"><div class="no">03 · LIGHTING</div><h4>背景采样 → 立绘环境光 + 轮廓光</h4>
+    <p>背景切换时把图画到 16×9 画布取平均色、亮度与高光重心，写入 <code>--amb/--rim/--rim-dir</code>；立绘叠两层以自身为 mask 的 multiply / screen 层。替换 <code>applySceneTint</code> 按场景名含「夜」才压暗的关键词判断。跨域图被污染时回退关键词。</p>
+    <div class="meta"><span class="ok">立绘不再「贴上去」</span><span>sprite-manager.js:900</span><span>中成本</span></div></div>
+  <div class="note"><div class="no">04 · PARTICLES</div><h4>真·加色发光 + 三层景深</h4>
+    <p>萤火虫 / 余烬给 <code>ParticleContainer</code> 里的子精灵设 ADD，但 Pixi v6 只认容器的 blendMode，发光一直没生效——把 ADD 设到 <code>backLayer/frontLayer</code>。花瓣分远 / 中 / 近三层，近景大而模糊、从对话框前掠过。High 档可加 <code>pixi-filters@4</code> 的 AdvancedBloom / Godray。</p>
+    <div class="meta"><span class="hi">修 bug</span><span>registry.js:881 / 1010</span><span>低成本</span></div></div>
+  <div class="note"><div class="no">05 · TYPOGRAPHY</div><h4>文字节奏：逐字淡入 / 标点停顿 / 行内标签</h4>
+    <p>现状每个字都用 <code>innerHTML</code> 重渲染整段（O(n²)，字是硬跳出来的）。改为一次性切成 span，再逐个加 <code>.on</code>，由 CSS 过渡淡入；句号后停 280ms、逗号停 120ms；支持 <code>{em}</code> <code>{shake}</code> <code>{wave}</code>；打完后显示收尾光标。</p>
+    <div class="meta"><span class="ok">性能也更好</span><span>typewriter.js:188</span><span>低成本</span></div></div>
+  <div class="note"><div class="no">06 · CHOREOGRAPHY</div><h4>编排：名牌擦入 / 角色色 / 选项错峰 / CG 揭示</h4>
+    <p>名牌 clip-path 擦入 + 下划条延迟伸出；每个角色派生一个强调色，贯穿名牌、书签角、强调字；选项错峰 70ms 入场并带序号，选中项有确认动画、其余下坠。CG 现在只是换背景，改为闪白→推远聚焦→宽银幕黑边→NEW CG 横幅。弹窗和 toast 补上开场弹簧动画。</p>
+    <div class="meta"><span>overlay-content.js / choices.js / modal.js</span><span>中成本</span></div></div>
+  <div class="note"><div class="no">07 · FONTS</div><h4>字体其实一直没加载</h4>
+    <p>默认皮肤的 Barlow / Noto Sans SC，以及各皮肤的 Cinzel、Ma Shan Zheng、Zhi Mang Xing、LXGW WenKai 等都只写进了 font-family，运行时唯一注入的是 Google Fonts 的樱色物语三款（国内基本不可达）。改为按当前皮肤从 jsDelivr fontsource 加载 unicode-range 分片，提案页的观感才能落到线上。</p>
+    <div class="meta"><span class="hi">性价比最高</span><span>styles.js:11926</span><span>低成本</span></div></div>
+  <div class="note"><div class="no">08 · ASSETS</div><h4>素材质检：立绘品红残边</h4>
+    <p>日式学园包 103 张立绘里有 22 张左右边缘残留不透明品红条（网格模板的 <code>#FF00FF</code> 分隔线，模型画偏后 1.8% 内缩没切干净，抠图又只去绿）。打包时从边缘连通区域额外剔除品红，或裁掉边缘的品红列。</p>
+    <div class="meta"><span class="hi">肉眼可见</span><span>build-sprite-pack.js:48</span><span>低成本</span></div></div>
+</section>
+
+<script>
+/* ============================================================
+   Stage FX 2.0 demo —— 资源 / 环境光 / 镜头
+   素材：内置图包「日式学园」（jsDelivr），离线时回退渐变
+   ============================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const stage = $('#stage'), cam = $('#cam');
+const isLegacy = () => document.body.classList.contains('legacy');
+const has = cls => stage.classList.contains(cls);
+
+const CDN = 'https://cdn.jsdelivr.net/gh/bigmalove/galgame-bg-jp@';
+const BG = n => `${CDN}v1.1.0/backgrounds/${encodeURIComponent(n)}.webp`;
+const SP = (c, e) => `${CDN}v1.3.0/sprites/${encodeURIComponent(c + '_' + e)}.webp`;
+
+const CAST = {
+  shiori: { name: '栞', file: '栗发温柔学妹', color: '#f0712c', side: 'left' },
+  reika:  { name: '丽华', file: '金发大小姐', color: '#c98a00', side: 'right' },
+};
+const SCENES = [
+  { name: '樱花道', time: '16:40', fx: 'sakura', rays: true },
+  { name: '教室',   time: '12:10', fx: 'dust',   rays: true },
+  { name: '放学路', time: '17:50', fx: 'none' },
+  { name: '夏日祭', time: '20:30', fx: 'bokeh' },
+  { name: '车站',   time: '22:10', fx: 'rain' },
+  { name: '天文台', time: '23:40', fx: 'none' },
+];
+const FALLBACK_BG = ['linear-gradient(160deg,#ffd6e4,#b6c8ff)', 'linear-gradient(160deg,#f5e6c8,#c9b28a)', 'linear-gradient(160deg,#ff9a6b,#5b3a7a)',
+  'linear-gradient(160deg,#1b1f4a,#7a2e4a)', 'linear-gradient(160deg,#0e1a2e,#2a4a6e)', 'linear-gradient(160deg,#0a0c1e,#3a1e3e)'];
+
+/* —— 图片：先 decode 再用（线上 setBackgroundWithTransition 缺的就是这一步）—— */
+const imgCache = new Map();
+function loadImage(url, timeout = 8000) {
+  if (imgCache.has(url)) return imgCache.get(url);
+  const p = new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const t = setTimeout(() => resolve(null), timeout);
+    img.onload = async () => { try { await img.decode(); } catch (_) {} clearTimeout(t); resolve(img); };
+    img.onerror = () => { clearTimeout(t); resolve(null); };
+    img.src = url;
+  });
+  imgCache.set(url, p);
+  return p;
+}
+const cssUrl = (url, i) => url ? `url("${url}")` : FALLBACK_BG[i % FALLBACK_BG.length];
+
+/* —— 胶片颗粒纹理（一次生成，dataURL 复用）—— */
+(function makeGrain() {
+  const c = document.createElement('canvas'); c.width = c.height = 160;
+  const g = c.getContext('2d'), d = g.createImageData(160, 160);
+  for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255 | 0; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 40; }
+  g.putImageData(d, 0, 0);
+  document.documentElement.style.setProperty('--grain', `url(${c.toDataURL()})`);
+})();
+
+/* ============================================================
+   环境光：背景 32×18 采样 → 平均色 / 亮度 / 高光色 / 高光重心
+   ============================================================ */
+const TOD_PRESETS = {
+  day:    { bri: 1,    sat: 1,    amb: '#fff6ea', ambOp: .45, rim: '#fff1d2', rimOp: .28, dir: '120deg' },
+  dusk:   { bri: .9,   sat: 1.05, amb: '#ffb07a', ambOp: .85, rim: '#ffae66', rimOp: .75, dir: '270deg' },
+  night:  { bri: .68,  sat: .8,   amb: '#8c9fe6', ambOp: .9,  rim: '#a8c8ff', rimOp: .55, dir: '90deg' },
+  memory: { bri: 1.03, sat: .55,  amb: '#f2d9ab', ambOp: .7,  rim: '#ffffff', rimOp: .3,  dir: '180deg' },
+};
+let todMode = 'auto', lastSample = null;
+const hex = (r, g, b) => '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+function sampleImage(img) {
+  try {
+    const W = 32, H = 18, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, W, H);
+    const d = g.getImageData(0, 0, W, H).data, px = [];
+    let R = 0, G = 0, B = 0, L = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], gg = d[i + 1], b = d[i + 2], l = (.2126 * r + .7152 * gg + .0722 * b) / 255;
+      R += r; G += gg; B += b; L += l; px.push({ r, g: gg, b, l, x: ((i / 4) % W) / (W - 1), y: Math.floor(i / 4 / W) / (H - 1) });
+    }
+    const n = px.length; R /= n; G /= n; B /= n; L /= n;
+    px.sort((a, b) => b.l - a.l);
+    const top = px.slice(0, Math.max(1, n * .1 | 0));
+    let tr = 0, tg = 0, tb = 0, tl = 0, tx = 0, ty = 0;
+    for (const p of top) { tr += p.r; tg += p.g; tb += p.b; tl += p.l; tx += p.x; ty += p.y; }
+    const m = top.length;
+    return { avg: [R, G, B], lum: L, hi: [tr / m, tg / m, tb / m], hiLum: tl / m, hx: tx / m, hy: ty / m };
+  } catch (_) { return null; } // 跨域污染：线上回退关键词判断
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [(h * 60 + 360) % 360, s, l];
+}
+function lightingFromSample(s) {
+  // 环境色：保留背景平均色的色相并放大饱和度（直接归一化会退化成近白色，multiply 无效）
+  const [h, sat] = rgbToHsl(...s.avg), dark = s.lum < .32;
+  const amb = `hsl(${h.toFixed(0)} ${(Math.min(.6, sat * 2.4) * 100).toFixed(0)}% ${dark ? 80 : 90}%)`;
+  const hm = Math.max(...s.hi, 1), rim = s.hi.map(v => Math.min(255, (v / hm) * 255 * 1.05 + 20));
+  const dir = s.hy < .22 && Math.abs(s.hx - .5) < .18 ? '180deg' : s.hx < .5 ? '90deg' : '270deg';
+  return {
+    bri: Math.min(1.04, Math.max(.66, .5 + s.lum * .95)), sat: Math.min(1.02, Math.max(.74, .7 + s.lum * .55)),
+    amb, ambOp: dark ? .95 : .7, rim: hex(...rim), rimOp: Math.min(.8, Math.max(.22, .2 + (s.hiLum - s.lum) * 1.1)), dir,
+  };
+}
+function applyLighting() {
+  const L = todMode === 'auto' ? (lastSample ? lightingFromSample(lastSample) : TOD_PRESETS.day) : TOD_PRESETS[todMode];
+  const st = stage.style;
+  st.setProperty('--char-bri', L.bri); st.setProperty('--char-sat', L.sat);
+  st.setProperty('--amb', L.amb); st.setProperty('--amb-op', L.ambOp);
+  st.setProperty('--rim', L.rim); st.setProperty('--rim-op', L.rimOp); st.setProperty('--rim-dir', L.dir);
+  stage.classList.remove('tod-dusk', 'tod-night', 'tod-memory');
+  if (todMode !== 'auto' && todMode !== 'day') stage.classList.add('tod-' + todMode);
+  $('#ambSw').style.background = L.amb; $('#rimSw').style.background = L.rim;
+  $('#ambTxt').textContent = `amb ${L.amb} ×${(+L.bri).toFixed(2)}`; $('#rimTxt').textContent = `rim ${L.dir}`;
+}
+
+/* ============================================================
+   镜头：视差插值 / 推镜 / 阻尼震屏
+   ============================================================ */
+const par = { tx: 0, ty: 0, x: 0, y: 0 };
+stage.addEventListener('pointermove', e => {
+  const r = stage.getBoundingClientRect();
+  par.tx = ((e.clientX - r.left) / r.width - .5) * 2; par.ty = ((e.clientY - r.top) / r.height - .5) * 2;
+});
+stage.addEventListener('pointerleave', () => { par.tx = par.ty = 0; });
+window.addEventListener('deviceorientation', e => {
+  if (e.gamma == null) return;
+  par.tx = Math.max(-1, Math.min(1, e.gamma / 25)); par.ty = Math.max(-1, Math.min(1, (e.beta - 40) / 25));
+});
+function camTick() {
+  const on = has('par-on') && !isLegacy();
+  par.x += ((on ? par.tx : 0) - par.x) * .06; par.y += ((on ? par.ty : 0) - par.y) * .06;
+  stage.style.setProperty('--mx', par.x.toFixed(4)); stage.style.setProperty('--my', par.y.toFixed(4));
+}
+function pushTo(side) {
+  const on = has('push-on') && !isLegacy();
+  stage.style.setProperty('--cam-x', on && side ? (side === 'left' ? 1.3 : -1.3) : 0);
+  stage.style.setProperty('--cam-zoom', on && side ? 1.035 : 1);
+}
+let shakeT0 = 0;
+function shake(power = 1) {
+  shakeT0 = performance.now(); cam.classList.add('shaking');
+  const A = stage.clientWidth * .012 * power;
+  (function step(now) {
+    const t = (now - shakeT0) / 1000, k = Math.exp(-t * 6.5);
+    if (k < .02) { stage.style.setProperty('--shake-x', '0px'); stage.style.setProperty('--shake-y', '0px'); cam.classList.remove('shaking'); return; }
+    stage.style.setProperty('--shake-x', (A * k * Math.sin(t * 58)).toFixed(2) + 'px');
+    stage.style.setProperty('--shake-y', (A * .6 * k * Math.cos(t * 47)).toFixed(2) + 'px');
+    requestAnimationFrame(step);
+  })(shakeT0);
+}
+function flash(bolt) { const f = $('#flash'); f.classList.toggle('bolt', !!bolt); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
+</script>
+
+<script>
+/* ============================================================
+   转场库：cross（现状）/ wipe / iris / black / strips / dissolve
+   ============================================================ */
+const slideBase = $('#slideBase'), slideFront = $('#slideFront');
+let sceneIdx = 0, transitioning = false, chapterNo = 1;
+
+function setSlideImg(slide, img) {
+  const kb = slide.querySelector('.kb');
+  kb.style.setProperty('--img', img);
+  // 每张图随机一个漂移方向，重启 Ken Burns
+  kb.style.setProperty('--kb-origin', `${30 + Math.random() * 40}% ${30 + Math.random() * 40}%`);
+  kb.style.setProperty('--kb-dx', `${(Math.random() < .5 ? -1 : 1) * (1 + Math.random())}%`);
+  kb.style.setProperty('--kb-dy', `${(Math.random() < .5 ? -1 : 1) * (.5 + Math.random() * .8)}%`);
+  kb.style.animation = 'none'; void kb.offsetWidth; kb.style.animation = '';
+}
+function resetFront() { slideFront.className = 'slide front'; setSlideImg(slideFront, 'none'); }
+function commitBase(img) {
+  slideBase.style.transition = 'none'; slideBase.classList.remove('dim');
+  setSlideImg(slideBase, img); void slideBase.offsetWidth; slideBase.style.transition = '';
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const restart = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+
+async function goScene(idx, type) {
+  if (transitioning) return;
+  transitioning = true;
+  const sc = SCENES[idx], url = BG(sc.name);
+  const img = await loadImage(url);              // ← 先解码，再开播
+  const bg = cssUrl(img ? url : null, idx);
+  if (isLegacy()) type = 'cross';
+  if (type === 'dissolve' && !img) type = 'wipe';
+  lastSample = img ? sampleImage(img) : null;
+  sceneIdx = idx;
+  const applySceneState = () => {
+    $('#hudLoc').textContent = sc.name; $('#hudTime').textContent = sc.time;
+    stage.classList.toggle('legacy-night', /夜|night|晚/i.test(sc.name)); // 线上关键词规则
+    $('#rays').classList.toggle('on', !!sc.rays && !isLegacy());
+    applyLighting(); if (FX.mode === 'scene') setFx(sc.fx);
+  };
+
+  if (type === 'cross') {
+    applySceneState();
+    slideFront.className = 'slide front t-cross'; setSlideImg(slideFront, bg); void slideFront.offsetWidth;
+    slideBase.classList.add('dim'); slideFront.classList.add('go'); restart($('#sweep'), 'go');
+    await wait(1100); commitBase(bg); resetFront();
+  } else if (type === 'wipe') {
+    applySceneState();
+    slideFront.className = 'slide front t-wipe'; setSlideImg(slideFront, bg); void slideFront.offsetWidth;
+    slideFront.classList.add('go'); restart($('#wipeEdge'), 'go');
+    await wait(1050); commitBase(bg); resetFront();
+  } else if (type === 'iris') {
+    applySceneState();
+    const side = currentSpeakerSide();
+    slideFront.style.setProperty('--iris-x', side === 'left' ? '30%' : side === 'right' ? '70%' : '50%');
+    slideFront.className = 'slide front t-iris'; setSlideImg(slideFront, bg); void slideFront.offsetWidth;
+    slideFront.classList.add('go');
+    await wait(1100); commitBase(bg); resetFront();
+  } else if (type === 'black') {
+    chapterNo += 1;
+    $('#locT').textContent = `CHAPTER ${String(chapterNo).padStart(2, '0')} · ${sc.time}`; $('#locN').textContent = sc.name;
+    $('#dlg').classList.add('hidden'); $('#blackout').classList.add('on');
+    await wait(650); commitBase(bg); applySceneState();
+    await wait(1100); $('#blackout').classList.remove('on');
+    await wait(300); $('#dlg').classList.remove('hidden');
+  } else if (type === 'strips') {
+    applySceneState();
+    const box = $('#strips'), N = 7, s = 3.5; box.innerHTML = '';
+    for (let i = 0; i < N; i++) {
+      const y0 = i === 0 ? -10 : (i / N) * 100, y1 = i === N - 1 ? 110 : ((i + 1) / N) * 100 + .4;
+      const el = document.createElement('div'); el.className = 'strip';
+      el.style.cssText = `--img:${bg};--from:${i % 2 ? '' : '-'}115%;--d:${i * 45}ms;clip-path:polygon(-5% ${y0 + s}%,105% ${y0 - s}%,105% ${y1 - s}%,-5% ${y1 + s}%)`;
+      box.appendChild(el);
+    }
+    void box.offsetWidth; $$('.strip', box).forEach(el => el.classList.add('go'));
+    await wait(980); commitBase(bg); await wait(30); box.innerHTML = '';
+  } else if (type === 'dissolve') {
+    applySceneState();
+    await runDissolve(img);
+    commitBase(bg); await wait(30); $('#dissolve').classList.remove('on');
+  }
+  transitioning = false;
+}
+
+/* —— 规则图溶解：低分辨率规则图（fbm 噪声 + 横向渐变）作阈值 mask，
+       线上可做成 Pixi Filter，支持用户上传 Ren'Py 式规则图 —— */
+const RULE_W = 192, RULE_H = 108;
+const rule = (() => {
+  const g = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+  const vnoise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = g(xi, yi), b = g(xi + 1, yi), c = g(xi, yi + 1), d = g(xi + 1, yi + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  const r = new Float32Array(RULE_W * RULE_H);
+  for (let y = 0; y < RULE_H; y++) for (let x = 0; x < RULE_W; x++) {
+    let f = 0, amp = .5, fr = 1 / 24;
+    for (let o = 0; o < 4; o++) { f += amp * vnoise(x * fr, y * fr); amp *= .5; fr *= 2; }
+    r[y * RULE_W + x] = .62 * f + .38 * (x / RULE_W);   // 墨迹从左向右洇开
+  }
+  return r;
+})();
+function runDissolve(img) {
+  return new Promise(resolve => {
+    const cv = $('#dissolve'), host = cv.parentElement, dpr = Math.min(1.5, devicePixelRatio || 1);
+    const W = cv.width = host.clientWidth * dpr | 0, H = cv.height = host.clientHeight * dpr | 0, ctx = cv.getContext('2d');
+    const mask = document.createElement('canvas'); mask.width = RULE_W; mask.height = RULE_H;
+    const edge = document.createElement('canvas'); edge.width = RULE_W; edge.height = RULE_H;
+    const mctx = mask.getContext('2d'), ectx = edge.getContext('2d');
+    const md = mctx.createImageData(RULE_W, RULE_H), ed = ectx.createImageData(RULE_W, RULE_H);
+    // cover 适配 + 与 Ken Burns 起始帧一致的 1.02 缩放
+    const sc = Math.max(W / img.width, H / img.height) * 1.02, dw = img.width * sc, dh = img.height * sc, dx = (W - dw) / 2, dy = (H - dh) / 2;
+    const soft = .14, dur = 1300, t0 = performance.now();
+    cv.classList.add('on');
+    (function frame(now) {
+      const p = Math.min(1, (now - t0) / dur), e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      for (let i = 0; i < rule.length; i++) {
+        const a = Math.max(0, Math.min(1, (e * (1 + soft) - rule[i]) / soft));
+        md.data[i * 4 + 3] = a * 255;
+        const rim = a * (1 - a) * 4;
+        ed.data[i * 4] = 170; ed.data[i * 4 + 1] = 240; ed.data[i * 4 + 2] = 255; ed.data[i * 4 + 3] = rim * 200;
+      }
+      mctx.putImageData(md, 0, 0); ectx.putImageData(ed, 0, 0);
+      ctx.globalCompositeOperation = 'source-over'; ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.globalCompositeOperation = 'destination-in'; ctx.drawImage(mask, 0, 0, W, H);
+      ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(edge, 0, 0, W, H);
+      if (p < 1) requestAnimationFrame(frame); else resolve();
+    })(t0);
+  });
+}
+</script>
+
+<script>
+/* ============================================================
+   粒子：canvas 2D 演示版（线上对应 Pixi registry.js）
+   升级 = 'lighter' 真加色 + 远/中/近三层景深（近景预模糊大花瓣）
+   现状 = source-over（模拟 ParticleContainer 吞掉 ADD）+ 无景深模糊
+   ============================================================ */
+const FX = { mode: 'scene', cur: 'none', parts: [], w: 0, h: 0, dpr: 1, nextBolt: 0, bolt: null, boltT: 0 };
+const cvB = $('#fxBack'), cvF = $('#fxFront'), ctxB = cvB.getContext('2d'), ctxF = cvF.getContext('2d');
+function resizeFx() {
+  FX.dpr = Math.min(2, devicePixelRatio || 1);
+  for (const cv of [cvB, cvF]) { cv.width = cv.clientWidth * FX.dpr | 0; cv.height = cv.clientHeight * FX.dpr | 0; }
+  FX.w = cvB.width; FX.h = cvB.height;
+}
+const rnd = (a, b) => a + Math.random() * (b - a);
+function sprite(size, blur, draw) {
+  const pad = Math.ceil(blur * 3 + 2), c = document.createElement('canvas');
+  c.width = c.height = size + pad * 2;
+  const g = c.getContext('2d'); if (blur) g.filter = `blur(${blur}px)`;
+  g.translate(c.width / 2, c.height / 2); draw(g, size); return c;
+}
+const drawPetal = (g, s) => {
+  const gr = g.createRadialGradient(0, s * .1, 0, 0, 0, s * .6);
+  gr.addColorStop(0, '#fff6f9'); gr.addColorStop(.55, '#ffc4d8'); gr.addColorStop(1, '#f394b5');
+  g.fillStyle = gr; g.beginPath(); g.moveTo(0, s * .5);
+  g.bezierCurveTo(s * .5, s * .2, s * .42, -s * .42, s * .1, -s * .46); g.lineTo(0, -s * .34); g.lineTo(-s * .1, -s * .46);
+  g.bezierCurveTo(-s * .42, -s * .42, -s * .5, s * .2, 0, s * .5); g.fill();
+};
+const drawGlow = color => (g, s) => {
+  const gr = g.createRadialGradient(0, 0, 0, 0, 0, s / 2);
+  gr.addColorStop(0, color); gr.addColorStop(.35, color.replace(/[\d.]+\)$/, '.35)')); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, s / 2, 0, Math.PI * 2); g.fill();
+};
+const drawBokeh = color => (g, s) => {
+  const gr = g.createRadialGradient(0, 0, s * .1, 0, 0, s / 2);
+  gr.addColorStop(0, color.replace(/[\d.]+\)$/, '.28)')); gr.addColorStop(.82, color.replace(/[\d.]+\)$/, '.42)'));
+  gr.addColorStop(.92, color); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, s / 2, 0, Math.PI * 2); g.fill();
+};
+const SPR = {
+  petal: [sprite(28, 0, drawPetal), sprite(22, 1.2, drawPetal), sprite(90, 7, drawPetal)],   // 中 / 远 / 近
+  dust: sprite(10, 0, drawGlow('rgba(255,240,210,1)')),
+  bokeh: ['rgba(255,190,90,.9)', 'rgba(255,120,90,.9)', 'rgba(255,225,140,.9)', 'rgba(255,140,190,.9)'].map(c => sprite(90, 2, drawBokeh(c))),
+  bokehNear: ['rgba(255,180,90,.9)', 'rgba(255,140,170,.9)'].map(c => sprite(220, 10, drawBokeh(c))),
+  firefly: sprite(26, 0, drawGlow('rgba(255,236,150,1)')),
+};
+
+function setFx(type) {
+  FX.cur = type; FX.parts = []; FX.bolt = null; FX.nextBolt = performance.now() + 2500;
+  const legacy = isLegacy(), W = FX.w, H = FX.h, d = FX.dpr;
+  const add = (n, f) => { for (let i = 0; i < n; i++) FX.parts.push(f(i)); };
+  if (type === 'sakura') {
+    const petal = (layer, depth) => ({ kind: 'petal', layer, depth, x: rnd(0, W), y: rnd(-H, H), s: d * (depth === 2 ? rnd(.8, 1.3) : depth === 1 ? rnd(.5, .8) : rnd(.7, 1.1)),
+      vx: rnd(18, 40) * d * (depth === 2 ? 3 : depth === 1 ? .6 : 1), vy: rnd(28, 55) * d * (depth === 2 ? 2.6 : depth === 1 ? .55 : 1),
+      rot: rnd(0, 6.28), vr: rnd(-1.5, 1.5), ph: rnd(0, 6.28), vph: rnd(1.5, 3.5), sw: rnd(.6, 1.6), a: depth === 1 ? .7 : depth === 2 ? .5 : .95 });
+    if (legacy) { add(46, () => petal('b', 0)); add(30, () => petal('f', 0)); }
+    else { add(60, () => petal('b', 1)); add(34, () => petal('b', 0)); add(5, () => petal('f', 2)); }
+  } else if (type === 'dust') {
+    add(legacy ? 50 : 90, () => ({ kind: 'dust', layer: 'b', x: rnd(0, W * .7), y: rnd(0, H * .8), s: d * rnd(.3, 1.1), vx: rnd(-6, 8) * d, vy: rnd(-5, 4) * d, ph: rnd(0, 6.28), vph: rnd(.8, 2.4) }));
+  } else if (type === 'bokeh') {
+    add(26, () => ({ kind: 'bokeh', layer: 'b', i: Math.random() * 4 | 0, x: rnd(0, W), y: rnd(0, H * .75), s: d * rnd(.35, 1), vx: rnd(-6, 6) * d, vy: rnd(-8, -2) * d, ph: rnd(0, 6.28), vph: rnd(.4, 1.2) }));
+    add(18, () => ({ kind: 'firefly', layer: 'b', x: rnd(0, W), y: rnd(H * .3, H), s: d * rnd(.5, 1), vx: rnd(-10, 10) * d, vy: rnd(-14, -4) * d, ph: rnd(0, 6.28), vph: rnd(1.5, 4) }));
+    if (!legacy) add(4, () => ({ kind: 'bokehNear', layer: 'f', i: Math.random() * 2 | 0, x: rnd(0, W), y: rnd(0, H), s: d * rnd(.8, 1.2), vx: rnd(-10, 10) * d, vy: rnd(-6, 6) * d, ph: rnd(0, 6.28), vph: rnd(.3, .7) }));
+  } else if (type === 'rain') {
+    add(legacy ? 130 : 110, () => ({ kind: 'rain', layer: 'f', x: rnd(0, W * 1.2), y: rnd(-H, H), len: rnd(14, 30) * d, v: rnd(900, 1400) * d, a: rnd(.18, .45) }));
+    if (!legacy) add(70, () => ({ kind: 'rain', layer: 'b', x: rnd(0, W * 1.2), y: rnd(-H, H), len: rnd(8, 14) * d, v: rnd(500, 700) * d, a: rnd(.1, .22) }));
+  }
+}
+function makeBolt() {
+  const W = FX.w, H = FX.h, pts = [], branches = [];
+  let x = rnd(W * .15, W * .85), y = 0;
+  pts.push([x, y]);
+  while (y < H * .62) {
+    x += rnd(-.035, .035) * W; y += rnd(.03, .06) * H; pts.push([x, y]);
+    if (Math.random() < .22) { const b = [[x, y]]; let bx = x, by = y; for (let k = 0; k < 4; k++) { bx += rnd(-.04, .04) * W; by += rnd(.02, .05) * H; b.push([bx, by]); } branches.push(b); }
+  }
+  return { pts, branches };
+}
+function strokePath(ctx, pts) { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
+
+function fxTick(dt, now) {
+  const W = FX.w, H = FX.h, legacy = isLegacy();
+  ctxB.clearRect(0, 0, cvB.width, cvB.height); ctxF.clearRect(0, 0, cvF.width, cvF.height); // 两块画布尺寸不同（前景层外扩给视差留边）
+  const gco = legacy ? 'source-over' : 'lighter';
+  for (const p of FX.parts) {
+    const ctx = p.layer === 'f' ? ctxF : ctxB;
+    if (p.kind === 'petal') {
+      p.ph += p.vph * dt; p.rot += p.vr * dt;
+      const gust = Math.sin(now / 2400) * .5 + .7;
+      p.x += (p.vx * gust + Math.sin(p.ph) * 14 * p.sw * FX.dpr) * dt; p.y += p.vy * dt;
+      if (p.y > H + 60 || p.x > W + 80) { p.y = rnd(-120, -20); p.x = rnd(-W * .3, W); }
+      const img = SPR.petal[p.depth];
+      ctx.save(); ctx.globalAlpha = p.a; ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale((p.depth === 2 ? .45 + .55 * Math.abs(Math.cos(p.ph)) : Math.cos(p.ph)) * p.s, p.s);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2); ctx.restore();
+    } else if (p.kind === 'dust') {
+      p.ph += p.vph * dt; p.x += (p.vx + Math.sin(p.ph) * 4) * dt; p.y += (p.vy + Math.cos(p.ph * .7) * 3) * dt;
+      if (p.x < -20 || p.x > W * .8 || p.y < -20 || p.y > H) { p.x = rnd(0, W * .7); p.y = rnd(0, H * .8); }
+      const lit = Math.max(0, 1 - (p.x / W + p.y / H) * .8);   // 光束内更亮
+      ctx.globalCompositeOperation = gco; ctx.globalAlpha = (.25 + .75 * (Math.sin(p.ph * 2) * .5 + .5)) * (legacy ? .6 : lit);
+      const s = SPR.dust.width * p.s; ctx.drawImage(SPR.dust, p.x - s / 2, p.y - s / 2, s, s);
+    } else if (p.kind === 'bokeh' || p.kind === 'bokehNear' || p.kind === 'firefly') {
+      p.ph += p.vph * dt; p.x += (p.vx + Math.sin(p.ph) * 6 * FX.dpr) * dt; p.y += p.vy * dt;
+      if (p.y < -150) { p.y = H + 100; p.x = rnd(0, W); } if (p.y > H + 160) p.y = -100;
+      const img = p.kind === 'firefly' ? SPR.firefly : (p.kind === 'bokeh' ? SPR.bokeh : SPR.bokehNear)[p.i];
+      ctx.globalCompositeOperation = gco;
+      ctx.globalAlpha = p.kind === 'firefly' ? (Math.sin(p.ph * 2) * .5 + .5) : (p.kind === 'bokehNear' ? .35 : .55 + Math.sin(p.ph) * .25);
+      const s = img.width * p.s; ctx.drawImage(img, p.x - s / 2, p.y - s / 2, s, s);
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  if (FX.cur === 'rain') {
+    for (const [ctx, layer] of [[ctxB, 'b'], [ctxF, 'f']]) {
+      ctx.strokeStyle = layer === 'f' ? 'rgba(205,220,255,.38)' : 'rgba(190,205,240,.2)'; ctx.lineWidth = (layer === 'f' ? 1.4 : .9) * FX.dpr;
+      ctx.beginPath();
+      for (const p of FX.parts) {
+        if (p.kind !== 'rain' || p.layer !== layer) continue;
+        p.y += p.v * dt; p.x -= p.v * .18 * dt;
+        if (p.y > H) { p.y = rnd(-120, -10); p.x = rnd(0, W * 1.2); }
+        ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + p.len * .18, p.y - p.len);
+      }
+      ctx.stroke();
+    }
+    if (!legacy && now > FX.nextBolt) {
+      FX.bolt = makeBolt(); FX.boltT = now; FX.nextBolt = now + rnd(5500, 9500);
+      flash(true); if (has('push-on')) shake(.35);
+    }
+    if (FX.bolt && now - FX.boltT < 260) {
+      const k = (now - FX.boltT) < 60 || (now - FX.boltT > 110 && now - FX.boltT < 170) ? 1 : .35;
+      ctxB.save(); ctxB.globalCompositeOperation = 'lighter'; ctxB.shadowColor = '#bcd2ff'; ctxB.shadowBlur = 24 * FX.dpr;
+      ctxB.strokeStyle = `rgba(235,242,255,${k})`; ctxB.lineWidth = 2.6 * FX.dpr; strokePath(ctxB, FX.bolt.pts);
+      ctxB.lineWidth = 1.2 * FX.dpr; FX.bolt.branches.forEach(b => strokePath(ctxB, b)); ctxB.restore();
+    }
+  }
+}
+</script>
+
+<script>
+/* ============================================================
+   立绘 / 文字 / 对话流程 / 选项 / CG / 控制面板
+   ============================================================ */
+const chars = {};
+function makeChar(id) {
+  const c = CAST[id], el = document.createElement('div');
+  el.className = `char ${c.side} breathe out-${c.side}`;
+  el.innerHTML = '<div class="inner"><div class="shadow"></div><img class="body" alt=""><div class="tint"></div><div class="rim"></div></div>';
+  $('#chars').appendChild(el);
+  return (chars[id] = { el, inner: el.querySelector('.inner'), expr: null });
+}
+async function setExpr(id, expr) {
+  const ch = chars[id]; if (!ch || ch.expr === expr) return;
+  ch.expr = expr;
+  const url = SP(CAST[id].file, expr);
+  await Promise.race([loadImage(url), wait(1500)]);
+  const old = ch.inner.querySelector('img.body'), img = document.createElement('img');
+  img.className = 'body old'; img.alt = ''; img.src = url;
+  old.after(img); void img.offsetWidth; img.classList.remove('old'); old.classList.add('old');
+  setTimeout(() => old.remove(), 360);
+  ch.el.style.setProperty('--sprite', `url("${url}")`);
+}
+let curSpeaker = null;
+const currentSpeakerSide = () => curSpeaker ? CAST[curSpeaker].side : null;
+function setSpeaker(id) {
+  curSpeaker = id || null;
+  for (const [k, ch] of Object.entries(chars)) {
+    ch.el.classList.toggle('speaking', !!id && k === id);
+    ch.el.classList.toggle('silent', !!id && k !== id);
+  }
+  pushTo(id ? CAST[id].side : null);
+}
+function bump(id, cls) { const ch = chars[id]; if (!ch) return; ch.el.classList.remove(cls); void ch.el.offsetWidth; ch.el.classList.add(cls); }
+
+/* —— 剧本：{em}强调 {shake}颤抖 {wave}波浪 —— */
+const SCRIPT = [
+  { s: null, t: '放学的钟声刚落，河边的小路上已经铺满了花瓣。风一吹，整条水面都泛起淡粉色的光。' },
+  { s: 'shiori', e: '微笑', t: '学长，等等我——今天的花，好像比昨天开得还要{em}更盛{/em}一点呢。' },
+  { s: 'reika', e: '默认', t: '哼，不过是普通的樱花罢了。……不过，倒也不算难看。' },
+  { s: 'shiori', e: '惊讶', fx: 'jolt', t: '诶？丽华学姐也会说这种话吗？{shake}好、好难得！{/shake}' },
+  { s: 'reika', e: '害羞', t: '少、少啰嗦！我只是……{wave}碰巧路过{/wave}而已。' },
+  { s: 'shiori', e: '大笑', fx: 'hop', t: '嘿嘿，那就一起走吧。前面的路，{em}三个人{/em}一起走才不会迷路哦。' },
+  { s: null, t: '两人一左一右地拉着我。接下来要去哪里呢？', choices: ['陪栞去河堤看夕阳', '跟丽华去夏日祭', '先去车站避雨（存档点）'] },
+];
+const PAUSE = { '。': 280, '！': 280, '？': 280, '!': 280, '?': 280, '…': 140, '，': 120, '、': 110, '；': 140, '：': 120, '—': 50, '」': 60 };
+function parseLine(t) {
+  const out = [], re = /\{(\/?)(em|shake|wave)\}/g; let cls = [], last = 0, m;
+  const push = s => { for (const c of s) out.push({ c, cls: [...cls] }); };
+  while ((m = re.exec(t))) { push(t.slice(last, m.index)); cls = m[1] ? cls.filter(x => x !== m[2]) : [...cls, m[2]]; last = re.lastIndex; }
+  push(t.slice(last)); return out;
+}
+const txt = $('#txt');
+let line = -1, typing = null;
+function typeLine(L) {
+  if (typing) clearTimeout(typing.timer);
+  const toks = parseLine(L.t), plain = toks.map(t => t.c).join('');
+  const fancy = !isLegacy() && has('char-fx');
+  if (isLegacy()) {
+    // 现状：每 tick 用整段切片重写（typewriter.js 的 renderTextSlice）
+    let i = 0; txt.textContent = '';
+    typing = { done: false, finish() { txt.textContent = plain; this.done = true; onTyped(L); } };
+    const tick = () => { i++; txt.textContent = plain.slice(0, i); if (i >= plain.length) { typing.done = true; onTyped(L); return; } typing.timer = setTimeout(tick, 33); };
+    typing.timer = setTimeout(tick, 33); return;
+  }
+  // 升级：一次性切 span，逐个加 .on（O(n)，排版预先占位不跳行）
+  txt.innerHTML = toks.map((t, i) => `<span class="ch ${t.cls.join(' ')}" style="--i:${i}">${t.c === ' ' ? '&nbsp;' : t.c}</span>`).join('') + '<span class="caret"></span>';
+  const spans = $$('.ch', txt), caret = $('.caret', txt);
+  if (!fancy) { spans.forEach(s => s.classList.add('on')); }
+  let i = 0;
+  typing = { done: false, finish() { clearTimeout(this.timer); spans.forEach(s => s.classList.add('on')); this.done = true; caret.classList.add('done'); onTyped(L); } };
+  if (!fancy) { typing.finish(); return; }
+  const tick = () => {
+    spans[i].classList.add('on');
+    const c = toks[i].c; i++;
+    if (i >= spans.length) { typing.done = true; caret.classList.add('done'); onTyped(L); return; }
+    typing.timer = setTimeout(tick, 33 + (PAUSE[c] || 0));
+  };
+  tick();
+}
+function onTyped(L) { typing.done = true; }
+function setBadge(id) {
+  const b = $('#badge'), name = id ? CAST[id].name : '旁白';
+  stage.style.setProperty('--spk', id ? CAST[id].color : '#00c4ef');
+  if ($('#badgeName').textContent === name && b.dataset.init) return;
+  b.dataset.init = 1; $('#badgeName').textContent = name; b.classList.toggle('narr', !id);
+  restart(b, 'enter'); restart($('#panelBox'), 'pulse');
+}
+function showLine(i) {
+  line = i; const L = SCRIPT[i];
+  setBadge(L.s); setSpeaker(L.s);
+  if (L.s) { setExpr(L.s, L.e); if (L.fx && !isLegacy()) setTimeout(() => bump(L.s, L.fx), 120); }
+  $('#prog').style.setProperty('--p', `${((i + 1) / SCRIPT.length) * 100}%`);
+  typeLine(L);
+}
+function advance() {
+  if ($('#cg').classList.contains('on')) { closeCg(); return; }
+  if ($('#choices').classList.contains('on') || transitioning) return;
+  if (typing && !typing.done) { typing.finish(); return; }
+  const L = SCRIPT[line];
+  if (L && L.choices) { showChoices(L.choices); return; }
+  showLine((line + 1) % SCRIPT.length);
+}
+
+/* —— 选项 —— */
+const CHOICE_DEST = [{ idx: 2, t: 'black' }, { idx: 3, t: 'dissolve' }, { idx: 4, t: 'strips' }];
+function showChoices(list) {
+  const box = $('#choices');
+  box.innerHTML = `<div class="ch-title">CHOICE · 选择</div>` +
+    list.map((c, i) => `<div class="card" data-no="${String(i + 1).padStart(2, '0')}" style="--i:${i}"><span>${c}</span></div>`).join('') +
+    `<div class="ch-hint">点击选项继续</div>`;
+  box.classList.add('on');
+  $$('.card', box).forEach((card, i) => card.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!isLegacy()) { $$('.card', box).forEach((c, j) => c.classList.add(j === i ? 'picked' : 'dropped')); await wait(480); }
+    box.classList.remove('on');
+    const d = CHOICE_DEST[i]; await goScene(d.idx, d.t); showLine(0);
+  }));
+}
+/* —— CG —— */
+async function openCg() {
+  const url = BG('海边'), img = await loadImage(url);
+  const cg = $('#cg'); cg.querySelector('.img').style.setProperty('--img', cssUrl(img ? url : null, 0));
+  if (!isLegacy()) flash();
+  cg.classList.add('on');
+}
+function closeCg() { $('#cg').classList.remove('on'); }
+
+/* —— 控制面板 —— */
+$$('.ab button').forEach(b => b.addEventListener('click', () => {
+  $$('.ab button').forEach(x => x.classList.toggle('on', x === b));
+  document.body.classList.toggle('legacy', b.dataset.mode === 'legacy');
+  setFx(FX.mode === 'scene' ? SCENES[sceneIdx].fx : FX.mode);
+  $('#rays').classList.toggle('on', !!SCENES[sceneIdx].rays && !isLegacy());
+  applyLighting(); setSpeaker(SCRIPT[line]?.s || null); if (line >= 0) typeLine(SCRIPT[line]);
+}));
+$$('#transBtns button').forEach(b => b.addEventListener('click', () => goScene((sceneIdx + 1) % SCENES.length, b.dataset.t)));
+$$('#todBtns button').forEach(b => b.addEventListener('click', () => {
+  todMode = b.dataset.tod; $$('#todBtns button').forEach(x => x.classList.toggle('on', x === b)); applyLighting();
+}));
+$$('#fxBtns button').forEach(b => b.addEventListener('click', () => {
+  FX.mode = b.dataset.fx; $$('#fxBtns button').forEach(x => x.classList.toggle('on', x === b));
+  setFx(FX.mode === 'scene' ? SCENES[sceneIdx].fx : FX.mode);
+}));
+$$('[data-act]').forEach(b => b.addEventListener('click', () => {
+  const a = b.dataset.act;
+  if (a === 'shake') shake(1);
+  else if (a === 'flash') flash();
+  else if (a === 'enter') { for (const [k, ch] of Object.entries(chars)) { ch.el.classList.add('out-' + CAST[k].side); setTimeout(() => ch.el.classList.remove('out-' + CAST[k].side), 520); } }
+  else if (a === 'hop') bump(curSpeaker || 'shiori', 'hop');
+  else if (a === 'choices') showChoices(SCRIPT[SCRIPT.length - 1].choices);
+  else if (a === 'cg') openCg();
+}));
+$$('.tgl input').forEach(inp => inp.addEventListener('change', () => {
+  stage.classList.toggle(inp.dataset.cls, inp.checked);
+  if (inp.dataset.cls === 'push-on') setSpeaker(SCRIPT[line]?.s || null);
+  if (inp.dataset.cls === 'char-fx' && line >= 0) typeLine(SCRIPT[line]);
+}));
+stage.addEventListener('click', advance);
+document.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); advance(); } });
+
+/* —— 主循环 —— */
+let lastT = performance.now(), frames = 0, fpsT = lastT;
+function loop(now) {
+  const dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
+  camTick(); fxTick(dt, now);
+  frames++; if (now - fpsT > 1000) { $('#fpsInfo').textContent = `${frames} fps · ${FX.parts.length} particles`; frames = 0; fpsT = now; }
+  requestAnimationFrame(loop);
+}
+let rzT; new ResizeObserver(() => { clearTimeout(rzT); rzT = setTimeout(() => { resizeFx(); setFx(FX.cur); }, 150); }).observe(stage);
+
+(async function init() {
+  resizeFx(); makeChar('shiori'); makeChar('reika');
+  setExpr('shiori', '默认'); setExpr('reika', '默认');
+  const sc = SCENES[0], img = await loadImage(BG(sc.name));
+  commitBase(cssUrl(img ? BG(sc.name) : null, 0)); lastSample = img ? sampleImage(img) : null;
+  $('#rays').classList.toggle('on', !!sc.rays); applyLighting(); setFx(sc.fx);
+  requestAnimationFrame(loop);
+  setTimeout(() => Object.entries(chars).forEach(([k, ch]) => ch.el.classList.remove('out-' + CAST[k].side)), 200);
+  setTimeout(() => showLine(0), 650);
+})();
+</script>
+</body>
+</html>

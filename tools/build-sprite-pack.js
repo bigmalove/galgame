@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const { removeEdgeMagenta } = require('./lib/magenta-fringe');
 
 const ROOT = path.resolve(__dirname, '..');
 const CHAR_FILE = path.join(__dirname, 'sprite-characters.json');
@@ -69,6 +70,11 @@ function chromaKeyToAlpha(data, width, height) {
 async function keyOutFile(inputPath) {
   const { data, info } = await sharp(inputPath).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const rgba = chromaKeyToAlpha(data, info.width, info.height);
+  // 网格模板的品红分隔线只去绿抠不掉，必须在求包围盒之前清掉，否则裁切框会被撑到格子边缘
+  const fringe = removeEdgeMagenta(rgba, info.width, info.height);
+  if (fringe.cleared) {
+    console.log(`  [品红残边] ${path.basename(inputPath)}: 清除 ${fringe.columns.length} 列 / ${fringe.cleared} 像素`);
+  }
   return { rgba, width: info.width, height: info.height };
 }
 

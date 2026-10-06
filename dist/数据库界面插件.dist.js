@@ -4430,9 +4430,9 @@
       function baseExtremum(array3, iteratee, comparator) {
         var index = -1, length = array3.length;
         while (++index < length) {
-          var value = array3[index], current = iteratee(value);
-          if (current != null && (computed === void 0 ? current === current && !isSymbol(current) : comparator(current, computed))) {
-            var computed = current, result = value;
+          var value = array3[index], current2 = iteratee(value);
+          if (current2 != null && (computed === void 0 ? current2 === current2 && !isSymbol(current2) : comparator(current2, computed))) {
+            var computed = current2, result = value;
           }
         }
         return result;
@@ -5072,8 +5072,8 @@
         if (g2.nodeCount() <= 1) {
           return [];
         }
-        var state = buildState(g2, weightFn || DEFAULT_WEIGHT_FN);
-        var results = doGreedyFAS(state.graph, state.buckets, state.zeroIdx);
+        var state2 = buildState(g2, weightFn || DEFAULT_WEIGHT_FN);
+        var results = doGreedyFAS(state2.graph, state2.buckets, state2.zeroIdx);
         return _2.flatten(_2.map(results, function(e2) {
           return g2.outEdges(e2.v, e2.w);
         }), true);
@@ -7697,6 +7697,10 @@
   var YANYUN_XUEJI_SKIN_ID = "skin-yanyun-xueji";
   var YANYUN_FAMILY_SKIN_IDS = [YANYUN_SKIN_ID, YANYUN_XUEJI_SKIN_ID];
   var DEFAULT_DARK_SKIN_ID = "skin-default-dark";
+  var DEFAULT_SOFT_SKIN_ID = "skin-default-soft";
+  var CYBERPOP_SKIN_ID = "skin-cyberpop";
+  var CYBERPOP_DARK_SKIN_ID = "skin-cyberpop-dark";
+  var DEFAULT_THEME_CLASS = "gal-theme-default";
   var HTML_SKIN_ID_PREFIX = "html-skin::";
   var HTML_SKIN_ACTIVE_CLASS = "html-skin";
   var THEME = {
@@ -7735,7 +7739,7 @@
   var RE_TAG_WHITESPACE = />\s+</g;
   var RE_MAINTEXT_CLOSED = /<maintext>([\s\S]*?)<\/maintext>/i;
   var RE_MAINTEXT_UNCLOSED = /<maintext>([\s\S]*)$/i;
-  var RE_BACKGROUND = /<background\s+scene="([^"]+)"\s*[\/]?>/i;
+  var RE_BACKGROUND = /<background\b[^>]*?\bscene\s*=\s*"([^"]+)"[^>]*?\/?>/i;
   var RE_BGIMG = /<bgimg>(.*?)<\/bgimg>/i;
   var RE_WHIMG = /<whimg>(.*?)<\/whimg>/i;
   var RE_BNIMG = /<bnimg>([\s\S]*?)<\/bnimg>/i;
@@ -7747,6 +7751,11 @@
   // src/core/env.js
   var topWindow = typeof window.parent !== "undefined" ? window.parent : window;
   var $2 = topWindow.jQuery || window.jQuery;
+  function getTavernContext() {
+    if (typeof SillyTavern === "undefined") return null;
+    const ctx = SillyTavern;
+    return Array.isArray(ctx?.chat) || typeof ctx?.getContext !== "function" ? ctx : ctx.getContext();
+  }
 
   // src/core/store.js
   var GalgameStore = {
@@ -7802,12 +7811,6 @@
       firstResult: null,
       formattedResult: null,
       targetMessageId: null,
-      originalProfile: void 0,
-      originalModel: void 0,
-      originalPreset: void 0,
-      originalWorldbooks: null,
-      worldbooksModified: false,
-      originalConfigSaved: false,
       isSecondGeneration: false,
       lastPrompts: null
     },
@@ -7856,12 +7859,6 @@
         firstResult: null,
         formattedResult: null,
         targetMessageId: null,
-        originalProfile: void 0,
-        originalModel: void 0,
-        originalPreset: void 0,
-        originalWorldbooks: null,
-        worldbooksModified: false,
-        originalConfigSaved: false,
         isSecondGeneration: false,
         lastPrompts: null
       };
@@ -8011,6 +8008,22 @@
     typewriterSpeed: 30,
     typewriterSoundEnabled: true,
     typewriterSoundVolume: 35,
+    // 打字机标点停顿：句读处稍作停留，模拟说话节奏
+    typewriterPunctuationPause: true,
+    // 按皮肤从 jsDelivr 加载 Web 字体（关闭则全部回退系统字体，省流量）
+    webFontsEnabled: true,
+    // 视觉演出（stage/）：背景转场风格 cinematic | wipe | iris | strips | dissolve | random
+    bgTransitionStyle: "cinematic",
+    // 允许 AI 在背景标签上指定转场（COT 注入 transition 属性说明）
+    bgTransitionAiHint: true,
+    // 镜头：背景缓慢漂移 / 鼠标·陀螺仪视差 / 推镜跟随说话人（仅「填满裁剪」背景模式生效）
+    stageCameraDrift: true,
+    stageParallax: true,
+    stageSpeakerPush: true,
+    // 环境光：按背景图采样自动给立绘染色、调明暗与轮廓光
+    stageAmbientLight: true,
+    // 控件动效（所有皮肤通用）：逐字点亮、推进流光、名牌换人、按钮涟漪 / 火花、选项 3D 翻入等
+    controlMotion: true,
     // 自动播放
     autoPlaySpeed: 2,
     // 显示设置
@@ -8027,6 +8040,8 @@
     effectsQuality: "balanced",
     effectsAutoClearOnSceneChange: true,
     effectsMaxActive: 2,
+    // 发光类粒子的辉光滤镜（pixi-filters AdvancedBloom，按需加载；Mobile 档自动关闭）
+    effectsBloom: true,
     uiScalePercentVersion: UI_SCALE_PERCENT_VERSION,
     dialogScalePercent: UI_SCALE_PERCENT_DEFAULT,
     toolbarScalePercent: UI_SCALE_PERCENT_DEFAULT,
@@ -8111,14 +8126,16 @@
     enhancedMode: {
       enabled: false,
       secondGenerate: {
-        useProfile: false,
+        // 'current': 跟随酒馆当前 API 与预设；'profile': 使用酒馆连接配置独立请求
+        llmSource: "current",
+        profileId: "",
         profileName: "",
-        useModel: false,
-        modelName: "",
-        usePreset: false,
-        presetName: "",
-        useWorldbooks: false,
-        worldbooks: []
+        // 留空则使用连接配置自带的模型
+        model: "",
+        // 0 表示跟随连接配置的预设
+        maxTokens: 0,
+        // 是否附带世界书内容（「角色定义之前/之后」位置的已激活条目）
+        sendWorldbook: false
       }
     },
     // 大香蕉生图模块设置
@@ -8534,40 +8551,37 @@
     saveSettings();
     return true;
   }
+  var ENHANCED_LLM_SOURCES = ["current", "profile"];
   function createDefaultEnhancedModeSettings() {
     return {
       enabled: false,
       secondGenerate: {
-        useProfile: false,
+        llmSource: "current",
+        profileId: "",
         profileName: "",
-        useModel: false,
-        modelName: "",
-        usePreset: false,
-        presetName: "",
-        useWorldbooks: false,
-        worldbooks: []
+        model: "",
+        maxTokens: 0,
+        sendWorldbook: false
       }
     };
   }
   function normalizeEnhancedModeSettings(rawEnhancedMode) {
     const enhanced = _safeObject(rawEnhancedMode);
     const secondGenerate = _safeObject(enhanced.secondGenerate);
-    const normalizedWorldbooks = Array.from(
-      new Set(
-        _safeArray(secondGenerate.worldbooks).map((name) => String(name || "").trim()).filter(Boolean)
-      )
-    );
+    const hasLlmSource = ENHANCED_LLM_SOURCES.includes(secondGenerate.llmSource);
+    const legacyProfileName = !hasLlmSource && secondGenerate.useProfile ? String(secondGenerate.profileName || "").trim() : "";
+    const legacyModel = legacyProfileName && secondGenerate.useModel ? String(secondGenerate.modelName || "").trim() : "";
+    const maxTokens = Math.round(Number(secondGenerate.maxTokens) || 0);
+    const legacySendWorldbook = !(secondGenerate.useWorldbooks && _safeArray(secondGenerate.worldbooks).length === 0);
     return {
       enabled: !!enhanced.enabled,
       secondGenerate: {
-        useProfile: !!secondGenerate.useProfile,
+        llmSource: hasLlmSource ? secondGenerate.llmSource : legacyProfileName ? "profile" : "current",
+        profileId: String(secondGenerate.profileId || "").trim(),
         profileName: String(secondGenerate.profileName || "").trim(),
-        useModel: !!secondGenerate.useModel,
-        modelName: String(secondGenerate.modelName || "").trim(),
-        usePreset: !!secondGenerate.usePreset,
-        presetName: String(secondGenerate.presetName || "").trim(),
-        useWorldbooks: !!secondGenerate.useWorldbooks,
-        worldbooks: normalizedWorldbooks
+        model: secondGenerate.model !== void 0 ? String(secondGenerate.model || "").trim() : legacyModel,
+        maxTokens: Math.max(0, Math.min(maxTokens, 1e6)),
+        sendWorldbook: hasLlmSource ? !!secondGenerate.sendWorldbook : legacySendWorldbook
       }
     };
   }
@@ -8794,25 +8808,25 @@
   var _charEnabledVariableWriteWarned = false;
   function getNestedValueByPath(source, path) {
     if (!source || typeof source !== "object" || !Array.isArray(path) || path.length === 0) return void 0;
-    let current = source;
+    let current2 = source;
     for (const segment of path) {
-      if (!current || typeof current !== "object") return void 0;
-      current = current[segment];
+      if (!current2 || typeof current2 !== "object") return void 0;
+      current2 = current2[segment];
     }
-    return current;
+    return current2;
   }
   function setNestedValueByPath(target, path, value) {
     if (!target || typeof target !== "object" || !Array.isArray(path) || path.length === 0) return;
-    let current = target;
+    let current2 = target;
     for (let i2 = 0; i2 < path.length - 1; i2 += 1) {
       const segment = path[i2];
-      const next = current[segment];
+      const next = current2[segment];
       if (!next || typeof next !== "object" || Array.isArray(next)) {
-        current[segment] = {};
+        current2[segment] = {};
       }
-      current = current[segment];
+      current2 = current2[segment];
     }
-    current[path[path.length - 1]] = value;
+    current2[path[path.length - 1]] = value;
   }
   function readCurrentCharEnabledFromCharacterVariables() {
     try {
@@ -9323,6 +9337,144 @@
     _pendingOptions = v3;
   }
 
+  // src/logic/enhanced-format-store.js
+  var EXTRA_KEY = "galgame_enhanced_format";
+  var RECORD_VERSION = 1;
+  var streamingDraft = null;
+  function normalizeSourceText(text) {
+    return String(text ?? "").replace(/\r\n?/g, "\n").trim();
+  }
+  function hashSourceText(text) {
+    const source = normalizeSourceText(text);
+    let hash = 2166136261;
+    for (let i2 = 0; i2 < source.length; i2++) {
+      hash ^= source.charCodeAt(i2);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `${source.length}_${(hash >>> 0).toString(36)}`;
+  }
+  function getRawChatMessage(ctx, mesId) {
+    const index = Number.parseInt(String(mesId), 10);
+    const chat = ctx?.chat;
+    if (!Array.isArray(chat) || !Number.isInteger(index) || index < 0) return null;
+    return chat[index] || null;
+  }
+  function getCurrentSwipeId(message) {
+    return Number.isInteger(message?.swipe_id) ? message.swipe_id : 0;
+  }
+  function getSwipeText(message, swipeId) {
+    if (!message) return "";
+    if (swipeId === getCurrentSwipeId(message)) return String(message.mes ?? "");
+    return String(message.swipes?.[swipeId] ?? "");
+  }
+  function isValidRecord(record, sourceHash) {
+    return !!record && typeof record === "object" && typeof record.formatted === "string" && record.formatted.length > 0 && record.sourceHash === sourceHash;
+  }
+  function collectRecordCandidates(message, swipeId) {
+    const candidates = [];
+    if (swipeId === getCurrentSwipeId(message)) {
+      candidates.push(message.extra?.[EXTRA_KEY]);
+      candidates.push(message.extra?.extra?.[EXTRA_KEY]);
+    }
+    candidates.push(message.swipe_info?.[swipeId]?.extra?.[EXTRA_KEY]);
+    return candidates;
+  }
+  function getMessageSourceSnapshot(mesId) {
+    const ctx = getTavernContext();
+    const message = getRawChatMessage(ctx, mesId);
+    if (!message) return null;
+    const swipeId = getCurrentSwipeId(message);
+    const text = getSwipeText(message, swipeId);
+    return {
+      mesId: Number.parseInt(String(mesId), 10),
+      swipeId,
+      chatId: typeof ctx?.getCurrentChatId === "function" ? String(ctx.getCurrentChatId() || "") : "",
+      text,
+      sourceHash: hashSourceText(text),
+      role: message.is_user ? "user" : message.extra?.type === "narrator" ? "system" : "assistant"
+    };
+  }
+  function getEnhancedFormatRecord(mesId) {
+    const message = getRawChatMessage(getTavernContext(), mesId);
+    if (!message || message.is_user) return null;
+    const swipeId = getCurrentSwipeId(message);
+    const sourceHash = hashSourceText(getSwipeText(message, swipeId));
+    return collectRecordCandidates(message, swipeId).find((record) => isValidRecord(record, sourceHash)) || null;
+  }
+  function hasStaleEnhancedFormatRecord(mesId) {
+    const message = getRawChatMessage(getTavernContext(), mesId);
+    if (!message || message.is_user) return false;
+    const swipeId = getCurrentSwipeId(message);
+    const sourceHash = hashSourceText(getSwipeText(message, swipeId));
+    const candidates = collectRecordCandidates(message, swipeId).filter((record) => record && typeof record === "object");
+    return candidates.length > 0 && !candidates.some((record) => isValidRecord(record, sourceHash));
+  }
+  function getEnhancedFormattedText(mesId) {
+    const draftText = getStreamingDraftText(mesId);
+    if (draftText) return draftText;
+    return getEnhancedFormatRecord(mesId)?.formatted || null;
+  }
+  async function saveEnhancedFormatRecord(snapshot, formatted, meta3 = {}) {
+    const ctx = getTavernContext();
+    if (!ctx || !snapshot) return false;
+    const currentChatId = typeof ctx.getCurrentChatId === "function" ? String(ctx.getCurrentChatId() || "") : "";
+    if (snapshot.chatId && currentChatId !== snapshot.chatId) {
+      console.warn(`[${SCRIPT_NAME}] 加强模式: 聊天已切换，丢弃楼层 ${snapshot.mesId} 的格式化结果`);
+      return false;
+    }
+    const message = getRawChatMessage(ctx, snapshot.mesId);
+    if (!message) return false;
+    if (hashSourceText(getSwipeText(message, snapshot.swipeId)) !== snapshot.sourceHash) {
+      console.warn(`[${SCRIPT_NAME}] 加强模式: 楼层 ${snapshot.mesId} swipe[${snapshot.swipeId}] 原文已变化，丢弃格式化结果`);
+      return false;
+    }
+    const record = {
+      version: RECORD_VERSION,
+      sourceHash: snapshot.sourceHash,
+      formatted: String(formatted || ""),
+      generatedAt: Date.now(),
+      ...meta3
+    };
+    if (snapshot.swipeId === getCurrentSwipeId(message)) {
+      if (!message.extra || typeof message.extra !== "object") message.extra = {};
+      message.extra[EXTRA_KEY] = record;
+    }
+    const swipeInfo = Array.isArray(message.swipe_info) ? message.swipe_info[snapshot.swipeId] : null;
+    if (swipeInfo && typeof swipeInfo === "object") {
+      if (!swipeInfo.extra || typeof swipeInfo.extra !== "object") swipeInfo.extra = {};
+      swipeInfo.extra[EXTRA_KEY] = { ...record };
+    }
+    if (typeof ctx.saveChat === "function") {
+      await ctx.saveChat();
+    }
+    return true;
+  }
+  function setStreamingDraft(snapshot, text) {
+    if (!snapshot) return;
+    streamingDraft = {
+      chatId: snapshot.chatId,
+      mesId: String(snapshot.mesId),
+      swipeId: snapshot.swipeId,
+      text: String(text || "")
+    };
+  }
+  function clearStreamingDraft(mesId) {
+    if (!streamingDraft) return;
+    if (mesId === void 0 || streamingDraft.mesId === String(mesId)) {
+      streamingDraft = null;
+    }
+  }
+  function getStreamingDraftText(mesId) {
+    if (!streamingDraft || streamingDraft.mesId !== String(mesId) || !streamingDraft.text) return null;
+    const ctx = getTavernContext();
+    if (streamingDraft.chatId && typeof ctx?.getCurrentChatId === "function" && String(ctx.getCurrentChatId() || "") !== streamingDraft.chatId) {
+      return null;
+    }
+    const message = getRawChatMessage(ctx, mesId);
+    if (!message || getCurrentSwipeId(message) !== streamingDraft.swipeId) return null;
+    return streamingDraft.text;
+  }
+
   // src/utils/html.js
   function decodeHtml(html) {
     const txt = document.createElement("textarea");
@@ -9360,6 +9512,14 @@
     return null;
   }
   function getFormattedSwipeContent(mesId) {
+    try {
+      const enhancedText = getEnhancedFormattedText(mesId);
+      if (enhancedText) {
+        return enhancedText.replace(RE_THINK_CLOSED, "").replace(RE_THINK_UNCLOSED, "");
+      }
+    } catch (e2) {
+      console.warn(`[${SCRIPT_NAME}] 获取加强模式格式化文本失败:`, e2);
+    }
     try {
       const messages = getChatMessages(parseInt(mesId, 10), { include_swipes: true });
       if (!messages || !messages[0]) return null;
@@ -10286,6 +10446,9 @@
     }
     return null;
   }
+  function getSegmentCharacterId(segment) {
+    return String(segment?.spriteCharacter || segment?.speaker || "").trim();
+  }
 
   // src/db/live2d-models.js
   function normalizeCharacterIdKey(characterId) {
@@ -10417,6 +10580,687 @@
       }
     });
   }
+
+  // src/stage/ambient-light.js
+  var topDoc = topWindow.document;
+  var FILTER_SVG_ID = "gal-ambient-filter-defs";
+  var FILTER_ID = "gal-ambient-tint";
+  var TWEEN_MS = 900;
+  var SAMPLE_W = 32;
+  var SAMPLE_H = 18;
+  var NEUTRAL = { r: 1, g: 1, b: 1, bri: 1, sat: 1, rimA: 0, rimR: 255, rimG: 255, rimB: 255, rimX: 0 };
+  var current = { ...NEUTRAL };
+  var tweenId = 0;
+  var sampleSerial = 0;
+  var lastSource = null;
+  function isAmbientEnabled() {
+    return getSettings()?.stageAmbientLight !== false;
+  }
+  function ensureFilterDefs() {
+    let svg = topDoc.getElementById(FILTER_SVG_ID);
+    if (svg) return svg.querySelector("feColorMatrix");
+    svg = topDoc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("id", FILTER_SVG_ID);
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("width", "0");
+    svg.setAttribute("height", "0");
+    svg.style.cssText = "position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;";
+    svg.innerHTML = `<filter id="${FILTER_ID}" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0"/></filter>`;
+    (topDoc.body || topDoc.documentElement).appendChild(svg);
+    return svg.querySelector("feColorMatrix");
+  }
+  function sampleImagePixels(img) {
+    const canvas = topDoc.createElement("canvas");
+    canvas.width = SAMPLE_W;
+    canvas.height = SAMPLE_H;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, SAMPLE_W, SAMPLE_H);
+    const data4 = ctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H).data;
+    const pixels = [];
+    let sumR = 0, sumG = 0, sumB = 0, sumL = 0;
+    for (let i2 = 0; i2 < data4.length; i2 += 4) {
+      const r2 = data4[i2], g2 = data4[i2 + 1], b2 = data4[i2 + 2];
+      const l2 = (0.2126 * r2 + 0.7152 * g2 + 0.0722 * b2) / 255;
+      sumR += r2;
+      sumG += g2;
+      sumB += b2;
+      sumL += l2;
+      const idx = i2 / 4;
+      pixels.push({ r: r2, g: g2, b: b2, l: l2, x: idx % SAMPLE_W / (SAMPLE_W - 1), y: Math.floor(idx / SAMPLE_W) / (SAMPLE_H - 1) });
+    }
+    const n2 = pixels.length;
+    pixels.sort((a2, b2) => b2.l - a2.l);
+    const top = pixels.slice(0, Math.max(1, Math.floor(n2 * 0.1)));
+    let tr = 0, tg = 0, tb = 0, tl = 0, tx = 0, ty = 0;
+    for (const p3 of top) {
+      tr += p3.r;
+      tg += p3.g;
+      tb += p3.b;
+      tl += p3.l;
+      tx += p3.x;
+      ty += p3.y;
+    }
+    const m2 = top.length;
+    return {
+      avg: [sumR / n2, sumG / n2, sumB / n2],
+      lum: sumL / n2,
+      hi: [tr / m2, tg / m2, tb / m2],
+      hiLum: tl / m2,
+      hx: tx / m2,
+      hy: ty / m2
+    };
+  }
+  var noCorsOrigins = /* @__PURE__ */ new Set();
+  function getOrigin(url) {
+    try {
+      return new URL(url, topWindow.location.href).origin;
+    } catch (_2) {
+      return "";
+    }
+  }
+  function loadCorsImage(url) {
+    return new Promise((resolve2) => {
+      const img = new topWindow.Image();
+      img.crossOrigin = "anonymous";
+      const timer = topWindow.setTimeout(() => resolve2(null), 5e3);
+      img.onload = () => {
+        topWindow.clearTimeout(timer);
+        resolve2(img);
+      };
+      img.onerror = () => {
+        topWindow.clearTimeout(timer);
+        resolve2(null);
+      };
+      img.src = url;
+    });
+  }
+  async function sampleBackground(img, url) {
+    try {
+      return sampleImagePixels(img);
+    } catch (_2) {
+      if (!/^https?:/i.test(String(url || ""))) return null;
+      const origin = getOrigin(url);
+      if (!origin || noCorsOrigins.has(origin)) return null;
+      const corsImg = await loadCorsImage(url);
+      if (!corsImg) {
+        noCorsOrigins.add(origin);
+        return null;
+      }
+      try {
+        return sampleImagePixels(corsImg);
+      } catch (_3) {
+        return null;
+      }
+    }
+  }
+  function rgbToHsl(r2, g2, b2) {
+    r2 /= 255;
+    g2 /= 255;
+    b2 /= 255;
+    const max5 = Math.max(r2, g2, b2), min4 = Math.min(r2, g2, b2);
+    const l2 = (max5 + min4) / 2, d2 = max5 - min4;
+    if (!d2) return [0, 0, l2];
+    const s2 = d2 / (1 - Math.abs(2 * l2 - 1));
+    let h2;
+    if (max5 === r2) h2 = (g2 - b2) / d2 % 6;
+    else if (max5 === g2) h2 = (b2 - r2) / d2 + 2;
+    else h2 = (r2 - g2) / d2 + 4;
+    return [(h2 * 60 + 360) % 360, s2, l2];
+  }
+  function hslToRgb(h2, s2, l2) {
+    const c2 = (1 - Math.abs(2 * l2 - 1)) * s2;
+    const x3 = c2 * (1 - Math.abs(h2 / 60 % 2 - 1));
+    const m2 = l2 - c2 / 2;
+    let r2 = 0, g2 = 0, b2 = 0;
+    if (h2 < 60) [r2, g2, b2] = [c2, x3, 0];
+    else if (h2 < 120) [r2, g2, b2] = [x3, c2, 0];
+    else if (h2 < 180) [r2, g2, b2] = [0, c2, x3];
+    else if (h2 < 240) [r2, g2, b2] = [0, x3, c2];
+    else if (h2 < 300) [r2, g2, b2] = [x3, 0, c2];
+    else [r2, g2, b2] = [c2, 0, x3];
+    return [r2 + m2, g2 + m2, b2 + m2];
+  }
+  var clamp = (v3, min4, max5) => Math.max(min4, Math.min(max5, v3));
+  function computeAmbientLighting(stats) {
+    const [h2, s2] = rgbToHsl(...stats.avg);
+    const dark = stats.lum < 0.32;
+    const tint = hslToRgb(h2, Math.min(0.6, s2 * 2.4), dark ? 0.8 : 0.9);
+    const k2 = dark ? 0.95 : 0.7;
+    const hiMax = Math.max(...stats.hi, 1);
+    const rim = stats.hi.map((v3) => clamp(v3 / hiMax * 255 * 1.05 + 20, 0, 255));
+    const rimX = Math.abs(stats.hx - 0.5) < 0.12 ? 0 : stats.hx < 0.5 ? -1 : 1;
+    return {
+      r: 1 - k2 + k2 * tint[0],
+      g: 1 - k2 + k2 * tint[1],
+      b: 1 - k2 + k2 * tint[2],
+      bri: clamp(0.5 + stats.lum * 0.95, 0.66, 1.04),
+      sat: clamp(0.7 + stats.lum * 0.55, 0.74, 1.02),
+      // 轮廓光强度：高光与平均亮度反差越大（夜景灯光、逆光）越明显
+      rimA: clamp(0.2 + (stats.hiLum - stats.lum) * 1.1, 0.2, 0.8) * 0.55,
+      rimR: rim[0],
+      rimG: rim[1],
+      rimB: rim[2],
+      rimX
+    };
+  }
+  function applyLighting($overlay, state2) {
+    const el = $overlay?.[0];
+    if (!el) return;
+    const matrix = ensureFilterDefs();
+    if (matrix) {
+      matrix.setAttribute("values", `${state2.r.toFixed(4)} 0 0 0 0 0 ${state2.g.toFixed(4)} 0 0 0 0 0 ${state2.b.toFixed(4)} 0 0 0 0 0 1 0`);
+    }
+    el.style.setProperty("--gal-amb-bri", state2.bri.toFixed(4));
+    el.style.setProperty("--gal-amb-sat", state2.sat.toFixed(4));
+    el.style.setProperty("--gal-rim-color", `rgba(${Math.round(state2.rimR)}, ${Math.round(state2.rimG)}, ${Math.round(state2.rimB)}, ${state2.rimA.toFixed(3)})`);
+    el.style.setProperty("--gal-rim-x", `${(state2.rimX * 0.25).toFixed(3)}rem`);
+  }
+  function tweenTo($overlay, target, onDone) {
+    $overlay.toggleClass("gal-ambient-lite", getSettings()?.effectsQuality === "mobile");
+    const id2 = ++tweenId;
+    const from = { ...current };
+    const startedAt = topWindow.performance.now();
+    const step3 = (now) => {
+      if (id2 !== tweenId) return;
+      const p3 = Math.min(1, (now - startedAt) / TWEEN_MS);
+      const e2 = 1 - Math.pow(1 - p3, 3);
+      const state2 = {};
+      for (const key of Object.keys(NEUTRAL)) state2[key] = from[key] + (target[key] - from[key]) * e2;
+      current = state2;
+      applyLighting($overlay, state2);
+      if (p3 < 1) topWindow.requestAnimationFrame(step3);
+      else if (onDone) onDone();
+    };
+    topWindow.requestAnimationFrame(step3);
+  }
+  function refreshAmbientLight($overlay) {
+    if (!$overlay || !$overlay.length) return;
+    if (!isAmbientEnabled() || !lastSource) {
+      resetAmbientLight($overlay, { immediate: true });
+      return;
+    }
+    updateAmbientLightFromImage(lastSource.img, lastSource.url, $overlay);
+  }
+  function forgetAmbientSource($overlay) {
+    lastSource = null;
+    resetAmbientLight($overlay);
+  }
+  function resetAmbientLight($overlay, { immediate = false } = {}) {
+    if (!$overlay || !$overlay.length) return;
+    sampleSerial++;
+    if (immediate) {
+      tweenId++;
+      current = { ...NEUTRAL };
+      applyLighting($overlay, current);
+      $overlay.removeClass("gal-ambient-on");
+      return;
+    }
+    tweenTo($overlay, NEUTRAL, () => $overlay.removeClass("gal-ambient-on"));
+  }
+  async function updateAmbientLightFromImage(img, url, $overlay) {
+    if (!$overlay || !$overlay.length) return;
+    lastSource = img ? { img, url } : null;
+    if (!isAmbientEnabled()) {
+      resetAmbientLight($overlay, { immediate: true });
+      return;
+    }
+    const serial = ++sampleSerial;
+    let stats = null;
+    try {
+      stats = await sampleBackground(img, url);
+    } catch (error3) {
+      console.warn(`[${SCRIPT_NAME}] 环境光采样失败:`, error3);
+    }
+    if (serial !== sampleSerial) return;
+    if (!stats) {
+      resetAmbientLight($overlay, { immediate: true });
+      return;
+    }
+    $overlay.addClass("gal-ambient-on");
+    tweenTo($overlay, computeAmbientLighting(stats));
+  }
+  $2(window).on("pagehide", () => {
+    tweenId++;
+    sampleSerial++;
+    lastSource = null;
+    topDoc.getElementById(FILTER_SVG_ID)?.remove();
+    const overlay = topDoc.getElementById("gal-global-overlay");
+    if (overlay) {
+      overlay.classList.remove("gal-ambient-on", "gal-ambient-lite");
+      ["--gal-amb-bri", "--gal-amb-sat", "--gal-rim-color", "--gal-rim-x"].forEach((name) => overlay.style.removeProperty(name));
+    }
+  });
+
+  // src/stage/stage-fx.js
+  function ensureFlashLayer($overlay) {
+    const $container = $overlay.find(".gal-game-container").first();
+    if (!$container.length) return $2();
+    let $flash = $container.children(".gal-stage-flash");
+    if (!$flash.length) {
+      $flash = $2('<div class="gal-stage-flash" aria-hidden="true"></div>');
+      $container.append($flash);
+    }
+    return $flash;
+  }
+  function stageFlash($overlay, { color = "#ffffff", variant = "" } = {}) {
+    const $flash = ensureFlashLayer($overlay);
+    const el = $flash[0];
+    if (!el) return;
+    el.style.setProperty("--gal-flash-color", color);
+    el.classList.remove("is-active", "is-bolt", "is-thunder");
+    void el.offsetWidth;
+    if (variant === "bolt" || variant === "thunder") el.classList.add(`is-${variant}`);
+    el.classList.add("is-active");
+  }
+  var shownBannerIds = /* @__PURE__ */ new Set();
+  function showStageBanner($overlay, { id: id2 = "", kicker = "", title = "", sub = "" } = {}) {
+    if (id2) {
+      if (shownBannerIds.has(id2)) return;
+      shownBannerIds.add(id2);
+    }
+    const $container = $overlay.find(".gal-game-container").first();
+    if (!$container.length || !title) return;
+    $container.children(".gal-stage-banner").remove();
+    const $banner = $2(`
+    <div class="gal-stage-banner" aria-hidden="true">
+      <div class="gal-stage-banner-tag"></div>
+      <div class="gal-stage-banner-body">
+        <div class="gal-stage-banner-sub"></div>
+        <div class="gal-stage-banner-title"></div>
+      </div>
+    </div>`);
+    $banner.find(".gal-stage-banner-tag").text(kicker || "NEW");
+    $banner.find(".gal-stage-banner-sub").text(sub || "GALLERY UNLOCKED");
+    $banner.find(".gal-stage-banner-title").text(title);
+    $container.append($banner);
+    void $banner[0].offsetWidth;
+    $banner.addClass("is-active");
+    setTimeout(() => {
+      $banner.addClass("is-leaving");
+      setTimeout(() => $banner.remove(), 600);
+    }, 4200);
+  }
+  $2(window).on("pagehide", () => {
+    $2("#gal-global-overlay .gal-stage-banner").remove();
+  });
+
+  // src/stage/background.js
+  var DECODE_TIMEOUT_MS = 6e3;
+  var IMAGE_CACHE_LIMIT = 8;
+  var STRIP_COUNT = 7;
+  var BG_TRANSITION_TYPES = ["cinematic", "wipe", "iris", "strips", "dissolve", "black", "flash"];
+  var RANDOM_POOL = ["cinematic", "wipe", "iris", "strips", "dissolve"];
+  var TRANSITION_DURATION = {
+    cinematic: BG_TRANSITION_MS,
+    wipe: 1050,
+    iris: 1100,
+    strips: 1e3,
+    dissolve: 1300,
+    flash: 1200
+  };
+  var topDoc2 = topWindow.document;
+  var wait = (ms3) => new Promise((resolve2) => topWindow.setTimeout(resolve2, ms3));
+  var nextFrame = () => new Promise((resolve2) => topWindow.requestAnimationFrame(() => resolve2()));
+  var imageCache = /* @__PURE__ */ new Map();
+  function preloadBackgroundImage(url, timeoutMs = DECODE_TIMEOUT_MS) {
+    const key = String(url || "");
+    if (!key) return Promise.resolve(null);
+    if (imageCache.has(key)) {
+      const cached = imageCache.get(key);
+      imageCache.delete(key);
+      imageCache.set(key, cached);
+      return cached;
+    }
+    const task = new Promise((resolve2) => {
+      const img = new topWindow.Image();
+      let settled = false;
+      const done = (value) => {
+        if (settled) return;
+        settled = true;
+        topWindow.clearTimeout(timer);
+        resolve2(value);
+      };
+      const timer = topWindow.setTimeout(() => done(null), timeoutMs);
+      img.onload = () => {
+        if (typeof img.decode === "function") img.decode().then(() => done(img), () => done(img));
+        else done(img);
+      };
+      img.onerror = () => done(null);
+      img.src = key;
+    }).then((img) => {
+      if (!img) imageCache.delete(key);
+      return img;
+    });
+    imageCache.set(key, task);
+    while (imageCache.size > IMAGE_CACHE_LIMIT) {
+      imageCache.delete(imageCache.keys().next().value);
+    }
+    return task;
+  }
+  function toCssUrlValue(url) {
+    const safe = String(url || "").replace(/[\r\n]/g, "").replace(/[\\"]/g, "\\$&");
+    return `url("${safe}")`;
+  }
+  function setBgLayerUrl($layer, cssUrlValue) {
+    $layer.each(function() {
+      if (!this || !this.style) return;
+      if (cssUrlValue) this.style.setProperty("--gal-bg-url", cssUrlValue);
+      else this.style.removeProperty("--gal-bg-url");
+    });
+  }
+  function reflow(el) {
+    if (el) void el.offsetHeight;
+  }
+  function withoutTransition(elements, mutate) {
+    const els = elements.filter(Boolean);
+    els.forEach((el) => el.style.setProperty("transition", "none", "important"));
+    mutate();
+    els.forEach(reflow);
+    els.forEach((el) => el.style.removeProperty("transition"));
+  }
+  function prefersReducedMotion() {
+    try {
+      return !!topWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    } catch (_2) {
+      return false;
+    }
+  }
+  function getOverlayOf($bgLayer) {
+    return $bgLayer.closest("#gal-global-overlay");
+  }
+  function supportsLayeredTransition($bgLayer) {
+    return !getOverlayOf($bgLayer).hasClass("gal-bg-avoid-dialog");
+  }
+  function resolveBgTransitionType(requested, $bgLayer) {
+    let type = String(requested || "").trim().toLowerCase();
+    if (!type || type === "auto" || type === "default") {
+      type = String(getSettings()?.bgTransitionStyle || "cinematic").toLowerCase();
+    }
+    if (type === "random") type = RANDOM_POOL[Math.floor(Math.random() * RANDOM_POOL.length)];
+    if (!BG_TRANSITION_TYPES.includes(type)) type = "cinematic";
+    if (prefersReducedMotion()) return "cinematic";
+    if ((type === "strips" || type === "dissolve") && !supportsLayeredTransition($bgLayer)) return "cinematic";
+    return type;
+  }
+  function ensureBackgroundLayers($bgLayer) {
+    if (!$bgLayer || !$bgLayer.length) return { $base: $2(), $front: $2() };
+    let $base = $bgLayer.find(".gal-bg-base");
+    let $front = $bgLayer.find(".gal-bg-front");
+    if (!$base.length) {
+      $bgLayer.prepend('<div class="gal-bg-layer gal-bg-base"></div>');
+      $base = $bgLayer.find(".gal-bg-base");
+    }
+    if (!$front.length) {
+      $bgLayer.append('<div class="gal-bg-layer gal-bg-front"></div>');
+      $front = $bgLayer.find(".gal-bg-front");
+    }
+    return { $base, $front };
+  }
+  function cleanupTransitionArtifacts($bgLayer) {
+    $bgLayer.find(".gal-bg-strips, .gal-bg-dissolve").remove();
+    $bgLayer.removeAttr("data-bg-tr");
+  }
+  function commitToBase($bgLayer, cssUrl) {
+    const { $base, $front } = ensureBackgroundLayers($bgLayer);
+    withoutTransition([$base[0], $front[0]], () => {
+      setBgLayerUrl($base, cssUrl);
+      setBgLayerUrl($front.removeClass("is-active"), "");
+      $bgLayer.removeClass("bg-transitioning");
+      cleanupTransitionArtifacts($bgLayer);
+    });
+  }
+  function clearBackgroundLayers($bgLayer) {
+    const { $base, $front } = ensureBackgroundLayers($bgLayer);
+    $bgLayer.data("bgTransitionToken", `clear_${Date.now()}`);
+    $bgLayer.removeData("bgCurrentUrl");
+    $bgLayer.removeData("bgPendingCommit");
+    withoutTransition([$base[0], $front[0]], () => {
+      $bgLayer.removeClass("bg-transitioning");
+      cleanupTransitionArtifacts($bgLayer);
+      setBgLayerUrl($base, "");
+      setBgLayerUrl($front.removeClass("is-active"), "");
+    });
+    hideCurtain(getOverlayOf($bgLayer), true);
+    forgetAmbientSource(getOverlayOf($bgLayer));
+  }
+  async function runLayerTransition($bgLayer, type, cssUrl, isAlive) {
+    const { $front } = ensureBackgroundLayers($bgLayer);
+    const front = $front[0];
+    withoutTransition([front], () => {
+      $bgLayer.removeClass("bg-transitioning");
+      $bgLayer.attr("data-bg-tr", type);
+      $front.removeClass("is-active");
+      setBgLayerUrl($front, cssUrl);
+      if (type === "iris") front.style.setProperty("--gal-iris-x", getIrisOrigin($bgLayer));
+    });
+    if (type === "flash") stageFlash(getOverlayOf($bgLayer));
+    $bgLayer.addClass("bg-transitioning");
+    $front.addClass("is-active");
+    await wait(TRANSITION_DURATION[type] || BG_TRANSITION_MS);
+    return isAlive();
+  }
+  function getIrisOrigin($bgLayer) {
+    const $speaker = getOverlayOf($bgLayer).find(".gal-char-container.speaking").first();
+    const host = $bgLayer[0];
+    if (!$speaker.length || !host) return "50%";
+    const hostRect = host.getBoundingClientRect();
+    const rect = $speaker[0].getBoundingClientRect();
+    if (!hostRect.width) return "50%";
+    const ratio = (rect.left + rect.width / 2 - hostRect.left) / hostRect.width;
+    return `${Math.round(Math.max(0.15, Math.min(0.85, ratio)) * 100)}%`;
+  }
+  async function runStripsTransition($bgLayer, cssUrl, isAlive) {
+    const box = topDoc2.createElement("div");
+    box.className = "gal-bg-strips";
+    const slant = 3.5;
+    for (let i2 = 0; i2 < STRIP_COUNT; i2++) {
+      const y0 = i2 === 0 ? -10 : i2 / STRIP_COUNT * 100;
+      const y1 = i2 === STRIP_COUNT - 1 ? 110 : (i2 + 1) / STRIP_COUNT * 100 + 0.4;
+      const strip = topDoc2.createElement("div");
+      strip.className = "gal-bg-strip";
+      strip.style.setProperty("--gal-bg-url", cssUrl);
+      strip.style.setProperty("--gal-strip-from", `${i2 % 2 ? "" : "-"}115%`);
+      strip.style.setProperty("--gal-strip-delay", `${i2 * 45}ms`);
+      strip.style.clipPath = `polygon(-5% ${y0 + slant}%, 105% ${y0 - slant}%, 105% ${y1 - slant}%, -5% ${y1 + slant}%)`;
+      box.appendChild(strip);
+    }
+    $bgLayer.attr("data-bg-tr", "strips");
+    $bgLayer[0].appendChild(box);
+    reflow(box);
+    box.classList.add("is-active");
+    await wait(TRANSITION_DURATION.strips);
+    return isAlive();
+  }
+  var RULE_W = 192;
+  var RULE_H = 108;
+  var ruleCache = null;
+  function getDissolveRule() {
+    if (ruleCache) return ruleCache;
+    const hash = (x3, y3) => {
+      const s2 = Math.sin(x3 * 127.1 + y3 * 311.7) * 43758.5453;
+      return s2 - Math.floor(s2);
+    };
+    const noise = (x3, y3) => {
+      const xi = Math.floor(x3), yi = Math.floor(y3), xf = x3 - xi, yf = y3 - yi;
+      const u2 = xf * xf * (3 - 2 * xf), v3 = yf * yf * (3 - 2 * yf);
+      const a2 = hash(xi, yi), b2 = hash(xi + 1, yi), c2 = hash(xi, yi + 1), d2 = hash(xi + 1, yi + 1);
+      return a2 + (b2 - a2) * u2 + (c2 - a2) * v3 + (a2 - b2 - c2 + d2) * u2 * v3;
+    };
+    const rule = new Float32Array(RULE_W * RULE_H);
+    for (let y3 = 0; y3 < RULE_H; y3++) {
+      for (let x3 = 0; x3 < RULE_W; x3++) {
+        let f2 = 0, amp = 0.5, freq = 1 / 24;
+        for (let o2 = 0; o2 < 4; o2++) {
+          f2 += amp * noise(x3 * freq, y3 * freq);
+          amp *= 0.5;
+          freq *= 2;
+        }
+        rule[y3 * RULE_W + x3] = 0.62 * f2 + 0.38 * (x3 / RULE_W);
+      }
+    }
+    ruleCache = rule;
+    return rule;
+  }
+  function computeFitRect(img, width2, height2, $bgLayer) {
+    const style3 = topWindow.getComputedStyle($bgLayer.find(".gal-bg-base")[0] || $bgLayer[0]);
+    const fit2 = String(style3.getPropertyValue("--gal-bg-fit") || "cover").trim();
+    const pos = String(style3.getPropertyValue("--gal-bg-pos") || "center").trim();
+    const scale2 = fit2 === "contain" ? Math.min(width2 / img.naturalWidth, height2 / img.naturalHeight) : Math.max(width2 / img.naturalWidth, height2 / img.naturalHeight);
+    const w2 = img.naturalWidth * scale2;
+    const h2 = img.naturalHeight * scale2;
+    const y3 = pos.includes("top") ? 0 : (height2 - h2) / 2;
+    return { x: (width2 - w2) / 2, y: y3, w: w2, h: h2 };
+  }
+  async function runDissolveTransition($bgLayer, img, cssUrl, isAlive) {
+    const host = $bgLayer[0];
+    const dpr = Math.min(1.5, topWindow.devicePixelRatio || 1);
+    const width2 = Math.max(1, Math.round(host.clientWidth * dpr));
+    const height2 = Math.max(1, Math.round(host.clientHeight * dpr));
+    const canvas = topDoc2.createElement("canvas");
+    canvas.className = "gal-bg-dissolve";
+    canvas.width = width2;
+    canvas.height = height2;
+    const ctx = canvas.getContext("2d");
+    const mask = topDoc2.createElement("canvas");
+    const edge = topDoc2.createElement("canvas");
+    mask.width = edge.width = RULE_W;
+    mask.height = edge.height = RULE_H;
+    const mctx = mask.getContext("2d");
+    const ectx = edge.getContext("2d");
+    if (!ctx || !mctx || !ectx) return runLayerTransition($bgLayer, "cinematic", cssUrl, isAlive);
+    const maskData = mctx.createImageData(RULE_W, RULE_H);
+    const edgeData = ectx.createImageData(RULE_W, RULE_H);
+    const rule = getDissolveRule();
+    const rect = computeFitRect(img, width2, height2, $bgLayer);
+    const soft = 0.14;
+    const duration = TRANSITION_DURATION.dissolve;
+    $bgLayer.attr("data-bg-tr", "dissolve");
+    host.appendChild(canvas);
+    const startedAt = topWindow.performance.now();
+    while (true) {
+      if (!isAlive()) return false;
+      const p3 = Math.min(1, (topWindow.performance.now() - startedAt) / duration);
+      const e2 = p3 < 0.5 ? 2 * p3 * p3 : 1 - Math.pow(-2 * p3 + 2, 2) / 2;
+      for (let i2 = 0; i2 < rule.length; i2++) {
+        const a2 = Math.max(0, Math.min(1, (e2 * (1 + soft) - rule[i2]) / soft));
+        maskData.data[i2 * 4 + 3] = a2 * 255;
+        const rim = a2 * (1 - a2) * 4;
+        edgeData.data[i2 * 4] = 170;
+        edgeData.data[i2 * 4 + 1] = 240;
+        edgeData.data[i2 * 4 + 2] = 255;
+        edgeData.data[i2 * 4 + 3] = rim * 190;
+      }
+      mctx.putImageData(maskData, 0, 0);
+      ectx.putImageData(edgeData, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.clearRect(0, 0, width2, height2);
+      ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h);
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.drawImage(mask, 0, 0, width2, height2);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(edge, 0, 0, width2, height2);
+      if (p3 >= 1) break;
+      await nextFrame();
+    }
+    return isAlive();
+  }
+  function ensureCurtain($overlay) {
+    const $container = $overlay.find(".gal-game-container").first();
+    if (!$container.length) return $2();
+    let $curtain = $container.children(".gal-stage-curtain");
+    if (!$curtain.length) {
+      $curtain = $2(`
+      <div class="gal-stage-curtain" aria-hidden="true">
+        <div class="gal-stage-curtain-card">
+          <div class="gal-stage-curtain-kicker"></div>
+          <div class="gal-stage-curtain-title"></div>
+          <div class="gal-stage-curtain-line"></div>
+        </div>
+      </div>`);
+      $container.append($curtain);
+    }
+    return $curtain;
+  }
+  function hideCurtain($overlay, immediate = false) {
+    const $curtain = $overlay.find(".gal-stage-curtain");
+    if (!$curtain.length) return;
+    if (immediate) {
+      withoutTransition([$curtain[0]], () => $curtain.removeClass("is-active"));
+    } else {
+      $curtain.removeClass("is-active");
+    }
+  }
+  async function runBlackTransition($bgLayer, cssUrl, options2, isAlive) {
+    const $overlay = getOverlayOf($bgLayer);
+    const $curtain = ensureCurtain($overlay);
+    if (!$curtain.length) return runLayerTransition($bgLayer, "cinematic", cssUrl, isAlive);
+    const title = String(options2.scene || "").trim();
+    const timeText = String($overlay.find("#gal-time-text").first().text() || "").trim();
+    $curtain.find(".gal-stage-curtain-title").text(title);
+    $curtain.find(".gal-stage-curtain-kicker").text(timeText && !/^(未知|--)/.test(timeText) ? timeText : "SCENE");
+    $curtain.toggleClass("has-title", !!title);
+    reflow($curtain[0]);
+    $curtain.addClass("is-active");
+    await wait(650);
+    if (!isAlive()) {
+      hideCurtain($overlay);
+      return false;
+    }
+    commitToBase($bgLayer, cssUrl);
+    await wait(title ? 1100 : 450);
+    hideCurtain($overlay);
+    return isAlive();
+  }
+  function setBackgroundWithTransition($bgLayer, bgUrl, options2 = {}) {
+    if (!$bgLayer || !$bgLayer.length) return Promise.resolve(false);
+    ensureBackgroundLayers($bgLayer);
+    if ($bgLayer.data("bgCurrentUrl") === bgUrl) return Promise.resolve(false);
+    const hadImage = !!$bgLayer.data("bgCurrentUrl");
+    $bgLayer.data("bgCurrentUrl", bgUrl);
+    $bgLayer.find(".gal-gen-indicator").remove();
+    const pendingCommit = $bgLayer.data("bgPendingCommit");
+    if (pendingCommit) {
+      commitToBase($bgLayer, pendingCommit);
+      hideCurtain(getOverlayOf($bgLayer), true);
+    }
+    const token2 = `${Date.now()}_${Math.random()}`;
+    $bgLayer.data("bgTransitionToken", token2);
+    const isAlive = () => $bgLayer.data("bgTransitionToken") === token2;
+    const cssUrl = toCssUrlValue(bgUrl);
+    return preloadBackgroundImage(bgUrl).then(async (img) => {
+      if (!isAlive()) return false;
+      if (img) updateAmbientLightFromImage(img, bgUrl, getOverlayOf($bgLayer));
+      let type = hadImage ? resolveBgTransitionType(options2.transition, $bgLayer) : options2.transition === "flash" ? "flash" : "cinematic";
+      if (type === "dissolve" && !img) type = "wipe";
+      if (type === "flash" && options2.banner) showStageBanner(getOverlayOf($bgLayer), options2.banner);
+      $bgLayer.data("bgPendingCommit", cssUrl);
+      let alive;
+      try {
+        if (type === "black") alive = await runBlackTransition($bgLayer, cssUrl, options2, isAlive);
+        else if (type === "strips") alive = await runStripsTransition($bgLayer, cssUrl, isAlive);
+        else if (type === "dissolve") alive = await runDissolveTransition($bgLayer, img, cssUrl, isAlive);
+        else alive = await runLayerTransition($bgLayer, type, cssUrl, isAlive);
+      } catch (error3) {
+        console.warn(`[${SCRIPT_NAME}] 背景转场异常，直接切换:`, error3);
+        alive = isAlive();
+      }
+      if (!alive) return false;
+      $bgLayer.removeData("bgPendingCommit");
+      commitToBase($bgLayer, cssUrl);
+      return true;
+    });
+  }
+  $2(window).on("pagehide", () => {
+    const $bgLayer = $2("#gal-global-overlay .gal-layer-bg");
+    if (!$bgLayer.length) return;
+    $bgLayer.data("bgTransitionToken", `unload_${Date.now()}`);
+    const pendingCommit = $bgLayer.data("bgPendingCommit");
+    if (pendingCommit) commitToBase($bgLayer, pendingCommit);
+    else cleanupTransitionArtifacts($bgLayer);
+    $bgLayer.removeData("bgPendingCommit");
+    hideCurtain(getOverlayOf($bgLayer), true);
+  });
 
   // src/db/image-packs.js
   function buildSpritePackScopedId(characterId, expression, packId) {
@@ -10809,59 +11653,6 @@
       return false;
     }
   }
-  function toCssUrlValue(url) {
-    const safe = String(url || "").replace(/[\r\n]/g, "").replace(/[\\"]/g, "\\$&");
-    return `url("${safe}")`;
-  }
-  function setBgLayerUrl($layer, cssUrlValue) {
-    $layer.each(function() {
-      if (!this || !this.style) return;
-      if (cssUrlValue) this.style.setProperty("--gal-bg-url", cssUrlValue);
-      else this.style.removeProperty("--gal-bg-url");
-    });
-  }
-  function ensureBackgroundLayers($bgLayer) {
-    if (!$bgLayer || !$bgLayer.length) return { $base: $2(), $front: $2() };
-    let $base = $bgLayer.find(".gal-bg-base");
-    let $front = $bgLayer.find(".gal-bg-front");
-    if (!$base.length) {
-      $bgLayer.prepend('<div class="gal-bg-layer gal-bg-base"></div>');
-      $base = $bgLayer.find(".gal-bg-base");
-    }
-    if (!$front.length) {
-      $bgLayer.append('<div class="gal-bg-layer gal-bg-front"></div>');
-      $front = $bgLayer.find(".gal-bg-front");
-    }
-    return { $base, $front };
-  }
-  function clearBackgroundLayers($bgLayer) {
-    const { $base, $front } = ensureBackgroundLayers($bgLayer);
-    $bgLayer.removeClass("bg-transitioning");
-    $bgLayer.removeData("bgCurrentUrl");
-    setBgLayerUrl($base, "");
-    setBgLayerUrl($front.removeClass("is-active"), "");
-  }
-  function setBackgroundWithTransition($bgLayer, bgUrl) {
-    const { $base, $front } = ensureBackgroundLayers($bgLayer);
-    if ($bgLayer.data("bgCurrentUrl") === bgUrl) return;
-    $bgLayer.data("bgCurrentUrl", bgUrl);
-    $bgLayer.find(".gal-gen-indicator").remove();
-    const cssUrl = toCssUrlValue(bgUrl);
-    setBgLayerUrl($front.removeClass("is-active"), cssUrl);
-    if ($front[0]) void $front[0].offsetHeight;
-    const token2 = `${Date.now()}_${Math.random()}`;
-    $bgLayer.data("bgTransitionToken", token2);
-    $bgLayer.removeClass("bg-transitioning");
-    if ($bgLayer[0]) void $bgLayer[0].offsetHeight;
-    $bgLayer.addClass("bg-transitioning");
-    $front.addClass("is-active");
-    setTimeout(() => {
-      if ($bgLayer.data("bgTransitionToken") !== token2) return;
-      setBgLayerUrl($base, cssUrl);
-      setBgLayerUrl($front.removeClass("is-active"), "");
-      $bgLayer.removeClass("bg-transitioning");
-    }, BG_TRANSITION_MS);
-  }
 
   // src/db/sprites.js
   var SPRITE_ID_SEPARATOR = "::";
@@ -11215,10 +12006,10 @@
     const cache3 = getSpecialCgCache();
     const key = String(cgId || "").trim();
     if (!key || !cache3.has(key)) return;
-    const current = cache3.get(key);
-    if (typeof current === "string" && current.startsWith("blob:")) {
+    const current2 = cache3.get(key);
+    if (typeof current2 === "string" && current2.startsWith("blob:")) {
       try {
-        (topWindow.URL || URL).revokeObjectURL(current);
+        (topWindow.URL || URL).revokeObjectURL(current2);
       } catch (error3) {
         console.warn(`[${SCRIPT_NAME}] 撤销特殊CG缓存失败:`, error3);
       }
@@ -12682,21 +13473,21 @@ ${ssml}`;
     const stack = [String(baseDir || "").trim()];
     const visited = /* @__PURE__ */ new Set();
     while (stack.length > 0) {
-      const current = String(stack.pop() || "").trim();
-      if (!current) continue;
-      const currentKey = _normalizePathSep(current).toLowerCase();
+      const current2 = String(stack.pop() || "").trim();
+      if (!current2) continue;
+      const currentKey = _normalizePathSep(current2).toLowerCase();
       if (visited.has(currentKey)) continue;
       visited.add(currentKey);
       let entries = [];
       try {
-        entries = await fsp.readdir(current, { withFileTypes: true });
+        entries = await fsp.readdir(current2, { withFileTypes: true });
       } catch (e2) {
         continue;
       }
       for (const entry of entries) {
         const name = String(entry?.name || "").trim();
         if (!name) continue;
-        const full = pathModule.join(current, name);
+        const full = pathModule.join(current2, name);
         if (entry?.isDirectory?.()) {
           stack.push(full);
           continue;
@@ -12822,8 +13613,8 @@ ${ssml}`;
         added += 1;
         return;
       }
-      const current = next[index];
-      const currentText = JSON.stringify(current || {});
+      const current2 = next[index];
+      const currentText = JSON.stringify(current2 || {});
       const incomingText = JSON.stringify(incoming || {});
       if (currentText === incomingText) return;
       next[index] = incoming;
@@ -13440,6 +14231,249 @@ ${ssml}`;
     return true;
   }
 
+  // src/stage/camera.js
+  var PARALLAX = { bg: 1.1, char: 1.6, fxBack: 1.4, fxFront: 2.8 };
+  var PUSH_X = 1;
+  var PUSH_ZOOM = 0.02;
+  var PARALLAX_LERP = 0.07;
+  var PUSH_LERP = 0.035;
+  var SETTLE_EPS = 5e-4;
+  var state = {
+    tx: 0,
+    ty: 0,
+    x: 0,
+    y: 0,
+    pushTarget: 0,
+    push: 0,
+    zoomTarget: 1,
+    zoom: 1,
+    shakeStart: 0,
+    shakeUntil: 0,
+    shakePower: 0,
+    raf: 0,
+    inputsBound: false,
+    gyroBase: null,
+    styled: false
+  };
+  function prefersReducedMotion2() {
+    try {
+      return !!topWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    } catch (_2) {
+      return false;
+    }
+  }
+  function getOverlayEl() {
+    return topWindow.document.getElementById("gal-global-overlay");
+  }
+  function getCameraConfig() {
+    const settings = getSettings() || {};
+    const reduced = prefersReducedMotion2();
+    const coverMode = (settings.bgFillMode || "cover") === "cover";
+    return {
+      drift: !reduced && coverMode && settings.stageCameraDrift !== false,
+      parallax: !reduced && coverMode && settings.stageParallax !== false,
+      push: !reduced && coverMode && settings.stageSpeakerPush !== false,
+      shake: !reduced
+    };
+  }
+  function isOverlayActive(overlay) {
+    return !!overlay && overlay.classList.contains("active");
+  }
+  function getLayers(overlay) {
+    return {
+      container: overlay.querySelector(".gal-game-container"),
+      bg: overlay.querySelector(".gal-layer-bg"),
+      char: overlay.querySelector(".gal-layer-character"),
+      fxBack: overlay.querySelector(".gal-layer-effect-bg"),
+      fxFront: overlay.querySelector(".gal-layer-effect-fg")
+    };
+  }
+  function clearInlineCamera(overlay) {
+    if (!overlay) return;
+    const layers = getLayers(overlay);
+    [layers.bg, layers.char, layers.fxBack, layers.fxFront, layers.container].forEach((el) => {
+      if (!el) return;
+      el.style.removeProperty("translate");
+      el.style.removeProperty("scale");
+    });
+    state.styled = false;
+  }
+  var pct = (v3) => `${v3.toFixed(3)}%`;
+  function writeLayers(overlay, shakeX, shakeY) {
+    const layers = getLayers(overlay);
+    const { x: x3, y: y3, push: push3, zoom: zoom2 } = state;
+    if (layers.bg) layers.bg.style.translate = `${pct(-x3 * PARALLAX.bg + push3 * 0.45)} ${pct(-y3 * PARALLAX.bg * 0.8)}`;
+    if (layers.char) {
+      layers.char.style.translate = `${pct(-x3 * PARALLAX.char + push3)} ${pct(-y3 * PARALLAX.char * 0.5)}`;
+      layers.char.style.scale = zoom2.toFixed(4);
+    }
+    if (layers.fxBack) layers.fxBack.style.translate = `${pct(-x3 * PARALLAX.fxBack)} ${pct(-y3 * PARALLAX.fxBack * 0.7)}`;
+    if (layers.fxFront) layers.fxFront.style.translate = `${pct(-x3 * PARALLAX.fxFront + push3 * 1.4)} ${pct(-y3 * PARALLAX.fxFront * 0.7)}`;
+    if (layers.container) {
+      if (shakeX || shakeY) layers.container.style.translate = `${shakeX.toFixed(2)}px ${shakeY.toFixed(2)}px`;
+      else layers.container.style.removeProperty("translate");
+    }
+    const styledCard = overlay.querySelector(".gal-styled-stage.show .gal-styled-stage-content");
+    if (styledCard) {
+      styledCard.style.setProperty("--par-x", (x3 * 6).toFixed(2));
+      styledCard.style.setProperty("--par-y", (y3 * 4).toFixed(2));
+    }
+    state.styled = true;
+  }
+  function frame(now) {
+    state.raf = 0;
+    const overlay = getOverlayEl();
+    if (!isOverlayActive(overlay)) return;
+    const cfg = getCameraConfig();
+    const camOn = cfg.parallax || cfg.push;
+    const tx = cfg.parallax ? state.tx : 0;
+    const ty = cfg.parallax ? state.ty : 0;
+    state.x += (tx - state.x) * PARALLAX_LERP;
+    state.y += (ty - state.y) * PARALLAX_LERP;
+    state.push += ((cfg.push ? state.pushTarget : 0) - state.push) * PUSH_LERP;
+    state.zoom += ((cfg.push ? state.zoomTarget : 1) - state.zoom) * PUSH_LERP;
+    let shakeX = 0;
+    let shakeY = 0;
+    const shaking = cfg.shake && now < state.shakeUntil;
+    if (shaking) {
+      const t2 = (now - state.shakeStart) / 1e3;
+      const decay = Math.exp(-t2 * 6.5);
+      const container2 = overlay.querySelector(".gal-game-container");
+      const amp = (container2?.clientWidth || 800) * 0.012 * state.shakePower * decay;
+      shakeX = amp * Math.sin(t2 * 58);
+      shakeY = amp * 0.6 * Math.cos(t2 * 47);
+    }
+    if (camOn || shaking) writeLayers(overlay, shakeX, shakeY);
+    else if (state.styled) clearInlineCamera(overlay);
+    const settled = Math.abs(tx - state.x) < SETTLE_EPS && Math.abs(ty - state.y) < SETTLE_EPS && Math.abs((cfg.push ? state.pushTarget : 0) - state.push) < SETTLE_EPS && Math.abs((cfg.push ? state.zoomTarget : 1) - state.zoom) < SETTLE_EPS / 10 && !shaking;
+    if (!settled) {
+      state.raf = topWindow.requestAnimationFrame(frame);
+    } else if (!camOn && state.styled) {
+      clearInlineCamera(overlay);
+    } else if (camOn) {
+      writeLayers(overlay, 0, 0);
+    }
+  }
+  function kick() {
+    if (!state.raf) state.raf = topWindow.requestAnimationFrame(frame);
+  }
+  function onPointerMove(event3) {
+    if (event3.pointerType && event3.pointerType !== "mouse") return;
+    const overlay = getOverlayEl();
+    if (!isOverlayActive(overlay) || !getCameraConfig().parallax) return;
+    const container2 = overlay.querySelector(".gal-game-container");
+    if (!container2) return;
+    const rect = container2.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const inside = event3.clientX >= rect.left && event3.clientX <= rect.right && event3.clientY >= rect.top && event3.clientY <= rect.bottom;
+    if (inside) {
+      state.tx = Math.max(-1, Math.min(1, ((event3.clientX - rect.left) / rect.width - 0.5) * 2));
+      state.ty = Math.max(-1, Math.min(1, ((event3.clientY - rect.top) / rect.height - 0.5) * 2));
+    } else {
+      state.tx = 0;
+      state.ty = 0;
+    }
+    kick();
+  }
+  function onDeviceOrientation(event3) {
+    if (event3.gamma == null || event3.beta == null) return;
+    const overlay = getOverlayEl();
+    if (!isOverlayActive(overlay) || !getCameraConfig().parallax) return;
+    if (!state.gyroBase) state.gyroBase = { gamma: event3.gamma, beta: event3.beta };
+    state.gyroBase.gamma += (event3.gamma - state.gyroBase.gamma) * 4e-3;
+    state.gyroBase.beta += (event3.beta - state.gyroBase.beta) * 4e-3;
+    state.tx = Math.max(-1, Math.min(1, (event3.gamma - state.gyroBase.gamma) / 18));
+    state.ty = Math.max(-1, Math.min(1, (event3.beta - state.gyroBase.beta) / 18));
+    kick();
+  }
+  function bindInputs() {
+    if (state.inputsBound) return;
+    state.inputsBound = true;
+    topWindow.document.addEventListener("pointermove", onPointerMove, { passive: true });
+    let coarse = false;
+    try {
+      coarse = !!topWindow.matchMedia?.("(pointer: coarse)").matches;
+    } catch (_2) {
+    }
+    if (coarse) topWindow.addEventListener("deviceorientation", onDeviceOrientation, { passive: true });
+  }
+  function unbindInputs() {
+    if (!state.inputsBound) return;
+    state.inputsBound = false;
+    topWindow.document.removeEventListener("pointermove", onPointerMove);
+    topWindow.removeEventListener("deviceorientation", onDeviceOrientation);
+  }
+  function destroyCamera() {
+    unbindInputs();
+    if (state.raf) topWindow.cancelAnimationFrame(state.raf);
+    state.raf = 0;
+    state.shakeUntil = 0;
+    const overlay = getOverlayEl();
+    clearInlineCamera(overlay);
+    overlay?.classList.remove("gal-cam-on", "gal-cam-drift");
+  }
+  $2(window).on("pagehide", destroyCamera);
+  function applyCameraSettings() {
+    const overlay = getOverlayEl();
+    if (!overlay) return;
+    const cfg = getCameraConfig();
+    const camOn = cfg.drift || cfg.parallax || cfg.push;
+    overlay.classList.toggle("gal-cam-on", camOn);
+    overlay.classList.toggle("gal-cam-drift", cfg.drift);
+    bindInputs();
+    if (!cfg.parallax) {
+      state.tx = 0;
+      state.ty = 0;
+    }
+    if (!camOn) {
+      state.x = state.y = state.push = 0;
+      state.zoom = 1;
+      clearInlineCamera(overlay);
+      return;
+    }
+    requestCameraFocus();
+    kick();
+  }
+  function requestCameraFocus() {
+    topWindow.requestAnimationFrame(() => {
+      const overlay = getOverlayEl();
+      if (!isOverlayActive(overlay) || !getCameraConfig().push) {
+        state.pushTarget = 0;
+        state.zoomTarget = 1;
+        kick();
+        return;
+      }
+      const container2 = overlay.querySelector(".gal-game-container");
+      const speaker = overlay.querySelector(".gal-layer-character .gal-char-container.speaking");
+      if (!container2 || !speaker) {
+        state.pushTarget = 0;
+        state.zoomTarget = 1;
+      } else {
+        const cRect = container2.getBoundingClientRect();
+        const sRect = speaker.getBoundingClientRect();
+        const ratio = cRect.width ? (sRect.left + sRect.width / 2 - cRect.left) / cRect.width : 0.5;
+        state.pushTarget = Math.max(-PUSH_X, Math.min(PUSH_X, (0.5 - ratio) * 2 * PUSH_X));
+        state.zoomTarget = 1 + PUSH_ZOOM;
+      }
+      kick();
+    });
+  }
+  function shakeStage({ power = 1, duration = 650 } = {}) {
+    if (!getCameraConfig().shake) return;
+    const now = topWindow.performance.now();
+    state.shakeStart = now;
+    state.shakeUntil = now + duration;
+    state.shakePower = Math.max(0.1, Math.min(2.5, Number(power) || 1));
+    kick();
+  }
+  function resetCamera() {
+    state.tx = state.ty = state.x = state.y = 0;
+    state.pushTarget = state.push = 0;
+    state.zoomTarget = state.zoom = 1;
+    state.shakeUntil = 0;
+    clearInlineCamera(getOverlayEl());
+  }
+
   // src/effects/pixi-loader.js
   var PIXI_CANDIDATE_URLS = Object.freeze([
     "https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js",
@@ -13517,6 +14551,45 @@ ${ssml}`;
   function getPixiInstance() {
     return hasPixiRuntime() ? topWindow.PIXI : null;
   }
+  var PIXI_FILTERS_CANDIDATE_URLS = Object.freeze([
+    "https://cdn.jsdelivr.net/npm/pixi-filters@4.2.0/dist/pixi-filters.js",
+    "https://gcore.jsdelivr.net/npm/pixi-filters@4.2.0/dist/pixi-filters.js",
+    "https://unpkg.com/pixi-filters@4.2.0/dist/pixi-filters.js"
+  ]);
+  var pixiFiltersLoadPromise = null;
+  function hasPixiFilters() {
+    return !!topWindow?.PIXI?.filters?.AdvancedBloomFilter;
+  }
+  async function loadPixiFilters() {
+    if (hasPixiFilters()) return topWindow.PIXI.filters;
+    if (pixiFiltersLoadPromise) return pixiFiltersLoadPromise;
+    pixiFiltersLoadPromise = (async () => {
+      const PIXI = await loadPixiLibrary();
+      if (!PIXI) throw new Error("PIXI unavailable");
+      let lastError = null;
+      for (const url of PIXI_FILTERS_CANDIDATE_URLS) {
+        try {
+          await loadScript(url);
+          if (hasPixiFilters()) {
+            console.log(`[${SCRIPT_NAME}] pixi-filters loaded from ${url}`);
+            return topWindow.PIXI.filters;
+          }
+        } catch (error3) {
+          lastError = error3;
+          console.warn(`[${SCRIPT_NAME}] pixi-filters load failed from ${url}`, error3);
+        }
+      }
+      throw lastError || new Error("pixi-filters unavailable");
+    })().catch((error3) => {
+      pixiFiltersLoadPromise = null;
+      console.warn(`[${SCRIPT_NAME}] pixi-filters unavailable, bloom disabled`, error3);
+      return null;
+    });
+    return pixiFiltersLoadPromise;
+  }
+  function getPixiFilters() {
+    return hasPixiFilters() ? topWindow.PIXI.filters : null;
+  }
 
   // src/effects/registry.js
   var SUPPORTED_EFFECTS = Object.freeze([
@@ -13527,7 +14600,10 @@ ${ssml}`;
     "fog",
     "fireflies",
     "embers",
-    "screenFlash"
+    "screenFlash",
+    "lightning",
+    "bokeh",
+    "dust"
   ]);
   var PIXI_EFFECT_NAMES = SUPPORTED_EFFECTS;
   var EFFECT_FIXED_LAYER = Object.freeze({
@@ -13538,10 +14614,14 @@ ${ssml}`;
     fog: "bg",
     fireflies: "fg",
     embers: "fg",
-    screenFlash: "fg"
+    screenFlash: "fg",
+    // 闪电与光斑在角色身后（天空 / 远景灯火），浮尘飘在角色前方
+    lightning: "bg",
+    bokeh: "bg",
+    dust: "fg"
   });
   var textureCache = /* @__PURE__ */ Object.create(null);
-  function clamp(value, min4, max5) {
+  function clamp2(value, min4, max5) {
     return Math.max(min4, Math.min(max5, value));
   }
   function rand(min4, max5) {
@@ -13588,15 +14668,17 @@ ${ssml}`;
     textureCache[key] = texture;
     return texture;
   }
-  function createParticleLayer(PIXI, maxSize) {
+  function createParticleLayer(PIXI, maxSize, blendMode = null) {
     if (typeof PIXI.ParticleContainer === "function") {
-      return new PIXI.ParticleContainer(Math.max(4, maxSize), {
+      const layer = new PIXI.ParticleContainer(Math.max(4, maxSize), {
         scale: true,
         position: true,
         rotation: true,
         alpha: true,
         tint: true
       });
+      if (blendMode !== null && blendMode !== void 0) layer.blendMode = blendMode;
+      return layer;
     }
     return new PIXI.Container();
   }
@@ -13718,11 +14800,11 @@ ${ssml}`;
   }
   function getFlashBurstTexture(PIXI) {
     return createTextureFromCanvas(PIXI, "effect-flash-burst-v2", 256, 256, (ctx, w2, h2) => {
-      const burst = ctx.createRadialGradient(w2 * 0.5, h2 * 0.5, 2, w2 * 0.5, h2 * 0.5, h2 * 0.5);
-      burst.addColorStop(0, "rgba(255,255,245,1)");
-      burst.addColorStop(0.5, "rgba(255,238,183,0.42)");
-      burst.addColorStop(1, "rgba(255,238,183,0)");
-      ctx.fillStyle = burst;
+      const burst2 = ctx.createRadialGradient(w2 * 0.5, h2 * 0.5, 2, w2 * 0.5, h2 * 0.5, h2 * 0.5);
+      burst2.addColorStop(0, "rgba(255,255,245,1)");
+      burst2.addColorStop(0.5, "rgba(255,238,183,0.42)");
+      burst2.addColorStop(1, "rgba(255,238,183,0)");
+      ctx.fillStyle = burst2;
       ctx.beginPath();
       ctx.arc(w2 * 0.5, h2 * 0.5, h2 * 0.5, 0, Math.PI * 2);
       ctx.fill();
@@ -13810,7 +14892,7 @@ ${ssml}`;
       update(delta, size3) {
         const w2 = size3.width || width2;
         const h2 = size3.height || height2;
-        const step3 = clamp(delta, 0.2, 2.8) * speedFactor;
+        const step3 = clamp2(delta, 0.2, 2.8) * speedFactor;
         elapsed += step3 * 0.019;
         gustTimer -= step3 * 0.018;
         if (gustTimer <= 0) {
@@ -13828,7 +14910,7 @@ ${ssml}`;
           drop.y += drop.speed * step3;
           drop.sprite.position.set(drop.x, drop.y);
           drop.sprite.rotation = drop.profile.rotationBase + wind * drop.profile.rotationFollow;
-          drop.sprite.alpha = clamp(
+          drop.sprite.alpha = clamp2(
             drop.alphaBase * (0.78 + Math.sin(elapsed * 1.7 + drop.alphaPhase) * 0.16),
             0.06,
             1
@@ -13844,8 +14926,8 @@ ${ssml}`;
         const marginX = Math.max(56, width2 * 0.12);
         const marginY = Math.max(40, height2 * 0.1);
         for (const drop of drops) {
-          drop.x = clamp(drop.x, -marginX, width2 + marginX);
-          drop.y = clamp(drop.y, -height2, height2 + marginY);
+          drop.x = clamp2(drop.x, -marginX, width2 + marginX);
+          drop.y = clamp2(drop.y, -height2, height2 + marginY);
         }
       },
       destroy() {
@@ -13968,7 +15050,7 @@ ${ssml}`;
       update(delta, size3) {
         const w2 = size3.width || width2;
         const h2 = size3.height || height2;
-        const step3 = clamp(delta, 0.2, 2.9) * speedFactor;
+        const step3 = clamp2(delta, 0.2, 2.9) * speedFactor;
         elapsed += step3 * 0.016;
         gustTimer -= step3 * 0.016;
         if (gustTimer <= 0) {
@@ -13991,7 +15073,7 @@ ${ssml}`;
           flake.sprite.position.set(flake.x, flake.y);
           flake.sprite.rotation = flake.rotation;
           flake.sprite.scale.set(scaleX, scaleY);
-          flake.sprite.alpha = clamp(
+          flake.sprite.alpha = clamp2(
             flake.alphaBase * (0.82 + Math.sin(elapsed * 0.95 + flake.alphaPhase) * 0.18),
             0.08,
             1
@@ -14007,8 +15089,8 @@ ${ssml}`;
         const marginX = Math.max(48, width2 * 0.1);
         const marginY = Math.max(26, height2 * 0.08);
         for (const flake of flakes) {
-          flake.x = clamp(flake.x, -marginX, width2 + marginX);
-          flake.y = clamp(flake.y, -height2, height2 + marginY);
+          flake.x = clamp2(flake.x, -marginX, width2 + marginX);
+          flake.y = clamp2(flake.y, -height2, height2 + marginY);
         }
       },
       destroy() {
@@ -14114,7 +15196,7 @@ ${ssml}`;
       update(delta, size3) {
         const w2 = size3.width || width2;
         const h2 = size3.height || height2;
-        const step3 = clamp(delta, 0.2, 2.8) * speedFactor;
+        const step3 = clamp2(delta, 0.2, 2.8) * speedFactor;
         elapsed += step3 * 0.0165;
         gustTimer -= step3 * 0.0165;
         if (gustTimer <= 0) {
@@ -14138,7 +15220,7 @@ ${ssml}`;
           p3.sprite.position.set(p3.x, p3.y);
           p3.sprite.rotation = p3.rotation;
           p3.sprite.scale.set(scaleX, scaleY);
-          p3.sprite.alpha = clamp(p3.alphaBase * (0.82 + Math.sin(elapsed * 1.05 + p3.alphaPhase) * 0.2), 0.08, 1);
+          p3.sprite.alpha = clamp2(p3.alphaBase * (0.82 + Math.sin(elapsed * 1.05 + p3.alphaPhase) * 0.2), 0.08, 1);
           if (p3.y > h2 + marginY || p3.x < -marginX || p3.x > w2 + marginX) {
             respawnPetal(p3, w2, h2);
           }
@@ -14148,8 +15230,8 @@ ${ssml}`;
         width2 = Math.max(2, nextWidth);
         height2 = Math.max(2, nextHeight);
         for (const p3 of petals) {
-          p3.x = clamp(p3.x, -Math.max(40, width2 * 0.08), width2 + Math.max(40, width2 * 0.08));
-          p3.y = clamp(p3.y, -height2, height2 + Math.max(24, height2 * 0.08));
+          p3.x = clamp2(p3.x, -Math.max(40, width2 * 0.08), width2 + Math.max(40, width2 * 0.08));
+          p3.y = clamp2(p3.y, -height2, height2 + Math.max(24, height2 * 0.08));
         }
       },
       destroy() {
@@ -14212,7 +15294,7 @@ ${ssml}`;
       update(delta, size3) {
         const w2 = size3.width || width2;
         const h2 = size3.height || height2;
-        const step3 = clamp(delta, 0.15, 2.5) * speedFactor;
+        const step3 = clamp2(delta, 0.15, 2.5) * speedFactor;
         elapsed += step3 * 9e-3;
         windTimer -= step3 * 0.01;
         if (windTimer <= 0) {
@@ -14222,7 +15304,7 @@ ${ssml}`;
         windBias += (windTarget - windBias) * Math.min(1, 0.012 * step3);
         const wind = Math.sin(elapsed * 0.42) * 0.14 + windBias;
         const marginX = Math.max(120, w2 * 0.24);
-        haze.alpha = clamp(0.08 + Math.sin(elapsed * 0.4) * 0.015, 0.05, 0.12);
+        haze.alpha = clamp2(0.08 + Math.sin(elapsed * 0.4) * 0.015, 0.05, 0.12);
         const hazeBase = Math.max(w2, h2) / Math.max(1, texture.width);
         const hazeScale = hazeBase * (2.2 + Math.sin(elapsed * 0.33) * 0.08);
         haze.scale.set(hazeScale);
@@ -14236,7 +15318,7 @@ ${ssml}`;
           const scale2 = cloud.baseScale * breathe;
           cloud.sprite.position.set(cloud.x, cloud.y);
           cloud.sprite.scale.set(scale2);
-          cloud.sprite.alpha = clamp(
+          cloud.sprite.alpha = clamp2(
             cloud.alphaBase * (0.88 + Math.sin(elapsed * 0.54 + cloud.phase) * 0.16),
             0.03,
             0.42
@@ -14252,8 +15334,8 @@ ${ssml}`;
         updateHazeSize(width2, height2);
         const marginX = Math.max(120, width2 * 0.24);
         for (const cloud of clouds) {
-          cloud.x = clamp(cloud.x, -marginX, width2 + marginX);
-          cloud.y = clamp(cloud.y, height2 * 0.12, height2 * 0.98);
+          cloud.x = clamp2(cloud.x, -marginX, width2 + marginX);
+          cloud.y = clamp2(cloud.y, height2 * 0.12, height2 * 0.98);
         }
       },
       destroy() {
@@ -14267,8 +15349,8 @@ ${ssml}`;
     const texture = getFireflyTexture(PIXI);
     const backCount = toCount(26, quality);
     const frontCount = toCount(17, quality);
-    const backLayer = createParticleLayer(PIXI, backCount);
-    const frontLayer = createParticleLayer(PIXI, frontCount);
+    const backLayer = createParticleLayer(PIXI, backCount, PIXI.BLEND_MODES.ADD);
+    const frontLayer = createParticleLayer(PIXI, frontCount, PIXI.BLEND_MODES.ADD);
     container2.addChild(backLayer);
     container2.addChild(frontLayer);
     const lights = [];
@@ -14325,10 +15407,11 @@ ${ssml}`;
     return {
       displayObject: container2,
       persistent: true,
+      glow: { threshold: 0.32, bloomScale: 1.1, blur: 7 },
       update(delta, size3) {
         const w2 = size3.width || width2;
         const h2 = size3.height || height2;
-        const step3 = clamp(delta, 0.2, 2.5) * speedFactor;
+        const step3 = clamp2(delta, 0.2, 2.5) * speedFactor;
         elapsed += step3 * 0.018;
         const areaTop = h2 * 0.05;
         const areaBottom = h2 * 0.96;
@@ -14337,8 +15420,8 @@ ${ssml}`;
           light.phase += light.phaseSpeed * 0.012 * step3;
           light.vx += Math.sin(elapsed * 0.82 + light.noisePhaseX) * 6e-3 * step3;
           light.vy += Math.cos(elapsed * 0.65 + light.noisePhaseY) * 5e-3 * step3;
-          light.vx = clamp(light.vx, -light.profile.velocity, light.profile.velocity);
-          light.vy = clamp(light.vy, -light.profile.velocity * 0.75, light.profile.velocity * 0.5);
+          light.vx = clamp2(light.vx, -light.profile.velocity, light.profile.velocity);
+          light.vy = clamp2(light.vy, -light.profile.velocity * 0.75, light.profile.velocity * 0.5);
           light.x += light.vx * step3;
           light.y += light.vy * step3;
           if (light.x < -marginX) light.x = w2 + rand(0, marginX);
@@ -14355,15 +15438,15 @@ ${ssml}`;
           const sparkle = 0.86 + Math.sin(elapsed * 1.25 + light.phase * 1.2) * 0.24;
           light.sprite.position.set(light.x, light.y);
           light.sprite.scale.set(light.baseScale * sparkle);
-          light.sprite.alpha = clamp(light.alphaBase * pulse, 0.06, 1);
+          light.sprite.alpha = clamp2(light.alphaBase * pulse, 0.06, 1);
         }
       },
       onResize(nextWidth, nextHeight) {
         width2 = Math.max(2, nextWidth);
         height2 = Math.max(2, nextHeight);
         for (const light of lights) {
-          light.x = clamp(light.x, -16, width2 + 16);
-          light.y = clamp(light.y, height2 * 0.04, height2 * 0.98);
+          light.x = clamp2(light.x, -16, width2 + 16);
+          light.y = clamp2(light.y, height2 * 0.04, height2 * 0.98);
         }
       },
       destroy() {
@@ -14377,8 +15460,8 @@ ${ssml}`;
     const texture = getEmberTexture(PIXI);
     const backCount = toCount(46, quality);
     const frontCount = toCount(36, quality);
-    const backLayer = createParticleLayer(PIXI, backCount);
-    const frontLayer = createParticleLayer(PIXI, frontCount);
+    const backLayer = createParticleLayer(PIXI, backCount, PIXI.BLEND_MODES.ADD);
+    const frontLayer = createParticleLayer(PIXI, frontCount, PIXI.BLEND_MODES.ADD);
     container2.addChild(backLayer);
     container2.addChild(frontLayer);
     const embers = [];
@@ -14444,10 +15527,11 @@ ${ssml}`;
     return {
       displayObject: container2,
       persistent: true,
+      glow: { threshold: 0.38, bloomScale: 1, blur: 6 },
       update(delta, size3) {
         const w2 = size3.width || width2;
         const h2 = size3.height || height2;
-        const step3 = clamp(delta, 0.2, 2.8) * speedFactor;
+        const step3 = clamp2(delta, 0.2, 2.8) * speedFactor;
         elapsed += step3 * 0.017;
         windTimer -= step3 * 0.017;
         if (windTimer <= 0) {
@@ -14464,12 +15548,12 @@ ${ssml}`;
           ember.x += (turbulence * ember.profile.windFactor + ember.drift + Math.sin(ember.phase) * 0.12) * step3;
           ember.y -= ember.speedY * step3;
           ember.life -= ember.decay * step3;
-          const lifeGlow = clamp(ember.life, 0, 1);
+          const lifeGlow = clamp2(ember.life, 0, 1);
           const scaleGrow = 0.8 + (1 - lifeGlow) * 0.55;
           ember.sprite.position.set(ember.x, ember.y);
           ember.sprite.rotation = ember.rotation;
           ember.sprite.scale.set(ember.baseScale * scaleGrow);
-          ember.sprite.alpha = clamp(
+          ember.sprite.alpha = clamp2(
             ember.alphaBase * lifeGlow * (0.9 + Math.sin(elapsed * 1.5 + ember.phase) * 0.26),
             0,
             1
@@ -14483,8 +15567,8 @@ ${ssml}`;
         width2 = Math.max(2, nextWidth);
         height2 = Math.max(2, nextHeight);
         for (const ember of embers) {
-          ember.x = clamp(ember.x, -28, width2 + 28);
-          ember.y = clamp(ember.y, -28, height2 + 40);
+          ember.x = clamp2(ember.x, -28, width2 + 28);
+          ember.y = clamp2(ember.y, -28, height2 + 40);
         }
       },
       destroy() {
@@ -14502,11 +15586,11 @@ ${ssml}`;
     overlay.tint = 16774094;
     overlay.alpha = 0;
     overlay.blendMode = PIXI.BLEND_MODES.SCREEN;
-    const burst = new PIXI.Sprite(burstTexture);
-    burst.anchor.set(0.5);
-    burst.tint = 16774883;
-    burst.alpha = 0;
-    burst.blendMode = PIXI.BLEND_MODES.ADD;
+    const burst2 = new PIXI.Sprite(burstTexture);
+    burst2.anchor.set(0.5);
+    burst2.tint = 16774883;
+    burst2.alpha = 0;
+    burst2.blendMode = PIXI.BLEND_MODES.ADD;
     const ring = new PIXI.Sprite(burstTexture);
     ring.anchor.set(0.5);
     ring.tint = 16768163;
@@ -14514,13 +15598,13 @@ ${ssml}`;
     ring.blendMode = PIXI.BLEND_MODES.SCREEN;
     container2.addChild(overlay);
     container2.addChild(ring);
-    container2.addChild(burst);
+    container2.addChild(burst2);
     function applySize() {
       overlay.width = Math.max(2, width2);
       overlay.height = Math.max(2, height2);
       const cx = width2 * 0.5;
       const cy = height2 * 0.5;
-      burst.position.set(cx, cy);
+      burst2.position.set(cx, cy);
       ring.position.set(cx, cy);
       burstBaseScale = Math.max(width2, height2) / Math.max(1, burstTexture.width);
     }
@@ -14530,16 +15614,16 @@ ${ssml}`;
       persistent: false,
       done: false,
       update(delta) {
-        const step3 = clamp(delta, 0.2, 3);
+        const step3 = clamp2(delta, 0.2, 3);
         progress2 += step3 * 0.043;
-        const fadeIn = clamp(progress2 / 0.06, 0, 1);
+        const fadeIn = clamp2(progress2 / 0.06, 0, 1);
         const overlayFade = Math.exp(-Math.max(0, progress2 - 0.04) * 5.8);
-        overlay.alpha = clamp(0.86 * fadeIn * overlayFade, 0, 1);
-        burst.alpha = clamp(1.02 * Math.exp(-progress2 * 9.2), 0, 1);
-        ring.alpha = clamp(0.75 * Math.exp(-Math.max(0, progress2 - 0.015) * 4.5), 0, 1);
-        burst.scale.set(burstBaseScale * (0.32 + progress2 * 2.7));
+        overlay.alpha = clamp2(0.86 * fadeIn * overlayFade, 0, 1);
+        burst2.alpha = clamp2(1.02 * Math.exp(-progress2 * 9.2), 0, 1);
+        ring.alpha = clamp2(0.75 * Math.exp(-Math.max(0, progress2 - 0.015) * 4.5), 0, 1);
+        burst2.scale.set(burstBaseScale * (0.32 + progress2 * 2.7));
         ring.scale.set(burstBaseScale * (0.18 + progress2 * 1.5));
-        if (overlay.alpha < 0.01 && burst.alpha < 0.01 && ring.alpha < 0.01) {
+        if (overlay.alpha < 0.01 && burst2.alpha < 0.01 && ring.alpha < 0.01) {
           this.done = true;
         }
       },
@@ -14547,6 +15631,300 @@ ${ssml}`;
         width2 = Math.max(2, nextWidth);
         height2 = Math.max(2, nextHeight);
         applySize();
+      },
+      destroy() {
+        container2.destroy({ children: true });
+      }
+    };
+  }
+  function getBokehTexture(PIXI, soft) {
+    const size3 = soft ? 168 : 128;
+    return createTextureFromCanvas(PIXI, soft ? "effect-bokeh-soft-v1" : "effect-bokeh-v1", size3, size3, (ctx, w2, h2) => {
+      const r2 = w2 * (soft ? 0.34 : 0.44);
+      if (soft) ctx.filter = "blur(9px)";
+      const g2 = ctx.createRadialGradient(w2 * 0.5, h2 * 0.5, 0, w2 * 0.5, h2 * 0.5, r2);
+      g2.addColorStop(0, "rgba(255,255,255,0.3)");
+      g2.addColorStop(0.7, "rgba(255,255,255,0.4)");
+      g2.addColorStop(0.9, "rgba(255,255,255,0.85)");
+      g2.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g2;
+      ctx.beginPath();
+      ctx.arc(w2 * 0.5, h2 * 0.5, r2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  var BOKEH_TINTS = [16761975, 16751202, 16769696, 16748465, 16765578, 10475775];
+  function createBokehEffect({ PIXI, width: width2, height: height2, quality }) {
+    const container2 = new PIXI.Container();
+    const backCount = toCount(22, quality);
+    const frontCount = toCount(6, quality);
+    const backLayer = createParticleLayer(PIXI, backCount, PIXI.BLEND_MODES.ADD);
+    const frontLayer = createParticleLayer(PIXI, frontCount, PIXI.BLEND_MODES.ADD);
+    container2.addChild(backLayer);
+    container2.addChild(frontLayer);
+    const speedFactor = quality?.speed ?? 1;
+    const profiles = [
+      { layer: backLayer, count: backCount, texture: getBokehTexture(PIXI, false), scaleMin: 0.2, scaleMax: 0.5, alphaMin: 0.32, alphaMax: 0.6, drift: 0.14 },
+      { layer: frontLayer, count: frontCount, texture: getBokehTexture(PIXI, true), scaleMin: 0.75, scaleMax: 1.3, alphaMin: 0.12, alphaMax: 0.24, drift: 0.26 }
+    ];
+    const discs = [];
+    function respawn(disc, w2, h2, initial) {
+      disc.x = rand(-w2 * 0.05, w2 * 1.05);
+      disc.y = initial ? rand(0, h2) : h2 + rand(20, 120);
+      disc.vx = rand(-disc.profile.drift, disc.profile.drift) * 0.6;
+      disc.vy = -rand(disc.profile.drift * 0.25, disc.profile.drift);
+      disc.baseScale = rand(disc.profile.scaleMin, disc.profile.scaleMax);
+      disc.alphaBase = rand(disc.profile.alphaMin, disc.profile.alphaMax);
+      disc.phase = rand(0, Math.PI * 2);
+      disc.phaseSpeed = rand(0.25, 0.7);
+      disc.sprite.tint = choose(BOKEH_TINTS) || 16761975;
+    }
+    for (const profile of profiles) {
+      for (let i2 = 0; i2 < profile.count; i2 += 1) {
+        const sprite = new PIXI.Sprite(profile.texture);
+        sprite.anchor.set(0.5);
+        profile.layer.addChild(sprite);
+        const disc = { sprite, profile };
+        respawn(disc, width2, height2, true);
+        discs.push(disc);
+      }
+    }
+    return {
+      displayObject: container2,
+      persistent: true,
+      glow: { threshold: 0.3, bloomScale: 0.9, blur: 8 },
+      update(delta, size3) {
+        const w2 = size3.width || width2;
+        const h2 = size3.height || height2;
+        const step3 = clamp2(delta, 0.2, 2.5) * speedFactor;
+        for (const disc of discs) {
+          disc.phase += disc.phaseSpeed * 0.012 * step3;
+          disc.x += (disc.vx + Math.sin(disc.phase * 0.7) * 0.05) * step3;
+          disc.y += disc.vy * step3;
+          if (disc.y < -140 || disc.x < -w2 * 0.15 || disc.x > w2 * 1.15) respawn(disc, w2, h2, false);
+          const breathe = 0.7 + Math.sin(disc.phase) * 0.3;
+          disc.sprite.position.set(disc.x, disc.y);
+          disc.sprite.scale.set(disc.baseScale * (0.96 + Math.sin(disc.phase * 0.5) * 0.04));
+          disc.sprite.alpha = clamp2(disc.alphaBase * breathe, 0.03, 1);
+        }
+      },
+      onResize(nextWidth, nextHeight) {
+        width2 = Math.max(2, nextWidth);
+        height2 = Math.max(2, nextHeight);
+      },
+      destroy() {
+        discs.length = 0;
+        container2.destroy({ children: true });
+      }
+    };
+  }
+  function getDustTexture(PIXI) {
+    return createTextureFromCanvas(PIXI, "effect-dust-v1", 24, 24, (ctx, w2, h2) => {
+      const g2 = ctx.createRadialGradient(w2 * 0.5, h2 * 0.5, 0, w2 * 0.5, h2 * 0.5, w2 * 0.5);
+      g2.addColorStop(0, "rgba(255,250,235,1)");
+      g2.addColorStop(0.35, "rgba(255,240,210,0.55)");
+      g2.addColorStop(1, "rgba(255,240,210,0)");
+      ctx.fillStyle = g2;
+      ctx.beginPath();
+      ctx.arc(w2 * 0.5, h2 * 0.5, w2 * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  function createDustEffect({ PIXI, width: width2, height: height2, quality }) {
+    const container2 = new PIXI.Container();
+    const count = toCount(80, quality);
+    const layer = createParticleLayer(PIXI, count, PIXI.BLEND_MODES.ADD);
+    container2.addChild(layer);
+    const texture = getDustTexture(PIXI);
+    const speedFactor = quality?.speed ?? 1;
+    const motes = [];
+    let elapsed = rand(0, 10);
+    function respawn(mote, w2, h2) {
+      mote.x = rand(0, w2);
+      mote.y = rand(0, h2);
+      mote.vx = rand(-0.08, 0.08);
+      mote.vy = rand(-0.05, 0.07);
+      mote.baseScale = rand(0.2, 0.6);
+      mote.alphaBase = rand(0.45, 1);
+      mote.phase = rand(0, Math.PI * 2);
+      mote.phaseSpeed = rand(0.6, 1.8);
+      mote.noise = rand(0, Math.PI * 2);
+      mote.sprite.tint = choose([16774880, 16773064, 16775920]) || 16774880;
+    }
+    for (let i2 = 0; i2 < count; i2 += 1) {
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      layer.addChild(sprite);
+      const mote = { sprite };
+      respawn(mote, width2, height2);
+      motes.push(mote);
+    }
+    return {
+      displayObject: container2,
+      persistent: true,
+      glow: { threshold: 0.42, bloomScale: 0.75, blur: 4 },
+      update(delta, size3) {
+        const w2 = size3.width || width2;
+        const h2 = size3.height || height2;
+        const step3 = clamp2(delta, 0.2, 2.5) * speedFactor;
+        elapsed += step3 * 0.01;
+        for (const mote of motes) {
+          mote.phase += mote.phaseSpeed * 0.015 * step3;
+          mote.vx += Math.sin(elapsed + mote.noise) * 2e-3 * step3;
+          mote.vy += Math.cos(elapsed * 0.8 + mote.noise) * 15e-4 * step3;
+          mote.vx = clamp2(mote.vx, -0.12, 0.12);
+          mote.vy = clamp2(mote.vy, -0.09, 0.1);
+          mote.x += mote.vx * step3;
+          mote.y += mote.vy * step3;
+          if (mote.x < -20 || mote.x > w2 + 20 || mote.y < -20 || mote.y > h2 + 20) respawn(mote, w2, h2);
+          const lit = clamp2(1.3 - mote.x / w2 * 0.5 - mote.y / h2 * 0.7, 0, 1);
+          const twinkle = 0.35 + (Math.sin(mote.phase) * 0.5 + 0.5) * 0.65;
+          mote.sprite.position.set(mote.x, mote.y);
+          mote.sprite.scale.set(mote.baseScale);
+          mote.sprite.alpha = clamp2(mote.alphaBase * twinkle * (0.2 + lit * 0.8), 0, 1);
+        }
+      },
+      onResize(nextWidth, nextHeight) {
+        width2 = Math.max(2, nextWidth);
+        height2 = Math.max(2, nextHeight);
+      },
+      destroy() {
+        motes.length = 0;
+        container2.destroy({ children: true });
+      }
+    };
+  }
+  function getSkyFlashTexture(PIXI) {
+    return createTextureFromCanvas(PIXI, "effect-sky-flash-v1", 8, 256, (ctx, w2, h2) => {
+      const g2 = ctx.createLinearGradient(0, 0, 0, h2);
+      g2.addColorStop(0, "rgba(225,235,255,1)");
+      g2.addColorStop(0.45, "rgba(190,210,255,0.45)");
+      g2.addColorStop(1, "rgba(190,210,255,0)");
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, w2, h2);
+    });
+  }
+  function prefersReducedMotion3() {
+    try {
+      return !!topWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    } catch (_2) {
+      return false;
+    }
+  }
+  function buildBoltPath(width2, height2) {
+    const points = [];
+    const branches = [];
+    let x3 = rand(width2 * 0.12, width2 * 0.88);
+    let y3 = -10;
+    const endY = rand(height2 * 0.45, height2 * 0.72);
+    points.push([x3, y3]);
+    while (y3 < endY) {
+      x3 += rand(-0.035, 0.035) * width2;
+      y3 += rand(0.025, 0.06) * height2;
+      points.push([x3, y3]);
+      if (Math.random() < 0.2 && branches.length < 3) {
+        const branch = [[x3, y3]];
+        let bx = x3;
+        let by = y3;
+        const dir = Math.random() < 0.5 ? -1 : 1;
+        const steps = Math.round(rand(3, 6));
+        for (let k2 = 0; k2 < steps; k2 += 1) {
+          bx += (dir * rand(8e-3, 0.035) + rand(-0.012, 0.012)) * width2;
+          by += rand(0.018, 0.045) * height2;
+          branch.push([bx, by]);
+        }
+        branches.push(branch);
+      }
+    }
+    return { points, branches };
+  }
+  function strokePolyline(graphics, pts2) {
+    graphics.moveTo(pts2[0][0], pts2[0][1]);
+    for (let i2 = 1; i2 < pts2.length; i2 += 1) graphics.lineTo(pts2[i2][0], pts2[i2][1]);
+  }
+  function createLightningEffect({ PIXI, width: width2, height: height2, onStrike }) {
+    const container2 = new PIXI.Container();
+    const sky = new PIXI.Sprite(getSkyFlashTexture(PIXI));
+    sky.blendMode = PIXI.BLEND_MODES.ADD;
+    sky.alpha = 0;
+    const bolt = new PIXI.Graphics();
+    bolt.blendMode = PIXI.BLEND_MODES.ADD;
+    container2.addChild(sky);
+    container2.addChild(bolt);
+    const reduced = prefersReducedMotion3();
+    let elapsedMs = 0;
+    let nextStrikeAt = rand(700, 1400);
+    let strikeAt = -1;
+    let pendingDouble = false;
+    let boltVisible = false;
+    function layoutSky() {
+      sky.width = Math.max(2, width2);
+      sky.height = Math.max(2, height2 * 0.85);
+    }
+    layoutSky();
+    function drawBolt() {
+      const { points, branches } = buildBoltPath(width2, height2);
+      const round = { cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND };
+      bolt.clear();
+      bolt.lineStyle({ width: 9, color: 9417471, alpha: 0.22, ...round });
+      strokePolyline(bolt, points);
+      bolt.lineStyle({ width: 4, color: 13163775, alpha: 0.55, ...round });
+      strokePolyline(bolt, points);
+      bolt.lineStyle({ width: 1.8, color: 16777215, alpha: 1, ...round });
+      strokePolyline(bolt, points);
+      for (const branch of branches) {
+        bolt.lineStyle({ width: 3, color: 11060479, alpha: 0.3, ...round });
+        strokePolyline(bolt, branch);
+        bolt.lineStyle({ width: 1, color: 15660287, alpha: 0.85, ...round });
+        strokePolyline(bolt, branch);
+      }
+      boltVisible = true;
+    }
+    function strike(intensity) {
+      drawBolt();
+      strikeAt = elapsedMs;
+      if (!reduced && typeof onStrike === "function") {
+        try {
+          onStrike({ intensity });
+        } catch (_2) {
+        }
+      }
+    }
+    function flickerAlpha(t2) {
+      if (t2 < 0) return 0;
+      if (t2 < 60) return 1;
+      if (t2 < 110) return 0.22;
+      if (t2 < 170) return 0.9;
+      if (t2 < 520) return 0.9 * (1 - (t2 - 170) / 350);
+      return 0;
+    }
+    return {
+      displayObject: container2,
+      persistent: true,
+      glow: { threshold: 0.2, bloomScale: 1.5, blur: 10 },
+      update(delta) {
+        elapsedMs += clamp2(delta, 0.2, 3) * 16.67;
+        if (elapsedMs >= nextStrikeAt) {
+          strike(rand(0.5, 1));
+          pendingDouble = Math.random() < 0.3;
+          nextStrikeAt = elapsedMs + rand(3800, 9e3);
+        }
+        if (pendingDouble && strikeAt >= 0 && elapsedMs - strikeAt > 260) {
+          pendingDouble = false;
+          strike(0.6);
+        }
+        const a2 = strikeAt >= 0 ? flickerAlpha(elapsedMs - strikeAt) : 0;
+        bolt.alpha = reduced ? a2 * 0.6 : a2;
+        sky.alpha = reduced ? 0 : a2 * 0.42;
+        if (a2 <= 0 && boltVisible) {
+          bolt.clear();
+          boltVisible = false;
+        }
+      },
+      onResize(nextWidth, nextHeight) {
+        width2 = Math.max(2, nextWidth);
+        height2 = Math.max(2, nextHeight);
+        layoutSky();
       },
       destroy() {
         container2.destroy({ children: true });
@@ -14582,6 +15960,12 @@ ${ssml}`;
         return createEmbersEffect(context);
       case "screenFlash":
         return createScreenFlashEffect(context);
+      case "lightning":
+        return createLightningEffect(context);
+      case "bokeh":
+        return createBokehEffect(context);
+      case "dust":
+        return createDustEffect(context);
       default:
         return null;
     }
@@ -14614,14 +15998,14 @@ ${ssml}`;
     tickerBound: false,
     lastFlashAt: 0
   };
-  function clamp2(value, min4, max5) {
+  function clamp3(value, min4, max5) {
     return Math.max(min4, Math.min(max5, value));
   }
   function getEffectSettings() {
     const settings = getSettings() || {};
     const quality = QUALITY_PROFILES[settings.effectsQuality] ? settings.effectsQuality : DEFAULT_EFFECT_SETTINGS.effectsQuality;
     const parsedMax = Number.parseInt(settings.effectsMaxActive, 10);
-    const effectsMaxActive = Number.isFinite(parsedMax) ? clamp2(parsedMax, 1, 6) : DEFAULT_EFFECT_SETTINGS.effectsMaxActive;
+    const effectsMaxActive = Number.isFinite(parsedMax) ? clamp3(parsedMax, 1, 6) : DEFAULT_EFFECT_SETTINGS.effectsMaxActive;
     return {
       effectsEnabled: settings.effectsEnabled !== false,
       effectsQuality: quality,
@@ -14727,10 +16111,62 @@ ${ssml}`;
     }
   }
   function getLayerSize(app) {
+    const screen = app?.renderer?.screen;
     return {
-      width: Math.max(2, Number(app?.renderer?.width) || 2),
-      height: Math.max(2, Number(app?.renderer?.height) || 2)
+      width: Math.max(2, Number(screen?.width) || 2),
+      height: Math.max(2, Number(screen?.height) || 2)
     };
+  }
+  function isBloomEnabled(settings = getSettings() || {}) {
+    return settings.effectsBloom !== false && settings.effectsQuality !== "mobile";
+  }
+  function applyBloom(record) {
+    const instance = record?.instance;
+    const displayObject = instance?.displayObject;
+    if (!displayObject || !instance.glow) return;
+    const filters = getPixiFilters();
+    const app = getAppByLayer(record.layer);
+    if (!isBloomEnabled() || !filters?.AdvancedBloomFilter) {
+      if (displayObject.filters) displayObject.filters = null;
+      displayObject.filterArea = null;
+      return;
+    }
+    const balanced = (getSettings() || {}).effectsQuality !== "high";
+    const bloomKey = balanced ? "balanced" : "high";
+    if (displayObject.filters?.length && displayObject.__galBloomKey === bloomKey) return;
+    const { threshold = 0.35, bloomScale = 1, blur = 6 } = instance.glow;
+    try {
+      const bloom = new filters.AdvancedBloomFilter({
+        threshold,
+        bloomScale,
+        brightness: 1,
+        blur: balanced ? blur * 0.8 : blur,
+        quality: balanced ? 3 : 4,
+        kernels: null,
+        pixelSize: 1,
+        resolution: 1
+      });
+      displayObject.filters = [bloom];
+      displayObject.__galBloomKey = bloomKey;
+      if (app?.screen) displayObject.filterArea = app.screen;
+    } catch (error3) {
+      console.warn(`[${SCRIPT_NAME}] bloom filter failed: ${record.name}`, error3);
+    }
+  }
+  function refreshBloomForActiveEffects() {
+    for (const record of effectState.activeEffects.values()) applyBloom(record);
+  }
+  function ensureBloomRuntime() {
+    if (!isBloomEnabled() || getPixiFilters()) return;
+    loadPixiFilters().then((filters) => {
+      if (filters) refreshBloomForActiveEffects();
+    });
+  }
+  function handleLightningStrike({ intensity = 0.8 } = {}) {
+    const overlay = effectState.bgHost?.closest?.("#gal-global-overlay");
+    if (!overlay) return;
+    stageFlash($2(overlay), { color: "#dfe8ff", variant: "thunder" });
+    if (intensity > 0.85) shakeStage({ power: 0.3, duration: 500 });
   }
   function bindTicker(layer, app) {
     app.ticker.add((delta) => {
@@ -14770,6 +16206,7 @@ ${ssml}`;
     }
     if (action !== "perform") return;
     const name = String(op?.name || "").trim();
+    if (name === "screenShake") return;
     if (!isSupportedPixiEffect(name)) {
       console.warn(`[${SCRIPT_NAME}] unknown pixi effect "${name}"`);
       return;
@@ -14791,18 +16228,20 @@ ${ssml}`;
       prunePersistentEffects(settings.effectsMaxActive - 1);
     }
     const { width: width2, height: height2 } = getLayerSize(app);
-    const instance = createPixiEffectInstance(name, { PIXI, width: width2, height: height2, quality });
+    const instance = createPixiEffectInstance(name, { PIXI, width: width2, height: height2, quality, onStrike: handleLightningStrike });
     if (!instance?.displayObject) return;
     instance.displayObject.zIndex = name === "screenFlash" ? 999 : 10;
     app.stage.addChild(instance.displayObject);
     effectState.serial += 1;
-    effectState.activeEffects.set(key, {
+    const record = {
       key,
       layer,
       name,
       order: effectState.serial,
       instance
-    });
+    };
+    effectState.activeEffects.set(key, record);
+    applyBloom(record);
   }
   async function mountPixiEffects(overlayLike = null) {
     const overlayEl = resolveOverlayElement(overlayLike);
@@ -14827,6 +16266,7 @@ ${ssml}`;
       attachTickersIfNeeded();
       resizePixiEffects();
       syncPixiEffectsSettings();
+      ensureBloomRuntime();
       return true;
     } catch (error3) {
       console.error(`[${SCRIPT_NAME}] mount pixi effects failed`, error3);
@@ -14863,7 +16303,7 @@ ${ssml}`;
       const rect = host.getBoundingClientRect();
       const width2 = Math.max(2, Math.round(rect.width || host.clientWidth || 2));
       const height2 = Math.max(2, Math.round(rect.height || host.clientHeight || 2));
-      if (app.renderer.width !== width2 || app.renderer.height !== height2) {
+      if (app.renderer.screen.width !== width2 || app.renderer.screen.height !== height2) {
         app.renderer.resize(width2, height2);
       }
       for (const record of effectState.activeEffects.values()) {
@@ -14905,6 +16345,8 @@ ${ssml}`;
       effectState.fgApp.ticker.maxFPS = quality.targetFps;
     }
     prunePersistentEffects(settings.effectsMaxActive);
+    ensureBloomRuntime();
+    refreshBloomForActiveEffects();
     if (!settings.effectsEnabled) {
       clearAllPixiEffects();
       pausePixiEffects();
@@ -15234,6 +16676,544 @@ ${ssml}`;
   `;
   }
 
+  // src/ui/control-motion.js
+  var MOTION_CLASS = "gal-motion";
+  var MOTION_CHAR_FADE_MS = 480;
+  var MOTION_CHOICE_PICK_MS = 640;
+  var ADVANCE_MS = 1300;
+  var NAME_GHOST_MS = 260;
+  var HANDLERS_KEY = "__galgame_control_motion__";
+  var QUICK_LABELS = [
+    [".gal-sprite-toggle.sprites-hidden", "显示立绘"],
+    [".gal-sprite-toggle", "隐藏立绘"],
+    [".gal-location-popup-trigger", "地点"],
+    [".gal-time-popup-trigger", "时间"]
+  ];
+  function prefersReducedMotion4() {
+    try {
+      return !!topWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    } catch (_2) {
+      return false;
+    }
+  }
+  function isControlMotionEnabled() {
+    return getSettings()?.controlMotion !== false && !prefersReducedMotion4();
+  }
+  function isMotionNode(node) {
+    return !!node?.closest?.(`.${MOTION_CLASS}`);
+  }
+  function ensurePanelFx(panel) {
+    if (!panel) return null;
+    let fx = panel.querySelector(":scope > .gal-fx-panel");
+    if (!fx) {
+      fx = panel.ownerDocument.createElement("i");
+      fx.className = "gal-fx-panel";
+      fx.setAttribute("aria-hidden", "true");
+      panel.prepend(fx);
+    }
+    return fx;
+  }
+  function syncControlMotion($overlay) {
+    if (!$overlay?.length) return;
+    const on3 = isControlMotionEnabled();
+    $overlay.toggleClass(MOTION_CLASS, on3);
+    if (!on3) return;
+    initControlMotion();
+    $overlay[0].querySelectorAll(".gal-text-panel").forEach(ensurePanelFx);
+  }
+  function restartClass(el, cls, durationMs) {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    const timerKey = `__galFxTimer_${cls}`;
+    if (el[timerKey]) topWindow.clearTimeout(el[timerKey]);
+    el[timerKey] = topWindow.setTimeout(() => {
+      el.classList.remove(cls);
+      el[timerKey] = null;
+    }, durationMs);
+  }
+  function notifyDialogAdvance(textNode) {
+    if (!isMotionNode(textNode)) return;
+    const panel = textNode.closest(".gal-text-panel");
+    const fx = ensurePanelFx(panel);
+    if (fx) restartClass(fx, "gal-fx-advance", ADVANCE_MS);
+    const layer = textNode.closest(".gal-dialog-layer");
+    if (layer) restartClass(layer, "gal-fx-advance", ADVANCE_MS);
+  }
+  function playNameSwap(badgeEl, labelEl, prevText) {
+    if (!badgeEl || !labelEl || !isMotionNode(badgeEl)) return;
+    const doc = labelEl.ownerDocument;
+    const text = labelEl.textContent || "";
+    const chars = Array.from(text);
+    if (!chars.length) return;
+    const frag = doc.createDocumentFragment();
+    chars.forEach((ch, i2) => {
+      const b2 = doc.createElement("b");
+      b2.className = "gal-fx-ch";
+      b2.style.setProperty("--ci", String(i2));
+      b2.textContent = ch;
+      frag.appendChild(b2);
+    });
+    labelEl.replaceChildren(frag);
+    if (labelEl.__galFxNameTimer) topWindow.clearTimeout(labelEl.__galFxNameTimer);
+    labelEl.__galFxNameTimer = topWindow.setTimeout(() => {
+      labelEl.__galFxNameTimer = null;
+      if (labelEl.querySelector(".gal-fx-ch") && labelEl.textContent === text) labelEl.textContent = text;
+    }, chars.length * 70 + 700);
+    badgeEl.querySelectorAll(":scope > .gal-fx-ghost").forEach((el) => el.remove());
+    if (!prevText || prevText === text) return;
+    const win = doc.defaultView;
+    if (win.getComputedStyle(badgeEl).position === "static") return;
+    const ghost = doc.createElement("i");
+    ghost.className = "gal-fx-ghost";
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.textContent = prevText;
+    const cs = win.getComputedStyle(labelEl);
+    Object.assign(ghost.style, {
+      left: `${labelEl.offsetLeft}px`,
+      top: `${labelEl.offsetTop}px`,
+      font: cs.font,
+      letterSpacing: cs.letterSpacing,
+      color: cs.color,
+      writingMode: cs.writingMode
+    });
+    badgeEl.appendChild(ghost);
+    topWindow.setTimeout(() => ghost.remove(), NAME_GHOST_MS);
+  }
+  function playControlIntro(overlayEl) {
+    if (!overlayEl?.classList.contains(MOTION_CLASS)) return;
+    const play2 = (el, keyframes, delay2, duration, easing) => {
+      if (!el || !el.getClientRects().length) return;
+      el.animate(keyframes, { duration, delay: delay2, easing, fill: "backwards" });
+    };
+    const SPRING = "cubic-bezier(.34,1.6,.64,1)";
+    const SMOOTH = "cubic-bezier(.22,1,.36,1)";
+    const POP = [{ opacity: 0, scale: 0.3, translate: "0 12px" }, { opacity: 1, scale: 1, translate: "0 0" }];
+    overlayEl.querySelectorAll(".gal-text-panel").forEach((panel) => play2(
+      panel,
+      [{ opacity: 0, translate: "0 46px", filter: "blur(10px)" }, { opacity: 1, translate: "0 0", filter: "blur(0)" }],
+      0,
+      850,
+      SMOOTH
+    ));
+    overlayEl.querySelectorAll(".gal-bottom-toolbar").forEach((toolbar) => {
+      let i2 = 0;
+      toolbar.querySelectorAll(":scope > :is(.gal-footer-btn, .gal-pending-choices-btn)").forEach((btn) => {
+        if (btn.getClientRects().length) play2(btn, POP, 380 + 45 * i2++, 550, SPRING);
+      });
+    });
+    overlayEl.querySelectorAll(".gal-footer-btn-next").forEach((btn) => play2(btn, POP, 800, 600, SPRING));
+    overlayEl.querySelectorAll(":scope > :is(.gal-status-bar-container, .gal-fullscreen-btn)").forEach((el) => play2(
+      el,
+      [{ opacity: 0, translate: "0 -24px" }, { opacity: 1, translate: "0 0" }],
+      150,
+      600,
+      SMOOTH
+    ));
+    overlayEl.querySelectorAll(".gal-action-btn").forEach((btn, i2) => play2(
+      btn,
+      [{ opacity: 0, translate: "40px 0" }, { opacity: 1, translate: "0 0" }],
+      500 + 80 * i2,
+      650,
+      SMOOTH
+    ));
+    overlayEl.querySelectorAll(":is(.gal-sprite-toggle, .gal-status-popup-trigger)").forEach((btn, i2) => play2(btn, POP, 600 + 70 * i2, 500, SPRING));
+  }
+  var SCOPE = `.${MOTION_CLASS}`;
+  var PRESS_SELECTOR = [
+    ".gal-footer-btn",
+    ".gal-footer-btn-next",
+    ".gal-action-btn",
+    ".gal-pending-choices-btn",
+    ".gal-choice-card",
+    ".gal-menu-btn",
+    ".gal-fullscreen-btn",
+    ".gal-sprite-toggle",
+    ".gal-status-popup-trigger"
+  ].map((sel) => `${SCOPE} ${sel}`).join(", ");
+  function getHost(el) {
+    return el.closest("#gal-layer-choices") || el.closest("#gal-global-overlay");
+  }
+  function getFxLayer(host) {
+    let layer = host.querySelector(":scope > .gal-fx-layer");
+    if (!layer) {
+      layer = host.ownerDocument.createElement("div");
+      layer.className = "gal-fx-layer";
+      layer.setAttribute("aria-hidden", "true");
+      host.appendChild(layer);
+    }
+    return layer;
+  }
+  function toLayer(layer, clientX, clientY) {
+    const box = layer.getBoundingClientRect();
+    const k2 = box.width / (layer.offsetWidth || box.width || 1);
+    return { x: (clientX - box.left) / k2, y: (clientY - box.top) / k2, k: k2 };
+  }
+  function makeClip(el, cls) {
+    const host = getHost(el);
+    if (!host) return null;
+    const layer = getFxLayer(host);
+    const r2 = el.getBoundingClientRect();
+    if (!r2.width || !r2.height) return null;
+    const p3 = toLayer(layer, r2.left, r2.top);
+    const clip = el.ownerDocument.createElement("span");
+    clip.className = `gal-fx-clip ${cls}`;
+    Object.assign(clip.style, {
+      left: `${p3.x}px`,
+      top: `${p3.y}px`,
+      width: `${r2.width / p3.k}px`,
+      height: `${r2.height / p3.k}px`,
+      borderRadius: el.ownerDocument.defaultView.getComputedStyle(el).borderRadius
+    });
+    layer.appendChild(clip);
+    return clip;
+  }
+  function removeAfter(anim, el) {
+    anim.finished.then(() => el.remove(), () => el.remove());
+  }
+  function spawnRipple(el, e2) {
+    const clip = makeClip(el, "is-ripple");
+    if (!clip) return;
+    const r2 = el.getBoundingClientRect();
+    const k2 = r2.width / (parseFloat(clip.style.width) || r2.width);
+    const dot = el.ownerDocument.createElement("span");
+    dot.className = "gal-fx-ripple";
+    dot.style.left = `${(e2.clientX - r2.left) / k2}px`;
+    dot.style.top = `${(e2.clientY - r2.top) / k2}px`;
+    clip.appendChild(dot);
+    const size3 = Math.max(r2.width, r2.height) / k2 / 6;
+    removeAfter(dot.animate(
+      [{ scale: 0, opacity: 1 }, { scale: size3, opacity: 0 }],
+      { duration: 650, easing: "cubic-bezier(.22,1,.36,1)" }
+    ), clip);
+  }
+  function burst(el, count, spread) {
+    const host = getHost(el);
+    if (!host) return;
+    const layer = getFxLayer(host);
+    const r2 = el.getBoundingClientRect();
+    const { x: x3, y: y3 } = toLayer(layer, r2.left + r2.width / 2, r2.top + r2.height / 2);
+    const doc = el.ownerDocument;
+    const ring = doc.createElement("span");
+    ring.className = "gal-fx-ring";
+    ring.style.left = `${x3}px`;
+    ring.style.top = `${y3}px`;
+    layer.appendChild(ring);
+    removeAfter(ring.animate(
+      [{ scale: 0.4, opacity: 1 }, { scale: spread / 8, opacity: 0 }],
+      { duration: 650, easing: "cubic-bezier(.22,1,.36,1)" }
+    ), ring);
+    for (let i2 = 0; i2 < count; i2++) {
+      const isDot = i2 % 3 === 2;
+      const spark = doc.createElement("span");
+      spark.className = isDot ? "gal-fx-spark is-dot" : "gal-fx-spark";
+      spark.style.left = `${x3}px`;
+      spark.style.top = `${y3}px`;
+      layer.appendChild(spark);
+      const angle2 = i2 / count * Math.PI * 2 + Math.random() * 0.4;
+      const dist3 = spread * (0.75 + Math.random() * 0.6);
+      const rotate2 = isDot ? "45deg" : `${(angle2 * 180 / Math.PI).toFixed(1)}deg`;
+      const at2 = (f2) => `${(Math.cos(angle2) * dist3 * f2).toFixed(1)}px ${(Math.sin(angle2) * dist3 * f2).toFixed(1)}px`;
+      removeAfter(spark.animate(
+        [
+          { translate: "0 0", rotate: rotate2, scale: isDot ? "1" : "0.4 1", opacity: 1 },
+          { translate: at2(0.55), rotate: rotate2, scale: isDot ? "1.2" : "1.4 1", opacity: 1, offset: 0.35 },
+          { translate: at2(1), rotate: rotate2, scale: isDot ? "0" : "0.2 1", opacity: 0 }
+        ],
+        { duration: 620 + Math.random() * 280, easing: "cubic-bezier(.16,1,.3,1)" }
+      ), spark);
+    }
+  }
+  function sweepShine(el) {
+    const clip = makeClip(el, "is-shine");
+    if (!clip) return;
+    const bar = el.ownerDocument.createElement("span");
+    bar.className = "gal-fx-shine";
+    clip.appendChild(bar);
+    removeAfter(bar.animate(
+      [{ translate: "-120% 0" }, { translate: "320% 0" }],
+      { duration: 750, easing: "cubic-bezier(.4,0,.2,1)" }
+    ), clip);
+  }
+  var hoverFills = /* @__PURE__ */ new WeakMap();
+  function startFill(el) {
+    if (el.closest(`.${DEFAULT_THEME_CLASS}`) || hoverFills.has(el)) return;
+    const clip = makeClip(el, "is-fill");
+    if (!clip) return;
+    hoverFills.set(el, clip);
+    clip.animate([{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 0)" }], { duration: 480, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" });
+  }
+  function endFill(el) {
+    const clip = hoverFills.get(el);
+    if (!clip) return;
+    hoverFills.delete(el);
+    removeAfter(clip.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-out", fill: "forwards" }), clip);
+  }
+  var quickLabels = /* @__PURE__ */ new WeakMap();
+  function showQuickLabel(el) {
+    if (el.closest(`.${DEFAULT_THEME_CLASS}`) || quickLabels.has(el)) return;
+    const text = QUICK_LABELS.find(([sel]) => el.matches(sel))?.[1];
+    const host = getHost(el);
+    if (!text || !host) return;
+    const layer = getFxLayer(host);
+    const r2 = el.getBoundingClientRect();
+    const p3 = toLayer(layer, r2.left, r2.top + r2.height / 2);
+    const label = el.ownerDocument.createElement("span");
+    label.className = "gal-fx-label";
+    label.textContent = text;
+    label.style.left = `${p3.x - 8}px`;
+    label.style.top = `${p3.y}px`;
+    layer.appendChild(label);
+    quickLabels.set(el, label);
+    label.animate([{ opacity: 0, translate: "-90% -50%" }, { opacity: 1, translate: "-100% -50%" }], { duration: 320, easing: "cubic-bezier(.22,1,.36,1)", fill: "forwards" });
+  }
+  function hideQuickLabel(el) {
+    const label = quickLabels.get(el);
+    if (!label) return;
+    quickLabels.delete(el);
+    removeAfter(label.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: "forwards" }), label);
+  }
+  function moveToolbarIndicator(button) {
+    const toolbar = button.parentElement;
+    if (!toolbar?.classList.contains("gal-bottom-toolbar")) return;
+    let ind = toolbar.querySelector(":scope > .gal-fx-tb-ind");
+    if (!ind) {
+      ind = toolbar.ownerDocument.createElement("span");
+      ind.className = "gal-fx-tb-ind";
+      ind.setAttribute("aria-hidden", "true");
+      toolbar.appendChild(ind);
+    }
+    const cs = toolbar.ownerDocument.defaultView.getComputedStyle(button);
+    const first2 = !ind.classList.contains("is-on");
+    if (first2) ind.style.transition = "none";
+    ind.style.translate = `${button.offsetLeft}px ${button.offsetTop}px`;
+    ind.style.width = `${button.offsetWidth}px`;
+    ind.style.height = `${button.offsetHeight}px`;
+    ind.style.borderRadius = cs.borderRadius;
+    ind.style.transform = cs.transform === "none" ? "" : cs.transform;
+    if (first2) {
+      void ind.offsetWidth;
+      ind.style.transition = "";
+    }
+    ind.classList.add("is-on");
+  }
+  function hideToolbarIndicator(toolbar) {
+    toolbar?.querySelector(":scope > .gal-fx-tb-ind")?.classList.remove("is-on");
+  }
+  function setSpot(el, e2) {
+    const r2 = el.getBoundingClientRect();
+    if (!r2.width || !r2.height) return r2;
+    el.style.setProperty("--gal-fx-px", `${((e2.clientX - r2.left) / r2.width * 100).toFixed(1)}%`);
+    el.style.setProperty("--gal-fx-py", `${((e2.clientY - r2.top) / r2.height * 100).toFixed(1)}%`);
+    return r2;
+  }
+  function asElement(node) {
+    return node instanceof topWindow.Element ? node : null;
+  }
+  function handlePointerMove(e2) {
+    if (e2.pointerType !== "mouse") return;
+    const target = asElement(e2.target);
+    if (!target?.closest(SCOPE)) return;
+    const next = target.closest(`${SCOPE} .gal-footer-btn-next`);
+    if (next) {
+      const r2 = next.getBoundingClientRect();
+      const k2 = r2.width / (next.offsetWidth || r2.width);
+      const dx = (e2.clientX - (r2.left + r2.width / 2)) / k2;
+      const dy = (e2.clientY - (r2.top + r2.height / 2)) / k2;
+      next.style.translate = `${(dx * 0.18).toFixed(1)}px ${(dy * 0.3).toFixed(1)}px`;
+    }
+    const card = target.closest(`${SCOPE} .gal-choice-card`);
+    if (card && !card.classList.contains("gal-choice-picked")) {
+      const glint = card.querySelector(":scope > .gal-fx-glint");
+      const r2 = setSpot(glint || card, e2);
+      if (r2.width && r2.height) {
+        const ax = -((e2.clientY - r2.top) / r2.height - 0.5);
+        const ay = (e2.clientX - r2.left) / r2.width - 0.5;
+        const angle2 = Math.min(1, Math.hypot(ax, ay) * 2) * 7;
+        card.style.rotate = `${ax.toFixed(3)} ${ay.toFixed(3)} 0 ${angle2.toFixed(2)}deg`;
+      }
+    }
+    const panel = target.closest(`${SCOPE} .gal-text-panel`);
+    const panelFx = panel?.querySelector(":scope > .gal-fx-panel");
+    if (panelFx) setSpot(panelFx, e2);
+  }
+  function handlePointerOver(e2) {
+    if (e2.pointerType !== "mouse") return;
+    const target = asElement(e2.target);
+    if (!target?.closest(SCOPE)) return;
+    const from = asElement(e2.relatedTarget);
+    const btn = target.closest(`${SCOPE} .gal-bottom-toolbar > .gal-footer-btn`);
+    if (btn) moveToolbarIndicator(btn);
+    const next = target.closest(`${SCOPE} .gal-footer-btn-next`);
+    if (next && !next.contains(from)) sweepShine(next);
+    const action = target.closest(`${SCOPE} .gal-action-btn`);
+    if (action) startFill(action);
+    const quick = target.closest(`${SCOPE} :is(.gal-sprite-toggle, .gal-status-popup-trigger)`);
+    if (quick) showQuickLabel(quick);
+  }
+  function handlePointerOut(e2) {
+    const from = asElement(e2.target);
+    if (!from) return;
+    const to = asElement(e2.relatedTarget);
+    const left = (el) => el && !el.contains(to);
+    const next = from.closest(".gal-footer-btn-next");
+    if (left(next)) next.style.translate = "";
+    const card = from.closest(".gal-choice-card");
+    if (left(card)) card.style.rotate = "";
+    const btn = from.closest(".gal-bottom-toolbar > .gal-footer-btn");
+    if (btn && !to?.closest?.(".gal-bottom-toolbar > .gal-footer-btn")) hideToolbarIndicator(btn.parentElement);
+    const action = from.closest(".gal-action-btn");
+    if (left(action)) endFill(action);
+    const quick = from.closest(":is(.gal-sprite-toggle, .gal-status-popup-trigger)");
+    if (left(quick)) hideQuickLabel(quick);
+  }
+  function handlePointerDown(e2) {
+    const target = asElement(e2.target);
+    const el = target?.closest(PRESS_SELECTOR);
+    if (el) spawnRipple(el, e2);
+  }
+  function handleClickCapture(e2) {
+    const target = asElement(e2.target);
+    if (!target) return;
+    const next = target.closest(`${SCOPE} .gal-footer-btn-next`);
+    if (next) {
+      burst(next, 18, 90);
+      next.animate([{ scale: 1 }, { scale: 0.88 }, { scale: 1.06 }, { scale: 1 }], { duration: 420, easing: "ease-out" });
+      return;
+    }
+    const card = target.closest(`${SCOPE} .gal-choice-card`);
+    if (card && !card.classList.contains("gal-choice-picked")) {
+      card.style.rotate = "";
+      burst(card, 24, 150);
+    }
+  }
+  var moveFrame = 0;
+  var lastMove = null;
+  var HANDLERS = {
+    pointermove: (e2) => {
+      lastMove = e2;
+      if (moveFrame) return;
+      moveFrame = topWindow.requestAnimationFrame(() => {
+        moveFrame = 0;
+        if (lastMove) handlePointerMove(lastMove);
+      });
+    },
+    pointerover: handlePointerOver,
+    pointerout: handlePointerOut,
+    pointerdown: handlePointerDown,
+    click: handleClickCapture
+  };
+  function initControlMotion() {
+    const doc = topWindow.document;
+    const prev = topWindow[HANDLERS_KEY];
+    if (prev?.handlers === HANDLERS) return;
+    if (prev?.handlers) {
+      Object.entries(prev.handlers).forEach(([type, fn3]) => doc.removeEventListener(type, fn3, true));
+    }
+    Object.entries(HANDLERS).forEach(([type, fn3]) => doc.addEventListener(type, fn3, { capture: true, passive: true }));
+    topWindow[HANDLERS_KEY] = { handlers: HANDLERS };
+  }
+
+  // src/ui/tts-cue.js
+  var CUE_CLASS = "gal-tts-cue";
+  var CUE_HTML = `<div class="${CUE_CLASS}" aria-hidden="true"><i class="fa-solid fa-volume-off"></i><span class="gal-tts-cue-bars"><b></b><b></b><b></b><b></b></span></div>`;
+  var CUE_GAP = 10;
+  var WIDE_BADGE_SLACK = 80;
+  var resizeBound = false;
+  function translateOf(el) {
+    const raw = topWindow.getComputedStyle(el).translate;
+    if (!raw || raw === "none") return [0, 0];
+    const [x3 = 0, y3 = 0] = raw.split(" ").map((v3) => parseFloat(v3) || 0);
+    return [x3, y3];
+  }
+  function positionCue(badge, cue) {
+    const host = badge.offsetParent;
+    if (!host || !cue.isConnected) return;
+    const hostRect = host.getBoundingClientRect();
+    const scale2 = host.offsetWidth ? hostRect.width / host.offsetWidth : 1;
+    const label = badge.querySelector("span");
+    const badgeRect = badge.getBoundingClientRect();
+    const labelRect = label?.getBoundingClientRect();
+    const useLabel = labelRect?.width > 0 && badgeRect.width - labelRect.width > WIDE_BADGE_SLACK * scale2;
+    const anchor = useLabel ? labelRect : badgeRect;
+    if (!anchor.width) {
+      cue.style.visibility = "hidden";
+      return;
+    }
+    cue.style.visibility = "";
+    let [tx, ty] = translateOf(badge);
+    if (useLabel) {
+      const [lx, ly] = translateOf(label);
+      tx += lx;
+      ty += ly;
+    }
+    const right = anchor.right - tx * scale2 - hostRect.left - host.clientLeft * scale2;
+    const midY = anchor.top + anchor.height / 2 - ty * scale2 - hostRect.top - host.clientTop * scale2;
+    cue.style.left = `${right / scale2 + CUE_GAP}px`;
+    cue.style.top = `${midY / scale2}px`;
+  }
+  function repositionAll() {
+    topWindow.document.querySelectorAll(`#gal-global-overlay .${CUE_CLASS}`).forEach((cue) => {
+      const badge = cue.previousElementSibling;
+      if (badge?.classList.contains("gal-name-badge")) positionCue(badge, cue);
+    });
+  }
+  function syncTtsCue(overlay) {
+    const overlayEl = overlay?.jquery ? overlay[0] : overlay;
+    const badge = overlayEl?.querySelector(".gal-name-badge");
+    if (!badge) return;
+    let cue = badge.nextElementSibling;
+    if (!cue?.classList.contains(CUE_CLASS)) {
+      overlayEl.querySelectorAll(`.${CUE_CLASS}`).forEach((el) => el.remove());
+      badge.insertAdjacentHTML("afterend", CUE_HTML);
+      cue = badge.nextElementSibling;
+    }
+    if (!badge.__galTtsCueObserver && topWindow.ResizeObserver) {
+      const observer = new topWindow.ResizeObserver(() => positionCue(badge, cue));
+      observer.observe(badge);
+      const label = badge.querySelector("span");
+      if (label) observer.observe(label);
+      badge.__galTtsCueObserver = observer;
+      badge.addEventListener("animationend", () => positionCue(badge, cue));
+    }
+    if (!resizeBound) {
+      resizeBound = true;
+      topWindow.addEventListener("resize", () => topWindow.requestAnimationFrame(repositionAll));
+    }
+    positionCue(badge, cue);
+  }
+
+  // src/ui/default-theme.js
+  var CYBERPOP_CLASS = "gal-theme-cyberpop";
+  var DEFAULT_THEME_VARIANTS = {
+    none: "gal-theme-sky",
+    [DEFAULT_DARK_SKIN_ID]: "gal-theme-night",
+    [DEFAULT_SOFT_SKIN_ID]: "gal-theme-soft"
+  };
+  var THEME_SKIN_CLASSES = {
+    none: [DEFAULT_THEME_CLASS, DEFAULT_THEME_VARIANTS.none],
+    [DEFAULT_DARK_SKIN_ID]: [DEFAULT_THEME_CLASS, DEFAULT_THEME_VARIANTS[DEFAULT_DARK_SKIN_ID]],
+    [DEFAULT_SOFT_SKIN_ID]: [DEFAULT_THEME_CLASS, DEFAULT_THEME_VARIANTS[DEFAULT_SOFT_SKIN_ID]],
+    [CYBERPOP_SKIN_ID]: [CYBERPOP_CLASS],
+    [CYBERPOP_DARK_SKIN_ID]: [CYBERPOP_CLASS, DEFAULT_DARK_SKIN_ID]
+  };
+  var CLASSLESS_SKINS = /* @__PURE__ */ new Set(["none", DEFAULT_SOFT_SKIN_ID, CYBERPOP_SKIN_ID, CYBERPOP_DARK_SKIN_ID]);
+  var DEFAULT_THEME_CLASSES = [DEFAULT_THEME_CLASS, ...Object.values(DEFAULT_THEME_VARIANTS), CYBERPOP_CLASS];
+  function isThemeManagedSkin(skin) {
+    return Object.prototype.hasOwnProperty.call(THEME_SKIN_CLASSES, String(skin || "none").trim() || "none");
+  }
+  function isClasslessSkin(skin) {
+    return CLASSLESS_SKINS.has(String(skin || "none").trim() || "none");
+  }
+  function getDefaultThemeClasses(skin) {
+    return (THEME_SKIN_CLASSES[String(skin || "none").trim() || "none"] || []).slice();
+  }
+  function syncDefaultThemeClasses($el, classes2) {
+    if (!$el?.length) return;
+    DEFAULT_THEME_CLASSES.forEach((cls) => $el.toggleClass(cls, classes2.includes(cls)));
+    classes2.filter((cls) => !DEFAULT_THEME_CLASSES.includes(cls)).forEach((cls) => $el.addClass(cls));
+  }
+
   // src/ui/skin-jrpg-runtime.js
   var ASSET_ATTR = "data-cts-asset";
   function isJrpgSkinSelected(rawSkin) {
@@ -15391,10 +17371,10 @@ ${ssml}`;
     overlayUpdateQueue = overlayUpdateQueue.then(run, run);
     return overlayUpdateQueue;
   }
-  function nextOverlayRenderToken(state) {
-    if (!state) return 0;
-    state.renderToken = (Number(state.renderToken) || 0) + 1;
-    return state.renderToken;
+  function nextOverlayRenderToken(state2) {
+    if (!state2) return 0;
+    state2.renderToken = (Number(state2.renderToken) || 0) + 1;
+    return state2.renderToken;
   }
   function syncOverlaySkinClass($overlay) {
     if (!$overlay?.length) return;
@@ -15403,8 +17383,12 @@ ${ssml}`;
     BUILTIN_SKIN_CLASS_LIST.forEach((skinClass) => $overlay.removeClass(skinClass));
     $overlay.removeClass(CUSTOM_SKIN_ID);
     $overlay.removeClass("html-skin");
+    const isHtmlSkin = hasHtmlSkinId(rawSkin);
+    const themeSkin = isHtmlSkin ? null : isThemeManagedSkin(rawSkin) ? rawSkin : BUILTIN_SKIN_CLASS_LIST.includes(rawSkin) ? null : "none";
+    syncDefaultThemeClasses($overlay, themeSkin ? getDefaultThemeClasses(themeSkin) : []);
+    syncControlMotion($overlay);
     if (!rawSkin || rawSkin === "none" || rawSkin === "skin-western") return;
-    if (hasHtmlSkinId(rawSkin)) {
+    if (isHtmlSkin) {
       $overlay.addClass("html-skin");
       return;
     }
@@ -15417,12 +17401,12 @@ ${ssml}`;
       }
     }
   }
-  function scheduleOverlaySegmentDisplay(state, source = "unknown") {
-    if (!state) return Promise.resolve(false);
-    const token2 = nextOverlayRenderToken(state);
+  function scheduleOverlaySegmentDisplay(state2, source = "unknown") {
+    if (!state2) return Promise.resolve(false);
+    const token2 = nextOverlayRenderToken(state2);
     return queueOverlayUpdate(
       source,
-      () => _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state, token2, source) : Promise.resolve(false)
+      () => _updateOverlaySegmentDisplayRef ? _updateOverlaySegmentDisplayRef(state2, token2, source) : Promise.resolve(false)
     );
   }
   var _updateOverlaySegmentDisplayRef = null;
@@ -15630,6 +17614,23 @@ ${ssml}`;
       clearYanyunSkinAssets(overlay);
     }
   }
+  var STAGE_LAYER_SELECTORS = [".gal-layer-bg", ".gal-layer-effect-bg", ".gal-layer-character", ".gal-layer-effect-fg"];
+  var SHELL_STAGE_LAYER_CLASS = "gal-twilight-runtime-layer";
+  function detachStageLayers($overlay) {
+    return STAGE_LAYER_SELECTORS.map((selector) => {
+      const $layer = $overlay.find(selector).first();
+      return $layer.length ? $layer.detach()[0] : null;
+    });
+  }
+  function reattachStageLayers($overlay, layers) {
+    STAGE_LAYER_SELECTORS.forEach((selector, index) => {
+      const layer = layers[index];
+      const fresh = $overlay.find(selector)[0];
+      if (!layer || !fresh) return;
+      layer.classList.toggle(SHELL_STAGE_LAYER_CLASS, fresh.classList.contains(SHELL_STAGE_LAYER_CLASS));
+      fresh.replaceWith(layer);
+    });
+  }
   function snapshotOverlayState($overlay) {
     if (!$overlay?.length) return null;
     return {
@@ -15717,16 +17718,19 @@ ${ssml}`;
       const currentShell = String($overlay.find(".gal-game-container").attr("data-skin-shell") || "default").trim() || "default";
       if (currentShell !== shellType) {
         const overlayStateSnapshot = snapshotOverlayState($overlay);
+        const stageLayers = detachStageLayers($overlay);
         $overlay.html(buildOverlayInnerHtml({
           settings,
           locationIconClass,
           timeIconClass
         }));
+        reattachStageLayers($overlay, stageLayers);
         restoreOverlayState($overlay, overlayStateSnapshot);
       }
     }
     syncOverlayThemeAssets($overlay, settings?.skin);
     syncOverlaySkinClass($overlay);
+    syncTtsCue($overlay);
     return $overlay;
   }
   function renderMainInterface() {
@@ -15933,6 +17937,7 @@ ${ssml}`;
       const wasActive = $overlay.hasClass("active");
       syncOverlaySkinClass($overlay);
       $overlay.addClass("active");
+      if (!wasActive) playControlIntro($overlay[0]);
       resumePixiEffects();
       setChatScrollLock(true);
       startOverlayScrollPin();
@@ -18045,8 +20050,8 @@ ${ssml}`;
   function getCharAppearancePrompt(characterId) {
     if (characterId === "current_char") {
       const list = getCharacterListFromDatabase();
-      const current = list.find((c2) => c2.id === "current_char");
-      if (current) characterId = current.name;
+      const current2 = list.find((c2) => c2.id === "current_char");
+      if (current2) characterId = current2.name;
     }
     const prompts = getCharAppearancePrompts();
     return prompts[characterId] || "";
@@ -18901,9 +20906,9 @@ ${lines.join("\n")}`;
     _getLipSyncState(characterId) {
       const key = String(characterId || "").trim();
       if (!key) return null;
-      let state = this.lipSyncStates.get(key);
-      if (!state) {
-        state = {
+      let state2 = this.lipSyncStates.get(key);
+      if (!state2) {
+        state2 = {
           mouthParamCore: null,
           mouthParamIds: [],
           mouthParamIndexes: [],
@@ -18918,26 +20923,26 @@ ${lines.join("\n")}`;
           updateHookModel: null,
           updateHookRestore: null
         };
-        this.lipSyncStates.set(key, state);
+        this.lipSyncStates.set(key, state2);
       }
-      return state;
+      return state2;
     },
     _destroyLipSyncState(characterId) {
       const key = String(characterId || "").trim();
       if (!key) return;
-      const state = this.lipSyncStates.get(key);
-      if (!state) return;
-      state.lipSyncActive = false;
-      state.inModelUpdate = false;
-      if (state.writeMaskRestore) {
+      const state2 = this.lipSyncStates.get(key);
+      if (!state2) return;
+      state2.lipSyncActive = false;
+      state2.inModelUpdate = false;
+      if (state2.writeMaskRestore) {
         try {
-          state.writeMaskRestore();
+          state2.writeMaskRestore();
         } catch (e2) {
         }
       }
-      if (state.updateHookRestore) {
+      if (state2.updateHookRestore) {
         try {
-          state.updateHookRestore();
+          state2.updateHookRestore();
         } catch (e2) {
         }
       }
@@ -21341,23 +23346,23 @@ ${lines.join("\n")}`;
     stopBuiltinMotion(characterId) {
       const key = String(characterId || "").trim();
       if (!key) return false;
-      const state = this.builtinMotionPlayers.get(key);
-      if (!state) {
+      const state2 = this.builtinMotionPlayers.get(key);
+      if (!state2) {
         this._setBuiltinMotionFrameState(key, null);
         return false;
       }
-      state.stopped = true;
+      state2.stopped = true;
       const _topWindow = typeof window.parent !== "undefined" ? window.parent : window;
       try {
-        if (Number.isFinite(state.rafId)) {
-          (_topWindow.cancelAnimationFrame || window.cancelAnimationFrame)?.call(_topWindow, state.rafId);
+        if (Number.isFinite(state2.rafId)) {
+          (_topWindow.cancelAnimationFrame || window.cancelAnimationFrame)?.call(_topWindow, state2.rafId);
         }
       } catch (e2) {
       }
       try {
         const coreModel = this._getCoreModelForCharacter(key);
-        const resetParams = state.resetParams && typeof state.resetParams === "object" ? state.resetParams : null;
-        const resetWeight = Number.isFinite(state.weight) ? Number(state.weight) : 1;
+        const resetParams = state2.resetParams && typeof state2.resetParams === "object" ? state2.resetParams : null;
+        const resetWeight = Number.isFinite(state2.weight) ? Number(state2.weight) : 1;
         if (coreModel && resetParams) {
           for (const [paramId, normalizedValue] of Object.entries(resetParams)) {
             this._applyBuiltinParamWithAliases(coreModel, paramId, normalizedValue, resetWeight, key);
@@ -21377,10 +23382,10 @@ ${lines.join("\n")}`;
       if (!model || !coreModel) return false;
       const key = String(characterId || "").trim();
       if (!key) return false;
-      const keyframes = Array.isArray(motionDef.keyframes) ? motionDef.keyframes.map((frame) => ({
-        t: Number(frame?.t),
-        params: frame?.params && typeof frame.params === "object" ? frame.params : {}
-      })).filter((frame) => Number.isFinite(frame.t) && frame.t >= 0 && frame.t <= 1).sort((a2, b2) => a2.t - b2.t) : [];
+      const keyframes = Array.isArray(motionDef.keyframes) ? motionDef.keyframes.map((frame2) => ({
+        t: Number(frame2?.t),
+        params: frame2?.params && typeof frame2.params === "object" ? frame2.params : {}
+      })).filter((frame2) => Number.isFinite(frame2.t) && frame2.t >= 0 && frame2.t <= 1).sort((a2, b2) => a2.t - b2.t) : [];
       if (keyframes.length === 0) return false;
       this.stopBuiltinMotion(key);
       this._ensureBuiltinUpdateHook(key);
@@ -21401,16 +23406,16 @@ ${lines.join("\n")}`;
         return t2;
       };
       const resetParams = keyframes[0]?.params && typeof keyframes[0].params === "object" ? { ...keyframes[0].params } : null;
-      const state = { rafId: 0, stopped: false, startedAt: perfNow(), resetParams, weight: weight8 };
-      this.builtinMotionPlayers.set(key, state);
+      const state2 = { rafId: 0, stopped: false, startedAt: perfNow(), resetParams, weight: weight8 };
+      this.builtinMotionPlayers.set(key, state2);
       const step3 = () => {
         const currentState = this.builtinMotionPlayers.get(key);
-        if (!currentState || currentState !== state || state.stopped) return;
+        if (!currentState || currentState !== state2 || state2.stopped) return;
         if (!this.models.has(key) || this.models.get(key) !== model) {
           this.stopBuiltinMotion(key);
           return;
         }
-        const elapsed = perfNow() - state.startedAt;
+        const elapsed = perfNow() - state2.startedAt;
         let progress2 = elapsed / durationMs;
         if (loop) {
           progress2 = progress2 % 1;
@@ -21419,39 +23424,39 @@ ${lines.join("\n")}`;
         }
         const easedProgress = applyEasing(progress2);
         let prevFrame = keyframes[0];
-        let nextFrame = keyframes[keyframes.length - 1];
+        let nextFrame2 = keyframes[keyframes.length - 1];
         for (let i2 = 0; i2 < keyframes.length; i2++) {
-          const frame = keyframes[i2];
-          if (frame.t <= easedProgress) prevFrame = frame;
-          if (frame.t >= easedProgress) {
-            nextFrame = frame;
+          const frame2 = keyframes[i2];
+          if (frame2.t <= easedProgress) prevFrame = frame2;
+          if (frame2.t >= easedProgress) {
+            nextFrame2 = frame2;
             break;
           }
         }
-        const frameSpan = Math.max(1e-6, nextFrame.t - prevFrame.t || 0);
-        const localAlpha = nextFrame.t === prevFrame.t ? 0 : Math.max(0, Math.min(1, (easedProgress - prevFrame.t) / frameSpan));
+        const frameSpan = Math.max(1e-6, nextFrame2.t - prevFrame.t || 0);
+        const localAlpha = nextFrame2.t === prevFrame.t ? 0 : Math.max(0, Math.min(1, (easedProgress - prevFrame.t) / frameSpan));
         const paramNames = /* @__PURE__ */ new Set([
           ...Object.keys(prevFrame.params || {}),
-          ...Object.keys(nextFrame.params || {})
+          ...Object.keys(nextFrame2.params || {})
         ]);
         for (const paramId of paramNames) {
           const prevValue = Number(prevFrame.params?.[paramId]);
-          const nextValue = Number(nextFrame.params?.[paramId]);
+          const nextValue = Number(nextFrame2.params?.[paramId]);
           const a2 = Number.isFinite(prevValue) ? prevValue : Number.isFinite(nextValue) ? nextValue : 0;
           const b2 = Number.isFinite(nextValue) ? nextValue : a2;
           const blended = a2 + (b2 - a2) * localAlpha;
           this._applyBuiltinParamWithAliases(coreModel, paramId, blended, weight8, key);
-          state.currentParams = state.currentParams && typeof state.currentParams === "object" ? state.currentParams : {};
-          state.currentParams[paramId] = blended;
+          state2.currentParams = state2.currentParams && typeof state2.currentParams === "object" ? state2.currentParams : {};
+          state2.currentParams[paramId] = blended;
         }
-        this._setBuiltinMotionFrameState(key, state.currentParams || null, weight8);
+        this._setBuiltinMotionFrameState(key, state2.currentParams || null, weight8);
         if (!loop && elapsed >= durationMs) {
           this.stopBuiltinMotion(key);
           return;
         }
-        state.rafId = requestFrame.call(_topWindow, step3);
+        state2.rafId = requestFrame.call(_topWindow, step3);
       };
-      state.rafId = requestFrame.call(_topWindow, step3);
+      state2.rafId = requestFrame.call(_topWindow, step3);
       return true;
     },
     setExpression(characterId, expressionName) {
@@ -21506,9 +23511,9 @@ ${lines.join("\n")}`;
         "param_mouth_open",
         "mouth_open"
       ];
-      const state = this._getLipSyncState(characterId);
+      const state2 = this._getLipSyncState(characterId);
       if (typeof paramIdOrIndex === "number") {
-        if (state?.mouthParamIndexes?.includes(paramIdOrIndex)) return true;
+        if (state2?.mouthParamIndexes?.includes(paramIdOrIndex)) return true;
         try {
           if (typeof coreModel?.getParameterId === "function") {
             const pid = String(coreModel.getParameterId(paramIdOrIndex) || "").trim();
@@ -21521,19 +23526,19 @@ ${lines.join("\n")}`;
       const id2 = String(paramIdOrIndex || "").trim().toLowerCase();
       if (!id2) return false;
       if (preset.includes(id2)) return true;
-      return !!state?.mouthParamIds?.some((pid) => String(pid || "").trim().toLowerCase() === id2);
+      return !!state2?.mouthParamIds?.some((pid) => String(pid || "").trim().toLowerCase() === id2);
     },
     _installCoreWriteMask(characterId, coreModel) {
-      const state = this._getLipSyncState(characterId);
-      if (!state || !coreModel) return;
-      if (state.writeMaskCore === coreModel) return;
-      if (state.writeMaskRestore) {
+      const state2 = this._getLipSyncState(characterId);
+      if (!state2 || !coreModel) return;
+      if (state2.writeMaskCore === coreModel) return;
+      if (state2.writeMaskRestore) {
         try {
-          state.writeMaskRestore();
+          state2.writeMaskRestore();
         } catch (e2) {
         }
-        state.writeMaskCore = null;
-        state.writeMaskRestore = null;
+        state2.writeMaskCore = null;
+        state2.writeMaskRestore = null;
       }
       const restoreEntries = [];
       const methods = [
@@ -21566,14 +23571,14 @@ ${lines.join("\n")}`;
         restoreEntries.push({ method, raw });
         coreModel[method] = (...args) => {
           const paramRef = getParamRef(method, args);
-          if (paramRef !== null && state.lipSyncActive && state.inModelUpdate && this._isMouthParam(characterId, paramRef, coreModel)) {
+          if (paramRef !== null && state2.lipSyncActive && state2.inModelUpdate && this._isMouthParam(characterId, paramRef, coreModel)) {
             return void 0;
           }
           return raw.apply(coreModel, args);
         };
       }
-      state.writeMaskCore = coreModel;
-      state.writeMaskRestore = () => {
+      state2.writeMaskCore = coreModel;
+      state2.writeMaskRestore = () => {
         for (const entry of restoreEntries) {
           try {
             coreModel[entry.method] = entry.raw;
@@ -21583,16 +23588,16 @@ ${lines.join("\n")}`;
       };
     },
     _ensureLipSyncHooks(characterId, model) {
-      const state = this._getLipSyncState(characterId);
-      if (!state || !model) return;
-      if (state.updateHookModel === model) return;
-      if (state.updateHookRestore) {
+      const state2 = this._getLipSyncState(characterId);
+      if (!state2 || !model) return;
+      if (state2.updateHookModel === model) return;
+      if (state2.updateHookRestore) {
         try {
-          state.updateHookRestore();
+          state2.updateHookRestore();
         } catch (e2) {
         }
-        state.updateHookRestore = null;
-        state.updateHookModel = null;
+        state2.updateHookRestore = null;
+        state2.updateHookModel = null;
       }
       const internal = model?.internalModel;
       const updater = internal?.update;
@@ -21600,13 +23605,13 @@ ${lines.join("\n")}`;
       const rawUpdate = updater.bind(internal);
       const self2 = this;
       internal.update = function(...args) {
-        state.inModelUpdate = true;
+        state2.inModelUpdate = true;
         let ret;
         try {
           ret = rawUpdate(...args);
         } finally {
-          state.inModelUpdate = false;
-          if (state.lipSyncActive) {
+          state2.inModelUpdate = false;
+          if (state2.lipSyncActive) {
             try {
               self2._applyMouthValueToModel(characterId, model);
             } catch (e2) {
@@ -21619,8 +23624,8 @@ ${lines.join("\n")}`;
         }
         return ret;
       };
-      state.updateHookModel = model;
-      state.updateHookRestore = () => {
+      state2.updateHookModel = model;
+      state2.updateHookRestore = () => {
         try {
           internal.update = updater;
         } catch (e2) {
@@ -21628,26 +23633,26 @@ ${lines.join("\n")}`;
       };
     },
     _applyMouthValueToModel(characterId, model) {
-      const state = this._getLipSyncState(characterId);
-      if (!state || !model?.internalModel?.coreModel) return false;
-      const targetValue = Math.max(0, Math.min(1, state.mouthCurrentValue || 0));
-      const oldValue = state.mouthCurrentValue;
-      state.mouthCurrentValue = targetValue;
+      const state2 = this._getLipSyncState(characterId);
+      if (!state2 || !model?.internalModel?.coreModel) return false;
+      const targetValue = Math.max(0, Math.min(1, state2.mouthCurrentValue || 0));
+      const oldValue = state2.mouthCurrentValue;
+      state2.mouthCurrentValue = targetValue;
       const applied = this.setMouthOpen(characterId, targetValue);
-      state.mouthCurrentValue = oldValue;
+      state2.mouthCurrentValue = oldValue;
       return applied;
     },
     _setLipSyncActive(characterId, active) {
       const key = String(characterId || "").trim();
       if (!key) return;
-      let state = this.lipSyncStates.get(key);
-      if (!state && active) {
-        state = this._getLipSyncState(key);
+      let state2 = this.lipSyncStates.get(key);
+      if (!state2 && active) {
+        state2 = this._getLipSyncState(key);
       }
-      if (!state) return;
+      if (!state2) return;
       const next = !!active;
-      if (state.lipSyncActive === next) return;
-      state.lipSyncActive = next;
+      if (state2.lipSyncActive === next) return;
+      state2.lipSyncActive = next;
       if (next) {
         const model = this.models.get(key);
         const coreModel = model?.internalModel?.coreModel;
@@ -21661,11 +23666,11 @@ ${lines.join("\n")}`;
       if (!key) return false;
       const model = this.models.get(key);
       if (!model?.internalModel?.coreModel) return false;
-      const state = this._getLipSyncState(key);
-      if (!state) return false;
+      const state2 = this._getLipSyncState(key);
+      if (!state2) return false;
       const coreModel = model.internalModel.coreModel;
       const clampedValue = Math.max(0, Math.min(1, Number(value) || 0));
-      state.mouthCurrentValue = clampedValue;
+      state2.mouthCurrentValue = clampedValue;
       this._ensureLipSyncHooks(key, model);
       this._installCoreWriteMask(key, coreModel);
       const getParamRange = (paramId, paramIndex) => {
@@ -21829,13 +23834,13 @@ ${lines.join("\n")}`;
         }
       }
       if (appliedAny) return true;
-      if (state.mouthParamCore !== coreModel) {
-        state.mouthParamCore = coreModel;
-        state.mouthParamIds = [];
-        state.mouthParamIndexes = [];
-        state.mouthParamRangeMins = [];
-        state.mouthParamRangeMaxs = [];
-        state.mouthParamWarned = false;
+      if (state2.mouthParamCore !== coreModel) {
+        state2.mouthParamCore = coreModel;
+        state2.mouthParamIds = [];
+        state2.mouthParamIndexes = [];
+        state2.mouthParamRangeMins = [];
+        state2.mouthParamRangeMaxs = [];
+        state2.mouthParamWarned = false;
         try {
           if (typeof coreModel.getParameterCount === "function" && typeof coreModel.getParameterId === "function") {
             const count = Number(coreModel.getParameterCount()) || 0;
@@ -21845,24 +23850,24 @@ ${lines.join("\n")}`;
               const low = pid.toLowerCase();
               const range = getParamRange(pid, i2);
               if (low.includes("mouth") || low.includes("lip") || pid === "ParamA" || /^Param(?:58|61)$/i.test(pid)) {
-                state.mouthParamIds.push(pid);
-                state.mouthParamIndexes.push(i2);
-                state.mouthParamRangeMins.push(range.min);
-                state.mouthParamRangeMaxs.push(range.max);
+                state2.mouthParamIds.push(pid);
+                state2.mouthParamIndexes.push(i2);
+                state2.mouthParamRangeMins.push(range.min);
+                state2.mouthParamRangeMaxs.push(range.max);
                 continue;
               }
               if (/^param\d+$/i.test(pid) && range.max >= 8 && range.min >= -1) {
                 numericFallback.push({ id: pid, idx: i2, min: range.min, max: range.max });
               }
             }
-            if (state.mouthParamIds.length === 0 && numericFallback.length > 0) {
+            if (state2.mouthParamIds.length === 0 && numericFallback.length > 0) {
               numericFallback.sort((a2, b2) => b2.max - a2.max);
               const picked = numericFallback.slice(0, 3);
               for (const item of picked) {
-                state.mouthParamIds.push(item.id);
-                state.mouthParamIndexes.push(item.idx);
-                state.mouthParamRangeMins.push(item.min);
-                state.mouthParamRangeMaxs.push(item.max);
+                state2.mouthParamIds.push(item.id);
+                state2.mouthParamIndexes.push(item.idx);
+                state2.mouthParamRangeMins.push(item.min);
+                state2.mouthParamRangeMaxs.push(item.max);
               }
               this._debugLog(`[${SCRIPT_NAME}] Live2DManager: 使用数字参数回退`, {
                 characterId: key,
@@ -21873,31 +23878,31 @@ ${lines.join("\n")}`;
         } catch (e2) {
         }
       }
-      for (let i2 = 0; i2 < state.mouthParamIds.length; i2++) {
-        const pid = state.mouthParamIds[i2];
-        const pidx = state.mouthParamIndexes[i2] ?? -1;
+      for (let i2 = 0; i2 < state2.mouthParamIds.length; i2++) {
+        const pid = state2.mouthParamIds[i2];
+        const pidx = state2.mouthParamIndexes[i2] ?? -1;
         const appliedById = applyById(pid);
         const appliedByIndex = !appliedById && applyByIndex(pidx);
         if (appliedById || appliedByIndex) appliedAny = true;
       }
       if (appliedAny) return true;
-      if (!state.mouthParamWarned) {
-        state.mouthParamWarned = true;
+      if (!state2.mouthParamWarned) {
+        state2.mouthParamWarned = true;
         console.warn(`[${SCRIPT_NAME}] Live2DManager: 未找到可用口型参数`, {
           characterId: key,
           presetCandidates: paramNames,
-          scannedIds: state.mouthParamIds
+          scannedIds: state2.mouthParamIds
         });
       }
       return false;
     },
     getLipSyncDebugInfo(characterId) {
       const key = String(characterId || "").trim();
-      const state = key ? this.lipSyncStates.get(key) : null;
+      const state2 = key ? this.lipSyncStates.get(key) : null;
       return {
-        lipSyncOverride: state?.lipSyncActive ? "active" : "inactive",
+        lipSyncOverride: state2?.lipSyncActive ? "active" : "inactive",
         mouthParamsSource: "auto",
-        mouthParamsCount: state?.mouthParamIds?.length || 0
+        mouthParamsCount: state2?.mouthParamIds?.length || 0
       };
     },
     getMouthParams(characterId) {
@@ -21905,7 +23910,7 @@ ${lines.join("\n")}`;
       const model = this.models.get(key);
       if (!model?.internalModel?.coreModel) return [];
       const coreModel = model.internalModel.coreModel;
-      const state = this._getLipSyncState(key);
+      const state2 = this._getLipSyncState(key);
       const params = [];
       const seen = /* @__PURE__ */ new Set();
       const push3 = (id2) => {
@@ -21925,7 +23930,7 @@ ${lines.join("\n")}`;
         }
       } catch (e2) {
       }
-      for (const id2 of state?.mouthParamIds || []) {
+      for (const id2 of state2?.mouthParamIds || []) {
         push3(id2);
       }
       return params;
@@ -24351,7 +26356,7 @@ ${lines.join("\n")}`;
       const end = Math.min(segments.length, start + this.lookAheadLimit + 1);
       const seen = /* @__PURE__ */ new Set();
       for (let i2 = start; i2 < end; i2++) {
-        const speaker = segments[i2]?.speaker;
+        const speaker = getSegmentCharacterId(segments[i2]);
         if (!speaker || seen.has(speaker)) continue;
         seen.add(speaker);
         this.enqueueCharacter(speaker, `${reason}@${i2}`);
@@ -24699,7 +26704,15 @@ ${lines.join("\n")}`;
     enabled: true,
     provider: TTS_PROVIDER.LITTLEWHITEBOX,
     autoPlay: true,
-    isPlaying: false,
+    _isPlaying: false,
+    // 播放态同步到 overlay 类名，名牌旁的 TTS 标识（tts-cue.js）据此跳动
+    get isPlaying() {
+      return this._isPlaying;
+    },
+    set isPlaying(value) {
+      this._isPlaying = !!value;
+      $2("#gal-global-overlay").toggleClass("gal-tts-playing", this._isPlaying);
+    },
     isLoading: false,
     currentAudio: null,
     currentSegmentId: null,
@@ -26155,7 +28168,7 @@ ${lines.join("\n")}`;
       }
       this.isPlaying = true;
       if (segment.speaker) {
-        const resolvedSpeakerId = resolveTTSCharacterId(segment.speaker);
+        const resolvedSpeakerId = resolveTTSCharacterId(getSegmentCharacterId(segment));
         const hasLive2D = Live2DManager.models.has(resolvedSpeakerId);
         if (hasLive2D) this._startLipSyncOnPlay(resolvedSpeakerId);
         else this._startLipSyncWhenModelReady(resolvedSpeakerId);
@@ -26218,6 +28231,7 @@ ${lines.join("\n")}`;
         }
       };
       const onError = (err) => {
+        if (this.currentAudio !== audio || this._edgeDirectObjectUrl !== objectUrl) return;
         console.warn(`[${SCRIPT_NAME}] EdgeTTS 直连播放失败:`, err);
         showToast("EdgeTTS 直连播放失败，可切换 Edge 浏览器复测");
         onEnded();
@@ -26247,7 +28261,7 @@ ${lines.join("\n")}`;
       }
       this.isPlaying = true;
       if (segment.speaker) {
-        const resolvedSpeakerId = resolveTTSCharacterId(segment.speaker);
+        const resolvedSpeakerId = resolveTTSCharacterId(getSegmentCharacterId(segment));
         const hasLive2D = Live2DManager.models.has(resolvedSpeakerId);
         if (hasLive2D) this._startLipSyncOnPlay(resolvedSpeakerId);
         else this._startLipSyncWhenModelReady(resolvedSpeakerId);
@@ -26407,7 +28421,7 @@ ${lines.join("\n")}`;
       }
       const speakText = getSegmentSpeakText(segment);
       if (!speakText) return;
-      const gateSpeaker = String(segment.speaker || "").trim();
+      const gateSpeaker = getSegmentCharacterId(segment);
       if (gateSpeaker && !getCharacterTTSEnabled(resolveTTSCharacterId(gateSpeaker))) {
         console.log(`[${SCRIPT_NAME}] TTS: 角色已禁用配音，跳过 - ${gateSpeaker}`);
         return;
@@ -26427,7 +28441,7 @@ ${lines.join("\n")}`;
       if (!this.enabled) return;
       const settings = getSettings();
       const ttsConfig = segment.tts || {};
-      const speakerName = String(segment.speaker || "").trim();
+      const speakerName = getSegmentCharacterId(segment);
       const resolvedSpeakerName = resolveTTSCharacterId(speakerName);
       const requestedVoiceTag = String(ttsConfig.speaker || "").trim();
       const boundVoice = getCharacterTTSVoice(resolvedSpeakerName || speakerName);
@@ -26534,17 +28548,17 @@ ${lines.join("\n")}`;
         this.hideLoadingIndicator();
       }
     },
-    speakCurrent(state) {
+    speakCurrent(state2) {
       this.autoPlay = getSettings()?.ttsAutoPlay !== false;
-      if (!state || !this.autoPlay) return;
+      if (!state2 || !this.autoPlay) return;
       const provider = getTTSProvider();
       if (provider !== this.provider || !this.enabled) {
         this._refreshProviderState();
       }
       if (!this.enabled) return;
-      const segment = state.segments[state.currentIndex];
+      const segment = state2.segments[state2.currentIndex];
       if (!segment || segment.type !== "dialogue") return;
-      const segmentId = `${state.mesId || "unknown"}_${state.currentIndex}`;
+      const segmentId = `${state2.mesId || "unknown"}_${state2.currentIndex}`;
       this.speak(segment, segmentId);
     }
   };
@@ -27046,6 +29060,7 @@ ${lines.join("\n")}`;
   var _setBackgroundWithTransitionRef = null;
   var _clearBackgroundLayersRef = null;
   var _BGMManagerRef = null;
+  var _resolveSpecialCgSceneRef = null;
   function setSpriteManagerRefs({
     getSprite: getSprite2,
     getBackground: getBackground2,
@@ -27053,8 +29068,10 @@ ${lines.join("\n")}`;
     getMessageSegmentState,
     setBackgroundWithTransition: setBackgroundWithTransition2,
     clearBackgroundLayers: clearBackgroundLayers2,
-    BGMManager: BGMManager2
+    BGMManager: BGMManager2,
+    resolveSpecialCgScene
   }) {
+    if (resolveSpecialCgScene) _resolveSpecialCgSceneRef = resolveSpecialCgScene;
     if (getSprite2) _getSpriteRef2 = getSprite2;
     if (getBackground2) _getBackgroundRef = getBackground2;
     if (getSceneBackgrounds) _getSceneBackgroundsRef = getSceneBackgrounds;
@@ -27607,11 +29624,15 @@ ${lines.join("\n")}`;
             else $existingContainer.removeAttr("data-npc-silhouette");
             const currentSrc = $oldImgs.last().attr("src");
             if (currentSrc !== spriteUrl) {
+              $oldImgs.each(function() {
+                this.style.width = `${this.offsetWidth}px`;
+                this.style.height = `${this.offsetHeight}px`;
+              });
+              $oldImgs.addClass("gal-img-out");
               const $newImg = $2(`<img class="gal-char-img gal-img-in" src="${spriteUrl}" alt="${characterId}">`);
               $existingContainer.append($newImg);
               if ($newImg[0]) void $newImg[0].offsetHeight;
               $newImg.addClass("is-in");
-              $oldImgs.addClass("gal-img-out");
               setTimeout(() => {
                 if (!$existingContainer[0]?.isConnected) return;
                 $oldImgs.remove();
@@ -27763,6 +29784,7 @@ ${lines.join("\n")}`;
           }
         }
       });
+      requestCameraFocus();
     },
     applyEmotionEffect(characterId, expression) {
       const info = this.activeCharacters.get(characterId);
@@ -27797,7 +29819,7 @@ ${lines.join("\n")}`;
       }
       return bestMatch || sceneName;
     },
-    async applySceneTint($overlay, scene) {
+    async applySceneTint($overlay, scene, options2 = {}) {
       const originalScene = scene;
       if (scene) {
         scene = this.findBestMatchScene(scene);
@@ -27821,7 +29843,19 @@ ${lines.join("\n")}`;
       console.log(`[${SCRIPT_NAME}] [DEBUG] getBackground 返回: ${bgUrl ? "有图片URL" : "null/undefined"}`);
       if (bgUrl) {
         $bgLayer.addClass("has-bg").removeClass("generating-bg");
-        if (_setBackgroundWithTransitionRef) _setBackgroundWithTransitionRef($bgLayer, bgUrl);
+        if (_setBackgroundWithTransitionRef) {
+          let specialCgId = null;
+          try {
+            specialCgId = _resolveSpecialCgSceneRef ? _resolveSpecialCgSceneRef(scene) : null;
+          } catch (_2) {
+          }
+          const sceneTitle = String(originalScene || scene).replace(/_/g, " ");
+          _setBackgroundWithTransitionRef($bgLayer, bgUrl, {
+            scene: sceneTitle,
+            transition: specialCgId ? "flash" : options2.transition || null,
+            banner: specialCgId ? { id: specialCgId, kicker: "NEW CG", title: sceneTitle } : null
+          });
+        }
         console.log(`[${SCRIPT_NAME}] 应用背景成功: ${scene}, URL: ${bgUrl.substring(0, 50)}...`);
       } else {
         const BGMManagerLocal = _BGMManagerRef;
@@ -27879,12 +29913,12 @@ ${lines.join("\n")}`;
     const $lastMes = $2("#chat > .mes").last();
     if (!$lastMes.length) return;
     const mesId = $lastMes.attr("mesid");
-    const state = messageSegmentState2.get(String(mesId));
-    if (state && state.parsedContent && state.parsedContent.currentBackground && state.parsedContent.currentBackground.scene === sceneName) {
+    const state2 = messageSegmentState2.get(String(mesId));
+    if (state2 && state2.parsedContent && state2.parsedContent.currentBackground && state2.parsedContent.currentBackground.scene === sceneName) {
       SpriteManager.currentScene = null;
       console.log(`[${SCRIPT_NAME}] 背景生成: 强制刷新UI: ${sceneName}`);
       if (_updateGlobalOverlayContentRef) {
-        _updateGlobalOverlayContentRef(mesId, state.parsedContent);
+        _updateGlobalOverlayContentRef(mesId, state2.parsedContent);
       }
     }
   }
@@ -28529,7 +30563,7 @@ ${lines.join("\n")}`;
   var RE_TAG_WHITESPACE2 = />\s+</g;
   var RE_MAINTEXT_CLOSED2 = /<maintext>([\s\S]*?)<\/maintext>/i;
   var RE_MAINTEXT_UNCLOSED2 = /<maintext>([\s\S]*)$/i;
-  var RE_BACKGROUND2 = /<background\s+scene="([^"]+)"\s*[\/]?>/i;
+  var RE_BACKGROUND2 = /<background\b[^>]*?\bscene\s*=\s*"([^"]+)"[^>]*?\/?>/i;
   var RE_BGIMG2 = /<bgimg>(.*?)<\/bgimg>/i;
   var RE_WHIMG2 = /<whimg>(.*?)<\/whimg>/i;
   var RE_BNIMG2 = /<bnimg>([\s\S]*?)<\/bnimg>/i;
@@ -28593,12 +30627,86 @@ ${lines.join("\n")}`;
     if (getFormattedContent2) _getFormattedContentRef = getFormattedContent2;
   }
   var _measuredSegLength = null;
+  var _measuredLayout = null;
   function setMeasuredSegLength(value) {
-    const n2 = Math.round(Number(value));
+    const layout4 = value && typeof value === "object" ? value : null;
+    const n2 = Math.round(Number(layout4 ? layout4.chars : value));
     _measuredSegLength = Number.isFinite(n2) && n2 > 0 ? Math.max(60, Math.min(1200, n2)) : null;
+    const cpl = Number(layout4?.charsPerLine);
+    const lines = Number(layout4?.maxLines);
+    _measuredLayout = _measuredSegLength && cpl > 0 && lines > 0 ? { charsPerLine: cpl, maxLines: lines, gapLines: Math.max(0, Number(layout4.gapLines) || 0) } : null;
   }
   function getMeasuredSegLength() {
     return _measuredSegLength;
+  }
+  function getMeasuredLayoutSignature() {
+    const l2 = _measuredLayout;
+    return l2 ? `${l2.charsPerLine}x${l2.maxLines}x${l2.gapLines.toFixed(2)}` : "";
+  }
+  function estimateTextLines(text, layout4) {
+    const cpl = layout4.charsPerLine * 0.94;
+    const paras = String(text ?? "").split("\n");
+    let lines = 0;
+    for (const para of paras) {
+      let width2 = 0;
+      for (const ch of para) width2 += ch.codePointAt(0) < 11904 ? 0.55 : 1;
+      lines += Math.max(1, Math.ceil(width2 / cpl));
+    }
+    return lines + Math.max(0, paras.length - 1) * layout4.gapLines;
+  }
+  function fitsOnePage(text, maxChars, layout4) {
+    if (String(text ?? "").length > maxChars) return false;
+    return !layout4 || estimateTextLines(text, layout4) <= layout4.maxLines;
+  }
+  function splitParagraphByChars(text, maxChars) {
+    const chunks = [];
+    let rest = text;
+    const sentenceEnds = ["。", "！", "？", "…", "\n", ".", "!", "?"];
+    const clauseEnds = ["，", "、", "；", "：", "—", ",", ";", ":"];
+    const findBreak = (marks, minRatio) => {
+      for (let i2 = maxChars - 1; i2 >= Math.floor(maxChars * minRatio); i2--) {
+        if (marks.includes(rest[i2])) return i2 + 1;
+      }
+      return -1;
+    };
+    while (rest.length > maxChars) {
+      let splitIdx = findBreak(sentenceEnds, 0.35);
+      if (splitIdx === -1) splitIdx = findBreak(clauseEnds, 0.5);
+      if (splitIdx === -1) {
+        const spaceIdx = rest.lastIndexOf(" ", maxChars);
+        splitIdx = spaceIdx >= Math.floor(maxChars * 0.6) ? spaceIdx + 1 : maxChars;
+      }
+      chunks.push(rest.substring(0, splitIdx).trim());
+      rest = rest.substring(splitIdx).trim();
+    }
+    if (rest) chunks.push(rest);
+    return chunks;
+  }
+  function splitTextToPages(text, maxChars, layout4) {
+    if (fitsOnePage(text, maxChars, layout4)) return [text];
+    if (!layout4) return splitParagraphByChars(text, maxChars);
+    const pages = [];
+    let current2 = "";
+    for (const para of String(text).split("\n")) {
+      const candidate = current2 ? `${current2}
+${para}` : para;
+      if (fitsOnePage(candidate, maxChars, layout4)) {
+        current2 = candidate;
+        continue;
+      }
+      if (current2) pages.push(current2);
+      current2 = "";
+      if (fitsOnePage(para, maxChars, layout4)) {
+        current2 = para;
+        continue;
+      }
+      const perPage = Math.max(20, Math.min(maxChars, Math.floor(layout4.maxLines * layout4.charsPerLine * 0.9)));
+      const chunks = splitParagraphByChars(para, perPage);
+      pages.push(...chunks.slice(0, -1));
+      current2 = chunks[chunks.length - 1] || "";
+    }
+    if (current2) pages.push(current2);
+    return pages.filter((page) => page.trim());
   }
   function getExpressionTag(expressionName) {
     return EXPRESSION_TAG_MAP2[expressionName] || `${expressionName} expression`;
@@ -28650,6 +30758,14 @@ ${lines.join("\n")}`;
   function normalizeSpeakerName(name) {
     return stripImagePlaceholders(String(name || "")).replace(/^[“”"'‘’「」『』\s]+/, "").replace(/[“”"'‘’「」『』\s]+$/, "").trim();
   }
+  function splitSpeakerAlias(name) {
+    const raw = String(name || "");
+    const atIndex = raw.search(/[@＠]/);
+    if (atIndex < 0) return { display: raw.trim(), target: "" };
+    const target = normalizeSpeakerName(raw.slice(atIndex + 1));
+    const display = normalizeSpeakerName(raw.slice(0, atIndex)) || (target ? "???" : "");
+    return { display, target };
+  }
   function preprocessSimplifiedFormat(html) {
     if (!html) return html;
     html = cleanIllegalTags(html);
@@ -28669,7 +30785,8 @@ ${lines.join("\n")}`;
       const parts = exprVoicePart.split(",").map((s2) => s2.trim());
       const expression = parts[0];
       const specifiedVoice = parts[1] || null;
-      const boundVoice = getCharacterTTSVoice(speaker);
+      const voiceKey = splitSpeakerAlias(speaker).target || speaker;
+      const boundVoice = getCharacterTTSVoice(voiceKey);
       let voice = null;
       if (boundVoice) {
         voice = boundVoice;
@@ -28677,17 +30794,17 @@ ${lines.join("\n")}`;
         voice = specifiedVoice;
       } else if (specifiedVoice) {
         voice = specifiedVoice;
-        sessionVoiceCache2.set(speaker, specifiedVoice);
-      } else if (sessionVoiceCache2.has(speaker)) {
-        voice = sessionVoiceCache2.get(speaker);
+        sessionVoiceCache2.set(voiceKey, specifiedVoice);
+      } else if (sessionVoiceCache2.has(voiceKey)) {
+        voice = sessionVoiceCache2.get(voiceKey);
       }
       const genderCache = GalgameStore.cache.voiceGenders;
       let voiceGenderTag = null;
       if (specifiedVoice === "男声" || specifiedVoice === "女声") {
         voiceGenderTag = specifiedVoice;
-        genderCache.set(speaker, specifiedVoice);
-      } else if (genderCache.has(speaker)) {
-        voiceGenderTag = genderCache.get(speaker);
+        genderCache.set(voiceKey, specifiedVoice);
+      } else if (genderCache.has(voiceKey)) {
+        voiceGenderTag = genderCache.get(voiceKey);
       }
       const ttsParts = [];
       if (voice) ttsParts.push(`speaker=${voice}`);
@@ -28713,7 +30830,7 @@ ${lines.join("\n")}`;
     if (isEnabled && settings.enhancedMode?.enabled && messageId) {
       const formatData = _getFormattedContentRef ? _getFormattedContentRef(messageId) : null;
       if (formatData) {
-        console.log(`[${SCRIPT_NAME}] 使用格式化版本 (swipe ${formatData.formattedIndex})`);
+        console.log(`[${SCRIPT_NAME}] 使用格式化版本 (${formatData.source === "extra" ? "加强模式记录" : `swipe ${formatData.formattedIndex}`})`);
         html = formatData.formatted;
         html = html.replace(RE_THINK_CLOSED2, "");
         html = html.replace(RE_THINK_UNCLOSED2, "");
@@ -28727,13 +30844,16 @@ ${lines.join("\n")}`;
     const BASE_SEG_LENGTH = 120;
     const segLengthOverride = Math.round(Number(settings.dialogSegLengthOverride) || 0);
     const MAX_SEG_LENGTH = segLengthOverride > 0 ? Math.max(40, Math.min(2e3, segLengthOverride)) : _measuredSegLength ?? Math.max(40, Math.min(360, Math.round(BASE_SEG_LENGTH / getDialogFontScale(settings))));
+    const pageLayout = segLengthOverride > 0 ? null : _measuredLayout;
+    const segLayout = pageLayout ? getMeasuredLayoutSignature() : "";
     const cacheSource = [
       html,
       popup1Html,
       popup2Html,
       simpleStorybookMode ? "simple-storybook" : "standard-galgame",
       settings.ttsBilingualZhJaEnabled === true ? "tts-bilingual-zh-ja" : "tts-default",
-      `seg-len-${MAX_SEG_LENGTH}`
+      `seg-len-${MAX_SEG_LENGTH}`,
+      `seg-layout-${segLayout}`
     ].join("\n---gal-cache-boundary---\n");
     const cacheKey = `${cacheSource.length}_${hashCacheSource(cacheSource)}`;
     if (parseCache2.has(cacheKey)) {
@@ -28749,8 +30869,9 @@ ${lines.join("\n")}`;
       bgm: null,
       options: [],
       backgroundChanges: [],
-      // 本次分页使用的每页字符数，渲染后与实测容量比对以决定是否需要重排
-      segLength: MAX_SEG_LENGTH
+      // 本次分页使用的每页字符数 / 版式签名，渲染后与实测容量比对以决定是否需要重排
+      segLength: MAX_SEG_LENGTH,
+      segLayout
     };
     let cleanedHtml = html.replace(RE_PRE_TAG2, "").replace(RE_PRE_CLOSE2, "").replace(RE_CODE_TAG2, "").replace(RE_CODE_CLOSE2, "");
     cleanedHtml = cleanedHtml.replace(RE_TAG_WHITESPACE2, "><");
@@ -28770,16 +30891,21 @@ ${lines.join("\n")}`;
       content = content.substring(firstGalMatch.index);
     }
     const backgroundChanges = [];
-    const bgRegex = /<background\s+scene="([^"]+)"\s*[\/]?>/gi;
+    const bgRegex = /<background\b([^>]*?)\/?>/gi;
     const bnimgRegex = /<bnimg>([\s\S]*?)<\/bnimg>/gi;
     const bgimgRegex = /<bgimg>(.*?)<\/bgimg>/gi;
     const whimgRegex = /<whimg>(.*?)<\/whimg>/gi;
     let bgMatch;
     while ((bgMatch = bgRegex.exec(content)) !== null) {
+      const bgAttrs = bgMatch[1] || "";
+      const sceneAttr = bgAttrs.match(/\bscene\s*=\s*"([^"]+)"/i);
+      if (!sceneAttr) continue;
+      const transitionAttr = bgAttrs.match(/\btransition\s*=\s*"([^"]+)"/i);
       const bgEndPos = bgMatch.index + bgMatch[0].length;
       const bgInfo = {
         position: bgMatch.index,
-        scene: bgMatch[1],
+        scene: sceneAttr[1],
+        transition: transitionAttr ? transitionAttr[1].trim().toLowerCase() : null,
         generationTags: null,
         wallhavenTags: null,
         bananaPrompt: null
@@ -29064,8 +31190,19 @@ ${lines.join("\n")}`;
             }
             if (inlineParts[1] === "男声" || inlineParts[1] === "女声") {
               inlineVoiceTag = inlineParts[1];
-              GalgameStore.cache.voiceGenders.set(speaker, inlineVoiceTag);
             }
+          }
+          const speakerAlias = splitSpeakerAlias(speaker);
+          speaker = speakerAlias.display;
+          let spriteCharacter = speakerAlias.target;
+          if (spriteCharacter) {
+            spriteAliasMap.set(speaker, spriteCharacter);
+          } else if (spriteAliasMap.has(speaker)) {
+            spriteCharacter = spriteAliasMap.get(speaker);
+          }
+          if (spriteCharacter === speaker) spriteCharacter = "";
+          if (inlineVoiceTag) {
+            GalgameStore.cache.voiceGenders.set(spriteCharacter || speaker, inlineVoiceTag);
           }
           const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
           if (!speaker || !dialogue) return null;
@@ -29089,11 +31226,14 @@ ${lines.join("\n")}`;
               text: splitResult.displayText,
               expression: expression || "默认"
             };
+            if (spriteCharacter) {
+              segResult.spriteCharacter = spriteCharacter;
+            }
             if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
               segResult.ttsText = splitResult.ttsText;
             }
             if (ttsConfigString) {
-              segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+              segResult.tts = parseTTSConfig(ttsConfigString, spriteCharacter || speaker);
             }
             if (inlineVoiceTag) {
               if (!segResult.tts) {
@@ -29120,6 +31260,7 @@ ${lines.join("\n")}`;
       const styledBlocks = collectStyledBlocks(content);
       const expressionNames = getAllExpressions();
       const expressionPattern = expressionNames.map((e2) => e2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+      const spriteAliasMap = /* @__PURE__ */ new Map();
       const pTagRegex = /<p(?:\s+tts="([^"]*)")?\s*>([\s\S]*?)<\/p>/gi;
       const allContentItems = [];
       let match2;
@@ -29249,7 +31390,8 @@ ${lines.join("\n")}`;
           targetSegment.backgroundCommands = [];
         }
         targetSegment.backgroundCommands.push({
-          scene: bg.scene
+          scene: bg.scene,
+          transition: bg.transition || null
         });
       }
     }
@@ -29283,7 +31425,8 @@ ${lines.join("\n")}`;
       const hasOwnTtsText = (s2) => typeof s2.ttsText === "string" && s2.ttsText.trim() && s2.ttsText !== s2.text;
       for (const seg of result.segments) {
         const prev = mergedSegments[mergedSegments.length - 1];
-        const canMerge = prev && prev.type === seg.type && (seg.type === "narration" || seg.type === "dialogue") && (prev.speaker || null) === (seg.speaker || null) && prev.text && seg.text && !seg.spriteCommands && !seg.backgroundCommands && !seg.effectOps && (prev.backgroundScene || null) === (seg.backgroundScene || null) && !hasOwnTtsText(seg) && !hasOwnTtsText(prev) && (!seg.expression || seg.expression === prev.expression) && prev.text.length + seg.text.length + 1 <= MAX_SEG_LENGTH;
+        const canMerge = prev && prev.type === seg.type && (seg.type === "narration" || seg.type === "dialogue") && (prev.speaker || null) === (seg.speaker || null) && (prev.spriteCharacter || null) === (seg.spriteCharacter || null) && prev.text && seg.text && !seg.spriteCommands && !seg.backgroundCommands && !seg.effectOps && (prev.backgroundScene || null) === (seg.backgroundScene || null) && !hasOwnTtsText(seg) && !hasOwnTtsText(prev) && (!seg.expression || seg.expression === prev.expression) && fitsOnePage(`${prev.text}
+${seg.text}`, MAX_SEG_LENGTH, pageLayout);
         if (canMerge) {
           prev.text = `${prev.text}
 ${seg.text}`;
@@ -29300,47 +31443,24 @@ ${seg.text}`;
         finalSegments.push(seg);
         return;
       }
-      if (!seg.text || seg.text.length <= MAX_SEG_LENGTH) {
+      if (!seg.text) {
         finalSegments.push(seg);
         return;
       }
-      let text = seg.text;
-      let isFirstChunk = true;
-      while (text.length > MAX_SEG_LENGTH) {
-        let splitIdx = -1;
-        const punctuations = ["。", "！", "？", "…", "\n", ".", "!", "?"];
-        for (let i2 = MAX_SEG_LENGTH; i2 >= Math.floor(MAX_SEG_LENGTH * 0.6); i2--) {
-          if (punctuations.includes(text[i2])) {
-            splitIdx = i2 + 1;
-            break;
-          }
-        }
-        if (splitIdx === -1) {
-          splitIdx = text.lastIndexOf(" ", MAX_SEG_LENGTH);
-          if (splitIdx !== -1) splitIdx += 1;
-        }
-        if (splitIdx === -1 || splitIdx < Math.floor(MAX_SEG_LENGTH * 0.6)) {
-          splitIdx = MAX_SEG_LENGTH;
-        }
-        const nextSeg = Object.assign({}, seg, { text: text.substring(0, splitIdx).trim() });
-        if (!isFirstChunk) {
+      const pages = splitTextToPages(seg.text, MAX_SEG_LENGTH, pageLayout);
+      if (pages.length <= 1) {
+        finalSegments.push(seg);
+        return;
+      }
+      pages.forEach((pageText, index) => {
+        const nextSeg = Object.assign({}, seg, { text: pageText });
+        if (index > 0) {
           delete nextSeg.spriteCommands;
           delete nextSeg.backgroundCommands;
           delete nextSeg.effectOps;
         }
         finalSegments.push(nextSeg);
-        text = text.substring(splitIdx).trim();
-        isFirstChunk = false;
-      }
-      if (text) {
-        const nextSeg = Object.assign({}, seg, { text });
-        if (!isFirstChunk) {
-          delete nextSeg.spriteCommands;
-          delete nextSeg.backgroundCommands;
-          delete nextSeg.effectOps;
-        }
-        finalSegments.push(nextSeg);
-      }
+      });
     });
     result.segments = finalSegments;
     result.segments.forEach((seg) => {
@@ -29479,10 +31599,10 @@ ${seg.text}`;
     const mesId = getCurrentDisplayMesId();
     if (!mesId) return;
     const messageSegmentState8 = GalgameStore.cache.segments;
-    const state = messageSegmentState8.get(String(mesId));
-    if (!state) return;
-    const total = state.segments.length;
-    const currentIndex = state.currentIndex;
+    const state2 = messageSegmentState8.get(String(mesId));
+    if (!state2) return;
+    const total = state2.segments.length;
+    const currentIndex = state2.currentIndex;
     const isEnd = currentIndex >= total - 1;
     console.log(`[${SCRIPT_NAME}] updateNextBtnForGeneratingState - isEnd=${isEnd}, isGeneratingResponse=${getIsGeneratingResponse()}`);
     if (!isEnd || !getIsGeneratingResponse()) return;
@@ -29508,10 +31628,10 @@ ${seg.text}`;
     const mesId = getCurrentDisplayMesId();
     if (!mesId) return;
     const messageSegmentState8 = GalgameStore.cache.segments;
-    const state = messageSegmentState8.get(String(mesId));
-    if (!state) return;
-    const total = state.segments.length;
-    const currentIndex = state.currentIndex;
+    const state2 = messageSegmentState8.get(String(mesId));
+    if (!state2) return;
+    const total = state2.segments.length;
+    const currentIndex = state2.currentIndex;
     const isEnd = currentIndex >= total - 1;
     console.log(`[${SCRIPT_NAME}] refreshNextBtnDisplay - isEnd=${isEnd}, isGeneratingResponse=${getIsGeneratingResponse()}`);
     if (isEnd) {
@@ -29527,8 +31647,125 @@ ${seg.text}`;
     }
   }
 
+  // src/ui/web-fonts.js
+  var CDN_HOSTS = ["https://cdn.jsdelivr.net", "https://gcore.jsdelivr.net"];
+  var FONT_SOURCES = {
+    "Barlow": { pkg: "@fontsource/barlow@5", files: ["600", "700", "800", "900"] },
+    "Noto Sans SC": { pkg: "@fontsource/noto-sans-sc@5", files: ["500", "700"] },
+    "Noto Serif SC": { pkg: "@fontsource/noto-serif-sc@5", files: ["500", "700"] },
+    "Ma Shan Zheng": { pkg: "@fontsource/ma-shan-zheng@5", files: ["400"] },
+    "Anton": { pkg: "@fontsource/anton@5", files: ["400"] },
+    "Archivo Black": { pkg: "@fontsource/archivo-black@5", files: ["400"] },
+    "Zen Old Mincho": { pkg: "@fontsource/zen-old-mincho@5", files: ["400", "700"] },
+    "Zhi Mang Xing": { pkg: "@fontsource/zhi-mang-xing@5", files: ["400"] },
+    "Liu Jian Mao Cao": { pkg: "@fontsource/liu-jian-mao-cao@5", files: ["400"] },
+    "Shippori Mincho": { pkg: "@fontsource/shippori-mincho@5", files: ["500", "600", "700"] },
+    "Zen Kaku Gothic New": { pkg: "@fontsource/zen-kaku-gothic-new@5", files: ["400", "500", "700"] },
+    "Italiana": { pkg: "@fontsource/italiana@5", files: ["400"] },
+    "Cormorant Garamond": { pkg: "@fontsource-variable/cormorant-garamond@5", files: ["index"], variable: true },
+    "Outfit": { pkg: "@fontsource-variable/outfit@5", files: ["index"], variable: true },
+    "Barlow Condensed": { pkg: "@fontsource/barlow-condensed@5", files: ["500", "600"] },
+    "JetBrains Mono": { pkg: "@fontsource-variable/jetbrains-mono@5", files: ["index"], variable: true },
+    "LXGW WenKai Screen": { pkg: "lxgw-wenkai-screen-webfont@1", files: ["lxgwwenkaiscreen"] }
+  };
+  var SKIN_FONTS = [
+    { skins: ["none"], fonts: ["Outfit", "Noto Sans SC"] },
+    { skins: [DEFAULT_DARK_SKIN_ID], fonts: ["Barlow Condensed", "Noto Sans SC"] },
+    { skins: [DEFAULT_SOFT_SKIN_ID], fonts: ["LXGW WenKai Screen", "Noto Sans SC"] },
+    { skins: [CYBERPOP_SKIN_ID, CYBERPOP_DARK_SKIN_ID], fonts: ["Barlow", "Noto Sans SC"] },
+    { skins: ANCIENT_FAMILY_SKIN_IDS, fonts: ["Noto Serif SC", "Ma Shan Zheng"] },
+    { skins: PERSONA_FAMILY_SKIN_IDS, fonts: ["Anton", "Archivo Black", "Noto Sans SC"] },
+    { skins: JRPG_FAMILY_SKIN_IDS, fonts: ["Zen Old Mincho", "Noto Serif SC"] },
+    { skins: YANYUN_FAMILY_SKIN_IDS, fonts: ["Noto Serif SC", "Zhi Mang Xing", "Liu Jian Mao Cao"] },
+    { skins: ["skin-classic"], fonts: ["Shippori Mincho", "Zen Kaku Gothic New", "Italiana", "Cormorant Garamond", "Noto Serif SC"] },
+    { skins: SHUJIAN_FAMILY_SKIN_IDS, fonts: ["Noto Serif SC", "Cormorant Garamond"] }
+  ];
+  var DIALOG_FONTS = {
+    sans: ["Noto Sans SC"],
+    serif: ["Noto Serif SC"],
+    wenkai: ["LXGW WenKai Screen"],
+    mono: ["JetBrains Mono"]
+  };
+  var STYLED_STAGE_FONTS = ["LXGW WenKai Screen", "Noto Serif SC", "JetBrains Mono"];
+  var loadedFamilies = /* @__PURE__ */ new Map();
+  var FAILURE_COOLDOWN_MS = 10 * 60 * 1e3;
+  var failedAt = /* @__PURE__ */ new Map();
+  function isWebFontsEnabled() {
+    return getSettings()?.webFontsEnabled !== false;
+  }
+  function toStyleId(family) {
+    return `${SCRIPT_ID}-font-${family.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  }
+  function rewriteFontCss(css, baseUrl, source) {
+    let out = css.replace(/url\(\s*(['"]?)\.\/([^'")]+)\1\s*\)/g, (_m, _q, path) => `url("${baseUrl}${path}")`);
+    if (source.variable) {
+      out = out.replace(/font-family:\s*(['"])(.+?) Variable\1/g, (_m, q2, name) => `font-family: ${q2}${name}${q2}`);
+    }
+    return out;
+  }
+  async function fetchFontCss(source, file) {
+    for (const host of CDN_HOSTS) {
+      const baseUrl = `${host}/npm/${source.pkg}/`;
+      try {
+        const res = await topWindow.fetch(`${baseUrl}${file}.css`, { cache: "force-cache" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return rewriteFontCss(await res.text(), baseUrl, source);
+      } catch (error3) {
+        console.warn(`[${SCRIPT_NAME}] 字体 CSS 获取失败（${host}）: ${source.pkg}/${file}`, error3?.message || error3);
+      }
+    }
+    return "";
+  }
+  async function loadFamily(family) {
+    const source = FONT_SOURCES[family];
+    if (!source) return false;
+    const doc = topWindow.document;
+    const styleId = toStyleId(family);
+    if (doc.getElementById(styleId)) return true;
+    const parts = await Promise.all(source.files.map((file) => fetchFontCss(source, file)));
+    const css = parts.filter(Boolean).join("\n");
+    if (!css) return false;
+    if (doc.getElementById(styleId)) return true;
+    const styleEl = doc.createElement("style");
+    styleEl.id = styleId;
+    styleEl.textContent = css;
+    (doc.head || doc.documentElement).appendChild(styleEl);
+    return true;
+  }
+  function ensureWebFonts(families) {
+    if (!isWebFontsEnabled()) return Promise.resolve(false);
+    const list = Array.from(new Set((Array.isArray(families) ? families : [families]).filter(Boolean)));
+    const now = Date.now();
+    return Promise.all(list.map((family) => {
+      if (!loadedFamilies.has(family)) {
+        if (now - (failedAt.get(family) || 0) < FAILURE_COOLDOWN_MS) return Promise.resolve(false);
+        const onFail = () => {
+          loadedFamilies.delete(family);
+          failedAt.set(family, Date.now());
+          return false;
+        };
+        const task = loadFamily(family).then((ok) => ok ? true : onFail()).catch(onFail);
+        loadedFamilies.set(family, task);
+      }
+      return loadedFamilies.get(family);
+    })).then((results) => results.every(Boolean));
+  }
+  function getFontsForSkin(skin) {
+    const normalized = String(skin || "none").trim() || "none";
+    const matched = SKIN_FONTS.find((entry) => entry.skins.includes(normalized));
+    return matched ? matched.fonts.slice() : [];
+  }
+  function syncWebFontsForSettings(settings = getSettings()) {
+    if (!settings || settings.webFontsEnabled === false) return Promise.resolve(false);
+    const families = [
+      ...getFontsForSkin(settings.skin),
+      ...DIALOG_FONTS[String(settings.dialogFontFamily || "sans").toLowerCase()] || []
+    ];
+    return ensureWebFonts(families);
+  }
+
   // src/ui/styled-fx.js
-  var topDoc = topWindow.document;
+  var topDoc3 = topWindow.document;
   var raf = (fn3) => topWindow.requestAnimationFrame(fn3);
   var caf = (id2) => topWindow.cancelAnimationFrame(id2);
   var THEMES = {
@@ -29594,8 +31831,8 @@ ${seg.text}`;
     const cur = mk(THEMES.sms.particles);
     const tgt = mk(THEMES.sms.particles);
     let burstMul = 1;
-    const sp1 = topDoc.createElement("canvas");
-    const sp2 = topDoc.createElement("canvas");
+    const sp1 = topDoc3.createElement("canvas");
+    const sp2 = topDoc3.createElement("canvas");
     sp1.width = sp1.height = sp2.width = sp2.height = 64;
     function tintSprite(cv, rgb) {
       const c2 = cv.getContext("2d");
@@ -29671,7 +31908,7 @@ ${seg.text}`;
       host = stageEl;
       if (!canvas || !canvas.isConnected || canvas.parentElement !== stageEl) {
         if (canvas) canvas.remove();
-        canvas = topDoc.createElement("canvas");
+        canvas = topDoc3.createElement("canvas");
         canvas.className = "fx-particles";
         stageEl.insertBefore(canvas, stageEl.firstChild);
         ctx = canvas.getContext("2d");
@@ -29695,19 +31932,19 @@ ${seg.text}`;
       tgt.sway = p3.sway;
       tgt.size = p3.size;
     }
-    function burst(mul) {
+    function burst2(mul) {
       burstMul = Math.max(burstMul, mul || 2.5);
     }
-    return { start, stop: stop5, setTheme, burst, resize: resize2 };
+    return { start, stop: stop5, setTheme, burst: burst2, resize: resize2 };
   })();
   function ensureFxLayers(stageEl) {
     if (!stageEl.querySelector(".fx-rays")) {
-      const rays = topDoc.createElement("div");
+      const rays = topDoc3.createElement("div");
       rays.className = "fx-rays";
       stageEl.insertBefore(rays, stageEl.querySelector(".gal-styled-stage-content"));
     }
     if (!stageEl.querySelector(".fx-flash")) {
-      const flash = topDoc.createElement("div");
+      const flash = topDoc3.createElement("div");
       flash.className = "fx-flash";
       stageEl.appendChild(flash);
     }
@@ -29737,7 +31974,7 @@ ${seg.text}`;
       const isOther = row.classList.contains("gal-sms-row-other");
       if (isOther) {
         later(() => {
-          const ty = topDoc.createElement("div");
+          const ty = topDoc3.createElement("div");
           ty.className = "gal-sms-typing";
           ty.innerHTML = "<i></i><i></i><i></i>";
           body.insertBefore(ty, row);
@@ -29807,8 +32044,8 @@ ${seg.text}`;
   }
   function playParchment(card, stageEl, myToken) {
     if (REDUCED_MOTION) return;
-    const top = topDoc.createElement("div");
-    const bot = topDoc.createElement("div");
+    const top = topDoc3.createElement("div");
+    const bot = topDoc3.createElement("div");
     top.className = "fx-roller";
     bot.className = "fx-roller";
     for (const r2 of [top, bot]) {
@@ -29859,6 +32096,8 @@ ${seg.text}`;
     }
     const $stage = ensureStyledStage($overlay);
     if (!$stage.length) return;
+    ensureWebFonts(STYLED_STAGE_FONTS).catch(() => {
+    });
     token++;
     const myToken = token;
     clearSubTimers();
@@ -29929,6 +32168,32 @@ ${seg.text}`;
   var DEFAULT_SOUND_VOLUME = 35;
   var SOUND_MIN_INTERVAL_MS = 30;
   var TICK_MIN_DELAY_MS = 8;
+  var CHAR_FADE_MS = 200;
+  var PUNCTUATION_PAUSE_MS = {
+    "。": 260,
+    "！": 260,
+    "？": 260,
+    "!": 220,
+    "?": 220,
+    ".": 160,
+    "…": 120,
+    "⋯": 120,
+    "，": 110,
+    "、": 90,
+    ",": 80,
+    "；": 140,
+    ";": 120,
+    "：": 110,
+    ":": 90,
+    "—": 45,
+    "～": 60,
+    "~": 50,
+    "」": 70,
+    "』": 70,
+    "”": 70,
+    "）": 50,
+    ")": 40
+  };
   var activeSession = null;
   var sessionSerial = 0;
   var audioContext = null;
@@ -29980,6 +32245,68 @@ ${seg.text}`;
     }
     node.innerHTML = lines.map((line) => `<span class="gal-para">${renderLineHtml(line, colorQuotes)}</span>`).join("");
   }
+  function wrapChars(text) {
+    let html = "";
+    for (const ch of String(text ?? "")) {
+      html += `<span class="gal-tw-ch">${escapeHtml2(ch)}</span>`;
+    }
+    return html;
+  }
+  function renderLineTypingHtml(line, colorQuotes) {
+    if (!colorQuotes) return wrapChars(line);
+    let html = "";
+    let i2 = 0;
+    while (i2 < line.length) {
+      const close = QUOTE_PAIRS[line[i2]];
+      if (close) {
+        let end = line.indexOf(close, i2 + 1);
+        if (end === -1) end = line.length - 1;
+        html += `<span class="gal-quote">${wrapChars(line.slice(i2, end + 1))}</span>`;
+        i2 = end + 1;
+      } else {
+        let next = i2;
+        while (next < line.length && !QUOTE_PAIRS[line[next]]) next++;
+        html += wrapChars(line.slice(i2, next));
+        i2 = next;
+      }
+    }
+    return html;
+  }
+  function renderTypingMarkup(node, text) {
+    const raw = String(text ?? "");
+    const colorQuotes = getSettings()?.simpleStorybookMode === true;
+    const lines = raw.split("\n");
+    if (lines.length === 1) {
+      node.innerHTML = renderLineTypingHtml(raw, colorQuotes);
+    } else {
+      node.innerHTML = lines.map((line) => `<span class="gal-para">${renderLineTypingHtml(line, colorQuotes)}</span>`).join("");
+    }
+    return Array.from(node.querySelectorAll(".gal-tw-ch"));
+  }
+  function appendEndMarker(node) {
+    if (!node || !String(node.textContent || "").trim()) return;
+    const host = node.lastElementChild && node.lastElementChild.classList.contains("gal-para") ? node.lastElementChild : node;
+    const marker = node.ownerDocument.createElement("span");
+    marker.className = "gal-tw-end";
+    marker.setAttribute("aria-hidden", "true");
+    host.appendChild(marker);
+  }
+  function commitFinalText(node, text) {
+    renderTextSlice(node, text);
+    appendEndMarker(node);
+  }
+  function keepCharVisible(node, charEl) {
+    if (node.scrollHeight <= node.clientHeight + 1) return;
+    const box = node.getBoundingClientRect();
+    const rect = charEl.getBoundingClientRect();
+    if (rect.bottom > box.bottom - 2) node.scrollTop += rect.bottom - box.bottom + 4;
+  }
+  function getPunctuationPause(ch, speed) {
+    const base = PUNCTUATION_PAUSE_MS[ch];
+    if (!base) return 0;
+    const factor = Math.max(0.45, Math.min(1.5, 30 / speed));
+    return Math.round(base * factor);
+  }
   function getRuntimeSettings() {
     const settings = getSettings();
     const speed = clampNumber(settings?.typewriterSpeed, MIN_SPEED, MAX_SPEED, DEFAULT_SPEED);
@@ -29988,7 +32315,8 @@ ${seg.text}`;
       enabled: settings?.typewriterEnabled !== false,
       speed,
       soundEnabled: settings?.typewriterSoundEnabled !== false,
-      soundVolume
+      soundVolume,
+      punctuationPause: settings?.typewriterPunctuationPause !== false
     };
   }
   function completeSession(session, { commitText }) {
@@ -29999,7 +32327,19 @@ ${seg.text}`;
       session.timer = null;
     }
     if (commitText && session.node) {
-      renderTextSlice(session.node, session.fullText);
+      if (session.naturalEnd) {
+        const node = session.node;
+        const serial = String(session.id);
+        node.dataset.galTwSerial = serial;
+        const expectedText = session.fullText.replace(/\n/g, "");
+        topWindow.setTimeout(() => {
+          if (!node.isConnected || node.dataset.galTwSerial !== serial) return;
+          if (node.textContent !== expectedText) return;
+          commitFinalText(node, session.fullText);
+        }, (isMotionNode(node) ? MOTION_CHAR_FADE_MS : CHAR_FADE_MS) + 40);
+      } else {
+        commitFinalText(session.node, session.fullText);
+      }
     }
     if (activeSession && activeSession.id === session.id) {
       activeSession = null;
@@ -30062,22 +32402,23 @@ ${seg.text}`;
       return;
     }
     const runtime = getRuntimeSettings();
-    if (!runtime.enabled) {
+    if (!runtime.enabled || session.index >= session.chars.length) {
       completeSession(session, { commitText: true });
       return;
     }
-    if (session.index >= session.fullText.length) {
-      completeSession(session, { commitText: true });
-      return;
-    }
+    const charEl = session.chars[session.index];
     session.index += 1;
-    renderTextSlice(session.node, session.fullText.slice(0, session.index));
-    playTypeSound();
-    if (session.index >= session.fullText.length) {
+    charEl.classList.add("is-on");
+    keepCharVisible(session.node, charEl);
+    const ch = charEl.textContent || "";
+    if (ch.trim()) playTypeSound();
+    if (session.index >= session.chars.length) {
+      session.naturalEnd = true;
       completeSession(session, { commitText: true });
       return;
     }
-    const delay2 = Math.max(TICK_MIN_DELAY_MS, Math.round(1e3 / runtime.speed));
+    const pause2 = runtime.punctuationPause ? getPunctuationPause(ch, runtime.speed) : 0;
+    const delay2 = Math.max(TICK_MIN_DELAY_MS, Math.round(1e3 / runtime.speed)) + pause2;
     session.timer = topWindow.setTimeout(() => scheduleTyping(session), delay2);
   }
   function isTypewriterActive() {
@@ -30100,26 +32441,95 @@ ${seg.text}`;
     const instant = options2.instant === true || !runtime.enabled || fullText.length === 0;
     cancelTypewriter();
     if (!node) return Promise.resolve(fullText);
+    delete node.dataset.galTwSerial;
+    if (fullText.length) notifyDialogAdvance(node);
+    node.scrollTop = 0;
     if (instant) {
-      renderTextSlice(node, fullText);
+      if (fullText.length) commitFinalText(node, fullText);
+      else renderTextSlice(node, fullText);
       return Promise.resolve(fullText);
     }
     const session = {
       id: ++sessionSerial,
       node,
       fullText,
+      chars: renderTypingMarkup(node, fullText),
       index: 0,
       timer: null,
       active: true,
+      naturalEnd: false,
       resolve: null
     };
     session.promise = new Promise((resolve2) => {
       session.resolve = resolve2;
     });
-    node.textContent = "";
     activeSession = session;
     scheduleTyping(session);
     return session.promise;
+  }
+  $2(window).on("pagehide", () => {
+    finishActiveTypewriter();
+  });
+
+  // src/stage/choreography.js
+  var BADGE_ENTER_MS = 520;
+  var PANEL_PULSE_MS = 600;
+  var SPEAKER_PALETTE = [
+    "#ff4f7b",
+    "#f0812a",
+    "#8c6cff",
+    "#1fae78",
+    "#3d7bff",
+    "#d9468f",
+    "#14a3a3",
+    "#c65bd6",
+    "#e0a100",
+    "#ff6a4d"
+  ];
+  function hashName(name) {
+    let h2 = 2166136261;
+    for (const ch of String(name)) {
+      h2 ^= ch.codePointAt(0);
+      h2 = Math.imul(h2, 16777619);
+    }
+    return h2 >>> 0;
+  }
+  function getSpeakerColor(name) {
+    const key = String(name || "").trim();
+    if (!key) return "";
+    return SPEAKER_PALETTE[hashName(key) % SPEAKER_PALETTE.length];
+  }
+  function restartClass2(el, cls, durationMs) {
+    if (!el) return;
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    const timerKey = `__galTimer_${cls}`;
+    if (el[timerKey]) topWindow.clearTimeout(el[timerKey]);
+    el[timerKey] = topWindow.setTimeout(() => {
+      el.classList.remove(cls);
+      el[timerKey] = null;
+    }, durationMs);
+  }
+  function setSpeakerBadge($overlay, $nameBadge, label, { narration = false, speakerKey = null } = {}) {
+    if (!$nameBadge || !$nameBadge.length) return;
+    const $label = $nameBadge.find("span").first();
+    const text = String(label ?? "");
+    const prevText = $label.text();
+    const changed = prevText !== text || $nameBadge.hasClass("gal-narrator-label") !== !!narration;
+    $label.text(text);
+    $nameBadge.toggleClass("gal-narrator-label", !!narration);
+    syncTtsCue($overlay);
+    const overlayEl = $overlay?.[0];
+    if (overlayEl) {
+      const color = speakerKey ? getSpeakerColor(speakerKey) : "";
+      if (color) overlayEl.style.setProperty("--gal-speaker-color", color);
+      else overlayEl.style.removeProperty("--gal-speaker-color");
+    }
+    if (!changed) return;
+    restartClass2($nameBadge[0], "gal-badge-enter", BADGE_ENTER_MS);
+    playNameSwap($nameBadge[0], $label[0], prevText);
+    restartClass2($overlay?.find(".gal-text-panel")[0], "gal-panel-pulse", PANEL_PULSE_MS);
   }
 
   // src/ui/overlay-content.js
@@ -30132,6 +32542,11 @@ ${seg.text}`;
     if (/^(男声|女声)$/.test(tts.speaker || "")) return tts.speaker;
     return null;
   }
+  function getSpriteSpeaker(segment, resolvedSpeaker) {
+    if (!segment?.spriteCharacter) return resolvedSpeaker;
+    const characterId = getSegmentCharacterId(segment);
+    return resolveCharacterIdByKeywords(characterId) || characterId;
+  }
   function shouldUseTypewriterForSegment(segment) {
     return segment?.type === "dialogue" || segment?.type === "narration";
   }
@@ -30141,7 +32556,7 @@ ${seg.text}`;
   function applyCgToBackground($overlay, cgSrc) {
     const $bgLayer = $overlay.find(".gal-layer-bg");
     $bgLayer.addClass("has-bg").removeClass("generating-bg");
-    setBackgroundWithTransition($bgLayer, cgSrc);
+    setBackgroundWithTransition($bgLayer, cgSrc, { transition: "flash" });
     SpriteManager.currentScene = null;
   }
   function renderCgSegment($overlay, cgSrc) {
@@ -30313,25 +32728,34 @@ ${seg.text}`;
     html += "</div>";
     return html;
   }
-  async function syncEffectsForSegmentDisplay($overlay, state, currentIndex, { isNewMessage = false } = {}) {
-    if (!state) return;
+  function triggerSegmentShake(state2, currentIndex) {
+    const lastApplied = Number.isFinite(state2.lastAppliedEffectIndex) ? state2.lastAppliedEffectIndex : -1;
+    if (currentIndex === lastApplied) return;
+    const ops = Array.isArray(state2.segments[currentIndex]?.effectOps) ? state2.segments[currentIndex].effectOps : [];
+    if (ops.some((op) => op?.action === "perform" && String(op?.name || "").trim() === "screenShake")) {
+      shakeStage({ power: 1 });
+    }
+  }
+  async function syncEffectsForSegmentDisplay($overlay, state2, currentIndex, { isNewMessage = false } = {}) {
+    if (!state2) return;
     const settings = getSettings();
     if (!settings.effectsEnabled) {
       clearAllPixiEffects();
-      state.lastAppliedEffectIndex = currentIndex;
+      state2.lastAppliedEffectIndex = currentIndex;
       return;
     }
+    triggerSegmentShake(state2, currentIndex);
     const mounted = await mountPixiEffects($overlay[0]);
     if (!mounted) return;
     syncPixiEffectsSettings();
-    const lastApplied = Number.isFinite(state.lastAppliedEffectIndex) ? state.lastAppliedEffectIndex : -1;
+    const lastApplied = Number.isFinite(state2.lastAppliedEffectIndex) ? state2.lastAppliedEffectIndex : -1;
     const shouldClearOnSceneChange = !!settings.effectsAutoClearOnSceneChange;
     const shouldAutoClearOnMessageSwitch = isNewMessage;
     const shouldReplay = shouldAutoClearOnMessageSwitch || currentIndex <= lastApplied || lastApplied < 0;
     const clearIfSceneChangedAt = (segmentIndex) => {
       if (!shouldClearOnSceneChange || segmentIndex <= 0) return;
-      const prevScene = state.segments[segmentIndex - 1]?.backgroundScene || null;
-      const currentScene = state.segments[segmentIndex]?.backgroundScene || null;
+      const prevScene = state2.segments[segmentIndex - 1]?.backgroundScene || null;
+      const currentScene = state2.segments[segmentIndex]?.backgroundScene || null;
       if (currentScene && currentScene !== prevScene) {
         clearAllPixiEffects();
       }
@@ -30342,7 +32766,7 @@ ${seg.text}`;
       }
       for (let i2 = 0; i2 <= currentIndex; i2++) {
         clearIfSceneChangedAt(i2);
-        const ops = Array.isArray(state.segments[i2]?.effectOps) ? state.segments[i2].effectOps : [];
+        const ops = Array.isArray(state2.segments[i2]?.effectOps) ? state2.segments[i2].effectOps : [];
         if (ops.length > 0) {
           await applyPixiEffectOps(ops, $overlay[0]);
         }
@@ -30350,28 +32774,35 @@ ${seg.text}`;
     } else {
       for (let i2 = lastApplied + 1; i2 <= currentIndex; i2++) {
         clearIfSceneChangedAt(i2);
-        const ops = Array.isArray(state.segments[i2]?.effectOps) ? state.segments[i2].effectOps : [];
+        const ops = Array.isArray(state2.segments[i2]?.effectOps) ? state2.segments[i2].effectOps : [];
         if (ops.length > 0) {
           await applyPixiEffectOps(ops, $overlay[0]);
         }
       }
     }
-    state.lastAppliedEffectIndex = currentIndex;
+    state2.lastAppliedEffectIndex = currentIndex;
   }
-  function queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, options2 = {}) {
-    if (!state) return;
-    state.effectSyncTicket = (Number.isFinite(state.effectSyncTicket) ? state.effectSyncTicket : 0) + 1;
-    const ticket = state.effectSyncTicket;
+  function queueEffectsSyncForSegmentDisplay($overlay, state2, currentIndex, options2 = {}) {
+    if (!state2) return;
+    state2.effectSyncTicket = (Number.isFinite(state2.effectSyncTicket) ? state2.effectSyncTicket : 0) + 1;
+    const ticket = state2.effectSyncTicket;
     const run = async () => {
-      if (ticket !== state.effectSyncTicket) return;
+      if (ticket !== state2.effectSyncTicket) return;
       try {
-        await syncEffectsForSegmentDisplay($overlay, state, currentIndex, options2);
+        await syncEffectsForSegmentDisplay($overlay, state2, currentIndex, options2);
       } catch (error3) {
         console.warn(`[${SCRIPT_NAME}] 特效同步失败`, error3);
       }
     };
-    const basePromise = state.effectSyncPromise && typeof state.effectSyncPromise.then === "function" ? state.effectSyncPromise : Promise.resolve();
-    state.effectSyncPromise = basePromise.then(run, run);
+    const basePromise = state2.effectSyncPromise && typeof state2.effectSyncPromise.then === "function" ? state2.effectSyncPromise : Promise.resolve();
+    state2.effectSyncPromise = basePromise.then(run, run);
+  }
+  function getSegmentBackgroundTransition(segment, scene) {
+    const commands = Array.isArray(segment?.backgroundCommands) ? segment.backgroundCommands : [];
+    for (let i2 = commands.length - 1; i2 >= 0; i2--) {
+      if (commands[i2]?.scene === scene && commands[i2]?.transition) return commands[i2].transition;
+    }
+    return null;
   }
   function clearSpritesOnBackgroundCommand($overlay, segment) {
     if (!segment || !Array.isArray(segment.backgroundCommands) || segment.backgroundCommands.length === 0) {
@@ -30392,9 +32823,9 @@ ${seg.text}`;
     const simpleStorybookMode = settings.simpleStorybookMode === true;
     const mesIdStr = String(mesId);
     const suppressTTS = !!options2.suppressTTS;
-    let state = messageSegmentState3.get(mesIdStr);
-    if (!state) {
-      state = {
+    let state2 = messageSegmentState3.get(mesIdStr);
+    if (!state2) {
+      state2 = {
         currentIndex: 0,
         segments,
         parsedContent,
@@ -30403,54 +32834,54 @@ ${seg.text}`;
         effectSyncTicket: 0,
         effectSyncPromise: Promise.resolve()
       };
-      messageSegmentState3.set(mesIdStr, state);
+      messageSegmentState3.set(mesIdStr, state2);
       console.log(`[${SCRIPT_NAME}] [DEBUG] 新建状态，段落数: ${segments.length}`);
     } else if (options2.preserveIndex) {
-      state.currentIndex = Math.max(0, Math.min(state.currentIndex, segments.length - 1));
-      state.lastAppliedEffectIndex = -1;
-      state.segments = segments;
-      state.parsedContent = parsedContent;
-      if (!Number.isFinite(state.renderToken)) {
-        state.renderToken = 0;
+      state2.currentIndex = Math.max(0, Math.min(state2.currentIndex, segments.length - 1));
+      state2.lastAppliedEffectIndex = -1;
+      state2.segments = segments;
+      state2.parsedContent = parsedContent;
+      if (!Number.isFinite(state2.renderToken)) {
+        state2.renderToken = 0;
       }
-      if (!Number.isFinite(state.effectSyncTicket)) {
-        state.effectSyncTicket = 0;
+      if (!Number.isFinite(state2.effectSyncTicket)) {
+        state2.effectSyncTicket = 0;
       }
-      if (!state.effectSyncPromise || typeof state.effectSyncPromise.then !== "function") {
-        state.effectSyncPromise = Promise.resolve();
+      if (!state2.effectSyncPromise || typeof state2.effectSyncPromise.then !== "function") {
+        state2.effectSyncPromise = Promise.resolve();
       }
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 重分页保留阅读位置，索引: ${state.currentIndex}, 段落数: ${segments.length}`);
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 重分页保留阅读位置，索引: ${state2.currentIndex}, 段落数: ${segments.length}`);
     } else {
-      const segmentCountDiff = Math.abs(state.segments.length - segments.length);
+      const segmentCountDiff = Math.abs(state2.segments.length - segments.length);
       if (segmentCountDiff > 5) {
-        console.log(`[${SCRIPT_NAME}] [DEBUG] 段落数变化较大 (${state.segments.length} -> ${segments.length})，重置到第一段`);
-        state.currentIndex = 0;
-        state.lastAppliedEffectIndex = -1;
+        console.log(`[${SCRIPT_NAME}] [DEBUG] 段落数变化较大 (${state2.segments.length} -> ${segments.length})，重置到第一段`);
+        state2.currentIndex = 0;
+        state2.lastAppliedEffectIndex = -1;
       }
-      state.segments = segments;
-      state.parsedContent = parsedContent;
-      if (!Number.isFinite(state.renderToken)) {
-        state.renderToken = 0;
+      state2.segments = segments;
+      state2.parsedContent = parsedContent;
+      if (!Number.isFinite(state2.renderToken)) {
+        state2.renderToken = 0;
       }
-      if (!Number.isFinite(state.lastAppliedEffectIndex)) {
-        state.lastAppliedEffectIndex = -1;
+      if (!Number.isFinite(state2.lastAppliedEffectIndex)) {
+        state2.lastAppliedEffectIndex = -1;
       }
-      if (!Number.isFinite(state.effectSyncTicket)) {
-        state.effectSyncTicket = 0;
+      if (!Number.isFinite(state2.effectSyncTicket)) {
+        state2.effectSyncTicket = 0;
       }
-      if (!state.effectSyncPromise || typeof state.effectSyncPromise.then !== "function") {
-        state.effectSyncPromise = Promise.resolve();
+      if (!state2.effectSyncPromise || typeof state2.effectSyncPromise.then !== "function") {
+        state2.effectSyncPromise = Promise.resolve();
       }
-      console.log(`[${SCRIPT_NAME}] [DEBUG] 更新状态，当前索引: ${state.currentIndex}, 段落数: ${segments.length}`);
+      console.log(`[${SCRIPT_NAME}] [DEBUG] 更新状态，当前索引: ${state2.currentIndex}, 段落数: ${segments.length}`);
     }
     const isNewMessage = getCurrentDisplayMesId() !== mesIdStr;
     if (isNewMessage) {
       console.log(`[${SCRIPT_NAME}] [DEBUG] 切换消息(${getCurrentDisplayMesId()} -> ${mesIdStr})，保留现有Live2D模型避免重载`);
     }
     setCurrentDisplayMesId(mesIdStr);
-    const renderToken = nextOverlayRenderToken(state);
+    const renderToken = nextOverlayRenderToken(state2);
     $overlay.attr("data-render-token", String(renderToken));
-    const currentIndex = Math.min(state.currentIndex, segments.length - 1);
+    const currentIndex = Math.min(state2.currentIndex, segments.length - 1);
     if (simpleStorybookMode) {
       SpriteManager.reset($overlay);
     } else {
@@ -30470,8 +32901,7 @@ ${seg.text}`;
     if (isCg) {
       setStyledPresentationMode($overlay, false);
       hideStyledStage($overlay);
-      $nameBadge.find("span").text("CG");
-      $nameBadge.removeClass("gal-narrator-label");
+      setSpeakerBadge($overlay, $nameBadge, "CG");
       const cgSrc = getCapturedCgImage(mesId, displaySegment.cgIndex);
       cgAppliedAsBackground = renderCgSegment($overlay, cgSrc);
     } else if (isStyled) {
@@ -30506,20 +32936,17 @@ ${seg.text}`;
         "bulletin": "📢 Bulletin",
         "notice": "📢 Notice"
       }[displaySegment.styleType] || displaySegment.styleType;
-      $nameBadge.find("span").text(styledLabel);
-      $nameBadge.removeClass("gal-narrator-label");
+      setSpeakerBadge($overlay, $nameBadge, styledLabel);
       const styledHtml = renderStyledContent(displaySegment);
       $overlay.find(".gal-dialog-text").text("");
       showStyledStage($overlay, styledHtml, displaySegment.styleType);
     } else {
       setStyledPresentationMode($overlay, false);
       hideStyledStage($overlay);
-      $nameBadge.find("span").text(resolvedSpeaker || "旁白");
-      if (isNarration) {
-        $nameBadge.addClass("gal-narrator-label");
-      } else {
-        $nameBadge.removeClass("gal-narrator-label");
-      }
+      setSpeakerBadge($overlay, $nameBadge, resolvedSpeaker || "旁白", {
+        narration: isNarration,
+        speakerKey: isNarration ? null : resolvedSpeaker || null
+      });
       const enableTypewriter = shouldUseTypewriterForSegment(displaySegment);
       renderTypewriterText($overlay.find(".gal-dialog-text"), displayText, {
         instant: !enableTypewriter
@@ -30533,14 +32960,14 @@ ${seg.text}`;
       clearSpritesOnBackgroundCommand($overlay, displaySegment);
       const expression = displaySegment.expression || "默认";
       const voiceHint = getSegmentVoiceHint(displaySegment);
-      await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken, voiceHint);
+      await SpriteManager.updateSprite($overlay, getSpriteSpeaker(displaySegment, resolvedSpeaker), expression, renderToken, voiceHint);
     }
     const sceneToApply = displaySegment.backgroundScene || parsedContent.currentBackground?.scene;
     if (sceneToApply && !cgAppliedAsBackground) {
-      await SpriteManager.applySceneTint($overlay, sceneToApply);
+      await SpriteManager.applySceneTint($overlay, sceneToApply, { transition: getSegmentBackgroundTransition(displaySegment, sceneToApply) });
       console.log(`[${SCRIPT_NAME}] [DEBUG] 应用背景场景: "${sceneToApply}" (段落 ${currentIndex + 1}/${segments.length})`);
     }
-    queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, { isNewMessage });
+    queueEffectsSyncForSegmentDisplay($overlay, state2, currentIndex, { isNewMessage });
     const $nextBtn = $overlay.find('[data-action="next"]');
     const hasNextSegment = !!segments[currentIndex + 1];
     console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - hasNextSegment=${hasNextSegment}, isGeneratingResponse=${getIsGeneratingResponse()}`);
@@ -30570,12 +32997,39 @@ ${seg.text}`;
     maybeAutoRepaginate(parsedContent);
   }
   var _autoRepagInFlight = false;
+  function isDialogTextOverflowing() {
+    const textEl = $2("#gal-global-overlay .gal-dialog-text")[0];
+    return !!textEl && textEl.scrollHeight > textEl.clientHeight + 4;
+  }
+  var _deferredRepagTimer = null;
+  function scheduleDeferredRepaginateCheck(parsedContent, attempt = 0) {
+    clearTimeout(_deferredRepagTimer);
+    if (attempt >= 20) return;
+    _deferredRepagTimer = setTimeout(() => {
+      _deferredRepagTimer = null;
+      const state2 = messageSegmentState3.get(String(getCurrentDisplayMesId()));
+      if (!state2 || state2.parsedContent !== parsedContent) return;
+      refreshMeasuredDialogCapacity();
+      if (!getMeasuredSegLength()) {
+        scheduleDeferredRepaginateCheck(parsedContent, attempt + 1);
+        return;
+      }
+      maybeAutoRepaginate(parsedContent);
+    }, 100);
+  }
   function maybeAutoRepaginate(parsedContent) {
     if (_autoRepagInFlight) return;
     const measured = getMeasuredSegLength();
     const usedLen = Number(parsedContent?.segLength) || 0;
-    if (!measured || !usedLen) return;
-    if (measured <= usedLen * 1.3) return;
+    if (!usedLen) return;
+    if (!measured) {
+      scheduleDeferredRepaginateCheck(parsedContent);
+      return;
+    }
+    const grew = measured > usedLen * 1.3;
+    const layoutSig = getMeasuredLayoutSignature();
+    const layoutChanged = !!layoutSig && layoutSig !== (parsedContent?.segLayout || "");
+    if (!grew && !(layoutChanged && isDialogTextOverflowing())) return;
     _autoRepagInFlight = true;
     setTimeout(() => {
       repaginateCurrentMessageForFontChange().catch((e2) => console.warn(`[${SCRIPT_NAME}] 自动重分页失败`, e2)).finally(() => {
@@ -30583,17 +33037,17 @@ ${seg.text}`;
       });
     }, 0);
   }
-  async function updateOverlaySegmentDisplay(state, expectedRenderToken = null, source = "unknown") {
-    if (!state) return false;
-    const isRenderTokenStale = () => expectedRenderToken !== null && expectedRenderToken !== (Number(state.renderToken) || 0);
+  async function updateOverlaySegmentDisplay(state2, expectedRenderToken = null, source = "unknown") {
+    if (!state2) return false;
+    const isRenderTokenStale = () => expectedRenderToken !== null && expectedRenderToken !== (Number(state2.renderToken) || 0);
     if (isRenderTokenStale()) return false;
     const $overlay = $2("#gal-global-overlay");
     const simpleStorybookMode = getSettings().simpleStorybookMode === true;
-    const currentIndex = state.currentIndex;
-    const segment = state.segments[currentIndex];
+    const currentIndex = state2.currentIndex;
+    const segment = state2.segments[currentIndex];
     if (!segment) return false;
     if (!simpleStorybookMode) {
-      Live2DPreloadManager.preloadFromSegments(state.segments, currentIndex, "segment-display");
+      Live2DPreloadManager.preloadFromSegments(state2.segments, currentIndex, "segment-display");
     }
     if (expectedRenderToken !== null) {
       $overlay.attr("data-render-token", String(expectedRenderToken));
@@ -30610,8 +33064,7 @@ ${seg.text}`;
     if (isCg) {
       setStyledPresentationMode($overlay, false);
       hideStyledStage($overlay);
-      $nameBadge.find("span").text("CG");
-      $nameBadge.removeClass("gal-narrator-label");
+      setSpeakerBadge($overlay, $nameBadge, "CG");
       const mesId = $overlay.find(".gal-game-container").attr("data-mes-id");
       const cgSrc = getCapturedCgImage(mesId, segment.cgIndex);
       cgAppliedAsBackground = renderCgSegment($overlay, cgSrc);
@@ -30647,25 +33100,22 @@ ${seg.text}`;
         "bulletin": "📢 Bulletin",
         "notice": "📢 Notice"
       }[segment.styleType] || segment.styleType;
-      $nameBadge.find("span").text(styledLabel);
-      $nameBadge.removeClass("gal-narrator-label");
+      setSpeakerBadge($overlay, $nameBadge, styledLabel);
       const styledHtml = renderStyledContent(segment);
       $overlay.find(".gal-dialog-text").text("");
       showStyledStage($overlay, styledHtml, segment.styleType);
     } else {
       setStyledPresentationMode($overlay, false);
       hideStyledStage($overlay);
-      $nameBadge.find("span").text(resolvedSpeaker || "旁白");
-      if (isNarration) {
-        $nameBadge.addClass("gal-narrator-label");
-      } else {
-        $nameBadge.removeClass("gal-narrator-label");
-      }
+      setSpeakerBadge($overlay, $nameBadge, resolvedSpeaker || "旁白", {
+        narration: isNarration,
+        speakerKey: isNarration ? null : resolvedSpeaker || null
+      });
       renderTypewriterText($overlay.find(".gal-dialog-text"), segment.text || "", {
         instant: forceInstantRender || !shouldUseTypewriterForSegment(segment)
       });
     }
-    const total = state.segments.length;
+    const total = state2.segments.length;
     const progressPercent = total > 0 ? (currentIndex + 1) / total * 100 : 0;
     $overlay.find(".gal-progress-bar").css("width", `${progressPercent}%`);
     const isEnd = currentIndex >= total - 1;
@@ -30712,16 +33162,16 @@ ${seg.text}`;
       clearSpritesOnBackgroundCommand($overlay, segment);
       const expression = segment.expression || "默认";
       const voiceHint = getSegmentVoiceHint(segment);
-      await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken, voiceHint);
+      await SpriteManager.updateSprite($overlay, getSpriteSpeaker(segment, resolvedSpeaker), expression, expectedRenderToken, voiceHint);
       if (isRenderTokenStale()) return false;
     }
-    const sceneToApply = segment.backgroundScene || state.parsedContent?.currentBackground?.scene;
+    const sceneToApply = segment.backgroundScene || state2.parsedContent?.currentBackground?.scene;
     if (sceneToApply && !cgAppliedAsBackground) {
-      await SpriteManager.applySceneTint($overlay, sceneToApply);
+      await SpriteManager.applySceneTint($overlay, sceneToApply, { transition: getSegmentBackgroundTransition(segment, sceneToApply) });
       if (isRenderTokenStale()) return false;
       console.log(`[${SCRIPT_NAME}] [DEBUG] updateOverlaySegmentDisplay 应用背景: "${sceneToApply}" (段落 ${currentIndex + 1}/${total})`);
     }
-    queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex);
+    queueEffectsSyncForSegmentDisplay($overlay, state2, currentIndex);
     return true;
   }
   function measureDialogCapacityChars() {
@@ -30736,7 +33186,7 @@ ${seg.text}`;
     const cs = win.getComputedStyle(panel);
     const textCs = win.getComputedStyle(textEl);
     const availW = panel.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-    const availH = panel.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - (parseFloat(textCs.paddingTop) || 0) - (parseFloat(textCs.paddingBottom) || 0);
+    const availH = panel.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - (parseFloat(textCs.paddingTop) || 0) - (parseFloat(textCs.paddingBottom) || 0) - (parseFloat(textCs.marginTop) || 0) - (parseFloat(textCs.marginBottom) || 0);
     if (availW <= 0 || availH <= 0) return null;
     const probe = textEl.cloneNode(false);
     probe.style.cssText += `;position:absolute !important;visibility:hidden !important;pointer-events:none !important;left:-9999px !important;top:0 !important;width:${availW}px !important;height:auto !important;max-height:none !important;min-height:0 !important;overflow:visible !important;margin:0 !important;padding-top:0 !important;padding-bottom:0 !important;`;
@@ -30759,7 +33209,10 @@ ${seg.text}`;
         }
       }
       const charsPerLine = Math.max(4, lo);
-      return Math.floor(maxLines * charsPerLine * 0.9);
+      probe.innerHTML = `<span class="gal-para">${FILLER}</span><span class="gal-para">${FILLER}</span>`;
+      const twoParaH = probe.getBoundingClientRect().height;
+      const gapLines = Math.max(0, (twoParaH - lineH * 2) / lineH);
+      return { chars: Math.floor(maxLines * charsPerLine * 0.9), charsPerLine, maxLines, gapLines };
     } finally {
       probe.remove();
     }
@@ -30833,9 +33286,9 @@ ${seg.text}`;
     if (!mesIdStr) return;
     const $mes = $2(`#chat > .mes[mesid="${mesIdStr}"]`);
     if (!$mes.length) return;
-    const state = messageSegmentState3.get(mesIdStr);
-    const oldIndex = state?.currentIndex ?? 0;
-    const oldTotal = state?.segments?.length ?? 0;
+    const state2 = messageSegmentState3.get(mesIdStr);
+    const oldIndex = state2?.currentIndex ?? 0;
+    const oldTotal = state2?.segments?.length ?? 0;
     const contentToProcess = resolveGalgameContentForMes($mes, mesIdStr);
     if (!contentToProcess) return;
     const hasGalTags = RE_GAL_TAGS2.test(contentToProcess);
@@ -30844,11 +33297,11 @@ ${seg.text}`;
     const parsed = parseGalgameContent(contentToProcess);
     const newTotal = parsed.segments.length;
     if (newTotal === 0) return;
-    if (state) {
+    if (state2) {
       if (oldTotal > 1 && newTotal > 0) {
-        state.currentIndex = Math.min(newTotal - 1, Math.round(oldIndex / (oldTotal - 1) * (newTotal - 1)));
+        state2.currentIndex = Math.min(newTotal - 1, Math.round(oldIndex / (oldTotal - 1) * (newTotal - 1)));
       } else {
-        state.currentIndex = Math.min(oldIndex, newTotal - 1);
+        state2.currentIndex = Math.min(oldIndex, newTotal - 1);
       }
     }
     await updateGlobalOverlayContent(mesIdStr, parsed, { preserveIndex: true, suppressTTS: true });
@@ -30902,9 +33355,9 @@ ${seg.text}`;
     if (!$overlay.length || !$overlay.hasClass("active")) return;
     const currentMesId = $overlay.find(".gal-game-container").attr("data-mes-id");
     if (String(currentMesId) !== String(mesId)) return;
-    const state = messageSegmentState3.get(String(mesId));
-    if (!state) return;
-    const currentSegment = state.segments[state.currentIndex];
+    const state2 = messageSegmentState3.get(String(mesId));
+    if (!state2) return;
+    const currentSegment = state2.segments[state2.currentIndex];
     if (!currentSegment || currentSegment.type !== "cg") return;
     const cgSrc = getCapturedCgImage(mesId, currentSegment.cgIndex);
     if (cgSrc) {
@@ -30966,12 +33419,12 @@ ${seg.text}`;
     return cgIdx;
   }
   var cgObserverTimers = /* @__PURE__ */ new Map();
-  function syncOverlayChromeAfterCgChange($overlay, state) {
-    const total = state.segments.length;
-    const progressPercent = total > 0 ? (state.currentIndex + 1) / total * 100 : 0;
+  function syncOverlayChromeAfterCgChange($overlay, state2) {
+    const total = state2.segments.length;
+    const progressPercent = total > 0 ? (state2.currentIndex + 1) / total * 100 : 0;
     $overlay.find(".gal-progress-bar").css("width", `${progressPercent}%`);
     const $nextBtn = $overlay.find('[data-action="next"]');
-    if (state.segments[state.currentIndex + 1]) {
+    if (state2.segments[state2.currentIndex + 1]) {
       stopNextBtnAnimation();
       $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
     } else if (!getIsGeneratingResponse()) {
@@ -30985,13 +33438,13 @@ ${seg.text}`;
     const sources = collectChatu8CgEntries(mesText).map((entry) => entry.src);
     const existing = capturedCgImages.get(mesIdStr) || [];
     if (sources.length === existing.length && sources.every((s2, i2) => s2 === existing[i2])) return;
-    const state = messageSegmentState3.get(mesIdStr);
-    if (!state || !state.parsedContent) {
+    const state2 = messageSegmentState3.get(mesIdStr);
+    if (!state2 || !state2.parsedContent) {
       capturedCgImages.set(mesIdStr, sources);
       return;
     }
-    const prevSegments = state.segments || [];
-    const prevIndex = Math.max(0, Math.min(state.currentIndex, Math.max(0, prevSegments.length - 1)));
+    const prevSegments = state2.segments || [];
+    const prevIndex = Math.max(0, Math.min(state2.currentIndex, Math.max(0, prevSegments.length - 1)));
     const anchorSegment = prevSegments[prevIndex] || null;
     const anchorWasCg = anchorSegment?.type === "cg";
     const anchorCgIndex = anchorWasCg ? anchorSegment.cgIndex : -1;
@@ -31001,8 +33454,8 @@ ${seg.text}`;
       const seg = prevSegments[i2];
       if (seg?.type === "cg") lateSet.delete(existing[seg.cgIndex] || "");
     }
-    applyCgSegmentsToParsed(mesIdStr, mesText, state.parsedContent);
-    const segments = state.parsedContent.segments;
+    applyCgSegmentsToParsed(mesIdStr, mesText, state2.parsedContent);
+    const segments = state2.parsedContent.segments;
     let newIndex = -1;
     if (anchorSegment && !anchorWasCg) {
       newIndex = segments.indexOf(anchorSegment);
@@ -31034,15 +33487,15 @@ ${seg.text}`;
     } else {
       pendingLateCgSrcs.delete(mesIdStr);
     }
-    state.segments = segments;
-    state.currentIndex = Math.max(0, Math.min(newIndex, segments.length - 1));
+    state2.segments = segments;
+    state2.currentIndex = Math.max(0, Math.min(newIndex, segments.length - 1));
     const $overlay = $2("#gal-global-overlay");
     const viewingThisMes = $overlay.length && $overlay.hasClass("active") && String($overlay.find(".gal-game-container").attr("data-mes-id")) === mesIdStr;
     if (!viewingThisMes) return;
-    if (segments[state.currentIndex]?.type === "cg") {
+    if (segments[state2.currentIndex]?.type === "cg") {
       refreshCgDisplayIfNeeded(mesIdStr);
     }
-    syncOverlayChromeAfterCgChange($overlay, state);
+    syncOverlayChromeAfterCgChange($overlay, state2);
     if (hasNewLateCg) {
       showToast2("🖼️ CG 已生成，点击下一步查看");
     }
@@ -31202,9 +33655,9 @@ ${seg.text}`;
     } catch (error3) {
       console.warn(`[${SCRIPT_NAME}] 切换上一楼层时 CG 检测失败`, error3);
     }
-    let state = messageSegmentState4.get(mesIdStr);
-    if (!state) {
-      state = {
+    let state2 = messageSegmentState4.get(mesIdStr);
+    if (!state2) {
+      state2 = {
         currentIndex: 0,
         segments: parsed.segments,
         parsedContent: parsed,
@@ -31213,21 +33666,21 @@ ${seg.text}`;
         effectSyncTicket: 0,
         effectSyncPromise: Promise.resolve()
       };
-      messageSegmentState4.set(mesIdStr, state);
+      messageSegmentState4.set(mesIdStr, state2);
     } else {
-      state.segments = parsed.segments;
-      state.parsedContent = parsed;
-      if (!Number.isFinite(state.renderToken)) {
-        state.renderToken = 0;
+      state2.segments = parsed.segments;
+      state2.parsedContent = parsed;
+      if (!Number.isFinite(state2.renderToken)) {
+        state2.renderToken = 0;
       }
-      if (!Number.isFinite(state.lastAppliedEffectIndex)) {
-        state.lastAppliedEffectIndex = -1;
+      if (!Number.isFinite(state2.lastAppliedEffectIndex)) {
+        state2.lastAppliedEffectIndex = -1;
       }
-      if (!Number.isFinite(state.effectSyncTicket)) {
-        state.effectSyncTicket = 0;
+      if (!Number.isFinite(state2.effectSyncTicket)) {
+        state2.effectSyncTicket = 0;
       }
-      if (!state.effectSyncPromise || typeof state.effectSyncPromise.then !== "function") {
-        state.effectSyncPromise = Promise.resolve();
+      if (!state2.effectSyncPromise || typeof state2.effectSyncPromise.then !== "function") {
+        state2.effectSyncPromise = Promise.resolve();
       }
     }
     let nextIndex = 0;
@@ -31237,8 +33690,8 @@ ${seg.text}`;
       const clampedMax = Math.max(0, parsed.segments.length - 1);
       nextIndex = Math.max(0, Math.min(targetIndex, clampedMax));
     }
-    state.currentIndex = nextIndex;
-    return { state, parsed, mesId: mesIdStr };
+    state2.currentIndex = nextIndex;
+    return { state: state2, parsed, mesId: mesIdStr };
   }
   async function switchToPreviousAiFloor(options2 = {}) {
     const { suppressTTS = false } = options2;
@@ -31391,17 +33844,17 @@ ${seg.text}`;
     const doSkip = async () => {
       if (!getIsSkipping()) return;
       const mesId = $2("#gal-global-overlay .gal-game-container").attr("data-mes-id");
-      const state = messageSegmentState4.get(String(mesId));
-      if (!state) {
+      const state2 = messageSegmentState4.get(String(mesId));
+      if (!state2) {
         console.warn(`[${SCRIPT_NAME}] [DEBUG] 快进停止: 找不到状态`);
         stopSkipping();
         return;
       }
-      const hasNext = !!state.segments[state.currentIndex + 1];
+      const hasNext = !!state2.segments[state2.currentIndex + 1];
       if (hasNext) {
         TTSManager.stop();
-        state.currentIndex++;
-        await scheduleOverlaySegmentDisplay(state, "skip");
+        state2.currentIndex++;
+        await scheduleOverlaySegmentDisplay(state2, "skip");
         setSkipTimer(setTimeout(doSkip, settings.skipSpeed * 1e3));
       } else {
         stopSkipping();
@@ -31429,15 +33882,15 @@ ${seg.text}`;
     const doRewind = async () => {
       if (!getIsRewinding()) return;
       const mesId = $2("#gal-global-overlay .gal-game-container").attr("data-mes-id");
-      const state = messageSegmentState4.get(String(mesId));
-      if (!state) {
+      const state2 = messageSegmentState4.get(String(mesId));
+      if (!state2) {
         stopRewinding();
         return;
       }
-      if (state.currentIndex > 0) {
+      if (state2.currentIndex > 0) {
         TTSManager.stop();
-        state.currentIndex--;
-        await scheduleOverlaySegmentDisplay(state, "rewind");
+        state2.currentIndex--;
+        await scheduleOverlaySegmentDisplay(state2, "rewind");
         rewindTimer = setTimeout(doRewind, settings.skipSpeed * 1e3);
       } else {
         const switched = await switchToPreviousAiFloor({ suppressTTS: true });
@@ -31461,12 +33914,12 @@ ${seg.text}`;
   }
   async function triggerPrevSegment() {
     const mesId = $2("#gal-global-overlay .gal-game-container").attr("data-mes-id");
-    const state = messageSegmentState4.get(String(mesId));
-    if (!state) return;
-    if (state.currentIndex > 0) {
+    const state2 = messageSegmentState4.get(String(mesId));
+    if (!state2) return;
+    if (state2.currentIndex > 0) {
       TTSManager.stop();
-      state.currentIndex--;
-      await scheduleOverlaySegmentDisplay(state, "trigger-prev");
+      state2.currentIndex--;
+      await scheduleOverlaySegmentDisplay(state2, "trigger-prev");
     } else {
       const switched = await switchToPreviousAiFloor({ suppressTTS: true });
       if (!switched.ok) {
@@ -31701,7 +34154,7 @@ ${seg.text}`;
     const hasOwn = Object.prototype.hasOwnProperty;
     const source = rawSettings && typeof rawSettings === "object" && !Array.isArray(rawSettings) ? rawSettings : null;
     if (!source) return false;
-    const current = buildExportableMapSettings();
+    const current2 = buildExportableMapSettings();
     const patch = {};
     let changed = false;
     if (hasOwn.call(source, "mapSystemEnabled")) {
@@ -31721,7 +34174,7 @@ ${seg.text}`;
       changed = true;
     }
     if (hasOwn.call(source, "mapCoordsByRegion")) {
-      patch.mapCoordsByRegion = mergeMapCoordsByRegion(current.mapCoordsByRegion, source.mapCoordsByRegion);
+      patch.mapCoordsByRegion = mergeMapCoordsByRegion(current2.mapCoordsByRegion, source.mapCoordsByRegion);
       changed = true;
     }
     if (changed) {
@@ -33594,16 +36047,16 @@ ${seg.text}`;
     };
     const ctx = getSillyTavernContextSafe();
     if (ctx?.characters && ctx?.characterId != null) {
-      const current = ctx.characters[ctx.characterId];
-      append(current?.name);
-      append(current?.data?.name);
+      const current2 = ctx.characters[ctx.characterId];
+      append(current2?.name);
+      append(current2?.data?.name);
     }
     append(ctx?.name2);
     const st2 = topWindow?.SillyTavern;
     if (st2?.characters && st2?.characterId != null) {
-      const current = st2.characters[st2.characterId];
-      append(current?.name);
-      append(current?.data?.name);
+      const current2 = st2.characters[st2.characterId];
+      append(current2?.name);
+      append(current2?.data?.name);
     }
     append(st2?.name2);
     return result;
@@ -34545,22 +36998,22 @@ ${seg.text}`;
     }
     const ctx = getSillyTavernContextSafe();
     if (ctx?.characters && ctx?.characterId != null) {
-      const current = ctx.characters[ctx.characterId];
-      if (isLikelyRawCharacterCard(current)) {
+      const current2 = ctx.characters[ctx.characterId];
+      if (isLikelyRawCharacterCard(current2)) {
         return {
-          card: current,
-          resolvedName: String(current?.name || resolvedName || "current"),
+          card: current2,
+          resolvedName: String(current2?.name || resolvedName || "current"),
           source: "sillytavern.context"
         };
       }
     }
     const st2 = topWindow?.SillyTavern;
     if (st2?.characters && st2?.characterId != null) {
-      const current = st2.characters[st2.characterId];
-      if (isLikelyRawCharacterCard(current)) {
+      const current2 = st2.characters[st2.characterId];
+      if (isLikelyRawCharacterCard(current2)) {
         return {
-          card: current,
-          resolvedName: String(current?.name || resolvedName || "current"),
+          card: current2,
+          resolvedName: String(current2?.name || resolvedName || "current"),
           source: "sillytavern.global"
         };
       }
@@ -36179,7 +38632,7 @@ ${seg.text}`;
   }
 
   // src/ui/builtin-bg-packs.js
-  var CDN_HOSTS = ["https://cdn.jsdelivr.net", "https://gcore.jsdelivr.net"];
+  var CDN_HOSTS2 = ["https://cdn.jsdelivr.net", "https://gcore.jsdelivr.net"];
   var BUILTIN_BG_PACKS = [
     {
       id: "jp",
@@ -36234,7 +38687,7 @@ ${seg.text}`;
       const base = override.endsWith("/") ? override : `${override}/`;
       return base + encodePathSegments(relPath);
     }
-    return `${CDN_HOSTS[hostIndex]}/gh/${pack.repo}@${pack.tag}/${encodePathSegments(relPath)}`;
+    return `${CDN_HOSTS2[hostIndex]}/gh/${pack.repo}@${pack.tag}/${encodePathSegments(relPath)}`;
   }
   function resolveEntryUrl(rawUrl, hostIndex) {
     const url = String(rawUrl || "");
@@ -36244,7 +38697,7 @@ ${seg.text}`;
   var _manifestCache = /* @__PURE__ */ new Map();
   async function fetchPackManifest(pack) {
     if (_manifestCache.has(pack.id)) return _manifestCache.get(pack.id);
-    const hostCount = getBaseOverride(pack.id) ? 1 : CDN_HOSTS.length;
+    const hostCount = getBaseOverride(pack.id) ? 1 : CDN_HOSTS2.length;
     let lastError = null;
     for (let hostIndex = 0; hostIndex < hostCount; hostIndex++) {
       try {
@@ -36695,6 +39148,36 @@ ${conflicts.join("、")}`,
   }
 
   // src/logic/cot-template.js
+  async function buildTempSpriteAliasSection({ ttsEnabled, canAssignTemplate }) {
+    let characterIds = [];
+    try {
+      const [sprites, live2dModels] = await Promise.all([getAllSprites(null, false), getAllLive2DModels()]);
+      characterIds = Array.from(
+        new Set(
+          [...sprites.map((sp) => sp?.characterId), ...live2dModels.map((m2) => m2?.modelId || m2?.characterId)].map((id2) => String(id2 || "").trim()).filter(Boolean)
+        )
+      );
+    } catch (error3) {
+      console.warn(`[${SCRIPT_NAME}] 获取可临时指定立绘的角色失败:`, error3);
+    }
+    if (characterIds.length === 0 && !canAssignTemplate) return "";
+    const formatLine = ttsEnabled ? '`<p>显示名@角色名[表情,男声/女声]: "对话"</p>`' : '`<p>显示名@角色名: "对话"<表情名></p>`';
+    const exampleTarget = characterIds[0] || "星野雫";
+    const exampleLine = ttsEnabled ? `\`<p>神秘少女@${exampleTarget}[微笑,女声]: "我们……以前见过吗？"</p>\`` : `\`<p>神秘少女@${exampleTarget}: "我们……以前见过吗？"<微笑></p>\``;
+    const characterListLine = characterIds.length > 0 ? `
+- **可指定的角色**: ${characterIds.join(", ")}` : "";
+    const assignLine = canAssignTemplate ? "\n  - 该角色尚无立绘时，可先按「新角色立绘模板」规则以**真名**分配模板，再用本格式出场。" : "";
+    return `
+### 未揭示姓名角色的立绘（临时指定）
+- **用途**: 角色已登场、但姓名尚未在剧情中揭示（如"神秘少女""蒙面人""???"）时，用 \`显示名@角色名\` 临时调用其真实身份的立绘/Live2D与音色；对话框只显示 @ 前的名字
+- **格式**: ${formatLine}${characterListLine}
+- **使用规则**:
+  - @ 后必须是该角色的**真名**，且该角色已有立绘（在可指定列表中原样选取），禁止自创。
+  - 未揭示期间该角色的**每句**台词都带上 \`@角色名\`；姓名揭示后直接使用真名，不再加 @。
+  - 已知姓名的角色、路人与无立绘的角色不要使用本格式。${assignLine}
+- **示例**: ${exampleLine}
+`;
+  }
   async function generateCOTTemplate(options2 = {}) {
     const settings = getSettings();
     const locationStatusHtml = (topWindow?.localStorage?.getItem(CUSTOM_LOCATION_HTML_KEY) || "").trim();
@@ -36710,7 +39193,7 @@ ${statusTagInstructions.join("\n")}
 - ${placementHint}消息包含这些标签时，点击对应状态栏会弹窗显示标签内容。
 ` : "";
     const statusTagSection = buildStatusTagSection("以上标签请放在 <maintext> 内。");
-    const pixiEffectNames = ["rain", "snow", "heavySnow", "cherryBlossoms", "fog", "fireflies", "embers", "screenFlash"];
+    const pixiEffectNames = ["rain", "snow", "heavySnow", "cherryBlossoms", "fog", "fireflies", "embers", "lightning", "bokeh", "dust", "screenFlash", "screenShake"];
     const pixiEffectListText = pixiEffectNames.join(", ");
     const pixiEffectTagSection = settings.effectsEnabled === false ? "" : `
 ### Pixi 特效标签（可选）
@@ -36722,6 +39205,8 @@ ${statusTagInstructions.join("\n")}
   - 特效层由系统按特效名自动分配（雾固定背景层，其余固定前景层），不要输出 \`layer\`。
   - 同一场景不要高频重复输出同一个特效。
   - \`screenFlash\` 用于短暂强调（爆炸、雷电、强光），不要连续刷屏。
+  - \`screenShake\` 为一次性震屏（撞击、爆炸、地震、拍桌怒吼），放在对应台词前，一条消息最多一两次。
+  - \`lightning\` 为持续的远处雷暴（常与 rain 同用）；\`bokeh\` 为散景光斑（夜景灯火、祭典、浪漫时刻）；\`dust\` 为光束中的浮尘（旧屋、书库、清晨室内）。
 `;
     const bgmWhitelist = Array.from(
       new Set(
@@ -36939,9 +39424,12 @@ Wallhaven 是英文标签系统，标签必须是**简短、通用的英文单�
   - **强制触发**: 每次场景切换或环境改变时，**必须**立即输出背景标签。
   - **初始环境**: 故事开始的第一段回复中**必须**包含背景标签。`;
     const includeBackgroundSection = !(useChatu8 && sceneNames.length === 0) && !(simpleStorybookMode && bgSrc === "none" && sceneNames.length === 0);
+    const backgroundTransitionHint = settings.bgTransitionAiHint !== false ? `
+- 可选转场（仅在关键节点添加，平常省略）: \`<background scene="场景名" transition="black" />\`
+  - black: 黑场 + 地点字幕，用于时间流逝、换章、次日；dissolve: 墨迹溶解，用于回忆、梦境；iris: 光圈展开；wipe: 斜切擦除，用于快节奏移动` : "";
     const backgroundTagSection = includeBackgroundSection ? `### ${backgroundTagTitle}
 - 格式: \`<background scene="场景名" />\`
-${backgroundUsageRuleSection}
+${backgroundUsageRuleSection}${backgroundTransitionHint}
 - ${sceneListText}` : "";
     const exampleBackgroundLine = includeBackgroundSection ? `  <background scene="${exampleScene}" />
 ` : "";
@@ -36960,6 +39448,7 @@ ${backgroundUsageRuleSection}
       }
     }
     const ttsEnabled = getTTSEnabled();
+    const tempSpriteAliasSection = simpleStorybookMode ? "" : await buildTempSpriteAliasSection({ ttsEnabled, canAssignTemplate: !!autoSpriteAssignSection });
     const ttsBilingualZhJaEnabled = settings.ttsBilingualZhJaEnabled === true;
     const ttsDialogueFormatLine = ttsBilingualZhJaEnabled ? '- **格式**: `<p>角色名[表情,男声/女声]: "中文文本[JP]日文文本"</p>`' : '- **格式**: `<p>角色名[表情,男声/女声]: "对话内容"</p>`';
     const ttsBilingualHintSection = ttsBilingualZhJaEnabled ? `
@@ -37057,6 +39546,7 @@ ${bgmRuleSection}
 ${backgroundTagSection}
 ${pendingSpecialCgSection}
 ${autoSpriteAssignSection}
+${tempSpriteAliasSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）
@@ -37131,6 +39621,7 @@ ${bgmRuleSection}
 ${backgroundTagSection}
 ${pendingSpecialCgSection}
 ${autoSpriteAssignSection}
+${tempSpriteAliasSection}
 ${pixiEffectTagSection}
 
 ### 情境样式标签（可选）
@@ -37178,38 +39669,220 @@ ${extraRule}
     }
   }
 
+  // src/logic/enhanced-llm.js
+  function getRawProfiles(ctx) {
+    const profiles = ctx?.extensionSettings?.connectionManager?.profiles;
+    return Array.isArray(profiles) ? profiles : [];
+  }
+  function isConnectionManagerDisabled(ctx) {
+    const disabled = ctx?.extensionSettings?.disabledExtensions;
+    return Array.isArray(disabled) && disabled.includes("connection-manager");
+  }
+  function listConnectionProfiles() {
+    const ctx = getTavernContext();
+    if (!ctx || isConnectionManagerDisabled(ctx)) return [];
+    let profiles = getRawProfiles(ctx);
+    const service = ctx.ConnectionManagerRequestService;
+    if (typeof service?.getSupportedProfiles === "function") {
+      try {
+        profiles = service.getSupportedProfiles();
+      } catch (e2) {
+        console.warn(`[${SCRIPT_NAME}] 获取可用连接配置失败:`, e2);
+      }
+    }
+    return (Array.isArray(profiles) ? profiles : []).filter((profile) => profile && profile.id).map((profile) => ({
+      id: String(profile.id),
+      name: String(profile.name || profile.id),
+      api: String(profile.api || ""),
+      model: String(profile.model || "")
+    }));
+  }
+  function resolveConnectionProfile({ profileId = "", profileName = "" } = {}) {
+    const profiles = getRawProfiles(getTavernContext());
+    return profileId && profiles.find((profile) => profile?.id === profileId) || profileName && profiles.find((profile) => profile?.name === profileName) || null;
+  }
+  function describeLlmConfig(llm) {
+    if (!llm) return "酒馆当前 API";
+    const profile = resolveConnectionProfile(llm);
+    const profileLabel = profile?.name || llm.profileName || llm.profileId || "未知连接配置";
+    const model = llm.model || profile?.model || "";
+    return model ? `${profileLabel} / ${model}` : profileLabel;
+  }
+  var MODEL_SELECT_ALIASES = {
+    makersuite: ["google", "makersuite"]
+  };
+  function readModelOptionsFromTavernPage(source) {
+    const doc = topWindow?.document;
+    if (!doc || !source) return [];
+    const names = MODEL_SELECT_ALIASES[source] || [source];
+    const models = [];
+    for (const name of names) {
+      doc.querySelectorAll(`#model_${name}_select option`).forEach((option) => {
+        const value = String(option.value || "").trim();
+        if (value) models.push(value);
+      });
+      if (models.length > 0) break;
+    }
+    return models;
+  }
+  function extractModelIds(json2) {
+    const list = Array.isArray(json2?.data) ? json2.data : Array.isArray(json2?.data?.data) ? json2.data.data : Array.isArray(json2?.models) ? json2.models : Array.isArray(json2) ? json2 : [];
+    return list.map((item) => typeof item === "string" ? item : item?.id || item?.name || "").map((id2) => String(id2).trim()).filter(Boolean);
+  }
+  function resolveTavernApiUrl(path) {
+    try {
+      return new URL(path, topWindow.location.href).toString();
+    } catch (e2) {
+      return path;
+    }
+  }
+  async function requestRemoteModelList(ctx, profile, apiMap, secretId) {
+    const apiUrl = String(profile["api-url"] || "").trim() || void 0;
+    let url;
+    let body;
+    if (apiMap.selected === "openai") {
+      url = "/api/backends/chat-completions/status";
+      body = {
+        chat_completion_source: apiMap.source,
+        custom_url: apiUrl,
+        vertexai_region: apiUrl,
+        zai_endpoint: apiUrl,
+        siliconflow_endpoint: apiUrl,
+        minimax_endpoint: apiUrl,
+        pollinations_endpoint: apiUrl,
+        secret_id: secretId,
+        custom_include_headers: apiMap.source === "custom" ? ctx.chatCompletionSettings?.custom_include_headers : void 0
+      };
+    } else {
+      if (!apiUrl) throw new Error("该连接配置未设置 API 地址");
+      url = "/api/backends/text-completions/status";
+      body = { api_server: apiUrl, api_type: apiMap.type, secret_id: secretId };
+    }
+    const headers = typeof ctx.getRequestHeaders === "function" ? ctx.getRequestHeaders() : { "Content-Type": "application/json" };
+    const response = await fetch(resolveTavernApiUrl(url), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      cache: "no-cache"
+    });
+    if (!response.ok) {
+      throw new Error(`酒馆后端返回 HTTP ${response.status}（该 API 类型可能不支持获取模型列表）`);
+    }
+    const json2 = await response.json().catch(() => null);
+    if (!json2 || json2.error) {
+      throw new Error(json2?.message || json2?.error?.message || "上游 /models 请求失败（密钥无效或 API 地址不可用，详见酒馆服务端日志）");
+    }
+    return extractModelIds(json2);
+  }
+  async function fetchProfileModels(profileId) {
+    const ctx = getTavernContext();
+    if (!ctx) throw new Error("无法访问酒馆上下文");
+    const profile = resolveConnectionProfile({ profileId });
+    if (!profile) throw new Error("未找到该连接配置");
+    const apiMap = ctx.CONNECT_API_MAP?.[profile.api];
+    if (!apiMap) throw new Error(`未知的 API 类型: ${profile.api || "（空）"}`);
+    const models = /* @__PURE__ */ new Set();
+    let remoteError = null;
+    const secretId = profile["secret-id"] || void 0;
+    for (const attemptSecretId of secretId ? [secretId, void 0] : [void 0]) {
+      try {
+        (await requestRemoteModelList(ctx, profile, apiMap, attemptSecretId)).forEach((id2) => models.add(id2));
+        remoteError = null;
+        break;
+      } catch (e2) {
+        remoteError = e2;
+        console.warn(`[${SCRIPT_NAME}] 连接配置「${profile.name}」模型列表请求失败${attemptSecretId ? "（使用配置绑定的密钥）" : ""}:`, e2);
+      }
+    }
+    if (models.size === 0 && apiMap.selected === "openai") {
+      readModelOptionsFromTavernPage(apiMap.source).forEach((id2) => models.add(id2));
+    }
+    if (models.size === 0 && remoteError) throw remoteError;
+    return Array.from(models).sort((a2, b2) => a2.localeCompare(b2));
+  }
+  function resolveMaxTokens(ctx, profile, maxTokens) {
+    const explicit = Math.round(Number(maxTokens) || 0);
+    if (explicit > 0) return explicit;
+    if (profile.preset) return void 0;
+    const fallback = Math.round(Number(ctx.chatCompletionSettings?.openai_max_tokens) || 0);
+    return fallback > 0 ? fallback : 4096;
+  }
+  function unwrapRequestError(error3) {
+    const cause = error3?.cause;
+    const detail = cause?.message || (typeof cause === "string" ? cause : "");
+    return new Error(detail ? `${error3.message}: ${detail}` : error3?.message || String(error3));
+  }
+  async function requestWithConnectionProfile({ profileId, profileName, model, maxTokens, messages, onStream }) {
+    const ctx = getTavernContext();
+    if (!ctx) throw new Error("无法访问酒馆上下文");
+    if (isConnectionManagerDisabled(ctx)) throw new Error("酒馆的连接配置管理（Connection Manager）扩展已被禁用");
+    const service = ctx.ConnectionManagerRequestService;
+    if (typeof service?.sendRequest !== "function") {
+      throw new Error("当前酒馆版本不支持按连接配置独立请求，请更新酒馆或改用「跟随酒馆当前 API」");
+    }
+    const profile = resolveConnectionProfile({ profileId, profileName });
+    if (!profile) throw new Error(`未找到连接配置「${profileName || profileId || "未选择"}」`);
+    const overridePayload = model ? { model } : {};
+    let result;
+    try {
+      result = await service.sendRequest(
+        profile.id,
+        messages,
+        resolveMaxTokens(ctx, profile, maxTokens),
+        { stream: true, extractData: true, includePreset: true, includeInstruct: true },
+        overridePayload
+      );
+    } catch (e2) {
+      throw unwrapRequestError(e2);
+    }
+    if (typeof result === "function") {
+      let text = "";
+      for await (const chunk of result()) {
+        text = typeof chunk?.text === "string" ? chunk.text : text;
+        if (onStream) onStream(text);
+      }
+      return text;
+    }
+    const content = typeof result === "string" ? result : result?.content;
+    return typeof content === "string" ? content : String(content ?? "");
+  }
+
   // src/logic/enhanced-mode.js
   var WORLDBOOK_NAME2 = "galgame界面插件";
   var COT_ENTRY_NAME2 = "Galgame输出格式规范";
   var enhancedModeState2 = GalgameStore.enhancedMode;
   var worldbookInjectionState2 = GalgameStore.worldbookInjection;
   var _showToastRef9 = null;
-  var _updateGlobalOverlayContentRef3 = null;
   var _updateNextBtnForGeneratingStateRef2 = null;
-  var _updateGeneratingStatusRef2 = null;
   var _showGeneratingIndicatorRef = null;
+  var _processNewMessageRef = null;
   function setEnhancedModeRefs({
     showToast: showToast5,
-    updateGlobalOverlayContent: updateGlobalOverlayContent2,
     updateNextBtnForGeneratingState: updateNextBtnForGeneratingState2,
-    updateGeneratingStatus: updateGeneratingStatus2,
-    showGeneratingIndicator: showGeneratingIndicator2
+    showGeneratingIndicator: showGeneratingIndicator2,
+    processNewMessage: processNewMessage2
   }) {
     if (showToast5) _showToastRef9 = showToast5;
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
     if (updateNextBtnForGeneratingState2) _updateNextBtnForGeneratingStateRef2 = updateNextBtnForGeneratingState2;
-    if (updateGeneratingStatus2) _updateGeneratingStatusRef2 = updateGeneratingStatus2;
     if (showGeneratingIndicator2) _showGeneratingIndicatorRef = showGeneratingIndicator2;
+    if (processNewMessage2) _processNewMessageRef = processNewMessage2;
   }
   function showToast3(msg, duration) {
     if (_showToastRef9) _showToastRef9(msg, duration);
   }
   function isCotFormatted(content) {
     if (!content || typeof content !== "string") return false;
-    const cotIndicators = [/<background\s+scene=/i, /<sprite\s+/i, /<bgm>/i, /<maintext>/i, /<p\s+tts=/i];
+    const cotIndicators = [/<background\b[^>]*\bscene=/i, /<sprite\s+/i, /<bgm>/i, /<maintext>/i, /<p\s+tts=/i];
     return cotIndicators.some((pattern) => pattern.test(content));
   }
   function getFormattedContent(messageId) {
+    const enhancedText = getEnhancedFormattedText(messageId);
+    if (enhancedText) {
+      return { formatted: enhancedText, source: "extra" };
+    }
+    return getLegacyFormattedSwipe(messageId);
+  }
+  function getLegacyFormattedSwipe(messageId) {
     const messages = getChatMessages(messageId, { include_swipes: true });
     const message = messages[0];
     if (!message || !message.swipes || message.swipes.length < 2) {
@@ -37217,89 +39890,29 @@ ${extraRule}
     }
     const swipes = message.swipes;
     const swipesInfo = message.swipes_info || [];
-    const swipe1Info = swipesInfo[1] || {};
-    const swipe1Content = swipes[1];
-    if (swipe1Info.isEnhancedFormat === true) {
-      return {
-        original: swipes[0],
-        formatted: swipe1Content,
-        formattedIndex: 1,
-        originalIndex: 0,
-        currentSwipe: message.swipe_id
-      };
-    }
-    if (swipe1Info.isEnhancedFormat !== false && isCotFormatted(swipe1Content)) {
-      return {
-        original: swipes[0],
-        formatted: swipe1Content,
-        formattedIndex: 1,
-        originalIndex: 0,
-        currentSwipe: message.swipe_id,
-        autoDetected: true
-      };
-    }
-    for (let i2 = 2; i2 < swipes.length; i2++) {
+    for (let i2 = 1; i2 < swipes.length; i2++) {
       const info = swipesInfo[i2] || {};
-      if (info.isEnhancedFormat === true) {
+      if (info.isEnhancedFormat === true || info.isEnhancedFormat !== false && isCotFormatted(swipes[i2])) {
         return {
-          original: swipes[0],
           formatted: swipes[i2],
           formattedIndex: i2,
-          originalIndex: 0,
-          currentSwipe: message.swipe_id
-        };
-      }
-      if (info.isEnhancedFormat !== false && isCotFormatted(swipes[i2])) {
-        return {
-          original: swipes[0],
-          formatted: swipes[i2],
-          formattedIndex: i2,
-          originalIndex: 0,
-          currentSwipe: message.swipe_id,
-          autoDetected: true
+          source: "swipe"
         };
       }
     }
     return null;
   }
-  async function saveFormatToSwipe(messageId, originalContent, formattedContent) {
-    const numericMessageId = Number(messageId);
-    console.log(`[${SCRIPT_NAME}] saveFormatToSwipe: 开始, messageId=${numericMessageId}`);
-    const msgs = getChatMessages(numericMessageId, { include_swipes: true });
-    if (!msgs || msgs.length === 0) {
-      throw new Error("未找到目标楼层");
-    }
-    const msg = msgs[0];
-    console.log(`[${SCRIPT_NAME}] saveFormatToSwipe: 当前 swipes=${msg.swipes?.length}, swipe_id=${msg.swipe_id}`);
-    const newSwipes = [...msg.swipes, ""];
-    const newSwipeId = newSwipes.length - 1;
-    await setChatMessages(
-      [{ message_id: numericMessageId, swipes: newSwipes, swipe_id: newSwipeId }],
-      { refresh: "affected" }
-    );
-    console.log(`[${SCRIPT_NAME}] saveFormatToSwipe: 已添加空 swipe, swipe_id=${newSwipeId}`);
-    const updatedMsgs = getChatMessages(numericMessageId, { include_swipes: true });
-    if (updatedMsgs && updatedMsgs.length > 0) {
-      const updatedSwipes = [...updatedMsgs[0].swipes];
-      updatedSwipes[newSwipeId] = formattedContent;
-      await setChatMessages(
-        [{ message_id: numericMessageId, swipes: updatedSwipes, swipe_id: newSwipeId }],
-        { refresh: "affected" }
-      );
-    }
-    console.log(`[${SCRIPT_NAME}] 格式化版本已保存到 swipe ${newSwipeId}`);
-  }
-  function showEnhancedProgress(stage) {
+  function showEnhancedProgress(stage, detail = "") {
     const messages = {
-      first_generating: { icon: "fa-pen", text: "第一次生成（内容创作）", sub: "正在生成..." },
-      first_done: { icon: "fa-check", text: "第一次完成", sub: "准备格式化..." },
-      second_generating: { icon: "fa-wand-magic-sparkles", text: "第二次生成（COT格式化）", sub: "切换API中..." },
-      second_done: { icon: "fa-check-double", text: "加强模式完成", sub: "已保存2个版本" }
+      first_done: { icon: "fa-check", text: "第一次生成完成", sub: "准备格式化..." },
+      second_generating: { icon: "fa-wand-magic-sparkles", text: "第二次生成（格式化）", sub: detail || "正在格式化..." },
+      second_done: { icon: "fa-check-double", text: "加强模式完成", sub: "格式化文本仅在 Galgame 界面中显示" }
     };
     const msg = messages[stage];
     if (!msg) return;
+    const esc = (str) => String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     showToast3(
-      `<i class="fa-solid ${msg.icon}" style="color: #ff9800;"></i> <b>${msg.text}</b><br><small>${msg.sub}</small>`,
+      `<i class="fa-solid ${msg.icon}" style="color: #ff9800;"></i> <b>${msg.text}</b><br><small>${esc(msg.sub)}</small>`,
       3e3
     );
   }
@@ -37309,189 +39922,28 @@ ${extraRule}
     enhancedModeState2.firstResult = null;
     enhancedModeState2.formattedResult = null;
     enhancedModeState2.targetMessageId = null;
-    enhancedModeState2.originalProfile = void 0;
-    enhancedModeState2.originalModel = void 0;
-    enhancedModeState2.originalPreset = void 0;
-    enhancedModeState2.originalWorldbooks = null;
-    enhancedModeState2.worldbooksModified = false;
-    enhancedModeState2.originalConfigSaved = false;
-    enhancedModeState2.isSecondGeneration = false;
   }
-  function getAvailablePresets() {
-    try {
-      if (typeof getPresetNames === "function") {
-        return Promise.resolve(getPresetNames());
-      }
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取预设列表失败:`, e2);
-    }
-    return Promise.resolve([]);
+  function createGenerationId() {
+    return `galgame-cot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
-  async function getAvailableProfiles() {
-    try {
-      if (typeof triggerSlash === "function") {
-        const result = await triggerSlash("/profile-list");
-        if (result) {
-          try {
-            const parsed = JSON.parse(result);
-            if (Array.isArray(parsed)) return parsed;
-          } catch (e2) {
-            if (typeof result === "string") {
-              return result.split(",").map((p3) => p3.trim()).filter((p3) => p3.length > 0);
-            }
-          }
-        }
-      }
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取连接配置列表失败:`, e2);
-    }
-    return [];
-  }
-  function getAvailableModels() {
-    try {
-      if (typeof getModelOptions === "function") {
-        const models = getModelOptions();
-        if (Array.isArray(models)) {
-          return Promise.resolve(models.map((m2) => typeof m2 === "string" ? m2 : m2.name || m2.id || String(m2)));
-        }
-      }
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取模型列表失败:`, e2);
-    }
-    return Promise.resolve([]);
-  }
-  function getAvailableWorldbooks() {
-    try {
-      if (typeof getWorldbookNames === "function") {
-        const worldbooks = getWorldbookNames();
-        if (Array.isArray(worldbooks)) {
-          return Promise.resolve(worldbooks);
-        }
-      }
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取世界书列表失败:`, e2);
-    }
-    return Promise.resolve([]);
-  }
-  async function saveOriginalConfig() {
-    if (typeof triggerSlash !== "function") return;
-    try {
-      if (typeof getGlobalWorldbookNames === "function") {
-        enhancedModeState2.originalWorldbooks = getGlobalWorldbookNames();
-        console.log(`[${SCRIPT_NAME}] 当前世界书:`, enhancedModeState2.originalWorldbooks);
-      }
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取当前世界书失败:`, e2);
-    }
-    try {
-      enhancedModeState2.originalProfile = await triggerSlash("/profile quiet=true") || "";
-      console.log(`[${SCRIPT_NAME}] 当前连接配置: ${enhancedModeState2.originalProfile}`);
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取当前连接配置失败:`, e2);
-    }
-    try {
-      enhancedModeState2.originalModel = await triggerSlash("/model quiet=true") || "";
-      console.log(`[${SCRIPT_NAME}] 当前模型: ${enhancedModeState2.originalModel}`);
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取当前模型失败:`, e2);
-    }
-    try {
-      enhancedModeState2.originalPreset = await triggerSlash("/preset quiet=true") || "";
-      console.log(`[${SCRIPT_NAME}] 当前预设: ${enhancedModeState2.originalPreset}`);
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 获取当前预设失败:`, e2);
-    }
-  }
-  async function restoreOriginalConfig() {
-    if (typeof triggerSlash !== "function") return;
-    if (enhancedModeState2.originalPreset !== void 0 && enhancedModeState2.originalPreset !== "") {
-      try {
-        await triggerSlash(`/preset quiet=true ${enhancedModeState2.originalPreset}`);
-        console.log(`[${SCRIPT_NAME}] 已恢复预设: ${enhancedModeState2.originalPreset}`);
-      } catch (e2) {
-        console.warn(`[${SCRIPT_NAME}] 恢复预设失败:`, e2);
-      }
-    }
-    if (enhancedModeState2.originalModel !== void 0 && enhancedModeState2.originalModel !== "") {
-      try {
-        await triggerSlash(`/model quiet=true ${enhancedModeState2.originalModel}`);
-        console.log(`[${SCRIPT_NAME}] 已恢复模型: ${enhancedModeState2.originalModel}`);
-      } catch (e2) {
-        console.warn(`[${SCRIPT_NAME}] 恢复模型失败:`, e2);
-      }
-    }
-    if (enhancedModeState2.originalProfile !== void 0 && enhancedModeState2.originalProfile !== "") {
-      try {
-        await triggerSlash(`/profile quiet=true ${enhancedModeState2.originalProfile}`);
-        console.log(`[${SCRIPT_NAME}] 已恢复连接配置: ${enhancedModeState2.originalProfile}`);
-      } catch (e2) {
-        console.warn(`[${SCRIPT_NAME}] 恢复连接配置失败:`, e2);
-      }
-    }
-    if (enhancedModeState2.worldbooksModified && enhancedModeState2.originalWorldbooks !== null && typeof rebindGlobalWorldbooks === "function") {
-      try {
-        await rebindGlobalWorldbooks(enhancedModeState2.originalWorldbooks);
-        console.log(`[${SCRIPT_NAME}] 已恢复世界书:`, enhancedModeState2.originalWorldbooks);
-      } catch (e2) {
-        console.warn(`[${SCRIPT_NAME}] 恢复世界书失败:`, e2);
-      }
-    }
-  }
-  async function updateStreamingSwipe(messageId, swipeId, text) {
-    try {
-      const msgs = getChatMessages(messageId, { include_swipes: true });
-      if (!msgs || !msgs[0]) return;
-      const msg = msgs[0];
-      const newSwipes = [...msg.swipes];
-      newSwipes[swipeId] = text;
-      const updateData = { ...msg };
-      updateData.swipes = newSwipes;
-      updateData.swipe_id = swipeId;
-      await setChatMessages([updateData], { refresh: "affected" });
-    } catch (e2) {
-      console.warn(`[${SCRIPT_NAME}] 流式更新失败:`, e2);
-    }
-  }
-  async function convertTextToCotFormat(sourceText, options2 = {}) {
-    const normalizedSource = String(sourceText || "").trim();
-    if (!normalizedSource) {
-      throw new Error("待转换文本为空");
-    }
-    const independent = !!options2.independent;
-    const onStream = typeof options2.onStream === "function" ? options2.onStream : null;
-    const streamState = { latestText: "" };
-    let stopStreamListener = null;
+  async function generateWithTavern({ independent, systemPrompt, userPrompt, onStream, sendWorldbook }) {
+    const generationId = createGenerationId();
     const previousSecondGenerationState = enhancedModeState2.isSecondGeneration;
+    let stopStreamListener = null;
     try {
       enhancedModeState2.isSecondGeneration = true;
       if (onStream && typeof eventOn === "function" && typeof iframe_events !== "undefined") {
-        const handle = eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, (text) => {
-          const safeText = typeof text === "string" ? text : "";
-          streamState.latestText = safeText;
-          onStream(safeText);
+        const handle = eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, (text, id2) => {
+          if (id2 !== void 0 && id2 !== generationId) return;
+          onStream(typeof text === "string" ? text : "");
         });
         if (handle && typeof handle.stop === "function") {
           stopStreamListener = () => handle.stop();
         }
       }
-      const pendingSpecialCg = await getPendingSpecialCg();
-      const cotTemplate = await generateCOTTemplate({ pendingSpecialCg });
-      const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}
-
-${cotTemplate}`;
-      const userPrompt = `请将以下内容转换为标准Galgame格式：
-
-${normalizedSource}`;
-      enhancedModeState2.lastPrompts = {
-        systemPrompt,
-        userPrompt,
-        firstResult: normalizedSource,
-        timestamp: (/* @__PURE__ */ new Date()).toLocaleString("zh-CN")
-      };
-      console.log(`[${SCRIPT_NAME}] COT转换: 模式=${independent ? "独立(开场白)" : "预设(加强模式)"}`);
-      let formattedText;
       if (independent) {
-        formattedText = await generateRaw({
+        return await generateRaw({
+          generation_id: generationId,
           user_input: userPrompt,
           should_silence: true,
           should_stream: true,
@@ -37500,31 +39952,23 @@ ${normalizedSource}`;
             "user_input"
           ]
         });
-      } else {
-        formattedText = await generate({
-          user_input: userPrompt,
-          injects: [{ role: "system", content: systemPrompt }],
-          should_silence: true,
-          should_stream: true,
-          max_chat_history: 0,
-          overrides: {
-            chat_history: {
-              prompts: [],
-              with_depth_entries: false
-            },
-            dialogue_examples: ""
-          }
-        });
       }
-      const safeFormattedText = typeof formattedText === "string" ? formattedText : String(formattedText || "");
-      if (onStream && safeFormattedText && streamState.latestText !== safeFormattedText) {
-        onStream(safeFormattedText);
-      }
-      return {
-        formattedText: safeFormattedText,
-        systemPrompt,
-        userPrompt
-      };
+      return await generate({
+        generation_id: generationId,
+        user_input: userPrompt,
+        injects: [{ role: "system", content: systemPrompt }],
+        should_silence: true,
+        should_stream: true,
+        max_chat_history: 0,
+        overrides: {
+          chat_history: {
+            prompts: [],
+            with_depth_entries: false
+          },
+          dialogue_examples: "",
+          ...sendWorldbook ? {} : { world_info_before: "", world_info_after: "" }
+        }
+      });
     } finally {
       if (stopStreamListener) {
         try {
@@ -37536,139 +39980,215 @@ ${normalizedSource}`;
       enhancedModeState2.isSecondGeneration = previousSecondGenerationState;
     }
   }
-  async function runSecondGeneration(messageId, firstResult) {
-    const config = ensureEnhancedModeSettings();
-    const secondGenerateConfig = config.secondGenerate;
-    const numericMessageId = Number(messageId);
-    let streamBuffer = "";
-    let lastStreamUpdate = 0;
-    const STREAM_INTERVAL = 100;
+  async function collectWorldbookPrompt(sourceText) {
+    const ctx = getTavernContext();
+    if (typeof ctx?.getWorldInfoPrompt !== "function") {
+      console.warn(`[${SCRIPT_NAME}] 当前酒馆版本不支持读取世界书，第二次生成不附带世界书`);
+      return "";
+    }
     try {
-      if (!Number.isInteger(numericMessageId) || numericMessageId < 0) {
-        throw new Error("无效的消息ID，无法执行第二次生成");
+      const maxContext = Number(ctx.maxContext) > 0 ? Number(ctx.maxContext) : 8192;
+      const result = await ctx.getWorldInfoPrompt([sourceText], maxContext, true);
+      return [result?.worldInfoBefore, result?.worldInfoAfter].map((text) => String(text || "").trim()).filter(Boolean).join("\n\n");
+    } catch (e2) {
+      console.warn(`[${SCRIPT_NAME}] 读取世界书失败，第二次生成不附带世界书:`, e2);
+      return "";
+    }
+  }
+  async function convertTextToCotFormat(sourceText, options2 = {}) {
+    const normalizedSource = String(sourceText || "").trim();
+    if (!normalizedSource) {
+      throw new Error("待转换文本为空");
+    }
+    const independent = !!options2.independent;
+    const llm = options2.llm || null;
+    const sendWorldbook = !independent && !!options2.sendWorldbook;
+    const onStream = typeof options2.onStream === "function" ? options2.onStream : null;
+    let latestStreamText = "";
+    const streamHandler = onStream ? (text) => {
+      latestStreamText = text;
+      onStream(text);
+    } : null;
+    const pendingSpecialCg = await getPendingSpecialCg();
+    const cotTemplate = await generateCOTTemplate({ pendingSpecialCg });
+    const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}
+
+${cotTemplate}`;
+    const userPrompt = `请将以下内容转换为标准Galgame格式：
+
+${normalizedSource}`;
+    const llmLabel = describeLlmConfig(llm);
+    const worldbookPrompt = llm && sendWorldbook ? await collectWorldbookPrompt(normalizedSource) : "";
+    enhancedModeState2.lastPrompts = {
+      systemPrompt,
+      userPrompt,
+      firstResult: normalizedSource,
+      llmLabel,
+      sendWorldbook,
+      worldbookPrompt,
+      timestamp: (/* @__PURE__ */ new Date()).toLocaleString("zh-CN")
+    };
+    const modeLabel = llm ? "连接配置(加强模式)" : independent ? "独立(开场白)" : "预设(加强模式)";
+    console.log(`[${SCRIPT_NAME}] COT转换: 模式=${modeLabel}, LLM=${llmLabel}, 世界书=${sendWorldbook ? "发送" : "不发送"}`);
+    const formattedText = llm ? await requestWithConnectionProfile({
+      ...llm,
+      messages: [
+        ...worldbookPrompt ? [{ role: "system", content: `【世界书参考资料】以下设定仅用于识别角色、地点等名称，不要据此添加任何剧情：
+${worldbookPrompt}` }] : [],
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      onStream: streamHandler
+    }) : await generateWithTavern({ independent, systemPrompt, userPrompt, onStream: streamHandler, sendWorldbook });
+    const safeFormattedText = typeof formattedText === "string" ? formattedText : String(formattedText || "");
+    if (onStream && safeFormattedText && latestStreamText !== safeFormattedText) {
+      onStream(safeFormattedText);
+    }
+    return {
+      formattedText: safeFormattedText,
+      systemPrompt,
+      userPrompt
+    };
+  }
+  var STREAM_REFRESH_INTERVAL = 400;
+  async function refreshMessageInOverlay(messageId, options2) {
+    if (!getIsEnabled() || !_processNewMessageRef) return;
+    const mesNode = topWindow.document.querySelector(`#chat > .mes[mesid="${messageId}"]`);
+    if (!mesNode) return;
+    try {
+      await _processNewMessageRef(mesNode, options2);
+    } catch (e2) {
+      console.warn(`[${SCRIPT_NAME}] 加强模式: 刷新 Galgame 界面失败`, e2);
+    }
+  }
+  function showFormattingIndicator() {
+    if (!getIsEnabled() || !_showGeneratingIndicatorRef) return;
+    if (!topWindow.document.querySelector("#gal-global-overlay.active")) return;
+    _showGeneratingIndicatorRef("正在进行格式化转换...");
+  }
+  function createOverlayRefresher(messageId) {
+    let timer = null;
+    let inFlight = null;
+    let pending = false;
+    let stopped = false;
+    let lastRun = 0;
+    const run = async () => {
+      timer = null;
+      if (stopped) return;
+      if (inFlight) {
+        pending = true;
+        return;
       }
-      console.log(`[${SCRIPT_NAME}] 加强模式: 开始第二次生成（COT格式化-流式）`);
-      enhancedModeState2.stage = "second_generating";
-      showEnhancedProgress("second_generating");
-      if (!enhancedModeState2.originalConfigSaved) {
-        await saveOriginalConfig();
-        enhancedModeState2.originalConfigSaved = true;
+      lastRun = Date.now();
+      inFlight = refreshMessageInOverlay(messageId).then(() => {
+        if (!stopped) showFormattingIndicator();
+      });
+      await inFlight;
+      inFlight = null;
+      if (pending && !stopped) {
+        pending = false;
+        schedule();
       }
-      try {
-        const originalGlobalWbs = getGlobalWorldbookNames();
-        enhancedModeState2.originalWorldbooks = [...originalGlobalWbs];
-        enhancedModeState2.worldbooksModified = true;
-        let targetWorldbooks = [...originalGlobalWbs];
-        if (!secondGenerateConfig.useWorldbooks) {
-          targetWorldbooks = [...originalGlobalWbs];
-          console.log(`[${SCRIPT_NAME}] 第二次生成使用当前全局世界书:`, targetWorldbooks);
-        } else if (secondGenerateConfig.worldbooks && secondGenerateConfig.worldbooks.length > 0) {
-          targetWorldbooks = [...secondGenerateConfig.worldbooks];
-          console.log(`[${SCRIPT_NAME}] 第二次生成使用用户指定世界书:`, secondGenerateConfig.worldbooks);
-        } else {
-          targetWorldbooks = [];
-          console.log(`[${SCRIPT_NAME}] 第二次生成清空用户世界书`);
+    };
+    const schedule = () => {
+      if (timer || stopped) return;
+      timer = setTimeout(run, Math.max(0, STREAM_REFRESH_INTERVAL - (Date.now() - lastRun)));
+    };
+    const stop5 = () => {
+      stopped = true;
+      pending = false;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      return inFlight || Promise.resolve();
+    };
+    return { schedule, stop: stop5 };
+  }
+  function resolveSecondGenerateLlm(secondGenerate) {
+    if (secondGenerate?.llmSource !== "profile") return null;
+    if (!secondGenerate.profileId && !secondGenerate.profileName) {
+      throw new Error("已选择「使用酒馆连接配置」，但尚未选择连接配置");
+    }
+    return {
+      profileId: secondGenerate.profileId,
+      profileName: secondGenerate.profileName,
+      model: secondGenerate.model,
+      maxTokens: secondGenerate.maxTokens
+    };
+  }
+  async function runSecondGeneration(messageId) {
+    const snapshot = getMessageSourceSnapshot(messageId);
+    if (!snapshot) return;
+    enhancedModeState2.isActive = true;
+    enhancedModeState2.stage = "second_generating";
+    enhancedModeState2.targetMessageId = snapshot.mesId;
+    enhancedModeState2.firstResult = snapshot.text;
+    const refresher = createOverlayRefresher(snapshot.mesId);
+    try {
+      const secondGenerate = ensureEnhancedModeSettings().secondGenerate;
+      const llm = resolveSecondGenerateLlm(secondGenerate);
+      const llmLabel = describeLlmConfig(llm);
+      console.log(`[${SCRIPT_NAME}] 加强模式: 开始第二次生成（楼层 ${snapshot.mesId} swipe[${snapshot.swipeId}]，${llmLabel}）`);
+      showEnhancedProgress("second_generating", llmLabel);
+      showFormattingIndicator();
+      const { formattedText } = await convertTextToCotFormat(snapshot.text, {
+        llm,
+        sendWorldbook: secondGenerate.sendWorldbook,
+        onStream: (text) => {
+          setStreamingDraft(snapshot, text);
+          refresher.schedule();
         }
-        if (!targetWorldbooks.includes(WORLDBOOK_NAME2)) {
-          targetWorldbooks.push(WORLDBOOK_NAME2);
-        }
-        await rebindGlobalWorldbooks(targetWorldbooks);
-        console.log(`[${SCRIPT_NAME}] 加强模式第二次生成: 已临时附加脚本世界书`, targetWorldbooks);
-        if (secondGenerateConfig.useProfile && secondGenerateConfig.profileName) {
-          await triggerSlash(`/profile quiet=true ${secondGenerateConfig.profileName}`);
-          console.log(`[${SCRIPT_NAME}] 已切换到连接配置: ${secondGenerateConfig.profileName}`);
-          await new Promise((r2) => setTimeout(r2, 300));
-        }
-        if (secondGenerateConfig.useModel && secondGenerateConfig.modelName) {
-          await triggerSlash(`/model quiet=true ${secondGenerateConfig.modelName}`);
-          console.log(`[${SCRIPT_NAME}] 已切换到模型: ${secondGenerateConfig.modelName}`);
-          await new Promise((r2) => setTimeout(r2, 300));
-        }
-        if (secondGenerateConfig.usePreset && secondGenerateConfig.presetName) {
-          await triggerSlash(`/preset quiet=true ${secondGenerateConfig.presetName}`);
-          console.log(`[${SCRIPT_NAME}] 已切换到预设: ${secondGenerateConfig.presetName}`);
-          await new Promise((r2) => setTimeout(r2, 300));
-        }
-        enhancedModeState2.isSecondGeneration = true;
-        if (_updateGeneratingStatusRef2) _updateGeneratingStatusRef2("正在进行格式化转换...");
-        const msgs = getChatMessages(numericMessageId, { include_swipes: true });
-        if (!msgs || !msgs[0]) {
-          throw new Error("无法获取目标消息");
-        }
-        const msg = msgs[0];
-        const originalSwipeId = typeof msg.swipe_id === "number" ? msg.swipe_id : 0;
-        const currentSwipes = msg.swipes || [msg.message];
-        const newSwipes = [...currentSwipes, ""];
-        const newSwipeId = newSwipes.length - 1;
-        const updateData = { ...msg };
-        updateData.swipes = newSwipes;
-        updateData.swipe_id = newSwipeId;
-        await setChatMessages([updateData], { refresh: "affected" });
-        console.log(`[${SCRIPT_NAME}] 加强模式: 已添加并切换到 swipe[${newSwipeId}]`);
-        const streamHandler = (text) => {
-          streamBuffer = text || "";
-          const now = Date.now();
-          if (now - lastStreamUpdate >= STREAM_INTERVAL) {
-            updateStreamingSwipe(numericMessageId, newSwipeId, streamBuffer);
-            lastStreamUpdate = now;
-          }
-        };
-        const { formattedText: formattedResult } = await convertTextToCotFormat(firstResult, {
-          onStream: streamHandler
-        });
-        if (streamBuffer) {
-          await updateStreamingSwipe(numericMessageId, newSwipeId, streamBuffer);
-        }
-        console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成, 长度=${formattedResult?.length || 0}`);
-        enhancedModeState2.formattedResult = formattedResult;
-        if (formattedResult) {
-          const updatedMsgs = getChatMessages(numericMessageId, { include_swipes: true });
-          if (updatedMsgs && updatedMsgs[0]) {
-            const updatedSwipes = [...updatedMsgs[0].swipes];
-            updatedSwipes[newSwipeId] = formattedResult;
-            const updatedSwipesInfo = [...updatedMsgs[0].swipes_info || []];
-            updatedSwipesInfo[newSwipeId] = {
-              ...updatedSwipesInfo[newSwipeId] || {},
-              isEnhancedFormat: true,
-              enhancedModeGeneratedAt: Date.now()
-            };
-            const finalUpdateData = { ...updatedMsgs[0] };
-            finalUpdateData.swipes = updatedSwipes;
-            finalUpdateData.swipes_info = updatedSwipesInfo;
-            finalUpdateData.swipe_id = newSwipeId;
-            await setChatMessages([finalUpdateData], { refresh: "affected" });
-            console.log(`[${SCRIPT_NAME}] 加强模式: 已最终更新 swipe[${newSwipeId}]`);
-          }
-        }
-        if (originalSwipeId !== newSwipeId) {
-          const currentMsgs = getChatMessages(numericMessageId, { include_swipes: true });
-          if (currentMsgs && currentMsgs[0]) {
-            const switchData = { ...currentMsgs[0] };
-            switchData.swipe_id = originalSwipeId;
-            await setChatMessages([switchData], { refresh: "affected" });
-            console.log(`[${SCRIPT_NAME}] 加强模式: 已切回原始 swipe[${originalSwipeId}]`);
-          }
-        }
-        if (formattedResult && _updateGlobalOverlayContentRef3) {
-          const parsedFormatted = parseGalgameContent(formattedResult);
-          if (parsedFormatted.segments.length > 0) {
-            await _updateGlobalOverlayContentRef3(numericMessageId, parsedFormatted);
-            console.log(`[${SCRIPT_NAME}] 加强模式: 已显示格式化内容给用户`);
-          }
-        }
+      });
+      if (!formattedText.trim()) {
+        throw new Error("格式化结果为空");
+      }
+      console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成, 长度=${formattedText.length}`);
+      enhancedModeState2.formattedResult = formattedText;
+      const saved = await saveEnhancedFormatRecord(snapshot, formattedText, { llm: llmLabel });
+      if (saved) {
         enhancedModeState2.stage = "second_done";
         showEnhancedProgress("second_done");
-      } finally {
-        await restoreOriginalConfig();
-        console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成，已恢复原始配置`);
+      } else {
+        showToast3("原文已变化或已切换到其他回复，本次格式化结果未保存");
       }
     } catch (e2) {
       console.error(`[${SCRIPT_NAME}] 加强模式第二次生成失败:`, e2);
-      showToast3("格式化处理失败: " + e2.message);
-      await restoreOriginalConfig();
+      const reason = String(e2?.message || e2).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      showToast3(`格式化处理失败: ${reason}`);
     } finally {
+      await refresher.stop();
+      clearStreamingDraft(snapshot.mesId);
+      await refreshMessageInOverlay(snapshot.mesId, { forceRender: true });
       resetEnhancedModeState();
     }
+  }
+  var formatQueue = [];
+  function getFormatSkipReason(messageId) {
+    if (!getIsEnabled()) return "Galgame模式关闭";
+    if (!ensureEnhancedModeSettings().enabled) return "加强模式未启用";
+    const snapshot = getMessageSourceSnapshot(messageId);
+    if (!snapshot) return "楼层不存在";
+    if (snapshot.role !== "assistant") return "非 assistant 消息";
+    if (!snapshot.text.trim()) return "消息内容为空";
+    if (getEnhancedFormatRecord(messageId)) return "当前回复已有格式化结果";
+    return null;
+  }
+  function enqueueFormatJob(messageId) {
+    if (enhancedModeState2.isActive) {
+      if (!formatQueue.includes(messageId)) formatQueue.push(messageId);
+      console.log(`[${SCRIPT_NAME}] 加强模式: 楼层 ${messageId} 已排队，等待当前格式化完成`);
+      return;
+    }
+    const skipReason = getFormatSkipReason(messageId);
+    if (skipReason) {
+      console.log(`[${SCRIPT_NAME}] 加强模式: 跳过楼层 ${messageId}（${skipReason}）`);
+      runNextQueuedFormatJob();
+      return;
+    }
+    runSecondGeneration(messageId).finally(runNextQueuedFormatJob);
+  }
+  function runNextQueuedFormatJob() {
+    const nextMessageId = formatQueue.shift();
+    if (nextMessageId !== void 0) enqueueFormatJob(nextMessageId);
   }
   var worldbookInjectionListenerRegistered = false;
   function initWorldbookInjectionListener() {
@@ -37842,68 +40362,51 @@ ${normalizedSource}`;
     }
     if (typeof eventOn === "function" && typeof tavern_events !== "undefined" && tavern_events.GENERATION_ENDED) {
       eventOn(tavern_events.GENERATION_ENDED, async (eventPayload) => {
-        const messageId = resolveGenerationMessageId(eventPayload);
-        const isEnabled = getIsEnabled();
-        console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件, messageId=${messageId}`, eventPayload);
-        if (messageId === null) {
-          console.warn(`[${SCRIPT_NAME}] 加强模式: 无法解析 messageId，跳过本次`);
-          return;
-        }
-        const enhancedConfig = ensureEnhancedModeSettings();
-        if (!isEnabled || !enhancedConfig.enabled) {
+        console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件`, eventPayload);
+        if (!getIsEnabled() || !ensureEnhancedModeSettings().enabled) {
           console.log(`[${SCRIPT_NAME}] 加强模式: 未启用或Galgame模式关闭，跳过`);
           return;
         }
         if (enhancedModeState2.isSecondGeneration) {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成，清理状态`);
-          enhancedModeState2.isSecondGeneration = false;
+          console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成自身触发的结束事件，跳过`);
           return;
         }
-        if (enhancedModeState2.isActive && enhancedModeState2.stage === "second_generating") {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 当前阶段=${enhancedModeState2.stage}，跳过`);
+        const payloadMessageId = resolveGenerationMessageId(eventPayload);
+        if (payloadMessageId === null) {
+          console.warn(`[${SCRIPT_NAME}] 加强模式: 无法解析 messageId，跳过本次`);
           return;
         }
         try {
-          const message = await getMessageByIdWithRetry(messageId);
-          if (!message) {
-            console.warn(`[${SCRIPT_NAME}] 加强模式: 无法获取消息 ${messageId}`);
+          const message = await getMessageByIdWithRetry(payloadMessageId);
+          const messageId = Number.isInteger(message?.message_id) ? message.message_id : null;
+          if (messageId === null) {
+            console.warn(`[${SCRIPT_NAME}] 加强模式: 无法获取消息 ${payloadMessageId}`);
             return;
           }
-          if (message.role && message.role !== "assistant") {
-            console.log(`[${SCRIPT_NAME}] 加强模式: 非 assistant 消息，跳过`);
+          const skipReason = getFormatSkipReason(messageId);
+          if (skipReason) {
+            console.log(`[${SCRIPT_NAME}] 加强模式: 跳过楼层 ${messageId}（${skipReason}）`);
             return;
           }
-          const hasEnhancedFormatSwipe = (message.swipes_info || []).some((info) => info?.isEnhancedFormat === true);
-          if (hasEnhancedFormatSwipe) {
-            console.log(`[${SCRIPT_NAME}] 加强模式: 已存在 isEnhancedFormat swipe，跳过`);
-            return;
-          }
-          const currentSwipeId = typeof message.swipe_id === "number" ? message.swipe_id : 0;
-          const firstResult = message.swipes?.[currentSwipeId] || message.message;
-          if (!firstResult || !firstResult.trim()) {
-            console.warn(`[${SCRIPT_NAME}] 加强模式: 消息内容为空`);
-            return;
-          }
-          if (isCotFormatted(firstResult)) {
-            console.log(`[${SCRIPT_NAME}] 加强模式: 当前内容已是 COT，仍执行第二次生成`);
-          }
-          console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，内容长度=${firstResult.length}`);
-          enhancedModeState2.isActive = true;
-          enhancedModeState2.stage = "first_done";
-          enhancedModeState2.firstResult = firstResult;
-          enhancedModeState2.targetMessageId = messageId;
+          console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，楼层 ${messageId} 准备第二次生成`);
           showEnhancedProgress("first_done");
-          console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，准备第二次生成`);
           await new Promise((r2) => setTimeout(r2, 500));
-          setTimeout(() => {
-            runSecondGeneration(messageId, firstResult);
-          }, 0);
+          enqueueFormatJob(messageId);
         } catch (e2) {
           console.error(`[${SCRIPT_NAME}] 加强模式处理失败:`, e2);
           showToast3("加强模式失败: " + e2.message);
-          resetEnhancedModeState();
         }
       });
+      if (tavern_events.MESSAGE_EDITED) {
+        eventOn(tavern_events.MESSAGE_EDITED, (messageId) => {
+          const id2 = Number(messageId);
+          if (!Number.isInteger(id2) || id2 < 0) return;
+          if (!getIsEnabled() || !ensureEnhancedModeSettings().enabled) return;
+          if (!hasStaleEnhancedFormatRecord(id2)) return;
+          console.log(`[${SCRIPT_NAME}] 加强模式: 楼层 ${id2} 正文已编辑，重新格式化`);
+          enqueueFormatJob(id2);
+        });
+      }
       enhancedModeListenerRegistered = true;
       console.log(`[${SCRIPT_NAME}] 加强模式: GENERATION_ENDED 事件监听已注册`);
     } else {
@@ -38498,10 +41001,10 @@ ${normalizedSource}`;
   // src/logic/message-observer.js
   var messageContentDebounceTimers = /* @__PURE__ */ new Map();
   var MESSAGE_OBSERVER_BOUND_FLAG = "__galgame_message_observer_bound__";
-  var _processNewMessageRef = null;
+  var _processNewMessageRef2 = null;
   var _injectGalgameButtonRef = null;
   function setMessageObserverRefs({ processNewMessage: processNewMessage2, injectGalgameButton: injectGalgameButton2 }) {
-    if (processNewMessage2) _processNewMessageRef = processNewMessage2;
+    if (processNewMessage2) _processNewMessageRef2 = processNewMessage2;
     if (injectGalgameButton2) _injectGalgameButtonRef = injectGalgameButton2;
   }
   function setupMessageObserver() {
@@ -38530,7 +41033,7 @@ ${normalizedSource}`;
               node.classList.add("gal-hidden");
             }
             setTimeout(() => {
-              if (_processNewMessageRef) _processNewMessageRef(node);
+              if (_processNewMessageRef2) _processNewMessageRef2(node);
               if (_injectGalgameButtonRef) _injectGalgameButtonRef(node);
             }, 200);
             setupMessageContentObserver(node);
@@ -38549,9 +41052,9 @@ ${normalizedSource}`;
               lastAiMes = mes;
             }
           });
-          if (lastAiMes && _processNewMessageRef) {
+          if (lastAiMes && _processNewMessageRef2) {
             console.log(`[${SCRIPT_NAME}] 检测到聊天变更且界面缺失，重新渲染最后AI消息`);
-            _processNewMessageRef(lastAiMes, { forceRender: true });
+            _processNewMessageRef2(lastAiMes, { forceRender: true });
           }
         }, 500);
       }
@@ -38583,8 +41086,8 @@ ${normalizedSource}`;
         debounceTimer = setTimeout(() => {
           debounceTimer = null;
           messageContentDebounceTimers.delete(mesId);
-          if (getIsEnabled() && _processNewMessageRef) {
-            _processNewMessageRef(mesNode);
+          if (getIsEnabled() && _processNewMessageRef2) {
+            _processNewMessageRef2(mesNode);
           }
         }, 200);
         messageContentDebounceTimers.set(mesId, debounceTimer);
@@ -38599,7 +41102,7 @@ ${normalizedSource}`;
 
   // src/ui/styles.js
   var STYLES_INJECTED_FLAG = `${SCRIPT_ID}_styles_injected`;
-  var BASE_INTERFACE_CSS = `:root{--gal-z-overlay: 10000;--gal-z-dropdown: 1000;--gal-z-toast: 100000;--gal-z-modal: 100001;--gal-z-modal-critical: 100002;--gal-accent: #00d2ff;--gal-dark: #2b2e38;--gal-white: #ffffff;--gal-accent-sub: #ff0055;--gal-font-eng: "Barlow", sans-serif;--gal-accent-strong: #00a8cc;--gal-accent-soft: rgba(0, 210, 255, .1);--gal-accent-border: rgba(0, 210, 255, .35);--gal-panel-bg: #ffffff;--gal-panel-bg-sub: #f6f8fa;--gal-border: #e3e7eb;--gal-text: #2b2e38;--gal-text-2: #5c6470;--gal-text-3: #8a929c;--gal-danger: #d93a4a;--gal-shadow-sm: 0 1px 3px rgba(20, 30, 40, .08)}#gal-global-overlay{--gp-accent: #00c4ef;--gp-accent-2: #ff2e63;--gp-ink: #22252e;--gp-surface: #ffffff;--gp-stage-a: #eef1f6;--gp-stage-b: #dfe5ee;--gp-grid: rgba(34, 37, 46, .05);--gp-blockline: rgba(34, 37, 46, .07);--gp-block-a: rgba(0, 196, 239, .08);--gp-block-b: rgba(255, 46, 99, .05);--gp-text: #22252e;--gp-text-dim: rgba(34, 37, 46, .55);--gp-shadow: rgba(34, 37, 46, .16);--gp-badge-bg: #22252e;--gp-badge-fg: #ffffff;--gp-btn-bg: rgba(255, 255, 255, .92)}#gal-global-overlay.skin-default-dark{--gp-accent: #00d2ff;--gp-accent-2: #ff3d6e;--gp-ink: #e8ecf4;--gp-surface: #232733;--gp-stage-a: #1a1d26;--gp-stage-b: #12141b;--gp-grid: rgba(232, 236, 244, .045);--gp-blockline: rgba(232, 236, 244, .06);--gp-block-a: rgba(0, 210, 255, .07);--gp-block-b: rgba(255, 61, 110, .05);--gp-text: #e8ecf4;--gp-text-dim: rgba(232, 236, 244, .55);--gp-shadow: rgba(0, 0, 0, .5);--gp-badge-bg: #e8ecf4;--gp-badge-fg: #16181f;--gp-btn-bg: rgba(35, 39, 51, .92)}.gal-z-overlay{z-index:var(--gal-z-overlay)!important}.gal-z-dropdown{z-index:var(--gal-z-dropdown)!important}.gal-z-toast{z-index:var(--gal-z-toast)!important}.gal-z-modal{z-index:var(--gal-z-modal)!important}.gal-z-critical{z-index:var(--gal-z-modal-critical)!important}#gal-global-overlay{position:relative!important;width:100%!important;min-height:31.25rem;height:70vh;max-height:50rem;display:none;background:transparent!important;font-family:Noto Sans SC,sans-serif;border-radius:.75rem;overflow:visible;margin:.625rem 0;contain:layout;-webkit-text-size-adjust:100%;text-size-adjust:100%}#gal-global-overlay{--ui-scale: 1;--ui-scale-base: 1;--font-scale: 1;--gal-dialog-scale-user: 1;--gal-toolbar-scale-user: 1}#gal-global-overlay .gal-dialog-layer{--ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-dialog-scale-user, 1))}#gal-global-overlay .gal-bottom-toolbar{--ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-toolbar-scale-user, 1))}#gal-global-overlay.active{display:block!important}.gal-draggable-handle{cursor:move;user-select:none}#gal-global-overlay.fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-height:none!important;min-height:100vh!important;z-index:var(--gal-z-overlay)!important;border-radius:0!important;margin:0!important;box-shadow:none!important}#chat>.mes.gal-hidden{display:none!important}.gal-embedded-viewer{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#000000b3;backdrop-filter:blur(.375rem)}.gal-embedded-viewer-body{position:relative;max-width:95vw;max-height:90vh;overflow:auto;border-radius:.75rem;box-shadow:0 .5rem 2rem #00000080}.gal-embedded-viewer-close{position:fixed;top:.75rem;right:.75rem;z-index:100000;display:flex;align-items:center;gap:.375rem;padding:.5rem 1rem;border-radius:.5rem;border:.0625rem solid rgba(255,255,255,.2);background:linear-gradient(135deg,#1e1e28f2,#323246f2);backdrop-filter:blur(.625rem);color:#fff;font-size:.85rem;cursor:pointer;box-shadow:0 .25rem 1rem #0006;transition:opacity .2s}.gal-embedded-viewer-close:hover{opacity:.85}@media screen and (max-width: 48rem){.gal-embedded-viewer{align-items:flex-start!important;padding-top:3rem!important;padding-top:calc(3rem + env(safe-area-inset-top))!important}.gal-embedded-viewer-body{max-height:calc(100vh - 4rem)!important;max-height:calc(100dvh - 4rem - env(safe-area-inset-top))!important;max-width:100vw!important;border-radius:0!important}}.gal-fullscreen-btn{position:absolute;top:.938rem;right:.938rem;z-index:100;background:#2b2e38e6;color:var(--gal-accent);border:.125rem solid var(--gal-accent);padding:.625rem 1.125rem;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:all .2s;font-family:Barlow,sans-serif;border-radius:.25rem;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-fullscreen-btn:hover{background:var(--gal-accent);color:var(--gal-dark)}.gal-fullscreen-btn i{font-size:1rem}.gal-status-bar-container{position:absolute;top:.938rem;right:7.5rem;z-index:100;display:flex;gap:.625rem;align-items:center;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-location-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(0,210,255,.5);white-space:nowrap;max-width:21.875rem;overflow:hidden;display:flex;align-items:center}.gal-location-bar i{color:var(--gal-accent);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-location-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-time-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(255,0,85,.5);white-space:nowrap;max-width:16.25rem;overflow:hidden;display:flex;align-items:center}.gal-time-bar i{color:var(--gal-accent-sub);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-time-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-status-bar-container .auto-shrink{display:inline-block;transform-origin:left center}#gal-global-overlay.fullscreen .gal-status-bar-container{right:8.125rem}.gal-bgm-widget{position:absolute;top:.938rem;left:.938rem;z-index:100;background:#2b2e38d9;backdrop-filter:blur(.313rem);padding:.5rem .938rem;border-radius:1.25rem;color:#fff;display:flex;align-items:center;gap:.625rem;font-size:.85rem;box-shadow:0 .25rem .625rem #0003;transition:all .3s ease;border:1px solid rgba(255,255,255,.1);max-width:2.5rem;overflow:hidden;white-space:nowrap;cursor:pointer}.gal-bgm-widget:hover,.gal-bgm-widget.active{max-width:18.75rem;background:#2b2e38f2}.gal-bgm-icon{color:var(--gal-accent);animation:galSpin 4s linear infinite;animation-play-state:paused;font-size:1.1rem;min-width:1.25rem;text-align:center}.gal-bgm-widget.playing .gal-bgm-icon{animation-play-state:running}@keyframes galSpin{to{transform:rotate(360deg)}}.gal-bgm-info{display:flex;flex-direction:column;line-height:1.2;overflow:hidden;margin-right:.313rem}.gal-bgm-title{font-weight:700;font-size:.8rem;color:var(--gal-accent)}.gal-bgm-ctrl{display:flex;align-items:center;gap:.5rem}.gal-bgm-btn{background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem;padding:0;width:1.25rem}.gal-bgm-btn:hover{color:var(--gal-accent)}.gal-bgm-slider{width:3.75rem;height:.25rem;-webkit-appearance:none;background:#ffffff4d;border-radius:.125rem;outline:none}.gal-bgm-slider::-webkit-slider-thumb{-webkit-appearance:none;width:.625rem;height:.625rem;background:#fff;border-radius:50%;cursor:pointer}.gal-game-container{position:relative;width:100%;height:100%;background:transparent;font-family:Noto Sans SC,sans-serif;overflow:hidden;border-radius:.75rem;box-shadow:0 .25rem 1.25rem #0000001a;box-sizing:border-box}#gal-global-overlay.fullscreen .gal-game-container{border-radius:0;box-shadow:none;padding:0}.gal-layer-bg{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;background:#f0f2f5;overflow:hidden}.gal-bg-layer{position:absolute;inset:0;background-repeat:no-repeat;background-image:var(--gal-bg-url, none);background-size:var(--gal-bg-fit, cover);background-position:var(--gal-bg-pos, center);opacity:1;transform:scale(1);filter:blur(0) brightness(1) saturate(1);transition:opacity .9s cubic-bezier(.22,1,.36,1),transform 1.1s cubic-bezier(.22,1,.36,1),filter .9s cubic-bezier(.22,1,.36,1);will-change:opacity,transform,filter}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer{background-image:none}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:before,#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:after{content:"";position:absolute;background-image:var(--gal-bg-url, none);background-repeat:no-repeat;pointer-events:none}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:before{inset:0;background-size:cover;background-position:center;filter:blur(var(--gal-bg-backdrop-blur, 2rem)) brightness(.5) saturate(1.05);transform:scale(1.15)}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:after{top:0;left:0;right:0;bottom:var(--gal-bg-safe-inset, 0px);background-size:contain;background-position:center;transition:bottom .35s cubic-bezier(.22,1,.36,1)}@media (prefers-reduced-motion: reduce){#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:after{transition:none}}.gal-layer-bg.bg-transitioning .gal-bg-base{transform:scale(.985);filter:blur(4px) brightness(.85) saturate(.9)}.gal-bg-front{opacity:0;transform:scale(1.08);filter:blur(16px) brightness(1.15) saturate(1.15)}.gal-bg-front.is-active{opacity:1;transform:scale(1);filter:blur(0) brightness(1) saturate(1)}.gal-layer-bg:after{content:"";position:absolute;inset:-20%;z-index:2;pointer-events:none;opacity:0;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.18) 48%,rgba(255,255,255,.35) 50%,rgba(255,255,255,.18) 52%,transparent 60%);transform:translate(-60%) skew(-8deg)}.gal-layer-bg.bg-transitioning:after{opacity:1;transition:none;animation:gal-bg-sweep .9s cubic-bezier(.4,0,.2,1) forwards}@keyframes gal-bg-sweep{0%{transform:translate(-60%) skew(-8deg);opacity:1}70%{opacity:.9}to{transform:translate(60%) skew(-8deg);opacity:0}}.gal-layer-bg.generating-bg .gal-bg-layer{opacity:0!important}@media (prefers-reduced-motion: reduce){.gal-bg-layer{transition:opacity .45s ease!important;transform:none!important;filter:none!important}.gal-layer-bg:after,.gal-layer-bg.bg-transitioning:after{animation:none!important;opacity:0!important}.gal-bg-front{opacity:0}.gal-bg-front.is-active{opacity:1}}.gal-game-content{position:relative;width:100%;height:100%;z-index:1}.gal-layer-effect-bg,.gal-layer-effect-fg{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none}.gal-layer-effect-bg{z-index:3}.gal-layer-effect-fg{z-index:12}.gal-layer-effect-bg .gal-pixi-effect-canvas,.gal-layer-effect-fg .gal-pixi-effect-canvas,.gal-layer-effect-bg canvas,.gal-layer-effect-fg canvas{width:100%!important;height:100%!important;display:block;pointer-events:none}.gal-layer-bg:before{content:"";position:absolute;top:0;left:0;width:100%;height:100%;background-image:repeating-linear-gradient(45deg,var(--gp-grid, rgba(34, 37, 46, .05)) 0 1px,transparent 1px 28px),repeating-linear-gradient(-45deg,var(--gp-grid, rgba(34, 37, 46, .05)) 0 1px,transparent 1px 28px),linear-gradient(112deg,transparent 0%,transparent 8%,var(--gp-block-a, rgba(0, 196, 239, .08)) 8%,var(--gp-block-a, rgba(0, 196, 239, .08)) 30%,transparent 30%),linear-gradient(112deg,transparent 0%,transparent 72%,var(--gp-block-b, rgba(255, 46, 99, .05)) 72%,var(--gp-block-b, rgba(255, 46, 99, .05)) 96%,transparent 96%),radial-gradient(120% 90% at 78% -10%,var(--gp-block-a, rgba(0, 196, 239, .08)) 0%,transparent 52%),linear-gradient(168deg,var(--gp-stage-a, #eef1f6) 0%,var(--gp-stage-b, #dfe5ee) 100%);pointer-events:none}.gal-layer-bg.has-bg:before{display:none}.gal-layer-bg.generating-bg{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)}@keyframes galGenGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}to{background-position:0% 50%}}.gal-layer-bg.generating-bg:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent .125rem,rgba(0,210,255,.03) .125rem,rgba(0,210,255,.03) .25rem);opacity:.15;pointer-events:none}@keyframes galGenScanline{0%{transform:translateY(-100%)}to{transform:translateY(100%)}}@keyframes galSpriteSlideInLeft{0%{transform:translate(-6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInRight{0%{transform:translate(6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInCenter{0%{transform:translateY(3.125rem);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes galSpriteSlideOutLeft{0%{transform:translate(0);opacity:1}to{transform:translate(-6.25rem);opacity:0}}@keyframes galSpriteSlideOutRight{0%{transform:translate(0);opacity:1}to{transform:translate(6.25rem);opacity:0}}@keyframes galSpriteBreathing{0%,to{transform:translateY(0)}50%{transform:translateY(-.188rem)}}@keyframes galSpriteShake{0%,to{transform:translate(0)}20%{transform:translate(-.313rem)}40%{transform:translate(.313rem)}60%{transform:translate(-.188rem)}80%{transform:translate(.188rem)}}@keyframes galSpriteBounce{0%{transform:scale(1)}30%{transform:scale(1.15)}50%{transform:scale(.95)}70%{transform:scale(1.05)}to{transform:scale(1)}}@keyframes galSpriteExpressionChange{0%{opacity:.7;transform:scale(.98)}to{opacity:1;transform:scale(1)}}.gal-layer-character{position:absolute;bottom:35%;left:0;width:100%;height:55%;z-index:5;display:flex;justify-content:center;align-items:flex-end;pointer-events:none;padding:0 3%;gap:2%}.gal-live2d-stage-canvas{z-index:4;pointer-events:none}.gal-live2d-position-guide{position:absolute;inset:0;pointer-events:none;z-index:6}.gal-live2d-position-guide-box{position:absolute;border:.125rem dashed rgba(0,210,255,.55);border-radius:.625rem;box-shadow:0 0 1rem #00d2ff47;background:#0000000f}.gal-live2d-position-guide-label{position:absolute;top:-1.25rem;left:0;font-size:.72rem;line-height:1;color:#77dfff;text-shadow:0 0 .375rem rgba(0,0,0,.5);white-space:nowrap}.gal-live2d-position-toolbar{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translate(-50%);width:min(92vw,36rem);min-width:20rem;max-height:min(65vh,33.75rem);overflow-y:auto;padding:.9375rem 1.125rem;display:flex;flex-direction:column;gap:.6875rem;border-radius:.9375rem;border:.0625rem solid rgba(255,255,255,.16);color:#fff;background:linear-gradient(135deg,#1a1c26f7,#2a2e40f7);backdrop-filter:blur(.625rem);box-shadow:0 .5rem 1.75rem #00000075}.gal-live2d-position-row{display:flex;align-items:center;gap:.625rem}.gal-live2d-position-label{min-width:4.5rem;font-size:.85rem;color:#ffffffeb}.gal-live2d-position-slider{flex:1;cursor:pointer;accent-color:#00d2ff}.gal-live2d-position-value{min-width:2.875rem;text-align:right;font-size:.9rem;font-weight:600}.gal-live2d-position-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.25rem}.gal-live2d-position-btn{border:none;border-radius:.5rem;padding:.5rem .875rem;color:#fff;cursor:pointer;font-size:.85rem}.gal-live2d-position-btn-reset{background:#ffffff1f;border:.0625rem solid rgba(255,255,255,.2)}.gal-live2d-position-btn-cancel{background:#dc3545d1}.gal-live2d-position-btn-save{background:linear-gradient(135deg,#00d2ff,#3a7bd5);font-weight:600}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-live2d-position-toolbar{top:calc(.5rem + env(safe-area-inset-top,0px));bottom:auto;width:calc(100vw - 1rem);min-width:0;max-height:calc(72vh - env(safe-area-inset-top,0px));padding:.8125rem .8125rem .75rem;border-radius:.75rem}.gal-live2d-position-label{min-width:3.75rem;font-size:.8rem}.gal-live2d-position-value{min-width:2.5rem;font-size:.85rem}.gal-live2d-position-actions{flex-wrap:wrap;justify-content:stretch;margin-top:.125rem}.gal-live2d-position-btn{flex:1 1 calc(50% - .3125rem);min-height:2.25rem;font-size:.82rem;padding:.5rem .625rem}}.gal-char-slot{position:relative;flex:0 0 30%;max-width:30%;height:100%;display:flex;align-items:flex-end;justify-content:center;pointer-events:auto}.gal-char-slot.slot-left{order:1}.gal-char-slot.slot-center{order:2}.gal-char-slot.slot-right{order:3}.gal-char-container{position:relative;max-height:100%;--state-scale: 1;transform-origin:bottom center;max-width:100%;display:flex;align-items:flex-end;justify-content:center;filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,0,.4));transition:transform .4s cubic-bezier(.175,.885,.32,1.275),filter .3s ease,opacity .3s ease;pointer-events:auto;cursor:pointer;animation:galSpriteBreathing 4s ease-in-out infinite}.gal-char-container.entering-left{animation:galSpriteSlideInLeft .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-center{animation:galSpriteSlideInCenter .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-right{animation:galSpriteSlideInRight .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.exiting-left{animation:galSpriteSlideOutLeft .4s ease-in forwards;pointer-events:none}.gal-char-container.exiting-right,.gal-char-container.exiting-center{animation:galSpriteSlideOutRight .4s ease-in forwards;pointer-events:none}.gal-char-container.expression-change{animation:galSpriteExpressionChange .3s ease-out}.gal-char-container.speaking{--state-scale: 1.05;z-index:10;filter:drop-shadow(0 .938rem 2.5rem rgba(0,0,0,.5));position:relative}.gal-char-container.silent{--state-scale: .95;filter:drop-shadow(0 .313rem .938rem rgba(0,0,0,.3));z-index:4}.gal-layer-character.dof-enabled .gal-char-container.silent{filter:drop-shadow(0 .313rem .938rem rgba(0,0,0,.3)) brightness(.75) saturate(.85) blur(var(--gal-dof-blur, 1px))}@keyframes speakingGlow{0%,to{filter:drop-shadow(0 0 .5rem rgba(255,215,0,.7)) drop-shadow(0 0 .938rem rgba(255,180,0,.5)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}50%{filter:drop-shadow(0 0 .938rem rgba(255,215,0,.9)) drop-shadow(0 0 1.875rem rgba(255,180,0,.7)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}}.gal-layer-character.glow-enabled .gal-char-container.speaking{animation:speakingGlow 2s ease-in-out infinite,galSpriteBreathing 4s ease-in-out infinite}@keyframes bubbleBounce{0%,to{transform:translateY(0) scale(1)}50%{transform:translateY(-.5rem) scale(1.1)}}.gal-layer-character.bubble-enabled .gal-char-container.speaking:before{content:"?";position:absolute;top:-.625rem;right:10%;font-size:2.5rem;z-index:100;animation:bubbleBounce 1s ease-in-out infinite;filter:drop-shadow(.125rem .125rem .25rem rgba(0,0,0,.5))}.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{content:"\\f028"!important;font-family:"Font Awesome 6 Free";font-weight:900;color:var(--gal-accent);font-size:2.2rem}@media screen and (max-width: 48rem){.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{font-size:1.5rem!important;top:-.3rem!important;right:5%!important}}.gal-char-container[data-emotion=angry]{animation:galSpriteShake .4s ease-in-out 2,galSpriteBreathing 4s ease-in-out .8s infinite}.gal-char-container[data-emotion=surprised]{animation:galSpriteBounce .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-layer-character.scene-night{filter:hue-rotate(-10deg) brightness(.85) saturate(.9)}.gal-layer-character.scene-night .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,100,.5))}.gal-layer-character.scene-indoor{filter:sepia(.08) brightness(1.02)}.gal-layer-character.scene-indoor .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(100,50,0,.3))}.gal-char-img{max-height:100%;max-width:100%;height:auto;width:auto;object-fit:contain;object-position:bottom center;transform:scale(calc(var(--base-scale, 1) * var(--state-scale) * var(--gal-npc-sil-scale, 1)));transform-origin:bottom center;transition:opacity .3s ease,transform .3s cubic-bezier(.175,.885,.32,1.275)}.gal-char-container[data-npc-silhouette=true]{--gal-npc-sil-scale: .7}.gal-char-img.gal-img-in{position:absolute;left:0;right:0;bottom:0;margin:0 auto;opacity:0}.gal-char-img.gal-img-in.is-in{opacity:1}.gal-char-img.gal-img-out{opacity:0}.gal-char-placeholder{width:12.5rem;height:21.875rem;background:linear-gradient(135deg,#fffc,#f0f0f0e6);border:.25rem dashed #ccc;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#999;gap:.625rem;border-radius:.625rem;cursor:pointer;transition:all .3s;pointer-events:auto}.gal-char-placeholder:hover{border-color:var(--gal-accent);color:var(--gal-accent)}.gal-char-placeholder i{font-size:4rem}.gal-char-placeholder span{font-size:.9rem;font-weight:600}.gal-dialog-layer{position:absolute;bottom:calc(1.25rem * var(--gal-dialog-scale-user, 1));left:50%;right:auto;width:min(calc(100% - 6rem),calc(80% * var(--gal-dialog-scale-user, 1)));height:calc(30% * var(--gal-dialog-scale-user, 1));min-height:calc(9rem*min(var(--gal-dialog-scale-user, 1),1));max-height:72%;transform:translate(-50%);transform-origin:bottom center;max-width:none;z-index:30;pointer-events:auto}.gal-name-badge{position:absolute;top:-1.375rem;left:0;background:var(--gp-badge-bg, var(--gal-dark));color:var(--gp-badge-fg, #ffffff);padding:.5rem 2.188rem .5rem 1.563rem;font-size:1.4rem;font-weight:900;font-family:Barlow,sans-serif;transform:skew(-15deg) scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem 0 var(--gp-shadow, rgba(0, 0, 0, .2))}.gal-name-badge:after{content:"";position:absolute;left:0;right:26%;bottom:-2px;height:4px;background:var(--gp-accent, var(--gal-accent))}.gal-name-badge span{display:block;transform:skew(15deg)}.gal-dialog-topbar,.gal-dialog-quick-actions{display:contents}.gal-sprite-toggle{position:absolute;top:-1.375rem;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gp-btn-bg, var(--gal-white));border:.125rem solid var(--gp-ink, var(--gal-dark));border-radius:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.25rem .25rem 0 var(--gp-shadow, rgba(0, 0, 0, .2));transition:all .2s ease;opacity:.9}.gal-sprite-toggle:hover{opacity:1;background:var(--gp-accent, var(--gal-accent))}.gal-sprite-toggle:hover .gal-eye-icon{color:#101218}.gal-eye-icon{font-size:1.2rem;color:var(--gp-accent, var(--gal-accent));transition:color .2s ease;transform:skew(0)}.gal-sprite-toggle.sprites-hidden{background:#646464cc}.gal-sprite-toggle.sprites-hidden .gal-eye-icon{color:#999}.gal-sprite-toggle.sprites-hidden:hover{background:var(--gal-accent)}.gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon{color:var(--gal-dark)}.gal-status-popup-trigger{position:absolute;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gp-btn-bg, var(--gal-white));border:.125rem solid var(--gp-ink, var(--gal-dark));border-radius:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.25rem .25rem 0 var(--gp-shadow, rgba(0, 0, 0, .2));transition:all .2s ease;opacity:.9}.gal-location-popup-trigger{top:1.35rem}.gal-time-popup-trigger{top:3.95rem}.gal-status-popup-icon{font-size:1rem;transition:color .2s ease;pointer-events:none}.gal-location-popup-trigger .gal-status-popup-icon{color:var(--gal-accent)}.gal-time-popup-trigger .gal-status-popup-icon{color:var(--gal-accent-sub)}.gal-location-popup-trigger:hover,.gal-time-popup-trigger:hover{opacity:1}.gal-location-popup-trigger:hover{background:var(--gal-accent)}.gal-location-popup-trigger:hover .gal-status-popup-icon{color:var(--gal-dark)}.gal-time-popup-trigger:hover{background:var(--gal-accent-sub)}.gal-time-popup-trigger:hover .gal-status-popup-icon{color:#fff}.gal-layer-character.sprites-hidden{opacity:0!important;pointer-events:none!important;transition:opacity .3s ease}.gal-narrator-label{background:#666;color:#fff}.gal-cg-thumbnail{max-height:3.5rem;border-radius:.25rem;vertical-align:middle;margin-right:.5rem;cursor:pointer;box-shadow:0 2px 4px #0000004d}.gal-styled-stage{position:absolute;inset:10% 12% 22%;z-index:18;display:none;align-items:center;justify-content:center;pointer-events:none}.gal-styled-stage.show{display:flex}.gal-styled-stage .gal-styled-stage-content{width:min(68vw,42rem);max-height:min(56vh,34rem);overflow:visible;scrollbar-width:none;pointer-events:auto}.gal-styled-stage .gal-styled-stage-content .gal-styled{width:100%}.gal-styled-stage .gal-styled-stage-content .gal-styled-sms,.gal-styled-stage .gal-styled-stage-content .gal-styled-letter,.gal-styled-stage .gal-styled-stage-content .gal-styled-parchment,.gal-styled-stage .gal-styled-stage-content .gal-styled-newspaper{max-height:none;overflow-y:visible!important}#gal-global-overlay.gal-mode-styled .gal-layer-character,#gal-global-overlay.gal-mode-styled .gal-live2d-stage-canvas,#gal-global-overlay.gal-mode-styled .gal-live2d-position-guide{opacity:0!important;visibility:hidden!important;pointer-events:none!important}#gal-global-overlay.gal-mode-styled .gal-name-badge,#gal-global-overlay.gal-mode-styled .gal-sprite-toggle,#gal-global-overlay.gal-mode-styled .gal-status-popup-trigger,#gal-global-overlay.gal-mode-styled .gal-interaction-bar,#gal-global-overlay.gal-mode-styled .gal-dialog-text,#gal-global-overlay.gal-mode-styled .gal-progress-container{display:none!important}#gal-global-overlay.gal-mode-styled .gal-text-panel{background:transparent!important;background-image:none!important;box-shadow:none!important;border:none!important;overflow:visible!important;padding:0 1rem 4.8rem!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;filter:none!important}#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-glass{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:transparent!important}#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-gradient:before{display:none!important}#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar{display:flex!important;opacity:1!important;visibility:visible!important;z-index:120!important;background:linear-gradient(to top,#0a0e16b8,#0a0e166b 45%,#0a0e1600)!important}#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar>*{pointer-events:auto!important;opacity:1!important;visibility:visible!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn,#gal-global-overlay.gal-mode-styled .gal-footer-btn-next,#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn{display:inline-flex!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;filter:none!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn{background:#fffffff5!important;color:#1b2230!important;border-color:#1b2230!important}#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn{background:#e93c64!important;color:#fff!important;border-color:#1b2230!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn-next{background:#161b27!important;color:#f7fbff!important;border-color:#161b27!important;box-shadow:0 .25rem .875rem #00000073!important}@media screen and (max-width: 48rem){.gal-styled-stage{inset:11% 4% 26%}.gal-styled-stage .gal-styled-stage-content{width:100%;max-height:54vh}#gal-global-overlay.gal-mode-styled .gal-text-panel{padding:0 .5rem calc(4.3rem + env(safe-area-inset-bottom)) .5rem!important}}.gal-cg-viewer{position:absolute;inset:0;background:#000000eb;z-index:100;display:flex;align-items:center;justify-content:center;cursor:pointer}.gal-cg-viewer-img{max-width:90%;max-height:90%;object-fit:contain;border-radius:.5rem;box-shadow:0 4px 20px #00000080}.gal-cg-viewer-close{position:absolute;top:1rem;right:1rem;background:#ffffff26;border:none;color:#fff;width:2.5rem;height:2.5rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:background .2s ease}.gal-cg-viewer-close:hover{background:#ffffff4d}.gal-cg-viewer-loading{color:#fff9;font-size:1.1rem}.gal-generating-status{position:absolute;top:-3.75rem;left:50%;transform:translate(-50%) scale(.8);background:linear-gradient(135deg,var(--gal-accent) 0%,#ff6b9d 100%);color:#fff;padding:.5rem 1.25rem;font-size:.9rem;font-weight:700;border-radius:1.25rem;box-shadow:0 .25rem .938rem #0000004d;opacity:0;transition:all .3s ease;pointer-events:none;z-index:50}.gal-generating-status.show{opacity:1;transform:translate(-50%) scale(1)}.gal-interaction-bar{position:absolute;top:-3.438rem;right:0;display:flex;gap:.938rem;z-index:35;transform:scale(var(--ui-scale));transform-origin:bottom right}.gal-action-btn{padding:.75rem 1.875rem;font-weight:700;font-size:1.1rem;cursor:pointer;transform:skew(-15deg);display:flex;align-items:center;gap:.625rem;transition:all .2s cubic-bezier(.34,1.56,.64,1);border:.125rem solid transparent;box-shadow:.313rem .313rem #0003;font-family:Noto Sans SC,sans-serif;background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn span,.gal-action-btn i{transform:skew(15deg)}.gal-action-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem #0000004d}.gal-action-btn.btn-reroll{background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn.btn-reroll:hover{background:var(--gal-dark);color:var(--gal-accent);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent)}.gal-action-btn.btn-free{background:var(--gp-btn-bg, var(--gal-white));color:var(--gp-text, var(--gal-dark));border-color:var(--gp-ink, var(--gal-dark))}.gal-action-btn.btn-free i{color:var(--gp-accent, var(--gal-accent))}.gal-action-btn.btn-free:hover{background:var(--gp-ink, var(--gal-dark));color:var(--gp-surface, var(--gal-white));border-color:var(--gp-ink, var(--gal-dark));transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gp-shadow, rgba(0, 0, 0, .3))}.gal-text-panel{position:relative;width:100%;height:100%;box-sizing:border-box;background-color:rgb(from var(--gp-surface, #ffffff) r g b / calc(.6 + var(--panel-opacity, .5) * .38));background-image:linear-gradient(135deg,var(--gp-accent, #00c4ef) 0%,var(--gp-accent, #00c4ef) 3.2rem,transparent 3.2rem),linear-gradient(135deg,transparent 0%,transparent 94%,rgba(0,196,239,.14) 94%,rgba(0,196,239,.14) 100%);background-size:4rem .85rem,100% 100%;background-repeat:no-repeat,no-repeat;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:.156rem solid var(--gp-ink, var(--gal-dark));box-shadow:.5rem .5rem 0 var(--gp-shadow, rgba(0, 0, 0, .15));border-radius:0;padding:calc(2.5rem * var(--gal-dialog-scale-user, 1)) calc(3.75rem * var(--gal-dialog-scale-user, 1)) calc(5rem*max(var(--gal-dialog-scale-user, 1),var(--gal-toolbar-scale-user, 1))) calc(3.75rem * var(--gal-dialog-scale-user, 1));overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:none}.gal-text-panel::-webkit-scrollbar{display:none}.gal-dialog-text{font-size:calc(1.25rem * var(--ui-scale) * var(--font-scale, 1));line-height:1.9;color:var(--gp-text, #333);font-weight:500;letter-spacing:.02em}.gal-text-panel.text-effect-glass{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:#ffffffb3!important}.gal-text-panel.text-effect-gradient:before{content:"";position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(0,0,0,.6) 0%,rgba(0,0,0,.3) 50%,transparent 100%);pointer-events:none;z-index:1}.gal-text-panel.text-effect-gradient .gal-dialog-text{position:relative;z-index:2}.gal-text-panel.text-effect-gradient .gal-name-badge{z-index:3}.gal-text-panel.text-effect-text-bg{background:transparent!important;background-image:none!important;box-shadow:none!important}.gal-tts-loading{position:absolute;top:auto;bottom:1rem;right:1.5rem;display:flex;align-items:center;justify-content:center;width:2.5rem;height:2.5rem;padding:0;background:#fffffff2;border:.125rem solid var(--gal-accent);border-radius:50%;color:var(--gal-accent);box-shadow:0 .25rem .75rem #0000001a;opacity:0;transform:scale(.8);transition:all .4s cubic-bezier(.175,.885,.32,1.275);pointer-events:none;z-index:10}.gal-tts-loading.active{opacity:1;transform:scale(1)}.gal-tts-loading i{font-size:1rem;color:var(--gal-accent)}.gal-generating-indicator{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.75rem;padding:1.25rem 2.5rem;background:#fffffffa;border:.188rem solid var(--gal-accent);border-radius:1rem;box-shadow:0 .5rem 2rem #00d2ff4d;z-index:20;opacity:0;visibility:hidden;transition:all .3s ease}.gal-generating-indicator.active{opacity:1;visibility:visible}.gal-generating-indicator .gal-gen-icon{font-size:2.5rem;color:var(--gal-accent);animation:galGenPulse 1.5s ease-in-out infinite}.gal-generating-indicator .gal-gen-text{font-size:1.1rem;font-weight:700;color:var(--gal-dark);letter-spacing:.05em}.gal-generating-indicator .gal-gen-status{font-size:.85rem;color:#666;max-width:17.5rem;text-align:center;min-height:1.2em}.gal-generating-indicator .gal-gen-dots{display:flex;gap:.375rem;margin-top:.25rem}.gal-generating-indicator .gal-gen-dot{width:.5rem;height:.5rem;background:var(--gal-accent);border-radius:50%;animation:galGenDotBounce 1.4s ease-in-out infinite both}.gal-generating-indicator .gal-gen-dot:nth-child(1){animation-delay:-.32s}.gal-generating-indicator .gal-gen-dot:nth-child(2){animation-delay:-.16s}@keyframes galGenPulse{0%,to{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.8}}@keyframes galGenDotBounce{0%,80%,to{transform:scale(0)}40%{transform:scale(1)}}.gal-bottom-toolbar{position:absolute;bottom:0;left:0;width:100%;height:auto;min-height:3.75rem;padding:.625rem 1.875rem 0;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:100;contain:layout style}.gal-bottom-toolbar>*{pointer-events:auto}.gal-toolbar-left,.gal-toolbar-right{display:flex;align-items:flex-end;gap:.5rem}.gal-footer-btn{background:#ffffffe6!important;color:var(--gal-dark)!important;padding:0 calc(.75rem * var(--ui-scale))!important;font-family:var(--gal-font-eng)!important;font-weight:800!important;font-size:calc(.85rem * var(--ui-scale))!important;cursor:pointer!important;transition:background .2s,color .2s,transform .2s,box-shadow .2s!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;display:flex!important;align-items:center!important;gap:calc(.375rem * var(--ui-scale))!important;height:calc(2.25rem * var(--ui-scale))!important;transform:skew(-10deg)!important;box-shadow:calc(.125rem * var(--ui-scale)) calc(.125rem * var(--ui-scale)) 0 #0000001a!important;border-radius:0!important;will-change:transform}.gal-footer-btn i,.gal-footer-btn span{transform:skew(10deg)!important;font-size:calc(1rem * var(--ui-scale))!important}.gal-footer-btn:hover{background:var(--gal-dark)!important;color:#fff!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.25rem .25rem #0003!important}.gal-footer-btn-next{background:var(--gp-accent, var(--gal-accent))!important;color:#101218!important;font-size:calc(1.3rem * var(--ui-scale))!important;font-weight:900!important;padding:0 calc(2.5rem * var(--ui-scale))!important;height:calc(3.438rem * var(--ui-scale))!important;min-width:calc(8.75rem * var(--ui-scale))!important;border-radius:0!important;border:calc(.125rem * var(--ui-scale)) solid var(--gp-ink, var(--gal-dark))!important;margin-left:calc(.938rem * var(--ui-scale))!important;margin-right:0!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:center!important;gap:calc(.625rem * var(--ui-scale))!important;white-space:nowrap!important;line-height:1!important;box-shadow:calc(.25rem * var(--ui-scale)) calc(.25rem * var(--ui-scale)) 0 var(--gp-shadow, rgba(0, 0, 0, .2))!important;flex-shrink:0!important;clip-path:polygon(calc(1.563rem * var(--ui-scale)) 0,100% 0,100% 100%,0% 100%)!important;transition:background .2s ease,color .2s ease,transform .2s ease!important;transform:none!important;will-change:transform}.gal-footer-btn-next:hover{background:var(--gp-accent, var(--gal-accent))!important;color:#101218!important;transform:translate(-.125rem,-.125rem)!important;box-shadow:calc(.375rem * var(--ui-scale)) calc(.375rem * var(--ui-scale)) 0 var(--gp-shadow, rgba(0, 0, 0, .2))!important}.gal-footer-btn-next i{font-size:1.1rem!important;margin:0!important}.gal-bottom-toolbar{justify-content:flex-start;gap:calc(.25rem * var(--ui-scale));padding:.625rem .75rem 0;overflow:visible}.gal-footer-btn{padding:0 calc(.55rem * var(--ui-scale))!important;gap:calc(.25rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important}.gal-footer-btn i,.gal-footer-btn span{font-size:calc(.9rem * var(--ui-scale))!important}.gal-pending-choices-btn{padding:0 calc(.7rem * var(--ui-scale))!important;height:calc(2.45rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important;margin-left:auto!important;margin-right:0!important}.gal-footer-btn-next{margin-left:calc(.375rem * var(--ui-scale))!important;margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.9rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-footer-btn{padding:0 calc(.4rem * var(--ui-scale))!important;gap:calc(.2rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-footer-btn i,#gal-global-overlay.gal-toolbar-compact .gal-footer-btn span{font-size:calc(.8rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-pending-choices-btn{padding:0 calc(.5rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-footer-btn-next{min-width:calc(6rem * var(--ui-scale))!important;padding:0 calc(1.2rem * var(--ui-scale))!important}#gal-global-overlay.icon-only .gal-footer-btn .gal-btn-text{display:none!important}#gal-global-overlay.icon-only .gal-footer-btn{min-width:calc(2.1rem * var(--ui-scale))!important;justify-content:center!important}.gal-progress-indicator{font-family:Barlow,sans-serif;font-size:.85rem;font-weight:700;color:#888;padding:.375rem .625rem;display:flex;align-items:center;height:2.25rem}.gal-nav-btn.active{background:var(--gal-accent)!important;color:var(--gal-dark)!important;box-shadow:inset 1px 1px .188rem #0003!important}.gal-auto-playing{background:var(--gal-accent-sub)!important;color:#fff!important;border-color:var(--gal-accent-sub)!important;animation:galPulse 1s infinite}@keyframes galPulse{0%,to{opacity:1}50%{opacity:.8}}.gal-input-modal,#gal-free-input-modal{position:fixed;inset:0;background:#00000080;backdrop-filter:blur(.25rem);z-index:var(--gal-z-modal)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .2s ease}#gal-live2d-settings-modal{z-index:var(--gal-z-modal-critical)!important}@keyframes galFadeIn{0%{opacity:0}to{opacity:1}}.gal-input-box{background:var(--gal-white);border:.188rem solid var(--gal-dark);box-shadow:.625rem .625rem #00000026;width:90%;max-width:31.25rem;padding:1.563rem}.gal-input-title{font-family:Barlow,sans-serif;font-size:1.3rem;font-weight:800;color:var(--gal-dark);margin-bottom:.938rem;transform:skew(-5deg)}.gal-input-title span{transform:skew(5deg);display:block}.gal-input-field{width:100%;border:.125rem solid var(--gal-dark);padding:.75rem .938rem;font-size:1rem;font-family:Noto Sans SC,sans-serif;resize:vertical;min-height:5rem;box-sizing:border-box}.gal-input-field:focus{outline:none;border-color:var(--gal-accent);box-shadow:0 0 0 .188rem #00d2ff33}#gal-bg-upload-modal input[type=text],#gal-bg-upload-modal input[type=url],#gal-bg-upload-modal textarea,#gal-bg-upload-modal select,#gal-map-upload-modal input[type=text],#gal-map-upload-modal input[type=url],#gal-map-upload-modal textarea,#gal-map-upload-modal select,#gal-sprite-upload-modal input[type=text],#gal-sprite-upload-modal textarea,#gal-sprite-upload-modal select,#gal-batch-upload-modal input[type=text],#gal-batch-upload-modal textarea,#gal-batch-upload-modal select,#gal-character-sprites-modal input[type=text],#gal-character-sprites-modal select,#gal-expression-manager-modal input[type=text]{color:var(--SmartThemeBodyColor, #f5f7fa)!important;background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border-color:var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important;caret-color:var(--SmartThemeEmColor, #9ac7ff)}#gal-bg-upload-modal input[type=text]::placeholder,#gal-bg-upload-modal input[type=url]::placeholder,#gal-bg-upload-modal textarea::placeholder,#gal-map-upload-modal input[type=text]::placeholder,#gal-map-upload-modal input[type=url]::placeholder,#gal-map-upload-modal textarea::placeholder,#gal-sprite-upload-modal input[type=text]::placeholder,#gal-sprite-upload-modal textarea::placeholder,#gal-batch-upload-modal input[type=text]::placeholder,#gal-batch-upload-modal textarea::placeholder,#gal-character-sprites-modal input[type=text]::placeholder,#gal-expression-manager-modal input[type=text]::placeholder{color:var(--SmartThemeBodyColor, #f5f7fa)!important;opacity:.72}#gal-bg-upload-modal input[type=text]:focus,#gal-bg-upload-modal input[type=url]:focus,#gal-bg-upload-modal textarea:focus,#gal-bg-upload-modal select:focus,#gal-map-upload-modal input[type=text]:focus,#gal-map-upload-modal input[type=url]:focus,#gal-map-upload-modal textarea:focus,#gal-map-upload-modal select:focus,#gal-sprite-upload-modal input[type=text]:focus,#gal-sprite-upload-modal textarea:focus,#gal-sprite-upload-modal select:focus,#gal-batch-upload-modal input[type=text]:focus,#gal-batch-upload-modal textarea:focus,#gal-batch-upload-modal select:focus,#gal-character-sprites-modal input[type=text]:focus,#gal-character-sprites-modal select:focus,#gal-expression-manager-modal input[type=text]:focus{outline:none!important;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 3px #9ac7ff42!important}.gal-input-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.938rem}.gal-modal-layout-fixed{display:flex!important;flex-direction:column!important;overflow:hidden!important}.gal-modal-layout-fixed>.gal-input-title,.gal-modal-layout-fixed>.gal-modal-fixed-header{flex-shrink:0;position:sticky;top:0;z-index:2;background:var(--SmartThemeBlurTintColor, var(--gal-white))}.gal-modal-layout-fixed>.gal-input-title{margin-bottom:0!important}.gal-modal-layout-fixed>.gal-modal-scroll-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}.gal-modal-layout-fixed>.gal-input-actions,.gal-modal-layout-fixed>.gal-modal-fixed-actions{flex-shrink:0;margin-top:0!important}.gal-toast{position:fixed;bottom:1.875rem;right:1.875rem;background:var(--gal-dark);color:var(--gal-white);padding:.75rem 1.563rem;font-weight:600;transform:skew(-5deg);box-shadow:.313rem .313rem 0 var(--gal-accent);z-index:var(--gal-z-toast);animation:galToastIn .3s ease}.gal-toast span{display:block;transform:skew(5deg)}@keyframes galToastIn{0%{opacity:0;transform:skew(-5deg) translateY(1.25rem)}to{opacity:1;transform:skew(-5deg) translateY(0)}}.gal-input-modal,.gal-config-modal{position:fixed;inset:0;background:#0009;backdrop-filter:blur(.375rem);z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center}.gal-import-progress-overlay{z-index:var(--gal-z-modal-critical)!important}@media screen and (max-width: 48rem){.gal-import-progress-box{transform:translateY(8vh)}}.gal-config-panel{background:var(--gal-white);border:none!important;box-shadow:none!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;display:flex;flex-direction:column;border-radius:0!important}.gal-config-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.563rem;display:flex;justify-content:space-between;align-items:center}.gal-config-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:800;color:var(--gal-accent)}.gal-config-close{background:transparent;border:.125rem solid var(--gal-white);color:var(--gal-white);width:2rem;height:2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}.gal-config-close:hover{background:var(--gal-accent-sub);border-color:var(--gal-accent-sub)}.gal-config-body{padding:1.563rem;overflow-y:auto;flex:1}.gal-sprite-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.375rem,1fr));gap:.938rem}.gal-sprite-card{border:.125rem solid #eee;padding:.625rem;text-align:center;cursor:pointer;transition:all .2s}.gal-sprite-card:hover{border-color:var(--gal-accent);box-shadow:0 .25rem .75rem #00d2ff26}.gal-sprite-preview{width:100%;aspect-ratio:2 / 3;object-fit:cover;object-position:top center;background:#f9f9f9;border-radius:.25rem;margin-bottom:.5rem}.gal-crop-container{position:relative;width:100%;overflow:visible;background:#1a1a2e;border-radius:.5rem}.gal-crop-canvas-wrapper{position:relative;width:100%;height:23.75rem;overflow:hidden;cursor:move;display:flex;align-items:center;justify-content:center;background:#1a1a2e;border-radius:.5rem .5rem 0 0}#gal-crop-canvas{display:block}.gal-crop-overlay{position:absolute;inset:0;pointer-events:none}.gal-crop-frame{position:absolute;border:.188rem solid var(--gal-accent);box-shadow:0 0 0 624.938rem #0009;pointer-events:none}.gal-crop-controls{display:flex;align-items:center;justify-content:center;gap:.938rem;padding:.75rem 1.25rem;background:#000c;border-radius:0 0 .5rem .5rem}.gal-crop-controls .gal-crop-btn{padding:.5rem 1rem;min-width:3.75rem;font-size:.9rem}.gal-crop-zoom-slider{width:9.375rem;accent-color:var(--gal-accent)}.gal-crop-zoom-label{color:#fff;font-size:.85rem;font-weight:600;min-width:2.813rem}.gal-crop-btn{padding:.5rem 1rem;border:none;border-radius:.25rem;cursor:pointer;font-weight:600;transition:all .2s}.gal-crop-btn.reset{background:#666;color:#fff}.gal-crop-btn.reset:hover{background:#888}.gal-batch-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.938rem;max-height:60vh;overflow-y:auto;padding:.313rem}.gal-batch-upload-card{border:.125rem dashed #ccc;border-radius:.5rem;padding:.75rem;text-align:center;transition:all .2s;background:#fafafa}.gal-batch-upload-card:hover{border-color:var(--gal-accent);background:#00d2ff0d}.gal-batch-upload-card.has-image{border-style:solid;border-color:var(--gal-accent)}.gal-batch-upload-card .expression-label{font-weight:700;color:var(--gal-dark);margin-bottom:.625rem;font-size:.9rem}.gal-batch-upload-card .upload-preview{width:100%;aspect-ratio:2 / 3;background:#eee;border-radius:.375rem;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;margin-bottom:.5rem}.gal-batch-upload-card .upload-preview img{width:100%;height:100%;object-fit:cover;object-position:top center}.gal-batch-upload-card .upload-preview i{font-size:2rem;color:#bbb}.gal-batch-upload-card .upload-preview:hover i{color:var(--gal-accent)}.gal-batch-upload-card .remove-btn{background:var(--gal-accent-sub);color:#fff;border:none;padding:.25rem .625rem;border-radius:.25rem;font-size:.75rem;cursor:pointer;display:none}.gal-batch-upload-card.has-image .remove-btn{display:inline-block}.gal-sprite-label{font-size:.85rem;font-weight:700;color:var(--gal-dark);line-height:1.3}.gal-sprite-label small{font-weight:400;color:#888}.gal-upload-card{border:.125rem dashed #ccc;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:#999;min-height:7.5rem}.gal-upload-card:hover{border-color:var(--gal-accent);color:var(--gal-accent);background:#00d2ff0d}.gal-upload-card i{font-size:2rem}.gal-action-btn.primary{background:var(--gal-accent);color:var(--gal-dark);border-color:var(--gal-accent)}.gal-action-btn.primary:hover{background:var(--gal-dark);color:var(--gal-accent)}#gal-layer-choices{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;background:#0006!important;z-index:var(--gal-z-modal-critical)!important;display:none;flex-direction:column;justify-content:center;align-items:center;gap:.938rem;padding:1.25rem}#gal-layer-choices.active{display:flex!important;animation:galFadeIn .3s ease}.gal-choices-container{width:100%;max-width:32rem;display:flex;flex-direction:column;align-items:center;gap:.75rem;max-height:calc(100vh - 10rem);overflow-y:auto;padding:0 .5rem;box-sizing:border-box}.gal-choices-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:900;color:var(--gal-white);text-transform:uppercase;letter-spacing:.125rem;margin-bottom:.5rem;transform:skew(-10deg)}.gal-choices-title span{display:block;transform:skew(10deg)}.gal-choice-card{background:var(--gal-white);color:var(--gal-dark);padding:.75rem 1.875rem;min-width:12.5rem;max-width:90%;width:auto;text-align:center;font-weight:600;font-size:.95rem;line-height:1.4;border:.125rem solid var(--gal-dark);box-shadow:.375rem .375rem #00000026;transform:skew(-8deg);cursor:pointer;transition:all .2s cubic-bezier(.34,1.56,.64,1);position:relative;overflow:hidden;word-break:break-word}.gal-choice-card span{display:block;transform:skew(8deg)}.gal-choice-card:hover{background:var(--gal-accent);color:#fff;border-color:var(--gal-dark);transform:skew(-8deg) translate(-.188rem,-.188rem);box-shadow:.563rem .563rem 0 var(--gal-dark)}.gal-choice-card:after{content:"";display:none}.gal-choices-hint{font-size:.8rem;color:#ffffffb3;margin-top:.938rem}.gal-dialog-layer .gal-progress-container{position:absolute;bottom:0;left:0;width:100%;height:.375rem;background:#0003;border-radius:0;margin:0;z-index:10;overflow:hidden;position:relative;min-width:3.75rem}.gal-progress-bar{height:100%;background:linear-gradient(90deg,var(--gal-accent) 0%,#00a8cc 100%);width:0%;border-radius:0;transition:width .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 0 .625rem var(--gal-accent)}.gal-pending-choices-btn{background:linear-gradient(135deg,var(--gal-accent-sub) 0%,#cc0044 100%)!important;color:#fff!important;padding:0 calc(.72rem * var(--ui-scale))!important;font-weight:700!important;font-size:calc(.78rem * var(--ui-scale))!important;cursor:pointer!important;display:flex!important;align-items:center!important;gap:calc(.25rem * var(--ui-scale))!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;height:calc(2.25rem * var(--ui-scale))!important;margin-right:calc(.188rem * var(--ui-scale))!important;border-radius:0!important;transform:skew(-10deg)}.gal-pending-choices-btn.show{display:flex!important;-webkit-animation:galPendingPulse 2s ease-in-out infinite!important;animation:galPendingPulse 2s ease-in-out infinite!important}.gal-pending-choices-btn i,.gal-pending-choices-btn span{transform:skew(10deg)!important}.gal-pending-choices-btn i{font-size:calc(.9rem * var(--ui-scale))!important;margin:0!important}.gal-pending-choices-btn:hover{filter:brightness(1.1)!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.313rem .313rem #0003!important}@-webkit-keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}@keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}.gal-pending-choices-btn.gal-new-option-highlight{-webkit-animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important;animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important}@-webkit-keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}@keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}.gal-open-btn{display:inline-flex;align-items:center;gap:.313rem;padding:.125rem .5rem;background:transparent;color:var(--gal-accent);border:1px solid var(--gal-accent);border-radius:.25rem;font-size:.75rem;cursor:pointer;opacity:.6;transition:all .2s;margin-left:.313rem;font-family:Noto Sans SC,sans-serif}.gal-open-btn:hover{opacity:1;background:var(--gal-accent);color:var(--gal-dark)}.gal-history-modal{position:fixed!important;inset:0!important;background:#000000d9!important;backdrop-filter:blur(.313rem)!important;z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .3s ease}.gal-history-panel{background:var(--gal-white);border:.125rem solid var(--gal-accent);box-shadow:0 0 1.25rem #00d2ff4d;width:80%;max-width:50rem;height:80vh;display:flex;flex-direction:column;border-radius:.5rem;overflow:hidden}.gal-history-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.25rem;display:flex;justify-content:space-between;align-items:center;border-bottom:.125rem solid var(--gal-accent)}.gal-history-title{font-family:Noto Sans SC,sans-serif;font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:.625rem}.gal-history-close{background:transparent;border:none;color:#aaa;font-size:1.5rem;cursor:pointer;transition:color .2s;line-height:1}.gal-history-close:hover{color:var(--gal-accent)}.gal-history-body{flex:1;overflow-y:auto;padding:1.25rem;background:#f5f5f5}.gal-history-list{display:flex;flex-direction:column;gap:.938rem}.gal-history-item{background:#fff;padding:0;border-radius:.5rem;border:1px solid #eee;box-shadow:0 .25rem .75rem #0000000d;transition:all .2s;overflow:hidden;margin-bottom:.625rem}.gal-history-item:hover{box-shadow:0 .5rem 1.25rem #00d2ff26;transform:translateY(-.125rem);border-color:var(--gal-accent)}.gal-history-header-row{background:#f8f9fa;padding:.625rem 1.25rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}.gal-history-info-group{display:flex;align-items:center;gap:.75rem}.gal-history-index{background:var(--gal-accent);color:var(--gal-dark);padding:.125rem .5rem;border-radius:.25rem;font-size:.8rem;font-weight:700;font-family:Barlow,sans-serif}.gal-history-time{color:#666;font-size:.9rem;font-weight:600;font-family:Noto Sans SC,sans-serif;display:flex;align-items:center;gap:.375rem}.gal-history-time i{font-size:.8rem;color:#999}.gal-history-content{padding:1.25rem;font-size:1.05rem;line-height:1.8;color:#333;white-space:pre-wrap;text-align:justify}.gal-history-empty{text-align:center;padding:3.125rem;color:#999;font-style:italic}.galgame-database-container{position:fixed!important;top:0!important;left:0!important;width:100%!important;height:100%!important;z-index:var(--gal-z-modal-critical)!important;display:none}.gal-open-btn{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;background:linear-gradient(135deg,var(--gal-accent) 0%,#00a8cc 100%);color:#fff;border:none;border-radius:1.25rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 .125rem .5rem #00d2ff4d}.gal-open-btn:hover{transform:scale(1.05);box-shadow:0 .25rem .938rem #00d2ff80}.gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;gap:.5rem}.gal-realtime-label{font-size:.9rem!important;color:#2b2e38!important;font-weight:600!important;white-space:nowrap}.gal-realtime-switch{position:relative;display:inline-block;width:3.25rem;height:1.75rem;flex-shrink:0}.gal-realtime-switch input{opacity:0;width:0;height:0;position:absolute}.gal-realtime-slider{position:absolute;cursor:pointer;inset:0;background:linear-gradient(145deg,#d0d0d0,#b8b8b8);transition:all .3s ease;border-radius:1.75rem;box-shadow:inset 0 .125rem .25rem #0003}.gal-realtime-slider:before{content:"";position:absolute;height:1.375rem;width:1.375rem;left:.188rem;bottom:.188rem;background:linear-gradient(145deg,#fff,#f5f5f5);transition:transform .3s ease;border-radius:50%;box-shadow:0 .125rem .313rem #0000004d;z-index:2}.gal-realtime-slider:after{content:"OFF";position:absolute;right:.5rem;top:50%;transform:translateY(-50%);font-size:.563rem;font-weight:700;color:#666;z-index:1}.gal-realtime-switch input:checked+.gal-realtime-slider{background:linear-gradient(135deg,var(--gal-accent) 0%,var(--gal-accent-sub) 100%);box-shadow:inset 0 .125rem .25rem #0003,0 0 .75rem #00d2ff66}.gal-realtime-switch input:checked+.gal-realtime-slider:before{transform:translate(1.5rem)}.gal-realtime-switch input:checked+.gal-realtime-slider:after{content:"ON";left:.5rem;right:auto;color:#fffffff2}@media screen and (max-width: 48rem){.gal-input-modal,.gal-config-modal,#gal-settings-panel,#gal-asset-manager-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important;padding:0!important;z-index:var(--gal-z-modal-critical)!important;display:flex!important;align-items:center;justify-content:center}.gal-input-modal .gal-input-box,.gal-config-modal .gal-config-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;display:flex!important;flex-direction:column!important}.gal-config-body,.gal-input-box>div:not(.gal-input-title):not(.gal-input-actions){flex:1;overflow-y:auto!important}#gal-unified-panel .gal-config-body[data-l1-pane=settings]{overflow:hidden!important}}@media screen and (max-width: 48rem){.gal-input-title{flex-direction:column;align-items:flex-start!important;gap:.625rem;padding:.625rem .938rem!important;height:auto!important}.gal-input-title span{font-size:1.2rem!important}.gal-input-title div{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.313rem}.gal-input-title div>button,.gal-input-title div>div{flex:1;min-width:auto!important;margin:0!important}.gal-title-btn{padding:.25rem .625rem!important;font-size:.85rem!important;min-width:auto!important;transform:none!important}.gal-title-btn *{transform:none!important}.gal-tab-header{padding:0 .625rem!important;gap:.625rem!important;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}.gal-tab-item{padding:.625rem .5rem!important;font-size:.9rem!important;flex-shrink:0}.gal-sub-header,.gal-action-bar{flex-direction:column;align-items:stretch!important;gap:.625rem;height:auto!important;padding:.625rem .938rem!important}.gal-action-group,.gal-filter-group{display:flex!important;flex-wrap:wrap;gap:.5rem!important;width:100%}.gal-action-btn{margin:0!important;flex:1;min-width:6.25rem;padding:.5rem 0!important;justify-content:center;transform:none!important}.gal-action-btn *{transform:none!important}.gal-grid-container{padding:.625rem!important;grid-template-columns:repeat(auto-fill,minmax(6.875rem,1fr))!important;gap:.625rem!important}.gal-input-box>div:last-child{padding:.625rem .938rem!important;min-height:auto!important}#gal-settings-close,#gal-char-sprites-close{min-height:2.5rem!important;transform:none!important}}#gal-asset-manager-modal .gal-asset-header{padding:.625rem .938rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;margin-bottom:.313rem!important}#gal-asset-manager-modal .gal-action-btn:where(#gal-asset-export,#gal-asset-export-remote,#gal-import-dropdown-btn){padding:.25rem .5rem!important;font-size:.8rem!important}#gal-asset-manager-modal .gal-tab-header{padding:0 .625rem!important;min-height:2.5rem!important}#gal-asset-manager-modal .gal-tab-btn{padding:.5rem .75rem!important;font-size:.9rem!important}#gal-asset-manager-modal .gal-tab-content{padding:.625rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin-bottom:.625rem!important;flex-wrap:wrap}#gal-asset-manager-modal .gal-input-actions{padding:.625rem .938rem!important;min-height:auto!important}#gal-asset-manager-modal .gal-asset-header>div{flex-wrap:wrap!important;gap:.625rem!important}#gal-asset-manager-modal .gal-input-title{white-space:nowrap!important;font-size:1.2rem!important;width:auto!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button i{margin:0!important;font-size:1rem!important}#gal-asset-manager-modal .gal-import-menu span{display:inline!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{display:flex!important;gap:.313rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;padding:.5rem .25rem!important;font-size:.85rem!important;white-space:nowrap!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:.25rem!important}#gal-asset-manager-modal .gal-input-actions{padding:.5rem!important}#gal-asset-manager-modal .gal-input-actions button{min-height:2.25rem!important;padding:0!important}#gal-asset-manager-modal .gal-asset-header{padding:1.25rem 1.563rem .938rem;border-bottom:1px solid #e0e0e0;flex-shrink:0}#gal-asset-manager-modal .gal-tab-header{display:flex;border-bottom:.125rem solid #e0e0e0;padding:0 1.563rem;flex-shrink:0}#gal-asset-manager-modal .gal-tab-content{flex:1;overflow-y:auto;padding:1.25rem 1.563rem}#gal-asset-manager-modal .gal-input-actions{padding:.938rem 1.563rem;border-top:1px solid #e0e0e0;flex-shrink:0}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{padding:.5rem .75rem!important;background:#fffffff2;backdrop-filter:blur(.625rem);border-bottom:1px solid rgba(0,0,0,.05)!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:.5rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;font-weight:700!important;margin-right:auto!important}#gal-asset-manager-modal .gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;margin-left:0!important;transform:scale(.85);transform-origin:left center;flex-shrink:0!important;min-width:fit-content;margin-right:.25rem}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child{display:block!important;height:auto!important;padding-bottom:.5rem!important;margin-bottom:.5rem!important;border-bottom:1px solid rgba(0,0,0,.05)!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>div{width:100%!important;display:flex!important;flex-wrap:wrap!important;justify-content:space-between!important;gap:.625rem!important;position:static!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds] .gal-realtime-toggle-wrapper{flex:0 0 100%!important;width:100%!important;order:-1!important;display:flex!important;align-items:center!important;justify-content:center!important;background:#00000008!important;border-radius:.5rem;padding:.5rem!important;margin:0!important;height:auto!important;min-height:2.5rem!important;visibility:visible!important;opacity:1!important;z-index:10!important}#gal-asset-manager-modal .gal-realtime-label{display:inline-block!important;font-size:.9rem!important;color:#444!important;margin-right:.625rem!important;font-weight:700!important}#gal-asset-manager-modal .gal-realtime-switch{display:inline-block!important;transform:scale(1)!important;margin:0!important}#gal-batch-bg-upload-btn,#gal-add-bg-btn{flex:1 1 45%!important;width:auto!important;margin:0!important}#gal-asset-manager-modal .gal-asset-header button{width:2rem!important;height:2rem!important;padding:0!important;border-radius:50%!important;background:#fff!important;border:1px solid #eee!important;color:#555!important;box-shadow:0 .125rem .313rem #0000000d!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important}#gal-import-menu{top:2.813rem!important;right:.625rem!important;width:12.5rem!important}#gal-asset-manager-modal .gal-tab-header{min-height:2.5rem!important;background:#f1f3f5;padding:.25rem!important;margin:0!important;border:none!important;gap:.25rem}#gal-asset-manager-modal .gal-tab-btn{flex:1;padding:0!important;display:flex;align-items:center;justify-content:center;border-radius:.375rem!important;border:none!important;font-size:.85rem!important;color:#666;background:transparent}#gal-asset-manager-modal .gal-tab-btn.active{background:#fff!important;color:#333!important;box-shadow:0 1px .188rem #0000001a!important;font-weight:700}#gal-asset-manager-modal .gal-tab-pane>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child .gal-realtime-toggle-wrapper{display:flex!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin:.625rem!important;gap:.5rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;height:2.25rem!important;border-radius:1.125rem!important;font-size:.85rem!important;box-shadow:0 .125rem .375rem #0000001a!important;padding:0!important}.gal-character-grid,.gal-bg-grid{padding:0 .625rem 3.75rem!important;gap:.5rem!important;grid-template-columns:repeat(3,1fr)!important}.gal-character-card,.gal-bg-card{box-shadow:none!important;border:1px solid #eee!important}.gal-character-card>div:last-child>div:last-child{display:none!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:1.25rem;left:50%;transform:translate(-50%);width:90%!important;padding:0!important;border:none!important;z-index:100!important;background:transparent!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.75rem!important;border-radius:1.375rem!important;background:linear-gradient(135deg,#2c3e50,#000)!important;color:#fff!important;box-shadow:0 .25rem .75rem #0003!important;opacity:.9}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-box{display:flex!important;flex-direction:column!important;height:100%!important;overflow:hidden!important}#gal-asset-manager-modal .gal-asset-header{flex:0 0 auto!important;height:3.125rem!important;padding:0 .625rem!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:.5rem!important;background:#fff!important;border-bottom:1px solid #eee!important}#gal-asset-manager-modal .gal-asset-header>div{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:.5rem!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button{flex:0 0 auto!important;width:2rem!important;height:2rem!important;min-width:2rem!important;max-width:2rem!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:.875rem!important}#gal-asset-manager-modal .gal-asset-header>div{flex:0 0 auto!important}#gal-asset-manager-modal .gal-tab-header{flex:0 0 auto!important;height:2.5rem!important;padding:.125rem .625rem!important;gap:.313rem!important;background:#f8f9fa!important;display:flex!important;align-items:center!important}#gal-asset-manager-modal .gal-tab-btn{flex:1!important;height:2rem!important;padding:0!important;font-size:.813rem!important;line-height:2rem!important}#gal-asset-manager-modal .gal-tab-content{flex:1 1 auto!important;height:0!important;padding:.625rem .625rem 3.75rem!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:.938rem;left:5%;width:90%!important;padding:0!important;border:none!important;background:transparent!important;pointer-events:none}#gal-asset-manager-modal .gal-input-actions button{pointer-events:auto;height:2.5rem!important;border-radius:1.25rem!important;background:#000000d9!important;color:#fff!important;box-shadow:0 .25rem .625rem #0003!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header button{border-radius:.25rem!important;width:auto!important;padding:0 .5rem!important;background:transparent!important;border:1px solid transparent!important;box-shadow:none!important;color:#555!important}#gal-asset-manager-modal .gal-asset-header button:active{background:#0000001a!important}#gal-asset-manager-modal .gal-asset-header #gal-asset-export-remote{color:#6f42c1!important}#gal-asset-manager-modal .gal-asset-header #gal-import-dropdown-btn{color:#28a745!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{z-index:100!important;position:relative!important;border-bottom:none!important;box-shadow:none!important;padding-bottom:0!important}#gal-asset-manager-modal .gal-tab-header{z-index:90!important;position:relative!important;border-top:none!important;background:#fff!important;margin-top:-1px!important;padding-top:0!important}#gal-asset-manager-modal .gal-import-menu{z-index:var(--gal-z-dropdown)!important;position:absolute!important;top:100%!important;right:0!important;box-shadow:0 .25rem .938rem #0003!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important;position:relative!important;overflow:visible!important}#gal-asset-manager-modal .gal-input-title{margin-bottom:0!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{overflow:visible!important;touch-action:none!important;z-index:var(--gal-z-dropdown)!important}#gal-asset-manager-modal .gal-import-dropdown{overflow:visible!important;position:static!important}#gal-asset-manager-modal .gal-import-menu{position:fixed!important;top:3.438rem!important;right:.625rem!important;z-index:var(--gal-z-dropdown)!important;max-height:60vh!important;overflow-y:auto!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-actions{position:static!important;width:100%!important;padding:.625rem .938rem!important;background:#fff!important;border-top:1px solid #eee!important;transform:none!important;left:auto!important;bottom:auto!important;pointer-events:auto!important;flex-shrink:0!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.5rem!important;border-radius:.25rem!important;background:#f8f9fa!important;color:#333!important;border:1px solid #ddd!important;box-shadow:none!important;display:flex!important;align-items:center!important;justify-content:center!important}#gal-asset-manager-modal .gal-input-actions button:hover,#gal-asset-manager-modal .gal-input-actions button:active{background:#e9ecef!important}#gal-asset-manager-modal .gal-tab-content{padding-bottom:.625rem!important}}@media screen and (max-width: 48rem){#gal-history-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:var(--gal-z-modal-critical)!important;background:#000000d9!important;visibility:visible!important;opacity:1!important}#gal-history-modal .gal-history-panel{position:relative!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;border:none!important;border-radius:0!important;background:#fff!important;transform:none!important;display:flex!important;flex-direction:column!important;z-index:var(--gal-z-modal-critical)!important;opacity:1!important}#gal-history-modal .gal-history-header{flex-shrink:0!important;padding:.625rem .938rem!important;border-bottom:1px solid #eee!important}#gal-history-modal .gal-history-body{flex:1!important;height:auto!important;max-height:none!important;overflow-y:auto!important;padding:.938rem!important}}@media screen and (max-width: 48rem){#gal-global-overlay *,.gal-input-modal,.gal-config-modal,.gal-history-modal{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.gal-input-modal,.gal-config-modal,.gal-history-modal{background:#000000b3!important}.gal-bgm-widget,.gal-location-bar,.gal-time-bar{background:#2b2e38f2!important}.gal-footer-btn,.gal-footer-btn-next,.gal-pending-choices-btn,.gal-action-btn{box-shadow:none!important}.gal-sprite-card:hover,.gal-character-card:hover,.gal-bg-card:hover{transform:none!important}}@media screen and (max-width: 48rem){.gal-dialog-layer{left:50%!important;right:auto!important;width:min(98%,calc(96% * var(--gal-dialog-scale-user, 1)))!important;bottom:calc(.625rem * var(--gal-dialog-scale-user, 1))!important;height:calc(40% * var(--gal-dialog-scale-user, 1))!important;min-height:calc(11rem*min(var(--gal-dialog-scale-user, 1),1))!important;max-height:84%!important;transform:translate(-50%)!important;padding-bottom:env(safe-area-inset-bottom)}.gal-text-panel{padding:calc(1.563rem * var(--gal-dialog-scale-user, 1)) calc(.938rem * var(--gal-dialog-scale-user, 1)) calc(2.813rem * var(--gal-dialog-scale-user, 1)) calc(.938rem * var(--gal-dialog-scale-user, 1))!important}.gal-dialog-text{font-size:calc(.88rem * var(--font-scale))!important;line-height:1.6!important}.gal-name-badge{top:-1.25rem!important;left:0!important;padding:.25rem 1.25rem .25rem .938rem!important;font-size:1.1rem!important;transform:skew(-15deg) scale(.9)!important;transform-origin:bottom left!important}.gal-interaction-bar{top:-2.813rem!important;right:0!important;transform:scale(.85)!important;transform-origin:bottom right!important;gap:.5rem!important}.gal-action-btn{padding:.5rem 1rem!important;font-size:.95rem!important}.gal-bgm-widget{top:3.75rem!important;padding:.375rem .625rem!important;gap:.375rem!important;font-size:.72rem!important;border-radius:1rem!important;max-width:2.125rem!important;transition:max-width .3s cubic-bezier(.4,0,.2,1)!important}.gal-bgm-icon{font-size:.95rem!important;min-width:1rem!important}.gal-bgm-title{font-size:.7rem!important}.gal-bgm-btn{font-size:.8rem!important;width:1rem!important}.gal-bgm-slider{width:3rem!important;height:.188rem!important}.gal-bgm-slider::-webkit-slider-thumb{width:.5rem!important;height:.5rem!important}.gal-bgm-widget:active,.gal-bgm-widget:focus-within,.gal-bgm-widget.active{max-width:12rem!important;background:#2b2e38fa!important}.gal-status-bar-container{top:.625rem!important;right:auto!important;left:.625rem!important;flex-direction:column!important;align-items:flex-start!important;gap:.375rem!important;transform:scale(.85)!important;transform-origin:top left!important;pointer-events:none;z-index:90!important}.gal-location-bar,.gal-time-bar{max-width:10rem!important;height:1.625rem!important;font-size:.75rem!important;background:#2b2e38cc!important;backdrop-filter:blur(.25rem)}.gal-fullscreen-btn{top:.625rem!important;right:.625rem!important;padding:.5rem .75rem!important;font-size:.8rem!important}.gal-bottom-toolbar{padding:0 .625rem .625rem!important;min-height:3.125rem!important;margin-bottom:env(safe-area-inset-bottom)}.gal-footer-btn{height:2.375rem!important;padding:0 .625rem!important;min-width:2.375rem!important}.gal-footer-btn-next{min-width:6.25rem!important;height:2.813rem!important;font-size:1.1rem!important;margin-left:.625rem!important;margin-right:-.625rem!important}.gal-input-modal,.gal-config-modal,.gal-history-modal,#gal-layer-choices{z-index:var(--gal-z-modal-critical)!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;height:100dvh!important;max-height:100dvh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}.gal-choices-container{width:min(100%,32rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choices-title,.gal-choices-hint{width:100%!important;text-align:center!important}.gal-choice-card{max-width:100%!important;width:100%!important}#gal-global-overlay.fullscreen{z-index:var(--gal-z-overlay)!important}.gal-progress-indicator{display:none!important}}@media screen and (max-width: 48rem){.gal-interaction-bar .gal-action-btn{transform:skew(-15deg)!important;margin:0!important;flex:initial!important;min-width:auto!important;width:auto!important;display:flex!important;border-radius:0!important}.gal-interaction-bar .gal-action-btn *,.gal-interaction-bar .gal-action-btn i,.gal-interaction-bar .gal-action-btn span{transform:skew(15deg)!important}.gal-interaction-bar .gal-action-btn.btn-reroll,.gal-interaction-bar .gal-action-btn.btn-free{padding:.375rem .75rem!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){.gal-bottom-toolbar{padding-right:.75rem!important;overflow:visible!important}.gal-footer-btn-next{margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.75rem * var(--ui-scale))!important}.gal-pending-choices-btn{margin-right:0!important}#gal-settings-panel,#gal-asset-manager-modal,#gal-history-modal,.gal-history-modal,.gal-config-modal,.gal-input-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-layer-choices,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important}#gal-settings-panel .gal-config-panel,.gal-config-modal .gal-config-panel,#gal-asset-manager-modal .gal-input-box,.gal-input-modal .gal-input-box,#gal-history-modal .gal-history-panel,.gal-history-modal .gal-history-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}.gal-choices-container{width:min(100%,34rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choice-card{width:100%!important;max-width:100%!important}}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-footer-btn .gal-btn-text,.gal-pending-choices-btn .gal-btn-text,.gal-footer-btn-next .gal-btn-text,.gal-footer-btn[data-action=log],.gal-footer-btn[data-action=view-original],.gal-footer-btn[data-action=save],.gal-footer-btn[data-action=load]{display:none!important}.gal-footer-btn[data-action=close-mode]{order:-1!important}.gal-bottom-toolbar{justify-content:flex-start!important;gap:.3rem!important;padding:0 .875rem .5rem .5rem!important;overflow:visible!important}.gal-footer-btn,.gal-pending-choices-btn{flex:1 1 0!important;width:auto!important;min-width:0!important;padding:0!important;justify-content:center!important;height:2.5rem!important;margin-left:0!important}.gal-footer-btn i,.gal-pending-choices-btn i{margin:0!important;font-size:1.15rem!important}.gal-footer-btn-next{flex:0 0 auto!important;width:5rem!important;min-width:5rem!important;height:2.5rem!important;margin-left:.35rem!important;padding:0!important;justify-content:center!important;margin-right:0!important;z-index:100!important}.gal-footer-btn-next i{margin:0!important;font-size:1.6rem!important}}.gal-mobile-menu{display:none;position:absolute;bottom:4rem;left:.5rem;transform:none;background:#fffffff2;border:.125rem solid var(--gal-dark);border-radius:0;padding:.5rem;flex-direction:column;gap:.5rem;z-index:200;min-width:9rem;box-shadow:.313rem .313rem #0003;backdrop-filter:blur(.25rem);pointer-events:auto}.gal-mobile-menu.active{display:flex}.gal-mobile-menu .gal-menu-btn{display:flex;align-items:center;gap:.5rem;padding:.5rem .875rem;color:var(--gal-dark);background:var(--gal-white);border:.125rem solid var(--gal-dark);border-radius:0;cursor:pointer;text-align:left;font-size:.85rem;font-weight:700;font-family:Barlow,sans-serif;transition:all .2s;box-shadow:.188rem .188rem #0000001f}.gal-mobile-menu .gal-menu-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:translateY(-.125rem);box-shadow:.25rem .25rem #0003}.gal-mobile-menu .gal-menu-btn i{width:1.2rem;text-align:center}@media screen and (max-width: 48rem){#gal-batch-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-height:100%!important;max-width:100%!important;border-radius:0!important}#gal-batch-upload-modal>.gal-input-box>div:last-child{flex-direction:column!important}#gal-batch-upload-modal .gal-batch-sidebar{width:100%!important;border-right:none!important;border-bottom:1px solid #ddd!important;max-height:none!important;flex-shrink:0!important}#gal-batch-upload-modal .gal-batch-sidebar>div:first-child{padding:6px 8px!important}#gal-batch-upload-modal #gal-batch-add-char{white-space:nowrap!important;padding:4px 10px!important;font-size:.8rem!important;min-height:auto!important}#gal-batch-upload-modal #gal-batch-char-list{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:4px!important;padding:4px 6px!important}#gal-batch-upload-modal .gal-char-item{flex-shrink:0!important;min-width:auto!important;max-width:none!important;padding:5px 10px!important;font-size:.8rem!important;margin-bottom:0!important;border-radius:3px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child{flex:1!important;min-height:0!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child{padding:10px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child{margin-bottom:8px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child label{margin-bottom:4px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child input{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area{min-height:100px!important;padding:.75rem!important}#gal-batch-upload-modal #gal-grid-upload-area i{font-size:1.8rem!important}#gal-batch-upload-modal #gal-grid-upload-area span{font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area small{font-size:.75rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child{padding:.625rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child{gap:.5rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child>div{gap:.25rem!important}#gal-batch-upload-modal #gal-grid-preview-area label{font-size:.75rem!important}#gal-batch-upload-modal .gal-grid-mapping-container{grid-template-columns:repeat(auto-fill,minmax(70px,1fr))!important;gap:.375rem!important;max-height:150px!important}#gal-batch-upload-modal .gal-input-actions{padding:.5rem .75rem!important;padding-bottom:calc(.5rem + env(safe-area-inset-bottom))!important;gap:.5rem!important}#gal-batch-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-batch-upload-modal .gal-upload-tab{padding:6px 10px!important;font-size:.8rem!important}#gal-batch-upload-modal input[type=text]{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:.95rem!important}}@media screen and (max-width: 48rem){#gal-bg-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-bg-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important}#gal-bg-upload-modal .gal-input-title span{transform:none!important;flex:1!important;min-width:0!important}#gal-bg-upload-modal #gal-bg-close-x{flex-shrink:0!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2){margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) label{margin-bottom:.25rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) input{padding:.4rem .5rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal .gal-upload-tab{padding:.3rem .5rem!important;font-size:.8rem!important}#gal-bg-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-upload-card{min-height:70px!important;margin-bottom:.5rem!important;padding:.625rem!important}#gal-bg-upload-modal .gal-upload-card i{font-size:1.5rem!important}#gal-bg-upload-modal .gal-upload-card span{font-size:.85rem!important;margin-top:.25rem!important}#gal-bg-upload-modal .gal-upload-card small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal #gal-upload-remote>div{min-height:70px!important;padding:.625rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child{padding:.5rem!important;margin-bottom:.5rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.1rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child span{font-size:.9rem!important}#gal-bg-upload-modal #gal-bg-comfyui-prompt{height:55px!important;font-size:.8rem!important}#gal-bg-upload-modal #gal-bg-comfyui-generate-btn{min-height:38px!important;font-size:.9rem!important}#gal-bg-upload-modal .gal-input-actions{margin-top:.5rem!important}#gal-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-bg-upload-modal #gal-bg-preview-container{margin-bottom:.5rem!important}}@media screen and (max-width: 48rem){#gal-batch-bg-upload-modal .gal-input-box{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;border-radius:0!important}#gal-batch-bg-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:1rem!important}#gal-batch-bg-upload-modal #gal-batch-step-1{padding:.75rem!important}#gal-batch-bg-upload-modal .gal-upload-card{min-height:120px!important}#gal-batch-bg-upload-modal .gal-upload-card i{font-size:2rem!important}#gal-batch-bg-upload-modal .gal-upload-card span{font-size:.95rem!important;margin-top:.5rem!important}#gal-batch-bg-upload-modal .gal-upload-tab{padding:.375rem .625rem!important;font-size:.85rem!important}#gal-batch-bg-upload-modal .gal-batch-grid-container{padding:.625rem!important}#gal-batch-bg-upload-modal #gal-batch-grid{grid-template-columns:repeat(2,1fr)!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-batch-input-area{padding:.375rem!important}#gal-batch-bg-upload-modal .gal-batch-scene-input{padding:.375rem .5rem!important;font-size:.8rem!important}#gal-batch-bg-upload-modal #gal-batch-step-2>div:last-child{padding:.375rem .75rem!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-input-actions{padding:.5rem .75rem!important;gap:.375rem!important}#gal-batch-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-bg-upload-modal #gal-upload-remote>div{padding:.75rem!important}#gal-batch-bg-upload-modal #gal-batch-remote-urls{height:120px!important;font-size:.8rem!important}}@media screen and (max-width: 48rem){#gal-sprite-upload-modal .gal-input-box{width:100%!important;max-width:100%!important;max-height:100%!important;height:auto!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;padding-bottom:.375rem!important;border-bottom:1px solid #eee!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2){display:grid!important;grid-template-columns:1fr 1fr!important;gap:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2)>div{width:auto!important;margin-bottom:0!important}#gal-sprite-upload-modal label{font-size:.8rem!important;margin-bottom:.25rem!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}#gal-sprite-upload-modal input[type=text],#gal-sprite-upload-modal select{padding:.4rem .5rem!important;font-size:.85rem!important;height:32px!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3){padding:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3)>div{flex-direction:row!important;flex-wrap:wrap!important;gap:.5rem!important;align-items:center!important}#gal-sprite-upload-modal #gal-tts-voice-select{flex:1!important;width:auto!important;min-width:120px!important}#gal-sprite-upload-modal #gal-tts-voice-save-btn{width:auto!important;padding:0 .75rem!important;height:32px!important}#gal-sprite-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important;flex-wrap:nowrap!important;overflow-x:auto!important;flex:none!important;min-height:auto!important;gap:.25rem!important}#gal-sprite-upload-modal .gal-upload-tab{padding:.35rem .5rem!important;font-size:.8rem!important;flex:1!important;min-width:auto!important;text-align:center!important;white-space:nowrap!important;border-radius:.25rem!important}#gal-sprite-upload-modal #gal-upload-content{flex:1!important;display:flex!important;flex-direction:column!important;min-height:0!important;overflow-y:auto!important}#gal-sprite-upload-modal #gal-upload-trigger{flex:1!important;min-height:120px!important;padding:.75rem!important;display:flex!important;flex-direction:column!important;justify-content:center!important}#gal-sprite-upload-modal #gal-upload-trigger i{font-size:2rem!important;margin-bottom:.5rem!important}#gal-sprite-upload-modal #gal-upload-trigger span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-trigger small{font-size:.75rem!important}#gal-sprite-upload-modal #gal-upload-remote>div{padding:1rem!important;min-height:120px!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child{padding:.75rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.25rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:nth-child(2){flex-direction:column!important;gap:.75rem!important}#gal-sprite-upload-modal #gal-crop-area{margin-bottom:.75rem!important}#gal-sprite-upload-modal .gal-crop-container{padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:.5rem!important;padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls input[type=range]{width:120px!important}#gal-sprite-upload-modal .gal-crop-btn{padding:.375rem .625rem!important;font-size:.8rem!important}#gal-sprite-upload-modal .gal-crop-controls span{font-size:.85rem!important}#gal-sprite-upload-modal #gal-crop-area>p{font-size:.75rem!important;margin:.5rem 0!important}#gal-sprite-upload-modal .gal-input-actions{flex-direction:column!important;gap:.5rem!important;margin-top:.75rem!important;padding-top:.75rem!important;border-top:1px solid #eee!important}#gal-sprite-upload-modal .gal-input-actions button{width:100%!important;min-height:42px!important;padding:.625rem 1rem!important;font-size:.9rem!important;flex:none!important}#gal-sprite-upload-modal .gal-input-actions button i{margin-right:.375rem!important}}@media screen and (max-width: 48rem){#gal-character-sprites-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;border-radius:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:.5rem .75rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2){margin:.375rem .75rem 0!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:nth-child(2){flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-tts-voice-select{flex:1 1 8rem!important;width:auto!important;min-width:8rem!important;padding:.375rem .5rem!important;font-size:.8rem!important}#gal-character-sprites-modal #gal-char-tts-save-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2) small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-section{margin:.375rem .75rem!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important;max-height:40vh!important;overflow-y:auto!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:nth-child(2){gap:.375rem!important;flex-wrap:wrap!important}#gal-character-sprites-modal #gal-char-live2d-section .gal-action-btn{padding:.25rem .5rem!important;font-size:.75rem!important}#gal-character-sprites-modal #gal-char-live2d-section small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-container{margin-top:.5rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-canvas{height:250px!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4){padding:.5rem .75rem!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4)>div:first-child{margin-bottom:.5rem!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:.375rem!important}#gal-character-sprites-modal .gal-sprite-card{border-radius:.25rem!important}#gal-character-sprites-modal .gal-sprite-label{font-size:.7rem!important;padding:.25rem!important}#gal-character-sprites-modal #gal-char-sprites-close:hover{color:#333!important}}@media screen and (max-width: 22.5rem){#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:100%!important}}@media screen and (max-width: 48rem){#gal-unified-panel [data-l1-pane]:not([data-l1-pane=settings]){padding:12px!important}#gal-unified-panel [data-l1-pane=settings]{padding:0!important}#gal-unified-panel .gal-l2-body{padding:12px!important}#gal-unified-panel .gal-l1-tab-btn{padding:10px 16px!important;font-size:.9rem!important}#gal-unified-panel .gal-l1-tab-btn span{font-size:.85rem!important}#gal-unified-panel .gal-config-close{width:2.5rem!important;height:2.5rem!important;min-width:2.5rem!important;font-size:1.1rem!important}#gal-unified-panel .gal-master-bar{padding:8px 12px!important;gap:8px!important}#gal-unified-panel #gal-main-toggle{padding:7px 16px!important;font-size:.85rem!important}#gal-unified-panel .gal-l2-tab-header{padding:0 8px!important}#gal-unified-panel .gal-l2-tab-btn{padding:9px 10px!important;font-size:.8rem!important}#gal-unified-panel .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel .gal-settings-label{flex:1 1 100%!important;font-size:.85rem!important}#gal-unified-panel .gal-settings-control{flex:1 1 100%!important;justify-content:flex-start!important}#gal-unified-panel .gal-settings-control input[type=range]{width:100%!important;flex:1!important;min-width:0!important}#gal-unified-panel .gal-range-value{min-width:40px!important;flex-shrink:0!important}#gal-unified-panel .gal-settings-row:has(.gal-switch){flex-wrap:nowrap!important}#gal-unified-panel .gal-settings-row:has(.gal-switch) .gal-settings-label{flex:1 1 auto!important}#gal-unified-panel .gal-select,#gal-unified-panel .gal-input{width:100%!important;max-width:100%!important}#gal-unified-panel #gal-gpt-sovits-media-type{min-width:0!important;width:100%!important}#gal-unified-panel #gal-gpt-sovits-config{padding:8px!important;margin-top:8px!important}#gal-unified-panel #gal-gpt-sovits-config input[type=text],#gal-unified-panel #gal-gpt-sovits-config input[type=number]{margin-left:0!important;flex:1!important;min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row>.gal-settings-label{flex:1 1 100%!important}#gal-unified-panel #gal-gpt-sovits-speed{width:100%!important}#gal-unified-panel #gal-gpt-sovits-voices-json{font-size:.75rem!important}#gal-unified-panel #gal-gpt-sovits-config .gal-panel-btn{padding:8px!important;font-size:.85rem!important}#gal-unified-panel #gal-enhanced-config{padding-left:8px!important}#gal-unified-panel #gal-enhanced-config select{width:100%!important;margin-left:0!important}#gal-unified-panel #gal-enhanced-config>div>div{margin-left:8px!important}#gal-unified-panel #gal-enhanced-worldbooks-list{margin-left:8px!important}#gal-unified-panel .gal-enhanced-worldbook-item,#gal-unified-panel #gal-enhanced-config input[type=checkbox]{width:20px!important;height:20px!important}#gal-unified-panel .gal-switch{width:52px!important;height:30px!important;min-width:52px!important}#gal-unified-panel .gal-switch-slider:before{height:24px!important;width:24px!important}#gal-unified-panel .gal-switch input:checked+.gal-switch-slider:before{transform:translate(22px)!important}#gal-unified-panel .gal-bg-source-selector{padding:8px 10px!important;gap:8px!important;flex-wrap:wrap!important}#gal-unified-panel .gal-bg-source-selector .gal-radio-label{font-size:.8rem!important}#gal-unified-panel .gal-imagegen-pills{gap:6px!important;padding:8px 0!important}#gal-unified-panel .gal-pill{padding:6px 12px!important;font-size:.8rem!important}#gal-unified-panel [data-engine-pane]>div{padding:10px!important}#gal-unified-panel [data-engine-pane] input[type=text],#gal-unified-panel [data-engine-pane] input[type=password],#gal-unified-panel [data-engine-pane] textarea,#gal-unified-panel [data-engine-pane] select{max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel .gal-realtime-switch{min-width:3.25rem!important}#gal-unified-panel .gal-settings-divider{margin:10px 0!important}#gal-unified-panel .gal-settings-section-title{font-size:.9rem!important;margin-bottom:8px!important}#gal-unified-panel .gal-asset-header>div:first-child{flex-wrap:wrap!important;gap:8px!important}#gal-unified-panel #gal-pack-dropdown-btn,#gal-unified-panel #gal-render-scope-btn,#gal-unified-panel #gal-export-dropdown-btn,#gal-unified-panel #gal-import-dropdown-btn{padding:4px 8px!important;font-size:.8rem!important}#gal-unified-panel #gal-export-dropdown-btn>span,#gal-unified-panel #gal-import-dropdown-btn>span{display:none!important}#gal-unified-panel .gal-pack-menu,#gal-unified-panel .gal-export-menu,#gal-unified-panel .gal-import-menu{min-width:160px!important}#gal-unified-panel .gal-tab-header{display:flex!important;flex-wrap:nowrap!important;gap:0!important}#gal-unified-panel .gal-tab-btn{padding:8px 4px!important;font-size:.7rem!important;white-space:nowrap!important;flex:1!important;text-align:center!important;justify-content:center!important;gap:2px!important}#gal-unified-panel .gal-tab-btn i{font-size:.8rem!important;margin-right:2px!important}#gal-unified-panel .gal-pane-header{flex-wrap:wrap;gap:8px}#gal-unified-panel .gal-pane-stat{flex:1 1 100%;font-size:.85rem}#gal-unified-panel .gal-pane-actions{flex:1 1 100%;gap:6px}#gal-unified-panel .gal-pane-btn{padding:6px 8px!important;flex:1;justify-content:center;font-size:.75rem!important;gap:4px!important}#gal-unified-panel .gal-pane-btn>i{font-size:.8rem}#gal-prompts-modal{padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal>div>div:first-child{padding:12px 16px!important;border-radius:0!important}#gal-prompts-modal>div>div:nth-child(2){padding:12px!important}#gal-prompts-modal pre{font-size:.75rem!important;padding:8px!important}#gal-prompts-modal>div>div:last-child{padding:10px 12px!important}#gal-prompts-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-asset-header>div:first-child>div:first-child{gap:6px!important}#gal-unified-panel .gal-asset-header>div:first-child>div:last-child{gap:4px!important}#gal-unified-panel .gal-pack-item,#gal-unified-panel .gal-export-item,#gal-unified-panel .gal-import-item{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-character-grid{grid-template-columns:repeat(3,1fr)!important;gap:8px!important}#gal-unified-panel .gal-character-card>div:last-child{padding:6px!important}#gal-unified-panel .gal-character-card>div:last-child>div:first-child{font-size:.75rem!important}#gal-unified-panel .gal-bg-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}#gal-unified-panel .gal-bg-label{padding:6px!important;font-size:.8rem!important}}.gal-popup-modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:var(--gal-z-modal);padding:20px;box-sizing:border-box}.gal-popup-panel{background:var(--SmartThemeFormBg, #fff);color:#2b2e38;border-radius:12px;max-width:700px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px #0000004d}.gal-popup-header{padding:14px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}.gal-popup-title{font-weight:700;font-size:1.1rem;color:#2b2e38!important;text-shadow:none}.gal-popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#666;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background .2s}.gal-popup-close:hover{background:#00000014}.gal-popup-body{padding:20px;overflow-y:auto;flex:1;color:#2b2e38!important;line-height:1.7;text-shadow:none}.gal-popup-body a{color:#1f5fbf}.gal-popup-body *:not([style*=color]){color:inherit!important}@media screen and (max-width: 48rem){.gal-input-title{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;transform:none!important;gap:.5rem!important;padding:.5rem 0!important}.gal-input-title>span{transform:none!important;flex:1!important;min-width:0!important;display:inline!important;font-size:1rem!important}.gal-input-title>button,.gal-input-title .gal-close-btn{flex-shrink:0!important;transform:none!important}.gal-input-modal .gal-input-box:not(.gal-modal-layout-fixed){width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important;border-radius:0!important;overflow-y:auto!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;padding:0!important;border-radius:0!important;overflow:hidden!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-scroll-body{padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-title,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-header,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-actions,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-actions{padding-left:.75rem!important;padding-right:.75rem!important;margin-bottom:0!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-actions,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-actions{padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-scroll-body{margin-bottom:0!important}.gal-input-modal .gal-input-box>.gal-input-title{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div:last-child{margin-bottom:0!important}.gal-input-modal .gal-input-box label{margin-bottom:.25rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box input[type=text],.gal-input-modal .gal-input-box select,.gal-input-modal .gal-input-box textarea{padding:.4rem .5rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box small{font-size:.7rem!important;margin-top:.125rem!important}.gal-input-actions{margin-top:.5rem!important;gap:.375rem!important}.gal-input-actions button{min-height:36px!important;font-size:.85rem!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}.gal-popup-header{padding:10px 14px!important}.gal-popup-title{font-size:1rem!important}.gal-popup-body{padding:12px!important}#gal-live2d-settings-modal{padding:0!important}#gal-live2d-settings-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-live2d-settings-modal>div>div:first-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:first-child span{font-size:.95rem!important}#gal-live2d-settings-modal .gal-settings-tab{padding:8px 4px!important;font-size:.85rem!important}#gal-live2d-settings-modal .gal-settings-panel{padding:0!important}#gal-live2d-settings-modal>div>div:nth-child(3){padding:12px!important}#gal-live2d-settings-modal .gal-settings-panel div[style*=grid-template-columns]{grid-template-columns:1fr!important;gap:10px!important}#gal-live2d-settings-modal .gal-mapping-row{flex-wrap:wrap!important;gap:4px!important;padding:6px 0!important}#gal-live2d-settings-modal .gal-mapping-row span:first-child{min-width:50px!important;font-size:.8rem!important}#gal-live2d-settings-modal .gal-mapping-row select{flex:1 1 40%!important;min-width:0!important;font-size:.8rem!important;padding:4px!important}#gal-live2d-settings-modal>div>div:last-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-pack-manager-modal .gal-input-box{width:100%!important}#gal-pack-manager-modal .gal-pack-row{flex-wrap:wrap!important;gap:8px!important}#gal-pack-manager-modal .gal-pack-row>div:last-child{width:100%!important;justify-content:flex-end!important}#gal-transfer-modal .gal-input-box{width:100%!important}#gal-banana-appearance-picker .gal-input-box{max-width:none!important;width:100%!important;height:100%!important;max-height:none!important;border-radius:0!important}#gal-banana-appearance-picker .gal-input-title{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-box{padding:0!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-char-live2d-section>div:nth-child(2){flex-wrap:wrap!important;gap:6px!important}#gal-char-live2d-section .gal-action-btn{padding:4px 8px!important;font-size:.75rem!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]{margin:0 12px!important;padding:10px!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]>div:last-child{flex-direction:column!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))!important;gap:8px!important}#gal-sprite-upload-modal .gal-input-box{padding:12px!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:8px!important}#gal-sprite-upload-modal .gal-input-box>div:nth-child(2){flex-direction:column!important;gap:8px!important}#gal-sprite-upload-modal [style*="linear-gradient(135deg, #f5f7fa"]{padding:10px!important;margin-bottom:10px!important}#gal-sprite-upload-modal .gal-crop-container{margin-bottom:8px!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:6px!important}#gal-expression-manager-modal .gal-input-box{padding:12px!important}#gal-expression-manager-modal .gal-tag{padding:4px 8px!important;font-size:.75rem!important}#gal-expression-manager-modal .gal-input-box>div{margin-bottom:10px!important}#gal-expression-manager-modal .gal-input-box label{margin-bottom:4px!important;font-size:.85rem!important}#gal-expression-manager-modal .gal-input-box>div:last-child>div:last-child{gap:6px!important}#gal-expression-manager-modal #gal-new-expression-input{padding:8px 10px!important;font-size:.85rem!important;min-width:0!important}#gal-expression-manager-modal #gal-add-expression-btn{padding:8px 12px!important;font-size:.85rem!important;white-space:nowrap!important;flex-shrink:0!important}#gal-appearance-prompt-modal .gal-input-box{padding:12px!important}#gal-appearance-prompt-modal textarea{height:100px!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){#gal-live2d-settings-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important;padding:0!important}#gal-live2d-settings-modal>div{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}}#gal-asset-manager-modal .gal-tab-btn,#gal-live2d-settings-modal,#gal-live2d-settings-modal>div,#gal-bg-upload-modal,#gal-bg-upload-modal .gal-input-box,#gal-batch-bg-upload-modal,#gal-batch-bg-upload-modal .gal-input-box{opacity:1!important;filter:none!important}#gal-asset-manager-modal .gal-tab-btn{color:#4b5563!important;font-weight:700!important}#gal-asset-manager-modal .gal-tab-btn.active{color:var(--gal-accent)!important}#gal-live2d-settings-modal .gal-settings-tab{color:#5b6472!important;opacity:1!important}#gal-live2d-settings-modal .gal-settings-tab.active{color:var(--gal-accent)!important}#gal-live2d-settings-modal .gal-settings-panel,#gal-live2d-settings-modal .gal-settings-panel h4,#gal-live2d-settings-modal .gal-settings-panel p,#gal-live2d-settings-modal .gal-settings-panel label,#gal-live2d-settings-modal .gal-settings-panel span{color:#2b2e38!important;opacity:1!important}#gal-live2d-settings-modal .gal-settings-panel input[type=number],#gal-live2d-settings-modal .gal-settings-panel select,#gal-live2d-settings-modal .gal-settings-panel select option{color:#1f2937!important;background:#fff!important}#gal-live2d-settings-modal .gal-settings-panel button:not(:disabled){color:#2b2e38!important;opacity:1!important}#gal-live2d-settings-modal #gal-live2d-start-position-edit,#gal-live2d-settings-modal #gal-live2d-auto-match,#gal-live2d-settings-modal #gal-live2d-settings-save{color:#fff!important}#gal-live2d-settings-modal .gal-settings-panel button:disabled{opacity:.55!important;color:#6b7280!important}#gal-bg-upload-modal .gal-input-box,#gal-batch-bg-upload-modal .gal-input-box{color:#1f2937!important}#gal-bg-upload-modal .gal-upload-tab,#gal-batch-bg-upload-modal .gal-upload-tab{color:#6b7280!important;opacity:1!important}#gal-bg-upload-modal .gal-upload-tab.active,#gal-batch-bg-upload-modal .gal-upload-tab.active{color:#1f2937!important;font-weight:700!important}#gal-bg-upload-modal label,#gal-bg-upload-modal small,#gal-bg-upload-modal p,#gal-batch-bg-upload-modal label,#gal-batch-bg-upload-modal small,#gal-batch-bg-upload-modal p{color:#4b5563!important;opacity:1!important}#gal-bg-upload-modal input,#gal-bg-upload-modal textarea,#gal-bg-upload-modal select,#gal-batch-bg-upload-modal input,#gal-batch-bg-upload-modal textarea,#gal-batch-bg-upload-modal select{color:#1f2937!important;background:#fff!important;opacity:1!important}#gal-bg-upload-modal input::placeholder,#gal-bg-upload-modal textarea::placeholder,#gal-batch-bg-upload-modal input::placeholder,#gal-batch-bg-upload-modal textarea::placeholder{color:#9ca3af!important;opacity:1!important}#gal-bg-upload-modal button:not(:disabled),#gal-batch-bg-upload-modal button:not(:disabled){opacity:1!important}#gal-bg-upload-modal .gal-action-btn.primary:not(:disabled),#gal-batch-bg-upload-modal .gal-action-btn.primary:not(:disabled){color:#fff!important}#gal-bg-upload-modal button:disabled,#gal-batch-bg-upload-modal button:disabled{opacity:.55!important;color:#6b7280!important}#gal-bg-upload-modal #gal-bg-close-x,#gal-batch-bg-upload-modal #gal-batch-bg-close-x{color:#4b5563!important}#gal-unified-panel .gal-l1-tab-header{background:linear-gradient(135deg,#00000040,#0000008c),var(--SmartThemeBotMesBlurTintColor, #1a1a2e)!important}#gal-unified-panel .gal-l1-tab-btn{color:#ffffffd1!important}#gal-unified-panel .gal-l1-tab-btn i{color:currentColor!important;opacity:1!important}#gal-unified-panel .gal-l1-tab-btn:hover{color:#fffffff2!important}#gal-unified-panel .gal-l1-tab-btn.active{color:var(--gal-accent)!important}@media screen and (max-width: 48rem){.gal-sprite-toggle,.gal-status-popup-trigger{right:.375rem!important;transform:scale(max(var(--ui-scale),.88))!important;transform-origin:top right!important;z-index:91!important}.gal-sprite-toggle{top:-.9rem!important;width:2rem!important;height:2rem!important}.gal-location-popup-trigger{top:1.25rem!important;width:2rem!important;height:2rem!important}.gal-time-popup-trigger{top:3.55rem!important;width:2rem!important;height:2rem!important}.gal-status-popup-icon{font-size:.95rem!important}}@media screen and (max-width: 48rem){.gal-dialog-topbar{display:flex!important;position:absolute;left:0;right:0;bottom:calc(100% + .15rem);justify-content:flex-end;align-items:center;gap:.45rem;z-index:36;pointer-events:none}.gal-dialog-quick-actions{display:flex!important;align-items:center;gap:.3rem;flex:0 0 auto;pointer-events:auto}.gal-dialog-topbar .gal-sprite-toggle,.gal-dialog-topbar .gal-status-popup-trigger{position:static!important;inset:auto!important;transform:none!important;width:1.55rem!important;height:1.55rem!important;flex:0 0 auto;z-index:auto!important;box-shadow:.125rem .125rem 0 var(--gp-shadow, rgba(0, 0, 0, .2))}.gal-dialog-topbar .gal-eye-icon,.gal-dialog-topbar .gal-status-popup-icon{font-size:.8rem!important}.gal-dialog-topbar .gal-interaction-bar{position:static!important;inset:auto!important;transform:none!important;flex:0 1 auto;gap:.4rem!important;z-index:auto!important;pointer-events:auto}.gal-dialog-topbar .gal-interaction-bar .gal-action-btn{padding:.3rem .6rem!important;font-size:.82rem!important}}@media screen and (max-width: 22.5rem){.gal-dialog-topbar .gal-interaction-bar .gal-action-btn span{display:none!important}.gal-dialog-topbar .gal-interaction-bar .gal-action-btn{padding:.3rem .5rem!important}}#gal-global-overlay .gal-special-cg-overlay{position:absolute;inset:0;z-index:70;display:none;align-items:center;justify-content:center;background:#06080cd1;backdrop-filter:blur(2px)}#gal-global-overlay .gal-special-cg-overlay.active{display:flex!important}#gal-global-overlay .gal-special-cg-overlay-image{width:min(92%,72rem);max-height:88%;object-fit:contain;border-radius:.5rem;box-shadow:0 .75rem 2.5rem #00000073;border:.0625rem solid rgba(255,255,255,.2)}#gal-global-overlay .gal-special-cg-overlay-close{position:absolute;top:.875rem;right:.875rem;width:2.25rem;height:2.25rem;border:.0625rem solid rgba(255,255,255,.25);border-radius:999px;background:#0c1018b8;color:#f5f7fa;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}#gal-global-overlay .gal-special-cg-overlay-close:hover{background:#161c28e6}#gal-unified-panel .gal-special-cg-card,#gal-unified-panel .gal-special-cg-rules-panel{background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border-color:var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important}#gal-unified-panel .gal-special-cg-name,#gal-unified-panel .gal-special-cg-id,#gal-unified-panel .gal-special-cg-rules-hint,#gal-unified-panel .gal-special-cg-rules-header>span,#gal-unified-panel .gal-special-cg-master-switch,#gal-unified-panel .gal-special-cg-rule-enabled-wrap,#gal-unified-panel .gal-special-cg-empty-hint{color:var(--SmartThemeBodyColor, #f5f7fa)!important}#gal-unified-panel .gal-special-cg-id{opacity:.86}#gal-unified-panel .gal-special-cg-rules-hint code{color:var(--SmartThemeEmColor, #9ac7ff)!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text],#gal-unified-panel .gal-special-cg-rule-row input[type=number],#gal-unified-panel .gal-special-cg-rule-row textarea,#gal-unified-panel .gal-special-cg-rule-row select,#gal-special-cg-upload-modal input[type=text],#gal-special-cg-upload-modal input[type=number],#gal-special-cg-upload-modal textarea,#gal-special-cg-upload-modal select,#gal-batch-special-cg-upload-modal input[type=text],#gal-batch-special-cg-upload-modal input[type=number],#gal-batch-special-cg-upload-modal textarea,#gal-batch-special-cg-upload-modal select{color:var(--SmartThemeBodyColor, #f5f7fa)!important;background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text]::placeholder,#gal-unified-panel .gal-special-cg-rule-row input[type=number]::placeholder,#gal-unified-panel .gal-special-cg-rule-row textarea::placeholder,#gal-special-cg-upload-modal input[type=text]::placeholder,#gal-special-cg-upload-modal input[type=number]::placeholder,#gal-special-cg-upload-modal textarea::placeholder,#gal-batch-special-cg-upload-modal input[type=text]::placeholder,#gal-batch-special-cg-upload-modal input[type=number]::placeholder,#gal-batch-special-cg-upload-modal textarea::placeholder{color:var(--SmartThemeEmColor, #9ac7ff)!important;opacity:.82!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text]:focus,#gal-unified-panel .gal-special-cg-rule-row input[type=number]:focus,#gal-unified-panel .gal-special-cg-rule-row textarea:focus,#gal-unified-panel .gal-special-cg-rule-row select:focus,#gal-special-cg-upload-modal input[type=text]:focus,#gal-special-cg-upload-modal input[type=number]:focus,#gal-special-cg-upload-modal textarea:focus,#gal-special-cg-upload-modal select:focus,#gal-batch-special-cg-upload-modal input[type=text]:focus,#gal-batch-special-cg-upload-modal input[type=number]:focus,#gal-batch-special-cg-upload-modal textarea:focus,#gal-batch-special-cg-upload-modal select:focus{outline:none!important;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 .125rem #9ac7ff59!important}#gal-timeline-modal{z-index:var(--gal-z-modal-critical, 2147483000)!important;padding:1rem!important;align-items:stretch!important;justify-content:stretch!important;background:#07090eb8!important;backdrop-filter:blur(10px)}#gal-timeline-modal .gal-timeline-shell{width:min(96vw,92rem);height:min(92vh,56rem);margin:auto;display:flex;flex-direction:column;overflow:hidden;border-radius:1rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:linear-gradient(180deg,rgba(25,30,40,.96) 0%,var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92)) 100%);box-shadow:0 1rem 3rem #00000073;color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-header,#gal-timeline-modal .gal-timeline-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.9rem 1rem;border-bottom:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18))}#gal-timeline-modal .gal-timeline-title,#gal-timeline-modal .gal-timeline-header-actions,#gal-timeline-modal .gal-timeline-search-wrap,#gal-timeline-modal .gal-timeline-drawer-title-row,#gal-timeline-modal .gal-timeline-drawer-actions{display:flex;align-items:center;gap:.65rem}#gal-timeline-modal .gal-timeline-title{font-size:1.05rem;font-weight:700;color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-header-actions{margin-left:auto}#gal-timeline-modal .gal-timeline-header-btn,#gal-timeline-modal .gal-timeline-close,#gal-timeline-modal .gal-timeline-action-btn,#gal-timeline-modal .gal-timeline-session-btn{border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#ffffff0f;color:var(--SmartThemeBodyColor, #f5f7fa);border-radius:.75rem;cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .18s ease,box-shadow .18s ease}#gal-timeline-modal .gal-timeline-header-btn,#gal-timeline-modal .gal-timeline-action-btn{min-height:2.5rem;padding:.55rem .85rem;display:inline-flex;align-items:center;justify-content:center;gap:.45rem;font-size:.92rem;font-weight:600}#gal-timeline-modal .gal-timeline-close{width:2.5rem;height:2.5rem;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}#gal-timeline-modal .gal-timeline-header-btn:hover,#gal-timeline-modal .gal-timeline-close:hover,#gal-timeline-modal .gal-timeline-action-btn:hover,#gal-timeline-modal .gal-timeline-session-btn:hover{background:#9ac7ff24;border-color:var(--SmartThemeEmColor, #9ac7ff);transform:translateY(-.0625rem)}#gal-timeline-modal .gal-timeline-header-btn:focus,#gal-timeline-modal .gal-timeline-close:focus,#gal-timeline-modal .gal-timeline-action-btn:focus,#gal-timeline-modal .gal-timeline-session-btn:focus,#gal-timeline-modal .gal-timeline-search-input:focus{outline:none;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 .125rem #9ac7ff59}#gal-timeline-modal .gal-timeline-action-btn.primary{background:linear-gradient(135deg,#4997ffeb,#2f61ffeb);border-color:#c6deffb3;color:#fff}#gal-timeline-modal .gal-timeline-toolbar{gap:1rem}#gal-timeline-modal .gal-timeline-search-wrap{flex:1 1 auto;min-width:0;padding:0 .85rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#0a0e158a}#gal-timeline-modal .gal-timeline-search-wrap>i,#gal-timeline-modal .gal-timeline-status,#gal-timeline-modal .gal-timeline-preview-label,#gal-timeline-modal .gal-timeline-session-meta,#gal-timeline-modal .gal-timeline-drawer-hint,#gal-timeline-modal .gal-timeline-drawer-empty{color:var(--SmartThemeEmColor, #9ac7ff)}#gal-timeline-modal .gal-timeline-zoom-wrap{flex:0 0 auto;display:flex;align-items:center;gap:.55rem;min-width:18rem;padding:.4rem .65rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#0a0e158a}#gal-timeline-modal .gal-timeline-zoom-btn,#gal-timeline-modal .gal-timeline-zoom-value{flex:0 0 auto;min-width:2.25rem;height:2.25rem;border-radius:.7rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#ffffff0f;color:var(--SmartThemeBodyColor, #f5f7fa);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}#gal-timeline-modal .gal-timeline-zoom-value{min-width:4.3rem;padding:0 .7rem;font-weight:600}#gal-timeline-modal .gal-timeline-zoom-btn:hover,#gal-timeline-modal .gal-timeline-zoom-value:hover{background:#9ac7ff24;border-color:var(--SmartThemeEmColor, #9ac7ff)}#gal-timeline-modal .gal-timeline-zoom-btn:focus,#gal-timeline-modal .gal-timeline-zoom-value:focus,#gal-timeline-modal .gal-timeline-zoom-range:focus{outline:none;border-color:var(--SmartThemeEmColor, #9ac7ff);box-shadow:0 0 0 .125rem #9ac7ff59}#gal-timeline-modal .gal-timeline-zoom-range{flex:1 1 auto;min-width:8rem;accent-color:var(--SmartThemeEmColor, #9ac7ff);cursor:pointer}#gal-timeline-modal .gal-timeline-zoom-range::-webkit-slider-runnable-track{height:.35rem;border-radius:999px;background:linear-gradient(90deg,#9ac7ffe6,#4a6fffe6)}#gal-timeline-modal .gal-timeline-zoom-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:1rem;height:1rem;margin-top:-.325rem;border-radius:50%;border:.125rem solid rgba(255,255,255,.9);background:var(--SmartThemeBodyColor, #f5f7fa);box-shadow:0 .125rem .5rem #00000059}#gal-timeline-modal .gal-timeline-zoom-range::-moz-range-track{height:.35rem;border:none;border-radius:999px;background:linear-gradient(90deg,#9ac7ffe6,#4a6fffe6)}#gal-timeline-modal .gal-timeline-zoom-range::-moz-range-thumb{width:1rem;height:1rem;border:.125rem solid rgba(255,255,255,.9);border-radius:50%;background:var(--SmartThemeBodyColor, #f5f7fa);box-shadow:0 .125rem .5rem #00000059}#gal-timeline-modal .gal-timeline-search-input{width:100%;min-width:0;border:none!important;background:transparent!important;color:var(--SmartThemeBodyColor, #f5f7fa)!important;padding:.78rem 0!important;font-size:.95rem!important}#gal-timeline-modal .gal-timeline-search-input::placeholder{color:var(--SmartThemeEmColor, #9ac7ff)!important;opacity:.82!important}#gal-timeline-modal .gal-timeline-status{flex:0 0 auto;font-size:.85rem;white-space:nowrap}#gal-timeline-modal .gal-timeline-body{min-height:0;flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.9fr) minmax(18rem,.95fr)}#gal-timeline-modal .gal-timeline-graph-panel,#gal-timeline-modal .gal-timeline-drawer{min-height:0}#gal-timeline-modal .gal-timeline-graph-panel{position:relative;border-right:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18));background:radial-gradient(circle at top,#6084bc33,#0b0f16f5 62%)}#gal-timeline-modal #gal-timeline-graph,#gal-timeline-modal #gal-timeline-empty{width:100%;height:100%}#gal-timeline-modal #gal-timeline-empty{display:flex;align-items:center;justify-content:center;padding:2rem}#gal-timeline-modal .gal-timeline-empty-inner,#gal-timeline-modal .gal-timeline-drawer-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.65rem;text-align:center}#gal-timeline-modal .gal-timeline-drawer{overflow:auto;padding:1rem;background:#0b0f16ad}#gal-timeline-modal .gal-timeline-drawer-header,#gal-timeline-modal .gal-timeline-drawer-body{display:flex;flex-direction:column;gap:.85rem}#gal-timeline-modal .gal-timeline-drawer-title-row{justify-content:space-between;flex-wrap:wrap}#gal-timeline-modal .gal-timeline-node-type,#gal-timeline-modal .gal-timeline-chip{display:inline-flex;align-items:center;min-height:1.8rem;padding:.2rem .6rem;border-radius:999px;border:.0625rem solid rgba(154,199,255,.3);background:#9ac7ff1f;color:var(--SmartThemeBodyColor, #f5f7fa);font-size:.8rem}#gal-timeline-modal .gal-timeline-chip.checkpoint{border-color:#ffd16666;background:#ffd1661f}#gal-timeline-modal .gal-timeline-node-depth,#gal-timeline-modal .gal-timeline-node-label,#gal-timeline-modal .gal-timeline-preview,#gal-timeline-modal .gal-timeline-session-file{color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-node-label{font-size:1rem;font-weight:700;line-height:1.45}#gal-timeline-modal .gal-timeline-checkpoints{display:flex;flex-wrap:wrap;gap:.5rem}#gal-timeline-modal .gal-timeline-preview{padding:.9rem 1rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .22));background:#ffffff0a;line-height:1.6;white-space:pre-wrap;word-break:break-word}#gal-timeline-modal .gal-timeline-session-list{display:flex;flex-direction:column;gap:.55rem}#gal-timeline-modal .gal-timeline-session-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.75rem;text-align:left;padding:.7rem .85rem}#gal-timeline-modal .gal-timeline-session-btn.active{border-color:var(--SmartThemeEmColor, #9ac7ff);background:#9ac7ff29}#gal-timeline-modal .gal-timeline-session-btn.is-current{box-shadow:inset 0 0 0 .0625rem #ff5d9e66}#gal-timeline-modal .gal-timeline-session-file{flex:1 1 auto;min-width:0;font-weight:600;word-break:break-all}#gal-timeline-modal .gal-timeline-session-meta{flex:0 0 auto;font-size:.8rem}#gal-timeline-modal .gal-timeline-drawer-actions{flex-wrap:wrap}#gal-timeline-modal .gal-timeline-drawer-actions>button{flex:1 1 10rem}@media (max-width: 960px){#gal-timeline-modal{padding:0!important}#gal-timeline-modal .gal-timeline-shell{width:100vw;height:100vh;border-radius:0}#gal-timeline-modal .gal-timeline-toolbar,#gal-timeline-modal .gal-timeline-header{flex-wrap:wrap}#gal-timeline-modal .gal-timeline-zoom-wrap{width:100%;min-width:0}#gal-timeline-modal .gal-timeline-status{width:100%;white-space:normal}#gal-timeline-modal .gal-timeline-body{grid-template-columns:1fr;grid-template-rows:minmax(18rem,1fr) auto}#gal-timeline-modal .gal-timeline-graph-panel{min-height:18rem;border-right:none;border-bottom:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18))}}#gal-global-overlay.skin-default-dark .gal-footer-btn{background:var(--gp-btn-bg)!important;color:var(--gp-text)!important;border-color:var(--gp-ink)!important}#gal-global-overlay.skin-default-dark .gal-footer-btn:hover{background:var(--gp-ink)!important;color:var(--gp-surface)!important}#gal-global-overlay.skin-default-dark .gal-action-btn,#gal-global-overlay.skin-default-dark .gal-action-btn.btn-reroll{background:var(--gp-btn-bg);color:var(--gp-text);border-color:var(--gp-ink)}#gal-global-overlay.skin-default-dark .gal-action-btn:hover,#gal-global-overlay.skin-default-dark .gal-action-btn.btn-reroll:hover{background:var(--gp-ink);color:var(--gp-surface)}#gal-global-overlay.skin-default-dark .gal-location-bar,#gal-global-overlay.skin-default-dark .gal-time-bar{background:var(--gp-btn-bg);color:var(--gp-text)}#gal-global-overlay.skin-default-dark .gal-fullscreen-btn{background:var(--gp-btn-bg)!important;color:var(--gp-text)!important;border-color:var(--gp-ink)!important}#gal-layer-choices.skin-default-dark{background:#12141bb8!important}#gal-layer-choices.skin-default-dark .gal-choice-card{background:var(--gp-surface, #232733);color:var(--gp-text, #e8ecf4);border-color:var(--gp-ink, #e8ecf4);box-shadow:.375rem .375rem #00000080}#gal-layer-choices.skin-default-dark .gal-choices-title span{color:#e8ecf4}.gal-history-modal.skin-default-dark .gal-history-panel{background:#232733;border-color:#00d2ff99}.gal-history-modal.skin-default-dark .gal-history-content,.gal-history-modal.skin-default-dark .gal-history-title{color:#e8ecf4}#gal-global-overlay.skin-default-dark .gal-generating-indicator{background:#232733f5;color:#e8ecf4}#gal-global-overlay.skin-default-dark .gal-mobile-menu{background:#232733f2;border-color:#e8ecf4}#gal-global-overlay.skin-default-dark .gal-mobile-menu .gal-menu-btn{background:var(--gp-btn-bg);color:var(--gp-text);border-color:var(--gp-ink)}
+  var BASE_INTERFACE_CSS = `:root{--gal-z-overlay: 10000;--gal-z-dropdown: 1000;--gal-z-modal: 100001;--gal-z-modal-critical: 100002;--gal-z-toast: 100010;--gal-accent: #00d2ff;--gal-dark: #2b2e38;--gal-white: #ffffff;--gal-accent-sub: #ff0055;--gal-font-eng: "Barlow", sans-serif;--gal-accent-strong: #00a8cc;--gal-accent-soft: rgba(0, 210, 255, .1);--gal-accent-border: rgba(0, 210, 255, .35);--gal-panel-bg: #ffffff;--gal-panel-bg-sub: #f6f8fa;--gal-border: #e3e7eb;--gal-text: #2b2e38;--gal-text-2: #5c6470;--gal-text-3: #8a929c;--gal-danger: #d93a4a;--gal-shadow-sm: 0 1px 3px rgba(20, 30, 40, .08)}#gal-global-overlay{--gp-accent: #00c4ef;--gp-accent-2: #ff2e63;--gp-ink: #22252e;--gp-surface: #ffffff;--gp-stage-a: #eef1f6;--gp-stage-b: #dfe5ee;--gp-grid: rgba(34, 37, 46, .05);--gp-blockline: rgba(34, 37, 46, .07);--gp-block-a: rgba(0, 196, 239, .08);--gp-block-b: rgba(255, 46, 99, .05);--gp-text: #22252e;--gp-text-dim: rgba(34, 37, 46, .55);--gp-shadow: rgba(34, 37, 46, .16);--gp-badge-bg: #22252e;--gp-badge-fg: #ffffff;--gp-btn-bg: rgba(255, 255, 255, .92)}#gal-global-overlay.skin-default-dark{--gp-accent: #00d2ff;--gp-accent-2: #ff3d6e;--gp-ink: #e8ecf4;--gp-surface: #232733;--gp-stage-a: #1a1d26;--gp-stage-b: #12141b;--gp-grid: rgba(232, 236, 244, .045);--gp-blockline: rgba(232, 236, 244, .06);--gp-block-a: rgba(0, 210, 255, .07);--gp-block-b: rgba(255, 61, 110, .05);--gp-text: #e8ecf4;--gp-text-dim: rgba(232, 236, 244, .55);--gp-shadow: rgba(0, 0, 0, .5);--gp-badge-bg: #e8ecf4;--gp-badge-fg: #16181f;--gp-btn-bg: rgba(35, 39, 51, .92)}#gal-global-overlay,#gal-layer-choices,.gal-history-modal{--gal-color-accent: var(--gp-accent, var(--gal-accent));--gal-color-accent-2: var(--gp-accent-2, var(--gal-accent-sub));--gal-color-surface: var(--gp-surface, #ffffff);--gal-color-on-surface: var(--gp-text, var(--gal-dark));--gal-color-on-surface-dim: var(--gp-text-dim, rgba(34, 37, 46, .55));--gal-color-line: var(--gp-ink, var(--gal-dark));--gal-color-on-accent: #101218;--gal-color-shadow: var(--gp-shadow, rgba(0, 0, 0, .18));--gal-color-stage: #07080b;--gal-font-display: "Barlow", var(--gal-dialog-font-family, "Noto Sans SC", sans-serif);--gal-font-body: var(--gal-dialog-font-family, "Noto Sans SC", sans-serif);--gal-font-latin: "Barlow", sans-serif;--gal-radius: 0px}.gal-z-overlay{z-index:var(--gal-z-overlay)!important}.gal-z-dropdown{z-index:var(--gal-z-dropdown)!important}.gal-z-toast{z-index:var(--gal-z-toast)!important}.gal-z-modal{z-index:var(--gal-z-modal)!important}.gal-z-critical{z-index:var(--gal-z-modal-critical)!important}#gal-global-overlay{position:relative!important;width:100%!important;min-height:31.25rem;height:70vh;max-height:50rem;display:none;background:transparent!important;font-family:Noto Sans SC,sans-serif;border-radius:.75rem;overflow:visible;margin:.625rem 0;contain:layout;-webkit-text-size-adjust:100%;text-size-adjust:100%}#gal-global-overlay{--ui-scale: 1;--ui-scale-base: 1;--font-scale: 1;--gal-dialog-scale-user: 1;--gal-toolbar-scale-user: 1}#gal-global-overlay .gal-dialog-layer{--ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-dialog-scale-user, 1))}#gal-global-overlay .gal-bottom-toolbar{--ui-scale: calc(var(--ui-scale-base, 1) * var(--gal-toolbar-scale-user, 1))}#gal-global-overlay.active{display:block!important}.gal-draggable-handle{cursor:move;user-select:none}#gal-global-overlay.fullscreen{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-height:none!important;min-height:100vh!important;z-index:var(--gal-z-overlay)!important;border-radius:0!important;margin:0!important;box-shadow:none!important}#chat>.mes.gal-hidden{display:none!important}.gal-embedded-viewer{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#000000b3;backdrop-filter:blur(.375rem)}.gal-embedded-viewer-body{position:relative;max-width:95vw;max-height:90vh;overflow:auto;border-radius:.75rem;box-shadow:0 .5rem 2rem #00000080}.gal-embedded-viewer-close{position:fixed;top:.75rem;right:.75rem;z-index:100000;display:flex;align-items:center;gap:.375rem;padding:.5rem 1rem;border-radius:.5rem;border:.0625rem solid rgba(255,255,255,.2);background:linear-gradient(135deg,#1e1e28f2,#323246f2);backdrop-filter:blur(.625rem);color:#fff;font-size:.85rem;cursor:pointer;box-shadow:0 .25rem 1rem #0006;transition:opacity .2s}.gal-embedded-viewer-close:hover{opacity:.85}@media screen and (max-width: 48rem){.gal-embedded-viewer{align-items:flex-start!important;padding-top:3rem!important;padding-top:calc(3rem + env(safe-area-inset-top))!important}.gal-embedded-viewer-body{max-height:calc(100vh - 4rem)!important;max-height:calc(100dvh - 4rem - env(safe-area-inset-top))!important;max-width:100vw!important;border-radius:0!important}}.gal-fullscreen-btn{position:absolute;top:.938rem;right:.938rem;z-index:100;background:#2b2e38e6;color:var(--gal-accent);border:.125rem solid var(--gal-accent);padding:.625rem 1.125rem;font-size:.9rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:all .2s;font-family:Barlow,sans-serif;border-radius:.25rem;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-fullscreen-btn:hover{background:var(--gal-accent);color:var(--gal-dark)}.gal-fullscreen-btn i{font-size:1rem}.gal-status-bar-container{position:absolute;top:.938rem;right:7.5rem;z-index:100;display:flex;gap:.625rem;align-items:center;transform:scale(max(var(--ui-scale),.85));transform-origin:top right}.gal-location-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(0,210,255,.5);white-space:nowrap;max-width:21.875rem;overflow:hidden;display:flex;align-items:center}.gal-location-bar i{color:var(--gal-accent);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-location-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-time-bar{background:#2b2e38e6;color:#fff;padding:0 .938rem;height:1.875rem;line-height:1.875rem;font-size:.85rem;font-weight:500;border-radius:.25rem;border:1px solid rgba(255,0,85,.5);white-space:nowrap;max-width:16.25rem;overflow:hidden;display:flex;align-items:center}.gal-time-bar i{color:var(--gal-accent-sub);margin-right:.5rem;font-size:.9rem;flex-shrink:0}.gal-time-text{white-space:nowrap;transform-origin:left center;display:inline-block}.gal-status-bar-container .auto-shrink{display:inline-block;transform-origin:left center}#gal-global-overlay.fullscreen .gal-status-bar-container{right:8.125rem}.gal-bgm-widget{position:absolute;top:.938rem;left:.938rem;z-index:100;background:#2b2e38d9;backdrop-filter:blur(.313rem);padding:.5rem .938rem;border-radius:1.25rem;color:#fff;display:flex;align-items:center;gap:.625rem;font-size:.85rem;box-shadow:0 .25rem .625rem #0003;transition:all .3s ease;border:1px solid rgba(255,255,255,.1);max-width:2.5rem;overflow:hidden;white-space:nowrap;cursor:pointer}.gal-bgm-widget:hover,.gal-bgm-widget.active{max-width:18.75rem;background:#2b2e38f2}.gal-bgm-icon{color:var(--gal-accent);animation:galSpin 4s linear infinite;animation-play-state:paused;font-size:1.1rem;min-width:1.25rem;text-align:center}.gal-bgm-widget.playing .gal-bgm-icon{animation-play-state:running}@keyframes galSpin{to{transform:rotate(360deg)}}.gal-bgm-info{display:flex;flex-direction:column;line-height:1.2;overflow:hidden;margin-right:.313rem}.gal-bgm-title{font-weight:700;font-size:.8rem;color:var(--gal-accent)}.gal-bgm-ctrl{display:flex;align-items:center;gap:.5rem}.gal-bgm-btn{background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem;padding:0;width:1.25rem}.gal-bgm-btn:hover{color:var(--gal-accent)}.gal-bgm-slider{width:3.75rem;height:.25rem;-webkit-appearance:none;background:#ffffff4d;border-radius:.125rem;outline:none}.gal-bgm-slider::-webkit-slider-thumb{-webkit-appearance:none;width:.625rem;height:.625rem;background:#fff;border-radius:50%;cursor:pointer}.gal-game-container{position:relative;width:100%;height:100%;background:transparent;font-family:Noto Sans SC,sans-serif;overflow:hidden;border-radius:.75rem;box-shadow:0 .25rem 1.25rem #0000001a;box-sizing:border-box}#gal-global-overlay.fullscreen .gal-game-container{border-radius:0;box-shadow:none;padding:0}.gal-layer-bg{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;background:#f0f2f5;overflow:hidden}.gal-bg-layer{position:absolute;inset:0;background-repeat:no-repeat;background-image:var(--gal-bg-url, none);background-size:var(--gal-bg-fit, cover);background-position:var(--gal-bg-pos, center);opacity:1;transform:scale(1);filter:blur(0) brightness(1) saturate(1);transition:opacity .9s cubic-bezier(.22,1,.36,1),transform 1.1s cubic-bezier(.22,1,.36,1),filter .9s cubic-bezier(.22,1,.36,1);will-change:opacity,transform,filter}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer{background-image:none}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:before,#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:after{content:"";position:absolute;background-image:var(--gal-bg-url, none);background-repeat:no-repeat;pointer-events:none}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:before{inset:0;background-size:cover;background-position:center;filter:blur(var(--gal-bg-backdrop-blur, 2rem)) brightness(.5) saturate(1.05);transform:scale(1.15)}#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:after{top:0;left:0;right:0;bottom:var(--gal-bg-safe-inset, 0px);background-size:contain;background-position:center;transition:bottom .35s cubic-bezier(.22,1,.36,1)}@media (prefers-reduced-motion: reduce){#gal-global-overlay.gal-bg-avoid-dialog .gal-bg-layer:after{transition:none}}.gal-layer-bg.bg-transitioning .gal-bg-base{transform:scale(.985);filter:blur(4px) brightness(.85) saturate(.9)}.gal-bg-front{opacity:0;transform:scale(1.08);filter:blur(16px) brightness(1.15) saturate(1.15)}.gal-bg-front.is-active{opacity:1;transform:scale(1);filter:blur(0) brightness(1) saturate(1)}.gal-layer-bg:after{content:"";position:absolute;inset:-20%;z-index:2;pointer-events:none;opacity:0;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.18) 48%,rgba(255,255,255,.35) 50%,rgba(255,255,255,.18) 52%,transparent 60%);transform:translate(-60%) skew(-8deg)}.gal-layer-bg.bg-transitioning:after{opacity:1;transition:none;animation:gal-bg-sweep .9s cubic-bezier(.4,0,.2,1) forwards}@keyframes gal-bg-sweep{0%{transform:translate(-60%) skew(-8deg);opacity:1}70%{opacity:.9}to{transform:translate(60%) skew(-8deg);opacity:0}}.gal-layer-bg.generating-bg .gal-bg-layer{opacity:0!important}@media (prefers-reduced-motion: reduce){.gal-bg-layer{transition:opacity .45s ease!important;transform:none!important;filter:none!important}.gal-layer-bg:after,.gal-layer-bg.bg-transitioning:after{animation:none!important;opacity:0!important}.gal-bg-front{opacity:0}.gal-bg-front.is-active{opacity:1}}@property --gal-wipe-p{syntax: "<percentage>"; inherits: false; initial-value: -20%;}.gal-layer-bg[data-bg-tr=wipe] .gal-bg-front{opacity:1;transform:none;filter:none;--gal-wipe-p: -20%;-webkit-mask-image:linear-gradient(110deg,#000 calc(var(--gal-wipe-p) - 7%),transparent calc(var(--gal-wipe-p) + 7%));mask-image:linear-gradient(110deg,#000 calc(var(--gal-wipe-p) - 7%),transparent calc(var(--gal-wipe-p) + 7%));transition:--gal-wipe-p 1s cubic-bezier(.65,0,.35,1)}.gal-layer-bg[data-bg-tr=wipe] .gal-bg-front.is-active{--gal-wipe-p: 125%}.gal-layer-bg[data-bg-tr=wipe].bg-transitioning:after{background:linear-gradient(110deg,transparent 46%,rgba(150,236,255,.5) 49%,#fff 50%,rgba(255,150,196,.45) 51%,transparent 54%);mix-blend-mode:screen;animation:gal-bg-wipe-edge 1s cubic-bezier(.65,0,.35,1) forwards}@keyframes gal-bg-wipe-edge{0%{transform:translate(-75%);opacity:1}90%{opacity:1}to{transform:translate(75%);opacity:0}}.gal-layer-bg[data-bg-tr=wipe].bg-transitioning .gal-bg-base,.gal-layer-bg[data-bg-tr=iris].bg-transitioning .gal-bg-base,.gal-layer-bg[data-bg-tr=strips] .gal-bg-base,.gal-layer-bg[data-bg-tr=dissolve] .gal-bg-base{transform:none;filter:none}.gal-layer-bg[data-bg-tr=iris] .gal-bg-front{opacity:1;transform:none;filter:none;clip-path:circle(0% at var(--gal-iris-x, 50%) 46%);transition:clip-path 1.05s cubic-bezier(.7,0,.2,1)}.gal-layer-bg[data-bg-tr=iris] .gal-bg-front.is-active{clip-path:circle(120% at var(--gal-iris-x, 50%) 46%)}.gal-layer-bg[data-bg-tr=iris].bg-transitioning:after,.gal-layer-bg[data-bg-tr=strips]:after,.gal-layer-bg[data-bg-tr=dissolve]:after{animation:none;opacity:0}.gal-bg-strips{position:absolute;inset:0;z-index:1;pointer-events:none}.gal-bg-strip{position:absolute;inset:0;background-image:var(--gal-bg-url, none);background-repeat:no-repeat;background-size:var(--gal-bg-fit, cover);background-position:var(--gal-bg-pos, center);transform:translate(var(--gal-strip-from, -115%));transition:transform .62s cubic-bezier(.8,0,.15,1) var(--gal-strip-delay, 0ms);will-change:transform}.gal-bg-strips.is-active .gal-bg-strip{transform:translate(0)}.gal-bg-dissolve{position:absolute;inset:0;z-index:1;width:100%;height:100%;pointer-events:none}.gal-layer-bg[data-bg-tr=flash] .gal-bg-front{opacity:0;transform:scale(1.18);filter:blur(18px) brightness(1.8);transition:opacity .35s ease,transform 1.4s cubic-bezier(.22,1,.36,1),filter 1.1s cubic-bezier(.22,1,.36,1)}.gal-layer-bg[data-bg-tr=flash] .gal-bg-front.is-active{opacity:1;transform:scale(1);filter:none}.gal-layer-bg[data-bg-tr=flash]:after{animation:none!important;opacity:0!important}.gal-stage-flash,.gal-stage-curtain{position:absolute;inset:0;z-index:50;pointer-events:none}.gal-stage-flash{background:var(--gal-flash-color, #fff);opacity:0}.gal-stage-flash.is-active{animation:gal-stage-flash .65s cubic-bezier(.2,0,.2,1) forwards}.gal-stage-flash.is-bolt.is-active{animation:gal-stage-bolt .7s linear forwards}.gal-stage-flash.is-thunder.is-active{animation:gal-stage-thunder .6s linear forwards}@keyframes gal-stage-thunder{0%{opacity:.24}10%{opacity:.05}18%{opacity:.2}40%,to{opacity:0}}@keyframes gal-stage-flash{0%{opacity:.92}to{opacity:0}}@keyframes gal-stage-bolt{0%{opacity:.85}8%{opacity:.1}14%{opacity:.7}30%,to{opacity:0}}.gal-stage-curtain{display:grid;place-items:center;background:var(--gal-color-stage, #07080b);opacity:0;transition:opacity .45s ease}.gal-stage-curtain.is-active{opacity:1}.gal-stage-curtain-card{text-align:center;opacity:0;transform:translateY(.5rem);transition:opacity .5s ease .15s,transform .7s cubic-bezier(.22,1,.36,1) .15s}.gal-stage-curtain.is-active.has-title .gal-stage-curtain-card{opacity:1;transform:none}.gal-stage-curtain-kicker{font:600 calc(.8rem * var(--ui-scale, 1)) / 1 var(--gal-font-latin, var(--gal-font-eng));letter-spacing:.5em;color:var(--gal-color-accent)}.gal-stage-curtain-title{margin:calc(.9rem * var(--ui-scale, 1)) 0;font:900 calc(2.6rem * var(--ui-scale, 1)) / 1.1 var(--gal-font-display, var(--gal-dialog-font-family, "Noto Sans SC", sans-serif));letter-spacing:.3em;color:#fff}.gal-stage-curtain-line{width:0;height:2px;margin:0 auto;background:linear-gradient(90deg,transparent,var(--gal-color-accent),var(--gal-color-accent-2),transparent);transition:width .9s cubic-bezier(.22,1,.36,1) .3s}.gal-stage-curtain.is-active.has-title .gal-stage-curtain-line{width:min(20rem,40%)}.gal-stage-banner{position:absolute;left:0;top:14%;z-index:45;display:flex;align-items:stretch;pointer-events:none;filter:drop-shadow(0 .6rem 1.6rem rgba(0,0,0,.45));transition:opacity .5s ease,transform .5s ease}.gal-stage-banner.is-leaving{opacity:0;transform:translate(-1.5rem)}.gal-stage-banner-tag{display:grid;place-items:center;padding:0 calc(1.1rem * var(--ui-scale, 1));background:var(--gal-color-accent-2);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.3);font:900 calc(.85rem * var(--ui-scale, 1)) / 1 var(--gal-font-latin, var(--gal-font-eng));letter-spacing:.2em;transform:translate(-110%)}.gal-stage-banner-body{position:relative;overflow:hidden;padding:calc(.7rem * var(--ui-scale, 1)) calc(2.8rem * var(--ui-scale, 1)) calc(.7rem * var(--ui-scale, 1)) calc(1.3rem * var(--ui-scale, 1));background:color-mix(in srgb,var(--gal-color-stage, #101218) 80%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;clip-path:polygon(0 0,100% 0,calc(100% - 1.2rem) 100%,0 100%);transform:translate(-120%)}.gal-stage-banner-body:after{content:"";position:absolute;top:0;bottom:0;left:-40%;width:30%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent)}.gal-stage-banner-sub{font:600 calc(.68rem * var(--ui-scale, 1)) / 1 var(--gal-font-latin, var(--gal-font-eng));letter-spacing:.3em;color:var(--gal-color-accent)}.gal-stage-banner-title{margin-top:.35em;font:900 calc(1.35rem * var(--ui-scale, 1)) / 1.2 var(--gal-font-display, var(--gal-dialog-font-family, "Noto Sans SC", sans-serif));letter-spacing:.12em;white-space:nowrap}.gal-stage-banner.is-active .gal-stage-banner-tag{animation:gal-banner-in .6s cubic-bezier(.22,1,.36,1) .55s forwards}.gal-stage-banner.is-active .gal-stage-banner-body{animation:gal-banner-in .7s cubic-bezier(.22,1,.36,1) .7s forwards}.gal-stage-banner.is-active .gal-stage-banner-body:after{animation:gal-banner-sheen 1s ease 1.5s forwards}@keyframes gal-banner-in{to{transform:translate(0)}}@keyframes gal-banner-sheen{to{left:130%}}#gal-global-overlay.gal-cam-on .gal-layer-bg{scale:1.05;will-change:translate,scale}#gal-global-overlay.gal-cam-drift .gal-layer-bg{animation:gal-cam-drift 38s ease-in-out infinite alternate}@keyframes gal-cam-drift{0%{scale:1.05}to{scale:1.1}}#gal-global-overlay.gal-cam-on .gal-layer-character{transform-origin:50% 100%;will-change:translate,scale}#gal-global-overlay.gal-cam-on .gal-layer-effect-bg,#gal-global-overlay.gal-cam-on .gal-layer-effect-fg{will-change:translate}#gal-global-overlay.gal-ambient-on .gal-layer-character{filter:url(#gal-ambient-tint) brightness(var(--gal-amb-bri, 1)) saturate(var(--gal-amb-sat, 1)) drop-shadow(var(--gal-rim-x, 0) 0 .45rem var(--gal-rim-color, transparent))}#gal-global-overlay.gal-ambient-on.gal-ambient-lite .gal-layer-character{filter:url(#gal-ambient-tint) brightness(var(--gal-amb-bri, 1)) saturate(var(--gal-amb-sat, 1))}@media (prefers-reduced-motion: reduce){.gal-layer-bg[data-bg-tr] .gal-bg-front,.gal-bg-strip,.gal-stage-curtain,.gal-stage-curtain-card{transition-duration:.01ms!important}.gal-stage-flash.is-active{animation:none!important}}.gal-game-content{position:relative;width:100%;height:100%;z-index:2}.gal-layer-effect-bg,.gal-layer-effect-fg{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden;pointer-events:none}.gal-layer-effect-bg{z-index:1}.gal-layer-effect-fg{z-index:12}.gal-layer-effect-bg .gal-pixi-effect-canvas,.gal-layer-effect-fg .gal-pixi-effect-canvas,.gal-layer-effect-bg canvas,.gal-layer-effect-fg canvas{width:100%!important;height:100%!important;display:block;pointer-events:none}.gal-layer-bg:before{content:"";position:absolute;top:0;left:0;width:100%;height:100%;background-image:repeating-linear-gradient(45deg,var(--gp-grid, rgba(34, 37, 46, .05)) 0 1px,transparent 1px 28px),repeating-linear-gradient(-45deg,var(--gp-grid, rgba(34, 37, 46, .05)) 0 1px,transparent 1px 28px),linear-gradient(112deg,transparent 0%,transparent 8%,var(--gp-block-a, rgba(0, 196, 239, .08)) 8%,var(--gp-block-a, rgba(0, 196, 239, .08)) 30%,transparent 30%),linear-gradient(112deg,transparent 0%,transparent 72%,var(--gp-block-b, rgba(255, 46, 99, .05)) 72%,var(--gp-block-b, rgba(255, 46, 99, .05)) 96%,transparent 96%),radial-gradient(120% 90% at 78% -10%,var(--gp-block-a, rgba(0, 196, 239, .08)) 0%,transparent 52%),linear-gradient(168deg,var(--gp-stage-a, #eef1f6) 0%,var(--gp-stage-b, #dfe5ee) 100%);pointer-events:none}.gal-layer-bg.has-bg:before{display:none}.gal-layer-bg.generating-bg{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)}@keyframes galGenGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}to{background-position:0% 50%}}.gal-layer-bg.generating-bg:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent .125rem,rgba(0,210,255,.03) .125rem,rgba(0,210,255,.03) .25rem);opacity:.15;pointer-events:none}@keyframes galGenScanline{0%{transform:translateY(-100%)}to{transform:translateY(100%)}}@keyframes galSpriteSlideInLeft{0%{transform:translate(-6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInRight{0%{transform:translate(6.25rem);opacity:0}to{transform:translate(0);opacity:1}}@keyframes galSpriteSlideInCenter{0%{transform:translateY(3.125rem);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes galSpriteSlideOutLeft{0%{transform:translate(0);opacity:1}to{transform:translate(-6.25rem);opacity:0}}@keyframes galSpriteSlideOutRight{0%{transform:translate(0);opacity:1}to{transform:translate(6.25rem);opacity:0}}@keyframes galSpriteBreathing{0%,to{transform:translateY(0)}50%{transform:translateY(-.188rem)}}@keyframes galSpriteShake{0%,to{transform:translate(0)}20%{transform:translate(-.313rem)}40%{transform:translate(.313rem)}60%{transform:translate(-.188rem)}80%{transform:translate(.188rem)}}@keyframes galSpriteBounce{0%{transform:scale(1)}30%{transform:scale(1.15)}50%{transform:scale(.95)}70%{transform:scale(1.05)}to{transform:scale(1)}}@keyframes galSpriteExpressionChange{0%{opacity:.7;transform:scale(.98)}to{opacity:1;transform:scale(1)}}.gal-layer-character{position:absolute;bottom:35%;left:0;width:100%;height:55%;z-index:5;display:flex;justify-content:center;align-items:flex-end;pointer-events:none;padding:0 3%;gap:2%}.gal-live2d-stage-canvas{z-index:4;pointer-events:none}.gal-live2d-position-guide{position:absolute;inset:0;pointer-events:none;z-index:6}.gal-live2d-position-guide-box{position:absolute;border:.125rem dashed rgba(0,210,255,.55);border-radius:.625rem;box-shadow:0 0 1rem #00d2ff47;background:#0000000f}.gal-live2d-position-guide-label{position:absolute;top:-1.25rem;left:0;font-size:.72rem;line-height:1;color:#77dfff;text-shadow:0 0 .375rem rgba(0,0,0,.5);white-space:nowrap}.gal-live2d-position-toolbar{position:fixed;left:50%;bottom:calc(1rem + env(safe-area-inset-bottom,0px));transform:translate(-50%);width:min(92vw,36rem);min-width:20rem;max-height:min(65vh,33.75rem);overflow-y:auto;padding:.9375rem 1.125rem;display:flex;flex-direction:column;gap:.6875rem;border-radius:.9375rem;border:.0625rem solid rgba(255,255,255,.16);color:#fff;background:linear-gradient(135deg,#1a1c26f7,#2a2e40f7);backdrop-filter:blur(.625rem);box-shadow:0 .5rem 1.75rem #00000075}.gal-live2d-position-row{display:flex;align-items:center;gap:.625rem}.gal-live2d-position-label{min-width:4.5rem;font-size:.85rem;color:#ffffffeb}.gal-live2d-position-slider{flex:1;cursor:pointer;accent-color:#00d2ff}.gal-live2d-position-value{min-width:2.875rem;text-align:right;font-size:.9rem;font-weight:600}.gal-live2d-position-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.25rem}.gal-live2d-position-btn{border:none;border-radius:.5rem;padding:.5rem .875rem;color:#fff;cursor:pointer;font-size:.85rem}.gal-live2d-position-btn-reset{background:#ffffff1f;border:.0625rem solid rgba(255,255,255,.2)}.gal-live2d-position-btn-cancel{background:#dc3545d1}.gal-live2d-position-btn-save{background:linear-gradient(135deg,#00d2ff,#3a7bd5);font-weight:600}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-live2d-position-toolbar{top:calc(.5rem + env(safe-area-inset-top,0px));bottom:auto;width:calc(100vw - 1rem);min-width:0;max-height:calc(72vh - env(safe-area-inset-top,0px));padding:.8125rem .8125rem .75rem;border-radius:.75rem}.gal-live2d-position-label{min-width:3.75rem;font-size:.8rem}.gal-live2d-position-value{min-width:2.5rem;font-size:.85rem}.gal-live2d-position-actions{flex-wrap:wrap;justify-content:stretch;margin-top:.125rem}.gal-live2d-position-btn{flex:1 1 calc(50% - .3125rem);min-height:2.25rem;font-size:.82rem;padding:.5rem .625rem}}.gal-char-slot{position:relative;flex:0 0 30%;max-width:30%;height:100%;container-type:size;display:flex;align-items:flex-end;justify-content:center;pointer-events:auto}.gal-char-slot.slot-left{order:1}.gal-char-slot.slot-center{order:2}.gal-char-slot.slot-right{order:3}.gal-char-container{position:relative;max-height:100%;--state-scale: 1;transform-origin:bottom center;max-width:100%;display:flex;align-items:flex-end;justify-content:center;filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,0,.4));transition:transform .4s cubic-bezier(.175,.885,.32,1.275),filter .3s ease,opacity .3s ease;pointer-events:auto;cursor:pointer;animation:galSpriteBreathing 4s ease-in-out infinite}.gal-char-container.entering-left{animation:galSpriteSlideInLeft .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-center{animation:galSpriteSlideInCenter .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.entering-right{animation:galSpriteSlideInRight .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-char-container.exiting-left{animation:galSpriteSlideOutLeft .4s ease-in forwards;pointer-events:none}.gal-char-container.exiting-right,.gal-char-container.exiting-center{animation:galSpriteSlideOutRight .4s ease-in forwards;pointer-events:none}.gal-char-container.expression-change{animation:galSpriteExpressionChange .3s ease-out}.gal-char-container.speaking{--state-scale: 1.05;z-index:10;filter:drop-shadow(0 .938rem 2.5rem rgba(0,0,0,.5));position:relative}.gal-char-container.silent{--state-scale: .95;filter:drop-shadow(0 .313rem .938rem rgba(0,0,0,.3));z-index:4}.gal-layer-character.dof-enabled .gal-char-container.silent{filter:drop-shadow(0 .313rem .938rem rgba(0,0,0,.3)) brightness(.75) saturate(.85) blur(var(--gal-dof-blur, 1px))}@keyframes speakingGlow{0%,to{filter:drop-shadow(0 0 .5rem rgba(255,215,0,.7)) drop-shadow(0 0 .938rem rgba(255,180,0,.5)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}50%{filter:drop-shadow(0 0 .938rem rgba(255,215,0,.9)) drop-shadow(0 0 1.875rem rgba(255,180,0,.7)) drop-shadow(0 .938rem 1.875rem rgba(0,0,0,.4))}}.gal-layer-character.glow-enabled .gal-char-container.speaking{animation:speakingGlow 2s ease-in-out infinite,galSpriteBreathing 4s ease-in-out infinite}@keyframes bubbleBounce{0%,to{transform:translateY(0) scale(1)}50%{transform:translateY(-.5rem) scale(1.1)}}.gal-layer-character.bubble-enabled .gal-char-container.speaking:before{content:"?";position:absolute;top:-.625rem;right:10%;font-size:2.5rem;z-index:100;animation:bubbleBounce 1s ease-in-out infinite;filter:drop-shadow(.125rem .125rem .25rem rgba(0,0,0,.5))}.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking:before{content:none}.gal-tts-cue{--cue-color: var(--gal-speaker-color, var(--th-accent, var(--gal-accent, #1d9bff)));position:absolute;left:0;top:0;z-index:36;display:none;align-items:center;gap:.32rem;height:1.75rem;padding:0 .62rem 0 .56rem;border:1px solid color-mix(in srgb,var(--cue-color) 38%,transparent);border-radius:999px;background:var(--th-chip-bg, rgba(255, 255, 255, .92));box-shadow:0 .4rem 1rem -.45rem #0006,inset 0 1px #ffffff73;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:var(--cue-color);font-size:.78rem;line-height:1;transform:translateY(-50%) scale(calc(var(--cue-scale, 1) * var(--gal-dialog-scale-user, 1)));transform-origin:left center;pointer-events:none;transition:border-color .3s ease,color .3s ease}#gal-global-overlay:has(.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking) .gal-name-badge:not(.gal-narrator-label)+.gal-tts-cue{display:inline-flex;animation:gal-tts-cue-in .42s cubic-bezier(.22,1,.36,1) both}#gal-global-overlay.gal-mode-styled .gal-tts-cue{display:none!important}.gal-tts-cue:after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none}.gal-tts-cue>i{color:inherit;font-size:1em}.gal-tts-cue-bars{display:inline-flex;align-items:center;gap:2px;height:.85rem}.gal-tts-cue-bars b{width:2.5px;height:100%;border-radius:2px;background:currentColor;opacity:.5;transform:scaleY(var(--bar-rest, .4));transition:transform .3s ease,opacity .3s ease}.gal-tts-cue-bars b:nth-child(1){--bar-rest: .35;--bar-delay: 0s}.gal-tts-cue-bars b:nth-child(2){--bar-rest: .6;--bar-delay: -.32s}.gal-tts-cue-bars b:nth-child(3){--bar-rest: .85;--bar-delay: -.6s}.gal-tts-cue-bars b:nth-child(4){--bar-rest: .5;--bar-delay: -.18s}#gal-global-overlay:not(.gal-tts-playing):has(.gal-char-container.speaking.tts-active) .gal-tts-cue-bars b{animation:gal-tts-cue-wait 1.1s ease-in-out infinite}#gal-global-overlay:not(.gal-tts-playing):has(.gal-char-container.speaking.tts-active) .gal-tts-cue-bars b:nth-child(2){animation-delay:.15s}#gal-global-overlay:not(.gal-tts-playing):has(.gal-char-container.speaking.tts-active) .gal-tts-cue-bars b:nth-child(3){animation-delay:.3s}#gal-global-overlay:not(.gal-tts-playing):has(.gal-char-container.speaking.tts-active) .gal-tts-cue-bars b:nth-child(4){animation-delay:.45s}#gal-global-overlay.gal-tts-playing .gal-tts-cue{border-color:color-mix(in srgb,var(--cue-color) 70%,transparent)}#gal-global-overlay.gal-tts-playing .gal-tts-cue:after{animation:gal-tts-cue-ring 1.6s ease-out infinite}#gal-global-overlay.gal-tts-playing .gal-tts-cue-bars b{opacity:1;animation:gal-tts-cue-eq .9s ease-in-out var(--bar-delay) infinite}#gal-global-overlay.gal-tts-playing .gal-tts-cue-bars b:nth-child(odd){animation-duration:.72s}@keyframes gal-tts-cue-in{0%{opacity:0;translate:-.5rem 0}}@keyframes gal-tts-cue-wait{0%,to{opacity:.25}50%{opacity:1}}@keyframes gal-tts-cue-eq{0%,to{transform:scaleY(.3)}50%{transform:scaleY(1)}}@keyframes gal-tts-cue-ring{0%{box-shadow:0 0 color-mix(in srgb,var(--cue-color) 45%,transparent)}to{box-shadow:0 0 0 .5rem transparent}}@media screen and (max-width: 48rem){.gal-tts-cue{--cue-scale: .86}}@media (prefers-reduced-motion: reduce){.gal-tts-cue,.gal-tts-cue:after,.gal-tts-cue-bars b{animation:none!important}}.gal-char-container[data-emotion=angry]{animation:galSpriteShake .4s ease-in-out 2,galSpriteBreathing 4s ease-in-out .8s infinite}.gal-char-container[data-emotion=surprised]{animation:galSpriteBounce .5s ease-out,galSpriteBreathing 4s ease-in-out .5s infinite}.gal-layer-character.scene-night{filter:hue-rotate(-10deg) brightness(.85) saturate(.9)}.gal-layer-character.scene-night .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(0,0,100,.5))}.gal-layer-character.scene-indoor{filter:sepia(.08) brightness(1.02)}.gal-layer-character.scene-indoor .gal-char-container{filter:drop-shadow(0 .625rem 1.875rem rgba(100,50,0,.3))}.gal-char-img{max-height:100%;max-height:100cqh;max-width:100%;height:auto;width:auto;object-fit:contain;object-position:bottom center;transform:scale(calc(var(--base-scale, 1) * var(--state-scale) * var(--gal-npc-sil-scale, 1)));transform-origin:bottom center;transition:opacity .3s ease,transform .3s cubic-bezier(.175,.885,.32,1.275)}.gal-char-container[data-npc-silhouette=true]{--gal-npc-sil-scale: .7}.gal-char-img.gal-img-in{opacity:0}.gal-char-img.gal-img-in.is-in{opacity:1}.gal-char-img.gal-img-out{position:absolute;left:0;right:0;bottom:0;margin:0 auto;max-width:none;max-height:none;opacity:0;pointer-events:none}.gal-char-placeholder{width:12.5rem;height:21.875rem;background:linear-gradient(135deg,#fffc,#f0f0f0e6);border:.25rem dashed #ccc;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#999;gap:.625rem;border-radius:.625rem;cursor:pointer;transition:all .3s;pointer-events:auto}.gal-char-placeholder:hover{border-color:var(--gal-accent);color:var(--gal-accent)}.gal-char-placeholder i{font-size:4rem}.gal-char-placeholder span{font-size:.9rem;font-weight:600}.gal-dialog-layer{position:absolute;bottom:calc(1.25rem * var(--gal-dialog-scale-user, 1));left:50%;right:auto;width:min(calc(100% - 6rem),calc(80% * var(--gal-dialog-scale-user, 1)));height:calc(30% * var(--gal-dialog-scale-user, 1));min-height:calc(9rem*min(var(--gal-dialog-scale-user, 1),1));max-height:72%;transform:translate(-50%);transform-origin:bottom center;max-width:none;z-index:30;pointer-events:auto}.gal-name-badge{position:absolute;top:-1.375rem;left:0;background:var(--gp-badge-bg, var(--gal-dark));color:var(--gp-badge-fg, #ffffff);padding:.5rem 2.188rem .5rem 1.563rem;font-size:1.4rem;font-weight:900;font-family:Barlow,sans-serif;transform:skew(-15deg) scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.313rem .313rem 0 var(--gp-shadow, rgba(0, 0, 0, .2))}.gal-name-badge:after{content:"";position:absolute;left:0;right:26%;bottom:-2px;height:4px;background:var(--gp-accent, var(--gal-accent))}.gal-name-badge span{display:block;transform:skew(15deg)}.gal-dialog-topbar,.gal-dialog-quick-actions{display:contents}.gal-sprite-toggle{position:absolute;top:-1.375rem;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gp-btn-bg, var(--gal-white));border:.125rem solid var(--gp-ink, var(--gal-dark));border-radius:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.25rem .25rem 0 var(--gp-shadow, rgba(0, 0, 0, .2));transition:all .2s ease;opacity:.9}.gal-sprite-toggle:hover{opacity:1;background:var(--gp-accent, var(--gal-accent))}.gal-sprite-toggle:hover .gal-eye-icon{color:#101218}.gal-eye-icon{font-size:1.2rem;color:var(--gp-accent, var(--gal-accent));transition:color .2s ease;transform:skew(0)}.gal-sprite-toggle.sprites-hidden{background:#646464cc}.gal-sprite-toggle.sprites-hidden .gal-eye-icon{color:#999}.gal-sprite-toggle.sprites-hidden:hover{background:var(--gal-accent)}.gal-sprite-toggle.sprites-hidden:hover .gal-eye-icon{color:var(--gal-dark)}.gal-status-popup-trigger{position:absolute;left:auto;right:-2.5rem;width:2.2rem;height:2.2rem;background:var(--gp-btn-bg, var(--gal-white));border:.125rem solid var(--gp-ink, var(--gal-dark));border-radius:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transform:scale(var(--ui-scale));transform-origin:bottom left;z-index:35;box-shadow:.25rem .25rem 0 var(--gp-shadow, rgba(0, 0, 0, .2));transition:all .2s ease;opacity:.9}.gal-location-popup-trigger{top:1.35rem}.gal-time-popup-trigger{top:3.95rem}.gal-status-popup-icon{font-size:1rem;transition:color .2s ease;pointer-events:none}.gal-location-popup-trigger .gal-status-popup-icon{color:var(--gal-accent)}.gal-time-popup-trigger .gal-status-popup-icon{color:var(--gal-accent-sub)}.gal-location-popup-trigger:hover,.gal-time-popup-trigger:hover{opacity:1}.gal-location-popup-trigger:hover{background:var(--gal-accent)}.gal-location-popup-trigger:hover .gal-status-popup-icon{color:var(--gal-dark)}.gal-time-popup-trigger:hover{background:var(--gal-accent-sub)}.gal-time-popup-trigger:hover .gal-status-popup-icon{color:#fff}.gal-layer-character.sprites-hidden{opacity:0!important;pointer-events:none!important;transition:opacity .3s ease}.gal-narrator-label{background:#666;color:#fff}.gal-cg-thumbnail{max-height:3.5rem;border-radius:.25rem;vertical-align:middle;margin-right:.5rem;cursor:pointer;box-shadow:0 2px 4px #0000004d}.gal-styled-stage{position:absolute;inset:10% 12% 22%;z-index:18;display:none;align-items:center;justify-content:center;pointer-events:none}.gal-styled-stage.show{display:flex}.gal-styled-stage .gal-styled-stage-content{width:min(68vw,42rem);max-height:min(56vh,34rem);overflow:visible;scrollbar-width:none;pointer-events:auto}.gal-styled-stage .gal-styled-stage-content .gal-styled{width:100%}.gal-styled-stage .gal-styled-stage-content .gal-styled-sms,.gal-styled-stage .gal-styled-stage-content .gal-styled-letter,.gal-styled-stage .gal-styled-stage-content .gal-styled-parchment,.gal-styled-stage .gal-styled-stage-content .gal-styled-newspaper{max-height:none;overflow-y:visible!important}#gal-global-overlay.gal-mode-styled .gal-layer-character,#gal-global-overlay.gal-mode-styled .gal-live2d-stage-canvas,#gal-global-overlay.gal-mode-styled .gal-live2d-position-guide{opacity:0!important;visibility:hidden!important;pointer-events:none!important}#gal-global-overlay.gal-mode-styled .gal-name-badge,#gal-global-overlay.gal-mode-styled .gal-sprite-toggle,#gal-global-overlay.gal-mode-styled .gal-status-popup-trigger,#gal-global-overlay.gal-mode-styled .gal-interaction-bar,#gal-global-overlay.gal-mode-styled .gal-dialog-text,#gal-global-overlay.gal-mode-styled .gal-progress-container{display:none!important}#gal-global-overlay.gal-mode-styled .gal-text-panel{background:transparent!important;background-image:none!important;box-shadow:none!important;border:none!important;overflow:visible!important;padding:0 1rem 4.8rem!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;filter:none!important}#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-glass{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:transparent!important}#gal-global-overlay.gal-mode-styled .gal-text-panel.text-effect-gradient:before{display:none!important}#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar{display:flex!important;opacity:1!important;visibility:visible!important;z-index:120!important;background:linear-gradient(to top,#0a0e16b8,#0a0e166b 45%,#0a0e1600)!important}#gal-global-overlay.gal-mode-styled .gal-bottom-toolbar>*{pointer-events:auto!important;opacity:1!important;visibility:visible!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn,#gal-global-overlay.gal-mode-styled .gal-footer-btn-next,#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn{display:inline-flex!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;filter:none!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn{background:#fffffff5!important;color:#1b2230!important;border-color:#1b2230!important}#gal-global-overlay.gal-mode-styled .gal-pending-choices-btn{background:#e93c64!important;color:#fff!important;border-color:#1b2230!important}#gal-global-overlay.gal-mode-styled .gal-footer-btn-next{background:#161b27!important;color:#f7fbff!important;border-color:#161b27!important;box-shadow:0 .25rem .875rem #00000073!important}@media screen and (max-width: 48rem){.gal-styled-stage{inset:11% 4% 26%}.gal-styled-stage .gal-styled-stage-content{width:100%;max-height:54vh}#gal-global-overlay.gal-mode-styled .gal-text-panel{padding:0 .5rem calc(4.3rem + env(safe-area-inset-bottom)) .5rem!important}}.gal-cg-viewer{position:absolute;inset:0;background:#000000eb;z-index:100;display:flex;align-items:center;justify-content:center;cursor:pointer}.gal-cg-viewer-img{max-width:90%;max-height:90%;object-fit:contain;border-radius:.5rem;box-shadow:0 4px 20px #00000080}.gal-cg-viewer-close{position:absolute;top:1rem;right:1rem;background:#ffffff26;border:none;color:#fff;width:2.5rem;height:2.5rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;transition:background .2s ease}.gal-cg-viewer-close:hover{background:#ffffff4d}.gal-cg-viewer-loading{color:#fff9;font-size:1.1rem}.gal-generating-status{position:absolute;top:-3.75rem;left:50%;transform:translate(-50%) scale(.8);background:linear-gradient(135deg,var(--gal-accent) 0%,#ff6b9d 100%);color:#fff;padding:.5rem 1.25rem;font-size:.9rem;font-weight:700;border-radius:1.25rem;box-shadow:0 .25rem .938rem #0000004d;opacity:0;transition:all .3s ease;pointer-events:none;z-index:50}.gal-generating-status.show{opacity:1;transform:translate(-50%) scale(1)}.gal-interaction-bar{position:absolute;top:-3.438rem;right:0;display:flex;gap:.938rem;z-index:35;transform:scale(var(--ui-scale));transform-origin:bottom right}.gal-action-btn{padding:.75rem 1.875rem;font-weight:700;font-size:1.1rem;cursor:pointer;transform:skew(-15deg);display:flex;align-items:center;gap:.625rem;transition:all .2s cubic-bezier(.34,1.56,.64,1);border:.125rem solid transparent;box-shadow:.313rem .313rem #0003;font-family:Noto Sans SC,sans-serif;background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn span,.gal-action-btn i{transform:skew(15deg)}.gal-action-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem #0000004d}.gal-action-btn.btn-reroll{background:var(--gal-white);color:var(--gal-dark);border-color:var(--gal-dark)}.gal-action-btn.btn-reroll:hover{background:var(--gal-dark);color:var(--gal-accent);transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gal-accent)}.gal-action-btn.btn-free{background:var(--gp-btn-bg, var(--gal-white));color:var(--gp-text, var(--gal-dark));border-color:var(--gp-ink, var(--gal-dark))}.gal-action-btn.btn-free i{color:var(--gp-accent, var(--gal-accent))}.gal-action-btn.btn-free:hover{background:var(--gp-ink, var(--gal-dark));color:var(--gp-surface, var(--gal-white));border-color:var(--gp-ink, var(--gal-dark));transform:skew(-15deg) translateY(-.188rem);box-shadow:.313rem .5rem 0 var(--gp-shadow, rgba(0, 0, 0, .3))}.gal-text-panel{position:relative;width:100%;height:100%;box-sizing:border-box;background-color:rgb(from var(--gp-surface, #ffffff) r g b / calc(.6 + var(--panel-opacity, .5) * .38));background-image:linear-gradient(135deg,var(--gal-speaker-color, var(--gp-accent, #00c4ef)) 0%,var(--gal-speaker-color, var(--gp-accent, #00c4ef)) 3.2rem,transparent 3.2rem),linear-gradient(135deg,transparent 0%,transparent 94%,rgba(0,196,239,.14) 94%,rgba(0,196,239,.14) 100%);background-size:4rem .85rem,100% 100%;background-repeat:no-repeat,no-repeat;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:.156rem solid var(--gp-ink, var(--gal-dark));box-shadow:.5rem .5rem 0 var(--gp-shadow, rgba(0, 0, 0, .15));border-radius:0;padding:calc(2.5rem * var(--gal-dialog-scale-user, 1)) calc(3.75rem * var(--gal-dialog-scale-user, 1)) calc(5rem*max(var(--gal-dialog-scale-user, 1),var(--gal-toolbar-scale-user, 1))) calc(3.75rem * var(--gal-dialog-scale-user, 1));overflow:hidden!important;scrollbar-width:none}.gal-text-panel::-webkit-scrollbar{display:none}.gal-dialog-text{font-size:calc(1.25rem * var(--ui-scale) * var(--font-scale, 1));line-height:1.9;color:var(--gp-text, #333);font-weight:500;letter-spacing:.02em;box-sizing:border-box;max-height:100%;margin:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}.gal-dialog-text::-webkit-scrollbar{display:none}.gal-text-panel.text-effect-glass{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:#ffffffb3!important}.gal-text-panel.text-effect-gradient:before{content:"";position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(0,0,0,.6) 0%,rgba(0,0,0,.3) 50%,transparent 100%);pointer-events:none;z-index:1}.gal-text-panel.text-effect-gradient .gal-dialog-text{position:relative;z-index:2}.gal-text-panel.text-effect-gradient .gal-name-badge{z-index:3}.gal-text-panel.text-effect-text-bg{background:transparent!important;background-image:none!important;box-shadow:none!important}.gal-tts-loading{position:absolute;top:auto;bottom:1rem;right:1.5rem;display:flex;align-items:center;justify-content:center;width:2.5rem;height:2.5rem;padding:0;background:#fffffff2;border:.125rem solid var(--gal-accent);border-radius:50%;color:var(--gal-accent);box-shadow:0 .25rem .75rem #0000001a;opacity:0;transform:scale(.8);transition:all .4s cubic-bezier(.175,.885,.32,1.275);pointer-events:none;z-index:10}.gal-tts-loading.active{opacity:1;transform:scale(1)}.gal-tts-loading i{font-size:1rem;color:var(--gal-accent)}.gal-generating-indicator{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:.75rem;padding:1.25rem 2.5rem;background:#fffffffa;border:.188rem solid var(--gal-accent);border-radius:1rem;box-shadow:0 .5rem 2rem #00d2ff4d;z-index:20;opacity:0;visibility:hidden;transition:all .3s ease}.gal-generating-indicator.active{opacity:1;visibility:visible}.gal-generating-indicator .gal-gen-icon{font-size:2.5rem;color:var(--gal-accent);animation:galGenPulse 1.5s ease-in-out infinite}.gal-generating-indicator .gal-gen-text{font-size:1.1rem;font-weight:700;color:var(--gal-dark);letter-spacing:.05em}.gal-generating-indicator .gal-gen-status{font-size:.85rem;color:#666;max-width:17.5rem;text-align:center;min-height:1.2em}.gal-generating-indicator .gal-gen-dots{display:flex;gap:.375rem;margin-top:.25rem}.gal-generating-indicator .gal-gen-dot{width:.5rem;height:.5rem;background:var(--gal-accent);border-radius:50%;animation:galGenDotBounce 1.4s ease-in-out infinite both}.gal-generating-indicator .gal-gen-dot:nth-child(1){animation-delay:-.32s}.gal-generating-indicator .gal-gen-dot:nth-child(2){animation-delay:-.16s}@keyframes galGenPulse{0%,to{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.8}}@keyframes galGenDotBounce{0%,80%,to{transform:scale(0)}40%{transform:scale(1)}}.gal-bottom-toolbar{position:absolute;bottom:0;left:0;width:100%;height:auto;min-height:3.75rem;padding:.625rem 1.875rem 0;box-sizing:border-box;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none;z-index:100;contain:layout style}.gal-bottom-toolbar>*{pointer-events:auto}.gal-toolbar-left,.gal-toolbar-right{display:flex;align-items:flex-end;gap:.5rem}.gal-footer-btn{background:#ffffffe6!important;color:var(--gal-dark)!important;padding:0 calc(.75rem * var(--ui-scale))!important;font-family:var(--gal-font-eng)!important;font-weight:800!important;font-size:calc(.85rem * var(--ui-scale))!important;cursor:pointer!important;transition:background .2s,color .2s,transform .2s,box-shadow .2s!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;display:flex!important;align-items:center!important;gap:calc(.375rem * var(--ui-scale))!important;height:calc(2.25rem * var(--ui-scale))!important;transform:skew(-10deg)!important;box-shadow:calc(.125rem * var(--ui-scale)) calc(.125rem * var(--ui-scale)) 0 #0000001a!important;border-radius:0!important;will-change:transform}.gal-footer-btn i,.gal-footer-btn span{transform:skew(10deg)!important;font-size:calc(1rem * var(--ui-scale))!important}.gal-footer-btn:hover{background:var(--gal-dark)!important;color:#fff!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.25rem .25rem #0003!important}.gal-footer-btn-next{background:var(--gp-accent, var(--gal-accent))!important;color:#101218!important;font-size:calc(1.3rem * var(--ui-scale))!important;font-weight:900!important;padding:0 calc(2.5rem * var(--ui-scale))!important;height:calc(3.438rem * var(--ui-scale))!important;min-width:calc(8.75rem * var(--ui-scale))!important;border-radius:0!important;border:calc(.125rem * var(--ui-scale)) solid var(--gp-ink, var(--gal-dark))!important;margin-left:calc(.938rem * var(--ui-scale))!important;margin-right:0!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:center!important;gap:calc(.625rem * var(--ui-scale))!important;white-space:nowrap!important;line-height:1!important;box-shadow:calc(.25rem * var(--ui-scale)) calc(.25rem * var(--ui-scale)) 0 var(--gp-shadow, rgba(0, 0, 0, .2))!important;flex-shrink:0!important;clip-path:polygon(calc(1.563rem * var(--ui-scale)) 0,100% 0,100% 100%,0% 100%)!important;transition:background .2s ease,color .2s ease,transform .2s ease!important;transform:none!important;will-change:transform}.gal-footer-btn-next:hover{background:var(--gp-accent, var(--gal-accent))!important;color:#101218!important;transform:translate(-.125rem,-.125rem)!important;box-shadow:calc(.375rem * var(--ui-scale)) calc(.375rem * var(--ui-scale)) 0 var(--gp-shadow, rgba(0, 0, 0, .2))!important}.gal-footer-btn-next i{font-size:1.1rem!important;margin:0!important}.gal-bottom-toolbar{justify-content:flex-start;gap:calc(.25rem * var(--ui-scale));padding:.625rem .75rem 0;overflow:visible}.gal-footer-btn{padding:0 calc(.55rem * var(--ui-scale))!important;gap:calc(.25rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important}.gal-footer-btn i,.gal-footer-btn span{font-size:calc(.9rem * var(--ui-scale))!important}.gal-pending-choices-btn{padding:0 calc(.7rem * var(--ui-scale))!important;height:calc(2.45rem * var(--ui-scale))!important;font-size:calc(.78rem * var(--ui-scale))!important;margin-left:auto!important;margin-right:0!important}.gal-footer-btn-next{margin-left:calc(.375rem * var(--ui-scale))!important;margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.9rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-footer-btn{padding:0 calc(.4rem * var(--ui-scale))!important;gap:calc(.2rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-footer-btn i,#gal-global-overlay.gal-toolbar-compact .gal-footer-btn span{font-size:calc(.8rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-pending-choices-btn{padding:0 calc(.5rem * var(--ui-scale))!important}#gal-global-overlay.gal-toolbar-compact .gal-footer-btn-next{min-width:calc(6rem * var(--ui-scale))!important;padding:0 calc(1.2rem * var(--ui-scale))!important}#gal-global-overlay.icon-only .gal-footer-btn .gal-btn-text{display:none!important}#gal-global-overlay.icon-only .gal-footer-btn{min-width:calc(2.1rem * var(--ui-scale))!important;justify-content:center!important}.gal-progress-indicator{font-family:Barlow,sans-serif;font-size:.85rem;font-weight:700;color:#888;padding:.375rem .625rem;display:flex;align-items:center;height:2.25rem}.gal-nav-btn.active{background:var(--gal-accent)!important;color:var(--gal-dark)!important;box-shadow:inset 1px 1px .188rem #0003!important}.gal-auto-playing{background:var(--gal-accent-sub)!important;color:#fff!important;border-color:var(--gal-accent-sub)!important;animation:galPulse 1s infinite}@keyframes galPulse{0%,to{opacity:1}50%{opacity:.8}}.gal-input-modal,#gal-free-input-modal{position:fixed;inset:0;background:#00000080;backdrop-filter:blur(.25rem);z-index:var(--gal-z-modal)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .2s ease}#gal-live2d-settings-modal{z-index:var(--gal-z-modal-critical)!important}@keyframes galFadeIn{0%{opacity:0}to{opacity:1}}.gal-input-box{background:var(--gal-white);border:.188rem solid var(--gal-dark);box-shadow:.625rem .625rem #00000026;width:90%;max-width:31.25rem;padding:1.563rem}.gal-input-title{font-family:Barlow,sans-serif;font-size:1.3rem;font-weight:800;color:var(--gal-dark);margin-bottom:.938rem;transform:skew(-5deg)}.gal-input-title span{transform:skew(5deg);display:block}.gal-input-field{width:100%;border:.125rem solid var(--gal-dark);padding:.75rem .938rem;font-size:1rem;font-family:Noto Sans SC,sans-serif;resize:vertical;min-height:5rem;box-sizing:border-box}.gal-input-field:focus{outline:none;border-color:var(--gal-accent);box-shadow:0 0 0 .188rem #00d2ff33}#gal-bg-upload-modal input[type=text],#gal-bg-upload-modal input[type=url],#gal-bg-upload-modal textarea,#gal-bg-upload-modal select,#gal-map-upload-modal input[type=text],#gal-map-upload-modal input[type=url],#gal-map-upload-modal textarea,#gal-map-upload-modal select,#gal-sprite-upload-modal input[type=text],#gal-sprite-upload-modal textarea,#gal-sprite-upload-modal select,#gal-batch-upload-modal input[type=text],#gal-batch-upload-modal textarea,#gal-batch-upload-modal select,#gal-character-sprites-modal input[type=text],#gal-character-sprites-modal select,#gal-expression-manager-modal input[type=text]{color:var(--SmartThemeBodyColor, #f5f7fa)!important;background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border-color:var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important;caret-color:var(--SmartThemeEmColor, #9ac7ff)}#gal-bg-upload-modal input[type=text]::placeholder,#gal-bg-upload-modal input[type=url]::placeholder,#gal-bg-upload-modal textarea::placeholder,#gal-map-upload-modal input[type=text]::placeholder,#gal-map-upload-modal input[type=url]::placeholder,#gal-map-upload-modal textarea::placeholder,#gal-sprite-upload-modal input[type=text]::placeholder,#gal-sprite-upload-modal textarea::placeholder,#gal-batch-upload-modal input[type=text]::placeholder,#gal-batch-upload-modal textarea::placeholder,#gal-character-sprites-modal input[type=text]::placeholder,#gal-expression-manager-modal input[type=text]::placeholder{color:var(--SmartThemeBodyColor, #f5f7fa)!important;opacity:.72}#gal-bg-upload-modal input[type=text]:focus,#gal-bg-upload-modal input[type=url]:focus,#gal-bg-upload-modal textarea:focus,#gal-bg-upload-modal select:focus,#gal-map-upload-modal input[type=text]:focus,#gal-map-upload-modal input[type=url]:focus,#gal-map-upload-modal textarea:focus,#gal-map-upload-modal select:focus,#gal-sprite-upload-modal input[type=text]:focus,#gal-sprite-upload-modal textarea:focus,#gal-sprite-upload-modal select:focus,#gal-batch-upload-modal input[type=text]:focus,#gal-batch-upload-modal textarea:focus,#gal-batch-upload-modal select:focus,#gal-character-sprites-modal input[type=text]:focus,#gal-character-sprites-modal select:focus,#gal-expression-manager-modal input[type=text]:focus{outline:none!important;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 3px #9ac7ff42!important}.gal-input-actions{display:flex;justify-content:flex-end;gap:.625rem;margin-top:.938rem}.gal-modal-layout-fixed{display:flex!important;flex-direction:column!important;overflow:hidden!important}.gal-modal-layout-fixed>.gal-input-title,.gal-modal-layout-fixed>.gal-modal-fixed-header{flex-shrink:0;position:sticky;top:0;z-index:2;background:var(--SmartThemeBlurTintColor, var(--gal-white))}.gal-modal-layout-fixed>.gal-input-title{margin-bottom:0!important}.gal-modal-layout-fixed>.gal-modal-scroll-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}.gal-modal-layout-fixed>.gal-input-actions,.gal-modal-layout-fixed>.gal-modal-fixed-actions{flex-shrink:0;margin-top:0!important}.gal-toast{position:fixed;bottom:1.875rem;right:1.875rem;background:var(--gal-dark);color:var(--gal-white);padding:.75rem 1.563rem;font-weight:600;transform:skew(-5deg);box-shadow:.313rem .313rem 0 var(--gal-accent);z-index:var(--gal-z-toast);animation:galToastIn .3s ease}.gal-toast span{display:block;transform:skew(5deg)}@keyframes galToastIn{0%{opacity:0;transform:skew(-5deg) translateY(1.25rem)}to{opacity:1;transform:skew(-5deg) translateY(0)}}.gal-input-modal,.gal-config-modal{position:fixed;inset:0;background:#0009;backdrop-filter:blur(.375rem);z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center}.gal-import-progress-overlay{z-index:var(--gal-z-modal-critical)!important}@media screen and (max-width: 48rem){.gal-import-progress-box{transform:translateY(8vh)}}.gal-config-panel{background:var(--gal-white);border:none!important;box-shadow:none!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;display:flex;flex-direction:column;border-radius:0!important}.gal-config-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.563rem;display:flex;justify-content:space-between;align-items:center}.gal-config-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:800;color:var(--gal-accent)}.gal-config-close{background:transparent;border:.125rem solid var(--gal-white);color:var(--gal-white);width:2rem;height:2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}.gal-config-close:hover{background:var(--gal-accent-sub);border-color:var(--gal-accent-sub)}.gal-config-body{padding:1.563rem;overflow-y:auto;flex:1}.gal-sprite-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.375rem,1fr));gap:.938rem}.gal-sprite-card{border:.125rem solid #eee;padding:.625rem;text-align:center;cursor:pointer;transition:all .2s}.gal-sprite-card:hover{border-color:var(--gal-accent);box-shadow:0 .25rem .75rem #00d2ff26}.gal-sprite-preview{width:100%;aspect-ratio:2 / 3;object-fit:cover;object-position:top center;background:#f9f9f9;border-radius:.25rem;margin-bottom:.5rem}.gal-crop-container{position:relative;width:100%;overflow:visible;background:#1a1a2e;border-radius:.5rem}.gal-crop-canvas-wrapper{position:relative;width:100%;height:23.75rem;overflow:hidden;cursor:move;display:flex;align-items:center;justify-content:center;background:#1a1a2e;border-radius:.5rem .5rem 0 0}#gal-crop-canvas{display:block}.gal-crop-overlay{position:absolute;inset:0;pointer-events:none}.gal-crop-frame{position:absolute;border:.188rem solid var(--gal-accent);box-shadow:0 0 0 624.938rem #0009;pointer-events:none}.gal-crop-controls{display:flex;align-items:center;justify-content:center;gap:.938rem;padding:.75rem 1.25rem;background:#000c;border-radius:0 0 .5rem .5rem}.gal-crop-controls .gal-crop-btn{padding:.5rem 1rem;min-width:3.75rem;font-size:.9rem}.gal-crop-zoom-slider{width:9.375rem;accent-color:var(--gal-accent)}.gal-crop-zoom-label{color:#fff;font-size:.85rem;font-weight:600;min-width:2.813rem}.gal-crop-btn{padding:.5rem 1rem;border:none;border-radius:.25rem;cursor:pointer;font-weight:600;transition:all .2s}.gal-crop-btn.reset{background:#666;color:#fff}.gal-crop-btn.reset:hover{background:#888}.gal-batch-upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.938rem;max-height:60vh;overflow-y:auto;padding:.313rem}.gal-batch-upload-card{border:.125rem dashed #ccc;border-radius:.5rem;padding:.75rem;text-align:center;transition:all .2s;background:#fafafa}.gal-batch-upload-card:hover{border-color:var(--gal-accent);background:#00d2ff0d}.gal-batch-upload-card.has-image{border-style:solid;border-color:var(--gal-accent)}.gal-batch-upload-card .expression-label{font-weight:700;color:var(--gal-dark);margin-bottom:.625rem;font-size:.9rem}.gal-batch-upload-card .upload-preview{width:100%;aspect-ratio:2 / 3;background:#eee;border-radius:.375rem;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;margin-bottom:.5rem}.gal-batch-upload-card .upload-preview img{width:100%;height:100%;object-fit:cover;object-position:top center}.gal-batch-upload-card .upload-preview i{font-size:2rem;color:#bbb}.gal-batch-upload-card .upload-preview:hover i{color:var(--gal-accent)}.gal-batch-upload-card .remove-btn{background:var(--gal-accent-sub);color:#fff;border:none;padding:.25rem .625rem;border-radius:.25rem;font-size:.75rem;cursor:pointer;display:none}.gal-batch-upload-card.has-image .remove-btn{display:inline-block}.gal-sprite-label{font-size:.85rem;font-weight:700;color:var(--gal-dark);line-height:1.3}.gal-sprite-label small{font-weight:400;color:#888}.gal-upload-card{border:.125rem dashed #ccc;padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:#999;min-height:7.5rem}.gal-upload-card:hover{border-color:var(--gal-accent);color:var(--gal-accent);background:#00d2ff0d}.gal-upload-card i{font-size:2rem}.gal-action-btn.primary{background:var(--gal-accent);color:var(--gal-dark);border-color:var(--gal-accent)}.gal-action-btn.primary:hover{background:var(--gal-dark);color:var(--gal-accent)}#gal-layer-choices{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;background:#0006!important;z-index:var(--gal-z-modal-critical)!important;display:none;flex-direction:column;justify-content:center;align-items:center;gap:.938rem;padding:1.25rem}#gal-layer-choices.active{display:flex!important;animation:galFadeIn .3s ease}.gal-choices-container{width:100%;max-width:32rem;display:flex;flex-direction:column;align-items:center;gap:.75rem;max-height:calc(100vh - 10rem);overflow-y:auto;padding:0 .5rem;box-sizing:border-box}.gal-choices-title{font-family:Barlow,sans-serif;font-size:1.2rem;font-weight:900;color:var(--gal-white);text-transform:uppercase;letter-spacing:.125rem;margin-bottom:.5rem;transform:skew(-10deg)}.gal-choices-title span{display:block;transform:skew(10deg)}.gal-choice-card{background:var(--gal-white);color:var(--gal-dark);padding:.75rem 1.875rem;min-width:12.5rem;max-width:90%;width:auto;text-align:center;font-weight:600;font-size:.95rem;line-height:1.4;border:.125rem solid var(--gal-dark);box-shadow:.375rem .375rem #00000026;transform:skew(-8deg);cursor:pointer;transition:all .2s cubic-bezier(.34,1.56,.64,1);position:relative;overflow:hidden;word-break:break-word}.gal-choice-card span{display:block;transform:skew(8deg)}.gal-choice-card:hover{background:var(--gal-accent);color:#fff;border-color:var(--gal-dark);transform:skew(-8deg) translate(-.188rem,-.188rem);box-shadow:.563rem .563rem 0 var(--gal-dark)}.gal-choice-card:after{content:"";display:none}.gal-choices-hint{font-size:.8rem;color:#ffffffb3;margin-top:.938rem}.gal-dialog-layer .gal-progress-container{position:absolute;bottom:0;left:0;width:100%;height:.375rem;background:#0003;border-radius:0;margin:0;z-index:10;overflow:hidden;position:relative;min-width:3.75rem}.gal-progress-bar{height:100%;background:linear-gradient(90deg,var(--gal-accent) 0%,#00a8cc 100%);width:0%;border-radius:0;transition:width .3s cubic-bezier(.25,.8,.25,1);box-shadow:0 0 .625rem var(--gal-accent)}.gal-pending-choices-btn{background:linear-gradient(135deg,var(--gal-accent-sub) 0%,#cc0044 100%)!important;color:#fff!important;padding:0 calc(.72rem * var(--ui-scale))!important;font-weight:700!important;font-size:calc(.78rem * var(--ui-scale))!important;cursor:pointer!important;display:flex!important;align-items:center!important;gap:calc(.25rem * var(--ui-scale))!important;border:calc(.125rem * var(--ui-scale)) solid var(--gal-dark)!important;height:calc(2.25rem * var(--ui-scale))!important;margin-right:calc(.188rem * var(--ui-scale))!important;border-radius:0!important;transform:skew(-10deg)}.gal-pending-choices-btn.show{display:flex!important;-webkit-animation:galPendingPulse 2s ease-in-out infinite!important;animation:galPendingPulse 2s ease-in-out infinite!important}.gal-pending-choices-btn i,.gal-pending-choices-btn span{transform:skew(10deg)!important}.gal-pending-choices-btn i{font-size:calc(.9rem * var(--ui-scale))!important;margin:0!important}.gal-pending-choices-btn:hover{filter:brightness(1.1)!important;transform:skew(-10deg) translateY(-.125rem)!important;box-shadow:.313rem .313rem #0003!important}@-webkit-keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}@keyframes galPendingPulse{0%,to{box-shadow:inset 0 0 .938rem #ffffff4d,0 0 .938rem #ffd70099,0 0 1.563rem #ffd70066,.188rem .188rem #0000001a;filter:brightness(1)}50%{box-shadow:inset 0 0 1.875rem #fff9,0 0 1.875rem #ffd700cc,0 0 3.125rem #ffd70080,.188rem .188rem #0000001a;filter:brightness(1.25)}}.gal-pending-choices-btn.gal-new-option-highlight{-webkit-animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important;animation:galNewOptionPop .6s ease-out,galPendingPulse 2s ease-in-out infinite!important}@-webkit-keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}@keyframes galNewOptionPop{0%{transform:skew(-10deg) scale(.95);opacity:.8}50%{transform:skew(-10deg) scale(1.1)}to{transform:skew(-10deg) scale(1);opacity:1}}.gal-open-btn{display:inline-flex;align-items:center;gap:.313rem;padding:.125rem .5rem;background:transparent;color:var(--gal-accent);border:1px solid var(--gal-accent);border-radius:.25rem;font-size:.75rem;cursor:pointer;opacity:.6;transition:all .2s;margin-left:.313rem;font-family:Noto Sans SC,sans-serif}.gal-open-btn:hover{opacity:1;background:var(--gal-accent);color:var(--gal-dark)}.gal-history-modal{position:fixed!important;inset:0!important;background:#000000d9!important;backdrop-filter:blur(.313rem)!important;z-index:var(--gal-z-modal-critical)!important;display:flex;align-items:center;justify-content:center;animation:galFadeIn .3s ease}.gal-history-panel{background:var(--gal-white);border:.125rem solid var(--gal-accent);box-shadow:0 0 1.25rem #00d2ff4d;width:80%;max-width:50rem;height:80vh;display:flex;flex-direction:column;border-radius:.5rem;overflow:hidden}.gal-history-header{background:var(--gal-dark);color:var(--gal-white);padding:.938rem 1.25rem;display:flex;justify-content:space-between;align-items:center;border-bottom:.125rem solid var(--gal-accent)}.gal-history-title{font-family:Noto Sans SC,sans-serif;font-size:1.2rem;font-weight:700;display:flex;align-items:center;gap:.625rem}.gal-history-close{background:transparent;border:none;color:#aaa;font-size:1.5rem;cursor:pointer;transition:color .2s;line-height:1}.gal-history-close:hover{color:var(--gal-accent)}.gal-history-body{flex:1;overflow-y:auto;padding:1.25rem;background:#f5f5f5}.gal-history-list{display:flex;flex-direction:column;gap:.938rem}.gal-history-item{background:#fff;padding:0;border-radius:.5rem;border:1px solid #eee;box-shadow:0 .25rem .75rem #0000000d;transition:all .2s;overflow:hidden;margin-bottom:.625rem}.gal-history-item:hover{box-shadow:0 .5rem 1.25rem #00d2ff26;transform:translateY(-.125rem);border-color:var(--gal-accent)}.gal-history-header-row{background:#f8f9fa;padding:.625rem 1.25rem;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}.gal-history-info-group{display:flex;align-items:center;gap:.75rem}.gal-history-index{background:var(--gal-accent);color:var(--gal-dark);padding:.125rem .5rem;border-radius:.25rem;font-size:.8rem;font-weight:700;font-family:Barlow,sans-serif}.gal-history-time{color:#666;font-size:.9rem;font-weight:600;font-family:Noto Sans SC,sans-serif;display:flex;align-items:center;gap:.375rem}.gal-history-time i{font-size:.8rem;color:#999}.gal-history-content{padding:1.25rem;font-size:1.05rem;line-height:1.8;color:#333;white-space:pre-wrap;text-align:justify}.gal-history-empty{text-align:center;padding:3.125rem;color:#999;font-style:italic}.galgame-database-container{position:fixed!important;top:0!important;left:0!important;width:100%!important;height:100%!important;z-index:var(--gal-z-modal-critical)!important;display:none}.gal-open-btn{display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;background:linear-gradient(135deg,var(--gal-accent) 0%,#00a8cc 100%);color:#fff;border:none;border-radius:1.25rem;font-size:.85rem;font-weight:600;cursor:pointer;transition:all .3s;box-shadow:0 .125rem .5rem #00d2ff4d}.gal-open-btn:hover{transform:scale(1.05);box-shadow:0 .25rem .938rem #00d2ff80}.gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;gap:.5rem}.gal-realtime-label{font-size:.9rem!important;color:#2b2e38!important;font-weight:600!important;white-space:nowrap}.gal-realtime-switch{position:relative;display:inline-block;width:3.25rem;height:1.75rem;flex-shrink:0}.gal-realtime-switch input{opacity:0;width:0;height:0;position:absolute}.gal-realtime-slider{position:absolute;cursor:pointer;inset:0;background:linear-gradient(145deg,#d0d0d0,#b8b8b8);transition:all .3s ease;border-radius:1.75rem;box-shadow:inset 0 .125rem .25rem #0003}.gal-realtime-slider:before{content:"";position:absolute;height:1.375rem;width:1.375rem;left:.188rem;bottom:.188rem;background:linear-gradient(145deg,#fff,#f5f5f5);transition:transform .3s ease;border-radius:50%;box-shadow:0 .125rem .313rem #0000004d;z-index:2}.gal-realtime-slider:after{content:"OFF";position:absolute;right:.5rem;top:50%;transform:translateY(-50%);font-size:.563rem;font-weight:700;color:#666;z-index:1}.gal-realtime-switch input:checked+.gal-realtime-slider{background:linear-gradient(135deg,var(--gal-accent) 0%,var(--gal-accent-sub) 100%);box-shadow:inset 0 .125rem .25rem #0003,0 0 .75rem #00d2ff66}.gal-realtime-switch input:checked+.gal-realtime-slider:before{transform:translate(1.5rem)}.gal-realtime-switch input:checked+.gal-realtime-slider:after{content:"ON";left:.5rem;right:auto;color:#fffffff2}@media screen and (max-width: 48rem){.gal-input-modal,.gal-config-modal,#gal-settings-panel,#gal-asset-manager-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important;padding:0!important;z-index:var(--gal-z-modal-critical)!important;display:flex!important;align-items:center;justify-content:center}.gal-input-modal .gal-input-box,.gal-config-modal .gal-config-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;display:flex!important;flex-direction:column!important}.gal-config-body,.gal-input-box>div:not(.gal-input-title):not(.gal-input-actions){flex:1;overflow-y:auto!important}#gal-unified-panel .gal-config-body[data-l1-pane=settings]{overflow:hidden!important}}@media screen and (max-width: 48rem){.gal-input-title{flex-direction:column;align-items:flex-start!important;gap:.625rem;padding:.625rem .938rem!important;height:auto!important}.gal-input-title span{font-size:1.2rem!important}.gal-input-title div{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.313rem}.gal-input-title div>button,.gal-input-title div>div{flex:1;min-width:auto!important;margin:0!important}.gal-title-btn{padding:.25rem .625rem!important;font-size:.85rem!important;min-width:auto!important;transform:none!important}.gal-title-btn *{transform:none!important}.gal-tab-header{padding:0 .625rem!important;gap:.625rem!important;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch}.gal-tab-item{padding:.625rem .5rem!important;font-size:.9rem!important;flex-shrink:0}.gal-sub-header,.gal-action-bar{flex-direction:column;align-items:stretch!important;gap:.625rem;height:auto!important;padding:.625rem .938rem!important}.gal-action-group,.gal-filter-group{display:flex!important;flex-wrap:wrap;gap:.5rem!important;width:100%}.gal-action-btn{margin:0!important;flex:1;min-width:6.25rem;padding:.5rem 0!important;justify-content:center;transform:none!important}.gal-action-btn *{transform:none!important}.gal-grid-container{padding:.625rem!important;grid-template-columns:repeat(auto-fill,minmax(6.875rem,1fr))!important;gap:.625rem!important}.gal-input-box>div:last-child{padding:.625rem .938rem!important;min-height:auto!important}#gal-settings-close,#gal-char-sprites-close{min-height:2.5rem!important;transform:none!important}}#gal-asset-manager-modal .gal-asset-header{padding:.625rem .938rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;margin-bottom:.313rem!important}#gal-asset-manager-modal .gal-action-btn:where(#gal-asset-export,#gal-asset-export-remote,#gal-import-dropdown-btn){padding:.25rem .5rem!important;font-size:.8rem!important}#gal-asset-manager-modal .gal-tab-header{padding:0 .625rem!important;min-height:2.5rem!important}#gal-asset-manager-modal .gal-tab-btn{padding:.5rem .75rem!important;font-size:.9rem!important}#gal-asset-manager-modal .gal-tab-content{padding:.625rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin-bottom:.625rem!important;flex-wrap:wrap}#gal-asset-manager-modal .gal-input-actions{padding:.625rem .938rem!important;min-height:auto!important}#gal-asset-manager-modal .gal-asset-header>div{flex-wrap:wrap!important;gap:.625rem!important}#gal-asset-manager-modal .gal-input-title{white-space:nowrap!important;font-size:1.2rem!important;width:auto!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button i{margin:0!important;font-size:1rem!important}#gal-asset-manager-modal .gal-import-menu span{display:inline!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{display:flex!important;gap:.313rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;padding:.5rem .25rem!important;font-size:.85rem!important;white-space:nowrap!important;display:flex!important;justify-content:center!important;align-items:center!important;gap:.25rem!important}#gal-asset-manager-modal .gal-input-actions{padding:.5rem!important}#gal-asset-manager-modal .gal-input-actions button{min-height:2.25rem!important;padding:0!important}#gal-asset-manager-modal .gal-asset-header{padding:1.25rem 1.563rem .938rem;border-bottom:1px solid #e0e0e0;flex-shrink:0}#gal-asset-manager-modal .gal-tab-header{display:flex;border-bottom:.125rem solid #e0e0e0;padding:0 1.563rem;flex-shrink:0}#gal-asset-manager-modal .gal-tab-content{flex:1;overflow-y:auto;padding:1.25rem 1.563rem}#gal-asset-manager-modal .gal-input-actions{padding:.938rem 1.563rem;border-top:1px solid #e0e0e0;flex-shrink:0}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{padding:.5rem .75rem!important;background:#fffffff2;backdrop-filter:blur(.625rem);border-bottom:1px solid rgba(0,0,0,.05)!important;display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:.5rem!important}#gal-asset-manager-modal .gal-input-title{font-size:1.1rem!important;font-weight:700!important;margin-right:auto!important}#gal-asset-manager-modal .gal-realtime-toggle-wrapper{display:flex!important;align-items:center!important;margin-left:0!important;transform:scale(.85);transform-origin:left center;flex-shrink:0!important;min-width:fit-content;margin-right:.25rem}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child{display:block!important;height:auto!important;padding-bottom:.5rem!important;margin-bottom:.5rem!important;border-bottom:1px solid rgba(0,0,0,.05)!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds]>div:first-child>div{width:100%!important;display:flex!important;flex-wrap:wrap!important;justify-content:space-between!important;gap:.625rem!important;position:static!important}#gal-asset-manager-modal .gal-tab-pane[data-pane=backgrounds] .gal-realtime-toggle-wrapper{flex:0 0 100%!important;width:100%!important;order:-1!important;display:flex!important;align-items:center!important;justify-content:center!important;background:#00000008!important;border-radius:.5rem;padding:.5rem!important;margin:0!important;height:auto!important;min-height:2.5rem!important;visibility:visible!important;opacity:1!important;z-index:10!important}#gal-asset-manager-modal .gal-realtime-label{display:inline-block!important;font-size:.9rem!important;color:#444!important;margin-right:.625rem!important;font-weight:700!important}#gal-asset-manager-modal .gal-realtime-switch{display:inline-block!important;transform:scale(1)!important;margin:0!important}#gal-batch-bg-upload-btn,#gal-add-bg-btn{flex:1 1 45%!important;width:auto!important;margin:0!important}#gal-asset-manager-modal .gal-asset-header button{width:2rem!important;height:2rem!important;padding:0!important;border-radius:50%!important;background:#fff!important;border:1px solid #eee!important;color:#555!important;box-shadow:0 .125rem .313rem #0000000d!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important}#gal-import-menu{top:2.813rem!important;right:.625rem!important;width:12.5rem!important}#gal-asset-manager-modal .gal-tab-header{min-height:2.5rem!important;background:#f1f3f5;padding:.25rem!important;margin:0!important;border:none!important;gap:.25rem}#gal-asset-manager-modal .gal-tab-btn{flex:1;padding:0!important;display:flex;align-items:center;justify-content:center;border-radius:.375rem!important;border:none!important;font-size:.85rem!important;color:#666;background:transparent}#gal-asset-manager-modal .gal-tab-btn.active{background:#fff!important;color:#333!important;box-shadow:0 1px .188rem #0000001a!important;font-weight:700}#gal-asset-manager-modal .gal-tab-pane>div:first-child>span{display:none!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child .gal-realtime-toggle-wrapper{display:flex!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child{margin:.625rem!important;gap:.5rem!important}#gal-asset-manager-modal .gal-tab-pane>div:first-child button{flex:1!important;height:2.25rem!important;border-radius:1.125rem!important;font-size:.85rem!important;box-shadow:0 .125rem .375rem #0000001a!important;padding:0!important}.gal-character-grid,.gal-bg-grid{padding:0 .625rem 3.75rem!important;gap:.5rem!important;grid-template-columns:repeat(3,1fr)!important}.gal-character-card,.gal-bg-card{box-shadow:none!important;border:1px solid #eee!important}.gal-character-card>div:last-child>div:last-child{display:none!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:1.25rem;left:50%;transform:translate(-50%);width:90%!important;padding:0!important;border:none!important;z-index:100!important;background:transparent!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.75rem!important;border-radius:1.375rem!important;background:linear-gradient(135deg,#2c3e50,#000)!important;color:#fff!important;box-shadow:0 .25rem .75rem #0003!important;opacity:.9}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-box{display:flex!important;flex-direction:column!important;height:100%!important;overflow:hidden!important}#gal-asset-manager-modal .gal-asset-header{flex:0 0 auto!important;height:3.125rem!important;padding:0 .625rem!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:.5rem!important;background:#fff!important;border-bottom:1px solid #eee!important}#gal-asset-manager-modal .gal-asset-header>div{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:.5rem!important}#gal-asset-manager-modal .gal-asset-header button span,#gal-asset-manager-modal .gal-asset-header .gal-import-dropdown button span{display:none!important}#gal-asset-manager-modal .gal-asset-header button{flex:0 0 auto!important;width:2rem!important;height:2rem!important;min-width:2rem!important;max-width:2rem!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:.875rem!important}#gal-asset-manager-modal .gal-asset-header>div{flex:0 0 auto!important}#gal-asset-manager-modal .gal-tab-header{flex:0 0 auto!important;height:2.5rem!important;padding:.125rem .625rem!important;gap:.313rem!important;background:#f8f9fa!important;display:flex!important;align-items:center!important}#gal-asset-manager-modal .gal-tab-btn{flex:1!important;height:2rem!important;padding:0!important;font-size:.813rem!important;line-height:2rem!important}#gal-asset-manager-modal .gal-tab-content{flex:1 1 auto!important;height:0!important;padding:.625rem .625rem 3.75rem!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}#gal-asset-manager-modal .gal-input-actions{position:absolute!important;bottom:.938rem;left:5%;width:90%!important;padding:0!important;border:none!important;background:transparent!important;pointer-events:none}#gal-asset-manager-modal .gal-input-actions button{pointer-events:auto;height:2.5rem!important;border-radius:1.25rem!important;background:#000000d9!important;color:#fff!important;box-shadow:0 .25rem .625rem #0003!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header button{border-radius:.25rem!important;width:auto!important;padding:0 .5rem!important;background:transparent!important;border:1px solid transparent!important;box-shadow:none!important;color:#555!important}#gal-asset-manager-modal .gal-asset-header button:active{background:#0000001a!important}#gal-asset-manager-modal .gal-asset-header #gal-asset-export-remote{color:#6f42c1!important}#gal-asset-manager-modal .gal-asset-header #gal-import-dropdown-btn{color:#28a745!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{z-index:100!important;position:relative!important;border-bottom:none!important;box-shadow:none!important;padding-bottom:0!important}#gal-asset-manager-modal .gal-tab-header{z-index:90!important;position:relative!important;border-top:none!important;background:#fff!important;margin-top:-1px!important;padding-top:0!important}#gal-asset-manager-modal .gal-import-menu{z-index:var(--gal-z-dropdown)!important;position:absolute!important;top:100%!important;right:0!important;box-shadow:0 .25rem .938rem #0003!important}#gal-asset-manager-modal .gal-import-dropdown{position:static!important;position:relative!important;overflow:visible!important}#gal-asset-manager-modal .gal-input-title{margin-bottom:0!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-asset-header{overflow:visible!important;touch-action:none!important;z-index:var(--gal-z-dropdown)!important}#gal-asset-manager-modal .gal-import-dropdown{overflow:visible!important;position:static!important}#gal-asset-manager-modal .gal-import-menu{position:fixed!important;top:3.438rem!important;right:.625rem!important;z-index:var(--gal-z-dropdown)!important;max-height:60vh!important;overflow-y:auto!important}}@media screen and (max-width: 48rem){#gal-asset-manager-modal .gal-input-actions{position:static!important;width:100%!important;padding:.625rem .938rem!important;background:#fff!important;border-top:1px solid #eee!important;transform:none!important;left:auto!important;bottom:auto!important;pointer-events:auto!important;flex-shrink:0!important}#gal-asset-manager-modal .gal-input-actions button{width:100%!important;height:2.5rem!important;border-radius:.25rem!important;background:#f8f9fa!important;color:#333!important;border:1px solid #ddd!important;box-shadow:none!important;display:flex!important;align-items:center!important;justify-content:center!important}#gal-asset-manager-modal .gal-input-actions button:hover,#gal-asset-manager-modal .gal-input-actions button:active{background:#e9ecef!important}#gal-asset-manager-modal .gal-tab-content{padding-bottom:.625rem!important}}@media screen and (max-width: 48rem){#gal-history-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:var(--gal-z-modal-critical)!important;background:#000000d9!important;visibility:visible!important;opacity:1!important}#gal-history-modal .gal-history-panel{position:relative!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;border:none!important;border-radius:0!important;background:#fff!important;transform:none!important;display:flex!important;flex-direction:column!important;z-index:var(--gal-z-modal-critical)!important;opacity:1!important}#gal-history-modal .gal-history-header{flex-shrink:0!important;padding:.625rem .938rem!important;border-bottom:1px solid #eee!important}#gal-history-modal .gal-history-body{flex:1!important;height:auto!important;max-height:none!important;overflow-y:auto!important;padding:.938rem!important}}@media screen and (max-width: 48rem){#gal-global-overlay *,.gal-input-modal,.gal-config-modal,.gal-history-modal{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.gal-input-modal,.gal-config-modal,.gal-history-modal{background:#000000b3!important}.gal-bgm-widget,.gal-location-bar,.gal-time-bar{background:#2b2e38f2!important}.gal-footer-btn,.gal-footer-btn-next,.gal-pending-choices-btn,.gal-action-btn{box-shadow:none!important}.gal-sprite-card:hover,.gal-character-card:hover,.gal-bg-card:hover{transform:none!important}}@media screen and (max-width: 48rem){.gal-dialog-layer{left:50%!important;right:auto!important;width:min(98%,calc(96% * var(--gal-dialog-scale-user, 1)))!important;bottom:calc(.625rem * var(--gal-dialog-scale-user, 1))!important;height:calc(40% * var(--gal-dialog-scale-user, 1))!important;min-height:calc(11rem*min(var(--gal-dialog-scale-user, 1),1))!important;max-height:84%!important;transform:translate(-50%)!important;padding-bottom:env(safe-area-inset-bottom)}.gal-text-panel{padding:calc(1.563rem * var(--gal-dialog-scale-user, 1)) calc(.938rem * var(--gal-dialog-scale-user, 1)) calc(2.813rem * var(--gal-dialog-scale-user, 1)) calc(.938rem * var(--gal-dialog-scale-user, 1))!important}.gal-dialog-text{font-size:calc(.88rem * var(--font-scale))!important;line-height:1.6!important}.gal-name-badge{top:-1.25rem!important;left:0!important;padding:.25rem 1.25rem .25rem .938rem!important;font-size:1.1rem!important;transform:skew(-15deg) scale(.9)!important;transform-origin:bottom left!important}.gal-interaction-bar{top:-2.813rem!important;right:0!important;transform:scale(.85)!important;transform-origin:bottom right!important;gap:.5rem!important}.gal-action-btn{padding:.5rem 1rem!important;font-size:.95rem!important}.gal-bgm-widget{top:3.75rem!important;padding:.375rem .625rem!important;gap:.375rem!important;font-size:.72rem!important;border-radius:1rem!important;max-width:2.125rem!important;transition:max-width .3s cubic-bezier(.4,0,.2,1)!important}.gal-bgm-icon{font-size:.95rem!important;min-width:1rem!important}.gal-bgm-title{font-size:.7rem!important}.gal-bgm-btn{font-size:.8rem!important;width:1rem!important}.gal-bgm-slider{width:3rem!important;height:.188rem!important}.gal-bgm-slider::-webkit-slider-thumb{width:.5rem!important;height:.5rem!important}.gal-bgm-widget:active,.gal-bgm-widget:focus-within,.gal-bgm-widget.active{max-width:12rem!important;background:#2b2e38fa!important}.gal-status-bar-container{top:.625rem!important;right:auto!important;left:.625rem!important;flex-direction:column!important;align-items:flex-start!important;gap:.375rem!important;transform:scale(.85)!important;transform-origin:top left!important;pointer-events:none;z-index:90!important}.gal-location-bar,.gal-time-bar{max-width:10rem!important;height:1.625rem!important;font-size:.75rem!important;background:#2b2e38cc!important;backdrop-filter:blur(.25rem)}.gal-fullscreen-btn{top:.625rem!important;right:.625rem!important;padding:.5rem .75rem!important;font-size:.8rem!important}.gal-bottom-toolbar{padding:0 .625rem .625rem!important;min-height:3.125rem!important;margin-bottom:env(safe-area-inset-bottom)}.gal-footer-btn{height:2.375rem!important;padding:0 .625rem!important;min-width:2.375rem!important}.gal-footer-btn-next{min-width:6.25rem!important;height:2.813rem!important;font-size:1.1rem!important;margin-left:.625rem!important;margin-right:-.625rem!important}.gal-input-modal,.gal-config-modal,.gal-history-modal,#gal-layer-choices{z-index:var(--gal-z-modal-critical)!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;height:100dvh!important;max-height:100dvh!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}.gal-choices-container{width:min(100%,32rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choices-title,.gal-choices-hint{width:100%!important;text-align:center!important}.gal-choice-card{max-width:100%!important;width:100%!important}#gal-global-overlay.fullscreen{z-index:var(--gal-z-overlay)!important}.gal-progress-indicator{display:none!important}}@media screen and (max-width: 48rem){.gal-interaction-bar .gal-action-btn{transform:skew(-15deg)!important;margin:0!important;flex:initial!important;min-width:auto!important;width:auto!important;display:flex!important;border-radius:0!important}.gal-interaction-bar .gal-action-btn *,.gal-interaction-bar .gal-action-btn i,.gal-interaction-bar .gal-action-btn span{transform:skew(15deg)!important}.gal-interaction-bar .gal-action-btn.btn-reroll,.gal-interaction-bar .gal-action-btn.btn-free{padding:.375rem .75rem!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){.gal-bottom-toolbar{padding-right:.75rem!important;overflow:visible!important}.gal-footer-btn-next{margin-right:0!important;min-width:calc(7.25rem * var(--ui-scale))!important;padding:0 calc(1.75rem * var(--ui-scale))!important}.gal-pending-choices-btn{margin-right:0!important}#gal-settings-panel,#gal-asset-manager-modal,#gal-history-modal,.gal-history-modal,.gal-config-modal,.gal-input-modal,#gal-free-input-modal,#gal-batch-bg-upload-modal,#gal-custom-popup,#gal-character-sprites-modal,#gal-layer-choices,#gal-live2d-settings-modal,.gal-popup-modal,#gal-prompts-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important}#gal-settings-panel .gal-config-panel,.gal-config-modal .gal-config-panel,#gal-asset-manager-modal .gal-input-box,.gal-input-modal .gal-input-box,#gal-history-modal .gal-history-panel,.gal-history-modal .gal-history-panel{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important;margin:0!important}#gal-layer-choices{justify-content:center!important;align-items:center!important;padding-top:calc(env(safe-area-inset-top) + .75rem)!important;padding-bottom:calc(env(safe-area-inset-bottom) + .75rem)!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important}.gal-choices-container{width:min(100%,34rem)!important;max-height:calc(100dvh - 8rem)!important;overflow-y:auto!important;overflow-x:hidden!important;padding:0 .75rem!important}.gal-choice-card{width:100%!important;max-width:100%!important}}@media screen and (max-width: 48rem),screen and (max-height: 46rem){.gal-footer-btn .gal-btn-text,.gal-pending-choices-btn .gal-btn-text,.gal-footer-btn-next .gal-btn-text,.gal-footer-btn[data-action=log],.gal-footer-btn[data-action=view-original],.gal-footer-btn[data-action=save],.gal-footer-btn[data-action=load]{display:none!important}.gal-footer-btn[data-action=close-mode]{order:-1!important}.gal-bottom-toolbar{justify-content:flex-start!important;gap:.3rem!important;padding:0 .875rem .5rem .5rem!important;overflow:visible!important}.gal-footer-btn,.gal-pending-choices-btn{flex:1 1 0!important;width:auto!important;min-width:0!important;padding:0!important;justify-content:center!important;height:2.5rem!important;margin-left:0!important}.gal-footer-btn i,.gal-pending-choices-btn i{margin:0!important;font-size:1.15rem!important}.gal-footer-btn-next{flex:0 0 auto!important;width:5rem!important;min-width:5rem!important;height:2.5rem!important;margin-left:.35rem!important;padding:0!important;justify-content:center!important;margin-right:0!important;z-index:100!important}.gal-footer-btn-next i{margin:0!important;font-size:1.6rem!important}}.gal-mobile-menu{display:none;position:absolute;bottom:4rem;left:.5rem;transform:none;background:#fffffff2;border:.125rem solid var(--gal-dark);border-radius:0;padding:.5rem;flex-direction:column;gap:.5rem;z-index:200;min-width:9rem;box-shadow:.313rem .313rem #0003;backdrop-filter:blur(.25rem);pointer-events:auto}.gal-mobile-menu.active{display:flex}.gal-mobile-menu .gal-menu-btn{display:flex;align-items:center;gap:.5rem;padding:.5rem .875rem;color:var(--gal-dark);background:var(--gal-white);border:.125rem solid var(--gal-dark);border-radius:0;cursor:pointer;text-align:left;font-size:.85rem;font-weight:700;font-family:Barlow,sans-serif;transition:all .2s;box-shadow:.188rem .188rem #0000001f}.gal-mobile-menu .gal-menu-btn:hover{background:var(--gal-dark);color:var(--gal-white);transform:translateY(-.125rem);box-shadow:.25rem .25rem #0003}.gal-mobile-menu .gal-menu-btn i{width:1.2rem;text-align:center}@media screen and (max-width: 48rem){#gal-batch-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-height:100%!important;max-width:100%!important;border-radius:0!important}#gal-batch-upload-modal>.gal-input-box>div:last-child{flex-direction:column!important}#gal-batch-upload-modal .gal-batch-sidebar{width:100%!important;border-right:none!important;border-bottom:1px solid #ddd!important;max-height:none!important;flex-shrink:0!important}#gal-batch-upload-modal .gal-batch-sidebar>div:first-child{padding:6px 8px!important}#gal-batch-upload-modal #gal-batch-add-char{white-space:nowrap!important;padding:4px 10px!important;font-size:.8rem!important;min-height:auto!important}#gal-batch-upload-modal #gal-batch-char-list{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;gap:4px!important;padding:4px 6px!important}#gal-batch-upload-modal .gal-char-item{flex-shrink:0!important;min-width:auto!important;max-width:none!important;padding:5px 10px!important;font-size:.8rem!important;margin-bottom:0!important;border-radius:3px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child{flex:1!important;min-height:0!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child{padding:10px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child{margin-bottom:8px!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child label{margin-bottom:4px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-box>div:last-child>div:last-child>div:first-child>div:first-child input{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area{min-height:100px!important;padding:.75rem!important}#gal-batch-upload-modal #gal-grid-upload-area i{font-size:1.8rem!important}#gal-batch-upload-modal #gal-grid-upload-area span{font-size:.85rem!important}#gal-batch-upload-modal #gal-grid-upload-area small{font-size:.75rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child{padding:.625rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child{gap:.5rem!important}#gal-batch-upload-modal #gal-grid-preview-area>div:first-child>div:first-child>div{gap:.25rem!important}#gal-batch-upload-modal #gal-grid-preview-area label{font-size:.75rem!important}#gal-batch-upload-modal .gal-grid-mapping-container{grid-template-columns:repeat(auto-fill,minmax(70px,1fr))!important;gap:.375rem!important;max-height:150px!important}#gal-batch-upload-modal .gal-input-actions{padding:.5rem .75rem!important;padding-bottom:calc(.5rem + env(safe-area-inset-bottom))!important;gap:.5rem!important}#gal-batch-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-batch-upload-modal .gal-upload-tab{padding:6px 10px!important;font-size:.8rem!important}#gal-batch-upload-modal input[type=text]{padding:6px 10px!important;font-size:.85rem!important}#gal-batch-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:.95rem!important}}@media screen and (max-width: 48rem){#gal-bg-upload-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-bg-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;transform:none!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important}#gal-bg-upload-modal .gal-input-title span{transform:none!important;flex:1!important;min-width:0!important}#gal-bg-upload-modal #gal-bg-close-x{flex-shrink:0!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2){margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) label{margin-bottom:.25rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) input{padding:.4rem .5rem!important;font-size:.85rem!important}#gal-bg-upload-modal .gal-input-box>div:nth-child(2) small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal .gal-upload-tab{padding:.3rem .5rem!important;font-size:.8rem!important}#gal-bg-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important}#gal-bg-upload-modal .gal-upload-card{min-height:70px!important;margin-bottom:.5rem!important;padding:.625rem!important}#gal-bg-upload-modal .gal-upload-card i{font-size:1.5rem!important}#gal-bg-upload-modal .gal-upload-card span{font-size:.85rem!important;margin-top:.25rem!important}#gal-bg-upload-modal .gal-upload-card small{font-size:.7rem!important;margin-top:.125rem!important}#gal-bg-upload-modal #gal-upload-remote>div{min-height:70px!important;padding:.625rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child{padding:.5rem!important;margin-bottom:.5rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.1rem!important}#gal-bg-upload-modal #gal-upload-comfyui>div:first-child span{font-size:.9rem!important}#gal-bg-upload-modal #gal-bg-comfyui-prompt{height:55px!important;font-size:.8rem!important}#gal-bg-upload-modal #gal-bg-comfyui-generate-btn{min-height:38px!important;font-size:.9rem!important}#gal-bg-upload-modal .gal-input-actions{margin-top:.5rem!important}#gal-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-bg-upload-modal #gal-bg-preview-container{margin-bottom:.5rem!important}}@media screen and (max-width: 48rem){#gal-batch-bg-upload-modal .gal-input-box{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;border-radius:0!important}#gal-batch-bg-upload-modal .gal-input-title{padding:.5rem .75rem!important;font-size:1rem!important}#gal-batch-bg-upload-modal #gal-batch-step-1{padding:.75rem!important}#gal-batch-bg-upload-modal .gal-upload-card{min-height:120px!important}#gal-batch-bg-upload-modal .gal-upload-card i{font-size:2rem!important}#gal-batch-bg-upload-modal .gal-upload-card span{font-size:.95rem!important;margin-top:.5rem!important}#gal-batch-bg-upload-modal .gal-upload-tab{padding:.375rem .625rem!important;font-size:.85rem!important}#gal-batch-bg-upload-modal .gal-batch-grid-container{padding:.625rem!important}#gal-batch-bg-upload-modal #gal-batch-grid{grid-template-columns:repeat(2,1fr)!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-batch-input-area{padding:.375rem!important}#gal-batch-bg-upload-modal .gal-batch-scene-input{padding:.375rem .5rem!important;font-size:.8rem!important}#gal-batch-bg-upload-modal #gal-batch-step-2>div:last-child{padding:.375rem .75rem!important;gap:.5rem!important}#gal-batch-bg-upload-modal .gal-input-actions{padding:.5rem .75rem!important;gap:.375rem!important}#gal-batch-bg-upload-modal .gal-input-actions button{min-height:36px!important;font-size:.85rem!important}#gal-batch-bg-upload-modal #gal-upload-remote>div{padding:.75rem!important}#gal-batch-bg-upload-modal #gal-batch-remote-urls{height:120px!important;font-size:.8rem!important}}@media screen and (max-width: 48rem){#gal-sprite-upload-modal .gal-input-box{width:100%!important;max-width:100%!important;max-height:100%!important;height:auto!important;padding:.75rem!important;border-radius:0!important;overflow-y:auto!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:.5rem!important;padding-bottom:.375rem!important;border-bottom:1px solid #eee!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2){display:grid!important;grid-template-columns:1fr 1fr!important;gap:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(2)>div{width:auto!important;margin-bottom:0!important}#gal-sprite-upload-modal label{font-size:.8rem!important;margin-bottom:.25rem!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}#gal-sprite-upload-modal input[type=text],#gal-sprite-upload-modal select{padding:.4rem .5rem!important;font-size:.85rem!important;height:32px!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3){padding:.5rem!important;margin-bottom:.5rem!important;flex:none!important}#gal-sprite-upload-modal>.gal-input-box>div:nth-child(3)>div{flex-direction:row!important;flex-wrap:wrap!important;gap:.5rem!important;align-items:center!important}#gal-sprite-upload-modal #gal-tts-voice-select{flex:1!important;width:auto!important;min-width:120px!important}#gal-sprite-upload-modal #gal-tts-voice-save-btn{width:auto!important;padding:0 .75rem!important;height:32px!important}#gal-sprite-upload-modal .gal-upload-tabs{margin-bottom:.5rem!important;flex-wrap:nowrap!important;overflow-x:auto!important;flex:none!important;min-height:auto!important;gap:.25rem!important}#gal-sprite-upload-modal .gal-upload-tab{padding:.35rem .5rem!important;font-size:.8rem!important;flex:1!important;min-width:auto!important;text-align:center!important;white-space:nowrap!important;border-radius:.25rem!important}#gal-sprite-upload-modal #gal-upload-content{flex:1!important;display:flex!important;flex-direction:column!important;min-height:0!important;overflow-y:auto!important}#gal-sprite-upload-modal #gal-upload-trigger{flex:1!important;min-height:120px!important;padding:.75rem!important;display:flex!important;flex-direction:column!important;justify-content:center!important}#gal-sprite-upload-modal #gal-upload-trigger i{font-size:2rem!important;margin-bottom:.5rem!important}#gal-sprite-upload-modal #gal-upload-trigger span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-trigger small{font-size:.75rem!important}#gal-sprite-upload-modal #gal-upload-remote>div{padding:1rem!important;min-height:120px!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child{padding:.75rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child i{font-size:1.25rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:first-child span{font-size:1rem!important}#gal-sprite-upload-modal #gal-upload-comfyui>div:nth-child(2){flex-direction:column!important;gap:.75rem!important}#gal-sprite-upload-modal #gal-crop-area{margin-bottom:.75rem!important}#gal-sprite-upload-modal .gal-crop-container{padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:.5rem!important;padding:.5rem!important}#gal-sprite-upload-modal .gal-crop-controls input[type=range]{width:120px!important}#gal-sprite-upload-modal .gal-crop-btn{padding:.375rem .625rem!important;font-size:.8rem!important}#gal-sprite-upload-modal .gal-crop-controls span{font-size:.85rem!important}#gal-sprite-upload-modal #gal-crop-area>p{font-size:.75rem!important;margin:.5rem 0!important}#gal-sprite-upload-modal .gal-input-actions{flex-direction:column!important;gap:.5rem!important;margin-top:.75rem!important;padding-top:.75rem!important;border-top:1px solid #eee!important}#gal-sprite-upload-modal .gal-input-actions button{width:100%!important;min-height:42px!important;padding:.625rem 1rem!important;font-size:.9rem!important;flex:none!important}#gal-sprite-upload-modal .gal-input-actions button i{margin-right:.375rem!important}}@media screen and (max-width: 48rem){#gal-character-sprites-modal .gal-input-box{width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;border-radius:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:.5rem .75rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2){margin:.375rem .75rem 0!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2)>div:nth-child(2){flex-direction:row!important;flex-wrap:wrap!important;align-items:center!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-tts-voice-select{flex:1 1 8rem!important;width:auto!important;min-width:8rem!important;padding:.375rem .5rem!important;font-size:.8rem!important}#gal-character-sprites-modal #gal-char-tts-save-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(2) small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-section{margin:.375rem .75rem!important;padding:.5rem .625rem!important;border-radius:.375rem!important;flex:0 0 auto!important;max-height:40vh!important;overflow-y:auto!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child{margin-bottom:.375rem!important;gap:.375rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child i{font-size:.9rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:first-child span{font-size:.8rem!important}#gal-character-sprites-modal #gal-char-live2d-section>div:nth-child(2){gap:.375rem!important;flex-wrap:wrap!important}#gal-character-sprites-modal #gal-char-live2d-section .gal-action-btn{padding:.25rem .5rem!important;font-size:.75rem!important}#gal-character-sprites-modal #gal-char-live2d-section small{margin-top:.25rem!important;font-size:.7rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-container{margin-top:.5rem!important}#gal-character-sprites-modal #gal-char-live2d-preview-canvas{height:250px!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4){padding:.5rem .75rem!important;flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important}#gal-character-sprites-modal .gal-input-box>div:nth-child(4)>div:first-child{margin-bottom:.5rem!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:auto!important;padding:.375rem .625rem!important;font-size:.8rem!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:.375rem!important}#gal-character-sprites-modal .gal-sprite-card{border-radius:.25rem!important}#gal-character-sprites-modal .gal-sprite-label{font-size:.7rem!important;padding:.25rem!important}#gal-character-sprites-modal #gal-char-sprites-close:hover{color:#333!important}}@media screen and (max-width: 22.5rem){#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#gal-character-sprites-modal #gal-char-add-sprite-btn{width:100%!important}}@media screen and (max-width: 48rem){#gal-unified-panel [data-l1-pane]:not([data-l1-pane=settings]){padding:12px!important}#gal-unified-panel [data-l1-pane=settings]{padding:0!important}#gal-unified-panel .gal-l2-body{padding:12px!important}#gal-unified-panel .gal-l1-tab-btn{padding:10px 16px!important;font-size:.9rem!important}#gal-unified-panel .gal-l1-tab-btn span{font-size:.85rem!important}#gal-unified-panel .gal-config-close{width:2.5rem!important;height:2.5rem!important;min-width:2.5rem!important;font-size:1.1rem!important}#gal-unified-panel .gal-master-bar{padding:8px 12px!important;gap:8px!important}#gal-unified-panel #gal-main-toggle{padding:7px 16px!important;font-size:.85rem!important}#gal-unified-panel .gal-l2-tab-header{padding:0 8px!important}#gal-unified-panel .gal-l2-tab-btn{padding:9px 10px!important;font-size:.8rem!important}#gal-unified-panel .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel .gal-settings-label{flex:1 1 100%!important;font-size:.85rem!important}#gal-unified-panel .gal-settings-control{flex:1 1 100%!important;justify-content:flex-start!important}#gal-unified-panel .gal-settings-control input[type=range]{width:100%!important;flex:1!important;min-width:0!important}#gal-unified-panel .gal-range-value{min-width:40px!important;flex-shrink:0!important}#gal-unified-panel .gal-settings-row:has(.gal-switch){flex-wrap:nowrap!important}#gal-unified-panel .gal-settings-row:has(.gal-switch) .gal-settings-label{flex:1 1 auto!important}#gal-unified-panel .gal-select,#gal-unified-panel .gal-input{width:100%!important;max-width:100%!important}#gal-unified-panel #gal-gpt-sovits-media-type{min-width:0!important;width:100%!important}#gal-unified-panel #gal-gpt-sovits-config{padding:8px!important;margin-top:8px!important}#gal-unified-panel #gal-gpt-sovits-config input[type=text],#gal-unified-panel #gal-gpt-sovits-config input[type=number]{margin-left:0!important;flex:1!important;min-width:0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row{flex-wrap:wrap!important;gap:4px 0!important}#gal-unified-panel #gal-gpt-sovits-config .gal-settings-row>.gal-settings-label{flex:1 1 100%!important}#gal-unified-panel #gal-gpt-sovits-speed{width:100%!important}#gal-unified-panel #gal-gpt-sovits-voices-json{font-size:.75rem!important}#gal-unified-panel #gal-gpt-sovits-config .gal-panel-btn{padding:8px!important;font-size:.85rem!important}#gal-unified-panel #gal-enhanced-config{padding-left:8px!important}#gal-unified-panel #gal-enhanced-config select{width:100%!important;margin-left:0!important}#gal-unified-panel #gal-enhanced-config>div>div{margin-left:8px!important}#gal-unified-panel #gal-enhanced-worldbooks-list{margin-left:8px!important}#gal-unified-panel .gal-enhanced-worldbook-item,#gal-unified-panel #gal-enhanced-config input[type=checkbox]{width:20px!important;height:20px!important}#gal-unified-panel .gal-switch{width:52px!important;height:30px!important;min-width:52px!important}#gal-unified-panel .gal-switch-slider:before{height:24px!important;width:24px!important}#gal-unified-panel .gal-switch input:checked+.gal-switch-slider:before{transform:translate(22px)!important}#gal-unified-panel .gal-bg-source-selector{padding:8px 10px!important;gap:8px!important;flex-wrap:wrap!important}#gal-unified-panel .gal-bg-source-selector .gal-radio-label{font-size:.8rem!important}#gal-unified-panel .gal-imagegen-pills{gap:6px!important;padding:8px 0!important}#gal-unified-panel .gal-pill{padding:6px 12px!important;font-size:.8rem!important}#gal-unified-panel [data-engine-pane]>div{padding:10px!important}#gal-unified-panel [data-engine-pane] input[type=text],#gal-unified-panel [data-engine-pane] input[type=password],#gal-unified-panel [data-engine-pane] textarea,#gal-unified-panel [data-engine-pane] select{max-width:100%!important;box-sizing:border-box!important}#gal-unified-panel .gal-realtime-switch{min-width:3.25rem!important}#gal-unified-panel .gal-settings-divider{margin:10px 0!important}#gal-unified-panel .gal-settings-section-title{font-size:.9rem!important;margin-bottom:8px!important}#gal-unified-panel .gal-asset-header>div:first-child{flex-wrap:wrap!important;gap:8px!important}#gal-unified-panel #gal-pack-dropdown-btn,#gal-unified-panel #gal-render-scope-btn,#gal-unified-panel #gal-export-dropdown-btn,#gal-unified-panel #gal-import-dropdown-btn{padding:4px 8px!important;font-size:.8rem!important}#gal-unified-panel #gal-export-dropdown-btn>span,#gal-unified-panel #gal-import-dropdown-btn>span{display:none!important}#gal-unified-panel .gal-pack-menu,#gal-unified-panel .gal-export-menu,#gal-unified-panel .gal-import-menu{min-width:160px!important}#gal-unified-panel .gal-tab-header{display:flex!important;flex-wrap:nowrap!important;gap:0!important}#gal-unified-panel .gal-tab-btn{padding:8px 4px!important;font-size:.7rem!important;white-space:nowrap!important;flex:1!important;text-align:center!important;justify-content:center!important;gap:2px!important}#gal-unified-panel .gal-tab-btn i{font-size:.8rem!important;margin-right:2px!important}#gal-unified-panel .gal-pane-header{flex-wrap:wrap;gap:8px}#gal-unified-panel .gal-pane-stat{flex:1 1 100%;font-size:.85rem}#gal-unified-panel .gal-pane-actions{flex:1 1 100%;gap:6px}#gal-unified-panel .gal-pane-btn{padding:6px 8px!important;flex:1;justify-content:center;font-size:.75rem!important;gap:4px!important}#gal-unified-panel .gal-pane-btn>i{font-size:.8rem}#gal-prompts-modal{padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal>div>div:first-child{padding:12px 16px!important;border-radius:0!important}#gal-prompts-modal>div>div:nth-child(2){padding:12px!important}#gal-prompts-modal pre{font-size:.75rem!important;padding:8px!important}#gal-prompts-modal>div>div:last-child{padding:10px 12px!important}#gal-prompts-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-asset-header>div:first-child>div:first-child{gap:6px!important}#gal-unified-panel .gal-asset-header>div:first-child>div:last-child{gap:4px!important}#gal-unified-panel .gal-pack-item,#gal-unified-panel .gal-export-item,#gal-unified-panel .gal-import-item{padding:8px 12px!important;font-size:.85rem!important}#gal-unified-panel .gal-character-grid{grid-template-columns:repeat(3,1fr)!important;gap:8px!important}#gal-unified-panel .gal-character-card>div:last-child{padding:6px!important}#gal-unified-panel .gal-character-card>div:last-child>div:first-child{font-size:.75rem!important}#gal-unified-panel .gal-bg-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}#gal-unified-panel .gal-bg-label{padding:6px!important;font-size:.8rem!important}}.gal-popup-modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:var(--gal-z-modal);padding:20px;box-sizing:border-box}.gal-popup-panel{background:var(--SmartThemeFormBg, #fff);color:#2b2e38;border-radius:12px;max-width:700px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px #0000004d}.gal-popup-header{padding:14px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}.gal-popup-title{font-weight:700;font-size:1.1rem;color:#2b2e38!important;text-shadow:none}.gal-popup-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:#666;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background .2s}.gal-popup-close:hover{background:#00000014}.gal-popup-body{padding:20px;overflow-y:auto;flex:1;color:#2b2e38!important;line-height:1.7;text-shadow:none}.gal-popup-body a{color:#1f5fbf}.gal-popup-body *:not([style*=color]){color:inherit!important}@media screen and (max-width: 48rem){.gal-input-title{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;flex-wrap:nowrap!important;transform:none!important;gap:.5rem!important;padding:.5rem 0!important}.gal-input-title>span{transform:none!important;flex:1!important;min-width:0!important;display:inline!important;font-size:1rem!important}.gal-input-title>button,.gal-input-title .gal-close-btn{flex-shrink:0!important;transform:none!important}.gal-input-modal .gal-input-box:not(.gal-modal-layout-fixed){width:100%!important;height:auto!important;max-width:100%!important;max-height:100%!important;padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important;border-radius:0!important;overflow-y:auto!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed{width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;padding:0!important;border-radius:0!important;overflow:hidden!important;box-sizing:border-box!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-scroll-body{padding:.75rem!important;padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-title,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-header,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-actions,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-actions{padding-left:.75rem!important;padding-right:.75rem!important;margin-bottom:0!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-input-actions,.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-fixed-actions{padding-bottom:calc(.75rem + env(safe-area-inset-bottom))!important}.gal-input-modal .gal-input-box.gal-modal-layout-fixed>.gal-modal-scroll-body{margin-bottom:0!important}.gal-input-modal .gal-input-box>.gal-input-title{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div{margin-bottom:.5rem!important}.gal-input-modal .gal-input-box>div:last-child{margin-bottom:0!important}.gal-input-modal .gal-input-box label{margin-bottom:.25rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box input[type=text],.gal-input-modal .gal-input-box select,.gal-input-modal .gal-input-box textarea{padding:.4rem .5rem!important;font-size:.85rem!important}.gal-input-modal .gal-input-box small{font-size:.7rem!important;margin-top:.125rem!important}.gal-input-actions{margin-top:.5rem!important;gap:.375rem!important}.gal-input-actions button{min-height:36px!important;font-size:.85rem!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}.gal-popup-header{padding:10px 14px!important}.gal-popup-title{font-size:1rem!important}.gal-popup-body{padding:12px!important}#gal-live2d-settings-modal{padding:0!important}#gal-live2d-settings-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-live2d-settings-modal>div>div:first-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:first-child span{font-size:.95rem!important}#gal-live2d-settings-modal .gal-settings-tab{padding:8px 4px!important;font-size:.85rem!important}#gal-live2d-settings-modal .gal-settings-panel{padding:0!important}#gal-live2d-settings-modal>div>div:nth-child(3){padding:12px!important}#gal-live2d-settings-modal .gal-settings-panel div[style*=grid-template-columns]{grid-template-columns:1fr!important;gap:10px!important}#gal-live2d-settings-modal .gal-mapping-row{flex-wrap:wrap!important;gap:4px!important;padding:6px 0!important}#gal-live2d-settings-modal .gal-mapping-row span:first-child{min-width:50px!important;font-size:.8rem!important}#gal-live2d-settings-modal .gal-mapping-row select{flex:1 1 40%!important;min-width:0!important;font-size:.8rem!important;padding:4px!important}#gal-live2d-settings-modal>div>div:last-child{padding:10px 14px!important}#gal-live2d-settings-modal>div>div:last-child button{padding:8px 12px!important;font-size:.85rem!important}#gal-pack-manager-modal .gal-input-box{width:100%!important}#gal-pack-manager-modal .gal-pack-row{flex-wrap:wrap!important;gap:8px!important}#gal-pack-manager-modal .gal-pack-row>div:last-child{width:100%!important;justify-content:flex-end!important}#gal-transfer-modal .gal-input-box{width:100%!important}#gal-banana-appearance-picker .gal-input-box{max-width:none!important;width:100%!important;height:100%!important;max-height:none!important;border-radius:0!important}#gal-banana-appearance-picker .gal-input-title{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-box{padding:0!important}#gal-character-sprites-modal .gal-input-box>div:first-child{padding:10px 14px!important}#gal-character-sprites-modal .gal-input-title{font-size:1rem!important}#gal-char-live2d-section>div:nth-child(2){flex-wrap:wrap!important;gap:6px!important}#gal-char-live2d-section .gal-action-btn{padding:4px 8px!important;font-size:.75rem!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]{margin:0 12px!important;padding:10px!important}#gal-character-sprites-modal [style*="linear-gradient(135deg, #667eea"]>div:last-child{flex-direction:column!important}#gal-character-sprites-modal .gal-sprite-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))!important;gap:8px!important}#gal-sprite-upload-modal .gal-input-box{padding:12px!important}#gal-sprite-upload-modal .gal-input-title{font-size:1rem!important;margin-bottom:8px!important}#gal-sprite-upload-modal .gal-input-box>div:nth-child(2){flex-direction:column!important;gap:8px!important}#gal-sprite-upload-modal [style*="linear-gradient(135deg, #f5f7fa"]{padding:10px!important;margin-bottom:10px!important}#gal-sprite-upload-modal .gal-crop-container{margin-bottom:8px!important}#gal-sprite-upload-modal .gal-crop-controls{flex-wrap:wrap!important;gap:6px!important}#gal-expression-manager-modal .gal-input-box{padding:12px!important}#gal-expression-manager-modal .gal-tag{padding:4px 8px!important;font-size:.75rem!important}#gal-expression-manager-modal .gal-input-box>div{margin-bottom:10px!important}#gal-expression-manager-modal .gal-input-box label{margin-bottom:4px!important;font-size:.85rem!important}#gal-expression-manager-modal .gal-input-box>div:last-child>div:last-child{gap:6px!important}#gal-expression-manager-modal #gal-new-expression-input{padding:8px 10px!important;font-size:.85rem!important;min-width:0!important}#gal-expression-manager-modal #gal-add-expression-btn{padding:8px 12px!important;font-size:.85rem!important;white-space:nowrap!important;flex-shrink:0!important}#gal-appearance-prompt-modal .gal-input-box{padding:12px!important}#gal-appearance-prompt-modal textarea{height:100px!important}}@media screen and (min-width: 48.0625rem) and (max-width: 62.5rem){#gal-live2d-settings-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;transform:none!important;padding:0!important}#gal-live2d-settings-modal>div{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;border-radius:0!important}.gal-popup-modal{padding:0!important}.gal-popup-panel{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}#gal-prompts-modal{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important}#gal-prompts-modal>div{max-width:none!important;max-height:none!important;width:100%!important;height:100%!important;border-radius:0!important}}#gal-asset-manager-modal .gal-tab-btn,#gal-live2d-settings-modal,#gal-live2d-settings-modal>div,#gal-bg-upload-modal,#gal-bg-upload-modal .gal-input-box,#gal-batch-bg-upload-modal,#gal-batch-bg-upload-modal .gal-input-box{opacity:1!important;filter:none!important}#gal-asset-manager-modal .gal-tab-btn{color:#4b5563!important;font-weight:700!important}#gal-asset-manager-modal .gal-tab-btn.active{color:var(--gal-accent)!important}#gal-live2d-settings-modal .gal-settings-tab{color:#5b6472!important;opacity:1!important}#gal-live2d-settings-modal .gal-settings-tab.active{color:var(--gal-accent)!important}#gal-live2d-settings-modal .gal-settings-panel,#gal-live2d-settings-modal .gal-settings-panel h4,#gal-live2d-settings-modal .gal-settings-panel p,#gal-live2d-settings-modal .gal-settings-panel label,#gal-live2d-settings-modal .gal-settings-panel span{color:#2b2e38!important;opacity:1!important}#gal-live2d-settings-modal .gal-settings-panel input[type=number],#gal-live2d-settings-modal .gal-settings-panel select,#gal-live2d-settings-modal .gal-settings-panel select option{color:#1f2937!important;background:#fff!important}#gal-live2d-settings-modal .gal-settings-panel button:not(:disabled){color:#2b2e38!important;opacity:1!important}#gal-live2d-settings-modal #gal-live2d-start-position-edit,#gal-live2d-settings-modal #gal-live2d-auto-match,#gal-live2d-settings-modal #gal-live2d-settings-save{color:#fff!important}#gal-live2d-settings-modal .gal-settings-panel button:disabled{opacity:.55!important;color:#6b7280!important}#gal-bg-upload-modal .gal-input-box,#gal-batch-bg-upload-modal .gal-input-box{color:#1f2937!important}#gal-bg-upload-modal .gal-upload-tab,#gal-batch-bg-upload-modal .gal-upload-tab{color:#6b7280!important;opacity:1!important}#gal-bg-upload-modal .gal-upload-tab.active,#gal-batch-bg-upload-modal .gal-upload-tab.active{color:#1f2937!important;font-weight:700!important}#gal-bg-upload-modal label,#gal-bg-upload-modal small,#gal-bg-upload-modal p,#gal-batch-bg-upload-modal label,#gal-batch-bg-upload-modal small,#gal-batch-bg-upload-modal p{color:#4b5563!important;opacity:1!important}#gal-bg-upload-modal input,#gal-bg-upload-modal textarea,#gal-bg-upload-modal select,#gal-batch-bg-upload-modal input,#gal-batch-bg-upload-modal textarea,#gal-batch-bg-upload-modal select{color:#1f2937!important;background:#fff!important;opacity:1!important}#gal-bg-upload-modal input::placeholder,#gal-bg-upload-modal textarea::placeholder,#gal-batch-bg-upload-modal input::placeholder,#gal-batch-bg-upload-modal textarea::placeholder{color:#9ca3af!important;opacity:1!important}#gal-bg-upload-modal button:not(:disabled),#gal-batch-bg-upload-modal button:not(:disabled){opacity:1!important}#gal-bg-upload-modal .gal-action-btn.primary:not(:disabled),#gal-batch-bg-upload-modal .gal-action-btn.primary:not(:disabled){color:#fff!important}#gal-bg-upload-modal button:disabled,#gal-batch-bg-upload-modal button:disabled{opacity:.55!important;color:#6b7280!important}#gal-bg-upload-modal #gal-bg-close-x,#gal-batch-bg-upload-modal #gal-batch-bg-close-x{color:#4b5563!important}#gal-unified-panel .gal-l1-tab-header{background:linear-gradient(135deg,#00000040,#0000008c),var(--SmartThemeBotMesBlurTintColor, #1a1a2e)!important}#gal-unified-panel .gal-l1-tab-btn{color:#ffffffd1!important}#gal-unified-panel .gal-l1-tab-btn i{color:currentColor!important;opacity:1!important}#gal-unified-panel .gal-l1-tab-btn:hover{color:#fffffff2!important}#gal-unified-panel .gal-l1-tab-btn.active{color:var(--gal-accent)!important}@media screen and (max-width: 48rem){.gal-sprite-toggle,.gal-status-popup-trigger{right:.375rem!important;transform:scale(max(var(--ui-scale),.88))!important;transform-origin:top right!important;z-index:91!important}.gal-sprite-toggle{top:-.9rem!important;width:2rem!important;height:2rem!important}.gal-location-popup-trigger{top:1.25rem!important;width:2rem!important;height:2rem!important}.gal-time-popup-trigger{top:3.55rem!important;width:2rem!important;height:2rem!important}.gal-status-popup-icon{font-size:.95rem!important}}@media screen and (max-width: 48rem){.gal-dialog-topbar{display:flex!important;position:absolute;left:0;right:0;bottom:calc(100% + .15rem);justify-content:flex-end;align-items:center;gap:.45rem;z-index:36;pointer-events:none}.gal-dialog-quick-actions{display:flex!important;align-items:center;gap:.3rem;flex:0 0 auto;pointer-events:auto}.gal-dialog-topbar .gal-sprite-toggle,.gal-dialog-topbar .gal-status-popup-trigger{position:static!important;inset:auto!important;transform:none!important;width:1.55rem!important;height:1.55rem!important;flex:0 0 auto;z-index:auto!important;box-shadow:.125rem .125rem 0 var(--gp-shadow, rgba(0, 0, 0, .2))}.gal-dialog-topbar .gal-eye-icon,.gal-dialog-topbar .gal-status-popup-icon{font-size:.8rem!important}.gal-dialog-topbar .gal-interaction-bar{position:static!important;inset:auto!important;transform:none!important;flex:0 1 auto;gap:.4rem!important;z-index:auto!important;pointer-events:auto}.gal-dialog-topbar .gal-interaction-bar .gal-action-btn{padding:.3rem .6rem!important;font-size:.82rem!important}}@media screen and (max-width: 22.5rem){.gal-dialog-topbar .gal-interaction-bar .gal-action-btn span{display:none!important}.gal-dialog-topbar .gal-interaction-bar .gal-action-btn{padding:.3rem .5rem!important}}#gal-global-overlay .gal-special-cg-overlay{position:absolute;inset:0;z-index:70;display:none;align-items:center;justify-content:center;background:#06080cd1;backdrop-filter:blur(2px)}#gal-global-overlay .gal-special-cg-overlay.active{display:flex!important}#gal-global-overlay .gal-special-cg-overlay-image{width:min(92%,72rem);max-height:88%;object-fit:contain;border-radius:.5rem;box-shadow:0 .75rem 2.5rem #00000073;border:.0625rem solid rgba(255,255,255,.2)}#gal-global-overlay .gal-special-cg-overlay-close{position:absolute;top:.875rem;right:.875rem;width:2.25rem;height:2.25rem;border:.0625rem solid rgba(255,255,255,.25);border-radius:999px;background:#0c1018b8;color:#f5f7fa;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}#gal-global-overlay .gal-special-cg-overlay-close:hover{background:#161c28e6}#gal-unified-panel .gal-special-cg-card,#gal-unified-panel .gal-special-cg-rules-panel{background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border-color:var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important}#gal-unified-panel .gal-special-cg-name,#gal-unified-panel .gal-special-cg-id,#gal-unified-panel .gal-special-cg-rules-hint,#gal-unified-panel .gal-special-cg-rules-header>span,#gal-unified-panel .gal-special-cg-master-switch,#gal-unified-panel .gal-special-cg-rule-enabled-wrap,#gal-unified-panel .gal-special-cg-empty-hint{color:var(--SmartThemeBodyColor, #f5f7fa)!important}#gal-unified-panel .gal-special-cg-id{opacity:.86}#gal-unified-panel .gal-special-cg-rules-hint code{color:var(--SmartThemeEmColor, #9ac7ff)!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text],#gal-unified-panel .gal-special-cg-rule-row input[type=number],#gal-unified-panel .gal-special-cg-rule-row textarea,#gal-unified-panel .gal-special-cg-rule-row select,#gal-special-cg-upload-modal input[type=text],#gal-special-cg-upload-modal input[type=number],#gal-special-cg-upload-modal textarea,#gal-special-cg-upload-modal select,#gal-batch-special-cg-upload-modal input[type=text],#gal-batch-special-cg-upload-modal input[type=number],#gal-batch-special-cg-upload-modal textarea,#gal-batch-special-cg-upload-modal select{color:var(--SmartThemeBodyColor, #f5f7fa)!important;background:var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92))!important;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28))!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text]::placeholder,#gal-unified-panel .gal-special-cg-rule-row input[type=number]::placeholder,#gal-unified-panel .gal-special-cg-rule-row textarea::placeholder,#gal-special-cg-upload-modal input[type=text]::placeholder,#gal-special-cg-upload-modal input[type=number]::placeholder,#gal-special-cg-upload-modal textarea::placeholder,#gal-batch-special-cg-upload-modal input[type=text]::placeholder,#gal-batch-special-cg-upload-modal input[type=number]::placeholder,#gal-batch-special-cg-upload-modal textarea::placeholder{color:var(--SmartThemeEmColor, #9ac7ff)!important;opacity:.82!important}#gal-unified-panel .gal-special-cg-rule-row input[type=text]:focus,#gal-unified-panel .gal-special-cg-rule-row input[type=number]:focus,#gal-unified-panel .gal-special-cg-rule-row textarea:focus,#gal-unified-panel .gal-special-cg-rule-row select:focus,#gal-special-cg-upload-modal input[type=text]:focus,#gal-special-cg-upload-modal input[type=number]:focus,#gal-special-cg-upload-modal textarea:focus,#gal-special-cg-upload-modal select:focus,#gal-batch-special-cg-upload-modal input[type=text]:focus,#gal-batch-special-cg-upload-modal input[type=number]:focus,#gal-batch-special-cg-upload-modal textarea:focus,#gal-batch-special-cg-upload-modal select:focus{outline:none!important;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 .125rem #9ac7ff59!important}#gal-timeline-modal{z-index:var(--gal-z-modal-critical, 2147483000)!important;padding:1rem!important;align-items:stretch!important;justify-content:stretch!important;background:#07090eb8!important;backdrop-filter:blur(10px)}#gal-timeline-modal .gal-timeline-shell{width:min(96vw,92rem);height:min(92vh,56rem);margin:auto;display:flex;flex-direction:column;overflow:hidden;border-radius:1rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:linear-gradient(180deg,rgba(25,30,40,.96) 0%,var(--SmartThemeBlurTintColor, rgba(20, 24, 32, .92)) 100%);box-shadow:0 1rem 3rem #00000073;color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-header,#gal-timeline-modal .gal-timeline-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.9rem 1rem;border-bottom:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18))}#gal-timeline-modal .gal-timeline-title,#gal-timeline-modal .gal-timeline-header-actions,#gal-timeline-modal .gal-timeline-search-wrap,#gal-timeline-modal .gal-timeline-drawer-title-row,#gal-timeline-modal .gal-timeline-drawer-actions{display:flex;align-items:center;gap:.65rem}#gal-timeline-modal .gal-timeline-title{font-size:1.05rem;font-weight:700;color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-header-actions{margin-left:auto}#gal-timeline-modal .gal-timeline-header-btn,#gal-timeline-modal .gal-timeline-close,#gal-timeline-modal .gal-timeline-action-btn,#gal-timeline-modal .gal-timeline-session-btn{border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#ffffff0f;color:var(--SmartThemeBodyColor, #f5f7fa);border-radius:.75rem;cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .18s ease,box-shadow .18s ease}#gal-timeline-modal .gal-timeline-header-btn,#gal-timeline-modal .gal-timeline-action-btn{min-height:2.5rem;padding:.55rem .85rem;display:inline-flex;align-items:center;justify-content:center;gap:.45rem;font-size:.92rem;font-weight:600}#gal-timeline-modal .gal-timeline-close{width:2.5rem;height:2.5rem;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}#gal-timeline-modal .gal-timeline-header-btn:hover,#gal-timeline-modal .gal-timeline-close:hover,#gal-timeline-modal .gal-timeline-action-btn:hover,#gal-timeline-modal .gal-timeline-session-btn:hover{background:#9ac7ff24;border-color:var(--SmartThemeEmColor, #9ac7ff);transform:translateY(-.0625rem)}#gal-timeline-modal .gal-timeline-header-btn:focus,#gal-timeline-modal .gal-timeline-close:focus,#gal-timeline-modal .gal-timeline-action-btn:focus,#gal-timeline-modal .gal-timeline-session-btn:focus,#gal-timeline-modal .gal-timeline-search-input:focus{outline:none;border-color:var(--SmartThemeEmColor, #9ac7ff)!important;box-shadow:0 0 0 .125rem #9ac7ff59}#gal-timeline-modal .gal-timeline-action-btn.primary{background:linear-gradient(135deg,#4997ffeb,#2f61ffeb);border-color:#c6deffb3;color:#fff}#gal-timeline-modal .gal-timeline-toolbar{gap:1rem}#gal-timeline-modal .gal-timeline-search-wrap{flex:1 1 auto;min-width:0;padding:0 .85rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#0a0e158a}#gal-timeline-modal .gal-timeline-search-wrap>i,#gal-timeline-modal .gal-timeline-status,#gal-timeline-modal .gal-timeline-preview-label,#gal-timeline-modal .gal-timeline-session-meta,#gal-timeline-modal .gal-timeline-drawer-hint,#gal-timeline-modal .gal-timeline-drawer-empty{color:var(--SmartThemeEmColor, #9ac7ff)}#gal-timeline-modal .gal-timeline-zoom-wrap{flex:0 0 auto;display:flex;align-items:center;gap:.55rem;min-width:18rem;padding:.4rem .65rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#0a0e158a}#gal-timeline-modal .gal-timeline-zoom-btn,#gal-timeline-modal .gal-timeline-zoom-value{flex:0 0 auto;min-width:2.25rem;height:2.25rem;border-radius:.7rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .28));background:#ffffff0f;color:var(--SmartThemeBodyColor, #f5f7fa);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}#gal-timeline-modal .gal-timeline-zoom-value{min-width:4.3rem;padding:0 .7rem;font-weight:600}#gal-timeline-modal .gal-timeline-zoom-btn:hover,#gal-timeline-modal .gal-timeline-zoom-value:hover{background:#9ac7ff24;border-color:var(--SmartThemeEmColor, #9ac7ff)}#gal-timeline-modal .gal-timeline-zoom-btn:focus,#gal-timeline-modal .gal-timeline-zoom-value:focus,#gal-timeline-modal .gal-timeline-zoom-range:focus{outline:none;border-color:var(--SmartThemeEmColor, #9ac7ff);box-shadow:0 0 0 .125rem #9ac7ff59}#gal-timeline-modal .gal-timeline-zoom-range{flex:1 1 auto;min-width:8rem;accent-color:var(--SmartThemeEmColor, #9ac7ff);cursor:pointer}#gal-timeline-modal .gal-timeline-zoom-range::-webkit-slider-runnable-track{height:.35rem;border-radius:999px;background:linear-gradient(90deg,#9ac7ffe6,#4a6fffe6)}#gal-timeline-modal .gal-timeline-zoom-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:1rem;height:1rem;margin-top:-.325rem;border-radius:50%;border:.125rem solid rgba(255,255,255,.9);background:var(--SmartThemeBodyColor, #f5f7fa);box-shadow:0 .125rem .5rem #00000059}#gal-timeline-modal .gal-timeline-zoom-range::-moz-range-track{height:.35rem;border:none;border-radius:999px;background:linear-gradient(90deg,#9ac7ffe6,#4a6fffe6)}#gal-timeline-modal .gal-timeline-zoom-range::-moz-range-thumb{width:1rem;height:1rem;border:.125rem solid rgba(255,255,255,.9);border-radius:50%;background:var(--SmartThemeBodyColor, #f5f7fa);box-shadow:0 .125rem .5rem #00000059}#gal-timeline-modal .gal-timeline-search-input{width:100%;min-width:0;border:none!important;background:transparent!important;color:var(--SmartThemeBodyColor, #f5f7fa)!important;padding:.78rem 0!important;font-size:.95rem!important}#gal-timeline-modal .gal-timeline-search-input::placeholder{color:var(--SmartThemeEmColor, #9ac7ff)!important;opacity:.82!important}#gal-timeline-modal .gal-timeline-status{flex:0 0 auto;font-size:.85rem;white-space:nowrap}#gal-timeline-modal .gal-timeline-body{min-height:0;flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1.9fr) minmax(18rem,.95fr)}#gal-timeline-modal .gal-timeline-graph-panel,#gal-timeline-modal .gal-timeline-drawer{min-height:0}#gal-timeline-modal .gal-timeline-graph-panel{position:relative;border-right:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18));background:radial-gradient(circle at top,#6084bc33,#0b0f16f5 62%)}#gal-timeline-modal #gal-timeline-graph,#gal-timeline-modal #gal-timeline-empty{width:100%;height:100%}#gal-timeline-modal #gal-timeline-empty{display:flex;align-items:center;justify-content:center;padding:2rem}#gal-timeline-modal .gal-timeline-empty-inner,#gal-timeline-modal .gal-timeline-drawer-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.65rem;text-align:center}#gal-timeline-modal .gal-timeline-drawer{overflow:auto;padding:1rem;background:#0b0f16ad}#gal-timeline-modal .gal-timeline-drawer-header,#gal-timeline-modal .gal-timeline-drawer-body{display:flex;flex-direction:column;gap:.85rem}#gal-timeline-modal .gal-timeline-drawer-title-row{justify-content:space-between;flex-wrap:wrap}#gal-timeline-modal .gal-timeline-node-type,#gal-timeline-modal .gal-timeline-chip{display:inline-flex;align-items:center;min-height:1.8rem;padding:.2rem .6rem;border-radius:999px;border:.0625rem solid rgba(154,199,255,.3);background:#9ac7ff1f;color:var(--SmartThemeBodyColor, #f5f7fa);font-size:.8rem}#gal-timeline-modal .gal-timeline-chip.checkpoint{border-color:#ffd16666;background:#ffd1661f}#gal-timeline-modal .gal-timeline-node-depth,#gal-timeline-modal .gal-timeline-node-label,#gal-timeline-modal .gal-timeline-preview,#gal-timeline-modal .gal-timeline-session-file{color:var(--SmartThemeBodyColor, #f5f7fa)}#gal-timeline-modal .gal-timeline-node-label{font-size:1rem;font-weight:700;line-height:1.45}#gal-timeline-modal .gal-timeline-checkpoints{display:flex;flex-wrap:wrap;gap:.5rem}#gal-timeline-modal .gal-timeline-preview{padding:.9rem 1rem;border-radius:.85rem;border:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .22));background:#ffffff0a;line-height:1.6;white-space:pre-wrap;word-break:break-word}#gal-timeline-modal .gal-timeline-session-list{display:flex;flex-direction:column;gap:.55rem}#gal-timeline-modal .gal-timeline-session-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:.75rem;text-align:left;padding:.7rem .85rem}#gal-timeline-modal .gal-timeline-session-btn.active{border-color:var(--SmartThemeEmColor, #9ac7ff);background:#9ac7ff29}#gal-timeline-modal .gal-timeline-session-btn.is-current{box-shadow:inset 0 0 0 .0625rem #ff5d9e66}#gal-timeline-modal .gal-timeline-session-file{flex:1 1 auto;min-width:0;font-weight:600;word-break:break-all}#gal-timeline-modal .gal-timeline-session-meta{flex:0 0 auto;font-size:.8rem}#gal-timeline-modal .gal-timeline-drawer-actions{flex-wrap:wrap}#gal-timeline-modal .gal-timeline-drawer-actions>button{flex:1 1 10rem}@media (max-width: 960px){#gal-timeline-modal{padding:0!important}#gal-timeline-modal .gal-timeline-shell{width:100vw;height:100vh;border-radius:0}#gal-timeline-modal .gal-timeline-toolbar,#gal-timeline-modal .gal-timeline-header{flex-wrap:wrap}#gal-timeline-modal .gal-timeline-zoom-wrap{width:100%;min-width:0}#gal-timeline-modal .gal-timeline-status{width:100%;white-space:normal}#gal-timeline-modal .gal-timeline-body{grid-template-columns:1fr;grid-template-rows:minmax(18rem,1fr) auto}#gal-timeline-modal .gal-timeline-graph-panel{min-height:18rem;border-right:none;border-bottom:.0625rem solid var(--SmartThemeBorderColor, rgba(255, 255, 255, .18))}}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-footer-btn{background:var(--gp-btn-bg)!important;color:var(--gp-text)!important;border-color:var(--gp-ink)!important}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-footer-btn:hover{background:var(--gp-ink)!important;color:var(--gp-surface)!important}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-action-btn,#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-action-btn.btn-reroll{background:var(--gp-btn-bg);color:var(--gp-text);border-color:var(--gp-ink)}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-action-btn:hover,#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-action-btn.btn-reroll:hover{background:var(--gp-ink);color:var(--gp-surface)}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-location-bar,#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-time-bar{background:var(--gp-btn-bg);color:var(--gp-text)}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-fullscreen-btn{background:var(--gp-btn-bg)!important;color:var(--gp-text)!important;border-color:var(--gp-ink)!important}#gal-layer-choices.skin-default-dark:not(.gal-theme-default){background:#12141bb8!important}#gal-layer-choices.skin-default-dark:not(.gal-theme-default) .gal-choice-card{background:var(--gp-surface, #232733);color:var(--gp-text, #e8ecf4);border-color:var(--gp-ink, #e8ecf4);box-shadow:.375rem .375rem #00000080}#gal-layer-choices.skin-default-dark:not(.gal-theme-default) .gal-choices-title span{color:#e8ecf4}.gal-history-modal.skin-default-dark:not(.gal-theme-default) .gal-history-panel{background:#232733;border-color:#00d2ff99}.gal-history-modal.skin-default-dark:not(.gal-theme-default) .gal-history-content,.gal-history-modal.skin-default-dark:not(.gal-theme-default) .gal-history-title{color:#e8ecf4}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-generating-indicator{background:#232733f5;color:#e8ecf4}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-mobile-menu{background:#232733f2;border-color:#e8ecf4}#gal-global-overlay.skin-default-dark:not(.gal-theme-default) .gal-mobile-menu .gal-menu-btn{background:var(--gp-btn-bg);color:var(--gp-text);border-color:var(--gp-ink)}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-name-badge:after{background:var(--gal-speaker-color, var(--gp-accent, var(--gal-accent)));transform-origin:left center;transition:background .3s ease}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-name-badge.gal-badge-enter{animation:gal-badge-wipe .48s cubic-bezier(.2,.9,.1,1) backwards}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-name-badge.gal-badge-enter span{animation:gal-badge-name .42s cubic-bezier(.22,1,.36,1) .08s backwards}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-name-badge.gal-badge-enter:after{animation:gal-badge-bar .5s cubic-bezier(.22,1,.36,1) .18s backwards}@keyframes gal-badge-wipe{0%{clip-path:inset(0 100% 0 0);translate:-.75rem 0}to{clip-path:inset(-40% -40% -80% -10%)}}@keyframes gal-badge-name{0%{opacity:0;translate:-.4rem 0}}@keyframes gal-badge-bar{0%{transform:scaleX(0)}}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-text-panel.gal-panel-pulse{animation:gal-panel-pulse .6s ease-out}@keyframes gal-panel-pulse{0%{box-shadow:.5rem .5rem 0 var(--gp-shadow, rgba(0, 0, 0, .15)),0 0 color-mix(in srgb,var(--gal-speaker-color, var(--gp-accent, #00c4ef)) 55%,transparent)}to{box-shadow:.5rem .5rem 0 var(--gp-shadow, rgba(0, 0, 0, .15)),0 0 0 .9rem transparent}}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark){--gal-tw-end-color: var(--gal-speaker-color, var(--gal-color-accent))}#gal-global-overlay .gal-dialog-text .gal-tw-end{display:inline-block;width:.62em;height:.5em;margin-left:.4em;vertical-align:.05em;background:var(--gal-tw-end-color, var(--gal-color-accent));clip-path:polygon(0 0,100% 0,50% 100%);animation:gal-tw-end-bob 1.1s ease-in-out infinite}@keyframes gal-tw-end-bob{0%,to{translate:0 0;opacity:1}50%{translate:0 .2em;opacity:.5}}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-footer-btn-next{position:relative;overflow:hidden}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-footer-btn-next:after{content:"";position:absolute;top:0;bottom:0;left:0;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.7),transparent);transform:translate(-150%);pointer-events:none;animation:gal-next-sheen 3.4s ease-in-out infinite}@keyframes gal-next-sheen{0%,62%{transform:translate(-150%)}to{transform:translate(260%)}}#gal-global-overlay:is(:not([class*=skin-]),.skin-default-dark) .gal-progress-bar{background-image:repeating-linear-gradient(-45deg,var(--gp-accent, var(--gal-accent)) 0 .5rem,color-mix(in srgb,var(--gp-accent, var(--gal-accent)) 62%,#fff) .5rem 1rem);background-size:1.414rem 100%;animation:gal-bar-flow 1s linear infinite}@keyframes gal-bar-flow{to{background-position:1.414rem 0}}#gal-layer-choices:is(:not([class*=skin-]),.skin-default-dark){background:radial-gradient(ellipse at center,#0a0c1247,#0a0c12a8)!important;-webkit-backdrop-filter:blur(6px) saturate(.85);backdrop-filter:blur(6px) saturate(.85)}#gal-layer-choices:is(:not([class*=skin-]),.skin-default-dark).active .gal-choices-title{animation:gal-choices-title-in .5s cubic-bezier(.22,1,.36,1) backwards}@keyframes gal-choices-title-in{0%{opacity:0;letter-spacing:.6rem}}#gal-layer-choices:is(:not([class*=skin-]),.skin-default-dark) .gal-choice-card{padding-left:3.2rem;animation:gal-card-in .5s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--gal-i, 0) * 70ms + 80ms)}@keyframes gal-card-in{0%{opacity:0;translate:-2.5rem 0}}#gal-layer-choices:is(:not([class*=skin-]),.skin-default-dark) .gal-choice-card:before{content:attr(data-no);position:absolute;left:1.1rem;top:50%;transform:translateY(-50%) skew(8deg);font:900 .95rem / 1 var(--gal-font-eng);color:var(--gp-accent, var(--gal-accent));transition:color .2s ease}#gal-layer-choices:is(:not([class*=skin-]),.skin-default-dark) .gal-choice-card:hover:before{color:var(--gal-dark)}.gal-popup-modal,.gal-config-modal{animation:gal-modal-fade .22s ease-out backwards}.gal-popup-panel,.gal-config-panel,.gal-history-panel{animation:gal-modal-panel-in .34s cubic-bezier(.22,1,.36,1) backwards}@keyframes gal-modal-fade{0%{opacity:0}}@keyframes gal-modal-panel-in{0%{opacity:0;translate:0 .75rem;scale:.985}}@media (prefers-reduced-motion: reduce){#gal-global-overlay:not([class*=skin-]) *,#gal-global-overlay:not([class*=skin-]) *:before,#gal-global-overlay:not([class*=skin-]) *:after,#gal-global-overlay.gal-theme-default *,#gal-global-overlay.gal-theme-default *:before,#gal-global-overlay.gal-theme-default *:after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important}#gal-global-overlay .gal-dialog-text .gal-tw-ch{transition:none!important}#gal-global-overlay .gal-tw-end,#gal-global-overlay .gal-footer-btn-next:after,#gal-global-overlay .gal-progress-bar,#gal-global-overlay .gal-name-badge.gal-badge-enter,#gal-global-overlay .gal-name-badge.gal-badge-enter span,#gal-global-overlay .gal-name-badge.gal-badge-enter:after,#gal-global-overlay .gal-text-panel.gal-panel-pulse,#gal-layer-choices .gal-choice-card,#gal-layer-choices .gal-choices-title,.gal-popup-modal,.gal-config-modal,.gal-popup-panel,.gal-config-panel,.gal-history-panel,.gal-stage-banner-tag,.gal-stage-banner-body{animation:none!important}.gal-stage-banner-tag,.gal-stage-banner-body{transform:none!important}}@property --gal-fx-ang{syntax: "<angle>"; inherits: false; initial-value: 0deg;}@property --gal-fx-spot-c{syntax: "<color>"; inherits: false; initial-value: transparent;}#gal-global-overlay,#gal-layer-choices,.gal-history-modal{--gal-fx-accent: var(--gal-color-accent, #00c4ef);--gal-fx-accent-2: var(--gal-color-accent-2, var(--gal-fx-accent));--gal-fx-flash: var(--gal-fx-accent);--gal-fx-glow: color-mix(in srgb, var(--gal-fx-accent) 50%, transparent);--gal-fx-soft: color-mix(in srgb, var(--gal-fx-accent) 14%, transparent);--gal-fx-ripple: color-mix(in srgb, var(--gal-fx-accent) 30%, transparent);--gal-fx-spot: color-mix(in srgb, var(--gal-fx-accent) 12%, transparent);--gal-fx-fill: color-mix(in srgb, var(--gal-fx-accent) 22%, transparent);--gal-fx-sheen: rgb(255 255 255 / .3);--gal-fx-spark: var(--gal-fx-accent);--gal-fx-label-bg: var(--gal-color-surface, #ffffff);--gal-fx-label-fg: var(--gal-color-on-surface, #22252e)}.gal-fx-panel,.gal-fx-glint,.gal-fx-tb-ind{display:none}#gal-global-overlay.gal-motion .gal-dialog-text .gal-tw-ch{transition:none}#gal-global-overlay.gal-motion .gal-dialog-text .gal-tw-ch.is-on{animation:gal-fx-ch .46s cubic-bezier(.2,.8,.2,1) both}@keyframes gal-fx-ch{0%{opacity:0;filter:blur(6px);-webkit-text-fill-color:var(--gal-fx-flash);text-shadow:0 0 .7em var(--gal-fx-glow)}35%{opacity:1;filter:blur(0);-webkit-text-fill-color:var(--gal-fx-flash);text-shadow:0 0 .5em var(--gal-fx-glow)}}#gal-global-overlay.gal-motion .gal-text-panel{isolation:isolate}#gal-global-overlay.gal-motion .gal-text-panel>i.gal-fx-panel{position:absolute;inset:0;z-index:-1;display:block;overflow:hidden;border-radius:inherit;pointer-events:none;font-style:normal;background:radial-gradient(18rem circle at var(--gal-fx-px, 50%) var(--gal-fx-py, 50%),var(--gal-fx-spot-c),transparent 70%);transition:--gal-fx-spot-c .4s ease}#gal-global-overlay.gal-motion .gal-text-panel:hover>i.gal-fx-panel{--gal-fx-spot-c: var(--gal-fx-spot)}#gal-global-overlay.gal-motion .gal-fx-panel:before{content:"";position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(100deg,transparent,var(--gal-fx-sheen),transparent);transform:translate(-120%);opacity:0}#gal-global-overlay.gal-motion .gal-fx-panel.gal-fx-advance:before{animation:gal-fx-sheen 1s cubic-bezier(.4,0,.2,1)}@keyframes gal-fx-sheen{0%{opacity:1;transform:translate(-120%)}to{opacity:1;transform:translate(330%)}}#gal-global-overlay.gal-motion .gal-fx-panel:after{content:"";position:absolute;inset:0;padding:1.5px;border-radius:inherit;opacity:0;background:conic-gradient(from var(--gal-fx-ang),transparent 0 60%,var(--gal-fx-accent-2) 78%,var(--gal-fx-accent) 90%,#ffffff 94%,transparent 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}#gal-global-overlay.gal-motion .gal-fx-panel.gal-fx-advance:after{animation:gal-fx-trace 1.25s cubic-bezier(.45,.05,.25,1)}#gal-global-overlay.gal-motion .gal-text-panel:has(>.gal-generating-indicator.active)>.gal-fx-panel:after{opacity:1;animation:gal-fx-trace-loop 1.4s linear infinite}@keyframes gal-fx-trace{0%{--gal-fx-ang: -60deg;opacity:0}12%,78%{opacity:1}to{--gal-fx-ang: 300deg;opacity:0}}@keyframes gal-fx-trace-loop{to{--gal-fx-ang: 360deg}}#gal-global-overlay.gal-motion.gal-mode-styled .gal-text-panel>.gal-fx-panel,#gal-global-overlay.gal-motion .gal-text-panel.text-effect-text-bg>.gal-fx-panel{display:none}#gal-global-overlay.gal-motion .gal-name-badge .gal-fx-ch{display:inline-block;font-weight:inherit;font-style:inherit;animation:gal-fx-name-in .56s cubic-bezier(.34,1.56,.64,1) both;animation-delay:calc(var(--ci, 0) * 70ms + 60ms)}@keyframes gal-fx-name-in{0%{opacity:0;translate:0 -.8em;rotate:-12deg;scale:1.25;filter:blur(6px)}}#gal-global-overlay.gal-motion .gal-name-badge>i.gal-fx-ghost{position:absolute;margin:0;font-style:normal;white-space:nowrap;pointer-events:none;animation:gal-fx-ghost .26s cubic-bezier(.4,0,1,1) forwards}@keyframes gal-fx-ghost{to{opacity:0;translate:0 -45%;filter:blur(5px)}}#gal-global-overlay.gal-motion .gal-bottom-toolbar{isolation:isolate}#gal-global-overlay.gal-motion .gal-bottom-toolbar>.gal-fx-tb-ind{position:absolute;left:0;top:0;z-index:-1;display:block;margin:0;background:var(--gal-fx-soft);pointer-events:none!important;transition:translate .5s cubic-bezier(.34,1.45,.64,1),width .5s cubic-bezier(.34,1.45,.64,1),height .3s ease,opacity .25s ease}#gal-global-overlay.gal-motion .gal-bottom-toolbar>.gal-fx-tb-ind:not(.is-on){opacity:0!important}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=log]:hover i{animation:gal-fx-ic-shift .5s ease}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=save]:hover i{animation:gal-fx-ic-drop .55s cubic-bezier(.34,1.56,.64,1)}#gal-global-overlay.gal-motion :is(.gal-footer-btn[data-action=load],.gal-footer-btn[data-action=timeline]):hover i{animation:gal-fx-ic-wobble .55s ease}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=view-original]:hover i{animation:gal-fx-ic-bob .5s ease}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=prev]:hover i{animation:gal-fx-ic-back .7s ease-in-out infinite}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=auto]:hover i{animation:gal-fx-ic-play .9s ease-in-out infinite}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=skip]:hover i{animation:gal-fx-ic-skip .6s linear infinite}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=config]:hover i{animation:gal-fx-spin .7s cubic-bezier(.34,1.56,.64,1)}#gal-global-overlay.gal-motion .gal-footer-btn[data-action=close-mode]:hover i{animation:gal-fx-ic-pop .5s ease}@keyframes gal-fx-ic-shift{30%{translate:-3px 0}65%{translate:2px 0}}@keyframes gal-fx-ic-drop{0%{translate:0 -6px}60%{translate:0 0;scale:1.18 .82}to{scale:1 1}}@keyframes gal-fx-ic-wobble{40%{rotate:-16deg}70%{rotate:6deg}}@keyframes gal-fx-ic-bob{40%{translate:0 -3px}}@keyframes gal-fx-ic-back{50%{translate:-3px 0}}@keyframes gal-fx-ic-play{50%{translate:3px 0;scale:1.12}}@keyframes gal-fx-ic-skip{0%{translate:0 0;opacity:1}50%{translate:5px 0;opacity:0}51%{translate:-5px 0;opacity:0}to{translate:0 0;opacity:1}}@keyframes gal-fx-ic-pop{40%{scale:1.3}}@keyframes gal-fx-spin{0%{rotate:0deg}to{rotate:360deg}}#gal-global-overlay.gal-motion :is(.gal-footer-btn,.gal-footer-btn-next,.gal-action-btn,.gal-pending-choices-btn,.gal-menu-btn,.gal-fullscreen-btn):active,#gal-layer-choices.gal-motion .gal-choice-card:active{scale:.94}#gal-global-overlay.gal-motion .gal-action-btn.btn-reroll:hover i{animation:gal-fx-spin .7s cubic-bezier(.34,1.56,.64,1)}#gal-global-overlay.gal-motion .gal-action-btn.btn-free:hover i{animation:gal-fx-type .16s steps(2) 4}@keyframes gal-fx-type{50%{translate:0 1.5px}}#gal-global-overlay.gal-motion .gal-footer-btn-next{animation:gal-fx-halo 2.6s 1.4s ease-out infinite}@keyframes gal-fx-halo{0%{outline:2px solid var(--gal-fx-glow);outline-offset:0}70%,to{outline:2px solid transparent;outline-offset:.9rem}}#gal-global-overlay.gal-motion .gal-footer-btn-next i{animation:gal-fx-chev 1.6s ease-in-out infinite}@keyframes gal-fx-chev{0%,to{translate:0 0;text-shadow:0 0 0 transparent}30%{text-shadow:0 0 0 transparent}50%{translate:4px 0}55%{text-shadow:7px 0 0 color-mix(in srgb,currentColor 55%,transparent)}85%{text-shadow:14px 0 0 transparent}}:where(#gal-global-overlay.gal-motion) .gal-pending-choices-btn{position:relative}#gal-global-overlay.gal-motion .gal-pending-choices-btn.show:before{content:"";position:absolute;top:-.3rem;right:-.3rem;z-index:2;width:.625rem;height:.625rem;border-radius:50%;background:#ff5a7a;box-shadow:0 0 0 2px var(--gal-color-surface, #ffffff),0 .25rem .6rem -.15rem #ff5a7ab3;pointer-events:none;animation:gal-fx-pop-in .55s cubic-bezier(.34,1.8,.64,1) backwards}#gal-global-overlay.gal-motion .gal-pending-choices-btn.show:after{content:"";position:absolute;inset:0;border:1.5px solid var(--gal-fx-flash);border-radius:inherit;pointer-events:none;animation:gal-fx-ring-out 2s ease-out infinite}#gal-global-overlay.gal-motion .gal-pending-choices-btn.show i{animation:gal-fx-wiggle 3s ease-in-out infinite}@keyframes gal-fx-pop-in{0%{scale:0;opacity:0}}@keyframes gal-fx-ring-out{0%{opacity:.9;scale:1}to{opacity:0;scale:1.2 1.7}}@keyframes gal-fx-wiggle{0%,14%,to{rotate:0deg}3%{rotate:-16deg}6%{rotate:14deg}9%{rotate:-8deg}12%{rotate:4deg}}#gal-layer-choices.gal-motion.active{animation:gal-fx-veil .45s ease both}@keyframes gal-fx-veil{0%{opacity:0}}#gal-layer-choices.gal-motion.active .gal-choices-title{animation:gal-fx-title .8s .05s cubic-bezier(.22,1,.36,1) both}@keyframes gal-fx-title{0%{opacity:0;letter-spacing:1em;filter:blur(6px)}}#gal-layer-choices.gal-motion .gal-choices-container{perspective:900px}#gal-layer-choices.gal-motion .gal-choice-card{isolation:isolate;animation:gal-fx-card-in .75s cubic-bezier(.34,1.3,.64,1) both;animation-delay:calc(var(--gal-i, 0) * 90ms + .18s)}@keyframes gal-fx-card-in{0%{opacity:0;translate:0 34px;rotate:x -70deg;filter:blur(4px)}}#gal-layer-choices.gal-motion .gal-choice-card>i.gal-fx-glint{position:absolute;inset:0;z-index:-1;display:block;overflow:hidden;border-radius:inherit;pointer-events:none;font-style:normal;background:radial-gradient(14rem circle at var(--gal-fx-px, 50%) var(--gal-fx-py, 50%),var(--gal-fx-spot-c),transparent 70%);transition:--gal-fx-spot-c .4s ease}#gal-layer-choices.gal-motion .gal-choice-card:hover>i.gal-fx-glint{--gal-fx-spot-c: var(--gal-fx-spot)}#gal-layer-choices.gal-motion .gal-fx-glint:before{content:"";position:absolute;top:-30%;bottom:-30%;left:0;width:30%;background:linear-gradient(100deg,transparent,var(--gal-fx-sheen),transparent);transform:translate(-140%) skew(-18deg);animation:gal-fx-glint .9s cubic-bezier(.4,0,.2,1) backwards;animation-delay:calc(var(--gal-i, 0) * 90ms + .7s)}#gal-layer-choices.gal-motion .gal-choice-card:hover>.gal-fx-glint:before{animation:gal-fx-glint-hover .8s cubic-bezier(.4,0,.2,1)}@keyframes gal-fx-glint{to{transform:translate(420%) skew(-18deg)}}@keyframes gal-fx-glint-hover{to{transform:translate(420%) skew(-18deg)}}#gal-layer-choices.gal-motion .gal-choice-card.gal-choice-picked{animation:gal-fx-picked .64s cubic-bezier(.22,1,.36,1) forwards!important}#gal-layer-choices.gal-motion .gal-choice-card.gal-choice-dropped{animation:gal-fx-drop-r .42s cubic-bezier(.55,0,1,.45) forwards!important}#gal-layer-choices.gal-motion .gal-choice-card.gal-choice-dropped:has(~.gal-choice-picked){animation-name:gal-fx-drop-l!important}@keyframes gal-fx-picked{0%{scale:1;filter:brightness(1)}35%{scale:1.06;filter:brightness(1.35)}70%{scale:1.03;filter:brightness(1);opacity:1}to{scale:1.08;opacity:0}}@keyframes gal-fx-drop-r{to{opacity:0;translate:90px 10px;filter:blur(6px)}}@keyframes gal-fx-drop-l{to{opacity:0;translate:-90px -10px;filter:blur(6px)}}#gal-global-overlay>.gal-fx-layer,#gal-layer-choices>.gal-fx-layer{position:absolute;inset:0;z-index:9999;overflow:hidden;pointer-events:none}.gal-fx-layer>.gal-fx-clip{position:absolute;overflow:hidden;pointer-events:none}.gal-fx-layer>.gal-fx-clip.is-fill{background:linear-gradient(100deg,var(--gal-fx-fill),color-mix(in srgb,var(--gal-fx-accent-2) 22%,transparent))}.gal-fx-layer .gal-fx-ripple{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--gal-fx-ripple)}.gal-fx-layer .gal-fx-shine{position:absolute;top:-20%;bottom:-20%;left:0;width:40%;background:linear-gradient(100deg,transparent,rgb(255 255 255 / .6),transparent);transform:skew(-20deg)}.gal-fx-layer>.gal-fx-spark{position:absolute;width:16px;height:2.5px;margin:-1.25px 0 0 -8px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--gal-fx-spark));box-shadow:0 0 8px var(--gal-fx-glow)}.gal-fx-layer>.gal-fx-spark.is-dot{width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:1px;background:var(--gal-fx-spark)}.gal-fx-layer>.gal-fx-ring{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border:2px solid var(--gal-fx-spark);border-radius:50%;box-shadow:0 0 12px var(--gal-fx-glow)}.gal-fx-layer>.gal-fx-label{position:absolute;padding:.3rem .8rem;border:1px solid color-mix(in srgb,var(--gal-fx-accent) 35%,transparent);border-radius:999px;background:var(--gal-fx-label-bg);color:var(--gal-fx-label-fg);font:500 .78rem / 1.3 var(--gal-font-body, "Noto Sans SC", sans-serif);letter-spacing:.06em;white-space:nowrap;box-shadow:0 .4rem 1rem -.5rem #00000059;opacity:0}#gal-global-overlay.gal-theme-sky,#gal-layer-choices.gal-theme-sky,.gal-history-modal.gal-theme-sky{--th-accent: #1d9bff;--th-accent-2: #3a6cff;--th-grad: linear-gradient(100deg, #24aaff, #3a6cff);--th-on-accent: #ffffff;--th-ink: #26324f;--th-ink-2: #15284a;--th-dim: #6d7a97;--th-line: rgba(29, 155, 255, .16);--th-flash: #1d9bff;--th-glow: rgba(29, 155, 255, .5);--th-soft: rgba(29, 155, 255, .09);--th-ripple: rgba(29, 155, 255, .26);--th-spot: rgba(29, 155, 255, .09);--th-sheen: rgba(255, 255, 255, .75);--th-spark: #1d9bff;--th-shadow: rgba(16, 52, 120, .28);--th-chip-bg: rgba(255, 255, 255, .92);--th-chip-fg: #15284a;--th-chip-icon: #1d9bff;--th-chip-line: transparent;--th-chip-radius: .56rem;--th-surface: 255 255 255;--th-surface-2: 244 249 255;--th-latin: "Outfit", "Noto Sans SC", sans-serif;--th-display: "Noto Sans SC", sans-serif;--th-radius: 1.125rem;--th-btn-radius: .56rem;--th-q: 2.375rem;--gal-tw-end-color: #1d9bff}#gal-global-overlay.gal-theme-night,#gal-layer-choices.gal-theme-night,.gal-history-modal.gal-theme-night{--th-accent: #f1f4f9;--th-accent-2: #a8dcff;--th-grad: linear-gradient(#f1f4f9, #f1f4f9);--th-on-accent: #0b0d12;--th-ink: #edf1f7;--th-ink-2: #ffffff;--th-dim: rgba(237, 241, 247, .52);--th-line: rgba(255, 255, 255, .11);--th-flash: #a8dcff;--th-glow: rgba(168, 220, 255, .55);--th-soft: rgba(255, 255, 255, .07);--th-ripple: rgba(255, 255, 255, .2);--th-spot: rgba(168, 220, 255, .07);--th-sheen: rgba(255, 255, 255, .12);--th-spark: #d6efff;--th-shadow: rgba(0, 0, 0, .6);--th-chip-bg: rgba(13, 15, 22, .72);--th-chip-fg: #edf1f7;--th-chip-icon: rgba(237, 241, 247, .6);--th-chip-line: rgba(255, 255, 255, .14);--th-chip-radius: 3px;--th-surface: 20 23 32;--th-surface-2: 10 12 18;--th-latin: "Barlow Condensed", "Noto Sans SC", sans-serif;--th-display: "Noto Sans SC", sans-serif;--th-radius: .375rem;--th-btn-radius: 2px;--th-q: 2.125rem;--gal-tw-end-color: #edf1f7}#gal-global-overlay.gal-theme-soft,#gal-layer-choices.gal-theme-soft,.gal-history-modal.gal-theme-soft{--th-accent: #8a84d6;--th-accent-2: #f2b8a8;--th-grad: linear-gradient(100deg, #9b95e0, #b8a3e0 55%, #f2b8a8);--th-on-accent: #ffffff;--th-ink: #4a4d63;--th-ink-2: #4a4d63;--th-dim: #8d91ad;--th-line: rgba(138, 132, 214, .28);--th-flash: #8a84d6;--th-glow: rgba(138, 132, 214, .5);--th-soft: rgba(138, 132, 214, .1);--th-ripple: rgba(138, 132, 214, .24);--th-spot: rgba(242, 184, 168, .16);--th-sheen: rgba(255, 255, 255, .8);--th-spark: #b8a3e0;--th-shadow: rgba(110, 96, 160, .32);--th-chip-bg: rgba(255, 252, 249, .9);--th-chip-fg: #4a4d63;--th-chip-icon: #8a84d6;--th-chip-line: transparent;--th-chip-radius: 999px;--th-surface: 255 253 250;--th-surface-2: 255 249 245;--th-latin: "Noto Sans SC", sans-serif;--th-display: "LXGW WenKai Screen", "Noto Sans SC", sans-serif;--th-radius: 1.75rem;--th-btn-radius: 50%;--th-q: 2.375rem;--gal-tw-end-color: #8a84d6}#gal-global-overlay.gal-theme-default,#gal-layer-choices.gal-theme-default,.gal-history-modal.gal-theme-default{--gp-accent: var(--th-accent);--gp-accent-2: var(--th-accent-2);--gp-ink: var(--th-ink);--gp-text: var(--th-ink);--gp-text-dim: var(--th-dim);--gp-shadow: var(--th-shadow);--gal-color-accent: var(--th-accent);--gal-color-accent-2: var(--th-accent-2);--gal-color-surface: rgb(var(--th-surface));--gal-color-on-surface: var(--th-ink);--gal-color-on-surface-dim: var(--th-dim);--gal-color-line: var(--th-line);--gal-color-on-accent: var(--th-on-accent);--gal-color-shadow: var(--th-shadow);--gal-font-display: var(--th-display);--gal-font-latin: var(--th-latin);--gal-radius: var(--th-radius);--gal-fx-accent: var(--th-accent);--gal-fx-accent-2: var(--th-accent-2);--gal-fx-flash: var(--th-flash);--gal-fx-glow: var(--th-glow);--gal-fx-soft: var(--th-soft);--gal-fx-ripple: var(--th-ripple);--gal-fx-spot: var(--th-spot);--gal-fx-sheen: var(--th-sheen);--gal-fx-spark: var(--th-spark)}#gal-global-overlay.gal-theme-default .gal-text-panel{--th-pa: calc(.78 + var(--panel-opacity, .5) * .2);border:0;box-shadow:none}#gal-global-overlay.gal-theme-default .gal-dialog-text{color:var(--th-ink)}#gal-global-overlay.gal-theme-default .gal-name-badge{padding:0;background:none;box-shadow:none;transform:none;pointer-events:none}#gal-global-overlay.gal-theme-default .gal-name-badge span{transform:none}#gal-global-overlay.gal-theme-default .gal-footer-btn{background:transparent!important;color:var(--th-dim)!important;border:0!important;border-radius:var(--th-btn-radius)!important;transform:none!important;box-shadow:none!important;font-family:var(--th-latin)!important;transition:color .25s ease!important}#gal-global-overlay.gal-theme-default .gal-footer-btn span,#gal-global-overlay.gal-theme-default .gal-footer-btn i{transform:none!important}#gal-global-overlay.gal-theme-default .gal-footer-btn:hover{background:transparent!important;color:var(--th-accent)!important;transform:none!important;box-shadow:none!important}#gal-global-overlay.gal-theme-default .gal-footer-btn.gal-nav-btn.active,#gal-global-overlay.gal-theme-default .gal-footer-btn.gal-auto-playing{background:var(--th-soft)!important;color:var(--th-accent)!important;box-shadow:none!important}#gal-global-overlay.gal-theme-default .gal-pending-choices-btn{position:relative;overflow:visible;flex-shrink:0!important;white-space:nowrap!important;transform:none;box-shadow:none;filter:none}#gal-global-overlay.gal-theme-default .gal-pending-choices-btn i,#gal-global-overlay.gal-theme-default .gal-pending-choices-btn span{transform:none!important}#gal-global-overlay.gal-theme-default .gal-footer-btn-next{position:relative;overflow:visible;border:0!important;clip-path:none!important;transform:none!important}#gal-global-overlay.gal-theme-default .gal-footer-btn-next:hover{transform:none!important}#gal-global-overlay.gal-theme-default .gal-action-btn{position:relative;overflow:hidden;isolation:isolate;border:0;transform:none;font-family:var(--th-display)}#gal-global-overlay.gal-theme-default .gal-action-btn span,#gal-global-overlay.gal-theme-default .gal-action-btn i{display:inline-block;transform:none}#gal-global-overlay.gal-theme-default .gal-sprite-toggle,#gal-global-overlay.gal-theme-default .gal-status-popup-trigger{right:calc(-1 * var(--th-q) - .75rem);width:auto;min-width:var(--th-q);height:var(--th-q);padding:0;justify-content:flex-end;border:1px solid var(--th-chip-line);border-radius:999px;background:var(--th-chip-bg);box-shadow:0 .4rem .9rem -.5rem var(--th-shadow);opacity:1;transform:scale(var(--ui-scale));transform-origin:right top;transition:background .3s ease,box-shadow .3s ease}#gal-global-overlay.gal-theme-default .gal-sprite-toggle{top:.25rem}#gal-global-overlay.gal-theme-default .gal-location-popup-trigger{top:calc(.25rem + var(--th-q) + .55rem)}#gal-global-overlay.gal-theme-default .gal-time-popup-trigger{top:calc(.25rem + 2 * (var(--th-q) + .55rem))}#gal-global-overlay.gal-theme-default .gal-eye-icon,#gal-global-overlay.gal-theme-default .gal-status-popup-icon{flex:none;width:calc(var(--th-q) - 2px);text-align:center;color:var(--th-chip-icon)!important;transition:rotate .5s cubic-bezier(.34,1.56,.64,1),color .25s ease}#gal-global-overlay.gal-theme-default .gal-sprite-toggle:hover,#gal-global-overlay.gal-theme-default .gal-status-popup-trigger:hover,#gal-global-overlay.gal-theme-default .gal-sprite-toggle.sprites-hidden:hover{background:var(--th-chip-bg);box-shadow:0 .5rem 1.1rem -.45rem var(--th-glow)}#gal-global-overlay.gal-theme-default .gal-sprite-toggle.sprites-hidden{background:var(--th-chip-bg);opacity:.7}#gal-global-overlay.gal-theme-default .gal-dialog-layer .gal-progress-container{position:absolute;left:var(--th-radius);right:var(--th-radius);bottom:-.45rem;width:auto;min-width:0;height:2px;background:transparent;border-radius:2px}#gal-global-overlay.gal-theme-default .gal-progress-bar{background:var(--th-grad);background-image:var(--th-grad);border-radius:2px;box-shadow:0 0 .5rem var(--th-glow);animation:none}#gal-global-overlay.gal-theme-sky .gal-layer-bg:before{background-image:radial-gradient(ellipse 34% 9% at 50% 30%,transparent 92%,rgba(29,155,255,.22) 94%,transparent 96%),radial-gradient(ellipse 46% 13% at 50% 30%,transparent 95%,rgba(29,155,255,.12) 96.5%,transparent 98%),linear-gradient(118deg,transparent 30%,rgba(255,255,255,.55) 38%,transparent 46%),linear-gradient(118deg,transparent 52%,rgba(255,255,255,.35) 57%,transparent 62%),radial-gradient(60% 50% at 80% 10%,rgba(140,205,255,.55),transparent 70%),linear-gradient(180deg,#cfe8ff,#eef7ff 52%,#fff)}#gal-global-overlay.gal-theme-sky .gal-text-panel{background-color:transparent;background-image:linear-gradient(180deg,rgb(255 255 255 / var(--th-pa)),rgb(244 249 255 / calc(var(--th-pa) * .96)));background-size:auto;background-repeat:no-repeat;border-radius:var(--th-radius);box-shadow:0 1.4rem 2.75rem -1.1rem var(--th-shadow),inset 0 0 0 1px #ffffffe6;-webkit-backdrop-filter:blur(18px) saturate(1.4);backdrop-filter:blur(18px) saturate(1.4);padding:calc(3.9rem * var(--gal-dialog-scale-user, 1)) calc(3.75rem * var(--gal-dialog-scale-user, 1)) calc(5rem*max(var(--gal-dialog-scale-user, 1),var(--gal-toolbar-scale-user, 1))) calc(3.75rem * var(--gal-dialog-scale-user, 1))}#gal-global-overlay.gal-theme-sky .gal-text-panel:not(.text-effect-gradient):before{content:"";position:absolute;right:0;bottom:0;width:19rem;height:10rem;z-index:-1;pointer-events:none;background:repeating-linear-gradient(-45deg,rgba(29,155,255,.11) 0 2px,transparent 2px 10px);-webkit-mask-image:linear-gradient(135deg,transparent 45%,#000 100%);mask-image:linear-gradient(135deg,transparent 45%,#000 100%)}#gal-global-overlay.gal-theme-sky .gal-name-badge{top:calc(1.25rem * var(--gal-dialog-scale-user, 1));left:calc(3.75rem * var(--gal-dialog-scale-user, 1));right:calc(3.75rem * var(--gal-dialog-scale-user, 1));display:flex;align-items:center;gap:1rem;color:var(--th-ink-2);font-family:var(--th-display);font-size:calc(1.55rem * var(--ui-scale, 1));font-weight:900;line-height:1.2;letter-spacing:.04em}#gal-global-overlay.gal-theme-sky .gal-name-badge span{position:relative;flex:none}#gal-global-overlay.gal-theme-sky .gal-name-badge span:after{content:"";position:absolute;left:0;bottom:-.42rem;width:1.9rem;height:.25rem;border-radius:2px;background:linear-gradient(90deg,var(--gal-speaker-color, #1d9bff),#3a6cff);transform-origin:left center}#gal-global-overlay.gal-theme-sky .gal-name-badge:after{position:static;flex:1 1 auto;height:1px;background:linear-gradient(90deg,var(--th-line),rgba(29,155,255,.05));transform-origin:left center;transition:none}#gal-global-overlay.gal-theme-sky .gal-name-badge:before{content:"";order:3;flex:none;width:1.25rem;height:.875rem;background:linear-gradient(90deg,#1d9bff 0 4px,transparent 4px 8px,rgba(29,155,255,.55) 8px 12px,transparent 12px 16px,rgba(29,155,255,.25) 16px 20px);transform:skew(-24deg)}#gal-global-overlay.gal-theme-sky .gal-name-badge.gal-narrator-label span{color:var(--th-dim)}#gal-global-overlay.gal-theme-sky .gal-name-badge.gal-narrator-label span:after{background:#6d7a9773}#gal-global-overlay.gal-theme-sky .gal-dialog-text{font-weight:500;letter-spacing:.02em}#gal-global-overlay.gal-theme-sky .gal-bottom-toolbar{gap:calc(.35rem * var(--ui-scale));padding:0 calc(1.5rem * var(--gal-dialog-scale-user, 1)) calc(1.1rem * var(--gal-dialog-scale-user, 1)) calc(3rem * var(--gal-dialog-scale-user, 1));align-items:center}#gal-global-overlay.gal-theme-sky .gal-footer-btn{font-weight:700!important;letter-spacing:.06em}#gal-global-overlay.gal-theme-sky .gal-footer-btn span{font-size:calc(.8rem * var(--ui-scale))!important}#gal-global-overlay.gal-theme-sky .gal-pending-choices-btn{height:calc(2.5rem * var(--ui-scale))!important;padding:0 calc(1rem * var(--ui-scale))!important;background:#1d9bff1a!important;color:var(--th-accent)!important;border:0!important;border-radius:.625rem!important;font-weight:700!important}#gal-global-overlay.gal-theme-sky .gal-footer-btn-next{height:calc(2.75rem * var(--ui-scale))!important;min-width:calc(8.5rem * var(--ui-scale))!important;padding:0 calc(1.9rem * var(--ui-scale))!important;border-radius:.7rem!important;background:var(--th-grad)!important;color:#fff!important;font-family:var(--th-latin)!important;font-size:calc(1rem * var(--ui-scale))!important;font-weight:800!important;letter-spacing:.12em;transform:skew(-10deg)!important;box-shadow:0 .6rem 1.25rem -.5rem #286eff99,inset 0 1px #ffffff59!important}#gal-global-overlay.gal-theme-sky .gal-footer-btn-next:hover{background:var(--th-grad)!important;color:#fff!important;transform:skew(-10deg)!important;filter:brightness(1.08) saturate(1.1);box-shadow:0 .7rem 1.4rem -.45rem #286effb3,inset 0 1px #fff6!important}#gal-global-overlay.gal-theme-sky .gal-footer-btn-next .gal-btn-text{display:inline-block;transform:skew(10deg)}#gal-global-overlay.gal-theme-sky .gal-interaction-bar{gap:.625rem}#gal-global-overlay.gal-theme-sky .gal-action-btn,#gal-global-overlay.gal-theme-sky .gal-action-btn.btn-reroll,#gal-global-overlay.gal-theme-sky .gal-action-btn.btn-free{padding:.6rem 1.15rem;border-radius:.625rem;background:#ffffffeb;color:var(--th-ink-2);font-size:.9rem;font-weight:700;transform:skew(-10deg);box-shadow:0 .5rem 1.1rem -.6rem var(--th-shadow)}#gal-global-overlay.gal-theme-sky .gal-action-btn span,#gal-global-overlay.gal-theme-sky .gal-action-btn i{transform:skew(10deg)}#gal-global-overlay.gal-theme-sky .gal-action-btn i{color:var(--th-accent)}#gal-layer-choices.gal-theme-sky{background:linear-gradient(180deg,#e1f0ff80,#f0f7ffa8)!important;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}#gal-layer-choices.gal-theme-sky .gal-choices-container{max-width:34rem}#gal-layer-choices.gal-theme-sky .gal-choices-title{display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;color:var(--th-ink-2);font-family:var(--th-display);font-size:1.25rem;font-weight:900;letter-spacing:.08em;text-transform:none;transform:none}#gal-layer-choices.gal-theme-sky .gal-choices-title span{color:var(--th-ink-2);transform:none}#gal-layer-choices.gal-theme-sky .gal-choices-title:before{content:"CHOICE";padding:.2rem .65rem;border-radius:.3rem;background:var(--th-accent);color:#fff;font-family:var(--th-latin);font-size:.75rem;font-weight:800;letter-spacing:.16em;transform:skew(-12deg)}#gal-layer-choices.gal-theme-sky .gal-choice-card{--th-card-bg: linear-gradient(rgba(255, 255, 255, .96), rgba(255, 255, 255, .96));width:min(32.5rem,100%);padding:1.05rem 3rem;border-radius:.75rem;color:var(--th-ink-2);font-family:var(--th-display);font-size:1.03rem;font-weight:700;letter-spacing:.04em;box-shadow:0 .75rem 1.6rem -.9rem var(--th-shadow)}#gal-layer-choices.gal-theme-sky .gal-choice-card:before{content:"";left:1rem;top:.9rem;bottom:.9rem;width:5px;border-radius:2px;background:var(--th-accent);transform:skew(-14deg);transition:background .25s ease}#gal-layer-choices.gal-theme-sky .gal-choice-card:hover{--th-card-bg: var(--th-grad);--th-spot: rgba(255, 255, 255, .22);color:#fff;box-shadow:0 1rem 1.75rem -.9rem #286effb3}#gal-layer-choices.gal-theme-sky .gal-choice-card:hover:before{background:#fff}#gal-global-overlay.gal-theme-night .gal-layer-bg:before{background-image:radial-gradient(45% 55% at 78% 18%,rgba(110,150,255,.2),transparent 70%),radial-gradient(40% 50% at 15% 85%,rgba(140,110,220,.14),transparent 70%),linear-gradient(180deg,#0c1120,#070910)}#gal-global-overlay.gal-theme-night .gal-text-panel{--th-pa: calc(.66 + var(--panel-opacity, .5) * .26);--th-corner: rgba(255, 255, 255, .5);background-color:transparent;background-image:linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(var(--th-corner),var(--th-corner)),linear-gradient(180deg,rgb(20 23 32 / var(--th-pa)),rgb(10 12 18 / calc(var(--th-pa) + .08)));background-size:10px 1px,1px 10px,10px 1px,1px 10px,10px 1px,1px 10px,10px 1px,1px 10px,auto;background-position:left 7px top 7px,left 7px top 7px,right 7px top 7px,right 7px top 7px,left 7px bottom 7px,left 7px bottom 7px,right 7px bottom 7px,right 7px bottom 7px,0 0;background-repeat:no-repeat;border:1px solid var(--th-line);border-radius:var(--th-radius);box-shadow:0 1.5rem 3.75rem -1.5rem #000000b3;-webkit-backdrop-filter:blur(24px) saturate(1.3);backdrop-filter:blur(24px) saturate(1.3);padding:calc(3.5rem * var(--gal-dialog-scale-user, 1)) calc(4rem * var(--gal-dialog-scale-user, 1)) calc(5rem*max(var(--gal-dialog-scale-user, 1),var(--gal-toolbar-scale-user, 1))) calc(4rem * var(--gal-dialog-scale-user, 1))}#gal-global-overlay.gal-theme-night .gal-dialog-layer:before{content:"";position:absolute;top:0;left:calc(4rem * var(--gal-dialog-scale-user, 1));width:4rem;height:2px;z-index:1;pointer-events:none;background:var(--gal-speaker-color, #edf1f7);box-shadow:0 0 .6rem var(--gal-speaker-color, rgba(255, 255, 255, .6));transition:background .4s ease,box-shadow .4s ease}#gal-global-overlay.gal-theme-night .gal-name-badge{top:calc(1.5rem * var(--gal-dialog-scale-user, 1));left:calc(4rem * var(--gal-dialog-scale-user, 1));display:flex;align-items:center;gap:.875rem;color:var(--th-ink);font-family:var(--th-display);font-size:calc(1.3rem * var(--ui-scale, 1));font-weight:700;line-height:1.2;letter-spacing:.08em}#gal-global-overlay.gal-theme-night .gal-name-badge:before{content:"";order:-1;flex:none;width:3px;height:1.1em;background:var(--gal-speaker-color, #a8dcff);box-shadow:0 0 .5rem var(--gal-speaker-color, rgba(168, 220, 255, .6));transition:background .4s ease}#gal-global-overlay.gal-theme-night .gal-name-badge:after{position:static;flex:none;width:7.5rem;height:7px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.28) 0 1px,transparent 1px 7px);-webkit-mask-image:linear-gradient(90deg,#000,transparent);mask-image:linear-gradient(90deg,#000,transparent);transform-origin:left center;transition:none}#gal-global-overlay.gal-theme-night .gal-name-badge.gal-narrator-label span{color:var(--th-dim)}#gal-global-overlay.gal-theme-night .gal-name-badge.gal-narrator-label:before{background:#edf1f766;box-shadow:none}#gal-global-overlay.gal-theme-night .gal-dialog-text{font-weight:400;letter-spacing:.03em}#gal-global-overlay.gal-theme-night .gal-dialog-text .gal-tw-end{width:.5em;height:.38em;animation:gal-th-blink 1.2s ease-in-out infinite}#gal-global-overlay.gal-theme-night .gal-bottom-toolbar{gap:calc(.25rem * var(--ui-scale));padding:0 calc(1.5rem * var(--gal-dialog-scale-user, 1)) calc(1.1rem * var(--gal-dialog-scale-user, 1)) calc(3.25rem * var(--gal-dialog-scale-user, 1));align-items:center}#gal-global-overlay.gal-theme-night .gal-bottom-toolbar:before{content:"";position:absolute;top:-.6rem;left:calc(4rem * var(--gal-dialog-scale-user, 1));right:calc(4rem * var(--gal-dialog-scale-user, 1));height:1px;background:var(--th-line);pointer-events:none}#gal-global-overlay.gal-theme-night .gal-footer-btn{font-weight:500!important;letter-spacing:.18em}#gal-global-overlay.gal-theme-night .gal-footer-btn span{font-size:calc(.82rem * var(--ui-scale))!important}#gal-global-overlay.gal-theme-night .gal-footer-btn:hover{color:var(--th-ink)!important}#gal-global-overlay.gal-theme-night .gal-pending-choices-btn{height:calc(2.375rem * var(--ui-scale))!important;padding:0 calc(.9rem * var(--ui-scale))!important;background:transparent!important;color:var(--th-ink)!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:3px!important;font-weight:500!important;letter-spacing:.08em}#gal-global-overlay.gal-theme-night .gal-pending-choices-btn i{color:var(--th-accent-2)}#gal-global-overlay.gal-theme-night .gal-footer-btn-next{height:calc(2.625rem * var(--ui-scale))!important;min-width:calc(8.25rem * var(--ui-scale))!important;padding:0 calc(1.75rem * var(--ui-scale))!important;border-radius:999px!important;background:#f1f4f9!important;color:#0b0d12!important;font-family:var(--th-latin)!important;font-size:calc(1rem * var(--ui-scale))!important;font-weight:600!important;letter-spacing:.3em;box-shadow:0 0 0 4px #f1f4f91f,0 .5rem 1.4rem -.5rem #0009!important}#gal-global-overlay.gal-theme-night .gal-footer-btn-next:hover{background:#fff!important;color:#0b0d12!important;box-shadow:0 0 0 4px #f1f4f933,0 0 1.5rem -.2rem #a8dcff73!important}#gal-global-overlay.gal-theme-night .gal-interaction-bar{gap:.5rem}#gal-global-overlay.gal-theme-night .gal-action-btn,#gal-global-overlay.gal-theme-night .gal-action-btn.btn-reroll,#gal-global-overlay.gal-theme-night .gal-action-btn.btn-free{padding:.55rem 1.05rem;border:1px solid rgba(255,255,255,.2);border-radius:999px;background:var(--th-chip-bg);color:var(--th-ink);font-size:.82rem;font-weight:500;letter-spacing:.1em;box-shadow:none;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}#gal-global-overlay.gal-theme-night .gal-action-btn i{color:var(--th-dim);font-size:.8em}#gal-layer-choices.gal-theme-night{align-items:flex-end;padding-right:max(1.25rem,9vw);background:linear-gradient(90deg,#04060a26 30%,#04060aa8)!important;-webkit-backdrop-filter:none;backdrop-filter:none}#gal-layer-choices.gal-theme-night .gal-choices-container{width:min(27.5rem,100%);align-items:stretch;gap:.5rem;padding:0}#gal-layer-choices.gal-theme-night .gal-choices-title{width:min(27.5rem,100%);display:flex;align-items:center;gap:.75rem;margin-bottom:.25rem;color:var(--th-dim);font-family:var(--th-latin);font-size:.82rem;font-weight:500;letter-spacing:.3em;text-transform:none;transform:none}#gal-layer-choices.gal-theme-night .gal-choices-title:before{content:"OPTIONS"}#gal-layer-choices.gal-theme-night .gal-choices-title span{order:1;color:var(--th-ink);font-family:var(--th-display);font-size:.875rem;letter-spacing:.2em;transform:none}#gal-layer-choices.gal-theme-night .gal-choices-title:after{content:"";order:2;flex:1;height:1px;background:var(--th-line);transform-origin:left center}#gal-layer-choices.gal-theme-night .gal-choice-card{--th-card-bg: linear-gradient(rgba(12, 14, 20, .7), rgba(12, 14, 20, .7));width:100%;max-width:100%;display:flex;align-items:center;gap:.875rem;padding:.95rem 1.1rem;border:1px solid var(--th-line);border-radius:4px;color:var(--th-ink);font-family:var(--th-display);font-size:1rem;font-weight:400;letter-spacing:.05em;text-align:left;box-shadow:none;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}#gal-layer-choices.gal-theme-night .gal-choice-card:before{content:"\\f075";position:static;flex:none;width:1.75rem;height:1.75rem;display:grid;place-items:center;border:1px solid rgba(255,255,255,.3);border-radius:50%;color:#edf1f7cc;font:400 .8rem/1 "Font Awesome 6 Free";transform:none;transition:color .25s ease,border-color .25s ease}#gal-layer-choices.gal-theme-night .gal-choice-card:after{content:"\\f054";display:block;margin-left:auto;font:900 .7rem/1 "Font Awesome 6 Free";opacity:0;translate:-.5rem 0;transition:opacity .25s ease,translate .35s cubic-bezier(.22,1,.36,1)}#gal-layer-choices.gal-theme-night .gal-choice-card:hover{--th-card-bg: linear-gradient(#f1f4f9, #f1f4f9);--th-spot: rgba(168, 220, 255, .25);color:#0b0d12;border-color:#f1f4f9;box-shadow:0 0 0 4px #f1f4f91a}#gal-layer-choices.gal-theme-night .gal-choice-card:hover:before{color:#0b0d12;border-color:#0b0d1259}#gal-layer-choices.gal-theme-night .gal-choice-card:hover:after{opacity:1;translate:0 0}#gal-layer-choices.gal-theme-night .gal-choices-hint{width:min(27.5rem,100%);text-align:right}#gal-global-overlay.gal-theme-soft .gal-layer-bg:before{background-image:radial-gradient(18% 30% at 26% 34%,rgba(255,255,255,.55),transparent 70%),radial-gradient(14% 24% at 74% 26%,rgba(255,236,228,.6),transparent 70%),radial-gradient(55% 60% at 15% 10%,rgba(196,190,255,.7),transparent 70%),radial-gradient(60% 60% at 90% 95%,rgba(255,200,182,.7),transparent 70%),linear-gradient(170deg,#ebe6ff,#f8f3fb,#fff1ea)}#gal-global-overlay.gal-theme-soft .gal-text-panel{background-color:transparent;background-image:radial-gradient(40% 90% at 8% 100%,rgba(255,210,194,.35),transparent 70%),radial-gradient(35% 90% at 94% 0%,rgba(196,190,255,.35),transparent 70%),linear-gradient(180deg,rgb(255 253 250 / var(--th-pa)),rgb(255 249 245 / calc(var(--th-pa) * .94)));background-size:auto;background-repeat:no-repeat;border-radius:var(--th-radius);box-shadow:inset 0 0 0 1px #fffffff2,0 0 0 6px #ffffff38,0 1.5rem 3.1rem -1.5rem var(--th-shadow);-webkit-backdrop-filter:blur(20px) saturate(1.2);backdrop-filter:blur(20px) saturate(1.2);text-align:center;padding:calc(3.25rem * var(--gal-dialog-scale-user, 1)) calc(6.25rem * var(--gal-dialog-scale-user, 1)) calc(5rem*max(var(--gal-dialog-scale-user, 1),var(--gal-toolbar-scale-user, 1))) calc(6.25rem * var(--gal-dialog-scale-user, 1))}#gal-global-overlay.gal-theme-soft .gal-name-badge{top:calc(-1.2rem * var(--ui-scale, 1));left:0;right:0;display:flex;justify-content:center;align-items:center;gap:.875rem;font-family:var(--th-display);font-size:calc(1.06rem * var(--ui-scale, 1));font-weight:700;line-height:1.3}#gal-global-overlay.gal-theme-soft .gal-name-badge span{padding:.45rem 1.6rem;border-radius:999px;background:var(--th-grad);color:#fff;letter-spacing:.32em;text-indent:.32em;box-shadow:0 .5rem 1.1rem -.5rem #8a84d6b3,inset 0 1px #ffffff73}#gal-global-overlay.gal-theme-soft .gal-name-badge:before,#gal-global-overlay.gal-theme-soft .gal-name-badge:after{content:"";position:static;flex:none;width:5.6rem;height:8px;background:radial-gradient(circle,#8a84d6 0 2.5px,transparent 3px) right center / 8px 8px no-repeat,linear-gradient(90deg,transparent,var(--th-line)) left center / calc(100% - 12px) 1px no-repeat;transform:none;transform-origin:right center;transition:none}#gal-global-overlay.gal-theme-soft .gal-name-badge:after{background:radial-gradient(circle,#8a84d6 0 2.5px,transparent 3px) left center / 8px 8px no-repeat,linear-gradient(270deg,transparent,var(--th-line)) right center / calc(100% - 12px) 1px no-repeat;transform-origin:left center}#gal-global-overlay.gal-theme-soft .gal-name-badge.gal-narrator-label span{background:#fffcf9f5;color:var(--th-dim);box-shadow:0 .5rem 1.1rem -.6rem var(--th-shadow),inset 0 0 0 1px var(--th-line)}#gal-global-overlay.gal-theme-soft .gal-dialog-text{letter-spacing:.04em}#gal-global-overlay.gal-theme-soft .gal-dialog-text .gal-tw-end{width:.62em;height:.62em;vertical-align:0;clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);animation:gal-th-twinkle 1.6s ease-in-out infinite}#gal-global-overlay.gal-theme-soft .gal-bottom-toolbar{gap:calc(.35rem * var(--ui-scale));padding:0 calc(1.6rem * var(--gal-dialog-scale-user, 1)) calc(1.1rem * var(--gal-dialog-scale-user, 1)) calc(1.9rem * var(--gal-dialog-scale-user, 1));align-items:center}#gal-global-overlay.gal-theme-soft .gal-footer-btn{flex:0 0 auto!important;width:calc(2.375rem * var(--ui-scale))!important;height:calc(2.375rem * var(--ui-scale))!important;padding:0!important;justify-content:center!important}#gal-global-overlay.gal-theme-soft .gal-footer-btn .gal-btn-text{display:none!important}#gal-global-overlay.gal-theme-soft .gal-pending-choices-btn{height:calc(2.375rem * var(--ui-scale))!important;padding:0 calc(1.1rem * var(--ui-scale))!important;background:transparent!important;color:var(--th-accent)!important;border:1px solid var(--th-line)!important;border-radius:999px!important;letter-spacing:.1em}#gal-global-overlay.gal-theme-soft .gal-footer-btn-next{height:calc(2.625rem * var(--ui-scale))!important;min-width:calc(8rem * var(--ui-scale))!important;padding:0 calc(1.75rem * var(--ui-scale))!important;border-radius:999px!important;background:var(--th-grad)!important;color:#fff!important;font-family:var(--th-latin)!important;font-size:calc(.95rem * var(--ui-scale))!important;font-weight:700!important;letter-spacing:.2em;box-shadow:0 .6rem 1.4rem -.6rem #8a84d6cc,inset 0 1px #ffffff73!important}#gal-global-overlay.gal-theme-soft .gal-footer-btn-next:hover{background:var(--th-grad)!important;color:#fff!important;filter:brightness(1.06) saturate(1.1)}#gal-global-overlay.gal-theme-soft .gal-interaction-bar{right:1.1rem;gap:.625rem}#gal-global-overlay.gal-theme-soft .gal-action-btn,#gal-global-overlay.gal-theme-soft .gal-action-btn.btn-reroll,#gal-global-overlay.gal-theme-soft .gal-action-btn.btn-free{padding:.55rem 1.15rem;border-radius:999px;background:var(--th-chip-bg);color:var(--th-ink);font-size:.85rem;font-weight:500;letter-spacing:.08em;box-shadow:0 .5rem 1.1rem -.6rem var(--th-shadow);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}#gal-global-overlay.gal-theme-soft .gal-action-btn i{color:var(--th-accent)}#gal-layer-choices.gal-theme-soft{background:radial-gradient(ellipse at center,#fffaf640,#f0e8fa9e)!important;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}#gal-layer-choices.gal-theme-soft .gal-choices-container{max-width:33rem}#gal-layer-choices.gal-theme-soft .gal-choices-title{display:flex;align-items:center;gap:.875rem;margin-bottom:.4rem;color:var(--th-accent);font-family:var(--th-display);font-size:1.375rem;font-weight:400;letter-spacing:.3em;text-transform:none;transform:none}#gal-layer-choices.gal-theme-soft .gal-choices-title span{color:var(--th-accent);margin-right:-.3em;transform:none}#gal-layer-choices.gal-theme-soft .gal-choices-title:before,#gal-layer-choices.gal-theme-soft .gal-choices-title:after{content:"";width:4.4rem;height:8px;background:radial-gradient(circle,#8a84d6 0 2.5px,transparent 3px) right center / 8px 8px no-repeat,linear-gradient(90deg,transparent,var(--th-line)) left center / calc(100% - 12px) 1px no-repeat;transform-origin:right center}#gal-layer-choices.gal-theme-soft .gal-choices-title:after{background:radial-gradient(circle,#8a84d6 0 2.5px,transparent 3px) left center / 8px 8px no-repeat,linear-gradient(270deg,transparent,var(--th-line)) right center / calc(100% - 12px) 1px no-repeat;transform-origin:left center}#gal-layer-choices.gal-theme-soft .gal-choice-card{--th-card-bg: linear-gradient(rgba(255, 253, 250, .9), rgba(255, 253, 250, .9));width:min(31.25rem,100%);display:flex;align-items:center;gap:.875rem;padding:.55rem .6rem;border-radius:999px;color:var(--th-ink);font-family:var(--th-display);font-size:1.1rem;font-weight:400;letter-spacing:.06em;box-shadow:inset 0 0 0 1px #fffffff2,0 .6rem 1.5rem -.9rem var(--th-shadow);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}#gal-layer-choices.gal-theme-soft .gal-choice-card span{flex:1}#gal-layer-choices.gal-theme-soft .gal-choice-card:before{content:"\\f4ad";position:static;flex:none;width:2.375rem;height:2.375rem;display:grid;place-items:center;border-radius:50%;background:#8a84d61f;color:var(--th-accent);font:400 .95rem/1 "Font Awesome 6 Free";transform:none;transition:background .3s ease,color .3s ease}#gal-layer-choices.gal-theme-soft .gal-choice-card:after{content:"";display:block;flex:none;width:2.375rem}#gal-layer-choices.gal-theme-soft .gal-choice-card:hover{--th-card-bg: linear-gradient(#fffdfb, #fffdfb);color:var(--th-accent);box-shadow:0 0 0 4px #8a84d633,0 .9rem 1.75rem -.9rem var(--th-shadow)}#gal-layer-choices.gal-theme-soft .gal-choice-card:hover:before{background:linear-gradient(135deg,#9b95e0,#f2b8a8);color:#fff}#gal-global-overlay.gal-theme-default .gal-name-badge.gal-badge-enter,#gal-global-overlay.gal-theme-default .gal-name-badge.gal-badge-enter span{animation:none}#gal-global-overlay.gal-theme-default .gal-footer-btn-next:after{display:none}#gal-global-overlay.gal-theme-sky .gal-name-badge.gal-badge-enter span:after{animation:gal-th-grow-x .6s .28s cubic-bezier(.34,1.56,.64,1) backwards}#gal-global-overlay.gal-theme-sky .gal-name-badge.gal-badge-enter:after,#gal-global-overlay.gal-theme-night .gal-name-badge.gal-badge-enter:after{animation:gal-th-grow-x .9s .18s cubic-bezier(.22,1,.36,1) backwards}#gal-global-overlay.gal-theme-sky .gal-name-badge.gal-badge-enter:before{animation:gal-fx-pop-in .45s .5s cubic-bezier(.34,1.8,.64,1) backwards}#gal-global-overlay.gal-theme-night .gal-name-badge.gal-badge-enter:before{animation:gal-th-grow-y .5s cubic-bezier(.34,1.56,.64,1) backwards}#gal-global-overlay.gal-theme-soft .gal-name-badge.gal-badge-enter span{animation:gal-th-pill .6s cubic-bezier(.22,1,.36,1) backwards}#gal-global-overlay.gal-theme-soft .gal-name-badge.gal-badge-enter:before,#gal-global-overlay.gal-theme-soft .gal-name-badge.gal-badge-enter:after{animation:gal-th-grow-x .7s .25s cubic-bezier(.22,1,.36,1) backwards}#gal-global-overlay.gal-theme-night .gal-dialog-layer.gal-fx-advance:before{animation:gal-th-seg 1s cubic-bezier(.22,1,.36,1)}@keyframes gal-th-seg{40%{width:13.75rem}}@keyframes gal-th-grow-x{0%{scale:0 1;opacity:0}}@keyframes gal-th-grow-y{0%{scale:1 0}}@keyframes gal-th-pill{0%{clip-path:inset(0 50% 0 50% round 999px)}to{clip-path:inset(0 0 0 0 round 999px)}}@keyframes gal-th-blink{50%{opacity:.25}}@keyframes gal-th-twinkle{50%{scale:.6;rotate:45deg;opacity:.5}}#gal-global-overlay.gal-theme-night .gal-bottom-toolbar>.gal-fx-tb-ind{background:linear-gradient(#a8dcff,#a8dcff) center bottom / 56% 2px no-repeat,var(--th-soft);box-shadow:0 .5rem .9rem -.6rem var(--th-glow)}#gal-global-overlay.gal-theme-default :is(.gal-footer-btn,.gal-action-btn,.gal-pending-choices-btn),#gal-layer-choices.gal-theme-default .gal-choice-card{transition-property:color,background,border-color,box-shadow,translate,scale;transition-duration:.25s,.3s,.3s,.3s,.35s,.18s;transition-timing-function:ease,ease,ease,ease,cubic-bezier(.34,1.56,.64,1),cubic-bezier(.34,1.56,.64,1)}#gal-global-overlay.gal-theme-default .gal-footer-btn[data-action=close-mode]:hover{color:#ff5a6e!important}#gal-global-overlay.gal-theme-default .gal-action-btn:before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--th-grad);scale:0 1;transform-origin:left center;transition:scale .5s cubic-bezier(.22,1,.36,1)}#gal-global-overlay.gal-theme-default .gal-action-btn:hover{color:var(--th-on-accent);translate:0 -2px}#gal-global-overlay.gal-theme-default .gal-action-btn:hover:before{scale:1 1}#gal-global-overlay.gal-theme-default .gal-action-btn:hover i{color:var(--th-on-accent)!important}@media (hover: hover) and (min-width: 48.0625rem){#gal-global-overlay.gal-theme-default .gal-sprite-toggle:before,#gal-global-overlay.gal-theme-default .gal-status-popup-trigger:before{max-width:0;overflow:hidden;opacity:0;white-space:nowrap;color:var(--th-chip-fg);font-family:var(--th-display);font-size:.8rem;letter-spacing:.06em;transition:max-width .5s cubic-bezier(.22,1,.36,1),padding .5s cubic-bezier(.22,1,.36,1),opacity .3s ease}#gal-global-overlay.gal-theme-default .gal-sprite-toggle:before{content:"\\9690\\85cf\\7acb\\7ed8"}#gal-global-overlay.gal-theme-default .gal-sprite-toggle.sprites-hidden:before{content:"\\663e\\793a\\7acb\\7ed8"}#gal-global-overlay.gal-theme-default .gal-location-popup-trigger:before{content:"\\5730\\70b9"}#gal-global-overlay.gal-theme-default .gal-time-popup-trigger:before{content:"\\65f6\\95f4"}#gal-global-overlay.gal-theme-default .gal-sprite-toggle:hover:before,#gal-global-overlay.gal-theme-default .gal-status-popup-trigger:hover:before{max-width:6em;padding-left:.9rem;opacity:1}#gal-global-overlay.gal-theme-default .gal-sprite-toggle:hover .gal-eye-icon,#gal-global-overlay.gal-theme-default .gal-status-popup-trigger:hover .gal-status-popup-icon{rotate:-12deg}}#gal-global-overlay.gal-theme-default .gal-pending-choices-btn.show,#gal-global-overlay.gal-theme-default .gal-pending-choices-btn.gal-new-option-highlight{animation:none!important}#gal-layer-choices.gal-theme-default,#gal-layer-choices.gal-theme-default .gal-choices-container,#gal-layer-choices.gal-theme-default .gal-choice-card{box-sizing:border-box}#gal-layer-choices.gal-theme-default .gal-choice-card{min-width:0;max-width:100%;border:0;transform:none;background:var(--th-card-bg)}#gal-layer-choices.gal-theme-night .gal-choice-card{border:1px solid var(--th-line)}#gal-layer-choices.gal-theme-default .gal-choice-card span{transform:none}#gal-layer-choices.gal-theme-default .gal-choice-card:hover{transform:none;translate:0 -2px}#gal-layer-choices.gal-theme-default.active .gal-choices-title:before,#gal-layer-choices.gal-theme-default.active .gal-choices-title:after{animation:gal-th-grow-x .8s .25s cubic-bezier(.22,1,.36,1) backwards}#gal-layer-choices.gal-theme-sky.active .gal-choices-title:before{animation:gal-fx-pop-in .5s .2s cubic-bezier(.34,1.8,.64,1) backwards}#gal-layer-choices.gal-theme-default .gal-choices-hint{color:var(--th-dim);font-size:.78rem;letter-spacing:.2em}#gal-layer-choices.gal-theme-night .gal-choices-hint{color:#edf1f780}@keyframes gal-th-speaking{0%,to{filter:drop-shadow(0 0 .25rem rgb(255 255 255 / .7)) drop-shadow(0 0 .9rem var(--th-glow)) drop-shadow(0 .9rem 1.8rem rgb(0 0 0 / .3))}50%{filter:drop-shadow(0 0 .4rem rgb(255 255 255 / .9)) drop-shadow(0 0 1.5rem var(--th-glow)) drop-shadow(0 .9rem 1.8rem rgb(0 0 0 / .3))}}#gal-global-overlay.gal-theme-default .gal-layer-character.glow-enabled .gal-char-container.speaking{animation:gal-th-speaking 2.6s ease-in-out infinite,galSpriteBreathing 4s ease-in-out infinite}#gal-global-overlay.gal-theme-default .gal-location-bar,#gal-global-overlay.gal-theme-default .gal-time-bar,#gal-global-overlay.gal-theme-default .gal-fullscreen-btn{height:2rem;line-height:2rem;background:var(--th-chip-bg);color:var(--th-chip-fg);border:1px solid var(--th-chip-line);border-radius:var(--th-chip-radius);box-shadow:0 .4rem 1rem -.5rem var(--th-shadow);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);font-family:var(--th-display);font-weight:500;letter-spacing:.06em}#gal-global-overlay.gal-theme-default .gal-fullscreen-btn{position:absolute;overflow:hidden;padding:0 .875rem;font-size:.8rem}#gal-global-overlay.gal-theme-default .gal-location-bar i,#gal-global-overlay.gal-theme-default .gal-time-bar i,#gal-global-overlay.gal-theme-default .gal-fullscreen-btn i{color:var(--th-chip-icon);font-size:.78rem}#gal-global-overlay.gal-theme-default .gal-fullscreen-btn:hover{background:var(--th-chip-bg);color:var(--th-accent);box-shadow:0 .5rem 1.1rem -.45rem var(--th-glow)}#gal-global-overlay.gal-theme-default .gal-mobile-menu{background:rgb(var(--th-surface) / .94);border:1px solid var(--th-line);border-radius:calc(var(--th-radius) * .7);box-shadow:0 1rem 2.5rem -.8rem var(--th-shadow)}#gal-global-overlay.gal-theme-default .gal-mobile-menu .gal-menu-btn{position:relative;overflow:hidden;background:transparent;color:var(--th-ink);border:0;border-radius:calc(var(--th-radius) * .45);box-shadow:none;font-family:var(--th-display);font-weight:500;letter-spacing:.06em}#gal-global-overlay.gal-theme-default .gal-mobile-menu .gal-menu-btn i{color:var(--th-accent)}#gal-global-overlay.gal-theme-night .gal-mobile-menu .gal-menu-btn i{color:var(--th-dim)}#gal-global-overlay.gal-theme-default .gal-mobile-menu .gal-menu-btn:hover{background:var(--th-soft);color:var(--th-ink);transform:none;box-shadow:none}#gal-global-overlay.gal-theme-default .gal-generating-indicator{padding:1rem 2.25rem;background:rgb(var(--th-surface) / .94);border:1px solid var(--th-line);border-radius:var(--th-radius);box-shadow:0 1.25rem 2.5rem -1rem var(--th-shadow)}#gal-global-overlay.gal-theme-default .gal-generating-indicator .gal-gen-icon{color:var(--th-accent)}#gal-global-overlay.gal-theme-default .gal-generating-indicator .gal-gen-text{color:var(--th-ink);font-family:var(--th-display);letter-spacing:.2em}#gal-global-overlay.gal-theme-default .gal-generating-indicator .gal-gen-status{color:var(--th-dim)}#gal-global-overlay.gal-theme-default .gal-generating-indicator .gal-gen-dot{background:var(--th-accent)}#gal-global-overlay.gal-theme-default .gal-generating-indicator .gal-gen-dot:nth-child(2){background:var(--th-accent-2)}#gal-global-overlay.gal-theme-default .gal-tts-loading{background:var(--th-chip-bg);border:1px solid var(--th-line);color:var(--th-accent);box-shadow:0 .4rem 1rem -.4rem var(--th-glow)}#gal-global-overlay.gal-theme-default .gal-tts-loading i{color:var(--th-accent)}.gal-history-modal.gal-theme-default{background:rgb(var(--th-surface-2) / .55)!important}.gal-history-modal.gal-theme-night{background:#04060ab3!important}.gal-history-modal.gal-theme-default .gal-history-panel{background:rgb(var(--th-surface) / .97);border:1px solid var(--th-line);border-radius:var(--th-radius);box-shadow:0 2rem 4rem -1.2rem var(--th-shadow)}.gal-history-modal.gal-theme-default .gal-history-header{position:relative;background:transparent;color:var(--th-ink);border-bottom:1px solid var(--th-line)}.gal-history-modal.gal-theme-default .gal-history-title{color:var(--th-ink);font-family:var(--th-display);letter-spacing:.12em}.gal-history-modal.gal-theme-default .gal-history-title i,.gal-history-modal.gal-theme-default .gal-history-close:hover{color:var(--th-accent)}.gal-history-modal.gal-theme-night .gal-history-title i{color:var(--th-accent-2)}.gal-history-modal.gal-theme-default .gal-history-close{color:var(--th-dim)}.gal-history-modal.gal-theme-default .gal-history-body{background:transparent}.gal-history-modal.gal-theme-default .gal-history-item{background:rgb(var(--th-surface-2) / .7);border:1px solid var(--th-line);border-radius:calc(var(--th-radius) * .6);box-shadow:none}.gal-history-modal.gal-theme-default .gal-history-item:hover{border-color:var(--th-accent);box-shadow:0 .6rem 1.4rem -.8rem var(--th-glow)}.gal-history-modal.gal-theme-default .gal-history-header-row{background:transparent;border-bottom:1px solid var(--th-line)}.gal-history-modal.gal-theme-default .gal-history-index{background:var(--th-grad);color:var(--th-on-accent);border-radius:999px;font-family:var(--th-latin)}.gal-history-modal.gal-theme-default .gal-history-time,.gal-history-modal.gal-theme-default .gal-history-time i,.gal-history-modal.gal-theme-default .gal-history-empty{color:var(--th-dim)}.gal-history-modal.gal-theme-default .gal-history-content{color:var(--th-ink)}#gal-global-overlay.gal-theme-default.gal-mode-styled .gal-text-panel:before,#gal-global-overlay.gal-theme-default.gal-mode-styled .gal-text-panel:after,#gal-global-overlay.gal-theme-default.gal-mode-styled .gal-dialog-layer:before,#gal-global-overlay.gal-theme-default.gal-mode-styled .gal-dialog-layer:after,#gal-global-overlay.gal-theme-default.gal-mode-styled .gal-bottom-toolbar:before{display:none!important}#gal-global-overlay.gal-theme-default.gal-mode-styled .gal-footer-btn{background:var(--th-chip-bg)!important;color:var(--th-chip-fg)!important}#gal-global-overlay.gal-theme-default.gal-mode-styled .gal-pending-choices-btn{background:var(--th-chip-bg)!important}@media screen and (min-width: 48.0625rem) and (max-height: 46rem){#gal-global-overlay.gal-theme-default .gal-footer-btn{flex:0 0 auto!important;width:calc(2.6rem * var(--ui-scale))!important}#gal-global-overlay.gal-theme-default .gal-pending-choices-btn{flex:0 0 auto!important;width:auto!important;padding:0 1rem!important;margin-left:auto!important}}@media screen and (max-width: 48rem){#gal-global-overlay.gal-theme-default .gal-text-panel{--th-pa: calc(.9 + var(--panel-opacity, .5) * .08)}#gal-global-overlay.gal-theme-sky .gal-text-panel{padding:calc(2.75rem * var(--gal-dialog-scale-user, 1)) calc(1.15rem * var(--gal-dialog-scale-user, 1)) calc(3.1rem * var(--gal-dialog-scale-user, 1)) calc(1.15rem * var(--gal-dialog-scale-user, 1))!important}#gal-global-overlay.gal-theme-night .gal-text-panel{padding:calc(2.75rem * var(--gal-dialog-scale-user, 1)) calc(1.25rem * var(--gal-dialog-scale-user, 1)) calc(3.1rem * var(--gal-dialog-scale-user, 1)) calc(1.25rem * var(--gal-dialog-scale-user, 1))!important}#gal-global-overlay.gal-theme-soft .gal-text-panel{padding:calc(3.1rem * var(--gal-dialog-scale-user, 1)) calc(1.25rem * var(--gal-dialog-scale-user, 1)) calc(3.1rem * var(--gal-dialog-scale-user, 1)) calc(1.25rem * var(--gal-dialog-scale-user, 1))!important}#gal-global-overlay.gal-theme-default .gal-name-badge{padding:0!important;transform:none!important}#gal-global-overlay.gal-theme-sky .gal-name-badge{top:.85rem!important;left:1.15rem!important;right:1.15rem!important;font-size:1.2rem!important}#gal-global-overlay.gal-theme-night .gal-name-badge{top:.95rem!important;left:1.25rem!important;font-size:1.05rem!important}#gal-global-overlay.gal-theme-night .gal-dialog-layer:before{left:1.25rem}#gal-global-overlay.gal-theme-soft .gal-name-badge{top:.7rem!important;left:0!important;right:0!important;font-size:.95rem!important}#gal-global-overlay.gal-theme-soft .gal-name-badge:before,#gal-global-overlay.gal-theme-soft .gal-name-badge:after{width:3rem}#gal-global-overlay.gal-theme-default .gal-bottom-toolbar:before{left:1.25rem;right:1.25rem}#gal-global-overlay.gal-theme-sky .gal-interaction-bar .gal-action-btn{transform:skew(-10deg)!important;border-radius:.5rem!important}#gal-global-overlay.gal-theme-sky .gal-interaction-bar .gal-action-btn *,#gal-global-overlay.gal-theme-sky .gal-interaction-bar .gal-action-btn i,#gal-global-overlay.gal-theme-sky .gal-interaction-bar .gal-action-btn span{transform:skew(10deg)!important}#gal-global-overlay.gal-theme-night .gal-interaction-bar .gal-action-btn,#gal-global-overlay.gal-theme-soft .gal-interaction-bar .gal-action-btn{transform:none!important;border-radius:999px!important}#gal-global-overlay.gal-theme-night .gal-interaction-bar .gal-action-btn *,#gal-global-overlay.gal-theme-night .gal-interaction-bar .gal-action-btn i,#gal-global-overlay.gal-theme-night .gal-interaction-bar .gal-action-btn span,#gal-global-overlay.gal-theme-soft .gal-interaction-bar .gal-action-btn *,#gal-global-overlay.gal-theme-soft .gal-interaction-bar .gal-action-btn i,#gal-global-overlay.gal-theme-soft .gal-interaction-bar .gal-action-btn span{transform:none!important}#gal-global-overlay.gal-theme-default .gal-location-bar,#gal-global-overlay.gal-theme-default .gal-time-bar{background:var(--th-chip-bg)!important}#gal-global-overlay.gal-theme-default .gal-dialog-topbar .gal-sprite-toggle,#gal-global-overlay.gal-theme-default .gal-dialog-topbar .gal-status-popup-trigger{min-width:0;justify-content:center;box-shadow:0 .3rem .7rem -.35rem var(--th-shadow)}#gal-global-overlay.gal-theme-default .gal-dialog-topbar .gal-eye-icon,#gal-global-overlay.gal-theme-default .gal-dialog-topbar .gal-status-popup-icon{width:auto}#gal-global-overlay.gal-theme-soft .gal-footer-btn{flex:1 1 0!important;width:auto!important;min-width:0!important;height:2.4rem!important;border-radius:999px!important}#gal-global-overlay.gal-theme-default .gal-footer-btn-next{width:5rem!important;min-width:5rem!important;height:2.5rem!important;padding:0!important}#gal-global-overlay.gal-theme-default .gal-footer-btn i,#gal-global-overlay.gal-theme-default .gal-pending-choices-btn i{font-size:1.1rem!important}#gal-global-overlay.gal-theme-default .gal-footer-btn-next i{font-size:1.4rem!important}#gal-global-overlay.gal-theme-soft .gal-pending-choices-btn{flex:1 1 0!important;padding:0!important;justify-content:center!important}#gal-layer-choices.gal-theme-night{align-items:center;padding-right:1.25rem}}@media (prefers-reduced-motion: reduce){#gal-layer-choices.gal-theme-default *,#gal-layer-choices.gal-theme-default *:before,#gal-layer-choices.gal-theme-default *:after,.gal-history-modal.gal-theme-default *{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 `;
   function getBaseInterfaceCss() {
     return BASE_INTERFACE_CSS;
@@ -38611,6 +41114,133 @@ ${normalizedSource}`;
     topWindow[STYLES_INJECTED_FLAG] = true;
     const css = BASE_INTERFACE_CSS;
     const skinCss = `
+/* === 跨皮肤语义 token 映射 ===
+   把各皮肤命名空间变量映射到 --gal-color-* / --gal-font-*（默认值见 数据库界面插件.css）。
+   选择器范围与各皮肤自身变量块一致（变体只覆写命名空间变量，这里自动跟随）。
+   新增皮肤时在此补一组映射，通用组件即可直接适配 */
+#gal-global-overlay.skin-twilight {
+    --gal-color-accent: var(--twilight-accent);
+    --gal-color-accent-2: var(--twilight-accent);
+    --gal-color-surface: var(--twilight-glass-strong);
+    --gal-color-on-surface: var(--twilight-text-main);
+    --gal-color-on-surface-dim: var(--twilight-text-muted);
+    --gal-color-line: var(--twilight-glass-border);
+    --gal-color-on-accent: #1a1410;
+    --gal-color-stage: #0b0c12;
+    --gal-font-display: var(--twilight-headline);
+    --gal-font-body: var(--twilight-body);
+    --gal-font-latin: var(--twilight-label);
+    --gal-radius: 12px;
+}
+/* 选项层挂在 body 下，取不到 overlay 上的 --twilight-*：直接给薄暮主色（控件动效等通用组件读取） */
+#gal-layer-choices.skin-twilight {
+    --gal-color-accent: #d7b189;
+    --gal-color-accent-2: #d7b189;
+    --gal-color-surface: rgba(12, 14, 22, 0.76);
+    --gal-color-on-surface: rgba(245, 240, 232, 0.96);
+}
+#gal-global-overlay[class*="skin-ancient"],
+#gal-layer-choices[class*="skin-ancient"],
+.gal-history-modal[class*="skin-ancient"] {
+    --gal-color-accent: var(--ink-gold);
+    --gal-color-accent-2: var(--ink-seal);
+    --gal-color-surface: var(--ink-paper);
+    --gal-color-on-surface: var(--ink-black);
+    --gal-color-on-surface-dim: var(--ink-mid);
+    --gal-color-line: var(--ink-deep);
+    --gal-color-on-accent: var(--ink-on-ink);
+    --gal-color-shadow: rgba(var(--ink-black-rgb), 0.28);
+    --gal-color-stage: var(--ink-lacquer);
+    --gal-font-display: var(--ink-font-brush);
+    --gal-font-body: var(--ink-font-kai);
+    --gal-font-latin: var(--ink-font-kai);
+    --gal-radius: 2px;
+}
+#gal-global-overlay[class*="skin-persona"],
+#gal-layer-choices[class*="skin-persona"],
+.gal-history-modal[class*="skin-persona"] {
+    --gal-color-accent: var(--p5-red);
+    --gal-color-accent-2: var(--p5-red-dk);
+    --gal-color-surface: var(--p5-white);
+    --gal-color-on-surface: var(--p5-black);
+    --gal-color-on-surface-dim: var(--p5-gray);
+    --gal-color-line: var(--p5-black);
+    --gal-color-on-accent: var(--p5-white);
+    --gal-color-shadow: rgba(0, 0, 0, 0.35);
+    --gal-color-stage: var(--p5-black);
+    --gal-font-display: var(--p5-font-impact);
+    --gal-font-body: var(--p5-font-cn);
+    --gal-font-latin: var(--p5-font-impact);
+    --gal-radius: 0px;
+}
+#gal-global-overlay[class*="skin-jrpg"],
+#gal-layer-choices[class*="skin-jrpg"],
+.gal-history-modal[class*="skin-jrpg"] {
+    --gal-color-accent: var(--cts-crystal);
+    --gal-color-accent-2: var(--cts-gold);
+    --gal-color-surface: var(--cts-btn-face);
+    --gal-color-on-surface: var(--cts-text);
+    --gal-color-on-surface-dim: var(--cts-dim);
+    --gal-color-line: var(--cts-gold);
+    --gal-color-on-accent: var(--cts-dark-on-crystal);
+    --gal-color-shadow: rgba(0, 0, 0, 0.45);
+    --gal-color-stage: var(--cts-void);
+    --gal-font-display: var(--cts-font);
+    --gal-font-body: var(--cts-font);
+    --gal-font-latin: var(--cts-font);
+    --gal-radius: 2px;
+}
+#gal-global-overlay[class*="skin-yanyun"],
+#gal-layer-choices[class*="skin-yanyun"],
+.gal-history-modal[class*="skin-yanyun"] {
+    --gal-color-accent: var(--yx-bronze-2);
+    --gal-color-accent-2: var(--yx-cinnabar);
+    --gal-color-surface: var(--yx-btnface);
+    --gal-color-on-surface: var(--yx-text);
+    --gal-color-on-surface-dim: var(--yx-dim);
+    --gal-color-line: var(--yx-bronze);
+    --gal-color-on-accent: var(--yx-seal-text);
+    --gal-color-shadow: rgba(0, 0, 0, 0.5);
+    --gal-color-stage: var(--yx-ink-0);
+    --gal-font-display: var(--yx-font-brush);
+    --gal-font-body: var(--yx-font);
+    --gal-font-latin: var(--yx-font);
+    --gal-radius: 0px;
+}
+#gal-global-overlay.skin-classic,
+#gal-layer-choices.skin-classic {
+    --gal-color-accent: var(--sk-sakura);
+    --gal-color-accent-2: var(--sk-deep);
+    --gal-color-surface: var(--sk-white);
+    --gal-color-on-surface: var(--sk-plum);
+    --gal-color-on-surface-dim: var(--sk-plum-soft);
+    --gal-color-line: var(--sk-glass-line);
+    --gal-color-on-accent: #ffffff;
+    --gal-color-shadow: var(--sk-shadow);
+    --gal-color-stage: var(--sk-plum);
+    --gal-font-display: var(--sk-serif);
+    --gal-font-body: var(--sk-sans);
+    --gal-font-latin: var(--sk-latin);
+    --gal-radius: 16px;
+}
+#gal-global-overlay[class*="skin-shujian"],
+#gal-layer-choices[class*="skin-shujian"],
+.gal-history-modal[class*="skin-shujian"] {
+    --gal-color-accent: var(--shu-vermilion);
+    --gal-color-accent-2: var(--shu-vermilion-dk);
+    --gal-color-surface: var(--shu-paper);
+    --gal-color-on-surface: var(--shu-ink);
+    --gal-color-on-surface-dim: var(--shu-ink-soft);
+    --gal-color-line: var(--shu-hairline);
+    --gal-color-on-accent: var(--shu-on-seal);
+    --gal-color-shadow: rgba(0, 0, 0, 0.22);
+    --gal-color-stage: #12100e;
+    --gal-font-display: var(--shu-font-serif);
+    --gal-font-body: var(--shu-font-serif);
+    --gal-font-latin: var(--shu-font-latin);
+    --gal-radius: 2px;
+}
+
 /* === 全局皮肤重置 === */
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge,
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge span,
@@ -38634,22 +41264,22 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn,
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn {
     clip-path: none !important;
-    overflow: visible !important;
-    min-height: calc(2.25rem * var(--ui-scale, 1)) !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 calc(0.75rem * var(--ui-scale, 1)) !important;
+    overflow: visible;
+    min-height: calc(2.25rem * var(--ui-scale, 1));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 calc(0.75rem * var(--ui-scale, 1));
     font-size: calc(0.85rem * var(--ui-scale, 1)) !important;
-    cursor: pointer !important;
-    white-space: nowrap !important;
+    cursor: pointer;
+    white-space: nowrap;
 }
 /* 所有皮肤 NEXT 按钮缩放适配 */
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next {
     font-size: calc(1.3rem * var(--ui-scale, 1)) !important;
-    padding: 0 calc(2.5rem * var(--ui-scale, 1)) !important;
-    height: calc(3.438rem * var(--ui-scale, 1)) !important;
-    min-width: calc(8.75rem * var(--ui-scale, 1)) !important;
+    padding: 0 calc(2.5rem * var(--ui-scale, 1));
+    height: calc(3.438rem * var(--ui-scale, 1));
+    min-width: calc(8.75rem * var(--ui-scale, 1));
 }
 /* 所有皮肤名牌+文字缩放适配 */
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
@@ -38657,7 +41287,7 @@ ${normalizedSource}`;
     transform-origin: left top !important;
 }
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-dialog-text {
-    font-size: calc(1.25rem * var(--ui-scale, 1) * var(--font-scale, 1)) !important;
+    font-size: calc(1.25rem * var(--ui-scale, 1) * var(--font-scale, 1));
 }
 
 /* =========================================================
@@ -42546,7 +45176,7 @@ ${normalizedSource}`;
     background:
         radial-gradient(120% 95% at 50% 30%, rgba(255, 252, 242, 0.55) 0%, rgba(var(--ink-silk-rgb), 0) 55%),
         radial-gradient(140% 120% at 50% 110%, rgba(var(--ink-black-rgb), 0.2) 0%, rgba(var(--ink-black-rgb), 0) 46%),
-        linear-gradient(175deg, var(--ink-paper) 0%, var(--ink-silk) 46%, var(--ink-paper-warm) 100%) !important;
+        linear-gradient(175deg, var(--ink-paper) 0%, var(--ink-silk) 46%, var(--ink-paper-warm) 100%);
 }
 /* 远山两叠（::before 淡墨远山，::after 浓墨近山 + 雾带用渐变叠出） */
 #gal-global-overlay[class*="skin-ancient"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::before {
@@ -42556,9 +45186,9 @@ ${normalizedSource}`;
         radial-gradient(50% 18% at 86% 60%, var(--ink-mountain-far) 0 55%, transparent 56%),
         radial-gradient(44% 30% at 12% 70%, var(--ink-mountain-mid) 0 58%, transparent 59%),
         radial-gradient(52% 33% at 46% 71%, var(--ink-mountain-mid) 0 62%, transparent 63%),
-        radial-gradient(38% 25% at 82% 69%, var(--ink-mountain-mid) 0 54%, transparent 55%) !important;
-    background-size: auto !important;
-    opacity: 0.34 !important;
+        radial-gradient(38% 25% at 82% 69%, var(--ink-mountain-mid) 0 54%, transparent 55%);
+    background-size: auto;
+    opacity: 0.34;
     filter: blur(1.5px);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::after {
@@ -42616,33 +45246,33 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-ancient"] .gal-text-panel {
     background:
         linear-gradient(90deg, rgba(216, 205, 178, 0.55) 0%, transparent 5%, transparent 95%, rgba(216, 205, 178, 0.55) 100%),
-        linear-gradient(178deg, rgba(244, 238, 224, var(--panel-opacity, 0.96)) 0%, rgba(234, 226, 205, var(--panel-opacity, 0.96)) 100%) !important;
-    border: none !important;
-    border-top: 5px solid var(--ink-lacquer) !important;
-    border-bottom: 5px solid var(--ink-lacquer) !important;
-    border-radius: 3px !important;
+        linear-gradient(178deg, rgba(244, 238, 224, var(--panel-opacity, 0.96)) 0%, rgba(234, 226, 205, var(--panel-opacity, 0.96)) 100%);
+    border: none;
+    border-top: 5px solid var(--ink-lacquer);
+    border-bottom: 5px solid var(--ink-lacquer);
+    border-radius: 3px;
     box-shadow:
         0 -7px 0 -1px var(--ink-lacquer-lt),
         0 7px 0 -1px var(--ink-lacquer-lt),
-        0 1.6rem 2.8rem -1.1rem rgba(20, 14, 6, 0.55) !important;
+        0 1.6rem 2.8rem -1.1rem rgba(20, 14, 6, 0.55);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-dialog-text {
-    color: var(--ink-black) !important;
-    font-weight: 500 !important;
+    color: var(--ink-black);
+    font-weight: 500;
     letter-spacing: 0.08em;
     line-height: 2.1 !important;
-    text-shadow: none !important;
-    font-family: var(--ink-font-kai) !important;
+    text-shadow: none;
+    font-family: var(--ink-font-kai);
 }
 
 /* —— 姓名牌：一笔浓墨落纸（笔触 clip-path）+ 右下小朱印 —— */
 #gal-global-overlay[class*="skin-ancient"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: radial-gradient(140% 190% at 8% 30%, var(--ink-deep) 0%, var(--ink-black) 55%, rgba(var(--ink-black-rgb), 0.94) 100%) !important;
     color: var(--ink-on-ink) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    font-family: var(--ink-font-brush) !important;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    font-family: var(--ink-font-brush);
     font-size: 1.35rem !important;
     padding: 0.45rem 1.7rem 0.45rem 1.3rem !important;
     left: 20px !important;
@@ -42654,11 +45284,11 @@ ${normalizedSource}`;
     z-index: 36;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge span {
-    transform: none !important;
+    transform: none;
     font-weight: 400;
     letter-spacing: 0.14em;
-    text-shadow: none !important;
-    font-family: var(--ink-font-brush) !important;
+    text-shadow: none;
+    font-family: var(--ink-font-brush);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge::after {
     content: "";
@@ -42672,22 +45302,22 @@ ${normalizedSource}`;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge.gal-narrator-label {
-    background: radial-gradient(140% 190% at 8% 30%, #8a8375 0%, var(--ink-mid) 60%, rgba(110, 103, 92, 0.92) 100%) !important;
-    color: #f6f1e4 !important;
+    background: radial-gradient(140% 190% at 8% 30%, #8a8375 0%, var(--ink-mid) 60%, rgba(110, 103, 92, 0.92) 100%);
+    color: #f6f1e4;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge.gal-narrator-label::after { background: var(--ink-mid); }
 
 /* —— 对话框右上悬浮操作：绢底墨字小签，悬停墨色涨满 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-action-btn {
-    background: rgba(244, 238, 224, 0.96) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.35) !important;
-    color: var(--ink-deep) !important;
-    font-weight: 600 !important;
+    background: rgba(244, 238, 224, 0.96);
+    border: 1px solid rgba(var(--ink-black-rgb), 0.35);
+    color: var(--ink-deep);
+    font-weight: 600;
     border-radius: 2px !important;
-    letter-spacing: 0.18em !important;
+    letter-spacing: 0.18em;
     box-shadow: 0 4px 10px -4px rgba(20, 14, 6, 0.4) !important;
     transition: all 0.28s ease !important;
-    font-family: var(--ink-font-kai) !important;
+    font-family: var(--ink-font-kai);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-action-btn:hover {
     background: var(--ink-black) !important;
@@ -42707,9 +45337,9 @@ ${normalizedSource}`;
     color: var(--ink-mid) !important;
     font-weight: 600 !important;
     border-radius: 50% !important;
-    letter-spacing: 0.12em !important;
+    letter-spacing: 0.12em;
     box-shadow: none !important;
-    position: relative !important;
+    position: relative;
     isolation: isolate;
     transition: color 0.26s ease !important;
     font-family: var(--ink-font-kai) !important;
@@ -42743,12 +45373,12 @@ ${normalizedSource}`;
     border: none !important;
     border-radius: 3px !important;
     box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.5) !important;
-    font-family: var(--ink-font-kai) !important;
+    font-family: var(--ink-font-kai);
     font-weight: 700 !important;
-    letter-spacing: 0.3em !important;
+    letter-spacing: 0.3em;
     text-indent: 0.3em;
-    position: relative !important;
-    overflow: visible !important;
+    position: relative;
+    overflow: visible;
     transition: letter-spacing 0.3s ease, box-shadow 0.3s ease !important;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-footer-btn-next::before,
@@ -42784,9 +45414,9 @@ ${normalizedSource}`;
     color: #f5e9d4 !important;
     border: none !important;
     border-radius: 2px !important;
-    font-family: var(--ink-font-kai) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.16em !important;
+    font-family: var(--ink-font-kai);
+    font-weight: 700;
+    letter-spacing: 0.16em;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-pending-choices-btn.show,
 #gal-global-overlay[class*="skin-ancient"] .gal-pending-choices-btn.gal-new-option-highlight {
@@ -42806,13 +45436,13 @@ ${normalizedSource}`;
 
 /* —— 进度条：一笔由浓转淡的墨迹 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-dialog-layer .gal-progress-container {
-    background: rgba(var(--ink-black-rgb), 0.14) !important;
-    height: 0.22rem !important;
+    background: rgba(var(--ink-black-rgb), 0.14);
+    height: 0.22rem;
     border-radius: 3px;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-progress-bar {
-    background: linear-gradient(90deg, var(--ink-black) 0%, var(--ink-deep) 55%, var(--ink-faint) 100%) !important;
-    box-shadow: none !important;
+    background: linear-gradient(90deg, var(--ink-black) 0%, var(--ink-deep) 55%, var(--ink-faint) 100%);
+    box-shadow: none;
     border-radius: 3px;
 }
 
@@ -42820,21 +45450,21 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-ancient"] .gal-location-bar,
 #gal-global-overlay[class*="skin-ancient"] .gal-time-bar {
     background: rgba(var(--ink-silk-rgb), 0.72) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.25) !important;
-    border-radius: 2px !important;
-    color: var(--ink-deep) !important;
-    font-family: var(--ink-font-kai) !important;
-    letter-spacing: 0.22em !important;
+    border: 1px solid rgba(var(--ink-black-rgb), 0.25);
+    border-radius: 2px;
+    color: var(--ink-deep);
+    font-family: var(--ink-font-kai);
+    letter-spacing: 0.22em;
     text-shadow: none;
     backdrop-filter: blur(2px);
 }
-#gal-global-overlay[class*="skin-ancient"] .gal-location-bar i { color: var(--ink-seal) !important; }
-#gal-global-overlay[class*="skin-ancient"] .gal-time-bar i { color: var(--ink-gold) !important; }
+#gal-global-overlay[class*="skin-ancient"] .gal-location-bar i { color: var(--ink-seal); }
+#gal-global-overlay[class*="skin-ancient"] .gal-time-bar i { color: var(--ink-gold); }
 #gal-global-overlay[class*="skin-ancient"] .gal-fullscreen-btn {
-    background: rgba(var(--ink-silk-rgb), 0.5) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.3) !important;
-    border-radius: 999px !important;
-    color: var(--ink-mid) !important;
+    background: rgba(var(--ink-silk-rgb), 0.5);
+    border: 1px solid rgba(var(--ink-black-rgb), 0.3);
+    border-radius: 999px;
+    color: var(--ink-mid);
     backdrop-filter: blur(2px);
     transition: all 0.3s ease;
 }
@@ -42847,14 +45477,14 @@ ${normalizedSource}`;
 /* —— 立绘显隐 / 状态弹窗小按钮：绢底圆钮 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-ancient"] .gal-status-popup-trigger {
-    background: var(--ink-paper) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.32) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(20, 14, 6, 0.4) !important;
+    background: var(--ink-paper);
+    border: 1px solid rgba(var(--ink-black-rgb), 0.32);
+    border-radius: 999px;
+    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(20, 14, 6, 0.4);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-sprite-toggle .gal-eye-icon,
 #gal-global-overlay[class*="skin-ancient"] .gal-status-popup-trigger .gal-status-popup-icon {
-    color: var(--ink-seal) !important;
+    color: var(--ink-seal);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-ancient"] .gal-status-popup-trigger:hover {
@@ -42868,15 +45498,15 @@ ${normalizedSource}`;
 
 /* —— 生成中指示器：「运笔之中」——墨滴入水双圈涟漪 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator {
-    background: linear-gradient(178deg, var(--ink-paper) 0%, var(--ink-paper-warm) 100%) !important;
-    border: none !important;
-    border-top: 4px solid var(--ink-lacquer) !important;
-    border-bottom: 4px solid var(--ink-lacquer) !important;
-    border-radius: 2px !important;
-    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7) !important;
+    background: linear-gradient(178deg, var(--ink-paper) 0%, var(--ink-paper-warm) 100%);
+    border: none;
+    border-top: 4px solid var(--ink-lacquer);
+    border-bottom: 4px solid var(--ink-lacquer);
+    border-radius: 2px;
+    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-icon {
-    color: var(--ink-deep) !important;
+    color: var(--ink-deep);
     animation: galAncientInkCore 1.8s ease-in-out infinite !important;
 }
 @keyframes galAncientInkCore {
@@ -42884,18 +45514,18 @@ ${normalizedSource}`;
     50% { transform: scale(0.82); opacity: 0.7; }
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-text {
-    color: var(--ink-black) !important;
-    font-family: var(--ink-font-kai) !important;
-    letter-spacing: 0.5em !important;
+    color: var(--ink-black);
+    font-family: var(--ink-font-kai);
+    letter-spacing: 0.5em;
     text-indent: 0.5em;
-    font-weight: 700 !important;
+    font-weight: 700;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-status {
-    color: var(--ink-mid) !important;
-    font-family: var(--ink-font-kai) !important;
+    color: var(--ink-mid);
+    font-family: var(--ink-font-kai);
     letter-spacing: 0.24em;
 }
-#gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-dot { background: var(--ink-deep) !important; }
+#gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-dot { background: var(--ink-deep); }
 
 /* —— 选项浮层：挂轴自上垂落，悬停朱批圈点（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-ancient"] {
@@ -43079,7 +45709,7 @@ ${normalizedSource}`;
 
 /* —— 无背景图时的舞台：红黑放射漩涡 + 半调网点（有背景图/生成中时让位）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-layer-bg:not(.has-bg):not(.generating-bg) {
-    background: var(--p5-black) !important;
+    background: var(--p5-black);
     isolation: isolate;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::after {
@@ -43098,9 +45728,9 @@ ${normalizedSource}`;
 }
 @keyframes galPersonaVortexSpin { to { transform: rotate(360deg); } }
 #gal-global-overlay[class*="skin-persona"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::before {
-    background-image: radial-gradient(rgba(var(--p5-white-rgb), 0.14) 1px, transparent 1.4px) !important;
-    background-size: 9px 9px !important;
-    opacity: 0.4 !important;
+    background-image: radial-gradient(rgba(var(--p5-white-rgb), 0.14) 1px, transparent 1.4px);
+    background-size: 9px 9px;
+    opacity: 0.4;
     -webkit-mask: linear-gradient(115deg, transparent 34%, #000 78%);
             mask: linear-gradient(115deg, transparent 34%, #000 78%);
     z-index: 1;
@@ -43129,11 +45759,11 @@ ${normalizedSource}`;
 
 /* —— 对话正文：一张剪出来的白纸片（不规则 clip-path + 红黑双层硬影）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-text-panel {
-    background: rgba(var(--p5-white-rgb), var(--panel-opacity, 0.96)) !important;
-    background-image: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    background: rgba(var(--p5-white-rgb), var(--panel-opacity, 0.96));
+    background-image: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     clip-path: polygon(
         0.6% 3%, 0% 14%, 0.4% 96%, 2% 100%, 40% 99%, 43.5% 100%, 97% 99.2%,
         99.6% 90%, 99.2% 10%, 97% 0.6%, 55% 1.6%, 51% 0%, 4% 1.4%);
@@ -43141,7 +45771,7 @@ ${normalizedSource}`;
     filter:
         drop-shadow(6px 6px 0 var(--p5-red))
         drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.9))
-        drop-shadow(0 18px 26px rgba(0, 0, 0, 0.45)) !important;
+        drop-shadow(0 18px 26px rgba(0, 0, 0, 0.45));
 }
 /* 纸面右上角网点：印刷余味 */
 #gal-global-overlay[class*="skin-persona"] .gal-text-panel::before {
@@ -43157,11 +45787,11 @@ ${normalizedSource}`;
             mask: linear-gradient(115deg, transparent 45%, #000 92%);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-dialog-text {
-    color: var(--p5-black) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.05em !important;
+    color: var(--p5-black);
+    font-weight: 700;
+    letter-spacing: 0.05em;
     line-height: 1.95 !important;
-    text-shadow: none !important;
+    text-shadow: none;
 }
 
 /* —— 姓名牌：甩上去的墨迹标签 + 星形飞溅 ——
@@ -43169,24 +45799,24 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-persona"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: var(--p5-black) !important;
     color: var(--p5-white) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    font-family: var(--p5-font-impact) !important;
+    border: none;
+    border-radius: 0;
+    font-family: var(--p5-font-impact);
     transform: rotate(-3.4deg) scale(var(--ui-scale)) !important;
     transform-origin: bottom left;
     left: 15px !important; top: -26px !important;
     padding: 0.5rem 1.6rem 0.5rem 1.3rem !important;
     clip-path: polygon(0% 22%, 5% 0%, 100% 8%, 96% 88%, 91% 100%, 3% 92%);
-    box-shadow: none !important;
+    box-shadow: none;
     filter: drop-shadow(4px 4px 0 var(--p5-red));
     z-index: 36;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge span {
-    transform: none !important;
+    transform: none;
     font-style: normal;
     letter-spacing: 0.18em;
-    font-size: 1.25rem !important;
-    text-shadow: none !important;
+    font-size: 1.25rem;
+    text-shadow: none;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge::before {
     content: "";
@@ -43205,8 +45835,8 @@ ${normalizedSource}`;
     clip-path: polygon(50% 0, 68% 34%, 100% 40%, 74% 62%, 84% 100%, 50% 76%, 16% 96%, 28% 60%, 0 38%, 34% 32%);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge.gal-narrator-label {
-    background: var(--p5-white) !important;
-    color: var(--p5-black) !important;
+    background: var(--p5-white);
+    color: var(--p5-black);
     filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.85));
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge.gal-narrator-label::before { background: var(--p5-black); }
@@ -43214,19 +45844,19 @@ ${normalizedSource}`;
 /* —— 对话框右上悬浮操作：剪贴字条按钮（角度互不相同，悬停回正）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-interaction-bar { right: 10px !important; }
 #gal-global-overlay[class*="skin-persona"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn {
-    background: var(--p5-black) !important;
-    color: var(--p5-white) !important;
-    border: 2px solid var(--p5-white) !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    font-family: var(--p5-font-cn) !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.14em !important;
+    background: var(--p5-black);
+    color: var(--p5-white);
+    border: 2px solid var(--p5-white);
+    border-radius: 0;
+    box-shadow: none;
+    font-family: var(--p5-font-cn);
+    font-weight: 900;
+    letter-spacing: 0.14em;
     clip-path: polygon(4% 12%, 100% 0%, 97% 90%, 0% 100%) !important;
     transition: all 0.16s ease !important;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-reroll { transform: skewX(-15deg) rotate(1.4deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-free { transform: skewX(-15deg) rotate(-1.8deg) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-reroll { transform: skewX(-15deg) rotate(1.4deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-free { transform: skewX(-15deg) rotate(-1.8deg); }
 #gal-global-overlay[class*="skin-persona"] .gal-action-btn:hover {
     background: var(--p5-red) !important;
     border-color: var(--p5-red) !important;
@@ -43240,22 +45870,22 @@ ${normalizedSource}`;
     background: rgba(13, 12, 14, 0.78) !important;
     color: var(--p5-white) !important;
     border: 1.5px solid rgba(var(--p5-white-rgb), 0.75) !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     box-shadow: none !important;
     font-family: var(--p5-font-cn) !important;
     font-weight: 900 !important;
-    letter-spacing: 0.1em !important;
+    letter-spacing: 0.1em;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-footer-btn i,
 #gal-global-overlay[class*="skin-persona"] .gal-footer-btn span {
-    transform: none !important;
+    transform: none;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+1) { transform: rotate(-2.2deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+2) { transform: rotate(1.6deg) translateY(1px) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+3) { transform: rotate(-0.8deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+4) { transform: rotate(2.4deg) translateY(-1px) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+5) { transform: rotate(-1.4deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+6) { transform: rotate(0.9deg) translateY(1px) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+1) { transform: rotate(-2.2deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+2) { transform: rotate(1.6deg) translateY(1px); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+3) { transform: rotate(-0.8deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+4) { transform: rotate(2.4deg) translateY(-1px); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+5) { transform: rotate(-1.4deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+6) { transform: rotate(0.9deg) translateY(1px); }
 #gal-global-overlay[class*="skin-persona"] .gal-footer-btn:hover {
     background: var(--p5-white) !important;
     color: var(--p5-black) !important;
@@ -43270,15 +45900,15 @@ ${normalizedSource}`;
     background: var(--p5-red) !important;
     color: #fff !important;
     border: none !important;
-    border-radius: 0 !important;
-    font-family: var(--p5-font-impact) !important;
+    border-radius: 0;
+    font-family: var(--p5-font-impact);
     font-weight: 400 !important;
-    letter-spacing: 0.22em !important;
+    letter-spacing: 0.22em;
     clip-path: polygon(0% 18%, 3% 0%, 92% 4%, 100% 50%, 92% 96%, 2% 100%) !important;
-    transform: rotate(-1deg) !important;
+    transform: rotate(-1deg);
     box-shadow: none !important;
-    position: relative !important;
-    overflow: hidden !important;
+    position: relative;
+    overflow: hidden;
     isolation: isolate;
     transition: transform 0.18s ease !important;
 }
@@ -43307,15 +45937,15 @@ ${normalizedSource}`;
 /* —— 待选项按钮：怪盗预告函（周期性抖动）—— */
 #gal-global-overlay[class*="skin-persona"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn {
     background: var(--p5-red) !important;
-    color: #fff !important;
+    color: #fff;
     border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    font-family: var(--p5-font-cn) !important;
+    border-radius: 0;
+    box-shadow: none;
+    font-family: var(--p5-font-cn);
     font-weight: 900 !important;
-    letter-spacing: 0.14em !important;
+    letter-spacing: 0.14em;
     clip-path: polygon(3% 16%, 0% 0%, 98% 5%, 100% 82%, 95% 100%, 5% 94%) !important;
-    transform: rotate(-1.6deg) !important;
+    transform: rotate(-1.6deg);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-pending-choices-btn.show,
 #gal-global-overlay[class*="skin-persona"] .gal-pending-choices-btn.gal-new-option-highlight {
@@ -43334,49 +45964,49 @@ ${normalizedSource}`;
 
 /* —— 进度条：斜切红黑条纹 —— */
 #gal-global-overlay[class*="skin-persona"] .gal-dialog-layer .gal-progress-container {
-    background: rgba(var(--p5-white-rgb), 0.14) !important;
+    background: rgba(var(--p5-white-rgb), 0.14);
     transform: skewX(-30deg);
-    height: 0.28rem !important;
+    height: 0.28rem;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-progress-bar {
-    background: repeating-linear-gradient(90deg, var(--p5-red) 0 14px, var(--p5-red-dk) 14px 18px) !important;
-    box-shadow: none !important;
+    background: repeating-linear-gradient(90deg, var(--p5-red) 0 14px, var(--p5-red-dk) 14px 18px);
+    box-shadow: none;
 }
 
 /* —— 顶部地点/时间：赎金信字条（黑纸条 + 白纸条）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-location-bar {
     background: var(--p5-black) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    color: var(--p5-white) !important;
-    font-family: var(--p5-font-cn) !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.26em !important;
+    border: none;
+    border-radius: 0;
+    color: var(--p5-white);
+    font-family: var(--p5-font-cn);
+    font-weight: 900;
+    letter-spacing: 0.26em;
     transform: rotate(-1.6deg);
-    box-shadow: 3px 3px 0 var(--p5-red) !important;
+    box-shadow: 3px 3px 0 var(--p5-red);
     clip-path: polygon(0% 8%, 4% 0%, 97% 2%, 100% 86%, 96% 100%, 2% 97%);
     text-shadow: none;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-time-bar {
     background: var(--p5-white) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    color: var(--p5-black) !important;
-    font-family: var(--p5-font-impact) !important;
-    letter-spacing: 0.28em !important;
+    border: none;
+    border-radius: 0;
+    color: var(--p5-black);
+    font-family: var(--p5-font-impact);
+    letter-spacing: 0.28em;
     transform: rotate(1.1deg);
-    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.85) !important;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.85);
     clip-path: polygon(2% 0%, 100% 6%, 98% 94%, 0% 100%);
     text-shadow: none;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-location-bar i { color: var(--p5-red) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-time-bar i { color: var(--p5-red) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-location-bar i { color: var(--p5-red); }
+#gal-global-overlay[class*="skin-persona"] .gal-time-bar i { color: var(--p5-red); }
 #gal-global-overlay[class*="skin-persona"] .gal-fullscreen-btn {
-    background: rgba(13, 12, 14, 0.6) !important;
-    border: 2px solid var(--p5-white) !important;
-    border-radius: 0 !important;
-    color: var(--p5-white) !important;
-    font-weight: 900 !important;
+    background: rgba(13, 12, 14, 0.6);
+    border: 2px solid var(--p5-white);
+    border-radius: 0;
+    color: var(--p5-white);
+    font-weight: 900;
     transform: rotate(3deg);
     clip-path: polygon(8% 2%, 98% 0%, 94% 92%, 2% 98%);
     transition: all 0.18s ease;
@@ -43390,14 +46020,14 @@ ${normalizedSource}`;
 /* —— 立绘显隐 / 状态弹窗小按钮：黑色小方钮 —— */
 #gal-global-overlay[class*="skin-persona"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-persona"] .gal-status-popup-trigger {
-    background: var(--p5-black) !important;
-    border: 1.5px solid rgba(var(--p5-white-rgb), 0.6) !important;
-    border-radius: 0 !important;
-    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5) !important;
+    background: var(--p5-black);
+    border: 1.5px solid rgba(var(--p5-white-rgb), 0.6);
+    border-radius: 0;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-sprite-toggle .gal-eye-icon,
 #gal-global-overlay[class*="skin-persona"] .gal-status-popup-trigger .gal-status-popup-icon {
-    color: var(--p5-red) !important;
+    color: var(--p5-red);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-persona"] .gal-status-popup-trigger:hover {
@@ -43411,27 +46041,27 @@ ${normalizedSource}`;
 
 /* —— 生成中指示器：「潜入中」黑卡 —— */
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator {
-    background: var(--p5-black) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: 8px 8px 0 var(--p5-red) !important;
+    background: var(--p5-black);
+    border: none;
+    border-radius: 0;
+    box-shadow: 8px 8px 0 var(--p5-red);
     clip-path: polygon(1.5% 8%, 98% 1%, 99.5% 90%, 0.5% 97%);
-    transform: translate(-50%, -50%) rotate(-1deg) !important;
+    transform: translate(-50%, -50%) rotate(-1deg);
 }
-#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-icon { color: var(--p5-red) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-icon { color: var(--p5-red); }
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-text {
-    color: var(--p5-white) !important;
-    font-family: var(--p5-font-cn) !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.5em !important;
+    color: var(--p5-white);
+    font-family: var(--p5-font-cn);
+    font-weight: 900;
+    letter-spacing: 0.5em;
     text-indent: 0.5em;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-status {
-    color: var(--p5-gray) !important;
-    font-family: var(--p5-font-impact) !important;
+    color: var(--p5-gray);
+    font-family: var(--p5-font-impact);
     letter-spacing: 0.2em;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-dot { background: var(--p5-red) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-dot { background: var(--p5-red); }
 
 /* —— 选项浮层：预告函名刺拍在放射漩涡上（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-persona"] {
@@ -43725,7 +46355,7 @@ ${normalizedSource}`;
    夜穹场景（cts-scene，注入到 .gal-layer-bg 内；
    有背景图 / 生成中时整层隐藏，宿主点阵伪元素同时禁用）
    ============================================================ */
-#gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg::before { display: none !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg::before { display: none; }
 #gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg.has-bg .cts-scene,
 #gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg.generating-bg .cts-scene { display: none; }
 #gal-global-overlay[class*="skin-jrpg"] .cts-scene {
@@ -44078,33 +46708,33 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-jrpg"] .gal-location-bar,
 #gal-global-overlay[class*="skin-jrpg"] .gal-time-bar {
     background: rgba(7, 12, 36, 0.55) !important;
-    border: 1px solid rgba(184, 237, 255, 0.28) !important;
-    border-radius: 0 !important;
+    border: 1px solid rgba(184, 237, 255, 0.28);
+    border-radius: 0;
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-    color: var(--cts-white) !important;
-    font-family: var(--cts-font) !important;
+    color: var(--cts-white);
+    font-family: var(--cts-font);
     letter-spacing: 0.14em;
     backdrop-filter: blur(3px);
 }
 .skin-jrpg-dawn .gal-location-bar,
 .skin-jrpg-dawn .gal-time-bar {
-    background: rgba(250, 252, 255, 0.6) !important;
-    border-color: rgba(46, 126, 199, 0.3) !important;
+    background: rgba(250, 252, 255, 0.6);
+    border-color: rgba(46, 126, 199, 0.3);
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-location-bar i,
-#gal-global-overlay[class*="skin-jrpg"] .gal-time-bar i { color: var(--cts-gold2) !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-time-bar i { color: var(--cts-gold2); }
 #gal-global-overlay[class*="skin-jrpg"] .gal-fullscreen-btn {
-    background: rgba(7, 12, 36, 0.55) !important;
-    color: var(--cts-dim) !important;
-    border: 1px solid rgba(184, 237, 255, 0.28) !important;
-    border-radius: 0 !important;
+    background: rgba(7, 12, 36, 0.55);
+    color: var(--cts-dim);
+    border: 1px solid rgba(184, 237, 255, 0.28);
+    border-radius: 0;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-fullscreen-btn:hover {
     background: var(--cts-gold2) !important;
     color: #071028 !important;
     border-color: var(--cts-gold2) !important;
 }
-.skin-jrpg-dawn .gal-fullscreen-btn { background: rgba(250, 252, 255, 0.6) !important; }
+.skin-jrpg-dawn .gal-fullscreen-btn { background: rgba(250, 252, 255, 0.6); }
 
 /* ============================================================
    对话框：demo 双层结构 1:1 —— 面板本体透明，
@@ -44140,11 +46770,11 @@ ${normalizedSource}`;
 @keyframes galCtsSpinReverse { to { transform: rotate(-360deg); } }
 
 #gal-global-overlay[class*="skin-jrpg"] .gal-text-panel {
-    background: transparent !important;
-    background-image: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    background: transparent;
+    background-image: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     overflow: visible !important;
     position: relative;
     filter: drop-shadow(0 20px 38px rgba(1, 3, 10, 0.7));
@@ -44243,37 +46873,37 @@ ${normalizedSource}`;
 /* 工具栏保持宿主的 absolute bottom 定位，但抬离削角线、收进削角内 */
 #gal-global-overlay[class*="skin-jrpg"] .gal-text-panel > .gal-bottom-toolbar {
     z-index: 3;
-    bottom: 14px !important;
-    padding-left: 3.2rem !important;
-    padding-right: 3.2rem !important;
+    bottom: 14px;
+    padding-left: 3.2rem;
+    padding-right: 3.2rem;
 }
 /* 进度条（面板外兄弟元素）：收进削角范围、与面板底边留出呼吸 */
 #gal-global-overlay[class*="skin-jrpg"] .gal-dialog-layer > .gal-progress-container {
-    margin: 8px 30px 0 !important;
-    width: auto !important;
+    margin: 8px 30px 0;
+    width: auto;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-dialog-text {
-    color: var(--cts-text) !important;
-    text-shadow: 0 0 18px rgba(111, 212, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.6) !important;
+    color: var(--cts-text);
+    text-shadow: 0 0 18px rgba(111, 212, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.6);
     line-height: 2 !important;
     letter-spacing: 0.06em;
-    font-weight: 500 !important;
-    font-family: var(--cts-font) !important;
+    font-weight: 500;
+    font-family: var(--cts-font);
 }
-.skin-jrpg-dawn .gal-dialog-text { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65) !important; }
+.skin-jrpg-dawn .gal-dialog-text { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65); }
 
 /* ============================================================
    姓名牌：斜切纹章板 + 呼吸星晶
    ============================================================ */
 #gal-global-overlay[class*="skin-jrpg"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: linear-gradient(120deg, var(--cts-gold2) 0%, var(--cts-gold) 40%, rgba(111, 212, 255, 0.85) 100%) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    clip-path: var(--cts-cut-para) !important;
+    border: none;
+    border-radius: 0;
+    clip-path: var(--cts-cut-para);
     padding: 0.55rem 2rem 0.55rem 2.2rem !important;
     left: 15px !important;
     top: -2.4rem !important;
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     filter: drop-shadow(0 8px 18px rgba(1, 3, 10, 0.7)) drop-shadow(0 0 16px rgba(111, 212, 255, 0.22));
 }
@@ -44295,14 +46925,14 @@ ${normalizedSource}`;
     animation: galCtsGem 2.8s ease-in-out infinite;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-name-badge span {
-    color: var(--cts-badge-text) !important;
-    text-shadow: var(--cts-badge-shadow) !important;
+    color: var(--cts-badge-text);
+    text-shadow: var(--cts-badge-shadow);
     font-weight: 700;
     letter-spacing: 0.2em;
-    font-family: var(--cts-font) !important;
+    font-family: var(--cts-font);
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-name-badge.gal-narrator-label {
-    background: linear-gradient(120deg, rgba(174, 185, 214, 0.7), rgba(110, 124, 158, 0.65)) !important;
+    background: linear-gradient(120deg, rgba(174, 185, 214, 0.7), rgba(110, 124, 158, 0.65));
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-name-badge.gal-narrator-label::before {
     background: linear-gradient(120deg, #2a3452 0%, #1c2440 100%);
@@ -44321,16 +46951,16 @@ ${normalizedSource}`;
    ============================================================ */
 #gal-global-overlay[class*="skin-jrpg"] .gal-interaction-bar { right: 10px !important; }
 #gal-global-overlay[class*="skin-jrpg"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn {
-    background: var(--cts-btn-face) !important;
-    color: var(--cts-ice) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: var(--cts-btn-face);
+    color: var(--cts-ice);
+    border: none;
+    border-radius: 0;
     clip-path: var(--cts-cut-para) !important;
     box-shadow: inset 0 0 0 1px rgba(184, 237, 255, 0.3) !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
-    position: relative !important;
+    font-family: var(--cts-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    position: relative;
     isolation: isolate;
     transition: color 0.25s ease, box-shadow 0.25s ease !important;
 }
@@ -44358,12 +46988,12 @@ ${normalizedSource}`;
     background: none !important;
     color: var(--cts-dim) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     box-shadow: none !important;
     font-family: var(--cts-font) !important;
     font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
-    position: relative !important;
+    letter-spacing: 0.1em;
+    position: relative;
     transition: color 0.25s ease, text-shadow 0.25s ease !important;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-footer-btn::after {
@@ -44388,15 +47018,15 @@ ${normalizedSource}`;
     background: linear-gradient(120deg, var(--cts-ice), var(--cts-crystal) 70%) !important;
     color: var(--cts-dark-on-crystal) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: var(--cts-cut-para) !important;
-    box-shadow: none !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--cts-font);
+    font-weight: 700;
+    letter-spacing: 0.14em;
     animation: galCtsBreathe 2.4s ease-out infinite;
 }
-.skin-jrpg-dawn .gal-pending-choices-btn { color: #fff !important; }
+.skin-jrpg-dawn .gal-pending-choices-btn { color: #fff; }
 @keyframes galCtsBreathe {
     0%   { filter: drop-shadow(0 0 0 rgba(111, 212, 255, 0.6)); }
     70%  { filter: drop-shadow(0 0 12px rgba(111, 212, 255, 0.05)); }
@@ -44411,14 +47041,14 @@ ${normalizedSource}`;
         linear-gradient(120deg, rgba(217, 180, 92, 0.75), rgba(111, 212, 255, 0.55)) !important;
     color: var(--cts-next-text) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: var(--cts-cut-hex) !important;
     box-shadow: none !important;
-    font-family: var(--cts-font) !important;
+    font-family: var(--cts-font);
     font-weight: 700 !important;
-    letter-spacing: 0.3em !important;
+    letter-spacing: 0.3em;
     text-shadow: 0 0 12px rgba(111, 212, 255, 0.7);
-    position: relative !important;
+    position: relative;
     isolation: isolate;
     animation: galCtsNextSpin 3.2s linear infinite;
     filter: drop-shadow(0 6px 18px rgba(111, 212, 255, 0.4));
@@ -44447,12 +47077,12 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-jrpg"] .gal-progress-container {
     background:
         repeating-linear-gradient(90deg, rgba(184, 237, 255, 0.22) 0 1px, transparent 1px 10%),
-        rgba(184, 237, 255, 0.09) !important;
-    overflow: visible !important;
+        rgba(184, 237, 255, 0.09);
+    overflow: visible;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-progress-bar {
-    background: linear-gradient(90deg, rgba(111, 212, 255, 0.25) 0%, var(--cts-crystal) 55%, var(--cts-gold2) 100%) !important;
-    box-shadow: 0 0 10px rgba(111, 212, 255, 0.65) !important;
+    background: linear-gradient(90deg, rgba(111, 212, 255, 0.25) 0%, var(--cts-crystal) 55%, var(--cts-gold2) 100%);
+    box-shadow: 0 0 10px rgba(111, 212, 255, 0.65);
     position: relative;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-progress-bar::after {
@@ -44470,18 +47100,18 @@ ${normalizedSource}`;
    ============================================================ */
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger {
-    background: rgba(7, 14, 42, 0.92) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: rgba(7, 14, 42, 0.92);
+    border: none;
+    border-radius: 0;
     clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
-    box-shadow: inset 0 0 0 1px rgba(184, 237, 255, 0.3) !important;
-    color: var(--cts-ice) !important;
+    box-shadow: inset 0 0 0 1px rgba(184, 237, 255, 0.3);
+    color: var(--cts-ice);
     transition: box-shadow 0.25s ease, color 0.25s ease !important;
 }
 .skin-jrpg-dawn .gal-sprite-toggle,
 .skin-jrpg-dawn .gal-status-popup-trigger {
-    background: rgba(250, 252, 255, 0.94) !important;
-    color: #2E7EC7 !important;
+    background: rgba(250, 252, 255, 0.94);
+    color: #2E7EC7;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger:hover {
@@ -44491,14 +47121,14 @@ ${normalizedSource}`;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle i,
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle .gal-eye-icon,
-#gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger i { color: inherit !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger i { color: inherit; }
 
 /* ============================================================
    选项浮层：命运星盘
    ============================================================ */
 #gal-layer-choices[class*="skin-jrpg"] {
     background: rgba(2, 4, 14, 0.7) !important;
-    backdrop-filter: blur(5px) saturate(0.9) !important;
+    backdrop-filter: blur(5px) saturate(0.9);
     isolation: isolate;
 }
 #gal-layer-choices.skin-jrpg-dawn { background: rgba(160, 190, 225, 0.55) !important; }
@@ -44536,24 +47166,24 @@ ${normalizedSource}`;
     z-index: -1;
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choices-title span {
-    color: var(--cts-white) !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.62em !important;
+    color: var(--cts-white);
+    font-family: var(--cts-font);
+    font-weight: 700;
+    letter-spacing: 0.62em;
     text-indent: 0.62em;
-    text-shadow: 0 0 20px rgba(111, 212, 255, 0.7) !important;
+    text-shadow: 0 0 20px rgba(111, 212, 255, 0.7);
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choices-hint {
-    color: rgba(216, 228, 250, 0.42) !important;
-    letter-spacing: 0.34em !important;
+    color: rgba(216, 228, 250, 0.42);
+    letter-spacing: 0.34em;
 }
-#gal-layer-choices.skin-jrpg-dawn .gal-choices-hint { color: rgba(34, 50, 82, 0.55) !important; }
+#gal-layer-choices.skin-jrpg-dawn .gal-choices-hint { color: rgba(34, 50, 82, 0.55); }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choice-card {
-    background: linear-gradient(120deg, rgba(246, 227, 166, 0.85), rgba(111, 212, 255, 0.35) 45%, rgba(184, 237, 255, 0.6)) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: linear-gradient(120deg, rgba(246, 227, 166, 0.85), rgba(111, 212, 255, 0.35) 45%, rgba(184, 237, 255, 0.6));
+    border: none;
+    border-radius: 0;
     clip-path: var(--cts-cut-card);
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     position: relative;
     filter: drop-shadow(0 16px 26px rgba(1, 3, 10, 0.7));
@@ -44568,10 +47198,10 @@ ${normalizedSource}`;
     background: var(--cts-cardface);
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choice-card span {
-    color: var(--cts-text) !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.06em !important;
+    color: var(--cts-text);
+    font-family: var(--cts-font);
+    font-weight: 600;
+    letter-spacing: 0.06em;
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choice-card:hover {
     transform: translateY(-3px) scale(1.012) !important;
@@ -44653,19 +47283,19 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-jrpg"] .gal-generating-indicator {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(111, 212, 255, 0.12) 0%, transparent 55%),
-        linear-gradient(178deg, rgba(13, 24, 64, 0.97), rgba(5, 9, 26, 0.97)) !important;
-    border: none !important;
-    border-radius: 0 !important;
+        linear-gradient(178deg, rgba(13, 24, 64, 0.97), rgba(5, 9, 26, 0.97));
+    border: none;
+    border-radius: 0;
     clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
-    box-shadow: inset 0 0 0 1px rgba(217, 180, 92, 0.45) !important;
+    box-shadow: inset 0 0 0 1px rgba(217, 180, 92, 0.45);
 }
 .skin-jrpg-dawn .gal-generating-indicator {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(95, 168, 220, 0.14) 0%, transparent 55%),
-        linear-gradient(178deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97)) !important;
+        linear-gradient(178deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97));
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-icon {
-    color: var(--cts-ice) !important;
+    color: var(--cts-ice);
     text-shadow: 0 0 14px rgba(184, 237, 255, 1);
     animation: galCtsGenPulse 1.8s ease-in-out infinite;
 }
@@ -44674,16 +47304,16 @@ ${normalizedSource}`;
     50% { opacity: 0.35; transform: scale(0.82); }
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-text {
-    color: var(--cts-white) !important;
-    font-family: var(--cts-font) !important;
-    letter-spacing: 0.4em !important;
+    color: var(--cts-white);
+    font-family: var(--cts-font);
+    letter-spacing: 0.4em;
     text-shadow: 0 0 16px rgba(111, 212, 255, 0.55);
 }
 .skin-jrpg-dawn .gal-gen-text { text-shadow: none; }
-#gal-global-overlay[class*="skin-jrpg"] .gal-gen-status { color: var(--cts-dim) !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-gen-status { color: var(--cts-dim); }
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-dot {
-    background: var(--cts-gold2) !important;
-    border-radius: 0 !important;
+    background: var(--cts-gold2);
+    border-radius: 0;
     transform: rotate(45deg);
     box-shadow: 0 0 8px rgba(246, 227, 166, 0.8);
 }
@@ -44694,30 +47324,30 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-jrpg"] .gal-mobile-menu {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(111, 212, 255, 0.08) 0%, transparent 55%),
-        linear-gradient(170deg, rgba(16, 28, 70, 0.97), rgba(6, 11, 30, 0.97)) !important;
-    border: 1px solid rgba(217, 180, 92, 0.4) !important;
-    border-radius: 0 !important;
+        linear-gradient(170deg, rgba(16, 28, 70, 0.97), rgba(6, 11, 30, 0.97));
+    border: 1px solid rgba(217, 180, 92, 0.4);
+    border-radius: 0;
     clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7) !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(8px) !important;
 }
 .skin-jrpg-dawn .gal-mobile-menu {
-    background: linear-gradient(170deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97)) !important;
+    background: linear-gradient(170deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97));
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-mobile-menu .gal-menu-btn {
-    background: rgba(184, 237, 255, 0.05) !important;
-    color: var(--cts-ice) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: rgba(184, 237, 255, 0.05);
+    color: var(--cts-ice);
+    border: none;
+    border-radius: 0;
     clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
-    box-shadow: none !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--cts-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
 }
 .skin-jrpg-dawn .gal-mobile-menu .gal-menu-btn {
-    background: rgba(46, 126, 199, 0.08) !important;
-    color: #2E7EC7 !important;
+    background: rgba(46, 126, 199, 0.08);
+    color: #2E7EC7;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-mobile-menu .gal-menu-btn:hover {
     background: linear-gradient(120deg, rgba(246, 227, 166, 0.9), rgba(217, 180, 92, 0.9)) !important;
@@ -44854,7 +47484,7 @@ ${normalizedSource}`;
    风雪夜戏场景（yx-scene，注入 .gal-layer-bg；
    有背景图 / 生成中时隐藏，宿主点阵伪元素禁用）
    ============================================================ */
-#gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg::before { display: none !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg::before { display: none; }
 #gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg.has-bg .yx-scene,
 #gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg.generating-bg .yx-scene { display: none; }
 #gal-global-overlay[class*="skin-yanyun"] .yx-scene {
@@ -45075,21 +47705,21 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-yanyun"] .gal-location-bar,
 #gal-global-overlay[class*="skin-yanyun"] .gal-time-bar {
     background: var(--yx-btnface) !important;
-    border: 1px solid rgba(166, 124, 61, 0.35) !important;
-    border-radius: 0 !important;
+    border: 1px solid rgba(166, 124, 61, 0.35);
+    border-radius: 0;
     clip-path: var(--yx-cut-s);
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
     letter-spacing: 0.14em;
     backdrop-filter: blur(3px);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-location-bar i,
-#gal-global-overlay[class*="skin-yanyun"] .gal-time-bar i { color: var(--yx-bronze-2) !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-time-bar i { color: var(--yx-bronze-2); }
 #gal-global-overlay[class*="skin-yanyun"] .gal-fullscreen-btn {
-    background: var(--yx-btnface) !important;
-    color: var(--yx-dim) !important;
-    border: 1px solid rgba(166, 124, 61, 0.35) !important;
-    border-radius: 0 !important;
+    background: var(--yx-btnface);
+    color: var(--yx-dim);
+    border: 1px solid rgba(166, 124, 61, 0.35);
+    border-radius: 0;
     clip-path: var(--yx-cut-s);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-fullscreen-btn:hover {
@@ -45117,11 +47747,11 @@ ${normalizedSource}`;
     letter-spacing: 0.06em;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-text-panel {
-    background: transparent !important;
-    background-image: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    background: transparent;
+    background-image: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     overflow: visible !important;
     position: relative;
     filter: drop-shadow(0 22px 42px rgba(0, 0, 0, 0.8));
@@ -45235,36 +47865,36 @@ ${normalizedSource}`;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-text-panel > .gal-bottom-toolbar {
     z-index: 3;
-    bottom: 14px !important;
-    padding-left: 3rem !important;
-    padding-right: 3rem !important;
+    bottom: 14px;
+    padding-left: 3rem;
+    padding-right: 3rem;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-dialog-layer > .gal-progress-container {
-    margin: 8px 30px 0 !important;
-    width: auto !important;
+    margin: 8px 30px 0;
+    width: auto;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-dialog-text {
-    color: var(--yx-text) !important;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+    color: var(--yx-text);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
     line-height: 2 !important;
     letter-spacing: 0.05em;
-    font-weight: 500 !important;
-    font-family: var(--yx-font) !important;
+    font-weight: 500;
+    font-family: var(--yx-font);
 }
-.skin-yanyun-xueji .gal-dialog-text { text-shadow: 0 1px 3px rgba(255, 255, 255, 0.5) !important; }
+.skin-yanyun-xueji .gal-dialog-text { text-shadow: 0 1px 3px rgba(255, 255, 255, 0.5); }
 
 /* ============================================================
    姓名牌：铜印拓（铜缘深墨牌 + 左侧朱砂小印）
    ============================================================ */
 #gal-global-overlay[class*="skin-yanyun"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: linear-gradient(135deg, var(--yx-bronze-2) 0%, var(--yx-bronze) 55%, rgba(166, 124, 61, 0.75) 100%) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    clip-path: var(--yx-cut-tab) !important;
+    border: none;
+    border-radius: 0;
+    clip-path: var(--yx-cut-tab);
     padding: 0.6rem 2rem 0.6rem 2.6rem !important;
     left: 15px !important;
     top: -2.6rem !important;
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.75));
 }
@@ -45287,14 +47917,14 @@ ${normalizedSource}`;
     box-shadow: inset 0 0 0 1px rgba(240, 230, 214, 0.25), 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-name-badge span {
-    color: var(--yx-text) !important;
-    text-shadow: none !important;
+    color: var(--yx-text);
+    text-shadow: none;
     font-weight: 700;
     letter-spacing: 0.24em;
-    font-family: var(--yx-font) !important;
+    font-family: var(--yx-font);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-name-badge.gal-narrator-label {
-    background: linear-gradient(135deg, rgba(141, 154, 171, 0.6), rgba(93, 107, 126, 0.6)) !important;
+    background: linear-gradient(135deg, rgba(141, 154, 171, 0.6), rgba(93, 107, 126, 0.6));
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-name-badge.gal-narrator-label::after {
     background: #5d6b7e;
@@ -45306,16 +47936,16 @@ ${normalizedSource}`;
    ============================================================ */
 #gal-global-overlay[class*="skin-yanyun"] .gal-interaction-bar { right: 10px !important; }
 #gal-global-overlay[class*="skin-yanyun"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn {
-    background: var(--yx-btnface) !important;
-    color: var(--yx-snow-dim) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: var(--yx-btnface);
+    color: var(--yx-snow-dim);
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-tab) !important;
     box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.3) !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
-    position: relative !important;
+    font-family: var(--yx-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    position: relative;
     isolation: isolate;
     transition: color 0.25s ease, box-shadow 0.25s ease !important;
 }
@@ -45343,12 +47973,12 @@ ${normalizedSource}`;
     background: none !important;
     color: var(--yx-dim) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     box-shadow: none !important;
     font-family: var(--yx-font) !important;
     font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
-    position: relative !important;
+    letter-spacing: 0.1em;
+    position: relative;
     transition: color 0.22s ease !important;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-footer-btn::after {
@@ -45371,12 +48001,12 @@ ${normalizedSource}`;
     background: linear-gradient(160deg, #c14a3c, var(--yx-cinnabar) 60%) !important;
     color: var(--yx-seal-text) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: var(--yx-cut-tab) !important;
-    box-shadow: none !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--yx-font);
+    font-weight: 700;
+    letter-spacing: 0.14em;
     animation: galYxSealBreathe 2.6s ease-out infinite;
 }
 @keyframes galYxSealBreathe {
@@ -45390,15 +48020,15 @@ ${normalizedSource}`;
     background: linear-gradient(135deg, var(--yx-bronze-2), var(--yx-bronze) 45%, rgba(166, 124, 61, 0.8)) !important;
     color: var(--yx-text) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%) !important;
     box-shadow: none !important;
-    font-family: var(--yx-font) !important;
+    font-family: var(--yx-font);
     font-weight: 700 !important;
-    letter-spacing: 0.3em !important;
-    position: relative !important;
+    letter-spacing: 0.3em;
+    position: relative;
     isolation: isolate;
-    overflow: hidden !important;
+    overflow: hidden;
     filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.6));
     transition: filter 0.3s ease !important;
 }
@@ -45436,13 +48066,13 @@ ${normalizedSource}`;
 
 /* 进度条：一痕墨迹，朱砂行至处 */
 #gal-global-overlay[class*="skin-yanyun"] .gal-progress-container {
-    background: rgba(199, 222, 244, 0.1) !important;
-    overflow: visible !important;
+    background: rgba(199, 222, 244, 0.1);
+    overflow: visible;
 }
-.skin-yanyun-xueji .gal-progress-container { background: rgba(52, 68, 88, 0.15) !important; }
+.skin-yanyun-xueji .gal-progress-container { background: rgba(52, 68, 88, 0.15); }
 #gal-global-overlay[class*="skin-yanyun"] .gal-progress-bar {
-    background: linear-gradient(90deg, rgba(166, 124, 61, 0.4) 0%, var(--yx-bronze-2) 78%, var(--yx-cinnabar) 100%) !important;
-    box-shadow: none !important;
+    background: linear-gradient(90deg, rgba(166, 124, 61, 0.4) 0%, var(--yx-bronze-2) 78%, var(--yx-cinnabar) 100%);
+    box-shadow: none;
     position: relative;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-progress-bar::after {
@@ -45460,12 +48090,12 @@ ${normalizedSource}`;
    ============================================================ */
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-yanyun"] .gal-status-popup-trigger {
-    background: var(--yx-btnface) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: var(--yx-btnface);
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-s);
-    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.3) !important;
-    color: var(--yx-snow-dim) !important;
+    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.3);
+    color: var(--yx-snow-dim);
     transition: box-shadow 0.25s ease, color 0.25s ease !important;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle:hover,
@@ -45476,14 +48106,14 @@ ${normalizedSource}`;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle i,
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle .gal-eye-icon,
-#gal-global-overlay[class*="skin-yanyun"] .gal-status-popup-trigger i { color: inherit !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-status-popup-trigger i { color: inherit; }
 
 /* ============================================================
    选项浮层：抉择（"武"字水印 + 朱印令牌）
    ============================================================ */
 #gal-layer-choices[class*="skin-yanyun"] {
     background: var(--yx-overlay-veil) !important;
-    backdrop-filter: blur(5px) saturate(0.9) !important;
+    backdrop-filter: blur(5px) saturate(0.9);
     isolation: isolate;
 }
 #gal-layer-choices[class*="skin-yanyun"]::before {
@@ -45500,23 +48130,23 @@ ${normalizedSource}`;
     z-index: -1;
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choices-title span {
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.6em !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
+    font-weight: 700;
+    letter-spacing: 0.6em;
     text-indent: 0.6em;
-    text-shadow: var(--yx-title-shadow) !important;
+    text-shadow: var(--yx-title-shadow);
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choices-hint {
-    color: var(--yx-dim) !important;
-    letter-spacing: 0.34em !important;
+    color: var(--yx-dim);
+    letter-spacing: 0.34em;
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choice-card {
-    background: linear-gradient(135deg, rgba(217, 176, 106, 0.8), rgba(166, 124, 61, 0.5) 40%, rgba(166, 124, 61, 0.75)) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: linear-gradient(135deg, rgba(217, 176, 106, 0.8), rgba(166, 124, 61, 0.5) 40%, rgba(166, 124, 61, 0.75));
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-card);
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     position: relative;
     filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.7));
@@ -45531,10 +48161,10 @@ ${normalizedSource}`;
     background: var(--yx-choice);
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choice-card span {
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.05em !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
+    font-weight: 600;
+    letter-spacing: 0.05em;
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choice-card:hover {
     transform: translateY(-2px) !important;
@@ -45609,15 +48239,15 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-yanyun"] .gal-generating-indicator {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(199, 222, 244, 0.06) 0%, transparent 55%),
-        var(--yx-choice) !important;
-    border: none !important;
-    border-radius: 0 !important;
+        var(--yx-choice);
+    border: none;
+    border-radius: 0;
     clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
-    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.4) !important;
+    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.4);
 }
 /* 魔杖图标改造为悬剑 */
 #gal-global-overlay[class*="skin-yanyun"] .gal-gen-icon {
-    color: var(--yx-blade) !important;
+    color: var(--yx-blade);
     text-shadow: 0 0 10px rgba(199, 222, 244, 0.6);
     animation: galYxSwordSway 2.2s ease-in-out infinite alternate;
 }
@@ -45626,14 +48256,14 @@ ${normalizedSource}`;
     to   { transform: rotate(4deg); }
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-gen-text {
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
-    letter-spacing: 0.4em !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
+    letter-spacing: 0.4em;
 }
-#gal-global-overlay[class*="skin-yanyun"] .gal-gen-status { color: var(--yx-dim) !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-gen-status { color: var(--yx-dim); }
 #gal-global-overlay[class*="skin-yanyun"] .gal-gen-dot {
-    background: var(--yx-cinnabar) !important;
-    border-radius: 50% 50% 50% 4% !important;
+    background: var(--yx-cinnabar);
+    border-radius: 50% 50% 50% 4%;
     transform: rotate(45deg);
     box-shadow: none;
 }
@@ -45644,23 +48274,23 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-yanyun"] .gal-mobile-menu {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(199, 222, 244, 0.04) 0%, transparent 55%),
-        var(--yx-choice) !important;
-    border: 1px solid rgba(166, 124, 61, 0.4) !important;
-    border-radius: 0 !important;
+        var(--yx-choice);
+    border: 1px solid rgba(166, 124, 61, 0.4);
+    border-radius: 0;
     clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7) !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(8px) !important;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-mobile-menu .gal-menu-btn {
-    background: rgba(166, 124, 61, 0.08) !important;
-    color: var(--yx-snow-dim) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: rgba(166, 124, 61, 0.08);
+    color: var(--yx-snow-dim);
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-tab);
-    box-shadow: none !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--yx-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-mobile-menu .gal-menu-btn:hover {
     background: linear-gradient(120deg, var(--yx-bronze-2), var(--yx-bronze)) !important;
@@ -45715,9 +48345,9 @@ ${normalizedSource}`;
 }
 /* —— 无背景图时的舞台：春晓花霞（晨光 + 雾紫远山 + 垂樱枝） —— */
 #gal-global-overlay.skin-classic .gal-layer-bg:not(.has-bg):not(.generating-bg) {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 640' preserveAspectRatio='xMidYMid slice'%3E%3Cdefs%3E%3ClinearGradient id='sky' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FFF3EA'/%3E%3Cstop offset='0.42' stop-color='%23FFE4EA'/%3E%3Cstop offset='0.76' stop-color='%23F3DEEE'/%3E%3Cstop offset='1' stop-color='%23E7DCF2'/%3E%3C/linearGradient%3E%3CradialGradient id='sun' cx='0.24' cy='0.2' r='0.34'%3E%3Cstop offset='0' stop-color='%23FFFBEB' stop-opacity='0.95'/%3E%3Cstop offset='0.5' stop-color='%23FFE9CD' stop-opacity='0.5'/%3E%3Cstop offset='1' stop-color='%23FFE9CD' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1200' height='640' fill='url(%23sky)'/%3E%3Crect width='1200' height='640' fill='url(%23sun)'/%3E%3Cpath d='M0,430 Q160,340 340,400 T700,392 Q900,350 1040,404 T1200,398 L1200,640 L0,640 Z' fill='%23D9C4E0' opacity='0.55'/%3E%3Cpath d='M0,480 Q220,404 460,458 T900,450 Q1060,420 1200,462 L1200,640 L0,640 Z' fill='%23E4BBD0' opacity='0.6'/%3E%3Cpath d='M0,556 Q300,512 640,542 T1200,534 L1200,640 L0,640 Z' fill='%23F2D7E3' opacity='0.9'/%3E%3Cg fill='none' stroke='%237C4A62' stroke-linecap='round' opacity='0.9'%3E%3Cpath d='M1230,30 Q1040,80 930,180 T780,330' stroke-width='12'/%3E%3Cpath d='M1030,110 Q950,145 910,225' stroke-width='6'/%3E%3Cpath d='M910,205 Q830,245 812,326' stroke-width='5'/%3E%3Cpath d='M1120,64 Q1060,134 1068,214' stroke-width='6'/%3E%3C/g%3E%3Cg%3E%3Ccircle cx='924' cy='188' r='34' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='880' cy='238' r='26' fill='%23F6B2C9' opacity='0.85'/%3E%3Ccircle cx='962' cy='150' r='24' fill='%23FBD5E1' opacity='0.9'/%3E%3Ccircle cx='822' cy='300' r='28' fill='%23F6B2C9' opacity='0.8'/%3E%3Ccircle cx='792' cy='336' r='18' fill='%23F19CBB' opacity='0.75'/%3E%3Ccircle cx='1062' cy='196' r='26' fill='%23F9C6D6' opacity='0.85'/%3E%3Ccircle cx='1092' cy='150' r='20' fill='%23FBD5E1' opacity='0.85'/%3E%3Ccircle cx='1148' cy='84' r='30' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='1006' cy='120' r='18' fill='%23F6B2C9' opacity='0.7'/%3E%3C/g%3E%3Cg fill='%23E87FA5'%3E%3Ccircle cx='936' cy='196' r='5' opacity='0.9'/%3E%3Ccircle cx='884' cy='248' r='4' opacity='0.8'/%3E%3Ccircle cx='826' cy='308' r='4.5' opacity='0.8'/%3E%3Ccircle cx='1066' cy='204' r='4' opacity='0.8'/%3E%3Ccircle cx='1146' cy='92' r='5' opacity='0.85'/%3E%3C/g%3E%3Cg fill='%23F4A9C1'%3E%3Cpath d='M300,140 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.5'/%3E%3Cpath d='M480,300 q7,-3 9,3 q-2,8 -10,6 q-3,-7 1,-9' opacity='0.4'/%3E%3Cpath d='M180,380 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.45'/%3E%3Cpath d='M640,180 q6,-3 8,3 q-2,7 -9,5 q-3,-6 1,-8' opacity='0.35'/%3E%3Cpath d='M560,440 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.4'/%3E%3C/g%3E%3C/svg%3E") !important;
-    background-size: cover !important;
-    background-position: center !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 640' preserveAspectRatio='xMidYMid slice'%3E%3Cdefs%3E%3ClinearGradient id='sky' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FFF3EA'/%3E%3Cstop offset='0.42' stop-color='%23FFE4EA'/%3E%3Cstop offset='0.76' stop-color='%23F3DEEE'/%3E%3Cstop offset='1' stop-color='%23E7DCF2'/%3E%3C/linearGradient%3E%3CradialGradient id='sun' cx='0.24' cy='0.2' r='0.34'%3E%3Cstop offset='0' stop-color='%23FFFBEB' stop-opacity='0.95'/%3E%3Cstop offset='0.5' stop-color='%23FFE9CD' stop-opacity='0.5'/%3E%3Cstop offset='1' stop-color='%23FFE9CD' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1200' height='640' fill='url(%23sky)'/%3E%3Crect width='1200' height='640' fill='url(%23sun)'/%3E%3Cpath d='M0,430 Q160,340 340,400 T700,392 Q900,350 1040,404 T1200,398 L1200,640 L0,640 Z' fill='%23D9C4E0' opacity='0.55'/%3E%3Cpath d='M0,480 Q220,404 460,458 T900,450 Q1060,420 1200,462 L1200,640 L0,640 Z' fill='%23E4BBD0' opacity='0.6'/%3E%3Cpath d='M0,556 Q300,512 640,542 T1200,534 L1200,640 L0,640 Z' fill='%23F2D7E3' opacity='0.9'/%3E%3Cg fill='none' stroke='%237C4A62' stroke-linecap='round' opacity='0.9'%3E%3Cpath d='M1230,30 Q1040,80 930,180 T780,330' stroke-width='12'/%3E%3Cpath d='M1030,110 Q950,145 910,225' stroke-width='6'/%3E%3Cpath d='M910,205 Q830,245 812,326' stroke-width='5'/%3E%3Cpath d='M1120,64 Q1060,134 1068,214' stroke-width='6'/%3E%3C/g%3E%3Cg%3E%3Ccircle cx='924' cy='188' r='34' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='880' cy='238' r='26' fill='%23F6B2C9' opacity='0.85'/%3E%3Ccircle cx='962' cy='150' r='24' fill='%23FBD5E1' opacity='0.9'/%3E%3Ccircle cx='822' cy='300' r='28' fill='%23F6B2C9' opacity='0.8'/%3E%3Ccircle cx='792' cy='336' r='18' fill='%23F19CBB' opacity='0.75'/%3E%3Ccircle cx='1062' cy='196' r='26' fill='%23F9C6D6' opacity='0.85'/%3E%3Ccircle cx='1092' cy='150' r='20' fill='%23FBD5E1' opacity='0.85'/%3E%3Ccircle cx='1148' cy='84' r='30' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='1006' cy='120' r='18' fill='%23F6B2C9' opacity='0.7'/%3E%3C/g%3E%3Cg fill='%23E87FA5'%3E%3Ccircle cx='936' cy='196' r='5' opacity='0.9'/%3E%3Ccircle cx='884' cy='248' r='4' opacity='0.8'/%3E%3Ccircle cx='826' cy='308' r='4.5' opacity='0.8'/%3E%3Ccircle cx='1066' cy='204' r='4' opacity='0.8'/%3E%3Ccircle cx='1146' cy='92' r='5' opacity='0.85'/%3E%3C/g%3E%3Cg fill='%23F4A9C1'%3E%3Cpath d='M300,140 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.5'/%3E%3Cpath d='M480,300 q7,-3 9,3 q-2,8 -10,6 q-3,-7 1,-9' opacity='0.4'/%3E%3Cpath d='M180,380 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.45'/%3E%3Cpath d='M640,180 q6,-3 8,3 q-2,7 -9,5 q-3,-6 1,-8' opacity='0.35'/%3E%3Cpath d='M560,440 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.4'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: cover;
+    background-position: center;
 }
 /* 覆盖宿主点阵，改为缓慢漂移的花雾横带 */
 #gal-global-overlay.skin-classic .gal-layer-bg:not(.has-bg):not(.generating-bg)::before {
@@ -45727,9 +48357,9 @@ ${normalizedSource}`;
         transparent 62%,
         transparent 66%,
         rgba(255, 250, 250, 0.45) 74%,
-        transparent 82%) !important;
-    background-size: auto !important;
-    opacity: 0.9 !important;
+        transparent 82%);
+    background-size: auto;
+    opacity: 0.9;
     filter: blur(5px);
     animation: skClassicMistDrift 26s ease-in-out infinite alternate;
 }
@@ -45758,16 +48388,16 @@ ${normalizedSource}`;
 }
 /* 对话主面板：暖白磨砂玻璃 */
 #gal-global-overlay.skin-classic .gal-text-panel {
-    background: var(--sk-glass) !important;
-    background-image: none !important;
-    border: 1px solid var(--sk-glass-line) !important;
-    border-radius: calc(22px * var(--ui-scale, 1)) !important;
+    background: var(--sk-glass);
+    background-image: none;
+    border: 1px solid var(--sk-glass-line);
+    border-radius: calc(22px * var(--ui-scale, 1));
     box-shadow:
         0 calc(24px * var(--ui-scale, 1)) calc(64px * var(--ui-scale, 1)) var(--sk-shadow),
         0 calc(2px * var(--ui-scale, 1)) calc(8px * var(--ui-scale, 1)) rgba(70, 41, 58, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(22px) saturate(1.35) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(1.35) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(1.35);
     overflow: visible !important;
 }
 /* 顶缘一线樱霞渐变 —— 面板唯一的彩色装饰 */
@@ -45784,30 +48414,30 @@ ${normalizedSource}`;
     pointer-events: none;
 }
 #gal-global-overlay.skin-classic .gal-dialog-text {
-    color: var(--sk-plum) !important;
-    font-family: var(--sk-serif) !important;
-    font-weight: 500 !important;
+    color: var(--sk-plum);
+    font-family: var(--sk-serif);
+    font-weight: 500;
     line-height: 2.05 !important;
-    letter-spacing: 0.035em !important;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+    letter-spacing: 0.035em;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 /* 名字：樱渐变浮签 + 白花瓣印 + 明朝体 */
 #gal-global-overlay.skin-classic .gal-name-badge {
     top: calc(-1.35rem * var(--ui-scale, 1)) !important;
     left: calc(1.6rem * var(--ui-scale, 1)) !important;
     padding: calc(0.42rem * var(--ui-scale, 1)) calc(1.55rem * var(--ui-scale, 1)) !important;
-    background: var(--sk-grad) !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 999px !important;
+    background: var(--sk-grad);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
     box-shadow:
         0 calc(8px * var(--ui-scale, 1)) calc(22px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.38),
-        inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
-    display: inline-flex !important;
-    align-items: center !important;
+        inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    display: inline-flex;
+    align-items: center;
     gap: 0.55rem;
-    font-family: var(--sk-serif) !important;
-    font-weight: 700 !important;
+    font-family: var(--sk-serif);
+    font-weight: 700;
 }
 #gal-global-overlay.skin-classic .gal-name-badge::before {
     content: '';
@@ -45824,14 +48454,14 @@ ${normalizedSource}`;
 }
 /* 交互按钮（重绘/自由对话）：白玻璃药丸 */
 #gal-global-overlay.skin-classic .gal-action-btn {
-    background: rgba(255, 250, 248, 0.78) !important;
-    color: var(--sk-plum-soft) !important;
-    border: 1px solid rgba(255, 255, 255, 0.95) !important;
+    background: rgba(255, 250, 248, 0.78);
+    color: var(--sk-plum-soft);
+    border: 1px solid rgba(255, 255, 255, 0.95);
     border-radius: 999px !important;
     box-shadow: 0 calc(6px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.12) !important;
-    font-family: var(--sk-sans) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.14em !important;
+    font-family: var(--sk-sans);
+    font-weight: 700;
+    letter-spacing: 0.14em;
     backdrop-filter: blur(12px) saturate(1.3);
     -webkit-backdrop-filter: blur(12px) saturate(1.3);
     transition: color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease, background 0.25s ease !important;
@@ -45844,8 +48474,8 @@ ${normalizedSource}`;
     box-shadow: 0 calc(10px * var(--ui-scale, 1)) calc(26px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.22) !important;
 }
 #gal-global-overlay.skin-classic .gal-action-btn.btn-free {
-    color: var(--sk-deep) !important;
-    border-color: rgba(242, 115, 155, 0.4) !important;
+    color: var(--sk-deep);
+    border-color: rgba(242, 115, 155, 0.4);
 }
 /* 底部工具栏：幽灵文字按钮 · 悬停晕开樱色 */
 #gal-global-overlay.skin-classic .gal-bottom-toolbar {
@@ -45859,11 +48489,11 @@ ${normalizedSource}`;
     box-shadow: none !important;
     font-family: var(--sk-sans) !important;
     font-weight: 700 !important;
-    letter-spacing: 0.1em !important;
+    letter-spacing: 0.1em;
     transition: color 0.22s ease, background 0.22s ease !important;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn i {
-    font-size: calc(0.72rem * var(--ui-scale, 1)) !important;
+    font-size: calc(0.72rem * var(--ui-scale, 1));
     opacity: 0.55;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn:hover {
@@ -45882,10 +48512,10 @@ ${normalizedSource}`;
     color: var(--sk-deep) !important;
     border: 1px solid rgba(242, 115, 155, 0.55) !important;
     border-radius: 999px !important;
-    box-shadow: none !important;
-    font-family: var(--sk-sans) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.12em !important;
+    box-shadow: none;
+    font-family: var(--sk-sans);
+    font-weight: 700;
+    letter-spacing: 0.12em;
     animation: none !important;
     transition: all 0.28s ease !important;
 }
@@ -45906,7 +48536,7 @@ ${normalizedSource}`;
 }
 /* NEXT：樱渐变主按钮 · 箭头前探 */
 #gal-global-overlay.skin-classic .gal-footer-btn-next {
-    clip-path: none !important;
+    clip-path: none;
     border-radius: 999px !important;
     background: var(--sk-grad) !important;
     color: #fff !important;
@@ -45914,14 +48544,14 @@ ${normalizedSource}`;
     box-shadow:
         0 calc(10px * var(--ui-scale, 1)) calc(26px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.38),
         inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
-    font-family: var(--sk-latin) !important;
+    font-family: var(--sk-latin);
     font-weight: 400 !important;
-    letter-spacing: 0.3em !important;
+    letter-spacing: 0.3em;
     text-indent: 0.3em;
     transition: box-shadow 0.28s ease, transform 0.28s ease, filter 0.28s ease !important;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn-next i {
-    font-size: calc(0.78rem * var(--ui-scale, 1)) !important;
+    font-size: calc(0.78rem * var(--ui-scale, 1));
     transition: transform 0.28s ease;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn-next:hover {
@@ -45945,27 +48575,27 @@ ${normalizedSource}`;
 }
 /* 进度：晨光丝带 */
 #gal-global-overlay.skin-classic .gal-progress-container {
-    background: rgba(222, 85, 133, 0.10) !important;
-    height: calc(3px * var(--ui-scale, 1)) !important;
-    border-radius: 999px !important;
+    background: rgba(222, 85, 133, 0.10);
+    height: calc(3px * var(--ui-scale, 1));
+    border-radius: 999px;
 }
 #gal-global-overlay.skin-classic .gal-progress-bar {
-    background: linear-gradient(90deg, #F5A6BE, #EE6E99, #C3AEDC) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 0 10px rgba(242, 115, 155, 0.55) !important;
+    background: linear-gradient(90deg, #F5A6BE, #EE6E99, #C3AEDC);
+    border-radius: 999px;
+    box-shadow: 0 0 10px rgba(242, 115, 155, 0.55);
 }
 /* 顶部状态：白玻璃小签 */
 #gal-global-overlay.skin-classic .gal-fullscreen-btn,
 #gal-global-overlay.skin-classic .gal-location-bar,
 #gal-global-overlay.skin-classic .gal-time-bar {
     background: rgba(255, 250, 248, 0.66) !important;
-    color: var(--sk-plum-soft) !important;
-    border: 1px solid rgba(255, 255, 255, 0.9) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.10) !important;
-    font-family: var(--sk-sans) !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.08em !important;
+    color: var(--sk-plum-soft);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.10);
+    font-family: var(--sk-sans);
+    font-weight: 500;
+    letter-spacing: 0.08em;
     backdrop-filter: blur(10px) saturate(1.3);
     -webkit-backdrop-filter: blur(10px) saturate(1.3);
     transition: color 0.25s ease, box-shadow 0.25s ease !important;
@@ -45977,8 +48607,8 @@ ${normalizedSource}`;
 }
 #gal-global-overlay.skin-classic .gal-location-bar i,
 #gal-global-overlay.skin-classic .gal-time-bar i {
-    color: var(--sk-sakura) !important;
-    font-size: 0.72rem !important;
+    color: var(--sk-sakura);
+    font-size: 0.72rem;
 }
 #gal-global-overlay.skin-classic .gal-bgm-widget {
     background: rgba(255, 250, 248, 0.7) !important;
@@ -45996,16 +48626,16 @@ ${normalizedSource}`;
 /* 侧边小按钮：白玻璃圆钮 */
 #gal-global-overlay.skin-classic .gal-sprite-toggle,
 #gal-global-overlay.skin-classic .gal-status-popup-trigger {
-    background: rgba(255, 250, 248, 0.72) !important;
-    border: 1px solid rgba(255, 255, 255, 0.95) !important;
-    border-radius: 50% !important;
-    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.12) !important;
+    background: rgba(255, 250, 248, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.12);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     transition: box-shadow 0.25s ease, transform 0.25s ease !important;
 }
-#gal-global-overlay.skin-classic .gal-eye-icon { color: var(--sk-plum-soft) !important; }
-#gal-global-overlay.skin-classic .gal-status-popup-icon { color: var(--sk-plum-soft) !important; }
+#gal-global-overlay.skin-classic .gal-eye-icon { color: var(--sk-plum-soft); }
+#gal-global-overlay.skin-classic .gal-status-popup-icon { color: var(--sk-plum-soft); }
 #gal-global-overlay.skin-classic .gal-sprite-toggle:hover,
 #gal-global-overlay.skin-classic .gal-status-popup-trigger:hover {
     transform: translateY(-2px) !important;
@@ -46018,8 +48648,8 @@ ${normalizedSource}`;
 /* 选项层：花雾玻璃 · 白卡浮升 */
 #gal-layer-choices.skin-classic {
     background: linear-gradient(160deg, rgba(255, 236, 241, 0.82), rgba(238, 228, 248, 0.82)) !important;
-    backdrop-filter: blur(20px) saturate(1.3) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
+    backdrop-filter: blur(20px) saturate(1.3);
+    -webkit-backdrop-filter: blur(20px) saturate(1.3);
 }
 #gal-layer-choices.skin-classic .gal-choices-title {
     font-family: var(--sk-latin);
@@ -46029,13 +48659,13 @@ ${normalizedSource}`;
     text-indent: 0.5em;
 }
 #gal-layer-choices.skin-classic .gal-choice-card {
-    background: rgba(255, 252, 251, 0.9) !important;
-    color: var(--sk-plum) !important;
-    border: 1px solid rgba(255, 255, 255, 1) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 10px 30px rgba(222, 85, 133, 0.12) !important;
+    background: rgba(255, 252, 251, 0.9);
+    color: var(--sk-plum);
+    border: 1px solid rgba(255, 255, 255, 1);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px rgba(222, 85, 133, 0.12);
     font-family: var(--sk-serif);
-    font-weight: 600 !important;
+    font-weight: 600;
     letter-spacing: 0.06em;
     position: relative;
     overflow: hidden;
@@ -46065,17 +48695,17 @@ ${normalizedSource}`;
 }
 /* 生成中指示器 */
 #gal-global-overlay.skin-classic .gal-generating-indicator {
-    background: rgba(255, 250, 248, 0.9) !important;
-    border: 1px solid rgba(255, 255, 255, 0.95) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 20px 50px rgba(222, 85, 133, 0.2) !important;
+    background: rgba(255, 250, 248, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    border-radius: 18px;
+    box-shadow: 0 20px 50px rgba(222, 85, 133, 0.2);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
 }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-icon   { color: var(--sk-sakura) !important; }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-text   { color: var(--sk-plum) !important; font-family: var(--sk-serif); letter-spacing: 0.18em; }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-status { color: var(--sk-plum-soft) !important; }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-dot    { background: var(--sk-sakura) !important; }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-icon   { color: var(--sk-sakura); }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-text   { color: var(--sk-plum); font-family: var(--sk-serif); letter-spacing: 0.18em; }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-status { color: var(--sk-plum-soft); }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-dot    { background: var(--sk-sakura); }
 
 /* =========================================================
    6. 朱笺 (Shujian / Vermilion Letter) — 宣纸 × 墨 × 朱砂印章
@@ -46129,15 +48759,15 @@ ${normalizedSource}`;
    注意 :not(.generating-bg)：背景生成中要让位给下方的「研墨」动画 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-layer-bg:not(.generating-bg) {
     background:
-        radial-gradient(115% 90% at 50% 8%, rgba(var(--shu-paper-rgb), 1) 0%, rgba(var(--shu-paper-warm-rgb), 1) 68%, rgba(var(--shu-paper-warm-rgb), 1) 100%) !important;
+        radial-gradient(115% 90% at 50% 8%, rgba(var(--shu-paper-rgb), 1) 0%, rgba(var(--shu-paper-warm-rgb), 1) 68%, rgba(var(--shu-paper-warm-rgb), 1) 100%);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-layer-bg:not(.generating-bg)::before {
     background-image:
         repeating-linear-gradient(90deg,
             var(--shu-stage-line) 0, var(--shu-stage-line) 1px,
-            transparent 1px, transparent 2.6rem) !important;
-    background-size: auto !important;
-    opacity: 1 !important;
+            transparent 1px, transparent 2.6rem);
+    background-size: auto;
+    opacity: 1;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-layer-bg:not(.generating-bg)::after {
     content: "";
@@ -46186,37 +48816,37 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-shujian"] .gal-text-panel {
     background: linear-gradient(175deg,
         rgba(var(--shu-paper-rgb), var(--panel-opacity, 0.96)) 0%,
-        rgba(var(--shu-paper-warm-rgb), var(--panel-opacity, 0.96)) 100%) !important;
-    border: 1px solid var(--shu-hairline) !important;
-    border-radius: 4px !important;
-    box-shadow: 0 1.5rem 3rem -1.2rem rgba(15, 10, 5, 0.5) !important;
+        rgba(var(--shu-paper-warm-rgb), var(--panel-opacity, 0.96)) 100%);
+    border: 1px solid var(--shu-hairline);
+    border-radius: 4px;
+    box-shadow: 0 1.5rem 3rem -1.2rem rgba(15, 10, 5, 0.5);
     outline: 1px solid var(--shu-hairline-soft);
     outline-offset: -7px;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-dialog-text {
-    color: var(--shu-ink) !important;
-    font-weight: 500 !important;
+    color: var(--shu-ink);
+    font-weight: 500;
     line-height: 2.05 !important;
     letter-spacing: 0.045em;
-    text-shadow: none !important;
+    text-shadow: none;
 }
 
 /* —— 姓名牌：竖排朱砂印章（旁白转墨灰印）—— */
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge {
-    background: linear-gradient(160deg, var(--shu-vermilion) 0%, var(--shu-vermilion-dk) 100%) !important;
-    color: var(--shu-on-seal) !important;
-    writing-mode: vertical-rl !important;
-    text-orientation: upright !important;
+    background: linear-gradient(160deg, var(--shu-vermilion) 0%, var(--shu-vermilion-dk) 100%);
+    color: var(--shu-on-seal);
+    writing-mode: vertical-rl;
+    text-orientation: upright;
     left: -0.45rem !important;
     top: -1.6rem !important;
     padding: 0.85rem 0.5rem !important;
     font-size: 1.05rem !important;
-    font-weight: 700 !important;
-    font-family: var(--shu-font-serif) !important;
-    letter-spacing: 0.22em !important;
-    line-height: 1 !important;
-    border-radius: 3px !important;
-    box-shadow: 0 0.5rem 1.2rem -0.35rem var(--shu-glow), inset 0 0 0 1px rgba(253, 246, 234, 0.35) !important;
+    font-weight: 700;
+    font-family: var(--shu-font-serif);
+    letter-spacing: 0.22em;
+    line-height: 1;
+    border-radius: 3px;
+    box-shadow: 0 0.5rem 1.2rem -0.35rem var(--shu-glow), inset 0 0 0 1px rgba(253, 246, 234, 0.35);
     z-index: 36;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge::after {
@@ -46229,11 +48859,11 @@ ${normalizedSource}`;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge span {
     letter-spacing: inherit;
-    text-shadow: none !important;
+    text-shadow: none;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge.gal-narrator-label {
-    background: var(--shu-narrator) !important;
-    box-shadow: 0 0.5rem 1.2rem -0.35rem rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(253, 246, 234, 0.25) !important;
+    background: var(--shu-narrator);
+    box-shadow: 0 0.5rem 1.2rem -0.35rem rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(253, 246, 234, 0.25);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge.gal-narrator-label::after {
     border-color: rgba(74, 68, 58, 0.4);
@@ -46243,14 +48873,14 @@ ${normalizedSource}`;
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn,
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn.btn-reroll,
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn.btn-free {
-    background: var(--shu-paper) !important;
-    color: var(--shu-ink-soft) !important;
-    border: 1px solid var(--shu-hairline) !important;
+    background: var(--shu-paper);
+    color: var(--shu-ink-soft);
+    border: 1px solid var(--shu-hairline);
     border-radius: 999px !important;
     box-shadow: 0 0.4rem 0.9rem -0.4rem rgba(15, 10, 5, 0.45) !important;
-    font-family: var(--shu-font-serif) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
+    font-family: var(--shu-font-serif);
+    font-weight: 600;
+    letter-spacing: 0.14em;
     transition: all 0.22s ease !important;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn:hover {
@@ -46275,8 +48905,8 @@ ${normalizedSource}`;
     border-radius: 2px !important;
     font-family: var(--shu-font-serif) !important;
     font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
-    position: relative !important;
+    letter-spacing: 0.1em;
+    position: relative;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-footer-btn::after {
     content: "";
@@ -46303,16 +48933,16 @@ ${normalizedSource}`;
     color: var(--shu-vermilion) !important;
     border: 1px solid var(--shu-vermilion) !important;
     border-radius: 999px !important;
-    clip-path: none !important;
+    clip-path: none;
     box-shadow: none !important;
-    font-family: var(--shu-font-latin) !important;
-    font-style: italic !important;
+    font-family: var(--shu-font-latin);
+    font-style: italic;
     font-weight: 600 !important;
-    letter-spacing: 0.22em !important;
+    letter-spacing: 0.22em;
     font-size: calc(1.05rem * var(--ui-scale, 1)) !important;
-    height: calc(2.9rem * var(--ui-scale, 1)) !important;
-    min-width: calc(7.5rem * var(--ui-scale, 1)) !important;
-    padding: 0 calc(1.9rem * var(--ui-scale, 1)) !important;
+    height: calc(2.9rem * var(--ui-scale, 1));
+    min-width: calc(7.5rem * var(--ui-scale, 1));
+    padding: 0 calc(1.9rem * var(--ui-scale, 1));
     transition: background 0.25s ease, color 0.25s ease !important;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-footer-btn-next:hover {
@@ -46326,9 +48956,9 @@ ${normalizedSource}`;
     color: var(--shu-on-seal) !important;
     border: none !important;
     border-radius: 999px !important;
-    font-family: var(--shu-font-serif) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.12em !important;
+    font-family: var(--shu-font-serif);
+    font-weight: 700;
+    letter-spacing: 0.12em;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-pending-choices-btn.show,
 #gal-global-overlay[class*="skin-shujian"] .gal-pending-choices-btn.gal-new-option-highlight {
@@ -46346,33 +48976,33 @@ ${normalizedSource}`;
 
 /* —— 进度条：一根泥金→朱砂的墨线 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-dialog-layer .gal-progress-container {
-    background: var(--shu-hairline-soft) !important;
-    height: 0.25rem !important;
+    background: var(--shu-hairline-soft);
+    height: 0.25rem;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-progress-bar {
-    background: linear-gradient(90deg, var(--shu-gold) 0%, var(--shu-vermilion) 100%) !important;
-    box-shadow: none !important;
+    background: linear-gradient(90deg, var(--shu-gold) 0%, var(--shu-vermilion) 100%);
+    box-shadow: none;
 }
 
 /* —— 顶部地点/时间与全屏按钮：半透明幽灵胶囊，几乎不遮画面 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-location-bar,
 #gal-global-overlay[class*="skin-shujian"] .gal-time-bar {
     background: rgba(20, 16, 14, 0.28) !important;
-    border: 1px solid rgba(244, 236, 220, 0.22) !important;
-    border-radius: 999px !important;
-    color: #f4ecdc !important;
-    font-family: var(--shu-font-serif) !important;
-    letter-spacing: 0.16em !important;
+    border: 1px solid rgba(244, 236, 220, 0.22);
+    border-radius: 999px;
+    color: #f4ecdc;
+    font-family: var(--shu-font-serif);
+    letter-spacing: 0.16em;
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(3px);
 }
-#gal-global-overlay[class*="skin-shujian"] .gal-location-bar i { color: #e0603f !important; }
-#gal-global-overlay[class*="skin-shujian"] .gal-time-bar i { color: #d9b06a !important; }
+#gal-global-overlay[class*="skin-shujian"] .gal-location-bar i { color: #e0603f; }
+#gal-global-overlay[class*="skin-shujian"] .gal-time-bar i { color: #d9b06a; }
 #gal-global-overlay[class*="skin-shujian"] .gal-fullscreen-btn {
-    background: rgba(20, 16, 14, 0.28) !important;
-    border: 1px solid rgba(244, 236, 220, 0.35) !important;
-    border-radius: 999px !important;
-    color: rgba(244, 236, 220, 0.85) !important;
+    background: rgba(20, 16, 14, 0.28);
+    border: 1px solid rgba(244, 236, 220, 0.35);
+    border-radius: 999px;
+    color: rgba(244, 236, 220, 0.85);
     backdrop-filter: blur(3px);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-fullscreen-btn:hover {
@@ -46384,14 +49014,14 @@ ${normalizedSource}`;
 /* —— 立绘显隐 / 状态弹窗小按钮：纸底圆钮 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-shujian"] .gal-status-popup-trigger {
-    background: var(--shu-paper) !important;
-    border: 1px solid var(--shu-hairline) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(15, 10, 5, 0.4) !important;
+    background: var(--shu-paper);
+    border: 1px solid var(--shu-hairline);
+    border-radius: 999px;
+    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(15, 10, 5, 0.4);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-sprite-toggle .gal-eye-icon,
 #gal-global-overlay[class*="skin-shujian"] .gal-status-popup-trigger .gal-status-popup-icon {
-    color: var(--shu-vermilion) !important;
+    color: var(--shu-vermilion);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-shujian"] .gal-status-popup-trigger:hover {
@@ -46405,24 +49035,24 @@ ${normalizedSource}`;
 
 /* —— 生成中指示器：「研墨之中」纸卡 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator {
-    background: linear-gradient(178deg, var(--shu-paper) 0%, var(--shu-paper-warm) 100%) !important;
-    border: 1px solid var(--shu-hairline) !important;
-    border-radius: 4px !important;
-    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7) !important;
+    background: linear-gradient(178deg, var(--shu-paper) 0%, var(--shu-paper-warm) 100%);
+    border: 1px solid var(--shu-hairline);
+    border-radius: 4px;
+    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7);
 }
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-icon { color: var(--shu-vermilion) !important; }
+#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-icon { color: var(--shu-vermilion); }
 #gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-text {
-    color: var(--shu-ink) !important;
-    font-family: var(--shu-font-serif) !important;
-    letter-spacing: 0.4em !important;
+    color: var(--shu-ink);
+    font-family: var(--shu-font-serif);
+    letter-spacing: 0.4em;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-status {
-    color: var(--shu-ink-soft) !important;
-    font-family: var(--shu-font-latin) !important;
+    color: var(--shu-ink-soft);
+    font-family: var(--shu-font-latin);
     font-style: italic;
     letter-spacing: 0.14em;
 }
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-dot { background: var(--shu-vermilion) !important; }
+#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-dot { background: var(--shu-vermilion); }
 
 /* —— 选项浮层：纸签 + 汉字序号，悬停朱批（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-shujian"] {
@@ -46552,62 +49182,62 @@ ${normalizedSource}`;
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn .gal-btn-text,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn .gal-btn-text,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next .gal-btn-text {
-        display: none !important;
+        display: none;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='log'],
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='view-original'],
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='save'],
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='load'] {
-        display: none !important;
+        display: none;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='close-mode'] {
-        order: -1 !important;
+        order: -1;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-bottom-toolbar {
-        justify-content: flex-start !important;
-        gap: 0.3rem !important;
+        justify-content: flex-start;
+        gap: 0.3rem;
         padding: 0 0.875rem 0.5rem 0.5rem !important;
-        overflow: visible !important;
+        overflow: visible;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn {
         flex: 1 !important;
-        width: auto !important;
-        min-width: 0 !important;
-        height: 2.5rem !important;
-        min-height: 2.5rem !important;
-        margin-left: 0 !important;
-        padding: 0 !important;
-        justify-content: center !important;
+        width: auto;
+        min-width: 0;
+        height: 2.5rem;
+        min-height: 2.5rem;
+        margin-left: 0;
+        padding: 0;
+        justify-content: center;
         transform: none !important;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn i,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn i {
-        margin: 0 !important;
+        margin: 0;
         font-size: 1.15rem !important;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next {
-        flex: 0 0 auto !important;
-        width: 5rem !important;
+        flex: 0 0 auto;
+        width: 5rem;
         min-width: 5rem !important;
-        height: 2.5rem !important;
-        min-height: 2.5rem !important;
-        margin-left: 0.35rem !important;
-        margin-right: 0 !important;
+        height: 2.5rem;
+        min-height: 2.5rem;
+        margin-left: 0.35rem;
+        margin-right: 0;
         padding: 0 !important;
-        justify-content: center !important;
+        justify-content: center;
         transform: none !important;
-        z-index: 100 !important;
+        z-index: 100;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next i {
-        margin: 0 !important;
+        margin: 0;
         font-size: 1.6rem !important;
     }
 }
@@ -46618,7 +49248,7 @@ ${normalizedSource}`;
    必须位于各皮肤规则之后：墨染/心之怪盗的名牌 transform 与本块同特异性，靠源码顺序取胜。 */
 @media screen and (max-width: 48rem) {
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-dialog-text {
-        font-size: calc(0.88rem * var(--font-scale, 1)) !important;
+        font-size: calc(0.88rem * var(--font-scale, 1));
     }
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
         transform: scale(0.9) !important;
@@ -46632,7 +49262,7 @@ ${normalizedSource}`;
     }
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-action-btn {
         font-size: 0.95rem !important;
-        min-height: 2rem !important;
+        min-height: 2rem;
         padding: 0.5rem 1rem !important;
     }
 }
@@ -46767,6 +49397,43 @@ ${normalizedSource}`;
 /* 引号内对话着色（仅绘本模式，旁白中夹杂的人物台词），可用 --gal-quote-color 覆盖 */
 #gal-global-overlay .gal-dialog-text .gal-quote {
     color: var(--gal-quote-color, #e8b04b) !important;
+}
+/* 打字机逐字淡入（typewriter.js 一次性切 span 后逐个加 .is-on）；同样强制继承防主题 span 污染 */
+#gal-global-overlay .gal-dialog-text .gal-tw-ch {
+    color: inherit !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    font-style: inherit !important;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+}
+#gal-global-overlay .gal-dialog-text .gal-tw-ch.is-on {
+    opacity: 1;
+}
+/* 名牌入场（所有皮肤）：只动 opacity 与独立 translate 属性，与皮肤自身 transform 叠加不冲突 */
+#gal-global-overlay .gal-name-badge.gal-badge-enter {
+    animation: gal-badge-enter-generic 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes gal-badge-enter-generic {
+    from { opacity: 0; translate: -0.6rem 0; }
+}
+/* 选项选中反馈（所有皮肤）：被选项放大淡出、其余下坠 */
+#gal-layer-choices .gal-choice-card.gal-choice-picked {
+    animation: gal-choice-picked 0.3s ease-out forwards !important;
+    pointer-events: none !important;
+}
+#gal-layer-choices .gal-choice-card.gal-choice-dropped {
+    animation: gal-choice-dropped 0.26s ease-in forwards !important;
+    pointer-events: none !important;
+}
+@keyframes gal-choice-picked {
+    0% { scale: 1; filter: brightness(1); }
+    45% { scale: 1.05; filter: brightness(1.15); }
+    100% { scale: 1.03; opacity: 0; }
+}
+@keyframes gal-choice-dropped {
+    to { opacity: 0; translate: 0 0.9rem; }
 }
 /* 用户自定义行距（--gal-dialog-line-height 未设置时回退到皮肤自身 line-height） */
 #gal-global-overlay.gal-custom-line-height .gal-dialog-text {
@@ -50509,14 +53176,8 @@ ${normalizedSource}`;
     styleEl.id = `${SCRIPT_ID}-styles`;
     styleEl.textContent = css + skinCss + styledCss + saveLoadCss + titleScreenCss + immersiveBaseCss + saveLoadImmersiveCss + saveLoadSlotsCss + cgUploadImmersiveCss + cgUploadGalleryCss + titleGalleryImmersiveCss;
     (targetDoc.head || targetDoc.documentElement).appendChild(styleEl);
-    const fontLinkId = `${SCRIPT_ID}-skin-fonts`;
-    if (!targetDoc.getElementById(fontLinkId)) {
-      const fontLink = targetDoc.createElement("link");
-      fontLink.id = fontLinkId;
-      fontLink.rel = "stylesheet";
-      fontLink.href = "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Italiana&display=swap";
-      (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
-    }
+    const legacyFontLink = targetDoc.getElementById(`${SCRIPT_ID}-skin-fonts`);
+    if (legacyFontLink) legacyFontLink.remove();
     console.log(`[${SCRIPT_NAME}] 样式已注入`);
   }
 
@@ -50524,7 +53185,7 @@ ${normalizedSource}`;
   function syncHistoryModalSkinClass($modal) {
     if (!$modal?.length) return;
     const $overlay = $2("#gal-global-overlay");
-    [...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID].forEach((skinClass) => {
+    [...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, ...DEFAULT_THEME_CLASSES, MOTION_CLASS].forEach((skinClass) => {
       $modal.toggleClass(skinClass, $overlay.hasClass(skinClass));
     });
   }
@@ -50680,6 +53341,14 @@ ${normalizedSource}`;
   // src/ui/choices.js
   var messageSegmentState5 = GalgameStore.cache.segments;
   var OPTIONS_OBSERVER_BOUND_FLAG = "__galgame_options_observer_bound__";
+  var CHOICE_PICK_MS = 300;
+  function prefersReducedMotion5() {
+    try {
+      return !!topWindow.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    } catch (_2) {
+      return false;
+    }
+  }
   var _isRerollingRef = null;
   function setChoicesRefs({ getIsRerolling: getIsRerolling2 }) {
     if (getIsRerolling2) _isRerollingRef = getIsRerolling2;
@@ -50687,7 +53356,7 @@ ${normalizedSource}`;
   function syncChoicesLayerSkinClass($layer) {
     if (!$layer?.length) return;
     const $overlay = getOverlayElement();
-    [...TWILIGHT_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, "skin-classic", "html-skin"].forEach((skinClass) => {
+    [...TWILIGHT_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, ...DEFAULT_THEME_CLASSES, MOTION_CLASS, "skin-classic", "html-skin"].forEach((skinClass) => {
       $layer.toggleClass(skinClass, $overlay.hasClass(skinClass));
     });
   }
@@ -50731,16 +53400,28 @@ ${normalizedSource}`;
     const $layer = ensureChoicesLayer();
     const $container = $layer.find(".gal-choices-container");
     $container.empty();
+    $layer.removeData("choicePicking");
     options2.forEach((opt, idx) => {
       const $card = $2(`
-      <div class="gal-choice-card" data-option-index="${idx}" data-option-value="${encodeURIComponent(opt.value)}">
-        <span>${opt.text}</span>
+      <div class="gal-choice-card" data-option-index="${idx}" data-no="${String(idx + 1).padStart(2, "0")}" style="--gal-i: ${idx}" data-option-value="${encodeURIComponent(opt.value)}">
+        <i class="gal-fx-glint" aria-hidden="true"></i><span>${opt.text}</span>
       </div>
     `);
       $card.on("click", function(e2) {
         e2.stopPropagation();
+        if ($layer.data("choicePicking")) return;
         const value = decodeURIComponent($2(this).data("option-value"));
-        handleChoiceSelection(value);
+        if (prefersReducedMotion5()) {
+          handleChoiceSelection(value);
+          return;
+        }
+        $layer.data("choicePicking", true);
+        $2(this).addClass("gal-choice-picked");
+        $container.find(".gal-choice-card").not(this).addClass("gal-choice-dropped");
+        topWindow.setTimeout(() => {
+          $layer.removeData("choicePicking");
+          handleChoiceSelection(value);
+        }, $layer.hasClass(MOTION_CLASS) ? MOTION_CHOICE_PICK_MS : CHOICE_PICK_MS);
       });
       $container.append($card);
     });
@@ -50853,8 +53534,8 @@ ${normalizedSource}`;
         if ($overlay2.length && $overlay2.hasClass("active")) {
           const mesId = $overlay2.find(".gal-game-container").attr("data-mes-id");
           if (mesId) {
-            const state = messageSegmentState5.get(String(mesId));
-            if (state && state.currentIndex >= state.segments.length - 1) {
+            const state2 = messageSegmentState5.get(String(mesId));
+            if (state2 && state2.currentIndex >= state2.segments.length - 1) {
               shouldPopup = true;
             }
           }
@@ -51075,10 +53756,10 @@ ${normalizedSource}`;
       console.warn(`[${SCRIPT_NAME}] 恢复酒馆自动滚动失败`, e2);
     }
   }
-  var _processNewMessageRef2 = null;
+  var _processNewMessageRef3 = null;
   var _applySettingsToUIRef2 = null;
   function setGalgameModeRefs({ processNewMessage: processNewMessage2, applySettingsToUI: applySettingsToUI2 }) {
-    if (processNewMessage2) _processNewMessageRef2 = processNewMessage2;
+    if (processNewMessage2) _processNewMessageRef3 = processNewMessage2;
     if (applySettingsToUI2) _applySettingsToUIRef2 = applySettingsToUI2;
   }
   async function applyGalgameMode() {
@@ -51104,8 +53785,8 @@ ${normalizedSource}`;
       }
     }
     console.log(`[${SCRIPT_NAME}] applyGalgameMode: 找到最后AI消息=${$lastAiMes ? "是" : "否"}`);
-    if ($lastAiMes && $lastAiMes.length && _processNewMessageRef2) {
-      await _processNewMessageRef2($lastAiMes[0], { forceRender: true });
+    if ($lastAiMes && $lastAiMes.length && _processNewMessageRef3) {
+      await _processNewMessageRef3($lastAiMes[0], { forceRender: true });
     }
     showAllFloors();
     if (_applySettingsToUIRef2) {
@@ -51133,8 +53814,8 @@ ${normalizedSource}`;
   }
   function hideNonLastFloors() {
     const $overlay = $2("#gal-global-overlay");
-    const isOverlayActive = $overlay.length > 0 && $overlay.hasClass("active");
-    if (!isOverlayActive) {
+    const isOverlayActive2 = $overlay.length > 0 && $overlay.hasClass("active");
+    if (!isOverlayActive2) {
       console.warn(`[${SCRIPT_NAME}] 覆盖层未激活，跳过隐藏消息楼层`);
       showAllFloors();
       return false;
@@ -51155,7 +53836,7 @@ ${normalizedSource}`;
     console.log(`[${SCRIPT_NAME}] 已显示所有消息楼层，共 ${$allMes.length} 个`);
   }
   function refreshGalgameViews() {
-    if (_processNewMessageRef2) {
+    if (_processNewMessageRef3) {
       const $allMes = $2("#chat > .mes");
       let $lastAiMes = null;
       $allMes.each(function() {
@@ -51164,7 +53845,7 @@ ${normalizedSource}`;
         }
       });
       if ($lastAiMes && $lastAiMes.length) {
-        _processNewMessageRef2($lastAiMes[0]);
+        _processNewMessageRef3($lastAiMes[0]);
       }
     }
   }
@@ -51446,7 +54127,7 @@ ${normalizedSource}`;
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;
   }
-  function clamp3(value, min4, max5) {
+  function clamp4(value, min4, max5) {
     return Math.max(min4, Math.min(max5, value));
   }
   function pad2(value) {
@@ -51567,17 +54248,17 @@ ${normalizedSource}`;
     const ctx = tryGetContext();
     appendUnique(ids, ctx?.characterId);
     if (ctx?.characters && ctx?.characterId != null) {
-      const current = ctx.characters[ctx.characterId];
-      appendUnique(names, current?.name);
-      appendUnique(names, current?.data?.name);
+      const current2 = ctx.characters[ctx.characterId];
+      appendUnique(names, current2?.name);
+      appendUnique(names, current2?.data?.name);
     }
     appendUnique(names, ctx?.name2);
     const st2 = topWindow?.SillyTavern;
     appendUnique(ids, st2?.characterId);
     if (st2?.characters && st2?.characterId != null) {
-      const current = st2.characters[st2.characterId];
-      appendUnique(names, current?.name);
-      appendUnique(names, current?.data?.name);
+      const current2 = st2.characters[st2.characterId];
+      appendUnique(names, current2?.name);
+      appendUnique(names, current2?.data?.name);
     }
     appendUnique(names, st2?.name2);
     return normalizeCharacterCardInfo({
@@ -51746,8 +54427,8 @@ ${normalizedSource}`;
     }
   }
   function collectCurrentBackground(messageId) {
-    const state = GalgameStore.cache.segments.get(String(messageId));
-    return state?.parsedContent?.currentBackground?.scene || null;
+    const state2 = GalgameStore.cache.segments.get(String(messageId));
+    return state2?.parsedContent?.currentBackground?.scene || null;
   }
   function generateSaveId() {
     return `save_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -51765,8 +54446,8 @@ ${normalizedSource}`;
     if (chatId === CURRENT_CHAT_SENTINEL) {
       console.warn(`[${SCRIPT_NAME}] 未解析到聊天 ID，存档将绑定当前聊天上下文`);
     }
-    const state = GalgameStore.cache.segments.get(String(lastMessageId));
-    const segmentIndex = Math.max(0, Math.floor(safeNumber(state?.currentIndex, 0)));
+    const state2 = GalgameStore.cache.segments.get(String(lastMessageId));
+    const segmentIndex = Math.max(0, Math.floor(safeNumber(state2?.currentIndex, 0)));
     const messageText = buildMessageText(lastMessageId);
     const thumbnailDataUrl = await captureSaveThumbnail();
     const normalizedLabel = String(label || "").trim();
@@ -51992,11 +54673,11 @@ ${normalizedSource}`;
     return { mesNode, parsed };
   }
   async function renderSaveSlot(slot) {
-    const messageId = clamp3(safeNumber(slot.messageId, 0), 0, Math.max(0, safeGetLastMessageId()));
+    const messageId = clamp4(safeNumber(slot.messageId, 0), 0, Math.max(0, safeGetLastMessageId()));
     const segmentIndex = Math.max(0, Math.floor(safeNumber(slot.segmentIndex, 0)));
     const { parsed } = parseMessageForOverlay(messageId);
     const mesId = String(messageId);
-    const state = GalgameStore.cache.segments.get(mesId) || {
+    const state2 = GalgameStore.cache.segments.get(mesId) || {
       currentIndex: 0,
       segments: parsed.segments,
       parsedContent: parsed,
@@ -52005,10 +54686,10 @@ ${normalizedSource}`;
       effectSyncTicket: 0,
       effectSyncPromise: Promise.resolve()
     };
-    state.segments = parsed.segments;
-    state.parsedContent = parsed;
-    state.currentIndex = clamp3(segmentIndex, 0, Math.max(0, parsed.segments.length - 1));
-    GalgameStore.cache.segments.set(mesId, state);
+    state2.segments = parsed.segments;
+    state2.parsedContent = parsed;
+    state2.currentIndex = clamp4(segmentIndex, 0, Math.max(0, parsed.segments.length - 1));
+    GalgameStore.cache.segments.set(mesId, state2);
     await updateGlobalOverlayContent(mesId, parsed, { suppressTTS: true });
     showGlobalOverlay();
   }
@@ -52106,7 +54787,7 @@ ${normalizedSource}`;
     return { ok: true };
   }
   async function renderOverlayAtMessage(messageId, options2 = {}) {
-    const numericMessageId = clamp3(safeNumber(messageId, 0), 0, Math.max(0, safeGetLastMessageId()));
+    const numericMessageId = clamp4(safeNumber(messageId, 0), 0, Math.max(0, safeGetLastMessageId()));
     const segmentIndex = Math.max(0, Math.floor(safeNumber(options2.segmentIndex, 0)));
     const contentOverride = typeof options2.contentOverride === "string" ? options2.contentOverride : "";
     const mesId = String(numericMessageId);
@@ -52127,7 +54808,7 @@ ${normalizedSource}`;
       const fallbackText = content || String(mesNode?.querySelector(".mes_text")?.textContent || "").trim();
       parsed = createFallbackParsed(fallbackText || "（当前消息无可显示内容）");
     }
-    const state = GalgameStore.cache.segments.get(mesId) || {
+    const state2 = GalgameStore.cache.segments.get(mesId) || {
       currentIndex: 0,
       segments: parsed.segments,
       parsedContent: parsed,
@@ -52136,10 +54817,10 @@ ${normalizedSource}`;
       effectSyncTicket: 0,
       effectSyncPromise: Promise.resolve()
     };
-    state.segments = parsed.segments;
-    state.parsedContent = parsed;
-    state.currentIndex = clamp3(segmentIndex, 0, Math.max(0, parsed.segments.length - 1));
-    GalgameStore.cache.segments.set(mesId, state);
+    state2.segments = parsed.segments;
+    state2.parsedContent = parsed;
+    state2.currentIndex = clamp4(segmentIndex, 0, Math.max(0, parsed.segments.length - 1));
+    GalgameStore.cache.segments.set(mesId, state2);
     await updateGlobalOverlayContent(mesId, parsed, { suppressTTS: !!options2.suppressTTS });
     showGlobalOverlay();
     return { ok: true, messageId: numericMessageId, parsed };
@@ -52795,13 +55476,13 @@ ${normalizedSource}`;
   // src/ui/process-message.js
   var messageSegmentState6 = GalgameStore.cache.segments;
   var RE_CLOSED_P3 = /<\/p>/i;
-  var _updateGlobalOverlayContentRef4 = null;
+  var _updateGlobalOverlayContentRef3 = null;
   var _applySettingsToUIRef3 = null;
   var _handleRealTimeBackgroundGenerationRef = null;
   var _handleBananaBackgroundGenerationRef = null;
   var _handleNovelAIBackgroundGenerationRef = null;
   function setProcessMessageRefs({ updateGlobalOverlayContent: updateGlobalOverlayContent2, applySettingsToUI: applySettingsToUI2, handleRealTimeBackgroundGeneration: handleRealTimeBackgroundGeneration2, handleBananaBackgroundGeneration: handleBananaBackgroundGeneration2, handleNovelAIBackgroundGeneration: handleNovelAIBackgroundGeneration2 }) {
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef3 = updateGlobalOverlayContent2;
     if (applySettingsToUI2) _applySettingsToUIRef3 = applySettingsToUI2;
     if (handleRealTimeBackgroundGeneration2) _handleRealTimeBackgroundGenerationRef = handleRealTimeBackgroundGeneration2;
     if (handleBananaBackgroundGeneration2) _handleBananaBackgroundGenerationRef = handleBananaBackgroundGeneration2;
@@ -52884,9 +55565,9 @@ ${normalizedSource}`;
       const loadingParsed = buildFallbackParsed2("生成中...");
       const isLastAi2 = $mes.nextAll('.mes[is_user!="true"]').length === 0;
       if (isLastAi2) {
-        if (_updateGlobalOverlayContentRef4) {
+        if (_updateGlobalOverlayContentRef3) {
           try {
-            await _updateGlobalOverlayContentRef4(mesId, loadingParsed);
+            await _updateGlobalOverlayContentRef3(mesId, loadingParsed);
             showGlobalOverlay();
             syncFloorVisibilityAfterOverlay(mesId);
           } catch (error3) {
@@ -52964,32 +55645,32 @@ ${normalizedSource}`;
         return;
       }
     }
-    let state = messageSegmentState6.get(String(mesId));
-    if (!state) {
-      state = { currentIndex: 0, segments: parsed.segments, parsedContent: parsed, renderToken: 0 };
-      messageSegmentState6.set(String(mesId), state);
+    let state2 = messageSegmentState6.get(String(mesId));
+    if (!state2) {
+      state2 = { currentIndex: 0, segments: parsed.segments, parsedContent: parsed, renderToken: 0 };
+      messageSegmentState6.set(String(mesId), state2);
       console.log(`[${SCRIPT_NAME}] 消息 ${mesId} 初始化状态`);
     } else {
-      state.segments = parsed.segments;
-      state.parsedContent = parsed;
-      if (!Number.isFinite(state.renderToken)) {
-        state.renderToken = 0;
+      state2.segments = parsed.segments;
+      state2.parsedContent = parsed;
+      if (!Number.isFinite(state2.renderToken)) {
+        state2.renderToken = 0;
       }
-      if (state.currentIndex >= parsed.segments.length) {
-        state.currentIndex = parsed.segments.length - 1;
+      if (state2.currentIndex >= parsed.segments.length) {
+        state2.currentIndex = parsed.segments.length - 1;
       }
     }
     markTimelineCacheDirty();
     if (!simpleStorybookMode) {
-      Live2DPreloadManager.preloadFromSegments(parsed.segments, state.currentIndex, "process-message");
+      Live2DPreloadManager.preloadFromSegments(parsed.segments, state2.currentIndex, "process-message");
     }
     const isLastAi = $mes.nextAll('.mes[is_user!="true"]').length === 0;
     if (isLastAi) {
       cancelTypewriter();
       const fallbackText = stripImagePlaceholders(String($mes.find(".mes_text").text() || "")).trim() || "（当前消息无可显示内容）";
-      if (_updateGlobalOverlayContentRef4) {
+      if (_updateGlobalOverlayContentRef3) {
         try {
-          await _updateGlobalOverlayContentRef4(mesId, parsed);
+          await _updateGlobalOverlayContentRef3(mesId, parsed);
           showGlobalOverlay();
           requestAnimationFrame(() => {
             if (_applySettingsToUIRef3) _applySettingsToUIRef3();
@@ -54201,16 +56882,16 @@ ${normalizedSource}`;
     var isObject = requireIsObject(), now = requireNow(), toNumber = requireToNumber();
     var FUNC_ERROR_TEXT = "Expected a function";
     var nativeMax = Math.max, nativeMin = Math.min;
-    function debounce2(func, wait, options2) {
+    function debounce2(func, wait2, options2) {
       var lastArgs, lastThis, maxWait, result, timerId, lastCallTime, lastInvokeTime = 0, leading = false, maxing = false, trailing = true;
       if (typeof func != "function") {
         throw new TypeError(FUNC_ERROR_TEXT);
       }
-      wait = toNumber(wait) || 0;
+      wait2 = toNumber(wait2) || 0;
       if (isObject(options2)) {
         leading = !!options2.leading;
         maxing = "maxWait" in options2;
-        maxWait = maxing ? nativeMax(toNumber(options2.maxWait) || 0, wait) : maxWait;
+        maxWait = maxing ? nativeMax(toNumber(options2.maxWait) || 0, wait2) : maxWait;
         trailing = "trailing" in options2 ? !!options2.trailing : trailing;
       }
       function invokeFunc(time2) {
@@ -54222,16 +56903,16 @@ ${normalizedSource}`;
       }
       function leadingEdge(time2) {
         lastInvokeTime = time2;
-        timerId = setTimeout(timerExpired, wait);
+        timerId = setTimeout(timerExpired, wait2);
         return leading ? invokeFunc(time2) : result;
       }
       function remainingWait(time2) {
-        var timeSinceLastCall = time2 - lastCallTime, timeSinceLastInvoke = time2 - lastInvokeTime, timeWaiting = wait - timeSinceLastCall;
+        var timeSinceLastCall = time2 - lastCallTime, timeSinceLastInvoke = time2 - lastInvokeTime, timeWaiting = wait2 - timeSinceLastCall;
         return maxing ? nativeMin(timeWaiting, maxWait - timeSinceLastInvoke) : timeWaiting;
       }
       function shouldInvoke(time2) {
         var timeSinceLastCall = time2 - lastCallTime, timeSinceLastInvoke = time2 - lastInvokeTime;
-        return lastCallTime === void 0 || timeSinceLastCall >= wait || timeSinceLastCall < 0 || maxing && timeSinceLastInvoke >= maxWait;
+        return lastCallTime === void 0 || timeSinceLastCall >= wait2 || timeSinceLastCall < 0 || maxing && timeSinceLastInvoke >= maxWait;
       }
       function timerExpired() {
         var time2 = now();
@@ -54269,12 +56950,12 @@ ${normalizedSource}`;
           }
           if (maxing) {
             clearTimeout(timerId);
-            timerId = setTimeout(timerExpired, wait);
+            timerId = setTimeout(timerExpired, wait2);
             return invokeFunc(lastCallTime);
           }
         }
         if (timerId === void 0) {
-          timerId = setTimeout(timerExpired, wait);
+          timerId = setTimeout(timerExpired, wait2);
         }
         return result;
       }
@@ -58778,9 +61459,9 @@ ${normalizedSource}`;
       return next.proxy;
     }
   };
-  var deliver = function deliver2(curr, state, name, value) {
+  var deliver = function deliver2(curr, state2, name, value) {
     if (curr.state === STATE_PENDING) {
-      curr.state = state;
+      curr.state = state2;
       curr[name] = value;
       execute(curr);
     }
@@ -60708,10 +63389,10 @@ ${normalizedSource}`;
     query: true,
     regex: stateSelectorRegex,
     populate: function populate2(selector, query, _ref3) {
-      var _ref4 = _slicedToArray(_ref3, 1), state = _ref4[0];
+      var _ref4 = _slicedToArray(_ref3, 1), state2 = _ref4[0];
       query.checks.push({
         type: Type.STATE,
-        value: state
+        value: state2
       });
     }
   }, {
@@ -65688,29 +68369,29 @@ ${normalizedSource}`;
     return f2;
   }
   var generateSpringRK4 = /* @__PURE__ */ function() {
-    function springAccelerationForState(state) {
-      return -state.tension * state.x - state.friction * state.v;
+    function springAccelerationForState(state2) {
+      return -state2.tension * state2.x - state2.friction * state2.v;
     }
     function springEvaluateStateWithDerivative(initialState, dt, derivative) {
-      var state = {
+      var state2 = {
         x: initialState.x + derivative.dx * dt,
         v: initialState.v + derivative.dv * dt,
         tension: initialState.tension,
         friction: initialState.friction
       };
       return {
-        dx: state.v,
-        dv: springAccelerationForState(state)
+        dx: state2.v,
+        dv: springAccelerationForState(state2)
       };
     }
-    function springIntegrateState(state, dt) {
+    function springIntegrateState(state2, dt) {
       var a2 = {
-        dx: state.v,
-        dv: springAccelerationForState(state)
-      }, b2 = springEvaluateStateWithDerivative(state, dt * 0.5, a2), c2 = springEvaluateStateWithDerivative(state, dt * 0.5, b2), d2 = springEvaluateStateWithDerivative(state, dt, c2), dxdt = 1 / 6 * (a2.dx + 2 * (b2.dx + c2.dx) + d2.dx), dvdt = 1 / 6 * (a2.dv + 2 * (b2.dv + c2.dv) + d2.dv);
-      state.x = state.x + dxdt * dt;
-      state.v = state.v + dvdt * dt;
-      return state;
+        dx: state2.v,
+        dv: springAccelerationForState(state2)
+      }, b2 = springEvaluateStateWithDerivative(state2, dt * 0.5, a2), c2 = springEvaluateStateWithDerivative(state2, dt * 0.5, b2), d2 = springEvaluateStateWithDerivative(state2, dt, c2), dxdt = 1 / 6 * (a2.dx + 2 * (b2.dx + c2.dx) + d2.dx), dvdt = 1 / 6 * (a2.dv + 2 * (b2.dv + c2.dv) + d2.dv);
+      state2.x = state2.x + dxdt * dt;
+      state2.v = state2.v + dvdt * dt;
+      return state2;
     }
     return function springRK4Factory(tension, friction, duration) {
       var initState = {
@@ -65989,13 +68670,13 @@ ${normalizedSource}`;
     var doneEles = [];
     function stepOne(ele2, isCore) {
       var _p = ele2._private;
-      var current = _p.animation.current;
+      var current2 = _p.animation.current;
       var queue = _p.animation.queue;
       var ranAnis = false;
-      if (current.length === 0) {
+      if (current2.length === 0) {
         var next = queue.shift();
         if (next) {
-          current.push(next);
+          current2.push(next);
         }
       }
       var callbacks = function callbacks2(_callbacks) {
@@ -66005,11 +68686,11 @@ ${normalizedSource}`;
         }
         _callbacks.splice(0, _callbacks.length);
       };
-      for (var i2 = current.length - 1; i2 >= 0; i2--) {
-        var ani = current[i2];
+      for (var i2 = current2.length - 1; i2 >= 0; i2--) {
+        var ani = current2[i2];
         var ani_p = ani._private;
         if (ani_p.stopped) {
-          current.splice(i2, 1);
+          current2.splice(i2, 1);
           ani_p.hooked = false;
           ani_p.playing = false;
           ani_p.started = false;
@@ -66034,7 +68715,7 @@ ${normalizedSource}`;
           ani_p.step(now);
         }
         if (ani.completed()) {
-          current.splice(i2, 1);
+          current2.splice(i2, 1);
           ani_p.hooked = false;
           ani_p.playing = false;
           ani_p.started = false;
@@ -66042,7 +68723,7 @@ ${normalizedSource}`;
         }
         ranAnis = true;
       }
-      if (!isCore && current.length === 0 && queue.length === 0) {
+      if (!isCore && current2.length === 0 && queue.length === 0) {
         doneEles.push(ele2);
       }
       return ranAnis;
@@ -71142,7 +73823,7 @@ ${normalizedSource}`;
     var i2 = 0;
     var loopRet = true;
     if (options2.animate === true) {
-      var _frame = function frame() {
+      var _frame = function frame2() {
         var f2 = 0;
         while (loopRet && f2 < options2.refresh) {
           loopRet = mainLoop(i2);
@@ -74826,15 +77507,15 @@ ${normalizedSource}`;
   var BRp$4 = {};
   BRp$4.getCachedImage = function(url, crossOrigin, onLoad) {
     var r2 = this;
-    var imageCache = r2.imageCache = r2.imageCache || {};
-    var cache3 = imageCache[url];
+    var imageCache2 = r2.imageCache = r2.imageCache || {};
+    var cache3 = imageCache2[url];
     if (cache3) {
       if (!cache3.image.complete) {
         cache3.image.addEventListener("load", onLoad);
       }
       return cache3.image;
     } else {
-      cache3 = imageCache[url] = imageCache[url] || {};
+      cache3 = imageCache2[url] = imageCache2[url] || {};
       var image = cache3.image = new Image();
       image.addEventListener("load", onLoad);
       image.addEventListener("error", function() {
@@ -75670,7 +78351,7 @@ ${normalizedSource}`;
       return true;
     };
     var wheelHandler = function wheelHandler2(e2) {
-      var clamp5 = false;
+      var clamp6 = false;
       var delta = e2.deltaY;
       if (delta == null) {
         if (e2.wheelDeltaY != null) {
@@ -75697,7 +78378,7 @@ ${normalizedSource}`;
           }
         } else {
           wheelDeltas.push(delta);
-          clamp5 = true;
+          clamp6 = true;
         }
       } else if (inaccurateScrollDevice) {
         inaccurateScrollFactor = Math.min(Math.abs(delta), inaccurateScrollFactor);
@@ -75724,7 +78405,7 @@ ${normalizedSource}`;
           r2.redraw();
         }, 150);
         var diff2;
-        if (clamp5 && Math.abs(delta) > 5) {
+        if (clamp6 && Math.abs(delta) > 5) {
           delta = signum(delta) * 5;
         }
         diff2 = delta / -250;
@@ -84120,10 +86801,10 @@ ${normalizedSource}`;
     const checkpointBadges = targetNode.checkpointInfo?.names?.length ? `<div class="gal-timeline-checkpoints">${targetNode.checkpointInfo.names.map((name) => `<span class="gal-timeline-chip checkpoint">${escapeHtml6(name)}</span>`).join("")}</div>` : "";
     const sessionButtons = Array.isArray(targetNode.sessions) ? targetNode.sessions.map((session, index) => {
       const active = selectedSession && isSameChatId(session.chatId, selectedSession.chatId) && session.messageId === selectedSession.messageId && session.swipeId === selectedSession.swipeId;
-      const current = modalState.data?.current?.chatId && isSameChatId(session.chatId, modalState.data.current.chatId);
+      const current2 = modalState.data?.current?.chatId && isSameChatId(session.chatId, modalState.data.current.chatId);
       const badgeText = session.swipeId != null ? `Swipe ${session.swipeId + 1}` : `楼层 ${session.messageId + 1}`;
       return `
-          <button class="gal-timeline-session-btn ${active ? "active" : ""} ${current ? "is-current" : ""}" data-role="timeline-select-session" data-session-index="${index}">
+          <button class="gal-timeline-session-btn ${active ? "active" : ""} ${current2 ? "is-current" : ""}" data-role="timeline-select-session" data-session-index="${index}">
             <span class="gal-timeline-session-file">${escapeHtml6(session.chatFile || session.chatId)}</span>
             <span class="gal-timeline-session-meta">${escapeHtml6(badgeText)}</span>
           </button>
@@ -84690,7 +87371,7 @@ ${normalizedSource}`;
     }
     const refsText = JSON.stringify(_safeArray4(working.refAudios), null, 2);
     const mapText = JSON.stringify(_safeObject4(working.expressionRefMap), null, 2);
-    const current = Object.assign({}, working, {
+    const current2 = Object.assign({}, working, {
       refAudiosJson: refsText,
       expressionRefMapJson: mapText
     });
@@ -84702,20 +87383,20 @@ ${normalizedSource}`;
         </div>
         <div class="gal-modal-scroll-body" style="padding:12px 14px 8px 14px;">
         <div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:10px;">
-          <label>模型名<input id="gal-gpt-edit-name" value="${_escapeHtmlLite(current.name || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>备注<input id="gal-gpt-edit-desc" value="${_escapeHtmlLite(current.desc || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>gpt权重<input id="gal-gpt-edit-gpt" value="${_escapeHtmlLite(current.paths?.gptWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>sovits权重<input id="gal-gpt-edit-sovits" value="${_escapeHtmlLite(current.paths?.sovitsWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>默认参考音频<input id="gal-gpt-edit-ref" value="${_escapeHtmlLite(current.paths?.defaultRefAudioPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>prompt_text<input id="gal-gpt-edit-prompt" value="${_escapeHtmlLite(current.params?.promptText || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>prompt_lang<input id="gal-gpt-edit-plang" value="${_escapeHtmlLite(current.params?.promptLang || "zh")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
-          <label>text_lang<input id="gal-gpt-edit-tlang" value="${_escapeHtmlLite(current.params?.textLang || "auto")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>模型名<input id="gal-gpt-edit-name" value="${_escapeHtmlLite(current2.name || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>备注<input id="gal-gpt-edit-desc" value="${_escapeHtmlLite(current2.desc || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>gpt权重<input id="gal-gpt-edit-gpt" value="${_escapeHtmlLite(current2.paths?.gptWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>sovits权重<input id="gal-gpt-edit-sovits" value="${_escapeHtmlLite(current2.paths?.sovitsWeightsPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>默认参考音频<input id="gal-gpt-edit-ref" value="${_escapeHtmlLite(current2.paths?.defaultRefAudioPath || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>prompt_text<input id="gal-gpt-edit-prompt" value="${_escapeHtmlLite(current2.params?.promptText || "")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>prompt_lang<input id="gal-gpt-edit-plang" value="${_escapeHtmlLite(current2.params?.promptLang || "zh")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+          <label>text_lang<input id="gal-gpt-edit-tlang" value="${_escapeHtmlLite(current2.params?.textLang || "auto")}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
         </div>
         <div style="margin-top:10px;">
-          <label>参考音频列表 JSON<textarea id="gal-gpt-edit-refs" rows="8" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current.refAudiosJson)}</textarea></label>
+          <label>参考音频列表 JSON<textarea id="gal-gpt-edit-refs" rows="8" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current2.refAudiosJson)}</textarea></label>
         </div>
         <div style="margin-top:10px;">
-          <label>表情映射 JSON<textarea id="gal-gpt-edit-map" rows="6" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current.expressionRefMapJson)}</textarea></label>
+          <label>表情映射 JSON<textarea id="gal-gpt-edit-map" rows="6" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-family:ui-monospace,Consolas,monospace;">${_escapeHtmlLite(current2.expressionRefMapJson)}</textarea></label>
         </div>
         </div>
         <div class="gal-input-actions gal-modal-fixed-actions" style="display:flex;justify-content:flex-end;gap:8px;margin:0;padding:12px 14px;border-top:1px solid #e5e7eb;">
@@ -85646,8 +88327,11 @@ ${normalizedSource}`;
   `;
   }
   var BUILTIN_SKIN_LIST = [
-    { value: "none", label: "默认" },
-    { value: DEFAULT_DARK_SKIN_ID, label: "默认 · 深色" },
+    { value: "none", label: "默认 · 晴空" },
+    { value: DEFAULT_DARK_SKIN_ID, label: "默认 · 夜航（深色）" },
+    { value: DEFAULT_SOFT_SKIN_ID, label: "默认 · 柔光" },
+    { value: CYBERPOP_SKIN_ID, label: "经典 Cyber Pop" },
+    { value: CYBERPOP_DARK_SKIN_ID, label: "经典 Cyber Pop · 深色" },
     { value: ANCIENT_SKIN_ID, label: "墨染千秋（水墨长卷）" },
     { value: ANCIENT_QINGLV_SKIN_ID, label: "墨染千秋 · 青绿设色" },
     { value: PERSONA_SKIN_ID, label: "心之怪盗（女神异闻录）" },
@@ -85726,6 +88410,34 @@ ${normalizedSource}`;
   function escapeHtml7(value) {
     return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  var ENHANCED_CUSTOM_MODEL_VALUE = "__gal_custom_model__";
+  var enhancedModelListCache = /* @__PURE__ */ new Map();
+  function resolveEnhancedProfileId(profiles, secondGenerate) {
+    if (secondGenerate.profileId && profiles.some((profile) => profile.id === secondGenerate.profileId)) {
+      return secondGenerate.profileId;
+    }
+    return profiles.find((profile) => profile.name === secondGenerate.profileName)?.id || "";
+  }
+  function buildEnhancedProfileOptionsHtml(profiles, secondGenerate) {
+    const selectedId = resolveEnhancedProfileId(profiles, secondGenerate);
+    const savedLabel = secondGenerate.profileName || secondGenerate.profileId;
+    const placeholder = !selectedId && savedLabel ? `「${savedLabel}」已不存在，请重新选择` : "请选择连接配置";
+    return [
+      `<option value="">${escapeHtml7(placeholder)}</option>`,
+      ...profiles.map((profile) => `<option value="${escapeHtml7(profile.id)}" ${profile.id === selectedId ? "selected" : ""}>${escapeHtml7(profile.name)}</option>`)
+    ].join("");
+  }
+  function buildEnhancedModelOptionsHtml(profileId, savedModel) {
+    const profile = profileId ? resolveConnectionProfile({ profileId }) : null;
+    const models = [...enhancedModelListCache.get(profileId) || []];
+    if (savedModel && !models.includes(savedModel)) models.unshift(savedModel);
+    const defaultLabel = profile?.model ? `跟随连接配置（${profile.model}）` : "跟随连接配置";
+    return [
+      `<option value="" ${savedModel ? "" : "selected"}>${escapeHtml7(defaultLabel)}</option>`,
+      ...models.map((model) => `<option value="${escapeHtml7(model)}" ${model === savedModel ? "selected" : ""}>${escapeHtml7(model)}</option>`),
+      `<option value="${ENHANCED_CUSTOM_MODEL_VALUE}">手动输入模型名…</option>`
+    ].join("");
+  }
   function cleanupAssetManagerDocumentEvents() {
     $2(topWindow.document).off(".galPackMenu").off(".galMenus").off(".galImportMenu");
   }
@@ -85766,9 +88478,10 @@ ${normalizedSource}`;
     $overlay.removeClass(CUSTOM_SKIN_ID);
     $overlay.removeClass("skin-western");
     $overlay.removeClass("html-skin");
-    if (skin !== "none") {
+    if (!isClasslessSkin(skin)) {
       $overlay.addClass(isHtmlSkin ? "html-skin" : skin);
     }
+    syncDefaultThemeClasses($overlay, getDefaultThemeClasses(skin));
     if (isHtmlSkin) {
       applyHtmlSkinRuntime(skin);
     } else {
@@ -85792,6 +88505,8 @@ ${normalizedSource}`;
     const padTopTenths = Math.max(0, Math.min(30, Math.round(Number(settings.dialogPadTop) || 0)));
     const padBottomTenths = Math.max(0, Math.min(30, Math.round(Number(settings.dialogPadBottom) || 0)));
     const $overlayEl = $2("#gal-global-overlay");
+    syncWebFontsForSettings(settings).then(() => topWindow.document.fonts?.ready).then(() => adjustToolbarForSpace()).catch(() => {
+    });
     $overlayEl.css({
       "--gal-dialog-scale-user": dialogScalePercentToScaleFactorForSkin(dialogScalePercent, activeSkin),
       "--gal-toolbar-scale-user": uiScalePercentToScaleFactor(toolbarScalePercent),
@@ -85860,6 +88575,9 @@ ${normalizedSource}`;
     });
     applyBgFillMode();
     applySkin();
+    syncControlMotion($overlayEl);
+    applyCameraSettings();
+    refreshAmbientLight($2("#gal-global-overlay"));
     applyTextEffect();
     syncPixiEffectsSettings();
     adjustToolbarForSpace();
@@ -86004,33 +88722,12 @@ ${normalizedSource}`;
       live2dManager.debug = !!settings.globalDebug;
     }
     const isEnabled = getIsEnabled();
-    const [presetNames, profileNames, modelNames, worldbookNames] = await Promise.all([
-      getAvailablePresets(),
-      getAvailableProfiles(),
-      getAvailableModels(),
-      getAvailableWorldbooks()
-    ]);
-    const savedWorldbooks = settings.enhancedMode?.secondGenerate?.worldbooks || [];
-    const presetOptions = [
-      '<option value="">使用当前预设</option>',
-      ...presetNames.map((p3) => `<option value="${escapeHtml7(p3)}" ${settings.enhancedMode?.secondGenerate?.presetName === p3 ? "selected" : ""}>${escapeHtml7(p3)}</option>`)
-    ].join("");
-    const profileOptions = [
-      '<option value="">使用当前连接配置</option>',
-      ...profileNames.map((p3) => `<option value="${escapeHtml7(p3)}" ${settings.enhancedMode?.secondGenerate?.profileName === p3 ? "selected" : ""}>${escapeHtml7(p3)}</option>`)
-    ].join("");
-    const modelOptions = [
-      '<option value="">使用当前模型</option>',
-      ...modelNames.map((m2) => `<option value="${escapeHtml7(m2)}" ${settings.enhancedMode?.secondGenerate?.modelName === m2 ? "selected" : ""}>${escapeHtml7(m2)}</option>`)
-    ].join("");
-    const worldbookListHtml = worldbookNames.length === 0 ? '<div style="font-size: 0.85rem; color: var(--gal-text-2, #333); margin-left: 24px; font-weight: 500;">暂无可用的世界书</div>' : `<div style="margin-left: 24px; max-height: 150px; overflow-y: auto; border: 1px solid var(--gal-border, #e3e7eb); border-radius: 6px; padding: 10px; background: var(--gal-panel-bg, #fff); color: var(--gal-text, #333);">
-        ${worldbookNames.map((wb) => `
-          <label class="gal-check" style="padding: 6px 0; font-size: 0.9rem; font-weight: 500;">
-            <input type="checkbox" class="gal-enhanced-worldbook-item" value="${escapeHtml7(wb)}" ${savedWorldbooks.includes(wb) ? "checked" : ""}>
-            <span style="color: var(--gal-text, #333);">${escapeHtml7(wb)}</span>
-          </label>
-        `).join("")}
-      </div>`;
+    const enhancedSecondGenerate = ensureEnhancedModeSettings().secondGenerate;
+    const enhancedLlmSource = enhancedSecondGenerate.llmSource;
+    const connectionProfiles = listConnectionProfiles();
+    const enhancedProfileId = resolveEnhancedProfileId(connectionProfiles, enhancedSecondGenerate);
+    const enhancedProfileOptions = buildEnhancedProfileOptionsHtml(connectionProfiles, enhancedSecondGenerate);
+    const enhancedModelOptions = buildEnhancedModelOptionsHtml(enhancedProfileId, enhancedSecondGenerate.model);
     const dialogFontOptions = DIALOG_FONT_PRESETS.map((item) => `<option value="${escapeHtml7(item.value)}" ${settings.dialogFontFamily === item.value ? "selected" : ""}>${escapeHtml7(item.label)}</option>`).join("");
     let assetsHtml = "";
     if (_buildAssetsPaneRef) {
@@ -86189,6 +88886,10 @@ ${normalizedSource}`;
               </div>
             </div>
             <div class="gal-settings-row">
+              <span class="gal-settings-label">标点停顿 <small style="color: var(--gal-text-3, #999);">(句读处稍作停留)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-typewriter-punct-pause" ${settings.typewriterPunctuationPause !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
               <span class="gal-settings-label">打字音效</span>
               <label class="gal-switch"><input type="checkbox" id="gal-typewriter-sound-enabled" ${settings.typewriterSoundEnabled ? "checked" : ""}><span class="gal-switch-slider"></span></label>
             </div>
@@ -86327,6 +89028,56 @@ ${normalizedSource}`;
                 <span class="gal-range-value" id="gal-effects-max-active-value">${effectMaxActive}</span>
               </div>
             </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">辉光滤镜 <small style="color: var(--gal-text-3, #999);">(萤火/光斑/雷电等，Mobile 档不生效)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-effects-bloom" ${settings.effectsBloom !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+          </div>
+          <div class="gal-settings-divider"></div>
+          <div class="gal-settings-section">
+            <div class="gal-settings-section-title"><i class="fa-solid fa-clapperboard"></i> 视觉演出</div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">背景转场</span>
+              <select id="gal-bg-transition-style" class="gal-select">
+                ${[
+      ["cinematic", "电影叠化（默认）"],
+      ["wipe", "斜切擦除"],
+      ["iris", "光圈展开"],
+      ["strips", "硬切条带"],
+      ["dissolve", "墨迹溶解"],
+      ["random", "随机轮换"]
+    ].map(([value, label]) => `<option value="${value}" ${(settings.bgTransitionStyle || "cinematic") === value ? "selected" : ""}>${label}</option>`).join("")}
+              </select>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">AI 指定转场 <small style="color: var(--gal-text-3, #999);">(换章/时间跳跃用黑场字幕)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-bg-transition-ai" ${settings.bgTransitionAiHint !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">背景漂移 <small style="color: var(--gal-text-3, #999);">(缓慢推拉镜头)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-stage-drift" ${settings.stageCameraDrift !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">景深视差 <small style="color: var(--gal-text-3, #999);">(鼠标/陀螺仪)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-stage-parallax" ${settings.stageParallax !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">推镜跟随说话人</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-stage-push" ${settings.stageSpeakerPush !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">环境光匹配立绘 <small style="color: var(--gal-text-3, #999);">(按背景自动调色)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-stage-ambient" ${settings.stageAmbientLight !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">控件动效 <small style="color: var(--gal-text-3, #999);">(逐字点亮/按钮涟漪/选项翻入等，所有皮肤)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-control-motion" ${settings.controlMotion !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">加载皮肤字体 <small style="color: var(--gal-text-3, #999);">(jsDelivr，关闭省流量)</small></span>
+              <label class="gal-switch"><input type="checkbox" id="gal-web-fonts" ${settings.webFontsEnabled !== false ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--gal-text-3, #999); margin-top: 4px; line-height: 1.6;">镜头效果仅在背景「填满裁剪」模式下生效；系统开启「减少动态效果」时自动关闭。</div>
           </div>
           </div><!-- /L2 visual (Pixi) -->
 
@@ -86560,48 +89311,56 @@ ${normalizedSource}`;
             </div>
             <div id="gal-enhanced-hint" style="${settings.enhancedMode?.enabled ? "" : "display: none;"} padding: 12px; background: var(--gal-accent-soft, rgba(0,210,255,0.1)); border: 1px solid var(--gal-accent-border, rgba(0,210,255,0.35)); border-radius: 6px; margin-bottom: 16px; font-size: 0.8rem; color: var(--gal-text-2, #666); line-height: 1.5;">
               <i class="fa-solid fa-lightbulb" style="color: var(--gal-accent-strong, #00a8cc);"></i>
-              第一次生成专注内容，第二次切换API进行COT格式化。
+              第一次生成专注内容，第二次生成把正文转换为 Galgame 格式。格式化结果只保存在楼层附加数据里、仅在 Galgame 界面中显示，关闭界面后酒馆聊天里仍是原来的正文。
             </div>
             <div id="gal-enhanced-config" style="${settings.enhancedMode?.enabled ? "" : "display: none;"} padding-left: 12px; border-left: 2px solid var(--gal-accent-border, rgba(0,210,255,0.35));">
-              <div style="font-weight: 600; margin-bottom: 12px; color: var(--gal-accent-strong, #00a8cc); font-size: 0.9rem;">第二次生成配置</div>
-              <div style="margin-bottom: 12px;">
-                <label class="gal-check" style="margin-bottom: 6px;">
-                  <input type="checkbox" id="gal-enhanced-use-profile" ${settings.enhancedMode?.secondGenerate?.useProfile ? "checked" : ""}>
-                  <span style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222);">连接配置</span>
+              <div style="font-weight: 600; margin-bottom: 12px; color: var(--gal-accent-strong, #00a8cc); font-size: 0.9rem;">第二次生成（格式化）使用的 LLM</div>
+              <div style="margin-bottom: 8px;">
+                <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
+                  <input type="radio" name="gal-enhanced-llm-source" value="current" ${enhancedLlmSource === "current" ? "checked" : ""}>
+                  <span>跟随酒馆当前 API 与预设</span>
                 </label>
-                <select id="gal-enhanced-profile-name" class="gal-select" style="width: calc(100% - 24px); margin-left: 24px;">${profileOptions}</select>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <label class="gal-check" style="margin-bottom: 6px;">
-                  <input type="checkbox" id="gal-enhanced-use-model" ${settings.enhancedMode?.secondGenerate?.useModel ? "checked" : ""}>
-                  <span style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222);">模型</span>
+                <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
+                  <input type="radio" name="gal-enhanced-llm-source" value="profile" ${enhancedLlmSource === "profile" ? "checked" : ""}>
+                  <span>使用酒馆连接配置（独立请求，不切换酒馆当前连接）</span>
                 </label>
-                <select id="gal-enhanced-model-name" class="gal-select" style="width: calc(100% - 24px); margin-left: 24px;">${modelOptions}</select>
               </div>
-              <div style="margin-bottom: 12px;">
-                <label class="gal-check" style="margin-bottom: 6px;">
-                  <input type="checkbox" id="gal-enhanced-use-preset" ${settings.enhancedMode?.secondGenerate?.usePreset ? "checked" : ""}>
-                  <span style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222);">预设</span>
-                </label>
-                <select id="gal-enhanced-preset-name" class="gal-select" style="width: calc(100% - 24px); margin-left: 24px;">${presetOptions}</select>
-              </div>
-              <div style="margin-bottom: 10px;">
-                <div style="font-size: 0.9rem; font-weight: 600; color: var(--gal-text, #222); margin-bottom: 8px;">世界书设置</div>
-                <div style="margin-left: 24px;">
-                  <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="default" ${!settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""}>
-                    <span>不使用自定义世界书(默认选择)</span>
-                  </label>
-                  <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="none" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && (!settings.enhancedMode?.secondGenerate?.worldbooks || settings.enhancedMode?.secondGenerate?.worldbooks.length === 0) ? "checked" : ""}>
-                    <span>不使用任何世界书</span>
-                  </label>
-                  <label class="gal-check" style="margin-bottom: 8px; font-size: 0.85rem;">
-                    <input type="radio" name="gal-enhanced-worldbook-mode" value="custom" ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "checked" : ""}>
-                    <span>使用以下世界书：</span>
-                  </label>
-                  <div id="gal-enhanced-worldbooks-list" style="margin-left: 24px; ${settings.enhancedMode?.secondGenerate?.useWorldbooks && settings.enhancedMode?.secondGenerate?.worldbooks && settings.enhancedMode?.secondGenerate?.worldbooks.length > 0 ? "" : "display: none;"}">${worldbookListHtml}</div>
+              <div class="gal-settings-row" style="margin-bottom: 4px;">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                  <span class="gal-settings-label">发送世界书内容</span>
+                  <small class="gal-hint" style="margin: 0;">附带按原文激活的世界书条目（角色定义前/后位置），帮助识别角色、地点等名称；会增加 token 消耗</small>
                 </div>
+                <label class="gal-switch"><input type="checkbox" id="gal-enhanced-send-worldbook" ${enhancedSecondGenerate.sendWorldbook ? "checked" : ""}><span class="gal-switch-slider"></span></label>
+              </div>
+              <div id="gal-enhanced-llm-profile-config" style="${enhancedLlmSource === "profile" ? "" : "display: none;"} margin-left: 24px; margin-bottom: 8px;">
+                <p id="gal-enhanced-llm-no-profile" class="gal-hint" style="${connectionProfiles.length === 0 ? "" : "display: none;"}">未找到可用的连接配置：请先在酒馆「API 连接」页面用「连接配置」保存一个配置（Connection Profile）。</p>
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">连接配置</span>
+                  <div style="display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex: 1; min-width: 0;">
+                    <select id="gal-enhanced-llm-profile" class="gal-select">${enhancedProfileOptions}</select>
+                    <button id="gal-enhanced-llm-refresh-profiles" class="gal-panel-btn secondary" style="padding: 6px 10px; flex: 0 0 auto;" title="刷新连接配置列表"><i class="fa-solid fa-rotate"></i></button>
+                  </div>
+                </div>
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">模型</span>
+                  <div style="display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex: 1; min-width: 0;">
+                    <select id="gal-enhanced-llm-model" class="gal-select">${enhancedModelOptions}</select>
+                    <button id="gal-enhanced-llm-fetch-models" class="gal-panel-btn secondary" style="padding: 6px 10px; flex: 0 0 auto;" title="从该连接配置的 API 获取模型列表"><i class="fa-solid fa-list"></i></button>
+                  </div>
+                </div>
+                <p id="gal-enhanced-llm-model-status" class="gal-hint" style="display: none; text-align: right; margin: -4px 0 6px;"></p>
+                <div id="gal-enhanced-llm-model-custom-row" class="gal-settings-row" style="display: none;">
+                  <span class="gal-settings-label">模型名</span>
+                  <input type="text" id="gal-enhanced-llm-model-custom" class="gal-input" placeholder="输入模型 ID，回车或失焦后保存">
+                </div>
+                <div class="gal-settings-row">
+                  <span class="gal-settings-label">最大回复长度 <small style="color: var(--gal-text-3, #999);">(0 = 跟随连接配置的预设)</small></span>
+                  <input type="number" id="gal-enhanced-llm-max-tokens" class="gal-input" min="0" step="256" value="${enhancedSecondGenerate.maxTokens || 0}" style="flex: 0 0 120px;">
+                </div>
+                <p class="gal-hint">模型列表来自该连接配置对应的 API；获取失败时可选「手动输入模型名」。请求使用连接配置绑定的密钥与预设参数，不发送角色卡和聊天记录。</p>
+                <button id="gal-enhanced-llm-test" class="gal-panel-btn secondary" style="width: 100%; flex-direction: row; justify-content: center; gap: 8px; padding: 8px 12px;">
+                  <i class="fa-solid fa-plug"></i><span>测试连接</span>
+                </button>
               </div>
               <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--gal-accent-border, rgba(0,210,255,0.35));">
                 <button id="gal-enhanced-view-prompts" class="gal-panel-btn secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -86891,7 +89650,7 @@ ${normalizedSource}`;
       } catch (e2) {
         console.warn(`[${SCRIPT_NAME}] 获取TTS音色列表失败:`, e2);
       }
-      const current = settings.ttsDefaultSpeaker || "";
+      const current2 = settings.ttsDefaultSpeaker || "";
       $sel.empty().append('<option value="">（不指定）</option>');
       voiceList.forEach((v3) => {
         const name = String(v3?.name || "").trim();
@@ -86900,7 +89659,7 @@ ${normalizedSource}`;
         const label = desc ? `${name} (${desc})` : name;
         $sel.append(`<option value="${escapeHtml7(name)}">${escapeHtml7(label)}</option>`);
       });
-      $sel.val(current);
+      $sel.val(current2);
       refreshTtsVoicePoolCandidates(voiceList);
       const provider = getTTSProvider();
       const providerHint = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? "GPT-SoVITS：建议把音色 name 设为角色名。" : "LittleWhiteBox：未指定/未绑定时使用此默认音色。";
@@ -87234,6 +89993,35 @@ ${normalizedSource}`;
       }
     });
     syncTitleSourceInputs();
+    $2("#gal-typewriter-punct-pause").on("change", function() {
+      settings.typewriterPunctuationPause = $2(this).is(":checked");
+      saveSettings();
+    });
+    $2("#gal-bg-transition-style").on("change", function() {
+      const value = String($2(this).val() || "").trim();
+      settings.bgTransitionStyle = ["cinematic", "wipe", "iris", "strips", "dissolve", "random"].includes(value) ? value : "cinematic";
+      saveSettings();
+    });
+    $2("#gal-bg-transition-ai").on("change", function() {
+      settings.bgTransitionAiHint = $2(this).is(":checked");
+      saveSettings();
+      injectCOTToWorldbook().catch(() => {
+      });
+    });
+    [
+      ["#gal-stage-drift", "stageCameraDrift"],
+      ["#gal-stage-parallax", "stageParallax"],
+      ["#gal-stage-push", "stageSpeakerPush"],
+      ["#gal-stage-ambient", "stageAmbientLight"],
+      ["#gal-control-motion", "controlMotion"],
+      ["#gal-web-fonts", "webFontsEnabled"]
+    ].forEach(([selector, key]) => {
+      $2(selector).on("change", function() {
+        settings[key] = $2(this).is(":checked");
+        applySettingsToUI();
+        saveSettings();
+      });
+    });
     $2("#gal-effects-enabled").on("change", function() {
       settings.effectsEnabled = $2(this).is(":checked");
       if (!settings.effectsEnabled) {
@@ -87247,6 +90035,12 @@ ${normalizedSource}`;
     $2("#gal-effects-quality").on("change", function() {
       const nextQuality = String($2(this).val() || "").trim();
       settings.effectsQuality = ["mobile", "balanced", "high"].includes(nextQuality) ? nextQuality : "balanced";
+      syncPixiEffectsSettings();
+      refreshAmbientLight($2("#gal-global-overlay"));
+      saveSettings();
+    });
+    $2("#gal-effects-bloom").on("change", function() {
+      settings.effectsBloom = $2(this).is(":checked");
       syncPixiEffectsSettings();
       saveSettings();
     });
@@ -87281,67 +90075,140 @@ ${normalizedSource}`;
       $2("#gal-enhanced-hint, #gal-enhanced-config").toggle(enabled);
       showToast2(enabled ? "已启用加强模式" : "已禁用加强模式");
     });
-    $2("#gal-enhanced-use-profile").on("change", function() {
+    const saveEnhancedSecondGenerate = (updater) => {
       const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.useProfile = $2(this).is(":checked");
+      updater(enhancedConfig.secondGenerate);
       saveSettings();
-    });
-    $2("#gal-enhanced-profile-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.profileName = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2("#gal-enhanced-use-model").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.useModel = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-enhanced-model-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.modelName = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2("#gal-enhanced-use-preset").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.usePreset = $2(this).is(":checked");
-      saveSettings();
-    });
-    $2("#gal-enhanced-preset-name").on("change", function() {
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.presetName = String($2(this).val() || "").trim();
-      saveSettings();
-    });
-    $2('input[name="gal-enhanced-worldbook-mode"]').on("change", function() {
-      const mode = $2(this).val();
-      const enhancedConfig = ensureEnhancedModeSettings();
-      if (mode === "default") {
-        enhancedConfig.secondGenerate.useWorldbooks = false;
-        enhancedConfig.secondGenerate.worldbooks = [];
-        $2("#gal-enhanced-worldbooks-list").hide();
-        $2(".gal-enhanced-worldbook-item").prop("checked", false);
-      } else if (mode === "none") {
-        enhancedConfig.secondGenerate.useWorldbooks = true;
-        enhancedConfig.secondGenerate.worldbooks = [];
-        $2("#gal-enhanced-worldbooks-list").hide();
-        $2(".gal-enhanced-worldbook-item").prop("checked", false);
-      } else if (mode === "custom") {
-        enhancedConfig.secondGenerate.useWorldbooks = true;
-        $2("#gal-enhanced-worldbooks-list").show();
+    };
+    const getSelectedEnhancedProfileId = () => String($2("#gal-enhanced-llm-profile").val() || "").trim();
+    const renderEnhancedModelOptions = () => {
+      const profileId = getSelectedEnhancedProfileId();
+      const savedModel = ensureEnhancedModeSettings().secondGenerate.model;
+      $2("#gal-enhanced-llm-model").html(buildEnhancedModelOptionsHtml(profileId, savedModel));
+      $2("#gal-enhanced-llm-model-custom-row").hide();
+    };
+    const setEnhancedModelStatus = (text, isError = false) => {
+      $2("#gal-enhanced-llm-model-status").text(text || "").css("color", isError ? "var(--gal-danger, #e5484d)" : "").toggle(!!text);
+    };
+    const fetchEnhancedModels = async ({ silent = false } = {}) => {
+      const profileId = getSelectedEnhancedProfileId();
+      if (!profileId) {
+        setEnhancedModelStatus("");
+        if (!silent) showToast2("请先选择连接配置");
+        return;
       }
-      saveSettings();
-    });
-    $2(document).on("change", ".gal-enhanced-worldbook-item", function() {
-      const selected = [];
-      $2(".gal-enhanced-worldbook-item:checked").each(function() {
-        selected.push($2(this).val());
+      const $btn = $2("#gal-enhanced-llm-fetch-models");
+      $btn.prop("disabled", true).find("i").attr("class", "fa-solid fa-spinner fa-spin");
+      setEnhancedModelStatus("正在获取模型列表…");
+      try {
+        const models = await fetchProfileModels(profileId);
+        enhancedModelListCache.set(profileId, models);
+        if (getSelectedEnhancedProfileId() !== profileId) return;
+        renderEnhancedModelOptions();
+        const resultText = models.length > 0 ? `已获取 ${models.length} 个模型` : "该 API 未返回任何模型，可选「手动输入模型名」";
+        setEnhancedModelStatus(resultText);
+        if (!silent) showToast2(resultText);
+      } catch (e2) {
+        const reason = e2?.message || String(e2);
+        if (getSelectedEnhancedProfileId() === profileId) {
+          setEnhancedModelStatus(`获取模型列表失败：${reason}；可选「手动输入模型名」`, true);
+        }
+        if (!silent) showToast2(`获取模型列表失败：${escapeHtml7(reason)}`);
+      } finally {
+        $btn.prop("disabled", false).find("i").attr("class", "fa-solid fa-list");
+      }
+    };
+    const ensureEnhancedModelsLoaded = () => {
+      const profileId = getSelectedEnhancedProfileId();
+      if (profileId && !enhancedModelListCache.has(profileId)) fetchEnhancedModels({ silent: true });
+    };
+    $2("#gal-enhanced-send-worldbook").on("change", function() {
+      const sendWorldbook = $2(this).is(":checked");
+      saveEnhancedSecondGenerate((config) => {
+        config.sendWorldbook = sendWorldbook;
       });
-      const enhancedConfig = ensureEnhancedModeSettings();
-      enhancedConfig.secondGenerate.worldbooks = Array.from(new Set(selected.map((name) => String(name || "").trim()).filter(Boolean)));
-      if (selected.length === 0) {
-        $2('input[name="gal-enhanced-worldbook-mode"][value="none"]').prop("checked", true);
-        $2("#gal-enhanced-worldbooks-list").hide();
+    });
+    $2('input[name="gal-enhanced-llm-source"]').on("change", function() {
+      const llmSource = $2(this).val() === "profile" ? "profile" : "current";
+      saveEnhancedSecondGenerate((config) => {
+        config.llmSource = llmSource;
+      });
+      $2("#gal-enhanced-llm-profile-config").toggle(llmSource === "profile");
+      if (llmSource === "profile") ensureEnhancedModelsLoaded();
+    });
+    $2("#gal-enhanced-llm-profile").on("change", function() {
+      const profileId = getSelectedEnhancedProfileId();
+      const profile = profileId ? resolveConnectionProfile({ profileId }) : null;
+      saveEnhancedSecondGenerate((config) => {
+        config.profileId = profileId;
+        config.profileName = profile?.name || "";
+        config.model = "";
+      });
+      renderEnhancedModelOptions();
+      setEnhancedModelStatus("");
+      ensureEnhancedModelsLoaded();
+    });
+    $2("#gal-enhanced-llm-refresh-profiles").on("click", function() {
+      const profiles = listConnectionProfiles();
+      $2("#gal-enhanced-llm-profile").html(buildEnhancedProfileOptionsHtml(profiles, ensureEnhancedModeSettings().secondGenerate));
+      $2("#gal-enhanced-llm-no-profile").toggle(profiles.length === 0);
+      renderEnhancedModelOptions();
+      showToast2(`已刷新，共 ${profiles.length} 个连接配置`);
+    });
+    $2("#gal-enhanced-llm-fetch-models").on("click", () => fetchEnhancedModels());
+    if (ensureEnhancedModeSettings().secondGenerate.llmSource === "profile") ensureEnhancedModelsLoaded();
+    $2("#gal-enhanced-llm-model").on("change", function() {
+      const value = String($2(this).val() || "");
+      if (value === ENHANCED_CUSTOM_MODEL_VALUE) {
+        $2("#gal-enhanced-llm-model-custom-row").show();
+        $2("#gal-enhanced-llm-model-custom").val(ensureEnhancedModeSettings().secondGenerate.model).trigger("focus");
+        return;
       }
-      saveSettings();
+      $2("#gal-enhanced-llm-model-custom-row").hide();
+      saveEnhancedSecondGenerate((config) => {
+        config.model = value.trim();
+      });
+    });
+    $2("#gal-enhanced-llm-model-custom").on("change", function() {
+      const model = String($2(this).val() || "").trim();
+      saveEnhancedSecondGenerate((config) => {
+        config.model = model;
+      });
+      renderEnhancedModelOptions();
+      if (model) showToast2(`已设置模型：${escapeHtml7(model)}`);
+    }).on("keydown", function(e2) {
+      if (e2.key === "Enter") $2(this).trigger("change");
+    });
+    $2("#gal-enhanced-llm-max-tokens").on("change", function() {
+      const maxTokens = Math.max(0, Math.round(Number($2(this).val()) || 0));
+      $2(this).val(maxTokens);
+      saveEnhancedSecondGenerate((config) => {
+        config.maxTokens = maxTokens;
+      });
+    });
+    $2("#gal-enhanced-llm-test").on("click", async function() {
+      const secondGenerate = ensureEnhancedModeSettings().secondGenerate;
+      if (!secondGenerate.profileId && !secondGenerate.profileName) {
+        showToast2("请先选择连接配置");
+        return;
+      }
+      const $btn = $2(this);
+      $btn.prop("disabled", true).find("i").attr("class", "fa-solid fa-spinner fa-spin");
+      try {
+        const reply = await requestWithConnectionProfile({
+          profileId: secondGenerate.profileId,
+          profileName: secondGenerate.profileName,
+          model: secondGenerate.model,
+          maxTokens: secondGenerate.maxTokens,
+          messages: [{ role: "user", content: "Reply with exactly one word: OK" }]
+        });
+        const preview = String(reply || "").trim().slice(0, 60);
+        showToast2(preview ? `连接成功，模型回复：${escapeHtml7(preview)}` : "请求成功，但模型返回了空内容");
+      } catch (e2) {
+        showToast2(`连接失败：${escapeHtml7(e2?.message || String(e2))}`);
+      } finally {
+        $btn.prop("disabled", false).find("i").attr("class", "fa-solid fa-plug");
+      }
     });
     $2("#gal-enhanced-view-prompts").on("click", function() {
       const prompts = enhancedModeState3.lastPrompts;
@@ -87350,14 +90217,15 @@ ${normalizedSource}`;
         return;
       }
       const esc = (str) => (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-      const html = `<div id="gal-prompts-modal" class="gal-z-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+      const html = `<div id="gal-prompts-modal" class="gal-z-critical" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
       <div style="background:var(--gal-panel-bg,#fff);border-radius:12px;max-width:800px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
         <div style="padding:16px 20px;border-bottom:2px solid var(--gal-accent,#00d2ff);display:flex;justify-content:space-between;align-items:center;background:var(--gal-dark,#2b2e38);color:#fff;border-radius:12px 12px 0 0;">
           <div style="font-weight:700;font-size:1.1rem;"><i class="fa-solid fa-eye" style="color:var(--gal-accent,#00d2ff);"></i> 加强模式提示词</div>
           <button id="gal-prompts-modal-close" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:1rem;"><i class="fa-solid fa-times"></i></button>
         </div>
         <div style="padding:20px;overflow-y:auto;flex:1;">
-          <div style="margin-bottom:8px;color:var(--gal-text-3,#888);font-size:0.85rem;"><i class="fa-solid fa-clock"></i> ${prompts.timestamp}</div>
+          <div style="margin-bottom:8px;color:var(--gal-text-3,#888);font-size:0.85rem;"><i class="fa-solid fa-clock"></i> ${prompts.timestamp}${prompts.llmLabel ? ` · <i class="fa-solid fa-microchip"></i> ${esc(prompts.llmLabel)}` : ""} · <i class="fa-solid fa-book"></i> 世界书${prompts.sendWorldbook ? prompts.worldbookPrompt ? "已附带" : "已发送（由酒馆按预设注入）" : "未发送"}</div>
+          ${prompts.worldbookPrompt ? `<div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:var(--gal-accent-strong,#00a8cc);">World Info</div><pre style="background:var(--gal-panel-bg-sub,#f6f8fa);border:1px solid var(--gal-border,#e3e7eb);border-left:3px solid var(--gal-accent,#00d2ff);border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto;margin:0;color:var(--gal-text,#333);">${esc(prompts.worldbookPrompt)}</pre></div>` : ""}
           <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:var(--gal-accent-strong,#00a8cc);">System Prompt</div><pre style="background:var(--gal-panel-bg-sub,#f6f8fa);border:1px solid var(--gal-border,#e3e7eb);border-left:3px solid var(--gal-accent,#00d2ff);border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto;margin:0;color:var(--gal-text,#333);">${esc(prompts.systemPrompt)}</pre></div>
           <div style="margin-bottom:20px;"><div style="font-weight:600;margin-bottom:8px;color:var(--gal-accent-strong,#00a8cc);">First Result</div><pre style="background:var(--gal-panel-bg-sub,#f6f8fa);border:1px solid var(--gal-border,#e3e7eb);border-left:3px solid var(--gal-accent,#00d2ff);border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:var(--gal-text,#333);">${esc(prompts.firstResult)}</pre></div>
           <div><div style="font-weight:600;margin-bottom:8px;color:var(--gal-accent-strong,#00a8cc);">User Prompt</div><pre style="background:var(--gal-panel-bg-sub,#f6f8fa);border:1px solid var(--gal-border,#e3e7eb);border-left:3px solid var(--gal-accent,#00d2ff);border-radius:6px;padding:12px;font-size:0.85rem;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow-y:auto;margin:0;color:var(--gal-text,#333);">${esc(prompts.userPrompt)}</pre></div>
@@ -87376,7 +90244,10 @@ ${normalizedSource}`;
         if (e2.target === $m[0]) $m.remove();
       });
       $m.find("#gal-prompts-modal-copy").on("click", () => {
-        navigator.clipboard.writeText(`=== 加强模式提示词 (${prompts.timestamp}) ===
+        navigator.clipboard.writeText(`=== 加强模式提示词 (${prompts.timestamp}${prompts.llmLabel ? ` · ${prompts.llmLabel}` : ""}) ===${prompts.worldbookPrompt ? `
+
+【World Info】
+${prompts.worldbookPrompt}` : ""}
 
 【System Prompt】
 ${prompts.systemPrompt}
@@ -88067,7 +90938,7 @@ ${prompts.userPrompt}`).then(() => showToast2("已复制到剪贴板")).catch(()
   };
   var MAX_ELEMENTS = 24;
   var MAX_ANCHORS = 10;
-  function clamp4(value, min4, max5) {
+  function clamp5(value, min4, max5) {
     return Math.min(max5, Math.max(min4, value));
   }
   function toNum(value, fallback = NaN) {
@@ -88105,7 +90976,7 @@ ${prompts.userPrompt}`).then(() => showToast2("已复制到剪贴板")).catch(()
         const x3 = toNum(p3[0]);
         const y3 = toNum(p3[1]);
         if (!Number.isFinite(x3) || !Number.isFinite(y3)) return null;
-        return [clamp4(Math.round(x3), 0, CANVAS_W), clamp4(Math.round(y3), 0, CANVAS_H)];
+        return [clamp5(Math.round(x3), 0, CANVAS_W), clamp5(Math.round(y3), 0, CANVAS_H)];
       }).filter(Boolean);
       if (cleaned.length < 2) return null;
       el.points = cleaned.slice(0, 40);
@@ -88113,10 +90984,10 @@ ${prompts.userPrompt}`).then(() => showToast2("已复制到剪贴板")).catch(()
       const x3 = toNum(raw.x);
       const y3 = toNum(raw.y);
       if (!Number.isFinite(x3) || !Number.isFinite(y3)) return null;
-      el.x = clamp4(Math.round(x3), 0, CANVAS_W);
-      el.y = clamp4(Math.round(y3), 0, CANVAS_H);
-      el.w = clamp4(Math.round(toNum(raw.w, 60)), 10, CANVAS_W);
-      el.h = clamp4(Math.round(toNum(raw.h, el.w)), 10, CANVAS_H);
+      el.x = clamp5(Math.round(x3), 0, CANVAS_W);
+      el.y = clamp5(Math.round(y3), 0, CANVAS_H);
+      el.w = clamp5(Math.round(toNum(raw.w, 60)), 10, CANVAS_W);
+      el.h = clamp5(Math.round(toNum(raw.h, el.w)), 10, CANVAS_H);
     }
     return el;
   }
@@ -88363,9 +91234,9 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
   async function ensureSheetsRegistered() {
     const api2 = getApi();
     if (!hasDbWriteSupport(api2)) return false;
-    const current = api2.exportTableAsJson();
-    const hasMap = !!findMapSheet(current);
-    const hasWorkbench = !!findWorkbenchSheet(current);
+    const current2 = api2.exportTableAsJson();
+    const hasMap = !!findMapSheet(current2);
+    const hasWorkbench = !!findWorkbenchSheet(current2);
     if (hasMap && hasWorkbench) return true;
     let template = null;
     try {
@@ -88380,7 +91251,7 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
     }
     if (!template || !Object.keys(template).some((k2) => k2.startsWith("sheet_"))) {
       template = { mate: { type: "chatSheets", version: 1 } };
-      Object.entries(current || {}).forEach(([key, sheet]) => {
+      Object.entries(current2 || {}).forEach(([key, sheet]) => {
         if (!key.startsWith("sheet_") || !sheet || typeof sheet !== "object") return;
         const clone3 = JSON.parse(JSON.stringify(sheet));
         clone3.content = Array.isArray(clone3.content) && clone3.content.length ? [clone3.content[0]] : [[]];
@@ -88453,8 +91324,8 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
     const api2 = getApi();
     if (!hasDbWriteSupport(api2)) return false;
     await ensureSheetsRegistered();
-    const current = api2.exportTableAsJson() || {};
-    const data4 = JSON.parse(JSON.stringify(current));
+    const current2 = api2.exportTableAsJson() || {};
+    const data4 = JSON.parse(JSON.stringify(current2));
     if (!data4.mate || typeof data4.mate !== "object") {
       data4.mate = { type: "chatSheets", version: 1 };
     }
@@ -88477,13 +91348,13 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
   async function removeLayoutFromDb(locationName) {
     const api2 = getApi();
     if (!hasDbWriteSupport(api2)) return false;
-    const current = api2.exportTableAsJson() || {};
-    const sheet = findMapSheet(current);
+    const current2 = api2.exportTableAsJson() || {};
+    const sheet = findMapSheet(current2);
     if (!sheet || !Array.isArray(sheet.content)) return false;
     const target = toText3(locationName);
     const filtered = sheet.content.filter((row, i2) => i2 === 0 || !Array.isArray(row) || toText3(row[COL_LOCATION]) !== target);
     if (filtered.length === sheet.content.length) return false;
-    const data4 = JSON.parse(JSON.stringify(current));
+    const data4 = JSON.parse(JSON.stringify(current2));
     findMapSheet(data4).content = JSON.parse(JSON.stringify(filtered));
     if (!data4.mate || typeof data4.mate !== "object") {
       data4.mate = { type: "chatSheets", version: 1 };
@@ -88508,8 +91379,8 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
     const api2 = getApi();
     if (!hasDbWriteSupport(api2)) return [];
     await ensureSheetsRegistered();
-    const current = api2.exportTableAsJson() || {};
-    const workbenchNow = findWorkbenchSheet(current);
+    const current2 = api2.exportTableAsJson() || {};
+    const workbenchNow = findWorkbenchSheet(current2);
     if (!workbenchNow || !Array.isArray(workbenchNow.content) || workbenchNow.content.length < 2) return [];
     const pendingIndexes = [];
     for (let i2 = 1; i2 < workbenchNow.content.length; i2++) {
@@ -88519,7 +91390,7 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
       if (raw.startsWith("{") && raw.length > 40) pendingIndexes.push(i2);
     }
     if (!pendingIndexes.length) return [];
-    const data4 = JSON.parse(JSON.stringify(current));
+    const data4 = JSON.parse(JSON.stringify(current2));
     if (!data4.mate || typeof data4.mate !== "object") {
       data4.mate = { type: "chatSheets", version: 1 };
     }
@@ -91335,11 +94206,11 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
   var GLOBAL_EVENT_DELEGATION_BOUND_FLAG = "__galgame_event_delegation_bound__";
   var _showSettingsPanelRef2 = null;
   var _showSpriteUploadDialogRef2 = null;
-  var _updateGlobalOverlayContentRef5 = null;
+  var _updateGlobalOverlayContentRef4 = null;
   function setEventsRefs({ showSettingsPanel: showSettingsPanel2, showSpriteUploadDialog: showSpriteUploadDialog2, updateGlobalOverlayContent: updateGlobalOverlayContent2 }) {
     if (showSettingsPanel2) _showSettingsPanelRef2 = showSettingsPanel2;
     if (showSpriteUploadDialog2) _showSpriteUploadDialogRef2 = showSpriteUploadDialog2;
-    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef5 = updateGlobalOverlayContent2;
+    if (updateGlobalOverlayContent2) _updateGlobalOverlayContentRef4 = updateGlobalOverlayContent2;
   }
   function setupGlobalEventListeners() {
     if (topWindow[GLOBAL_EVENT_DELEGATION_BOUND_FLAG]) {
@@ -91377,19 +94248,19 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
       }
       const $overlay = $2("#gal-global-overlay");
       const mesId = $overlay.find(".gal-game-container").attr("data-mes-id");
-      const state = messageSegmentState7.get(String(mesId));
-      if (!state) return;
-      const nextSegment = state.segments[state.currentIndex + 1];
+      const state2 = messageSegmentState7.get(String(mesId));
+      if (!state2) return;
+      const nextSegment = state2.segments[state2.currentIndex + 1];
       if (nextSegment) {
         const nextSpeakText = String(nextSegment.ttsText ?? nextSegment.text ?? "").trim();
         const nextWillSpeak = nextSegment.type === "dialogue" && settings.ttsEnabled && nextSpeakText.length > 0;
         if (nextWillSpeak) {
           TTSManager.stop();
         }
-        state.currentIndex++;
-        await scheduleOverlaySegmentDisplay(state, "next-click");
+        state2.currentIndex++;
+        await scheduleOverlaySegmentDisplay(state2, "next-click");
         if (nextWillSpeak) {
-          const segmentId = `${mesId}_${state.currentIndex}`;
+          const segmentId = `${mesId}_${state2.currentIndex}`;
           TTSManager.speak(nextSegment, segmentId);
         }
         return;
@@ -91542,12 +94413,12 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
         console.warn(`[${SCRIPT_NAME}] 点击进入时未解析到可显示段落，使用纯文本兜底显示`);
         parsed = buildFallbackParsed3();
       }
-      if (!_updateGlobalOverlayContentRef5) {
+      if (!_updateGlobalOverlayContentRef4) {
         console.warn(`[${SCRIPT_NAME}] updateGlobalOverlayContent 引用未注入，无法显示主界面`);
         showToast2("主界面初始化失败，请刷新页面后重试");
         return;
       }
-      await _updateGlobalOverlayContentRef5(mesId, parsed);
+      await _updateGlobalOverlayContentRef4(mesId, parsed);
       showGlobalOverlay();
       if (getSettings().hideOtherFloors) setTimeout(hideNonLastFloors, 80);
       resetTitleScreenSession();
@@ -91807,11 +94678,11 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
         $btn.html('<i class="fa-solid fa-pause"></i> STOP');
         $btn.addClass("gal-auto-playing");
         TTSManager.stop();
-        const state = messageSegmentState7.get(String(mesId));
-        if (state && settings.ttsEnabled) {
-          const currentSegment = state.segments[state.currentIndex];
+        const state2 = messageSegmentState7.get(String(mesId));
+        if (state2 && settings.ttsEnabled) {
+          const currentSegment = state2.segments[state2.currentIndex];
           if (currentSegment && currentSegment.type === "dialogue") {
-            const segmentId = `${mesId}_${state.currentIndex}`;
+            const segmentId = `${mesId}_${state2.currentIndex}`;
             TTSManager.speak(currentSegment, segmentId);
           }
         }
@@ -91821,21 +94692,21 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
           autoTickInFlight = true;
           try {
             if (isTypewriterActive()) return;
-            const state2 = messageSegmentState7.get(String(mesId));
-            if (!state2) {
+            const state3 = messageSegmentState7.get(String(mesId));
+            if (!state3) {
               clearInterval(timer);
               $btn.data("auto-timer", null);
               return;
             }
-            const hasNext = !!state2.segments[state2.currentIndex + 1];
+            const hasNext = !!state3.segments[state3.currentIndex + 1];
             if (hasNext) {
               TTSManager.stop();
-              state2.currentIndex++;
-              await scheduleOverlaySegmentDisplay(state2, "auto-play");
+              state3.currentIndex++;
+              await scheduleOverlaySegmentDisplay(state3, "auto-play");
               if (settings.ttsEnabled) {
-                const currentSegment = state2.segments[state2.currentIndex];
+                const currentSegment = state3.segments[state3.currentIndex];
                 if (currentSegment && currentSegment.type === "dialogue") {
-                  const segmentId = `${mesId}_${state2.currentIndex}`;
+                  const segmentId = `${mesId}_${state3.currentIndex}`;
                   TTSManager.speak(currentSegment, segmentId);
                 }
               }
@@ -91940,18 +94811,18 @@ SQL示例: INSERT INTO gal_map_workbench (row_id, location, layout_json) VALUES 
   function splitSelectorList(selectorText) {
     const selectors = [];
     let depth = 0;
-    let current = "";
+    let current2 = "";
     for (const char of String(selectorText || "")) {
       if (char === "(" || char === "[") depth += 1;
       else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
       if (char === "," && depth === 0) {
-        selectors.push(current.trim());
-        current = "";
+        selectors.push(current2.trim());
+        current2 = "";
       } else {
-        current += char;
+        current2 += char;
       }
     }
-    if (current.trim()) selectors.push(current.trim());
+    if (current2.trim()) selectors.push(current2.trim());
     return selectors.filter(Boolean);
   }
   function scopeSelector(selector) {
@@ -92073,6 +94944,7 @@ ${inner}
     { selector: ".gal-interaction-bar .gal-action-btn", desc: "重绘/自由对话按钮（.btn-reroll / .btn-free）" },
     { selector: ".gal-text-panel", desc: "对话文本面板" },
     { selector: ".gal-dialog-text", desc: "对话正文文字" },
+    { selector: ".gal-dialog-text .gal-tw-end", desc: "正文末尾的「可继续」指示（默认为主强调色闪烁下箭头，可用 --gal-tw-end-color 换色、改形状或 display:none）" },
     { selector: ".gal-bottom-toolbar", desc: "底部功能栏" },
     { selector: ".gal-footer-btn", desc: "底栏功能按钮（data-action=log/close-mode/view-original/config/save/load/timeline）" },
     { selector: ".gal-footer-btn.gal-nav-btn", desc: "导航按钮（data-action=prev/auto/skip）" },
@@ -92574,7 +95446,9 @@ ${String(rawCss || "")}
 - 基线中底栏按钮、NEXT 按钮、剧情选项按钮等大量规则带 !important；要覆盖这些属性，你的规则也必须加 !important。
 - 基线对按钮、姓名牌、选项卡片使用了 skewX 斜切变形（元素本体与内部 span/i 反向补偿）；如需去除，须对本体及内部 span/i 同时写 \`transform: none !important\`。
 - NEXT 按钮（.gal-footer-btn-next）带 clip-path 斜角裁切，可用 \`clip-path: none !important\` 去除。
-- 可用 CSS 变量：--ui-scale（整体缩放，尺寸建议写 calc(Xrem * var(--ui-scale))）、--font-scale（字号）、--panel-opacity（面板透明度，玩家可调）、--gp-*（默认皮肤颜色 token 组，整组覆写可快速全局换色）。
+- 可用 CSS 变量：--ui-scale（整体缩放，尺寸建议写 calc(Xrem * var(--ui-scale))）、--font-scale（字号）、--panel-opacity（面板透明度，玩家可调）、--gp-*（默认皮肤颜色 token 组，整组覆写可快速全局换色）、--gal-speaker-color（当前说话角色的强调色，按角色名自动派生，旁白时未设置；基线用于姓名牌下划线、面板书签角与文末指示）。
+- 跨皮肤语义 token（推荐优先覆写这一组，黑场幕布、NEW CG 横幅、文末指示等通用演出组件只读它们）：--gal-color-accent（主强调）、--gal-color-accent-2（次强调 / 标签）、--gal-color-surface（面板底色）、--gal-color-on-surface / --gal-color-on-surface-dim（面板文字 / 次要文字）、--gal-color-line（描边）、--gal-color-on-accent（强调色上的文字）、--gal-color-shadow、--gal-color-stage（幕布等深色舞台底）、--gal-font-display / --gal-font-body / --gal-font-latin（标题 / 正文 / 英文标签字体）、--gal-radius；文末指示颜色可单独用 --gal-tw-end-color 指定。
+- 控件动效（逐字点亮、推进流光、名牌换人、按钮涟漪 / 火花、选项翻入等，所有皮肤通用，玩家可在设置中关闭）颜色默认取 --gal-color-accent / --gal-color-accent-2，也可单独覆写 --gal-fx-accent、--gal-fx-glow、--gal-fx-soft、--gal-fx-ripple、--gal-fx-spark、--gal-fx-sheen。动效会在面板、底栏、选项卡内插入 .gal-fx-* 元素（<i> / <span>，仅装饰），皮肤不必为它们写样式；若给按钮、面板写了自己的 animation，以皮肤为准。
 - 允许使用 @media（窄屏适配）与 @keyframes（导入时会自动重命名防撞名）。
 - 无背景图时舞台显示 .gal-layer-bg::before 的默认纹理；有背景图时该纹理隐藏（模板控制条的"切换 · 演示背景"可预览两种状态）。
 
@@ -92969,23 +95843,23 @@ ${String(rawCss || "")}
     };
     const applyRowSelectValues = ($mappingContainer) => {
       $mappingContainer.find(".gal-expr-mapping-select").each(function() {
-        const current = normalizeTextValue(_$(this).data("current"));
-        if (current) {
-          _$(this).val(current);
+        const current2 = normalizeTextValue(_$(this).data("current"));
+        if (current2) {
+          _$(this).val(current2);
         } else {
           _$(this).val("");
         }
       });
       $mappingContainer.find(".gal-motion-mapping-select").each(function() {
-        const current = normalizeTextValue(_$(this).data("current"));
+        const current2 = normalizeTextValue(_$(this).data("current"));
         const disabled = _$(this).data("disabled") === true || _$(this).data("disabled") === "true";
         const hasGroup = _$(this).data("hasGroup") === true || _$(this).data("hasGroup") === "true";
         if (disabled) {
           _$(this).val("__disabled__");
-        } else if (hasGroup && current === "") {
+        } else if (hasGroup && current2 === "") {
           _$(this).val(EMPTY_MOTION_GROUP_VALUE);
-        } else if (current) {
-          _$(this).val(current);
+        } else if (current2) {
+          _$(this).val(current2);
         } else {
           _$(this).val("");
         }
@@ -93415,7 +96289,7 @@ ${String(rawCss || "")}
     const setPreviewTag = (tag) => {
       $modal.find("#gal-live2d-preview-tag").text(tag ? String(tag) : "-");
     };
-    const clamp5 = (value, min4, max5) => Math.max(min4, Math.min(max5, value));
+    const clamp6 = (value, min4, max5) => Math.max(min4, Math.min(max5, value));
     const getPreviewDragPoint = (event3) => {
       const oe = event3?.originalEvent || event3;
       if (oe?.touches?.length) return { x: oe.touches[0].clientX, y: oe.touches[0].clientY };
@@ -93442,9 +96316,9 @@ ${String(rawCss || "")}
       const canvasHeight = Math.max(1, Number($previewCanvas.innerHeight()) || Number($previewCanvas.height()) || 260);
       const maxOffsetX = Math.max(60, canvasWidth * 0.45);
       const maxOffsetY = Math.max(60, canvasHeight * 0.45);
-      previewPanOffsetX = clamp5(previewPanOffsetX, -maxOffsetX, maxOffsetX);
-      previewPanOffsetY = clamp5(previewPanOffsetY, -maxOffsetY, maxOffsetY);
-      previewZoomFactor = clamp5(previewZoomFactor, 0.5, 4);
+      previewPanOffsetX = clamp6(previewPanOffsetX, -maxOffsetX, maxOffsetX);
+      previewPanOffsetY = clamp6(previewPanOffsetY, -maxOffsetY, maxOffsetY);
+      previewZoomFactor = clamp6(previewZoomFactor, 0.5, 4);
       const finalScale = previewBasePose.scale * previewZoomFactor;
       if (model.scale?.set) {
         model.scale.set(finalScale);
@@ -93497,7 +96371,7 @@ ${String(rawCss || "")}
         const oe = event3?.originalEvent;
         if (!oe) return;
         const delta = oe.deltaY < 0 ? 0.08 : -0.08;
-        previewZoomFactor = clamp5(previewZoomFactor + delta, 0.5, 4);
+        previewZoomFactor = clamp6(previewZoomFactor + delta, 0.5, 4);
         applyPreviewViewport();
         if (typeof event3.preventDefault === "function") event3.preventDefault();
       });
@@ -97160,7 +100034,7 @@ ${String(rawCss || "")}
     const $libPath = $dialog.find("#gal-live2d-lib-path");
     const $libList = $dialog.find("#gal-live2d-lib-list");
     const $libFilter = $dialog.find("#gal-live2d-lib-filter");
-    const state = {
+    const state2 = {
       currentPath: "",
       entries: [],
       visibleEntries: [],
@@ -97183,8 +100057,8 @@ ${String(rawCss || "")}
     };
     const renderLibraryEntries = () => {
       const keyword = String($libFilter.val() || "").trim().toLowerCase();
-      const list = keyword ? state.entries.filter((entry) => String(entry.name || "").toLowerCase().includes(keyword)) : state.entries.slice();
-      state.visibleEntries = list;
+      const list = keyword ? state2.entries.filter((entry) => String(entry.name || "").toLowerCase().includes(keyword)) : state2.entries.slice();
+      state2.visibleEntries = list;
       if (!list.length) {
         $libList.html(`
         <div style="padding: 14px; color: #64748b; text-align: center;">
@@ -97195,7 +100069,7 @@ ${String(rawCss || "")}
       }
       const html = list.map((entry, index) => {
         const isDir = entry.type === "dir";
-        const selected = !isDir && state.selectedEntryPath === entry.path;
+        const selected = !isDir && state2.selectedEntryPath === entry.path;
         const icon = isDir ? "fa-folder" : "fa-file-code";
         const color = isDir ? "#2563eb" : "#1f2937";
         const bg = selected ? "#eff6ff" : "#fff";
@@ -97216,11 +100090,11 @@ ${String(rawCss || "")}
     };
     const loadDirectory = async (path, forceRefresh = false) => {
       const normalizedPath = String(path || "").trim().replace(/^\/+|\/+$/g, "");
-      const reqId = ++state.requestSeq;
-      state.currentPath = normalizedPath;
-      state.entries = [];
-      state.visibleEntries = [];
-      state.selectedEntryPath = "";
+      const reqId = ++state2.requestSeq;
+      state2.currentPath = normalizedPath;
+      state2.entries = [];
+      state2.visibleEntries = [];
+      state2.selectedEntryPath = "";
       $libPath.text(`/${normalizedPath}`);
       $libList.html(`
       <div style="padding: 16px; color: #64748b; text-align: center;">
@@ -97232,12 +100106,12 @@ ${String(rawCss || "")}
       }
       try {
         const entries = await fetchLive2DDirectory(normalizedPath);
-        if (!$dialog.closest("body").length || reqId !== state.requestSeq) return;
-        state.entries = entries;
+        if (!$dialog.closest("body").length || reqId !== state2.requestSeq) return;
+        state2.entries = entries;
         renderLibraryEntries();
         setStatus2(`目录 /${normalizedPath || ""} 已加载，共 ${entries.length} 项`);
       } catch (error3) {
-        if (!$dialog.closest("body").length || reqId !== state.requestSeq) return;
+        if (!$dialog.closest("body").length || reqId !== state2.requestSeq) return;
         const msg = error3 instanceof RateLimitError ? error3.message : `目录加载失败: ${error3?.message || error3}`;
         setStatus2(msg, true);
         $libList.html(`
@@ -97301,25 +100175,25 @@ ${String(rawCss || "")}
       }
     });
     $dialog.find("#gal-live2d-lib-up").on("click", () => {
-      const parent4 = getParentPath(state.currentPath);
-      if (parent4 === state.currentPath) return;
+      const parent4 = getParentPath(state2.currentPath);
+      if (parent4 === state2.currentPath) return;
       loadDirectory(parent4);
     });
     $dialog.find("#gal-live2d-lib-refresh").on("click", () => {
-      loadDirectory(state.currentPath, true);
+      loadDirectory(state2.currentPath, true);
     });
     $libFilter.on("input", () => {
       renderLibraryEntries();
     });
     $libList.on("click", ".gal-live2d-lib-entry", function() {
       const idx = Number.parseInt($2(this).attr("data-entry-index") || "-1", 10);
-      const entry = state.visibleEntries[idx];
+      const entry = state2.visibleEntries[idx];
       if (!entry) return;
       if (entry.type === "dir") {
         loadDirectory(entry.path);
         return;
       }
-      state.selectedEntryPath = entry.path;
+      state2.selectedEntryPath = entry.path;
       renderLibraryEntries();
       const selectedUrl = buildLibraryModelUrl(entry, $useCdn.prop("checked"));
       if (selectedUrl) {
@@ -97330,8 +100204,8 @@ ${String(rawCss || "")}
       }
     });
     $useCdn.on("change", () => {
-      if (!state.selectedEntryPath) return;
-      const selectedEntry = state.entries.find((entry) => entry.path === state.selectedEntryPath);
+      if (!state2.selectedEntryPath) return;
+      const selectedEntry = state2.entries.find((entry) => entry.path === state2.selectedEntryPath);
       if (!selectedEntry) return;
       const selectedUrl = buildLibraryModelUrl(selectedEntry, $useCdn.prop("checked"));
       if (selectedUrl) {
@@ -98861,8 +101735,8 @@ ${String(rawCss || "")}
     const getCharacter = topWindow?.TavernHelper?.getCharacter;
     if (typeof getCharacter === "function") {
       try {
-        const current = await getCharacter("current");
-        const config = extractGalgamePluginConfigFromCard(current);
+        const current2 = await getCharacter("current");
+        const config = extractGalgamePluginConfigFromCard(current2);
         if (config) return config;
       } catch (error3) {
         console.warn(`[${SCRIPT_NAME}] 读取 current 角色卡扩展失败`, error3);
@@ -100881,7 +103755,7 @@ ${baseUrl}`,
   var initStarted = false;
   function sanitizeLoadedSkinSetting(settings) {
     const rawSkin = String(settings?.skin || "none").trim();
-    const builtinSkinSet = /* @__PURE__ */ new Set(["none", DEFAULT_DARK_SKIN_ID, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, "skin-classic", ...ANCIENT_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...TWILIGHT_FAMILY_SKIN_IDS]);
+    const builtinSkinSet = /* @__PURE__ */ new Set(["none", DEFAULT_DARK_SKIN_ID, DEFAULT_SOFT_SKIN_ID, CYBERPOP_SKIN_ID, CYBERPOP_DARK_SKIN_ID, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, "skin-classic", ...ANCIENT_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...TWILIGHT_FAMILY_SKIN_IDS]);
     if (builtinSkinSet.has(rawSkin)) return false;
     if (hasHtmlSkinId(rawSkin)) return false;
     if (rawSkin === "skin-western" || rawSkin === CUSTOM_SKIN_ID || rawSkin) {
@@ -101239,8 +104113,19 @@ ${baseUrl}`,
     };
     console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager, effects}`);
   }
+  function installUnloadCleanup() {
+    $2(window).on("pagehide", () => {
+      try {
+        destroyPixiEffects();
+      } catch (error3) {
+        console.warn(`[${SCRIPT_NAME}] 卸载时销毁 Pixi 特效失败`, error3);
+      }
+      stopOverlayScrollPin();
+    });
+  }
   function startGalgamePlugin() {
     installGalgameGlobals();
+    installUnloadCleanup();
     if ($2 && topWindow.document.readyState === "complete") {
       init();
     } else {
@@ -101264,7 +104149,8 @@ ${baseUrl}`,
     getMessageSegmentState: () => GalgameStore.cache.segments,
     setBackgroundWithTransition,
     clearBackgroundLayers,
-    BGMManager
+    BGMManager,
+    resolveSpecialCgScene: resolveSpecialCgSceneAlias
   });
   setTTSManagerRefs({ showToast: showToast2 });
   setBGMManagerRefs({ showToast: showToast2 });
@@ -101282,7 +104168,7 @@ ${baseUrl}`,
   setMessageObserverRefs({ processNewMessage, injectGalgameButton });
   setEventsRefs({ showSettingsPanel, showSpriteUploadDialog, updateGlobalOverlayContent });
   setMenuButtonRefs({ showSettingsPanel });
-  setEnhancedModeRefs({ showToast: showToast2, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus, showGeneratingIndicator });
+  setEnhancedModeRefs({ showToast: showToast2, updateNextBtnForGeneratingState, showGeneratingIndicator, processNewMessage });
   setSettingsPanelRefs({ buildAssetsPane: buildAssetManagerContent, bindAssetsPane: bindAssetManagerContentEvents, assetStyles: buildAssetManagerStyles });
   setSpriteConfigRefs({ showBatchUploadDialog, showSpriteUploadDialog, showBackgroundUploadDialog });
   setAssetManagerRefs({

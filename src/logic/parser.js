@@ -20,7 +20,7 @@ const RE_CODE_CLOSE = /<\/code>/gi;
 const RE_TAG_WHITESPACE = />\s+</g;
 const RE_MAINTEXT_CLOSED = /<maintext>([\s\S]*?)<\/maintext>/i;
 const RE_MAINTEXT_UNCLOSED = /<maintext>([\s\S]*)$/i;
-const RE_BACKGROUND = /<background\s+scene="([^"]+)"\s*[\/]?>/i;
+const RE_BACKGROUND = /<background\b[^>]*?\bscene\s*=\s*"([^"]+)"[^>]*?\/?>/i;
 const RE_BGIMG = /<bgimg>(.*?)<\/bgimg>/i;
 const RE_WHIMG = /<whimg>(.*?)<\/whimg>/i;
 const RE_BNIMG = /<bnimg>([\s\S]*?)<\/bnimg>/i;
@@ -99,14 +99,103 @@ export function setParserRefs({ getFormattedContent }) {
 
 // 由 UI 层实测对话框得出的每页可容纳字符数（随字号/面板尺寸变化）
 let _measuredSegLength = null;
+// 实测版式：每行字数 / 可用行数 / 段间距折合行数。按字数分页会把多个短段落并进一页——
+// 每段至少独占一行、段间还有间距，字数没超行数却超了，正文溢出对话框
+let _measuredLayout = null;
 
+// value 可为字数，或 { chars, charsPerLine, maxLines, gapLines }
 export function setMeasuredSegLength(value) {
-  const n = Math.round(Number(value));
+  const layout = value && typeof value === 'object' ? value : null;
+  const n = Math.round(Number(layout ? layout.chars : value));
   _measuredSegLength = Number.isFinite(n) && n > 0 ? Math.max(60, Math.min(1200, n)) : null;
+  const cpl = Number(layout?.charsPerLine);
+  const lines = Number(layout?.maxLines);
+  _measuredLayout = _measuredSegLength && cpl > 0 && lines > 0
+    ? { charsPerLine: cpl, maxLines: lines, gapLines: Math.max(0, Number(layout.gapLines) || 0) }
+    : null;
 }
 
 export function getMeasuredSegLength() {
   return _measuredSegLength;
+}
+
+export function getMeasuredLayoutSignature() {
+  const l = _measuredLayout;
+  return l ? `${l.charsPerLine}x${l.maxLines}x${l.gapLines.toFixed(2)}` : '';
+}
+
+// 估算文本占用行数：每段至少一行；半角字符按 0.55 个全角宽计；段间距折算为行。
+// 每行容量打 0.94 折，给标点避头尾、混排换行留余量
+function estimateTextLines(text, layout) {
+  const cpl = layout.charsPerLine * 0.94;
+  const paras = String(text ?? '').split('\n');
+  let lines = 0;
+  for (const para of paras) {
+    let width = 0;
+    for (const ch of para) width += ch.codePointAt(0) < 0x2e80 ? 0.55 : 1;
+    lines += Math.max(1, Math.ceil(width / cpl));
+  }
+  return lines + Math.max(0, paras.length - 1) * layout.gapLines;
+}
+
+function fitsOnePage(text, maxChars, layout) {
+  if (String(text ?? '').length > maxChars) return false;
+  return !layout || estimateTextLines(text, layout) <= layout.maxLines;
+}
+
+// 单段按字数切分：优先在句读处断开（原有逻辑）
+function splitParagraphByChars(text, maxChars) {
+  const chunks = [];
+  let rest = text;
+  // 优先在句末断开（允许短一些的页），其次在分句标点处，都没有才按字数硬切，避免把一句话从中间劈开
+  const sentenceEnds = ['。', '！', '？', '…', '\n', '.', '!', '?'];
+  const clauseEnds = ['，', '、', '；', '：', '—', ',', ';', ':'];
+  const findBreak = (marks, minRatio) => {
+    for (let i = maxChars - 1; i >= Math.floor(maxChars * minRatio); i--) {
+      if (marks.includes(rest[i])) return i + 1;
+    }
+    return -1;
+  };
+  while (rest.length > maxChars) {
+    let splitIdx = findBreak(sentenceEnds, 0.35);
+    if (splitIdx === -1) splitIdx = findBreak(clauseEnds, 0.5);
+    if (splitIdx === -1) {
+      const spaceIdx = rest.lastIndexOf(' ', maxChars);
+      splitIdx = spaceIdx >= Math.floor(maxChars * 0.6) ? spaceIdx + 1 : maxChars;
+    }
+    chunks.push(rest.substring(0, splitIdx).trim());
+    rest = rest.substring(splitIdx).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+// 切成每页放得下的若干页：有实测版式时按段落累积（行数 + 字数双约束），单段过长再按字数切
+function splitTextToPages(text, maxChars, layout) {
+  if (fitsOnePage(text, maxChars, layout)) return [text];
+  if (!layout) return splitParagraphByChars(text, maxChars);
+  const pages = [];
+  let current = '';
+  for (const para of String(text).split('\n')) {
+    const candidate = current ? `${current}\n${para}` : para;
+    if (fitsOnePage(candidate, maxChars, layout)) {
+      current = candidate;
+      continue;
+    }
+    if (current) pages.push(current);
+    current = '';
+    if (fitsOnePage(para, maxChars, layout)) {
+      current = para;
+      continue;
+    }
+    // 单段超出一页：按行容量折算的字数切分，最后一块留作下一页的开头
+    const perPage = Math.max(20, Math.min(maxChars, Math.floor(layout.maxLines * layout.charsPerLine * 0.9)));
+    const chunks = splitParagraphByChars(para, perPage);
+    pages.push(...chunks.slice(0, -1));
+    current = chunks[chunks.length - 1] || '';
+  }
+  if (current) pages.push(current);
+  return pages.filter(page => page.trim());
 }
 
 // ============================================
@@ -214,6 +303,16 @@ function normalizeSpeakerName(name) {
     .trim();
 }
 
+// 未揭示姓名的角色：「显示名@角色名」—— 对话框显示 @ 前的名字，立绘 / Live2D / 配音使用 @ 后的角色
+function splitSpeakerAlias(name) {
+  const raw = String(name || '');
+  const atIndex = raw.search(/[@＠]/);
+  if (atIndex < 0) return { display: raw.trim(), target: '' };
+  const target = normalizeSpeakerName(raw.slice(atIndex + 1));
+  const display = normalizeSpeakerName(raw.slice(0, atIndex)) || (target ? '???' : '');
+  return { display, target };
+}
+
 // ============================================
 // 预处理简化格式
 // ============================================
@@ -244,8 +343,10 @@ function preprocessSimplifiedFormat(html) {
     const parts = exprVoicePart.split(',').map(s => s.trim());
     const expression = parts[0];
     const specifiedVoice = parts[1] || null;
+    // 音色按立绘角色绑定：临时指定立绘的未揭示角色沿用其真实角色的音色
+    const voiceKey = splitSpeakerAlias(speaker).target || speaker;
 
-    const boundVoice = getCharacterTTSVoice(speaker);
+    const boundVoice = getCharacterTTSVoice(voiceKey);
     let voice = null;
     if (boundVoice) {
       voice = boundVoice;
@@ -256,9 +357,9 @@ function preprocessSimplifiedFormat(html) {
     } else if (specifiedVoice) {
       // 旧格式向前兼容：具体音色名仍可直接使用。
       voice = specifiedVoice;
-      sessionVoiceCache.set(speaker, specifiedVoice);
-    } else if (sessionVoiceCache.has(speaker)) {
-      voice = sessionVoiceCache.get(speaker);
+      sessionVoiceCache.set(voiceKey, specifiedVoice);
+    } else if (sessionVoiceCache.has(voiceKey)) {
+      voice = sessionVoiceCache.get(voiceKey);
     }
 
     // 性别标签独立透传：绑定音色后 speaker 会被具体音色名覆盖，
@@ -267,9 +368,9 @@ function preprocessSimplifiedFormat(html) {
     let voiceGenderTag = null;
     if (specifiedVoice === '男声' || specifiedVoice === '女声') {
       voiceGenderTag = specifiedVoice;
-      genderCache.set(speaker, specifiedVoice);
-    } else if (genderCache.has(speaker)) {
-      voiceGenderTag = genderCache.get(speaker);
+      genderCache.set(voiceKey, specifiedVoice);
+    } else if (genderCache.has(voiceKey)) {
+      voiceGenderTag = genderCache.get(voiceKey);
     }
 
     const ttsParts = [];
@@ -309,7 +410,7 @@ export function parseGalgameContent(html, messageId) {
   if (isEnabled && settings.enhancedMode?.enabled && messageId) {
     const formatData = _getFormattedContentRef ? _getFormattedContentRef(messageId) : null;
     if (formatData) {
-      console.log(`[${SCRIPT_NAME}] 使用格式化版本 (swipe ${formatData.formattedIndex})`);
+      console.log(`[${SCRIPT_NAME}] 使用格式化版本 (${formatData.source === 'extra' ? '加强模式记录' : `swipe ${formatData.formattedIndex}`})`);
       html = formatData.formatted;
       html = html.replace(RE_THINK_CLOSED, '');
       html = html.replace(RE_THINK_UNCLOSED, '');
@@ -331,6 +432,9 @@ export function parseGalgameContent(html, messageId) {
     segLengthOverride > 0
       ? Math.max(40, Math.min(2000, segLengthOverride))
       : (_measuredSegLength ?? Math.max(40, Math.min(360, Math.round(BASE_SEG_LENGTH / getDialogFontScale(settings)))));
+  // 手动指定每页字数时不叠加行数约束，尊重用户设置
+  const pageLayout = segLengthOverride > 0 ? null : _measuredLayout;
+  const segLayout = pageLayout ? getMeasuredLayoutSignature() : '';
   const cacheSource = [
     html,
     popup1Html,
@@ -338,6 +442,7 @@ export function parseGalgameContent(html, messageId) {
     simpleStorybookMode ? 'simple-storybook' : 'standard-galgame',
     settings.ttsBilingualZhJaEnabled === true ? 'tts-bilingual-zh-ja' : 'tts-default',
     `seg-len-${MAX_SEG_LENGTH}`,
+    `seg-layout-${segLayout}`,
   ].join('\n---gal-cache-boundary---\n');
   const cacheKey = `${cacheSource.length}_${hashCacheSource(cacheSource)}`;
   if (parseCache.has(cacheKey)) {
@@ -356,8 +461,9 @@ export function parseGalgameContent(html, messageId) {
     bgm: null,
     options: [],
     backgroundChanges: [],
-    // 本次分页使用的每页字符数，渲染后与实测容量比对以决定是否需要重排
+    // 本次分页使用的每页字符数 / 版式签名，渲染后与实测容量比对以决定是否需要重排
     segLength: MAX_SEG_LENGTH,
+    segLayout,
   };
 
   // 移除 highlight.js 标签
@@ -390,17 +496,23 @@ export function parseGalgameContent(html, messageId) {
 
   // 段落级背景跟随：收集所有背景标签及其位置
   const backgroundChanges = [];
-  const bgRegex = /<background\s+scene="([^"]+)"\s*[\/]?>/gi;
+  // 属性顺序与额外属性均容错：<background scene="教室" transition="black" />
+  const bgRegex = /<background\b([^>]*?)\/?>/gi;
   const bnimgRegex = /<bnimg>([\s\S]*?)<\/bnimg>/gi;
   const bgimgRegex = /<bgimg>(.*?)<\/bgimg>/gi;
   const whimgRegex = /<whimg>(.*?)<\/whimg>/gi;
 
   let bgMatch;
   while ((bgMatch = bgRegex.exec(content)) !== null) {
+    const bgAttrs = bgMatch[1] || '';
+    const sceneAttr = bgAttrs.match(/\bscene\s*=\s*"([^"]+)"/i);
+    if (!sceneAttr) continue;
+    const transitionAttr = bgAttrs.match(/\btransition\s*=\s*"([^"]+)"/i);
     const bgEndPos = bgMatch.index + bgMatch[0].length;
     const bgInfo = {
       position: bgMatch.index,
-      scene: bgMatch[1],
+      scene: sceneAttr[1],
+      transition: transitionAttr ? transitionAttr[1].trim().toLowerCase() : null,
       generationTags: null,
       wallhavenTags: null,
       bananaPrompt: null,
@@ -699,6 +811,9 @@ export function parseGalgameContent(html, messageId) {
       return config;
     }
 
+    // 本条消息内的临时立绘指定：显示名 -> 角色名
+    const spriteAliasMap = new Map();
+
     function parseSegmentText(text, ttsConfigString = null) {
       if (!text) return null;
       text = text.trim();
@@ -742,8 +857,20 @@ export function parseGalgameContent(html, messageId) {
           }
           if (inlineParts[1] === '男声' || inlineParts[1] === '女声') {
             inlineVoiceTag = inlineParts[1];
-            GalgameStore.cache.voiceGenders.set(speaker, inlineVoiceTag);
           }
+        }
+        // 「显示名@角色名」临时指定立绘；同一条消息内后续未带 @ 的同名台词沿用该指定
+        const speakerAlias = splitSpeakerAlias(speaker);
+        speaker = speakerAlias.display;
+        let spriteCharacter = speakerAlias.target;
+        if (spriteCharacter) {
+          spriteAliasMap.set(speaker, spriteCharacter);
+        } else if (spriteAliasMap.has(speaker)) {
+          spriteCharacter = spriteAliasMap.get(speaker);
+        }
+        if (spriteCharacter === speaker) spriteCharacter = '';
+        if (inlineVoiceTag) {
+          GalgameStore.cache.voiceGenders.set(spriteCharacter || speaker, inlineVoiceTag);
         }
         const dialogue = stripOuterQuotes(dialogueMatch[2]).trim();
         if (!speaker || !dialogue) return null;
@@ -769,11 +896,14 @@ export function parseGalgameContent(html, messageId) {
             text: splitResult.displayText,
             expression: expression || '默认',
           };
+          if (spriteCharacter) {
+            segResult.spriteCharacter = spriteCharacter;
+          }
           if (splitResult.ttsText && splitResult.ttsText !== splitResult.displayText) {
             segResult.ttsText = splitResult.ttsText;
           }
           if (ttsConfigString) {
-            segResult.tts = parseTTSConfig(ttsConfigString, speaker);
+            segResult.tts = parseTTSConfig(ttsConfigString, spriteCharacter || speaker);
           }
           if (inlineVoiceTag) {
             if (!segResult.tts) {
@@ -951,6 +1081,7 @@ export function parseGalgameContent(html, messageId) {
       }
       targetSegment.backgroundCommands.push({
         scene: bg.scene,
+        transition: bg.transition || null,
       });
     }
   }
@@ -993,6 +1124,7 @@ export function parseGalgameContent(html, messageId) {
         prev.type === seg.type &&
         (seg.type === 'narration' || seg.type === 'dialogue') &&
         (prev.speaker || null) === (seg.speaker || null) &&
+        (prev.spriteCharacter || null) === (seg.spriteCharacter || null) &&
         prev.text &&
         seg.text &&
         !seg.spriteCommands &&
@@ -1002,7 +1134,7 @@ export function parseGalgameContent(html, messageId) {
         !hasOwnTtsText(seg) &&
         !hasOwnTtsText(prev) &&
         (!seg.expression || seg.expression === prev.expression) &&
-        prev.text.length + seg.text.length + 1 <= MAX_SEG_LENGTH;
+        fitsOnePage(`${prev.text}\n${seg.text}`, MAX_SEG_LENGTH, pageLayout);
       if (canMerge) {
         prev.text = `${prev.text}\n${seg.text}`;
       } else {
@@ -1021,47 +1153,25 @@ export function parseGalgameContent(html, messageId) {
       finalSegments.push(seg);
       return;
     }
-    if (!seg.text || seg.text.length <= MAX_SEG_LENGTH) {
+    if (!seg.text) {
       finalSegments.push(seg);
       return;
     }
-    let text = seg.text;
-    let isFirstChunk = true;
-    while (text.length > MAX_SEG_LENGTH) {
-      let splitIdx = -1;
-      const punctuations = ['。', '！', '？', '…', '\n', '.', '!', '?'];
-      for (let i = MAX_SEG_LENGTH; i >= Math.floor(MAX_SEG_LENGTH * 0.6); i--) {
-        if (punctuations.includes(text[i])) {
-          splitIdx = i + 1;
-          break;
-        }
-      }
-      if (splitIdx === -1) {
-        splitIdx = text.lastIndexOf(' ', MAX_SEG_LENGTH);
-        if (splitIdx !== -1) splitIdx += 1;
-      }
-      if (splitIdx === -1 || splitIdx < Math.floor(MAX_SEG_LENGTH * 0.6)) {
-        splitIdx = MAX_SEG_LENGTH;
-      }
-      const nextSeg = Object.assign({}, seg, { text: text.substring(0, splitIdx).trim() });
-      if (!isFirstChunk) {
+    const pages = splitTextToPages(seg.text, MAX_SEG_LENGTH, pageLayout);
+    if (pages.length <= 1) {
+      finalSegments.push(seg);
+      return;
+    }
+    pages.forEach((pageText, index) => {
+      const nextSeg = Object.assign({}, seg, { text: pageText });
+      // 立绘 / 背景 / 特效指令只跟随第一页
+      if (index > 0) {
         delete nextSeg.spriteCommands;
         delete nextSeg.backgroundCommands;
         delete nextSeg.effectOps;
       }
       finalSegments.push(nextSeg);
-      text = text.substring(splitIdx).trim();
-      isFirstChunk = false;
-    }
-    if (text) {
-      const nextSeg = Object.assign({}, seg, { text: text });
-      if (!isFirstChunk) {
-        delete nextSeg.spriteCommands;
-        delete nextSeg.backgroundCommands;
-        delete nextSeg.effectOps;
-      }
-      finalSegments.push(nextSeg);
-    }
+    });
   });
   result.segments = finalSegments;
   result.segments.forEach(seg => {

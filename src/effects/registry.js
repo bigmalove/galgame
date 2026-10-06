@@ -9,6 +9,9 @@ const SUPPORTED_EFFECTS = Object.freeze([
   'fireflies',
   'embers',
   'screenFlash',
+  'lightning',
+  'bokeh',
+  'dust',
 ]);
 
 export const PIXI_EFFECT_NAMES = SUPPORTED_EFFECTS;
@@ -22,6 +25,10 @@ const EFFECT_FIXED_LAYER = Object.freeze({
   fireflies: 'fg',
   embers: 'fg',
   screenFlash: 'fg',
+  // 闪电与光斑在角色身后（天空 / 远景灯火），浮尘飘在角色前方
+  lightning: 'bg',
+  bokeh: 'bg',
+  dust: 'fg',
 });
 
 const textureCache = Object.create(null);
@@ -84,15 +91,19 @@ function createTextureFromCanvas(PIXI, key, width, height, drawFn) {
   return texture;
 }
 
-function createParticleLayer(PIXI, maxSize) {
+// blendMode：ParticleContainer 只认容器自身的混合模式（Pixi v6 ParticleRenderer 读 container.blendMode），
+// 子精灵上设的 ADD 会被忽略。发光类粒子必须在这里传入，fallback 的普通 Container 由子精灵各自生效
+function createParticleLayer(PIXI, maxSize, blendMode = null) {
   if (typeof PIXI.ParticleContainer === 'function') {
-    return new PIXI.ParticleContainer(Math.max(4, maxSize), {
+    const layer = new PIXI.ParticleContainer(Math.max(4, maxSize), {
       scale: true,
       position: true,
       rotation: true,
       alpha: true,
       tint: true,
     });
+    if (blendMode !== null && blendMode !== undefined) layer.blendMode = blendMode;
+    return layer;
   }
   return new PIXI.Container();
 }
@@ -826,8 +837,8 @@ function createFirefliesEffect({ PIXI, width, height, quality }) {
   const texture = getFireflyTexture(PIXI);
   const backCount = toCount(26, quality);
   const frontCount = toCount(17, quality);
-  const backLayer = createParticleLayer(PIXI, backCount);
-  const frontLayer = createParticleLayer(PIXI, frontCount);
+  const backLayer = createParticleLayer(PIXI, backCount, PIXI.BLEND_MODES.ADD);
+  const frontLayer = createParticleLayer(PIXI, frontCount, PIXI.BLEND_MODES.ADD);
   container.addChild(backLayer);
   container.addChild(frontLayer);
 
@@ -889,6 +900,7 @@ function createFirefliesEffect({ PIXI, width, height, quality }) {
   return {
     displayObject: container,
     persistent: true,
+    glow: { threshold: 0.32, bloomScale: 1.1, blur: 7 },
     update(delta, size) {
       const w = size.width || width;
       const h = size.height || height;
@@ -946,8 +958,8 @@ function createEmbersEffect({ PIXI, width, height, quality }) {
   const texture = getEmberTexture(PIXI);
   const backCount = toCount(46, quality);
   const frontCount = toCount(36, quality);
-  const backLayer = createParticleLayer(PIXI, backCount);
-  const frontLayer = createParticleLayer(PIXI, frontCount);
+  const backLayer = createParticleLayer(PIXI, backCount, PIXI.BLEND_MODES.ADD);
+  const frontLayer = createParticleLayer(PIXI, frontCount, PIXI.BLEND_MODES.ADD);
   container.addChild(backLayer);
   container.addChild(frontLayer);
 
@@ -1018,6 +1030,7 @@ function createEmbersEffect({ PIXI, width, height, quality }) {
   return {
     displayObject: container,
     persistent: true,
+    glow: { threshold: 0.38, bloomScale: 1, blur: 6 },
     update(delta, size) {
       const w = size.width || width;
       const h = size.height || height;
@@ -1149,6 +1162,336 @@ function createScreenFlashEffect({ PIXI, width, height }) {
   };
 }
 
+// ============================================
+// 光斑（散景 bokeh）：远景灯火失焦的圆盘，中间半透明、边缘一圈亮环
+// ============================================
+function getBokehTexture(PIXI, soft) {
+  const size = soft ? 168 : 128;
+  return createTextureFromCanvas(PIXI, soft ? 'effect-bokeh-soft-v1' : 'effect-bokeh-v1', size, size, (ctx, w, h) => {
+    const r = w * (soft ? 0.34 : 0.44);
+    // 近景层预模糊（Safari 不支持 ctx.filter 时退化为清晰圆盘）
+    if (soft) ctx.filter = 'blur(9px)';
+    const g = ctx.createRadialGradient(w * 0.5, h * 0.5, 0, w * 0.5, h * 0.5, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.3)');
+    g.addColorStop(0.7, 'rgba(255,255,255,0.4)');
+    g.addColorStop(0.9, 'rgba(255,255,255,0.85)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(w * 0.5, h * 0.5, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+const BOKEH_TINTS = [0xffc477, 0xff9a62, 0xffe2a0, 0xff8fb1, 0xffd28a, 0x9fd8ff];
+
+function createBokehEffect({ PIXI, width, height, quality }) {
+  const container = new PIXI.Container();
+  const backCount = toCount(22, quality);
+  const frontCount = toCount(6, quality);
+  const backLayer = createParticleLayer(PIXI, backCount, PIXI.BLEND_MODES.ADD);
+  const frontLayer = createParticleLayer(PIXI, frontCount, PIXI.BLEND_MODES.ADD);
+  container.addChild(backLayer);
+  container.addChild(frontLayer);
+  const speedFactor = quality?.speed ?? 1;
+
+  const profiles = [
+    { layer: backLayer, count: backCount, texture: getBokehTexture(PIXI, false), scaleMin: 0.2, scaleMax: 0.5, alphaMin: 0.32, alphaMax: 0.6, drift: 0.14 },
+    { layer: frontLayer, count: frontCount, texture: getBokehTexture(PIXI, true), scaleMin: 0.75, scaleMax: 1.3, alphaMin: 0.12, alphaMax: 0.24, drift: 0.26 },
+  ];
+  const discs = [];
+
+  function respawn(disc, w, h, initial) {
+    disc.x = rand(-w * 0.05, w * 1.05);
+    disc.y = initial ? rand(0, h) : h + rand(20, 120);
+    disc.vx = rand(-disc.profile.drift, disc.profile.drift) * 0.6;
+    disc.vy = -rand(disc.profile.drift * 0.25, disc.profile.drift);
+    disc.baseScale = rand(disc.profile.scaleMin, disc.profile.scaleMax);
+    disc.alphaBase = rand(disc.profile.alphaMin, disc.profile.alphaMax);
+    disc.phase = rand(0, Math.PI * 2);
+    disc.phaseSpeed = rand(0.25, 0.7);
+    disc.sprite.tint = choose(BOKEH_TINTS) || 0xffc477;
+  }
+
+  for (const profile of profiles) {
+    for (let i = 0; i < profile.count; i += 1) {
+      const sprite = new PIXI.Sprite(profile.texture);
+      sprite.anchor.set(0.5);
+      profile.layer.addChild(sprite);
+      const disc = { sprite, profile };
+      respawn(disc, width, height, true);
+      discs.push(disc);
+    }
+  }
+
+  return {
+    displayObject: container,
+    persistent: true,
+    glow: { threshold: 0.3, bloomScale: 0.9, blur: 8 },
+    update(delta, size) {
+      const w = size.width || width;
+      const h = size.height || height;
+      const step = clamp(delta, 0.2, 2.5) * speedFactor;
+      for (const disc of discs) {
+        disc.phase += disc.phaseSpeed * 0.012 * step;
+        disc.x += (disc.vx + Math.sin(disc.phase * 0.7) * 0.05) * step;
+        disc.y += disc.vy * step;
+        if (disc.y < -140 || disc.x < -w * 0.15 || disc.x > w * 1.15) respawn(disc, w, h, false);
+        const breathe = 0.7 + Math.sin(disc.phase) * 0.3;
+        disc.sprite.position.set(disc.x, disc.y);
+        disc.sprite.scale.set(disc.baseScale * (0.96 + Math.sin(disc.phase * 0.5) * 0.04));
+        disc.sprite.alpha = clamp(disc.alphaBase * breathe, 0.03, 1);
+      }
+    },
+    onResize(nextWidth, nextHeight) {
+      width = Math.max(2, nextWidth);
+      height = Math.max(2, nextHeight);
+    },
+    destroy() {
+      discs.length = 0;
+      container.destroy({ children: true });
+    },
+  };
+}
+
+// ============================================
+// 浮尘：光束里缓慢游移、明灭的细小光尘，越靠近左上方光源越亮
+// ============================================
+function getDustTexture(PIXI) {
+  return createTextureFromCanvas(PIXI, 'effect-dust-v1', 24, 24, (ctx, w, h) => {
+    const g = ctx.createRadialGradient(w * 0.5, h * 0.5, 0, w * 0.5, h * 0.5, w * 0.5);
+    g.addColorStop(0, 'rgba(255,250,235,1)');
+    g.addColorStop(0.35, 'rgba(255,240,210,0.55)');
+    g.addColorStop(1, 'rgba(255,240,210,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(w * 0.5, h * 0.5, w * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function createDustEffect({ PIXI, width, height, quality }) {
+  const container = new PIXI.Container();
+  const count = toCount(80, quality);
+  const layer = createParticleLayer(PIXI, count, PIXI.BLEND_MODES.ADD);
+  container.addChild(layer);
+  const texture = getDustTexture(PIXI);
+  const speedFactor = quality?.speed ?? 1;
+  const motes = [];
+  let elapsed = rand(0, 10);
+
+  function respawn(mote, w, h) {
+    mote.x = rand(0, w);
+    mote.y = rand(0, h);
+    mote.vx = rand(-0.08, 0.08);
+    mote.vy = rand(-0.05, 0.07);
+    mote.baseScale = rand(0.2, 0.6);
+    mote.alphaBase = rand(0.45, 1);
+    mote.phase = rand(0, Math.PI * 2);
+    mote.phaseSpeed = rand(0.6, 1.8);
+    mote.noise = rand(0, Math.PI * 2);
+    mote.sprite.tint = choose([0xfff6e0, 0xffefc8, 0xfffaf0]) || 0xfff6e0;
+  }
+
+  for (let i = 0; i < count; i += 1) {
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(0.5);
+    layer.addChild(sprite);
+    const mote = { sprite };
+    respawn(mote, width, height);
+    motes.push(mote);
+  }
+
+  return {
+    displayObject: container,
+    persistent: true,
+    glow: { threshold: 0.42, bloomScale: 0.75, blur: 4 },
+    update(delta, size) {
+      const w = size.width || width;
+      const h = size.height || height;
+      const step = clamp(delta, 0.2, 2.5) * speedFactor;
+      elapsed += step * 0.01;
+      for (const mote of motes) {
+        mote.phase += mote.phaseSpeed * 0.015 * step;
+        mote.vx += Math.sin(elapsed + mote.noise) * 0.002 * step;
+        mote.vy += Math.cos(elapsed * 0.8 + mote.noise) * 0.0015 * step;
+        mote.vx = clamp(mote.vx, -0.12, 0.12);
+        mote.vy = clamp(mote.vy, -0.09, 0.1);
+        mote.x += mote.vx * step;
+        mote.y += mote.vy * step;
+        if (mote.x < -20 || mote.x > w + 20 || mote.y < -20 || mote.y > h + 20) respawn(mote, w, h);
+        // 光源在左上：沿对角线衰减，光束外的浮尘几乎不可见
+        const lit = clamp(1.3 - (mote.x / w) * 0.5 - (mote.y / h) * 0.7, 0, 1);
+        const twinkle = 0.35 + (Math.sin(mote.phase) * 0.5 + 0.5) * 0.65;
+        mote.sprite.position.set(mote.x, mote.y);
+        mote.sprite.scale.set(mote.baseScale);
+        mote.sprite.alpha = clamp(mote.alphaBase * twinkle * (0.2 + lit * 0.8), 0, 1);
+      }
+    },
+    onResize(nextWidth, nextHeight) {
+      width = Math.max(2, nextWidth);
+      height = Math.max(2, nextHeight);
+    },
+    destroy() {
+      motes.length = 0;
+      container.destroy({ children: true });
+    },
+  };
+}
+
+// ============================================
+// 雷电：远处天空的锯齿闪电（含分叉）+ 天空被照亮；每次落雷通过 onStrike 通知管理器
+// 做全屏闪光 / 轻微震屏（舞台层效果，见 pixi-effect-manager）
+// ============================================
+function getSkyFlashTexture(PIXI) {
+  return createTextureFromCanvas(PIXI, 'effect-sky-flash-v1', 8, 256, (ctx, w, h) => {
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, 'rgba(225,235,255,1)');
+    g.addColorStop(0.45, 'rgba(190,210,255,0.45)');
+    g.addColorStop(1, 'rgba(190,210,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  });
+}
+
+function prefersReducedMotion() {
+  try {
+    return !!topWindow.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  } catch (_) {
+    return false;
+  }
+}
+
+function buildBoltPath(width, height) {
+  const points = [];
+  const branches = [];
+  let x = rand(width * 0.12, width * 0.88);
+  let y = -10;
+  const endY = rand(height * 0.45, height * 0.72);
+  points.push([x, y]);
+  while (y < endY) {
+    x += rand(-0.035, 0.035) * width;
+    y += rand(0.025, 0.06) * height;
+    points.push([x, y]);
+    if (Math.random() < 0.2 && branches.length < 3) {
+      const branch = [[x, y]];
+      let bx = x;
+      let by = y;
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const steps = Math.round(rand(3, 6));
+      for (let k = 0; k < steps; k += 1) {
+        bx += (dir * rand(0.008, 0.035) + rand(-0.012, 0.012)) * width;
+        by += rand(0.018, 0.045) * height;
+        branch.push([bx, by]);
+      }
+      branches.push(branch);
+    }
+  }
+  return { points, branches };
+}
+
+function strokePolyline(graphics, pts) {
+  graphics.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i += 1) graphics.lineTo(pts[i][0], pts[i][1]);
+}
+
+function createLightningEffect({ PIXI, width, height, onStrike }) {
+  const container = new PIXI.Container();
+  const sky = new PIXI.Sprite(getSkyFlashTexture(PIXI));
+  sky.blendMode = PIXI.BLEND_MODES.ADD;
+  sky.alpha = 0;
+  const bolt = new PIXI.Graphics();
+  bolt.blendMode = PIXI.BLEND_MODES.ADD;
+  container.addChild(sky);
+  container.addChild(bolt);
+  const reduced = prefersReducedMotion();
+
+  let elapsedMs = 0;
+  let nextStrikeAt = rand(700, 1400);
+  let strikeAt = -1;
+  let pendingDouble = false;
+  let boltVisible = false;
+
+  function layoutSky() {
+    sky.width = Math.max(2, width);
+    sky.height = Math.max(2, height * 0.85);
+  }
+  layoutSky();
+
+  function drawBolt() {
+    const { points, branches } = buildBoltPath(width, height);
+    const round = { cap: PIXI.LINE_CAP.ROUND, join: PIXI.LINE_JOIN.ROUND };
+    bolt.clear();
+    bolt.lineStyle({ width: 9, color: 0x8fb2ff, alpha: 0.22, ...round });
+    strokePolyline(bolt, points);
+    bolt.lineStyle({ width: 4, color: 0xc8dcff, alpha: 0.55, ...round });
+    strokePolyline(bolt, points);
+    bolt.lineStyle({ width: 1.8, color: 0xffffff, alpha: 1, ...round });
+    strokePolyline(bolt, points);
+    for (const branch of branches) {
+      bolt.lineStyle({ width: 3, color: 0xa8c4ff, alpha: 0.3, ...round });
+      strokePolyline(bolt, branch);
+      bolt.lineStyle({ width: 1, color: 0xeef4ff, alpha: 0.85, ...round });
+      strokePolyline(bolt, branch);
+    }
+    boltVisible = true;
+  }
+
+  function strike(intensity) {
+    drawBolt();
+    strikeAt = elapsedMs;
+    if (!reduced && typeof onStrike === 'function') {
+      try {
+        onStrike({ intensity });
+      } catch (_) {}
+    }
+  }
+
+  // 闪烁曲线：亮 → 暗 → 再亮 → 渐隐（真实闪电常见的多次回击）
+  function flickerAlpha(t) {
+    if (t < 0) return 0;
+    if (t < 60) return 1;
+    if (t < 110) return 0.22;
+    if (t < 170) return 0.9;
+    if (t < 520) return 0.9 * (1 - (t - 170) / 350);
+    return 0;
+  }
+
+  return {
+    displayObject: container,
+    persistent: true,
+    glow: { threshold: 0.2, bloomScale: 1.5, blur: 10 },
+    update(delta) {
+      elapsedMs += clamp(delta, 0.2, 3) * 16.67;
+      if (elapsedMs >= nextStrikeAt) {
+        strike(rand(0.5, 1));
+        // 30% 概率紧跟一次回击
+        pendingDouble = Math.random() < 0.3;
+        nextStrikeAt = elapsedMs + rand(3800, 9000);
+      }
+      if (pendingDouble && strikeAt >= 0 && elapsedMs - strikeAt > 260) {
+        pendingDouble = false;
+        strike(0.6);
+      }
+      const a = strikeAt >= 0 ? flickerAlpha(elapsedMs - strikeAt) : 0;
+      bolt.alpha = reduced ? a * 0.6 : a;
+      sky.alpha = reduced ? 0 : a * 0.42;
+      if (a <= 0 && boltVisible) {
+        bolt.clear();
+        boltVisible = false;
+      }
+    },
+    onResize(nextWidth, nextHeight) {
+      width = Math.max(2, nextWidth);
+      height = Math.max(2, nextHeight);
+      layoutSky();
+    },
+    destroy() {
+      container.destroy({ children: true });
+    },
+  };
+}
+
 export function isSupportedPixiEffect(name) {
   return SUPPORTED_EFFECTS.includes(String(name || '').trim());
 }
@@ -1181,6 +1524,12 @@ export function createPixiEffectInstance(name, context) {
       return createEmbersEffect(context);
     case 'screenFlash':
       return createScreenFlashEffect(context);
+    case 'lightning':
+      return createLightningEffect(context);
+    case 'bokeh':
+      return createBokehEffect(context);
+    case 'dust':
+      return createDustEffect(context);
     default:
       return null;
   }

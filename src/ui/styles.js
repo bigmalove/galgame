@@ -25,6 +25,133 @@ export function injectStyles() {
 
   // Galgame UI 皮肤库（基于 UI/UX Pro Max 设计系统重构）
 const skinCss = `
+/* === 跨皮肤语义 token 映射 ===
+   把各皮肤命名空间变量映射到 --gal-color-* / --gal-font-*（默认值见 数据库界面插件.css）。
+   选择器范围与各皮肤自身变量块一致（变体只覆写命名空间变量，这里自动跟随）。
+   新增皮肤时在此补一组映射，通用组件即可直接适配 */
+#gal-global-overlay.skin-twilight {
+    --gal-color-accent: var(--twilight-accent);
+    --gal-color-accent-2: var(--twilight-accent);
+    --gal-color-surface: var(--twilight-glass-strong);
+    --gal-color-on-surface: var(--twilight-text-main);
+    --gal-color-on-surface-dim: var(--twilight-text-muted);
+    --gal-color-line: var(--twilight-glass-border);
+    --gal-color-on-accent: #1a1410;
+    --gal-color-stage: #0b0c12;
+    --gal-font-display: var(--twilight-headline);
+    --gal-font-body: var(--twilight-body);
+    --gal-font-latin: var(--twilight-label);
+    --gal-radius: 12px;
+}
+/* 选项层挂在 body 下，取不到 overlay 上的 --twilight-*：直接给薄暮主色（控件动效等通用组件读取） */
+#gal-layer-choices.skin-twilight {
+    --gal-color-accent: #d7b189;
+    --gal-color-accent-2: #d7b189;
+    --gal-color-surface: rgba(12, 14, 22, 0.76);
+    --gal-color-on-surface: rgba(245, 240, 232, 0.96);
+}
+#gal-global-overlay[class*="skin-ancient"],
+#gal-layer-choices[class*="skin-ancient"],
+.gal-history-modal[class*="skin-ancient"] {
+    --gal-color-accent: var(--ink-gold);
+    --gal-color-accent-2: var(--ink-seal);
+    --gal-color-surface: var(--ink-paper);
+    --gal-color-on-surface: var(--ink-black);
+    --gal-color-on-surface-dim: var(--ink-mid);
+    --gal-color-line: var(--ink-deep);
+    --gal-color-on-accent: var(--ink-on-ink);
+    --gal-color-shadow: rgba(var(--ink-black-rgb), 0.28);
+    --gal-color-stage: var(--ink-lacquer);
+    --gal-font-display: var(--ink-font-brush);
+    --gal-font-body: var(--ink-font-kai);
+    --gal-font-latin: var(--ink-font-kai);
+    --gal-radius: 2px;
+}
+#gal-global-overlay[class*="skin-persona"],
+#gal-layer-choices[class*="skin-persona"],
+.gal-history-modal[class*="skin-persona"] {
+    --gal-color-accent: var(--p5-red);
+    --gal-color-accent-2: var(--p5-red-dk);
+    --gal-color-surface: var(--p5-white);
+    --gal-color-on-surface: var(--p5-black);
+    --gal-color-on-surface-dim: var(--p5-gray);
+    --gal-color-line: var(--p5-black);
+    --gal-color-on-accent: var(--p5-white);
+    --gal-color-shadow: rgba(0, 0, 0, 0.35);
+    --gal-color-stage: var(--p5-black);
+    --gal-font-display: var(--p5-font-impact);
+    --gal-font-body: var(--p5-font-cn);
+    --gal-font-latin: var(--p5-font-impact);
+    --gal-radius: 0px;
+}
+#gal-global-overlay[class*="skin-jrpg"],
+#gal-layer-choices[class*="skin-jrpg"],
+.gal-history-modal[class*="skin-jrpg"] {
+    --gal-color-accent: var(--cts-crystal);
+    --gal-color-accent-2: var(--cts-gold);
+    --gal-color-surface: var(--cts-btn-face);
+    --gal-color-on-surface: var(--cts-text);
+    --gal-color-on-surface-dim: var(--cts-dim);
+    --gal-color-line: var(--cts-gold);
+    --gal-color-on-accent: var(--cts-dark-on-crystal);
+    --gal-color-shadow: rgba(0, 0, 0, 0.45);
+    --gal-color-stage: var(--cts-void);
+    --gal-font-display: var(--cts-font);
+    --gal-font-body: var(--cts-font);
+    --gal-font-latin: var(--cts-font);
+    --gal-radius: 2px;
+}
+#gal-global-overlay[class*="skin-yanyun"],
+#gal-layer-choices[class*="skin-yanyun"],
+.gal-history-modal[class*="skin-yanyun"] {
+    --gal-color-accent: var(--yx-bronze-2);
+    --gal-color-accent-2: var(--yx-cinnabar);
+    --gal-color-surface: var(--yx-btnface);
+    --gal-color-on-surface: var(--yx-text);
+    --gal-color-on-surface-dim: var(--yx-dim);
+    --gal-color-line: var(--yx-bronze);
+    --gal-color-on-accent: var(--yx-seal-text);
+    --gal-color-shadow: rgba(0, 0, 0, 0.5);
+    --gal-color-stage: var(--yx-ink-0);
+    --gal-font-display: var(--yx-font-brush);
+    --gal-font-body: var(--yx-font);
+    --gal-font-latin: var(--yx-font);
+    --gal-radius: 0px;
+}
+#gal-global-overlay.skin-classic,
+#gal-layer-choices.skin-classic {
+    --gal-color-accent: var(--sk-sakura);
+    --gal-color-accent-2: var(--sk-deep);
+    --gal-color-surface: var(--sk-white);
+    --gal-color-on-surface: var(--sk-plum);
+    --gal-color-on-surface-dim: var(--sk-plum-soft);
+    --gal-color-line: var(--sk-glass-line);
+    --gal-color-on-accent: #ffffff;
+    --gal-color-shadow: var(--sk-shadow);
+    --gal-color-stage: var(--sk-plum);
+    --gal-font-display: var(--sk-serif);
+    --gal-font-body: var(--sk-sans);
+    --gal-font-latin: var(--sk-latin);
+    --gal-radius: 16px;
+}
+#gal-global-overlay[class*="skin-shujian"],
+#gal-layer-choices[class*="skin-shujian"],
+.gal-history-modal[class*="skin-shujian"] {
+    --gal-color-accent: var(--shu-vermilion);
+    --gal-color-accent-2: var(--shu-vermilion-dk);
+    --gal-color-surface: var(--shu-paper);
+    --gal-color-on-surface: var(--shu-ink);
+    --gal-color-on-surface-dim: var(--shu-ink-soft);
+    --gal-color-line: var(--shu-hairline);
+    --gal-color-on-accent: var(--shu-on-seal);
+    --gal-color-shadow: rgba(0, 0, 0, 0.22);
+    --gal-color-stage: #12100e;
+    --gal-font-display: var(--shu-font-serif);
+    --gal-font-body: var(--shu-font-serif);
+    --gal-font-latin: var(--shu-font-latin);
+    --gal-radius: 2px;
+}
+
 /* === 全局皮肤重置 === */
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge,
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge span,
@@ -48,22 +175,22 @@ const skinCss = `
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn,
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn {
     clip-path: none !important;
-    overflow: visible !important;
-    min-height: calc(2.25rem * var(--ui-scale, 1)) !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 calc(0.75rem * var(--ui-scale, 1)) !important;
+    overflow: visible;
+    min-height: calc(2.25rem * var(--ui-scale, 1));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 calc(0.75rem * var(--ui-scale, 1));
     font-size: calc(0.85rem * var(--ui-scale, 1)) !important;
-    cursor: pointer !important;
-    white-space: nowrap !important;
+    cursor: pointer;
+    white-space: nowrap;
 }
 /* 所有皮肤 NEXT 按钮缩放适配 */
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next {
     font-size: calc(1.3rem * var(--ui-scale, 1)) !important;
-    padding: 0 calc(2.5rem * var(--ui-scale, 1)) !important;
-    height: calc(3.438rem * var(--ui-scale, 1)) !important;
-    min-width: calc(8.75rem * var(--ui-scale, 1)) !important;
+    padding: 0 calc(2.5rem * var(--ui-scale, 1));
+    height: calc(3.438rem * var(--ui-scale, 1));
+    min-width: calc(8.75rem * var(--ui-scale, 1));
 }
 /* 所有皮肤名牌+文字缩放适配 */
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
@@ -71,7 +198,7 @@ const skinCss = `
     transform-origin: left top !important;
 }
 #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-dialog-text {
-    font-size: calc(1.25rem * var(--ui-scale, 1) * var(--font-scale, 1)) !important;
+    font-size: calc(1.25rem * var(--ui-scale, 1) * var(--font-scale, 1));
 }
 
 /* =========================================================
@@ -3960,7 +4087,7 @@ const skinCss = `
     background:
         radial-gradient(120% 95% at 50% 30%, rgba(255, 252, 242, 0.55) 0%, rgba(var(--ink-silk-rgb), 0) 55%),
         radial-gradient(140% 120% at 50% 110%, rgba(var(--ink-black-rgb), 0.2) 0%, rgba(var(--ink-black-rgb), 0) 46%),
-        linear-gradient(175deg, var(--ink-paper) 0%, var(--ink-silk) 46%, var(--ink-paper-warm) 100%) !important;
+        linear-gradient(175deg, var(--ink-paper) 0%, var(--ink-silk) 46%, var(--ink-paper-warm) 100%);
 }
 /* 远山两叠（::before 淡墨远山，::after 浓墨近山 + 雾带用渐变叠出） */
 #gal-global-overlay[class*="skin-ancient"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::before {
@@ -3970,9 +4097,9 @@ const skinCss = `
         radial-gradient(50% 18% at 86% 60%, var(--ink-mountain-far) 0 55%, transparent 56%),
         radial-gradient(44% 30% at 12% 70%, var(--ink-mountain-mid) 0 58%, transparent 59%),
         radial-gradient(52% 33% at 46% 71%, var(--ink-mountain-mid) 0 62%, transparent 63%),
-        radial-gradient(38% 25% at 82% 69%, var(--ink-mountain-mid) 0 54%, transparent 55%) !important;
-    background-size: auto !important;
-    opacity: 0.34 !important;
+        radial-gradient(38% 25% at 82% 69%, var(--ink-mountain-mid) 0 54%, transparent 55%);
+    background-size: auto;
+    opacity: 0.34;
     filter: blur(1.5px);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::after {
@@ -4030,33 +4157,33 @@ const skinCss = `
 #gal-global-overlay[class*="skin-ancient"] .gal-text-panel {
     background:
         linear-gradient(90deg, rgba(216, 205, 178, 0.55) 0%, transparent 5%, transparent 95%, rgba(216, 205, 178, 0.55) 100%),
-        linear-gradient(178deg, rgba(244, 238, 224, var(--panel-opacity, 0.96)) 0%, rgba(234, 226, 205, var(--panel-opacity, 0.96)) 100%) !important;
-    border: none !important;
-    border-top: 5px solid var(--ink-lacquer) !important;
-    border-bottom: 5px solid var(--ink-lacquer) !important;
-    border-radius: 3px !important;
+        linear-gradient(178deg, rgba(244, 238, 224, var(--panel-opacity, 0.96)) 0%, rgba(234, 226, 205, var(--panel-opacity, 0.96)) 100%);
+    border: none;
+    border-top: 5px solid var(--ink-lacquer);
+    border-bottom: 5px solid var(--ink-lacquer);
+    border-radius: 3px;
     box-shadow:
         0 -7px 0 -1px var(--ink-lacquer-lt),
         0 7px 0 -1px var(--ink-lacquer-lt),
-        0 1.6rem 2.8rem -1.1rem rgba(20, 14, 6, 0.55) !important;
+        0 1.6rem 2.8rem -1.1rem rgba(20, 14, 6, 0.55);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-dialog-text {
-    color: var(--ink-black) !important;
-    font-weight: 500 !important;
+    color: var(--ink-black);
+    font-weight: 500;
     letter-spacing: 0.08em;
     line-height: 2.1 !important;
-    text-shadow: none !important;
-    font-family: var(--ink-font-kai) !important;
+    text-shadow: none;
+    font-family: var(--ink-font-kai);
 }
 
 /* —— 姓名牌：一笔浓墨落纸（笔触 clip-path）+ 右下小朱印 —— */
 #gal-global-overlay[class*="skin-ancient"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: radial-gradient(140% 190% at 8% 30%, var(--ink-deep) 0%, var(--ink-black) 55%, rgba(var(--ink-black-rgb), 0.94) 100%) !important;
     color: var(--ink-on-ink) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    font-family: var(--ink-font-brush) !important;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    font-family: var(--ink-font-brush);
     font-size: 1.35rem !important;
     padding: 0.45rem 1.7rem 0.45rem 1.3rem !important;
     left: 20px !important;
@@ -4068,11 +4195,11 @@ const skinCss = `
     z-index: 36;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge span {
-    transform: none !important;
+    transform: none;
     font-weight: 400;
     letter-spacing: 0.14em;
-    text-shadow: none !important;
-    font-family: var(--ink-font-brush) !important;
+    text-shadow: none;
+    font-family: var(--ink-font-brush);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge::after {
     content: "";
@@ -4086,22 +4213,22 @@ const skinCss = `
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge.gal-narrator-label {
-    background: radial-gradient(140% 190% at 8% 30%, #8a8375 0%, var(--ink-mid) 60%, rgba(110, 103, 92, 0.92) 100%) !important;
-    color: #f6f1e4 !important;
+    background: radial-gradient(140% 190% at 8% 30%, #8a8375 0%, var(--ink-mid) 60%, rgba(110, 103, 92, 0.92) 100%);
+    color: #f6f1e4;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-name-badge.gal-narrator-label::after { background: var(--ink-mid); }
 
 /* —— 对话框右上悬浮操作：绢底墨字小签，悬停墨色涨满 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-action-btn {
-    background: rgba(244, 238, 224, 0.96) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.35) !important;
-    color: var(--ink-deep) !important;
-    font-weight: 600 !important;
+    background: rgba(244, 238, 224, 0.96);
+    border: 1px solid rgba(var(--ink-black-rgb), 0.35);
+    color: var(--ink-deep);
+    font-weight: 600;
     border-radius: 2px !important;
-    letter-spacing: 0.18em !important;
+    letter-spacing: 0.18em;
     box-shadow: 0 4px 10px -4px rgba(20, 14, 6, 0.4) !important;
     transition: all 0.28s ease !important;
-    font-family: var(--ink-font-kai) !important;
+    font-family: var(--ink-font-kai);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-action-btn:hover {
     background: var(--ink-black) !important;
@@ -4121,9 +4248,9 @@ const skinCss = `
     color: var(--ink-mid) !important;
     font-weight: 600 !important;
     border-radius: 50% !important;
-    letter-spacing: 0.12em !important;
+    letter-spacing: 0.12em;
     box-shadow: none !important;
-    position: relative !important;
+    position: relative;
     isolation: isolate;
     transition: color 0.26s ease !important;
     font-family: var(--ink-font-kai) !important;
@@ -4157,12 +4284,12 @@ const skinCss = `
     border: none !important;
     border-radius: 3px !important;
     box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.5) !important;
-    font-family: var(--ink-font-kai) !important;
+    font-family: var(--ink-font-kai);
     font-weight: 700 !important;
-    letter-spacing: 0.3em !important;
+    letter-spacing: 0.3em;
     text-indent: 0.3em;
-    position: relative !important;
-    overflow: visible !important;
+    position: relative;
+    overflow: visible;
     transition: letter-spacing 0.3s ease, box-shadow 0.3s ease !important;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-footer-btn-next::before,
@@ -4198,9 +4325,9 @@ const skinCss = `
     color: #f5e9d4 !important;
     border: none !important;
     border-radius: 2px !important;
-    font-family: var(--ink-font-kai) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.16em !important;
+    font-family: var(--ink-font-kai);
+    font-weight: 700;
+    letter-spacing: 0.16em;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-pending-choices-btn.show,
 #gal-global-overlay[class*="skin-ancient"] .gal-pending-choices-btn.gal-new-option-highlight {
@@ -4220,13 +4347,13 @@ const skinCss = `
 
 /* —— 进度条：一笔由浓转淡的墨迹 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-dialog-layer .gal-progress-container {
-    background: rgba(var(--ink-black-rgb), 0.14) !important;
-    height: 0.22rem !important;
+    background: rgba(var(--ink-black-rgb), 0.14);
+    height: 0.22rem;
     border-radius: 3px;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-progress-bar {
-    background: linear-gradient(90deg, var(--ink-black) 0%, var(--ink-deep) 55%, var(--ink-faint) 100%) !important;
-    box-shadow: none !important;
+    background: linear-gradient(90deg, var(--ink-black) 0%, var(--ink-deep) 55%, var(--ink-faint) 100%);
+    box-shadow: none;
     border-radius: 3px;
 }
 
@@ -4234,21 +4361,21 @@ const skinCss = `
 #gal-global-overlay[class*="skin-ancient"] .gal-location-bar,
 #gal-global-overlay[class*="skin-ancient"] .gal-time-bar {
     background: rgba(var(--ink-silk-rgb), 0.72) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.25) !important;
-    border-radius: 2px !important;
-    color: var(--ink-deep) !important;
-    font-family: var(--ink-font-kai) !important;
-    letter-spacing: 0.22em !important;
+    border: 1px solid rgba(var(--ink-black-rgb), 0.25);
+    border-radius: 2px;
+    color: var(--ink-deep);
+    font-family: var(--ink-font-kai);
+    letter-spacing: 0.22em;
     text-shadow: none;
     backdrop-filter: blur(2px);
 }
-#gal-global-overlay[class*="skin-ancient"] .gal-location-bar i { color: var(--ink-seal) !important; }
-#gal-global-overlay[class*="skin-ancient"] .gal-time-bar i { color: var(--ink-gold) !important; }
+#gal-global-overlay[class*="skin-ancient"] .gal-location-bar i { color: var(--ink-seal); }
+#gal-global-overlay[class*="skin-ancient"] .gal-time-bar i { color: var(--ink-gold); }
 #gal-global-overlay[class*="skin-ancient"] .gal-fullscreen-btn {
-    background: rgba(var(--ink-silk-rgb), 0.5) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.3) !important;
-    border-radius: 999px !important;
-    color: var(--ink-mid) !important;
+    background: rgba(var(--ink-silk-rgb), 0.5);
+    border: 1px solid rgba(var(--ink-black-rgb), 0.3);
+    border-radius: 999px;
+    color: var(--ink-mid);
     backdrop-filter: blur(2px);
     transition: all 0.3s ease;
 }
@@ -4261,14 +4388,14 @@ const skinCss = `
 /* —— 立绘显隐 / 状态弹窗小按钮：绢底圆钮 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-ancient"] .gal-status-popup-trigger {
-    background: var(--ink-paper) !important;
-    border: 1px solid rgba(var(--ink-black-rgb), 0.32) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(20, 14, 6, 0.4) !important;
+    background: var(--ink-paper);
+    border: 1px solid rgba(var(--ink-black-rgb), 0.32);
+    border-radius: 999px;
+    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(20, 14, 6, 0.4);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-sprite-toggle .gal-eye-icon,
 #gal-global-overlay[class*="skin-ancient"] .gal-status-popup-trigger .gal-status-popup-icon {
-    color: var(--ink-seal) !important;
+    color: var(--ink-seal);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-ancient"] .gal-status-popup-trigger:hover {
@@ -4282,15 +4409,15 @@ const skinCss = `
 
 /* —— 生成中指示器：「运笔之中」——墨滴入水双圈涟漪 —— */
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator {
-    background: linear-gradient(178deg, var(--ink-paper) 0%, var(--ink-paper-warm) 100%) !important;
-    border: none !important;
-    border-top: 4px solid var(--ink-lacquer) !important;
-    border-bottom: 4px solid var(--ink-lacquer) !important;
-    border-radius: 2px !important;
-    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7) !important;
+    background: linear-gradient(178deg, var(--ink-paper) 0%, var(--ink-paper-warm) 100%);
+    border: none;
+    border-top: 4px solid var(--ink-lacquer);
+    border-bottom: 4px solid var(--ink-lacquer);
+    border-radius: 2px;
+    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-icon {
-    color: var(--ink-deep) !important;
+    color: var(--ink-deep);
     animation: galAncientInkCore 1.8s ease-in-out infinite !important;
 }
 @keyframes galAncientInkCore {
@@ -4298,18 +4425,18 @@ const skinCss = `
     50% { transform: scale(0.82); opacity: 0.7; }
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-text {
-    color: var(--ink-black) !important;
-    font-family: var(--ink-font-kai) !important;
-    letter-spacing: 0.5em !important;
+    color: var(--ink-black);
+    font-family: var(--ink-font-kai);
+    letter-spacing: 0.5em;
     text-indent: 0.5em;
-    font-weight: 700 !important;
+    font-weight: 700;
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-status {
-    color: var(--ink-mid) !important;
-    font-family: var(--ink-font-kai) !important;
+    color: var(--ink-mid);
+    font-family: var(--ink-font-kai);
     letter-spacing: 0.24em;
 }
-#gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-dot { background: var(--ink-deep) !important; }
+#gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-dot { background: var(--ink-deep); }
 
 /* —— 选项浮层：挂轴自上垂落，悬停朱批圈点（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-ancient"] {
@@ -4493,7 +4620,7 @@ const skinCss = `
 
 /* —— 无背景图时的舞台：红黑放射漩涡 + 半调网点（有背景图/生成中时让位）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-layer-bg:not(.has-bg):not(.generating-bg) {
-    background: var(--p5-black) !important;
+    background: var(--p5-black);
     isolation: isolate;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::after {
@@ -4512,9 +4639,9 @@ const skinCss = `
 }
 @keyframes galPersonaVortexSpin { to { transform: rotate(360deg); } }
 #gal-global-overlay[class*="skin-persona"] .gal-layer-bg:not(.has-bg):not(.generating-bg)::before {
-    background-image: radial-gradient(rgba(var(--p5-white-rgb), 0.14) 1px, transparent 1.4px) !important;
-    background-size: 9px 9px !important;
-    opacity: 0.4 !important;
+    background-image: radial-gradient(rgba(var(--p5-white-rgb), 0.14) 1px, transparent 1.4px);
+    background-size: 9px 9px;
+    opacity: 0.4;
     -webkit-mask: linear-gradient(115deg, transparent 34%, #000 78%);
             mask: linear-gradient(115deg, transparent 34%, #000 78%);
     z-index: 1;
@@ -4543,11 +4670,11 @@ const skinCss = `
 
 /* —— 对话正文：一张剪出来的白纸片（不规则 clip-path + 红黑双层硬影）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-text-panel {
-    background: rgba(var(--p5-white-rgb), var(--panel-opacity, 0.96)) !important;
-    background-image: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    background: rgba(var(--p5-white-rgb), var(--panel-opacity, 0.96));
+    background-image: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     clip-path: polygon(
         0.6% 3%, 0% 14%, 0.4% 96%, 2% 100%, 40% 99%, 43.5% 100%, 97% 99.2%,
         99.6% 90%, 99.2% 10%, 97% 0.6%, 55% 1.6%, 51% 0%, 4% 1.4%);
@@ -4555,7 +4682,7 @@ const skinCss = `
     filter:
         drop-shadow(6px 6px 0 var(--p5-red))
         drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.9))
-        drop-shadow(0 18px 26px rgba(0, 0, 0, 0.45)) !important;
+        drop-shadow(0 18px 26px rgba(0, 0, 0, 0.45));
 }
 /* 纸面右上角网点：印刷余味 */
 #gal-global-overlay[class*="skin-persona"] .gal-text-panel::before {
@@ -4571,11 +4698,11 @@ const skinCss = `
             mask: linear-gradient(115deg, transparent 45%, #000 92%);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-dialog-text {
-    color: var(--p5-black) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.05em !important;
+    color: var(--p5-black);
+    font-weight: 700;
+    letter-spacing: 0.05em;
     line-height: 1.95 !important;
-    text-shadow: none !important;
+    text-shadow: none;
 }
 
 /* —— 姓名牌：甩上去的墨迹标签 + 星形飞溅 ——
@@ -4583,24 +4710,24 @@ const skinCss = `
 #gal-global-overlay[class*="skin-persona"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: var(--p5-black) !important;
     color: var(--p5-white) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    font-family: var(--p5-font-impact) !important;
+    border: none;
+    border-radius: 0;
+    font-family: var(--p5-font-impact);
     transform: rotate(-3.4deg) scale(var(--ui-scale)) !important;
     transform-origin: bottom left;
     left: 15px !important; top: -26px !important;
     padding: 0.5rem 1.6rem 0.5rem 1.3rem !important;
     clip-path: polygon(0% 22%, 5% 0%, 100% 8%, 96% 88%, 91% 100%, 3% 92%);
-    box-shadow: none !important;
+    box-shadow: none;
     filter: drop-shadow(4px 4px 0 var(--p5-red));
     z-index: 36;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge span {
-    transform: none !important;
+    transform: none;
     font-style: normal;
     letter-spacing: 0.18em;
-    font-size: 1.25rem !important;
-    text-shadow: none !important;
+    font-size: 1.25rem;
+    text-shadow: none;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge::before {
     content: "";
@@ -4619,8 +4746,8 @@ const skinCss = `
     clip-path: polygon(50% 0, 68% 34%, 100% 40%, 74% 62%, 84% 100%, 50% 76%, 16% 96%, 28% 60%, 0 38%, 34% 32%);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge.gal-narrator-label {
-    background: var(--p5-white) !important;
-    color: var(--p5-black) !important;
+    background: var(--p5-white);
+    color: var(--p5-black);
     filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.85));
 }
 #gal-global-overlay[class*="skin-persona"] .gal-name-badge.gal-narrator-label::before { background: var(--p5-black); }
@@ -4628,19 +4755,19 @@ const skinCss = `
 /* —— 对话框右上悬浮操作：剪贴字条按钮（角度互不相同，悬停回正）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-interaction-bar { right: 10px !important; }
 #gal-global-overlay[class*="skin-persona"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn {
-    background: var(--p5-black) !important;
-    color: var(--p5-white) !important;
-    border: 2px solid var(--p5-white) !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    font-family: var(--p5-font-cn) !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.14em !important;
+    background: var(--p5-black);
+    color: var(--p5-white);
+    border: 2px solid var(--p5-white);
+    border-radius: 0;
+    box-shadow: none;
+    font-family: var(--p5-font-cn);
+    font-weight: 900;
+    letter-spacing: 0.14em;
     clip-path: polygon(4% 12%, 100% 0%, 97% 90%, 0% 100%) !important;
     transition: all 0.16s ease !important;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-reroll { transform: skewX(-15deg) rotate(1.4deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-free { transform: skewX(-15deg) rotate(-1.8deg) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-reroll { transform: skewX(-15deg) rotate(1.4deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-action-btn.btn-free { transform: skewX(-15deg) rotate(-1.8deg); }
 #gal-global-overlay[class*="skin-persona"] .gal-action-btn:hover {
     background: var(--p5-red) !important;
     border-color: var(--p5-red) !important;
@@ -4654,22 +4781,22 @@ const skinCss = `
     background: rgba(13, 12, 14, 0.78) !important;
     color: var(--p5-white) !important;
     border: 1.5px solid rgba(var(--p5-white-rgb), 0.75) !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     box-shadow: none !important;
     font-family: var(--p5-font-cn) !important;
     font-weight: 900 !important;
-    letter-spacing: 0.1em !important;
+    letter-spacing: 0.1em;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-footer-btn i,
 #gal-global-overlay[class*="skin-persona"] .gal-footer-btn span {
-    transform: none !important;
+    transform: none;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+1) { transform: rotate(-2.2deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+2) { transform: rotate(1.6deg) translateY(1px) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+3) { transform: rotate(-0.8deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+4) { transform: rotate(2.4deg) translateY(-1px) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+5) { transform: rotate(-1.4deg) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+6) { transform: rotate(0.9deg) translateY(1px) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+1) { transform: rotate(-2.2deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+2) { transform: rotate(1.6deg) translateY(1px); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+3) { transform: rotate(-0.8deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+4) { transform: rotate(2.4deg) translateY(-1px); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+5) { transform: rotate(-1.4deg); }
+#gal-global-overlay[class*="skin-persona"] .gal-footer-btn:nth-child(6n+6) { transform: rotate(0.9deg) translateY(1px); }
 #gal-global-overlay[class*="skin-persona"] .gal-footer-btn:hover {
     background: var(--p5-white) !important;
     color: var(--p5-black) !important;
@@ -4684,15 +4811,15 @@ const skinCss = `
     background: var(--p5-red) !important;
     color: #fff !important;
     border: none !important;
-    border-radius: 0 !important;
-    font-family: var(--p5-font-impact) !important;
+    border-radius: 0;
+    font-family: var(--p5-font-impact);
     font-weight: 400 !important;
-    letter-spacing: 0.22em !important;
+    letter-spacing: 0.22em;
     clip-path: polygon(0% 18%, 3% 0%, 92% 4%, 100% 50%, 92% 96%, 2% 100%) !important;
-    transform: rotate(-1deg) !important;
+    transform: rotate(-1deg);
     box-shadow: none !important;
-    position: relative !important;
-    overflow: hidden !important;
+    position: relative;
+    overflow: hidden;
     isolation: isolate;
     transition: transform 0.18s ease !important;
 }
@@ -4721,15 +4848,15 @@ const skinCss = `
 /* —— 待选项按钮：怪盗预告函（周期性抖动）—— */
 #gal-global-overlay[class*="skin-persona"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn {
     background: var(--p5-red) !important;
-    color: #fff !important;
+    color: #fff;
     border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    font-family: var(--p5-font-cn) !important;
+    border-radius: 0;
+    box-shadow: none;
+    font-family: var(--p5-font-cn);
     font-weight: 900 !important;
-    letter-spacing: 0.14em !important;
+    letter-spacing: 0.14em;
     clip-path: polygon(3% 16%, 0% 0%, 98% 5%, 100% 82%, 95% 100%, 5% 94%) !important;
-    transform: rotate(-1.6deg) !important;
+    transform: rotate(-1.6deg);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-pending-choices-btn.show,
 #gal-global-overlay[class*="skin-persona"] .gal-pending-choices-btn.gal-new-option-highlight {
@@ -4748,49 +4875,49 @@ const skinCss = `
 
 /* —— 进度条：斜切红黑条纹 —— */
 #gal-global-overlay[class*="skin-persona"] .gal-dialog-layer .gal-progress-container {
-    background: rgba(var(--p5-white-rgb), 0.14) !important;
+    background: rgba(var(--p5-white-rgb), 0.14);
     transform: skewX(-30deg);
-    height: 0.28rem !important;
+    height: 0.28rem;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-progress-bar {
-    background: repeating-linear-gradient(90deg, var(--p5-red) 0 14px, var(--p5-red-dk) 14px 18px) !important;
-    box-shadow: none !important;
+    background: repeating-linear-gradient(90deg, var(--p5-red) 0 14px, var(--p5-red-dk) 14px 18px);
+    box-shadow: none;
 }
 
 /* —— 顶部地点/时间：赎金信字条（黑纸条 + 白纸条）—— */
 #gal-global-overlay[class*="skin-persona"] .gal-location-bar {
     background: var(--p5-black) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    color: var(--p5-white) !important;
-    font-family: var(--p5-font-cn) !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.26em !important;
+    border: none;
+    border-radius: 0;
+    color: var(--p5-white);
+    font-family: var(--p5-font-cn);
+    font-weight: 900;
+    letter-spacing: 0.26em;
     transform: rotate(-1.6deg);
-    box-shadow: 3px 3px 0 var(--p5-red) !important;
+    box-shadow: 3px 3px 0 var(--p5-red);
     clip-path: polygon(0% 8%, 4% 0%, 97% 2%, 100% 86%, 96% 100%, 2% 97%);
     text-shadow: none;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-time-bar {
     background: var(--p5-white) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    color: var(--p5-black) !important;
-    font-family: var(--p5-font-impact) !important;
-    letter-spacing: 0.28em !important;
+    border: none;
+    border-radius: 0;
+    color: var(--p5-black);
+    font-family: var(--p5-font-impact);
+    letter-spacing: 0.28em;
     transform: rotate(1.1deg);
-    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.85) !important;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.85);
     clip-path: polygon(2% 0%, 100% 6%, 98% 94%, 0% 100%);
     text-shadow: none;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-location-bar i { color: var(--p5-red) !important; }
-#gal-global-overlay[class*="skin-persona"] .gal-time-bar i { color: var(--p5-red) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-location-bar i { color: var(--p5-red); }
+#gal-global-overlay[class*="skin-persona"] .gal-time-bar i { color: var(--p5-red); }
 #gal-global-overlay[class*="skin-persona"] .gal-fullscreen-btn {
-    background: rgba(13, 12, 14, 0.6) !important;
-    border: 2px solid var(--p5-white) !important;
-    border-radius: 0 !important;
-    color: var(--p5-white) !important;
-    font-weight: 900 !important;
+    background: rgba(13, 12, 14, 0.6);
+    border: 2px solid var(--p5-white);
+    border-radius: 0;
+    color: var(--p5-white);
+    font-weight: 900;
     transform: rotate(3deg);
     clip-path: polygon(8% 2%, 98% 0%, 94% 92%, 2% 98%);
     transition: all 0.18s ease;
@@ -4804,14 +4931,14 @@ const skinCss = `
 /* —— 立绘显隐 / 状态弹窗小按钮：黑色小方钮 —— */
 #gal-global-overlay[class*="skin-persona"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-persona"] .gal-status-popup-trigger {
-    background: var(--p5-black) !important;
-    border: 1.5px solid rgba(var(--p5-white-rgb), 0.6) !important;
-    border-radius: 0 !important;
-    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5) !important;
+    background: var(--p5-black);
+    border: 1.5px solid rgba(var(--p5-white-rgb), 0.6);
+    border-radius: 0;
+    box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.5);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-sprite-toggle .gal-eye-icon,
 #gal-global-overlay[class*="skin-persona"] .gal-status-popup-trigger .gal-status-popup-icon {
-    color: var(--p5-red) !important;
+    color: var(--p5-red);
 }
 #gal-global-overlay[class*="skin-persona"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-persona"] .gal-status-popup-trigger:hover {
@@ -4825,27 +4952,27 @@ const skinCss = `
 
 /* —— 生成中指示器：「潜入中」黑卡 —— */
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator {
-    background: var(--p5-black) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: 8px 8px 0 var(--p5-red) !important;
+    background: var(--p5-black);
+    border: none;
+    border-radius: 0;
+    box-shadow: 8px 8px 0 var(--p5-red);
     clip-path: polygon(1.5% 8%, 98% 1%, 99.5% 90%, 0.5% 97%);
-    transform: translate(-50%, -50%) rotate(-1deg) !important;
+    transform: translate(-50%, -50%) rotate(-1deg);
 }
-#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-icon { color: var(--p5-red) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-icon { color: var(--p5-red); }
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-text {
-    color: var(--p5-white) !important;
-    font-family: var(--p5-font-cn) !important;
-    font-weight: 900 !important;
-    letter-spacing: 0.5em !important;
+    color: var(--p5-white);
+    font-family: var(--p5-font-cn);
+    font-weight: 900;
+    letter-spacing: 0.5em;
     text-indent: 0.5em;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-status {
-    color: var(--p5-gray) !important;
-    font-family: var(--p5-font-impact) !important;
+    color: var(--p5-gray);
+    font-family: var(--p5-font-impact);
     letter-spacing: 0.2em;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-dot { background: var(--p5-red) !important; }
+#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-dot { background: var(--p5-red); }
 
 /* —— 选项浮层：预告函名刺拍在放射漩涡上（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-persona"] {
@@ -5139,7 +5266,7 @@ const skinCss = `
    夜穹场景（cts-scene，注入到 .gal-layer-bg 内；
    有背景图 / 生成中时整层隐藏，宿主点阵伪元素同时禁用）
    ============================================================ */
-#gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg::before { display: none !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg::before { display: none; }
 #gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg.has-bg .cts-scene,
 #gal-global-overlay[class*="skin-jrpg"] .gal-layer-bg.generating-bg .cts-scene { display: none; }
 #gal-global-overlay[class*="skin-jrpg"] .cts-scene {
@@ -5492,33 +5619,33 @@ const skinCss = `
 #gal-global-overlay[class*="skin-jrpg"] .gal-location-bar,
 #gal-global-overlay[class*="skin-jrpg"] .gal-time-bar {
     background: rgba(7, 12, 36, 0.55) !important;
-    border: 1px solid rgba(184, 237, 255, 0.28) !important;
-    border-radius: 0 !important;
+    border: 1px solid rgba(184, 237, 255, 0.28);
+    border-radius: 0;
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-    color: var(--cts-white) !important;
-    font-family: var(--cts-font) !important;
+    color: var(--cts-white);
+    font-family: var(--cts-font);
     letter-spacing: 0.14em;
     backdrop-filter: blur(3px);
 }
 .skin-jrpg-dawn .gal-location-bar,
 .skin-jrpg-dawn .gal-time-bar {
-    background: rgba(250, 252, 255, 0.6) !important;
-    border-color: rgba(46, 126, 199, 0.3) !important;
+    background: rgba(250, 252, 255, 0.6);
+    border-color: rgba(46, 126, 199, 0.3);
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-location-bar i,
-#gal-global-overlay[class*="skin-jrpg"] .gal-time-bar i { color: var(--cts-gold2) !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-time-bar i { color: var(--cts-gold2); }
 #gal-global-overlay[class*="skin-jrpg"] .gal-fullscreen-btn {
-    background: rgba(7, 12, 36, 0.55) !important;
-    color: var(--cts-dim) !important;
-    border: 1px solid rgba(184, 237, 255, 0.28) !important;
-    border-radius: 0 !important;
+    background: rgba(7, 12, 36, 0.55);
+    color: var(--cts-dim);
+    border: 1px solid rgba(184, 237, 255, 0.28);
+    border-radius: 0;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-fullscreen-btn:hover {
     background: var(--cts-gold2) !important;
     color: #071028 !important;
     border-color: var(--cts-gold2) !important;
 }
-.skin-jrpg-dawn .gal-fullscreen-btn { background: rgba(250, 252, 255, 0.6) !important; }
+.skin-jrpg-dawn .gal-fullscreen-btn { background: rgba(250, 252, 255, 0.6); }
 
 /* ============================================================
    对话框：demo 双层结构 1:1 —— 面板本体透明，
@@ -5554,11 +5681,11 @@ const skinCss = `
 @keyframes galCtsSpinReverse { to { transform: rotate(-360deg); } }
 
 #gal-global-overlay[class*="skin-jrpg"] .gal-text-panel {
-    background: transparent !important;
-    background-image: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    background: transparent;
+    background-image: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     overflow: visible !important;
     position: relative;
     filter: drop-shadow(0 20px 38px rgba(1, 3, 10, 0.7));
@@ -5657,37 +5784,37 @@ const skinCss = `
 /* 工具栏保持宿主的 absolute bottom 定位，但抬离削角线、收进削角内 */
 #gal-global-overlay[class*="skin-jrpg"] .gal-text-panel > .gal-bottom-toolbar {
     z-index: 3;
-    bottom: 14px !important;
-    padding-left: 3.2rem !important;
-    padding-right: 3.2rem !important;
+    bottom: 14px;
+    padding-left: 3.2rem;
+    padding-right: 3.2rem;
 }
 /* 进度条（面板外兄弟元素）：收进削角范围、与面板底边留出呼吸 */
 #gal-global-overlay[class*="skin-jrpg"] .gal-dialog-layer > .gal-progress-container {
-    margin: 8px 30px 0 !important;
-    width: auto !important;
+    margin: 8px 30px 0;
+    width: auto;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-dialog-text {
-    color: var(--cts-text) !important;
-    text-shadow: 0 0 18px rgba(111, 212, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.6) !important;
+    color: var(--cts-text);
+    text-shadow: 0 0 18px rgba(111, 212, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.6);
     line-height: 2 !important;
     letter-spacing: 0.06em;
-    font-weight: 500 !important;
-    font-family: var(--cts-font) !important;
+    font-weight: 500;
+    font-family: var(--cts-font);
 }
-.skin-jrpg-dawn .gal-dialog-text { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65) !important; }
+.skin-jrpg-dawn .gal-dialog-text { text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65); }
 
 /* ============================================================
    姓名牌：斜切纹章板 + 呼吸星晶
    ============================================================ */
 #gal-global-overlay[class*="skin-jrpg"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: linear-gradient(120deg, var(--cts-gold2) 0%, var(--cts-gold) 40%, rgba(111, 212, 255, 0.85) 100%) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    clip-path: var(--cts-cut-para) !important;
+    border: none;
+    border-radius: 0;
+    clip-path: var(--cts-cut-para);
     padding: 0.55rem 2rem 0.55rem 2.2rem !important;
     left: 15px !important;
     top: -2.4rem !important;
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     filter: drop-shadow(0 8px 18px rgba(1, 3, 10, 0.7)) drop-shadow(0 0 16px rgba(111, 212, 255, 0.22));
 }
@@ -5709,14 +5836,14 @@ const skinCss = `
     animation: galCtsGem 2.8s ease-in-out infinite;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-name-badge span {
-    color: var(--cts-badge-text) !important;
-    text-shadow: var(--cts-badge-shadow) !important;
+    color: var(--cts-badge-text);
+    text-shadow: var(--cts-badge-shadow);
     font-weight: 700;
     letter-spacing: 0.2em;
-    font-family: var(--cts-font) !important;
+    font-family: var(--cts-font);
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-name-badge.gal-narrator-label {
-    background: linear-gradient(120deg, rgba(174, 185, 214, 0.7), rgba(110, 124, 158, 0.65)) !important;
+    background: linear-gradient(120deg, rgba(174, 185, 214, 0.7), rgba(110, 124, 158, 0.65));
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-name-badge.gal-narrator-label::before {
     background: linear-gradient(120deg, #2a3452 0%, #1c2440 100%);
@@ -5735,16 +5862,16 @@ const skinCss = `
    ============================================================ */
 #gal-global-overlay[class*="skin-jrpg"] .gal-interaction-bar { right: 10px !important; }
 #gal-global-overlay[class*="skin-jrpg"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn {
-    background: var(--cts-btn-face) !important;
-    color: var(--cts-ice) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: var(--cts-btn-face);
+    color: var(--cts-ice);
+    border: none;
+    border-radius: 0;
     clip-path: var(--cts-cut-para) !important;
     box-shadow: inset 0 0 0 1px rgba(184, 237, 255, 0.3) !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
-    position: relative !important;
+    font-family: var(--cts-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    position: relative;
     isolation: isolate;
     transition: color 0.25s ease, box-shadow 0.25s ease !important;
 }
@@ -5772,12 +5899,12 @@ const skinCss = `
     background: none !important;
     color: var(--cts-dim) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     box-shadow: none !important;
     font-family: var(--cts-font) !important;
     font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
-    position: relative !important;
+    letter-spacing: 0.1em;
+    position: relative;
     transition: color 0.25s ease, text-shadow 0.25s ease !important;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-footer-btn::after {
@@ -5802,15 +5929,15 @@ const skinCss = `
     background: linear-gradient(120deg, var(--cts-ice), var(--cts-crystal) 70%) !important;
     color: var(--cts-dark-on-crystal) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: var(--cts-cut-para) !important;
-    box-shadow: none !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--cts-font);
+    font-weight: 700;
+    letter-spacing: 0.14em;
     animation: galCtsBreathe 2.4s ease-out infinite;
 }
-.skin-jrpg-dawn .gal-pending-choices-btn { color: #fff !important; }
+.skin-jrpg-dawn .gal-pending-choices-btn { color: #fff; }
 @keyframes galCtsBreathe {
     0%   { filter: drop-shadow(0 0 0 rgba(111, 212, 255, 0.6)); }
     70%  { filter: drop-shadow(0 0 12px rgba(111, 212, 255, 0.05)); }
@@ -5825,14 +5952,14 @@ const skinCss = `
         linear-gradient(120deg, rgba(217, 180, 92, 0.75), rgba(111, 212, 255, 0.55)) !important;
     color: var(--cts-next-text) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: var(--cts-cut-hex) !important;
     box-shadow: none !important;
-    font-family: var(--cts-font) !important;
+    font-family: var(--cts-font);
     font-weight: 700 !important;
-    letter-spacing: 0.3em !important;
+    letter-spacing: 0.3em;
     text-shadow: 0 0 12px rgba(111, 212, 255, 0.7);
-    position: relative !important;
+    position: relative;
     isolation: isolate;
     animation: galCtsNextSpin 3.2s linear infinite;
     filter: drop-shadow(0 6px 18px rgba(111, 212, 255, 0.4));
@@ -5861,12 +5988,12 @@ const skinCss = `
 #gal-global-overlay[class*="skin-jrpg"] .gal-progress-container {
     background:
         repeating-linear-gradient(90deg, rgba(184, 237, 255, 0.22) 0 1px, transparent 1px 10%),
-        rgba(184, 237, 255, 0.09) !important;
-    overflow: visible !important;
+        rgba(184, 237, 255, 0.09);
+    overflow: visible;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-progress-bar {
-    background: linear-gradient(90deg, rgba(111, 212, 255, 0.25) 0%, var(--cts-crystal) 55%, var(--cts-gold2) 100%) !important;
-    box-shadow: 0 0 10px rgba(111, 212, 255, 0.65) !important;
+    background: linear-gradient(90deg, rgba(111, 212, 255, 0.25) 0%, var(--cts-crystal) 55%, var(--cts-gold2) 100%);
+    box-shadow: 0 0 10px rgba(111, 212, 255, 0.65);
     position: relative;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-progress-bar::after {
@@ -5884,18 +6011,18 @@ const skinCss = `
    ============================================================ */
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger {
-    background: rgba(7, 14, 42, 0.92) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: rgba(7, 14, 42, 0.92);
+    border: none;
+    border-radius: 0;
     clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
-    box-shadow: inset 0 0 0 1px rgba(184, 237, 255, 0.3) !important;
-    color: var(--cts-ice) !important;
+    box-shadow: inset 0 0 0 1px rgba(184, 237, 255, 0.3);
+    color: var(--cts-ice);
     transition: box-shadow 0.25s ease, color 0.25s ease !important;
 }
 .skin-jrpg-dawn .gal-sprite-toggle,
 .skin-jrpg-dawn .gal-status-popup-trigger {
-    background: rgba(250, 252, 255, 0.94) !important;
-    color: #2E7EC7 !important;
+    background: rgba(250, 252, 255, 0.94);
+    color: #2E7EC7;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger:hover {
@@ -5905,14 +6032,14 @@ const skinCss = `
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle i,
 #gal-global-overlay[class*="skin-jrpg"] .gal-sprite-toggle .gal-eye-icon,
-#gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger i { color: inherit !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-status-popup-trigger i { color: inherit; }
 
 /* ============================================================
    选项浮层：命运星盘
    ============================================================ */
 #gal-layer-choices[class*="skin-jrpg"] {
     background: rgba(2, 4, 14, 0.7) !important;
-    backdrop-filter: blur(5px) saturate(0.9) !important;
+    backdrop-filter: blur(5px) saturate(0.9);
     isolation: isolate;
 }
 #gal-layer-choices.skin-jrpg-dawn { background: rgba(160, 190, 225, 0.55) !important; }
@@ -5950,24 +6077,24 @@ const skinCss = `
     z-index: -1;
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choices-title span {
-    color: var(--cts-white) !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.62em !important;
+    color: var(--cts-white);
+    font-family: var(--cts-font);
+    font-weight: 700;
+    letter-spacing: 0.62em;
     text-indent: 0.62em;
-    text-shadow: 0 0 20px rgba(111, 212, 255, 0.7) !important;
+    text-shadow: 0 0 20px rgba(111, 212, 255, 0.7);
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choices-hint {
-    color: rgba(216, 228, 250, 0.42) !important;
-    letter-spacing: 0.34em !important;
+    color: rgba(216, 228, 250, 0.42);
+    letter-spacing: 0.34em;
 }
-#gal-layer-choices.skin-jrpg-dawn .gal-choices-hint { color: rgba(34, 50, 82, 0.55) !important; }
+#gal-layer-choices.skin-jrpg-dawn .gal-choices-hint { color: rgba(34, 50, 82, 0.55); }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choice-card {
-    background: linear-gradient(120deg, rgba(246, 227, 166, 0.85), rgba(111, 212, 255, 0.35) 45%, rgba(184, 237, 255, 0.6)) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: linear-gradient(120deg, rgba(246, 227, 166, 0.85), rgba(111, 212, 255, 0.35) 45%, rgba(184, 237, 255, 0.6));
+    border: none;
+    border-radius: 0;
     clip-path: var(--cts-cut-card);
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     position: relative;
     filter: drop-shadow(0 16px 26px rgba(1, 3, 10, 0.7));
@@ -5982,10 +6109,10 @@ const skinCss = `
     background: var(--cts-cardface);
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choice-card span {
-    color: var(--cts-text) !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.06em !important;
+    color: var(--cts-text);
+    font-family: var(--cts-font);
+    font-weight: 600;
+    letter-spacing: 0.06em;
 }
 #gal-layer-choices[class*="skin-jrpg"] .gal-choice-card:hover {
     transform: translateY(-3px) scale(1.012) !important;
@@ -6067,19 +6194,19 @@ const skinCss = `
 #gal-global-overlay[class*="skin-jrpg"] .gal-generating-indicator {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(111, 212, 255, 0.12) 0%, transparent 55%),
-        linear-gradient(178deg, rgba(13, 24, 64, 0.97), rgba(5, 9, 26, 0.97)) !important;
-    border: none !important;
-    border-radius: 0 !important;
+        linear-gradient(178deg, rgba(13, 24, 64, 0.97), rgba(5, 9, 26, 0.97));
+    border: none;
+    border-radius: 0;
     clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
-    box-shadow: inset 0 0 0 1px rgba(217, 180, 92, 0.45) !important;
+    box-shadow: inset 0 0 0 1px rgba(217, 180, 92, 0.45);
 }
 .skin-jrpg-dawn .gal-generating-indicator {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(95, 168, 220, 0.14) 0%, transparent 55%),
-        linear-gradient(178deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97)) !important;
+        linear-gradient(178deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97));
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-icon {
-    color: var(--cts-ice) !important;
+    color: var(--cts-ice);
     text-shadow: 0 0 14px rgba(184, 237, 255, 1);
     animation: galCtsGenPulse 1.8s ease-in-out infinite;
 }
@@ -6088,16 +6215,16 @@ const skinCss = `
     50% { opacity: 0.35; transform: scale(0.82); }
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-text {
-    color: var(--cts-white) !important;
-    font-family: var(--cts-font) !important;
-    letter-spacing: 0.4em !important;
+    color: var(--cts-white);
+    font-family: var(--cts-font);
+    letter-spacing: 0.4em;
     text-shadow: 0 0 16px rgba(111, 212, 255, 0.55);
 }
 .skin-jrpg-dawn .gal-gen-text { text-shadow: none; }
-#gal-global-overlay[class*="skin-jrpg"] .gal-gen-status { color: var(--cts-dim) !important; }
+#gal-global-overlay[class*="skin-jrpg"] .gal-gen-status { color: var(--cts-dim); }
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-dot {
-    background: var(--cts-gold2) !important;
-    border-radius: 0 !important;
+    background: var(--cts-gold2);
+    border-radius: 0;
     transform: rotate(45deg);
     box-shadow: 0 0 8px rgba(246, 227, 166, 0.8);
 }
@@ -6108,30 +6235,30 @@ const skinCss = `
 #gal-global-overlay[class*="skin-jrpg"] .gal-mobile-menu {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(111, 212, 255, 0.08) 0%, transparent 55%),
-        linear-gradient(170deg, rgba(16, 28, 70, 0.97), rgba(6, 11, 30, 0.97)) !important;
-    border: 1px solid rgba(217, 180, 92, 0.4) !important;
-    border-radius: 0 !important;
+        linear-gradient(170deg, rgba(16, 28, 70, 0.97), rgba(6, 11, 30, 0.97));
+    border: 1px solid rgba(217, 180, 92, 0.4);
+    border-radius: 0;
     clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7) !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(8px) !important;
 }
 .skin-jrpg-dawn .gal-mobile-menu {
-    background: linear-gradient(170deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97)) !important;
+    background: linear-gradient(170deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97));
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-mobile-menu .gal-menu-btn {
-    background: rgba(184, 237, 255, 0.05) !important;
-    color: var(--cts-ice) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: rgba(184, 237, 255, 0.05);
+    color: var(--cts-ice);
+    border: none;
+    border-radius: 0;
     clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%);
-    box-shadow: none !important;
-    font-family: var(--cts-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--cts-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
 }
 .skin-jrpg-dawn .gal-mobile-menu .gal-menu-btn {
-    background: rgba(46, 126, 199, 0.08) !important;
-    color: #2E7EC7 !important;
+    background: rgba(46, 126, 199, 0.08);
+    color: #2E7EC7;
 }
 #gal-global-overlay[class*="skin-jrpg"] .gal-mobile-menu .gal-menu-btn:hover {
     background: linear-gradient(120deg, rgba(246, 227, 166, 0.9), rgba(217, 180, 92, 0.9)) !important;
@@ -6268,7 +6395,7 @@ const skinCss = `
    风雪夜戏场景（yx-scene，注入 .gal-layer-bg；
    有背景图 / 生成中时隐藏，宿主点阵伪元素禁用）
    ============================================================ */
-#gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg::before { display: none !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg::before { display: none; }
 #gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg.has-bg .yx-scene,
 #gal-global-overlay[class*="skin-yanyun"] .gal-layer-bg.generating-bg .yx-scene { display: none; }
 #gal-global-overlay[class*="skin-yanyun"] .yx-scene {
@@ -6489,21 +6616,21 @@ const skinCss = `
 #gal-global-overlay[class*="skin-yanyun"] .gal-location-bar,
 #gal-global-overlay[class*="skin-yanyun"] .gal-time-bar {
     background: var(--yx-btnface) !important;
-    border: 1px solid rgba(166, 124, 61, 0.35) !important;
-    border-radius: 0 !important;
+    border: 1px solid rgba(166, 124, 61, 0.35);
+    border-radius: 0;
     clip-path: var(--yx-cut-s);
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
     letter-spacing: 0.14em;
     backdrop-filter: blur(3px);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-location-bar i,
-#gal-global-overlay[class*="skin-yanyun"] .gal-time-bar i { color: var(--yx-bronze-2) !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-time-bar i { color: var(--yx-bronze-2); }
 #gal-global-overlay[class*="skin-yanyun"] .gal-fullscreen-btn {
-    background: var(--yx-btnface) !important;
-    color: var(--yx-dim) !important;
-    border: 1px solid rgba(166, 124, 61, 0.35) !important;
-    border-radius: 0 !important;
+    background: var(--yx-btnface);
+    color: var(--yx-dim);
+    border: 1px solid rgba(166, 124, 61, 0.35);
+    border-radius: 0;
     clip-path: var(--yx-cut-s);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-fullscreen-btn:hover {
@@ -6531,11 +6658,11 @@ const skinCss = `
     letter-spacing: 0.06em;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-text-panel {
-    background: transparent !important;
-    background-image: none !important;
-    border: none !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    background: transparent;
+    background-image: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     overflow: visible !important;
     position: relative;
     filter: drop-shadow(0 22px 42px rgba(0, 0, 0, 0.8));
@@ -6649,36 +6776,36 @@ const skinCss = `
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-text-panel > .gal-bottom-toolbar {
     z-index: 3;
-    bottom: 14px !important;
-    padding-left: 3rem !important;
-    padding-right: 3rem !important;
+    bottom: 14px;
+    padding-left: 3rem;
+    padding-right: 3rem;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-dialog-layer > .gal-progress-container {
-    margin: 8px 30px 0 !important;
-    width: auto !important;
+    margin: 8px 30px 0;
+    width: auto;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-dialog-text {
-    color: var(--yx-text) !important;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5) !important;
+    color: var(--yx-text);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
     line-height: 2 !important;
     letter-spacing: 0.05em;
-    font-weight: 500 !important;
-    font-family: var(--yx-font) !important;
+    font-weight: 500;
+    font-family: var(--yx-font);
 }
-.skin-yanyun-xueji .gal-dialog-text { text-shadow: 0 1px 3px rgba(255, 255, 255, 0.5) !important; }
+.skin-yanyun-xueji .gal-dialog-text { text-shadow: 0 1px 3px rgba(255, 255, 255, 0.5); }
 
 /* ============================================================
    姓名牌：铜印拓（铜缘深墨牌 + 左侧朱砂小印）
    ============================================================ */
 #gal-global-overlay[class*="skin-yanyun"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
     background: linear-gradient(135deg, var(--yx-bronze-2) 0%, var(--yx-bronze) 55%, rgba(166, 124, 61, 0.75) 100%) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    clip-path: var(--yx-cut-tab) !important;
+    border: none;
+    border-radius: 0;
+    clip-path: var(--yx-cut-tab);
     padding: 0.6rem 2rem 0.6rem 2.6rem !important;
     left: 15px !important;
     top: -2.6rem !important;
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.75));
 }
@@ -6701,14 +6828,14 @@ const skinCss = `
     box-shadow: inset 0 0 0 1px rgba(240, 230, 214, 0.25), 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-name-badge span {
-    color: var(--yx-text) !important;
-    text-shadow: none !important;
+    color: var(--yx-text);
+    text-shadow: none;
     font-weight: 700;
     letter-spacing: 0.24em;
-    font-family: var(--yx-font) !important;
+    font-family: var(--yx-font);
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-name-badge.gal-narrator-label {
-    background: linear-gradient(135deg, rgba(141, 154, 171, 0.6), rgba(93, 107, 126, 0.6)) !important;
+    background: linear-gradient(135deg, rgba(141, 154, 171, 0.6), rgba(93, 107, 126, 0.6));
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-name-badge.gal-narrator-label::after {
     background: #5d6b7e;
@@ -6720,16 +6847,16 @@ const skinCss = `
    ============================================================ */
 #gal-global-overlay[class*="skin-yanyun"] .gal-interaction-bar { right: 10px !important; }
 #gal-global-overlay[class*="skin-yanyun"]:not(.skin-default):not(.skin-default-dark) .gal-action-btn {
-    background: var(--yx-btnface) !important;
-    color: var(--yx-snow-dim) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: var(--yx-btnface);
+    color: var(--yx-snow-dim);
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-tab) !important;
     box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.3) !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
-    position: relative !important;
+    font-family: var(--yx-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    position: relative;
     isolation: isolate;
     transition: color 0.25s ease, box-shadow 0.25s ease !important;
 }
@@ -6757,12 +6884,12 @@ const skinCss = `
     background: none !important;
     color: var(--yx-dim) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     box-shadow: none !important;
     font-family: var(--yx-font) !important;
     font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
-    position: relative !important;
+    letter-spacing: 0.1em;
+    position: relative;
     transition: color 0.22s ease !important;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-footer-btn::after {
@@ -6785,12 +6912,12 @@ const skinCss = `
     background: linear-gradient(160deg, #c14a3c, var(--yx-cinnabar) 60%) !important;
     color: var(--yx-seal-text) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: var(--yx-cut-tab) !important;
-    box-shadow: none !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--yx-font);
+    font-weight: 700;
+    letter-spacing: 0.14em;
     animation: galYxSealBreathe 2.6s ease-out infinite;
 }
 @keyframes galYxSealBreathe {
@@ -6804,15 +6931,15 @@ const skinCss = `
     background: linear-gradient(135deg, var(--yx-bronze-2), var(--yx-bronze) 45%, rgba(166, 124, 61, 0.8)) !important;
     color: var(--yx-text) !important;
     border: none !important;
-    border-radius: 0 !important;
+    border-radius: 0;
     clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%) !important;
     box-shadow: none !important;
-    font-family: var(--yx-font) !important;
+    font-family: var(--yx-font);
     font-weight: 700 !important;
-    letter-spacing: 0.3em !important;
-    position: relative !important;
+    letter-spacing: 0.3em;
+    position: relative;
     isolation: isolate;
-    overflow: hidden !important;
+    overflow: hidden;
     filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.6));
     transition: filter 0.3s ease !important;
 }
@@ -6850,13 +6977,13 @@ const skinCss = `
 
 /* 进度条：一痕墨迹，朱砂行至处 */
 #gal-global-overlay[class*="skin-yanyun"] .gal-progress-container {
-    background: rgba(199, 222, 244, 0.1) !important;
-    overflow: visible !important;
+    background: rgba(199, 222, 244, 0.1);
+    overflow: visible;
 }
-.skin-yanyun-xueji .gal-progress-container { background: rgba(52, 68, 88, 0.15) !important; }
+.skin-yanyun-xueji .gal-progress-container { background: rgba(52, 68, 88, 0.15); }
 #gal-global-overlay[class*="skin-yanyun"] .gal-progress-bar {
-    background: linear-gradient(90deg, rgba(166, 124, 61, 0.4) 0%, var(--yx-bronze-2) 78%, var(--yx-cinnabar) 100%) !important;
-    box-shadow: none !important;
+    background: linear-gradient(90deg, rgba(166, 124, 61, 0.4) 0%, var(--yx-bronze-2) 78%, var(--yx-cinnabar) 100%);
+    box-shadow: none;
     position: relative;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-progress-bar::after {
@@ -6874,12 +7001,12 @@ const skinCss = `
    ============================================================ */
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-yanyun"] .gal-status-popup-trigger {
-    background: var(--yx-btnface) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: var(--yx-btnface);
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-s);
-    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.3) !important;
-    color: var(--yx-snow-dim) !important;
+    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.3);
+    color: var(--yx-snow-dim);
     transition: box-shadow 0.25s ease, color 0.25s ease !important;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle:hover,
@@ -6890,14 +7017,14 @@ const skinCss = `
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle i,
 #gal-global-overlay[class*="skin-yanyun"] .gal-sprite-toggle .gal-eye-icon,
-#gal-global-overlay[class*="skin-yanyun"] .gal-status-popup-trigger i { color: inherit !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-status-popup-trigger i { color: inherit; }
 
 /* ============================================================
    选项浮层：抉择（"武"字水印 + 朱印令牌）
    ============================================================ */
 #gal-layer-choices[class*="skin-yanyun"] {
     background: var(--yx-overlay-veil) !important;
-    backdrop-filter: blur(5px) saturate(0.9) !important;
+    backdrop-filter: blur(5px) saturate(0.9);
     isolation: isolate;
 }
 #gal-layer-choices[class*="skin-yanyun"]::before {
@@ -6914,23 +7041,23 @@ const skinCss = `
     z-index: -1;
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choices-title span {
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.6em !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
+    font-weight: 700;
+    letter-spacing: 0.6em;
     text-indent: 0.6em;
-    text-shadow: var(--yx-title-shadow) !important;
+    text-shadow: var(--yx-title-shadow);
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choices-hint {
-    color: var(--yx-dim) !important;
-    letter-spacing: 0.34em !important;
+    color: var(--yx-dim);
+    letter-spacing: 0.34em;
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choice-card {
-    background: linear-gradient(135deg, rgba(217, 176, 106, 0.8), rgba(166, 124, 61, 0.5) 40%, rgba(166, 124, 61, 0.75)) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: linear-gradient(135deg, rgba(217, 176, 106, 0.8), rgba(166, 124, 61, 0.5) 40%, rgba(166, 124, 61, 0.75));
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-card);
-    box-shadow: none !important;
+    box-shadow: none;
     isolation: isolate;
     position: relative;
     filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.7));
@@ -6945,10 +7072,10 @@ const skinCss = `
     background: var(--yx-choice);
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choice-card span {
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.05em !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
+    font-weight: 600;
+    letter-spacing: 0.05em;
 }
 #gal-layer-choices[class*="skin-yanyun"] .gal-choice-card:hover {
     transform: translateY(-2px) !important;
@@ -7023,15 +7150,15 @@ const skinCss = `
 #gal-global-overlay[class*="skin-yanyun"] .gal-generating-indicator {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(199, 222, 244, 0.06) 0%, transparent 55%),
-        var(--yx-choice) !important;
-    border: none !important;
-    border-radius: 0 !important;
+        var(--yx-choice);
+    border: none;
+    border-radius: 0;
     clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
-    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.4) !important;
+    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.4);
 }
 /* 魔杖图标改造为悬剑 */
 #gal-global-overlay[class*="skin-yanyun"] .gal-gen-icon {
-    color: var(--yx-blade) !important;
+    color: var(--yx-blade);
     text-shadow: 0 0 10px rgba(199, 222, 244, 0.6);
     animation: galYxSwordSway 2.2s ease-in-out infinite alternate;
 }
@@ -7040,14 +7167,14 @@ const skinCss = `
     to   { transform: rotate(4deg); }
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-gen-text {
-    color: var(--yx-text) !important;
-    font-family: var(--yx-font) !important;
-    letter-spacing: 0.4em !important;
+    color: var(--yx-text);
+    font-family: var(--yx-font);
+    letter-spacing: 0.4em;
 }
-#gal-global-overlay[class*="skin-yanyun"] .gal-gen-status { color: var(--yx-dim) !important; }
+#gal-global-overlay[class*="skin-yanyun"] .gal-gen-status { color: var(--yx-dim); }
 #gal-global-overlay[class*="skin-yanyun"] .gal-gen-dot {
-    background: var(--yx-cinnabar) !important;
-    border-radius: 50% 50% 50% 4% !important;
+    background: var(--yx-cinnabar);
+    border-radius: 50% 50% 50% 4%;
     transform: rotate(45deg);
     box-shadow: none;
 }
@@ -7058,23 +7185,23 @@ const skinCss = `
 #gal-global-overlay[class*="skin-yanyun"] .gal-mobile-menu {
     background:
         radial-gradient(140% 100% at 50% 0%, rgba(199, 222, 244, 0.04) 0%, transparent 55%),
-        var(--yx-choice) !important;
-    border: 1px solid rgba(166, 124, 61, 0.4) !important;
-    border-radius: 0 !important;
+        var(--yx-choice);
+    border: 1px solid rgba(166, 124, 61, 0.4);
+    border-radius: 0;
     clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7) !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(8px) !important;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-mobile-menu .gal-menu-btn {
-    background: rgba(166, 124, 61, 0.08) !important;
-    color: var(--yx-snow-dim) !important;
-    border: none !important;
-    border-radius: 0 !important;
+    background: rgba(166, 124, 61, 0.08);
+    color: var(--yx-snow-dim);
+    border: none;
+    border-radius: 0;
     clip-path: var(--yx-cut-tab);
-    box-shadow: none !important;
-    font-family: var(--yx-font) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
+    box-shadow: none;
+    font-family: var(--yx-font);
+    font-weight: 600;
+    letter-spacing: 0.14em;
 }
 #gal-global-overlay[class*="skin-yanyun"] .gal-mobile-menu .gal-menu-btn:hover {
     background: linear-gradient(120deg, var(--yx-bronze-2), var(--yx-bronze)) !important;
@@ -7129,9 +7256,9 @@ const skinCss = `
 }
 /* —— 无背景图时的舞台：春晓花霞（晨光 + 雾紫远山 + 垂樱枝） —— */
 #gal-global-overlay.skin-classic .gal-layer-bg:not(.has-bg):not(.generating-bg) {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 640' preserveAspectRatio='xMidYMid slice'%3E%3Cdefs%3E%3ClinearGradient id='sky' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FFF3EA'/%3E%3Cstop offset='0.42' stop-color='%23FFE4EA'/%3E%3Cstop offset='0.76' stop-color='%23F3DEEE'/%3E%3Cstop offset='1' stop-color='%23E7DCF2'/%3E%3C/linearGradient%3E%3CradialGradient id='sun' cx='0.24' cy='0.2' r='0.34'%3E%3Cstop offset='0' stop-color='%23FFFBEB' stop-opacity='0.95'/%3E%3Cstop offset='0.5' stop-color='%23FFE9CD' stop-opacity='0.5'/%3E%3Cstop offset='1' stop-color='%23FFE9CD' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1200' height='640' fill='url(%23sky)'/%3E%3Crect width='1200' height='640' fill='url(%23sun)'/%3E%3Cpath d='M0,430 Q160,340 340,400 T700,392 Q900,350 1040,404 T1200,398 L1200,640 L0,640 Z' fill='%23D9C4E0' opacity='0.55'/%3E%3Cpath d='M0,480 Q220,404 460,458 T900,450 Q1060,420 1200,462 L1200,640 L0,640 Z' fill='%23E4BBD0' opacity='0.6'/%3E%3Cpath d='M0,556 Q300,512 640,542 T1200,534 L1200,640 L0,640 Z' fill='%23F2D7E3' opacity='0.9'/%3E%3Cg fill='none' stroke='%237C4A62' stroke-linecap='round' opacity='0.9'%3E%3Cpath d='M1230,30 Q1040,80 930,180 T780,330' stroke-width='12'/%3E%3Cpath d='M1030,110 Q950,145 910,225' stroke-width='6'/%3E%3Cpath d='M910,205 Q830,245 812,326' stroke-width='5'/%3E%3Cpath d='M1120,64 Q1060,134 1068,214' stroke-width='6'/%3E%3C/g%3E%3Cg%3E%3Ccircle cx='924' cy='188' r='34' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='880' cy='238' r='26' fill='%23F6B2C9' opacity='0.85'/%3E%3Ccircle cx='962' cy='150' r='24' fill='%23FBD5E1' opacity='0.9'/%3E%3Ccircle cx='822' cy='300' r='28' fill='%23F6B2C9' opacity='0.8'/%3E%3Ccircle cx='792' cy='336' r='18' fill='%23F19CBB' opacity='0.75'/%3E%3Ccircle cx='1062' cy='196' r='26' fill='%23F9C6D6' opacity='0.85'/%3E%3Ccircle cx='1092' cy='150' r='20' fill='%23FBD5E1' opacity='0.85'/%3E%3Ccircle cx='1148' cy='84' r='30' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='1006' cy='120' r='18' fill='%23F6B2C9' opacity='0.7'/%3E%3C/g%3E%3Cg fill='%23E87FA5'%3E%3Ccircle cx='936' cy='196' r='5' opacity='0.9'/%3E%3Ccircle cx='884' cy='248' r='4' opacity='0.8'/%3E%3Ccircle cx='826' cy='308' r='4.5' opacity='0.8'/%3E%3Ccircle cx='1066' cy='204' r='4' opacity='0.8'/%3E%3Ccircle cx='1146' cy='92' r='5' opacity='0.85'/%3E%3C/g%3E%3Cg fill='%23F4A9C1'%3E%3Cpath d='M300,140 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.5'/%3E%3Cpath d='M480,300 q7,-3 9,3 q-2,8 -10,6 q-3,-7 1,-9' opacity='0.4'/%3E%3Cpath d='M180,380 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.45'/%3E%3Cpath d='M640,180 q6,-3 8,3 q-2,7 -9,5 q-3,-6 1,-8' opacity='0.35'/%3E%3Cpath d='M560,440 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.4'/%3E%3C/g%3E%3C/svg%3E") !important;
-    background-size: cover !important;
-    background-position: center !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 640' preserveAspectRatio='xMidYMid slice'%3E%3Cdefs%3E%3ClinearGradient id='sky' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FFF3EA'/%3E%3Cstop offset='0.42' stop-color='%23FFE4EA'/%3E%3Cstop offset='0.76' stop-color='%23F3DEEE'/%3E%3Cstop offset='1' stop-color='%23E7DCF2'/%3E%3C/linearGradient%3E%3CradialGradient id='sun' cx='0.24' cy='0.2' r='0.34'%3E%3Cstop offset='0' stop-color='%23FFFBEB' stop-opacity='0.95'/%3E%3Cstop offset='0.5' stop-color='%23FFE9CD' stop-opacity='0.5'/%3E%3Cstop offset='1' stop-color='%23FFE9CD' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='1200' height='640' fill='url(%23sky)'/%3E%3Crect width='1200' height='640' fill='url(%23sun)'/%3E%3Cpath d='M0,430 Q160,340 340,400 T700,392 Q900,350 1040,404 T1200,398 L1200,640 L0,640 Z' fill='%23D9C4E0' opacity='0.55'/%3E%3Cpath d='M0,480 Q220,404 460,458 T900,450 Q1060,420 1200,462 L1200,640 L0,640 Z' fill='%23E4BBD0' opacity='0.6'/%3E%3Cpath d='M0,556 Q300,512 640,542 T1200,534 L1200,640 L0,640 Z' fill='%23F2D7E3' opacity='0.9'/%3E%3Cg fill='none' stroke='%237C4A62' stroke-linecap='round' opacity='0.9'%3E%3Cpath d='M1230,30 Q1040,80 930,180 T780,330' stroke-width='12'/%3E%3Cpath d='M1030,110 Q950,145 910,225' stroke-width='6'/%3E%3Cpath d='M910,205 Q830,245 812,326' stroke-width='5'/%3E%3Cpath d='M1120,64 Q1060,134 1068,214' stroke-width='6'/%3E%3C/g%3E%3Cg%3E%3Ccircle cx='924' cy='188' r='34' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='880' cy='238' r='26' fill='%23F6B2C9' opacity='0.85'/%3E%3Ccircle cx='962' cy='150' r='24' fill='%23FBD5E1' opacity='0.9'/%3E%3Ccircle cx='822' cy='300' r='28' fill='%23F6B2C9' opacity='0.8'/%3E%3Ccircle cx='792' cy='336' r='18' fill='%23F19CBB' opacity='0.75'/%3E%3Ccircle cx='1062' cy='196' r='26' fill='%23F9C6D6' opacity='0.85'/%3E%3Ccircle cx='1092' cy='150' r='20' fill='%23FBD5E1' opacity='0.85'/%3E%3Ccircle cx='1148' cy='84' r='30' fill='%23F9C6D6' opacity='0.9'/%3E%3Ccircle cx='1006' cy='120' r='18' fill='%23F6B2C9' opacity='0.7'/%3E%3C/g%3E%3Cg fill='%23E87FA5'%3E%3Ccircle cx='936' cy='196' r='5' opacity='0.9'/%3E%3Ccircle cx='884' cy='248' r='4' opacity='0.8'/%3E%3Ccircle cx='826' cy='308' r='4.5' opacity='0.8'/%3E%3Ccircle cx='1066' cy='204' r='4' opacity='0.8'/%3E%3Ccircle cx='1146' cy='92' r='5' opacity='0.85'/%3E%3C/g%3E%3Cg fill='%23F4A9C1'%3E%3Cpath d='M300,140 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.5'/%3E%3Cpath d='M480,300 q7,-3 9,3 q-2,8 -10,6 q-3,-7 1,-9' opacity='0.4'/%3E%3Cpath d='M180,380 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.45'/%3E%3Cpath d='M640,180 q6,-3 8,3 q-2,7 -9,5 q-3,-6 1,-8' opacity='0.35'/%3E%3Cpath d='M560,440 q8,-4 10,4 q-2,9 -11,7 q-4,-8 1,-11' opacity='0.4'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: cover;
+    background-position: center;
 }
 /* 覆盖宿主点阵，改为缓慢漂移的花雾横带 */
 #gal-global-overlay.skin-classic .gal-layer-bg:not(.has-bg):not(.generating-bg)::before {
@@ -7141,9 +7268,9 @@ const skinCss = `
         transparent 62%,
         transparent 66%,
         rgba(255, 250, 250, 0.45) 74%,
-        transparent 82%) !important;
-    background-size: auto !important;
-    opacity: 0.9 !important;
+        transparent 82%);
+    background-size: auto;
+    opacity: 0.9;
     filter: blur(5px);
     animation: skClassicMistDrift 26s ease-in-out infinite alternate;
 }
@@ -7172,16 +7299,16 @@ const skinCss = `
 }
 /* 对话主面板：暖白磨砂玻璃 */
 #gal-global-overlay.skin-classic .gal-text-panel {
-    background: var(--sk-glass) !important;
-    background-image: none !important;
-    border: 1px solid var(--sk-glass-line) !important;
-    border-radius: calc(22px * var(--ui-scale, 1)) !important;
+    background: var(--sk-glass);
+    background-image: none;
+    border: 1px solid var(--sk-glass-line);
+    border-radius: calc(22px * var(--ui-scale, 1));
     box-shadow:
         0 calc(24px * var(--ui-scale, 1)) calc(64px * var(--ui-scale, 1)) var(--sk-shadow),
         0 calc(2px * var(--ui-scale, 1)) calc(8px * var(--ui-scale, 1)) rgba(70, 41, 58, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(22px) saturate(1.35) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(1.35) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(1.35);
     overflow: visible !important;
 }
 /* 顶缘一线樱霞渐变 —— 面板唯一的彩色装饰 */
@@ -7198,30 +7325,30 @@ const skinCss = `
     pointer-events: none;
 }
 #gal-global-overlay.skin-classic .gal-dialog-text {
-    color: var(--sk-plum) !important;
-    font-family: var(--sk-serif) !important;
-    font-weight: 500 !important;
+    color: var(--sk-plum);
+    font-family: var(--sk-serif);
+    font-weight: 500;
     line-height: 2.05 !important;
-    letter-spacing: 0.035em !important;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+    letter-spacing: 0.035em;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 /* 名字：樱渐变浮签 + 白花瓣印 + 明朝体 */
 #gal-global-overlay.skin-classic .gal-name-badge {
     top: calc(-1.35rem * var(--ui-scale, 1)) !important;
     left: calc(1.6rem * var(--ui-scale, 1)) !important;
     padding: calc(0.42rem * var(--ui-scale, 1)) calc(1.55rem * var(--ui-scale, 1)) !important;
-    background: var(--sk-grad) !important;
-    color: #fff !important;
-    border: none !important;
-    border-radius: 999px !important;
+    background: var(--sk-grad);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
     box-shadow:
         0 calc(8px * var(--ui-scale, 1)) calc(22px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.38),
-        inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
-    display: inline-flex !important;
-    align-items: center !important;
+        inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    display: inline-flex;
+    align-items: center;
     gap: 0.55rem;
-    font-family: var(--sk-serif) !important;
-    font-weight: 700 !important;
+    font-family: var(--sk-serif);
+    font-weight: 700;
 }
 #gal-global-overlay.skin-classic .gal-name-badge::before {
     content: '';
@@ -7238,14 +7365,14 @@ const skinCss = `
 }
 /* 交互按钮（重绘/自由对话）：白玻璃药丸 */
 #gal-global-overlay.skin-classic .gal-action-btn {
-    background: rgba(255, 250, 248, 0.78) !important;
-    color: var(--sk-plum-soft) !important;
-    border: 1px solid rgba(255, 255, 255, 0.95) !important;
+    background: rgba(255, 250, 248, 0.78);
+    color: var(--sk-plum-soft);
+    border: 1px solid rgba(255, 255, 255, 0.95);
     border-radius: 999px !important;
     box-shadow: 0 calc(6px * var(--ui-scale, 1)) calc(18px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.12) !important;
-    font-family: var(--sk-sans) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.14em !important;
+    font-family: var(--sk-sans);
+    font-weight: 700;
+    letter-spacing: 0.14em;
     backdrop-filter: blur(12px) saturate(1.3);
     -webkit-backdrop-filter: blur(12px) saturate(1.3);
     transition: color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease, background 0.25s ease !important;
@@ -7258,8 +7385,8 @@ const skinCss = `
     box-shadow: 0 calc(10px * var(--ui-scale, 1)) calc(26px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.22) !important;
 }
 #gal-global-overlay.skin-classic .gal-action-btn.btn-free {
-    color: var(--sk-deep) !important;
-    border-color: rgba(242, 115, 155, 0.4) !important;
+    color: var(--sk-deep);
+    border-color: rgba(242, 115, 155, 0.4);
 }
 /* 底部工具栏：幽灵文字按钮 · 悬停晕开樱色 */
 #gal-global-overlay.skin-classic .gal-bottom-toolbar {
@@ -7273,11 +7400,11 @@ const skinCss = `
     box-shadow: none !important;
     font-family: var(--sk-sans) !important;
     font-weight: 700 !important;
-    letter-spacing: 0.1em !important;
+    letter-spacing: 0.1em;
     transition: color 0.22s ease, background 0.22s ease !important;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn i {
-    font-size: calc(0.72rem * var(--ui-scale, 1)) !important;
+    font-size: calc(0.72rem * var(--ui-scale, 1));
     opacity: 0.55;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn:hover {
@@ -7296,10 +7423,10 @@ const skinCss = `
     color: var(--sk-deep) !important;
     border: 1px solid rgba(242, 115, 155, 0.55) !important;
     border-radius: 999px !important;
-    box-shadow: none !important;
-    font-family: var(--sk-sans) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.12em !important;
+    box-shadow: none;
+    font-family: var(--sk-sans);
+    font-weight: 700;
+    letter-spacing: 0.12em;
     animation: none !important;
     transition: all 0.28s ease !important;
 }
@@ -7320,7 +7447,7 @@ const skinCss = `
 }
 /* NEXT：樱渐变主按钮 · 箭头前探 */
 #gal-global-overlay.skin-classic .gal-footer-btn-next {
-    clip-path: none !important;
+    clip-path: none;
     border-radius: 999px !important;
     background: var(--sk-grad) !important;
     color: #fff !important;
@@ -7328,14 +7455,14 @@ const skinCss = `
     box-shadow:
         0 calc(10px * var(--ui-scale, 1)) calc(26px * var(--ui-scale, 1)) rgba(222, 85, 133, 0.38),
         inset 0 1px 0 rgba(255, 255, 255, 0.45) !important;
-    font-family: var(--sk-latin) !important;
+    font-family: var(--sk-latin);
     font-weight: 400 !important;
-    letter-spacing: 0.3em !important;
+    letter-spacing: 0.3em;
     text-indent: 0.3em;
     transition: box-shadow 0.28s ease, transform 0.28s ease, filter 0.28s ease !important;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn-next i {
-    font-size: calc(0.78rem * var(--ui-scale, 1)) !important;
+    font-size: calc(0.78rem * var(--ui-scale, 1));
     transition: transform 0.28s ease;
 }
 #gal-global-overlay.skin-classic .gal-footer-btn-next:hover {
@@ -7359,27 +7486,27 @@ const skinCss = `
 }
 /* 进度：晨光丝带 */
 #gal-global-overlay.skin-classic .gal-progress-container {
-    background: rgba(222, 85, 133, 0.10) !important;
-    height: calc(3px * var(--ui-scale, 1)) !important;
-    border-radius: 999px !important;
+    background: rgba(222, 85, 133, 0.10);
+    height: calc(3px * var(--ui-scale, 1));
+    border-radius: 999px;
 }
 #gal-global-overlay.skin-classic .gal-progress-bar {
-    background: linear-gradient(90deg, #F5A6BE, #EE6E99, #C3AEDC) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 0 10px rgba(242, 115, 155, 0.55) !important;
+    background: linear-gradient(90deg, #F5A6BE, #EE6E99, #C3AEDC);
+    border-radius: 999px;
+    box-shadow: 0 0 10px rgba(242, 115, 155, 0.55);
 }
 /* 顶部状态：白玻璃小签 */
 #gal-global-overlay.skin-classic .gal-fullscreen-btn,
 #gal-global-overlay.skin-classic .gal-location-bar,
 #gal-global-overlay.skin-classic .gal-time-bar {
     background: rgba(255, 250, 248, 0.66) !important;
-    color: var(--sk-plum-soft) !important;
-    border: 1px solid rgba(255, 255, 255, 0.9) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.10) !important;
-    font-family: var(--sk-sans) !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.08em !important;
+    color: var(--sk-plum-soft);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.10);
+    font-family: var(--sk-sans);
+    font-weight: 500;
+    letter-spacing: 0.08em;
     backdrop-filter: blur(10px) saturate(1.3);
     -webkit-backdrop-filter: blur(10px) saturate(1.3);
     transition: color 0.25s ease, box-shadow 0.25s ease !important;
@@ -7391,8 +7518,8 @@ const skinCss = `
 }
 #gal-global-overlay.skin-classic .gal-location-bar i,
 #gal-global-overlay.skin-classic .gal-time-bar i {
-    color: var(--sk-sakura) !important;
-    font-size: 0.72rem !important;
+    color: var(--sk-sakura);
+    font-size: 0.72rem;
 }
 #gal-global-overlay.skin-classic .gal-bgm-widget {
     background: rgba(255, 250, 248, 0.7) !important;
@@ -7410,16 +7537,16 @@ const skinCss = `
 /* 侧边小按钮：白玻璃圆钮 */
 #gal-global-overlay.skin-classic .gal-sprite-toggle,
 #gal-global-overlay.skin-classic .gal-status-popup-trigger {
-    background: rgba(255, 250, 248, 0.72) !important;
-    border: 1px solid rgba(255, 255, 255, 0.95) !important;
-    border-radius: 50% !important;
-    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.12) !important;
+    background: rgba(255, 250, 248, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(222, 85, 133, 0.12);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     transition: box-shadow 0.25s ease, transform 0.25s ease !important;
 }
-#gal-global-overlay.skin-classic .gal-eye-icon { color: var(--sk-plum-soft) !important; }
-#gal-global-overlay.skin-classic .gal-status-popup-icon { color: var(--sk-plum-soft) !important; }
+#gal-global-overlay.skin-classic .gal-eye-icon { color: var(--sk-plum-soft); }
+#gal-global-overlay.skin-classic .gal-status-popup-icon { color: var(--sk-plum-soft); }
 #gal-global-overlay.skin-classic .gal-sprite-toggle:hover,
 #gal-global-overlay.skin-classic .gal-status-popup-trigger:hover {
     transform: translateY(-2px) !important;
@@ -7432,8 +7559,8 @@ const skinCss = `
 /* 选项层：花雾玻璃 · 白卡浮升 */
 #gal-layer-choices.skin-classic {
     background: linear-gradient(160deg, rgba(255, 236, 241, 0.82), rgba(238, 228, 248, 0.82)) !important;
-    backdrop-filter: blur(20px) saturate(1.3) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
+    backdrop-filter: blur(20px) saturate(1.3);
+    -webkit-backdrop-filter: blur(20px) saturate(1.3);
 }
 #gal-layer-choices.skin-classic .gal-choices-title {
     font-family: var(--sk-latin);
@@ -7443,13 +7570,13 @@ const skinCss = `
     text-indent: 0.5em;
 }
 #gal-layer-choices.skin-classic .gal-choice-card {
-    background: rgba(255, 252, 251, 0.9) !important;
-    color: var(--sk-plum) !important;
-    border: 1px solid rgba(255, 255, 255, 1) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 10px 30px rgba(222, 85, 133, 0.12) !important;
+    background: rgba(255, 252, 251, 0.9);
+    color: var(--sk-plum);
+    border: 1px solid rgba(255, 255, 255, 1);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px rgba(222, 85, 133, 0.12);
     font-family: var(--sk-serif);
-    font-weight: 600 !important;
+    font-weight: 600;
     letter-spacing: 0.06em;
     position: relative;
     overflow: hidden;
@@ -7479,17 +7606,17 @@ const skinCss = `
 }
 /* 生成中指示器 */
 #gal-global-overlay.skin-classic .gal-generating-indicator {
-    background: rgba(255, 250, 248, 0.9) !important;
-    border: 1px solid rgba(255, 255, 255, 0.95) !important;
-    border-radius: 18px !important;
-    box-shadow: 0 20px 50px rgba(222, 85, 133, 0.2) !important;
+    background: rgba(255, 250, 248, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    border-radius: 18px;
+    box-shadow: 0 20px 50px rgba(222, 85, 133, 0.2);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
 }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-icon   { color: var(--sk-sakura) !important; }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-text   { color: var(--sk-plum) !important; font-family: var(--sk-serif); letter-spacing: 0.18em; }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-status { color: var(--sk-plum-soft) !important; }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-dot    { background: var(--sk-sakura) !important; }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-icon   { color: var(--sk-sakura); }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-text   { color: var(--sk-plum); font-family: var(--sk-serif); letter-spacing: 0.18em; }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-status { color: var(--sk-plum-soft); }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-dot    { background: var(--sk-sakura); }
 
 /* =========================================================
    6. 朱笺 (Shujian / Vermilion Letter) — 宣纸 × 墨 × 朱砂印章
@@ -7543,15 +7670,15 @@ const skinCss = `
    注意 :not(.generating-bg)：背景生成中要让位给下方的「研墨」动画 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-layer-bg:not(.generating-bg) {
     background:
-        radial-gradient(115% 90% at 50% 8%, rgba(var(--shu-paper-rgb), 1) 0%, rgba(var(--shu-paper-warm-rgb), 1) 68%, rgba(var(--shu-paper-warm-rgb), 1) 100%) !important;
+        radial-gradient(115% 90% at 50% 8%, rgba(var(--shu-paper-rgb), 1) 0%, rgba(var(--shu-paper-warm-rgb), 1) 68%, rgba(var(--shu-paper-warm-rgb), 1) 100%);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-layer-bg:not(.generating-bg)::before {
     background-image:
         repeating-linear-gradient(90deg,
             var(--shu-stage-line) 0, var(--shu-stage-line) 1px,
-            transparent 1px, transparent 2.6rem) !important;
-    background-size: auto !important;
-    opacity: 1 !important;
+            transparent 1px, transparent 2.6rem);
+    background-size: auto;
+    opacity: 1;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-layer-bg:not(.generating-bg)::after {
     content: "";
@@ -7600,37 +7727,37 @@ const skinCss = `
 #gal-global-overlay[class*="skin-shujian"] .gal-text-panel {
     background: linear-gradient(175deg,
         rgba(var(--shu-paper-rgb), var(--panel-opacity, 0.96)) 0%,
-        rgba(var(--shu-paper-warm-rgb), var(--panel-opacity, 0.96)) 100%) !important;
-    border: 1px solid var(--shu-hairline) !important;
-    border-radius: 4px !important;
-    box-shadow: 0 1.5rem 3rem -1.2rem rgba(15, 10, 5, 0.5) !important;
+        rgba(var(--shu-paper-warm-rgb), var(--panel-opacity, 0.96)) 100%);
+    border: 1px solid var(--shu-hairline);
+    border-radius: 4px;
+    box-shadow: 0 1.5rem 3rem -1.2rem rgba(15, 10, 5, 0.5);
     outline: 1px solid var(--shu-hairline-soft);
     outline-offset: -7px;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-dialog-text {
-    color: var(--shu-ink) !important;
-    font-weight: 500 !important;
+    color: var(--shu-ink);
+    font-weight: 500;
     line-height: 2.05 !important;
     letter-spacing: 0.045em;
-    text-shadow: none !important;
+    text-shadow: none;
 }
 
 /* —— 姓名牌：竖排朱砂印章（旁白转墨灰印）—— */
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge {
-    background: linear-gradient(160deg, var(--shu-vermilion) 0%, var(--shu-vermilion-dk) 100%) !important;
-    color: var(--shu-on-seal) !important;
-    writing-mode: vertical-rl !important;
-    text-orientation: upright !important;
+    background: linear-gradient(160deg, var(--shu-vermilion) 0%, var(--shu-vermilion-dk) 100%);
+    color: var(--shu-on-seal);
+    writing-mode: vertical-rl;
+    text-orientation: upright;
     left: -0.45rem !important;
     top: -1.6rem !important;
     padding: 0.85rem 0.5rem !important;
     font-size: 1.05rem !important;
-    font-weight: 700 !important;
-    font-family: var(--shu-font-serif) !important;
-    letter-spacing: 0.22em !important;
-    line-height: 1 !important;
-    border-radius: 3px !important;
-    box-shadow: 0 0.5rem 1.2rem -0.35rem var(--shu-glow), inset 0 0 0 1px rgba(253, 246, 234, 0.35) !important;
+    font-weight: 700;
+    font-family: var(--shu-font-serif);
+    letter-spacing: 0.22em;
+    line-height: 1;
+    border-radius: 3px;
+    box-shadow: 0 0.5rem 1.2rem -0.35rem var(--shu-glow), inset 0 0 0 1px rgba(253, 246, 234, 0.35);
     z-index: 36;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge::after {
@@ -7643,11 +7770,11 @@ const skinCss = `
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge span {
     letter-spacing: inherit;
-    text-shadow: none !important;
+    text-shadow: none;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge.gal-narrator-label {
-    background: var(--shu-narrator) !important;
-    box-shadow: 0 0.5rem 1.2rem -0.35rem rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(253, 246, 234, 0.25) !important;
+    background: var(--shu-narrator);
+    box-shadow: 0 0.5rem 1.2rem -0.35rem rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(253, 246, 234, 0.25);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-name-badge.gal-narrator-label::after {
     border-color: rgba(74, 68, 58, 0.4);
@@ -7657,14 +7784,14 @@ const skinCss = `
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn,
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn.btn-reroll,
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn.btn-free {
-    background: var(--shu-paper) !important;
-    color: var(--shu-ink-soft) !important;
-    border: 1px solid var(--shu-hairline) !important;
+    background: var(--shu-paper);
+    color: var(--shu-ink-soft);
+    border: 1px solid var(--shu-hairline);
     border-radius: 999px !important;
     box-shadow: 0 0.4rem 0.9rem -0.4rem rgba(15, 10, 5, 0.45) !important;
-    font-family: var(--shu-font-serif) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.14em !important;
+    font-family: var(--shu-font-serif);
+    font-weight: 600;
+    letter-spacing: 0.14em;
     transition: all 0.22s ease !important;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-action-btn:hover {
@@ -7689,8 +7816,8 @@ const skinCss = `
     border-radius: 2px !important;
     font-family: var(--shu-font-serif) !important;
     font-weight: 600 !important;
-    letter-spacing: 0.1em !important;
-    position: relative !important;
+    letter-spacing: 0.1em;
+    position: relative;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-footer-btn::after {
     content: "";
@@ -7717,16 +7844,16 @@ const skinCss = `
     color: var(--shu-vermilion) !important;
     border: 1px solid var(--shu-vermilion) !important;
     border-radius: 999px !important;
-    clip-path: none !important;
+    clip-path: none;
     box-shadow: none !important;
-    font-family: var(--shu-font-latin) !important;
-    font-style: italic !important;
+    font-family: var(--shu-font-latin);
+    font-style: italic;
     font-weight: 600 !important;
-    letter-spacing: 0.22em !important;
+    letter-spacing: 0.22em;
     font-size: calc(1.05rem * var(--ui-scale, 1)) !important;
-    height: calc(2.9rem * var(--ui-scale, 1)) !important;
-    min-width: calc(7.5rem * var(--ui-scale, 1)) !important;
-    padding: 0 calc(1.9rem * var(--ui-scale, 1)) !important;
+    height: calc(2.9rem * var(--ui-scale, 1));
+    min-width: calc(7.5rem * var(--ui-scale, 1));
+    padding: 0 calc(1.9rem * var(--ui-scale, 1));
     transition: background 0.25s ease, color 0.25s ease !important;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-footer-btn-next:hover {
@@ -7740,9 +7867,9 @@ const skinCss = `
     color: var(--shu-on-seal) !important;
     border: none !important;
     border-radius: 999px !important;
-    font-family: var(--shu-font-serif) !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.12em !important;
+    font-family: var(--shu-font-serif);
+    font-weight: 700;
+    letter-spacing: 0.12em;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-pending-choices-btn.show,
 #gal-global-overlay[class*="skin-shujian"] .gal-pending-choices-btn.gal-new-option-highlight {
@@ -7760,33 +7887,33 @@ const skinCss = `
 
 /* —— 进度条：一根泥金→朱砂的墨线 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-dialog-layer .gal-progress-container {
-    background: var(--shu-hairline-soft) !important;
-    height: 0.25rem !important;
+    background: var(--shu-hairline-soft);
+    height: 0.25rem;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-progress-bar {
-    background: linear-gradient(90deg, var(--shu-gold) 0%, var(--shu-vermilion) 100%) !important;
-    box-shadow: none !important;
+    background: linear-gradient(90deg, var(--shu-gold) 0%, var(--shu-vermilion) 100%);
+    box-shadow: none;
 }
 
 /* —— 顶部地点/时间与全屏按钮：半透明幽灵胶囊，几乎不遮画面 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-location-bar,
 #gal-global-overlay[class*="skin-shujian"] .gal-time-bar {
     background: rgba(20, 16, 14, 0.28) !important;
-    border: 1px solid rgba(244, 236, 220, 0.22) !important;
-    border-radius: 999px !important;
-    color: #f4ecdc !important;
-    font-family: var(--shu-font-serif) !important;
-    letter-spacing: 0.16em !important;
+    border: 1px solid rgba(244, 236, 220, 0.22);
+    border-radius: 999px;
+    color: #f4ecdc;
+    font-family: var(--shu-font-serif);
+    letter-spacing: 0.16em;
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(3px);
 }
-#gal-global-overlay[class*="skin-shujian"] .gal-location-bar i { color: #e0603f !important; }
-#gal-global-overlay[class*="skin-shujian"] .gal-time-bar i { color: #d9b06a !important; }
+#gal-global-overlay[class*="skin-shujian"] .gal-location-bar i { color: #e0603f; }
+#gal-global-overlay[class*="skin-shujian"] .gal-time-bar i { color: #d9b06a; }
 #gal-global-overlay[class*="skin-shujian"] .gal-fullscreen-btn {
-    background: rgba(20, 16, 14, 0.28) !important;
-    border: 1px solid rgba(244, 236, 220, 0.35) !important;
-    border-radius: 999px !important;
-    color: rgba(244, 236, 220, 0.85) !important;
+    background: rgba(20, 16, 14, 0.28);
+    border: 1px solid rgba(244, 236, 220, 0.35);
+    border-radius: 999px;
+    color: rgba(244, 236, 220, 0.85);
     backdrop-filter: blur(3px);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-fullscreen-btn:hover {
@@ -7798,14 +7925,14 @@ const skinCss = `
 /* —— 立绘显隐 / 状态弹窗小按钮：纸底圆钮 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-sprite-toggle,
 #gal-global-overlay[class*="skin-shujian"] .gal-status-popup-trigger {
-    background: var(--shu-paper) !important;
-    border: 1px solid var(--shu-hairline) !important;
-    border-radius: 999px !important;
-    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(15, 10, 5, 0.4) !important;
+    background: var(--shu-paper);
+    border: 1px solid var(--shu-hairline);
+    border-radius: 999px;
+    box-shadow: 0 0.3rem 0.7rem -0.3rem rgba(15, 10, 5, 0.4);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-sprite-toggle .gal-eye-icon,
 #gal-global-overlay[class*="skin-shujian"] .gal-status-popup-trigger .gal-status-popup-icon {
-    color: var(--shu-vermilion) !important;
+    color: var(--shu-vermilion);
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-sprite-toggle:hover,
 #gal-global-overlay[class*="skin-shujian"] .gal-status-popup-trigger:hover {
@@ -7819,24 +7946,24 @@ const skinCss = `
 
 /* —— 生成中指示器：「研墨之中」纸卡 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator {
-    background: linear-gradient(178deg, var(--shu-paper) 0%, var(--shu-paper-warm) 100%) !important;
-    border: 1px solid var(--shu-hairline) !important;
-    border-radius: 4px !important;
-    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7) !important;
+    background: linear-gradient(178deg, var(--shu-paper) 0%, var(--shu-paper-warm) 100%);
+    border: 1px solid var(--shu-hairline);
+    border-radius: 4px;
+    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7);
 }
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-icon { color: var(--shu-vermilion) !important; }
+#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-icon { color: var(--shu-vermilion); }
 #gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-text {
-    color: var(--shu-ink) !important;
-    font-family: var(--shu-font-serif) !important;
-    letter-spacing: 0.4em !important;
+    color: var(--shu-ink);
+    font-family: var(--shu-font-serif);
+    letter-spacing: 0.4em;
 }
 #gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-status {
-    color: var(--shu-ink-soft) !important;
-    font-family: var(--shu-font-latin) !important;
+    color: var(--shu-ink-soft);
+    font-family: var(--shu-font-latin);
     font-style: italic;
     letter-spacing: 0.14em;
 }
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-dot { background: var(--shu-vermilion) !important; }
+#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-dot { background: var(--shu-vermilion); }
 
 /* —— 选项浮层：纸签 + 汉字序号，悬停朱批（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-shujian"] {
@@ -7966,62 +8093,62 @@ const skinCss = `
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn .gal-btn-text,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn .gal-btn-text,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next .gal-btn-text {
-        display: none !important;
+        display: none;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='log'],
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='view-original'],
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='save'],
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='load'] {
-        display: none !important;
+        display: none;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn[data-action='close-mode'] {
-        order: -1 !important;
+        order: -1;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-bottom-toolbar {
-        justify-content: flex-start !important;
-        gap: 0.3rem !important;
+        justify-content: flex-start;
+        gap: 0.3rem;
         padding: 0 0.875rem 0.5rem 0.5rem !important;
-        overflow: visible !important;
+        overflow: visible;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn {
         flex: 1 !important;
-        width: auto !important;
-        min-width: 0 !important;
-        height: 2.5rem !important;
-        min-height: 2.5rem !important;
-        margin-left: 0 !important;
-        padding: 0 !important;
-        justify-content: center !important;
+        width: auto;
+        min-width: 0;
+        height: 2.5rem;
+        min-height: 2.5rem;
+        margin-left: 0;
+        padding: 0;
+        justify-content: center;
         transform: none !important;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn i,
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-pending-choices-btn i {
-        margin: 0 !important;
+        margin: 0;
         font-size: 1.15rem !important;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next {
-        flex: 0 0 auto !important;
-        width: 5rem !important;
+        flex: 0 0 auto;
+        width: 5rem;
         min-width: 5rem !important;
-        height: 2.5rem !important;
-        min-height: 2.5rem !important;
-        margin-left: 0.35rem !important;
-        margin-right: 0 !important;
+        height: 2.5rem;
+        min-height: 2.5rem;
+        margin-left: 0.35rem;
+        margin-right: 0;
         padding: 0 !important;
-        justify-content: center !important;
+        justify-content: center;
         transform: none !important;
-        z-index: 100 !important;
+        z-index: 100;
     }
 
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark) .gal-footer-btn-next i {
-        margin: 0 !important;
+        margin: 0;
         font-size: 1.6rem !important;
     }
 }
@@ -8032,7 +8159,7 @@ const skinCss = `
    必须位于各皮肤规则之后：墨染/心之怪盗的名牌 transform 与本块同特异性，靠源码顺序取胜。 */
 @media screen and (max-width: 48rem) {
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-dialog-text {
-        font-size: calc(0.88rem * var(--font-scale, 1)) !important;
+        font-size: calc(0.88rem * var(--font-scale, 1));
     }
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-name-badge {
         transform: scale(0.9) !important;
@@ -8046,7 +8173,7 @@ const skinCss = `
     }
     #gal-global-overlay[class*="skin-"]:not(.skin-default):not(.skin-default-dark):not(.skin-twilight) .gal-action-btn {
         font-size: 0.95rem !important;
-        min-height: 2rem !important;
+        min-height: 2rem;
         padding: 0.5rem 1rem !important;
     }
 }
@@ -8181,6 +8308,43 @@ const skinCss = `
 /* 引号内对话着色（仅绘本模式，旁白中夹杂的人物台词），可用 --gal-quote-color 覆盖 */
 #gal-global-overlay .gal-dialog-text .gal-quote {
     color: var(--gal-quote-color, #e8b04b) !important;
+}
+/* 打字机逐字淡入（typewriter.js 一次性切 span 后逐个加 .is-on）；同样强制继承防主题 span 污染 */
+#gal-global-overlay .gal-dialog-text .gal-tw-ch {
+    color: inherit !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    font-style: inherit !important;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+}
+#gal-global-overlay .gal-dialog-text .gal-tw-ch.is-on {
+    opacity: 1;
+}
+/* 名牌入场（所有皮肤）：只动 opacity 与独立 translate 属性，与皮肤自身 transform 叠加不冲突 */
+#gal-global-overlay .gal-name-badge.gal-badge-enter {
+    animation: gal-badge-enter-generic 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes gal-badge-enter-generic {
+    from { opacity: 0; translate: -0.6rem 0; }
+}
+/* 选项选中反馈（所有皮肤）：被选项放大淡出、其余下坠 */
+#gal-layer-choices .gal-choice-card.gal-choice-picked {
+    animation: gal-choice-picked 0.3s ease-out forwards !important;
+    pointer-events: none !important;
+}
+#gal-layer-choices .gal-choice-card.gal-choice-dropped {
+    animation: gal-choice-dropped 0.26s ease-in forwards !important;
+    pointer-events: none !important;
+}
+@keyframes gal-choice-picked {
+    0% { scale: 1; filter: brightness(1); }
+    45% { scale: 1.05; filter: brightness(1.15); }
+    100% { scale: 1.03; opacity: 0; }
+}
+@keyframes gal-choice-dropped {
+    to { opacity: 0; translate: 0 0.9rem; }
 }
 /* 用户自定义行距（--gal-dialog-line-height 未设置时回退到皮肤自身 line-height） */
 #gal-global-overlay.gal-custom-line-height .gal-dialog-text {
@@ -11923,15 +12087,10 @@ const titleGalleryImmersiveCss = `
     + titleGalleryImmersiveCss;
   (targetDoc.head || targetDoc.documentElement).appendChild(styleEl);
 
-  // 皮肤 Web 字体（樱色物语等使用；加载失败时回退到 font-family 中的系统字体）
-  const fontLinkId = `${SCRIPT_ID}-skin-fonts`;
-  if (!targetDoc.getElementById(fontLinkId)) {
-    const fontLink = targetDoc.createElement('link');
-    fontLink.id = fontLinkId;
-    fontLink.rel = 'stylesheet';
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Italiana&display=swap';
-    (targetDoc.head || targetDoc.documentElement).appendChild(fontLink);
-  }
+  // 皮肤 Web 字体改由 web-fonts.js 按当前皮肤从 jsDelivr 按需加载（原 Google Fonts 国内不可达）；
+  // 清理旧版本注入的 Google Fonts link，避免热重载后残留无效请求
+  const legacyFontLink = targetDoc.getElementById(`${SCRIPT_ID}-skin-fonts`);
+  if (legacyFontLink) legacyFontLink.remove();
   console.log(`[${SCRIPT_NAME}] 样式已注入`);
 }
 

@@ -4,7 +4,7 @@ import { setLive2DCharacterExpression } from './expression-motion.js';
 import { getCharacterUseLive2D } from './render-mode.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { SpriteAnimationManager } from '../animation/sprite-animation.js';
-import { getAllCharacterNameKeywords, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
+import { getAllCharacterNameKeywords, getSegmentCharacterId, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 function resolveLive2DCharacterId(characterId) {
   const rawCharacterId = String(characterId || '').trim();
@@ -76,7 +76,7 @@ export const Live2DPreloadManager = {
     const end = Math.min(segments.length, start + this.lookAheadLimit + 1);
     const seen = new Set();
     for (let i = start; i < end; i++) {
-      const speaker = segments[i]?.speaker;
+      const speaker = getSegmentCharacterId(segments[i]);
       if (!speaker || seen.has(speaker)) continue;
       seen.add(speaker);
       this.enqueueCharacter(speaker, `${reason}@${i}`);

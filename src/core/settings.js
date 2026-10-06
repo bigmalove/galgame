@@ -103,6 +103,22 @@ export const DEFAULT_SETTINGS = {
   typewriterSpeed: 30,
   typewriterSoundEnabled: true,
   typewriterSoundVolume: 35,
+  // 打字机标点停顿：句读处稍作停留，模拟说话节奏
+  typewriterPunctuationPause: true,
+  // 按皮肤从 jsDelivr 加载 Web 字体（关闭则全部回退系统字体，省流量）
+  webFontsEnabled: true,
+  // 视觉演出（stage/）：背景转场风格 cinematic | wipe | iris | strips | dissolve | random
+  bgTransitionStyle: 'cinematic',
+  // 允许 AI 在背景标签上指定转场（COT 注入 transition 属性说明）
+  bgTransitionAiHint: true,
+  // 镜头：背景缓慢漂移 / 鼠标·陀螺仪视差 / 推镜跟随说话人（仅「填满裁剪」背景模式生效）
+  stageCameraDrift: true,
+  stageParallax: true,
+  stageSpeakerPush: true,
+  // 环境光：按背景图采样自动给立绘染色、调明暗与轮廓光
+  stageAmbientLight: true,
+  // 控件动效（所有皮肤通用）：逐字点亮、推进流光、名牌换人、按钮涟漪 / 火花、选项 3D 翻入等
+  controlMotion: true,
   // 自动播放
   autoPlaySpeed: 2,
   // 显示设置
@@ -119,6 +135,8 @@ export const DEFAULT_SETTINGS = {
   effectsQuality: 'balanced',
   effectsAutoClearOnSceneChange: true,
   effectsMaxActive: 2,
+  // 发光类粒子的辉光滤镜（pixi-filters AdvancedBloom，按需加载；Mobile 档自动关闭）
+  effectsBloom: true,
   uiScalePercentVersion: UI_SCALE_PERCENT_VERSION,
   dialogScalePercent: UI_SCALE_PERCENT_DEFAULT,
   toolbarScalePercent: UI_SCALE_PERCENT_DEFAULT,
@@ -203,14 +221,16 @@ export const DEFAULT_SETTINGS = {
   enhancedMode: {
     enabled: false,
     secondGenerate: {
-      useProfile: false,
+      // 'current': 跟随酒馆当前 API 与预设；'profile': 使用酒馆连接配置独立请求
+      llmSource: 'current',
+      profileId: '',
       profileName: '',
-      useModel: false,
-      modelName: '',
-      usePreset: false,
-      presetName: '',
-      useWorldbooks: false,
-      worldbooks: [],
+      // 留空则使用连接配置自带的模型
+      model: '',
+      // 0 表示跟随连接配置的预设
+      maxTokens: 0,
+      // 是否附带世界书内容（「角色定义之前/之后」位置的已激活条目）
+      sendWorldbook: false,
     },
   },
   // 大香蕉生图模块设置
@@ -692,18 +712,18 @@ export function clearMapCoordsByRegion(regionKey) {
   return true;
 }
 
+export const ENHANCED_LLM_SOURCES = ['current', 'profile'];
+
 export function createDefaultEnhancedModeSettings() {
   return {
     enabled: false,
     secondGenerate: {
-      useProfile: false,
+      llmSource: 'current',
+      profileId: '',
       profileName: '',
-      useModel: false,
-      modelName: '',
-      usePreset: false,
-      presetName: '',
-      useWorldbooks: false,
-      worldbooks: [],
+      model: '',
+      maxTokens: 0,
+      sendWorldbook: false,
     },
   };
 }
@@ -711,25 +731,23 @@ export function createDefaultEnhancedModeSettings() {
 export function normalizeEnhancedModeSettings(rawEnhancedMode) {
   const enhanced = _safeObject(rawEnhancedMode);
   const secondGenerate = _safeObject(enhanced.secondGenerate);
-  const normalizedWorldbooks = Array.from(
-    new Set(
-      _safeArray(secondGenerate.worldbooks)
-        .map(name => String(name || '').trim())
-        .filter(Boolean),
-    ),
-  );
+  const hasLlmSource = ENHANCED_LLM_SOURCES.includes(secondGenerate.llmSource);
+  // 旧版第二次生成通过 /profile、/model 切换酒馆全局连接配置，迁移为按连接配置独立请求
+  const legacyProfileName = !hasLlmSource && secondGenerate.useProfile ? String(secondGenerate.profileName || '').trim() : '';
+  const legacyModel = legacyProfileName && secondGenerate.useModel ? String(secondGenerate.modelName || '').trim() : '';
+  const maxTokens = Math.round(Number(secondGenerate.maxTokens) || 0);
+  // 旧版默认使用当前全局世界书，仅「不使用任何世界书」（勾选自定义但列表为空）时不发送
+  const legacySendWorldbook = !(secondGenerate.useWorldbooks && _safeArray(secondGenerate.worldbooks).length === 0);
 
   return {
     enabled: !!enhanced.enabled,
     secondGenerate: {
-      useProfile: !!secondGenerate.useProfile,
+      llmSource: hasLlmSource ? secondGenerate.llmSource : (legacyProfileName ? 'profile' : 'current'),
+      profileId: String(secondGenerate.profileId || '').trim(),
       profileName: String(secondGenerate.profileName || '').trim(),
-      useModel: !!secondGenerate.useModel,
-      modelName: String(secondGenerate.modelName || '').trim(),
-      usePreset: !!secondGenerate.usePreset,
-      presetName: String(secondGenerate.presetName || '').trim(),
-      useWorldbooks: !!secondGenerate.useWorldbooks,
-      worldbooks: normalizedWorldbooks,
+      model: secondGenerate.model !== undefined ? String(secondGenerate.model || '').trim() : legacyModel,
+      maxTokens: Math.max(0, Math.min(maxTokens, 1000000)),
+      sendWorldbook: hasLlmSource ? !!secondGenerate.sendWorldbook : legacySendWorldbook,
     },
   };
 }

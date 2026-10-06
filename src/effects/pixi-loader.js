@@ -92,3 +92,52 @@ export function getPixiInstance() {
   return hasPixiRuntime() ? topWindow.PIXI : null;
 }
 
+
+// ---------- pixi-filters（辉光等高级滤镜，按需加载） ----------
+// 4.x 为 Pixi v6 对应版本：浏览器包依赖全局 PIXI，并把滤镜合并进 PIXI.filters
+const PIXI_FILTERS_CANDIDATE_URLS = Object.freeze([
+  'https://cdn.jsdelivr.net/npm/pixi-filters@4.2.0/dist/pixi-filters.js',
+  'https://gcore.jsdelivr.net/npm/pixi-filters@4.2.0/dist/pixi-filters.js',
+  'https://unpkg.com/pixi-filters@4.2.0/dist/pixi-filters.js',
+]);
+
+let pixiFiltersLoadPromise = null;
+
+function hasPixiFilters() {
+  return !!topWindow?.PIXI?.filters?.AdvancedBloomFilter;
+}
+
+export async function loadPixiFilters() {
+  if (hasPixiFilters()) return topWindow.PIXI.filters;
+  if (pixiFiltersLoadPromise) return pixiFiltersLoadPromise;
+
+  pixiFiltersLoadPromise = (async () => {
+    const PIXI = await loadPixiLibrary();
+    if (!PIXI) throw new Error('PIXI unavailable');
+    let lastError = null;
+    for (const url of PIXI_FILTERS_CANDIDATE_URLS) {
+      try {
+        await loadScript(url);
+        if (hasPixiFilters()) {
+          console.log(`[${SCRIPT_NAME}] pixi-filters loaded from ${url}`);
+          return topWindow.PIXI.filters;
+        }
+      } catch (error) {
+        lastError = error;
+        console.warn(`[${SCRIPT_NAME}] pixi-filters load failed from ${url}`, error);
+      }
+    }
+    throw lastError || new Error('pixi-filters unavailable');
+  })().catch(error => {
+    // 失败不缓存，下次挂载特效时再试；辉光缺席不影响粒子本身
+    pixiFiltersLoadPromise = null;
+    console.warn(`[${SCRIPT_NAME}] pixi-filters unavailable, bloom disabled`, error);
+    return null;
+  });
+
+  return pixiFiltersLoadPromise;
+}
+
+export function getPixiFilters() {
+  return hasPixiFilters() ? topWindow.PIXI.filters : null;
+}

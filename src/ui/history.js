@@ -1,11 +1,13 @@
 import { ANCIENT_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, YANYUN_FAMILY_SKIN_IDS } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
+import { MOTION_CLASS } from './control-motion.js';
+import { DEFAULT_THEME_CLASSES } from './default-theme.js';
 import { getModalMountRoot } from './fullscreen.js';
 
 function syncHistoryModalSkinClass($modal) {
   if (!$modal?.length) return;
   const $overlay = $('#gal-global-overlay');
-  [...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID].forEach(skinClass => {
+  [...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, ...DEFAULT_THEME_CLASSES, MOTION_CLASS].forEach(skinClass => {
     $modal.toggleClass(skinClass, $overlay.hasClass(skinClass));
   });
 }

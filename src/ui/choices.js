@@ -2,6 +2,8 @@ import { ANCIENT_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PE
 import { topWindow, $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getIsEnabled, getPendingOptions, setPendingOptions, getGalgameChoicesVisible, setGalgameChoicesVisible, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
+import { MOTION_CHOICE_PICK_MS, MOTION_CLASS } from './control-motion.js';
+import { DEFAULT_THEME_CLASSES } from './default-theme.js';
 import { getModalMountRoot } from './fullscreen.js';
 import { ensureGlobalOverlay, adjustToolbarForSpace } from './overlay.js';
 import { TWILIGHT_FAMILY_SKIN_IDS } from './skin-twilight.js';
@@ -13,6 +15,16 @@ import { showToast } from './toast.js';
 
 const messageSegmentState = GalgameStore.cache.segments;
 const OPTIONS_OBSERVER_BOUND_FLAG = '__galgame_options_observer_bound__';
+// 选中反馈动画时长（gal-choice-picked / gal-choice-dropped），播完再提交选项
+const CHOICE_PICK_MS = 300;
+
+function prefersReducedMotion() {
+  try {
+    return !!topWindow.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  } catch (_) {
+    return false;
+  }
+}
 
 // 延迟引用
 let _isRerollingRef = null;
@@ -24,7 +36,7 @@ export function setChoicesRefs({ getIsRerolling }) {
 function syncChoicesLayerSkinClass($layer) {
   if (!$layer?.length) return;
   const $overlay = getOverlayElement();
-  [...TWILIGHT_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, 'skin-classic', 'html-skin'].forEach(skinClass => {
+  [...TWILIGHT_FAMILY_SKIN_IDS, ...SHUJIAN_FAMILY_SKIN_IDS, ...PERSONA_FAMILY_SKIN_IDS, ...ANCIENT_FAMILY_SKIN_IDS, ...JRPG_FAMILY_SKIN_IDS, ...YANYUN_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, ...DEFAULT_THEME_CLASSES, MOTION_CLASS, 'skin-classic', 'html-skin'].forEach(skinClass => {
     $layer.toggleClass(skinClass, $overlay.hasClass(skinClass));
   });
 }
@@ -75,16 +87,30 @@ export function renderGalgameChoices(options) {
   const $container = $layer.find('.gal-choices-container');
   $container.empty();
 
+  $layer.removeData('choicePicking');
   options.forEach((opt, idx) => {
+    // --gal-i：错峰入场序号；data-no：默认皮肤左侧序号；.gal-fx-glint：控件动效的光泽 / 聚光层（用 <i>，不被 '.gal-choice-card span' 命中）
     const $card = $(`
-      <div class="gal-choice-card" data-option-index="${idx}" data-option-value="${encodeURIComponent(opt.value)}">
-        <span>${opt.text}</span>
+      <div class="gal-choice-card" data-option-index="${idx}" data-no="${String(idx + 1).padStart(2, '0')}" style="--gal-i: ${idx}" data-option-value="${encodeURIComponent(opt.value)}">
+        <i class="gal-fx-glint" aria-hidden="true"></i><span>${opt.text}</span>
       </div>
     `);
     $card.on('click', function (e) {
       e.stopPropagation();
+      if ($layer.data('choicePicking')) return;
       const value = decodeURIComponent($(this).data('option-value'));
-      handleChoiceSelection(value);
+      if (prefersReducedMotion()) {
+        handleChoiceSelection(value);
+        return;
+      }
+      // 选中确认：被选项放大淡出、其余下坠，播完再提交
+      $layer.data('choicePicking', true);
+      $(this).addClass('gal-choice-picked');
+      $container.find('.gal-choice-card').not(this).addClass('gal-choice-dropped');
+      topWindow.setTimeout(() => {
+        $layer.removeData('choicePicking');
+        handleChoiceSelection(value);
+      }, $layer.hasClass(MOTION_CLASS) ? MOTION_CHOICE_PICK_MS : CHOICE_PICK_MS);
     });
     $container.append($card);
   });

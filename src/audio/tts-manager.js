@@ -17,7 +17,7 @@ import { Live2DManager } from '../live2d/manager.js';
 import { LipSyncManager } from '../live2d/lip-sync.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { synthesizeToBlob } from './edge-tts-direct.js';
-import { getAllCharacterNameKeywords, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
+import { getAllCharacterNameKeywords, getSegmentCharacterId, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // 延迟引用: showToast (来自 UI 层)
 let _showToastRef = null;
@@ -153,7 +153,15 @@ export const TTSManager = {
   enabled: true,
   provider: TTS_PROVIDER.LITTLEWHITEBOX,
   autoPlay: true,
-  isPlaying: false,
+  _isPlaying: false,
+  // 播放态同步到 overlay 类名，名牌旁的 TTS 标识（tts-cue.js）据此跳动
+  get isPlaying() {
+    return this._isPlaying;
+  },
+  set isPlaying(value) {
+    this._isPlaying = !!value;
+    $('#gal-global-overlay').toggleClass('gal-tts-playing', this._isPlaying);
+  },
   isLoading: false,
   currentAudio: null,
   currentSegmentId: null,
@@ -1797,7 +1805,7 @@ export const TTSManager = {
 
     this.isPlaying = true;
     if (segment.speaker) {
-      const resolvedSpeakerId = resolveTTSCharacterId(segment.speaker);
+      const resolvedSpeakerId = resolveTTSCharacterId(getSegmentCharacterId(segment));
       const hasLive2D = Live2DManager.models.has(resolvedSpeakerId);
       if (hasLive2D) this._startLipSyncOnPlay(resolvedSpeakerId);
       else this._startLipSyncWhenModelReady(resolvedSpeakerId);
@@ -1873,6 +1881,8 @@ export const TTSManager = {
       }
     };
     const onError = err => {
+      // 切到下一句 / 停止播放时会先回收这段 blob URL，元素随之报错，并非播放失败
+      if (this.currentAudio !== audio || this._edgeDirectObjectUrl !== objectUrl) return;
       console.warn(`[${SCRIPT_NAME}] EdgeTTS 直连播放失败:`, err);
       showToast('EdgeTTS 直连播放失败，可切换 Edge 浏览器复测');
       onEnded();
@@ -1903,7 +1913,7 @@ export const TTSManager = {
     this.isPlaying = true;
 
     if (segment.speaker) {
-      const resolvedSpeakerId = resolveTTSCharacterId(segment.speaker);
+      const resolvedSpeakerId = resolveTTSCharacterId(getSegmentCharacterId(segment));
       const hasLive2D = Live2DManager.models.has(resolvedSpeakerId);
       if (hasLive2D) this._startLipSyncOnPlay(resolvedSpeakerId);
       else this._startLipSyncWhenModelReady(resolvedSpeakerId);
@@ -2085,7 +2095,7 @@ export const TTSManager = {
     if (!speakText) return;
 
     // 每角色 TTS 开关：被禁用的角色直接跳过（在打断当前播放的副作用之前）
-    const gateSpeaker = String(segment.speaker || '').trim();
+    const gateSpeaker = getSegmentCharacterId(segment);
     if (gateSpeaker && !getCharacterTTSEnabled(resolveTTSCharacterId(gateSpeaker))) {
       console.log(`[${SCRIPT_NAME}] TTS: 角色已禁用配音，跳过 - ${gateSpeaker}`);
       return;
@@ -2109,7 +2119,7 @@ export const TTSManager = {
 
     const settings = getSettings();
     const ttsConfig = segment.tts || {};
-    const speakerName = String(segment.speaker || '').trim();
+    const speakerName = getSegmentCharacterId(segment);
     const resolvedSpeakerName = resolveTTSCharacterId(speakerName);
     const requestedVoiceTag = String(ttsConfig.speaker || '').trim();
     const boundVoice = getCharacterTTSVoice(resolvedSpeakerName || speakerName);

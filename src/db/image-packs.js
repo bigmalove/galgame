@@ -1,4 +1,4 @@
-import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_SPECIAL_CGS, BG_TRANSITION_MS } from '../core/constants.js';
+import { SCRIPT_NAME, DEFAULT_PACK_ID, STORE_IMAGE_PACKS, STORE_SPRITES, STORE_BACKGROUNDS, STORE_MAP_IMAGES, STORE_SPECIAL_CGS } from '../core/constants.js';
 import { $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getDb } from '../core/state.js';
@@ -427,67 +427,7 @@ export async function isAllPacksEmpty() {
   }
 }
 
-// 背景图统一走 CSS 变量 --gal-bg-url（而非内联 background-image）：
-// 「避开对话框」模式下同一张图要被 ::before(模糊铺底) 与 ::after(清晰图) 各渲染一次，
-// 内联 background-image 无法喂给伪元素。
-function toCssUrlValue(url) {
-  const safe = String(url || '')
-    .replace(/[\r\n]/g, '')
-    .replace(/[\\"]/g, '\\$&');
-  return `url("${safe}")`;
-}
-
-function setBgLayerUrl($layer, cssUrlValue) {
-  $layer.each(function () {
-    if (!this || !this.style) return;
-    if (cssUrlValue) this.style.setProperty('--gal-bg-url', cssUrlValue);
-    else this.style.removeProperty('--gal-bg-url');
-  });
-}
-
-export function ensureBackgroundLayers($bgLayer) {
-  if (!$bgLayer || !$bgLayer.length) return { $base: $(), $front: $() };
-  let $base = $bgLayer.find('.gal-bg-base');
-  let $front = $bgLayer.find('.gal-bg-front');
-  if (!$base.length) {
-    $bgLayer.prepend('<div class="gal-bg-layer gal-bg-base"></div>');
-    $base = $bgLayer.find('.gal-bg-base');
-  }
-  if (!$front.length) {
-    $bgLayer.append('<div class="gal-bg-layer gal-bg-front"></div>');
-    $front = $bgLayer.find('.gal-bg-front');
-  }
-  return { $base, $front };
-}
-
-export function clearBackgroundLayers($bgLayer) {
-  const { $base, $front } = ensureBackgroundLayers($bgLayer);
-  $bgLayer.removeClass('bg-transitioning');
-  $bgLayer.removeData('bgCurrentUrl');
-  setBgLayerUrl($base, '');
-  setBgLayerUrl($front.removeClass('is-active'), '');
-}
-
-export function setBackgroundWithTransition($bgLayer, bgUrl) {
-  const { $base, $front } = ensureBackgroundLayers($bgLayer);
-  // 流式渲染会反复触发同一背景：URL 未变时跳过，避免过渡动画反复重放导致闪烁
-  if ($bgLayer.data('bgCurrentUrl') === bgUrl) return;
-  $bgLayer.data('bgCurrentUrl', bgUrl);
-  $bgLayer.find('.gal-gen-indicator').remove();
-  const cssUrl = toCssUrlValue(bgUrl);
-  setBgLayerUrl($front.removeClass('is-active'), cssUrl);
-  if ($front[0]) void $front[0].offsetHeight;
-  const token = `${Date.now()}_${Math.random()}`;
-  $bgLayer.data('bgTransitionToken', token);
-  $bgLayer.removeClass('bg-transitioning');
-  if ($bgLayer[0]) void $bgLayer[0].offsetHeight;
-  $bgLayer.addClass('bg-transitioning');
-  $front.addClass('is-active');
-  setTimeout(() => {
-    if ($bgLayer.data('bgTransitionToken') !== token) return;
-    setBgLayerUrl($base, cssUrl);
-    setBgLayerUrl($front.removeClass('is-active'), '');
-    $bgLayer.removeClass('bg-transitioning');
-  }, BG_TRANSITION_MS);
-}
+// 背景层切换（预加载解码 / 转场库 / 环境光采样）已迁至 stage/background.js，
+// 此处保留原导出名，供 index.js / 生图模块 / overlay-content 继续从图包模块引用
+export { ensureBackgroundLayers, clearBackgroundLayers, setBackgroundWithTransition } from '../stage/background.js';
 

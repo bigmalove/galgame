@@ -11,6 +11,7 @@ import { updateCharacterFocus } from '../live2d/preload.js';
 import { getCharacterUseLive2D } from '../live2d/render-mode.js';
 import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 import { getCharacterSpriteVisible } from './sprite-visibility.js';
+import { requestCameraFocus } from '../stage/camera.js';
 
 // 延迟引用: getSprite, getBackground, saveBackground, sceneBackgrounds,
 //           messageSegmentState, setBackgroundWithTransition, clearBackgroundLayers,
@@ -22,6 +23,7 @@ let _getMessageSegmentStateRef = null;
 let _setBackgroundWithTransitionRef = null;
 let _clearBackgroundLayersRef = null;
 let _BGMManagerRef = null;
+let _resolveSpecialCgSceneRef = null;
 
 export function setSpriteManagerRefs({
   getSprite,
@@ -31,7 +33,9 @@ export function setSpriteManagerRefs({
   setBackgroundWithTransition,
   clearBackgroundLayers,
   BGMManager,
+  resolveSpecialCgScene,
 }) {
+  if (resolveSpecialCgScene) _resolveSpecialCgSceneRef = resolveSpecialCgScene;
   if (getSprite) _getSpriteRef = getSprite;
   if (getBackground) _getBackgroundRef = getBackground;
   if (getSceneBackgrounds) _getSceneBackgroundsRef = getSceneBackgrounds;
@@ -692,11 +696,17 @@ export const SpriteManager = {
 
           const currentSrc = $oldImgs.last().attr('src');
           if (currentSrc !== spriteUrl) {
+            // 旧图冻结当前布局尺寸后改为绝对定位淡出，新图直接以最终布局进入文档流淡入。
+            // 反过来做（新图绝对定位）时 max-height: 100% 会按容器高度生效，而文档流中不生效，新图会先小一圈再跳回原尺寸
+            $oldImgs.each(function () {
+              this.style.width = `${this.offsetWidth}px`;
+              this.style.height = `${this.offsetHeight}px`;
+            });
+            $oldImgs.addClass('gal-img-out');
             const $newImg = $(`<img class="gal-char-img gal-img-in" src="${spriteUrl}" alt="${characterId}">`);
             $existingContainer.append($newImg);
             if ($newImg[0]) void $newImg[0].offsetHeight;
             $newImg.addClass('is-in');
-            $oldImgs.addClass('gal-img-out');
             setTimeout(() => {
               if (!$existingContainer[0]?.isConnected) return;
               $oldImgs.remove();
@@ -859,6 +869,7 @@ export const SpriteManager = {
         }
       }
     });
+    requestCameraFocus();
   },
 
   applyEmotionEffect(characterId, expression) {
@@ -897,7 +908,7 @@ export const SpriteManager = {
     return bestMatch || sceneName;
   },
 
-  async applySceneTint($overlay, scene) {
+  async applySceneTint($overlay, scene, options = {}) {
     const originalScene = scene;
     if (scene) {
       scene = this.findBestMatchScene(scene);
@@ -924,7 +935,19 @@ export const SpriteManager = {
 
     if (bgUrl) {
       $bgLayer.addClass('has-bg').removeClass('generating-bg');
-      if (_setBackgroundWithTransitionRef) _setBackgroundWithTransitionRef($bgLayer, bgUrl);
+      if (_setBackgroundWithTransitionRef) {
+        // 数值触发的特殊 CG 走「闪白揭示」+ NEW CG 横幅
+        let specialCgId = null;
+        try {
+          specialCgId = _resolveSpecialCgSceneRef ? _resolveSpecialCgSceneRef(scene) : null;
+        } catch (_) {}
+        const sceneTitle = String(originalScene || scene).replace(/_/g, ' ');
+        _setBackgroundWithTransitionRef($bgLayer, bgUrl, {
+          scene: sceneTitle,
+          transition: specialCgId ? 'flash' : (options.transition || null),
+          banner: specialCgId ? { id: specialCgId, kicker: 'NEW CG', title: sceneTitle } : null,
+        });
+      }
       console.log(`[${SCRIPT_NAME}] 应用背景成功: ${scene}, URL: ${bgUrl.substring(0, 50)}...`);
     } else {
       const BGMManagerLocal = _BGMManagerRef;

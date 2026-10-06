@@ -1,7 +1,9 @@
 import { SCRIPT_NAME } from '../core/constants.js';
-import { topWindow } from '../core/env.js';
+import { $, topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
-import { getPixiInstance, loadPixiLibrary } from './pixi-loader.js';
+import { shakeStage } from '../stage/camera.js';
+import { stageFlash } from '../stage/stage-fx.js';
+import { getPixiFilters, getPixiInstance, loadPixiFilters, loadPixiLibrary } from './pixi-loader.js';
 import { createPixiEffectInstance, getFixedEffectLayer, isSupportedPixiEffect } from './registry.js';
 
 const QUALITY_PROFILES = Object.freeze({
@@ -172,11 +174,76 @@ function prunePersistentEffects(maxActive) {
   }
 }
 
+// 布局尺寸用 CSS 像素（renderer.screen）。renderer.width/height 是乘过 devicePixelRatio 的画布像素，
+// 开启 autoDensity 后舞台坐标仍是 CSS 像素，用它布局会让高分屏上粒子铺满 2 倍区域、大半落在画外
 function getLayerSize(app) {
+  const screen = app?.renderer?.screen;
   return {
-    width: Math.max(2, Number(app?.renderer?.width) || 2),
-    height: Math.max(2, Number(app?.renderer?.height) || 2),
+    width: Math.max(2, Number(screen?.width) || 2),
+    height: Math.max(2, Number(screen?.height) || 2),
   };
+}
+
+// ---------- 辉光（pixi-filters AdvancedBloomFilter） ----------
+// 只给声明了 glow 参数的发光类特效（萤火虫 / 余烬 / 光斑 / 浮尘 / 雷电）挂滤镜；Mobile 档不启用。
+// 滤镜分辨率固定为 1：模糊本就不需要高分屏全分辨率，开销约为 2x 分辨率的四分之一
+function isBloomEnabled(settings = getSettings() || {}) {
+  return settings.effectsBloom !== false && settings.effectsQuality !== 'mobile';
+}
+
+function applyBloom(record) {
+  const instance = record?.instance;
+  const displayObject = instance?.displayObject;
+  if (!displayObject || !instance.glow) return;
+  const filters = getPixiFilters();
+  const app = getAppByLayer(record.layer);
+  if (!isBloomEnabled() || !filters?.AdvancedBloomFilter) {
+    if (displayObject.filters) displayObject.filters = null;
+    displayObject.filterArea = null;
+    return;
+  }
+  const balanced = (getSettings() || {}).effectsQuality !== 'high';
+  const bloomKey = balanced ? 'balanced' : 'high';
+  // 已按当前画质档挂好则跳过；画质档变化时按新参数重建
+  if (displayObject.filters?.length && displayObject.__galBloomKey === bloomKey) return;
+  const { threshold = 0.35, bloomScale = 1, blur = 6 } = instance.glow;
+  try {
+    const bloom = new filters.AdvancedBloomFilter({
+      threshold,
+      bloomScale,
+      brightness: 1,
+      blur: balanced ? blur * 0.8 : blur,
+      quality: balanced ? 3 : 4,
+      kernels: null,
+      pixelSize: 1,
+      resolution: 1,
+    });
+    displayObject.filters = [bloom];
+    displayObject.__galBloomKey = bloomKey;
+    // 全屏容器固定滤镜区域，省去每帧计算子节点包围盒
+    if (app?.screen) displayObject.filterArea = app.screen;
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] bloom filter failed: ${record.name}`, error);
+  }
+}
+
+function refreshBloomForActiveEffects() {
+  for (const record of effectState.activeEffects.values()) applyBloom(record);
+}
+
+function ensureBloomRuntime() {
+  if (!isBloomEnabled() || getPixiFilters()) return;
+  loadPixiFilters().then(filters => {
+    if (filters) refreshBloomForActiveEffects();
+  });
+}
+
+// ---------- 落雷：舞台层闪光 + 近雷轻震（雷电特效经 onStrike 回调） ----------
+function handleLightningStrike({ intensity = 0.8 } = {}) {
+  const overlay = effectState.bgHost?.closest?.('#gal-global-overlay');
+  if (!overlay) return;
+  stageFlash($(overlay), { color: '#dfe8ff', variant: 'thunder' });
+  if (intensity > 0.85) shakeStage({ power: 0.3, duration: 500 });
 }
 
 function bindTicker(layer, app) {
@@ -224,6 +291,8 @@ function applySingleOp(op, settings, quality) {
   if (action !== 'perform') return;
 
   const name = String(op?.name || '').trim();
+  // screenShake 是镜头效果（stage/camera.js），由 overlay-content 在段落推进时直接触发
+  if (name === 'screenShake') return;
   if (!isSupportedPixiEffect(name)) {
     console.warn(`[${SCRIPT_NAME}] unknown pixi effect "${name}"`);
     return;
@@ -253,20 +322,22 @@ function applySingleOp(op, settings, quality) {
   }
 
   const { width, height } = getLayerSize(app);
-  const instance = createPixiEffectInstance(name, { PIXI, width, height, quality });
+  const instance = createPixiEffectInstance(name, { PIXI, width, height, quality, onStrike: handleLightningStrike });
   if (!instance?.displayObject) return;
 
   instance.displayObject.zIndex = name === 'screenFlash' ? 999 : 10;
   app.stage.addChild(instance.displayObject);
 
   effectState.serial += 1;
-  effectState.activeEffects.set(key, {
+  const record = {
     key,
     layer,
     name,
     order: effectState.serial,
     instance,
-  });
+  };
+  effectState.activeEffects.set(key, record);
+  applyBloom(record);
 }
 
 export async function mountPixiEffects(overlayLike = null) {
@@ -298,6 +369,7 @@ export async function mountPixiEffects(overlayLike = null) {
     attachTickersIfNeeded();
     resizePixiEffects();
     syncPixiEffectsSettings();
+    ensureBloomRuntime();
     return true;
   } catch (error) {
     console.error(`[${SCRIPT_NAME}] mount pixi effects failed`, error);
@@ -344,7 +416,8 @@ export function resizePixiEffects() {
     const width = Math.max(2, Math.round(rect.width || host.clientWidth || 2));
     const height = Math.max(2, Math.round(rect.height || host.clientHeight || 2));
 
-    if (app.renderer.width !== width || app.renderer.height !== height) {
+    // 与 CSS 像素尺寸比较（renderer.width 含 devicePixelRatio，高分屏上永远不等）
+    if (app.renderer.screen.width !== width || app.renderer.screen.height !== height) {
       app.renderer.resize(width, height);
     }
 
@@ -394,6 +467,8 @@ export function syncPixiEffectsSettings() {
   }
 
   prunePersistentEffects(settings.effectsMaxActive);
+  ensureBloomRuntime();
+  refreshBloomForActiveEffects();
 
   if (!settings.effectsEnabled) {
     clearAllPixiEffects();

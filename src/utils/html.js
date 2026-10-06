@@ -1,5 +1,6 @@
 import { SCRIPT_NAME, RE_GAL_TAGS, RE_THINK_CLOSED, RE_THINK_UNCLOSED } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
+import { getEnhancedFormattedText } from '../logic/enhanced-format-store.js';
 
 // ============================================
 // HTML 工具函数
@@ -55,11 +56,21 @@ export function getRawMessageContent(mesId) {
 }
 
 /**
- * 获取消息的格式化版本内容（加强模式生成的 swipe）
+ * 获取消息的格式化版本内容：加强模式保存在楼层 extra 上的格式化文本（含第二次生成的流式草稿），
+ * 其次兼容旧版写入 swipe 的格式化版本
  * @param {string|number} mesId 消息 ID
  * @returns {string|null} 格式化后的消息内容
  */
 export function getFormattedSwipeContent(mesId) {
+  try {
+    const enhancedText = getEnhancedFormattedText(mesId);
+    if (enhancedText) {
+      return enhancedText.replace(RE_THINK_CLOSED, '').replace(RE_THINK_UNCLOSED, '');
+    }
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 获取加强模式格式化文本失败:`, e);
+  }
+
   try {
     // getChatMessages 是 SillyTavern 宿主函数，在 IIFE 闭包中可直接访问
     const messages = getChatMessages(parseInt(mesId, 10), { include_swipes: true });

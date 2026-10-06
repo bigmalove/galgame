@@ -31,6 +31,7 @@ export const HTML_SKIN_ALLOWED_SELECTOR_HINTS = [
   { selector: '.gal-interaction-bar .gal-action-btn', desc: '重绘/自由对话按钮（.btn-reroll / .btn-free）' },
   { selector: '.gal-text-panel', desc: '对话文本面板' },
   { selector: '.gal-dialog-text', desc: '对话正文文字' },
+  { selector: '.gal-dialog-text .gal-tw-end', desc: '正文末尾的「可继续」指示（默认为主强调色闪烁下箭头，可用 --gal-tw-end-color 换色、改形状或 display:none）' },
   { selector: '.gal-bottom-toolbar', desc: '底部功能栏' },
   { selector: '.gal-footer-btn', desc: '底栏功能按钮（data-action=log/close-mode/view-original/config/save/load/timeline）' },
   { selector: '.gal-footer-btn.gal-nav-btn', desc: '导航按钮（data-action=prev/auto/skip）' },
@@ -551,7 +552,9 @@ export const HTML_SKIN_PROMPT = `以下是 Galgame 游戏界面皮肤模板的�
 - 基线中底栏按钮、NEXT 按钮、剧情选项按钮等大量规则带 !important；要覆盖这些属性，你的规则也必须加 !important。
 - 基线对按钮、姓名牌、选项卡片使用了 skewX 斜切变形（元素本体与内部 span/i 反向补偿）；如需去除，须对本体及内部 span/i 同时写 \`transform: none !important\`。
 - NEXT 按钮（.gal-footer-btn-next）带 clip-path 斜角裁切，可用 \`clip-path: none !important\` 去除。
-- 可用 CSS 变量：--ui-scale（整体缩放，尺寸建议写 calc(Xrem * var(--ui-scale))）、--font-scale（字号）、--panel-opacity（面板透明度，玩家可调）、--gp-*（默认皮肤颜色 token 组，整组覆写可快速全局换色）。
+- 可用 CSS 变量：--ui-scale（整体缩放，尺寸建议写 calc(Xrem * var(--ui-scale))）、--font-scale（字号）、--panel-opacity（面板透明度，玩家可调）、--gp-*（默认皮肤颜色 token 组，整组覆写可快速全局换色）、--gal-speaker-color（当前说话角色的强调色，按角色名自动派生，旁白时未设置；基线用于姓名牌下划线、面板书签角与文末指示）。
+- 跨皮肤语义 token（推荐优先覆写这一组，黑场幕布、NEW CG 横幅、文末指示等通用演出组件只读它们）：--gal-color-accent（主强调）、--gal-color-accent-2（次强调 / 标签）、--gal-color-surface（面板底色）、--gal-color-on-surface / --gal-color-on-surface-dim（面板文字 / 次要文字）、--gal-color-line（描边）、--gal-color-on-accent（强调色上的文字）、--gal-color-shadow、--gal-color-stage（幕布等深色舞台底）、--gal-font-display / --gal-font-body / --gal-font-latin（标题 / 正文 / 英文标签字体）、--gal-radius；文末指示颜色可单独用 --gal-tw-end-color 指定。
+- 控件动效（逐字点亮、推进流光、名牌换人、按钮涟漪 / 火花、选项翻入等，所有皮肤通用，玩家可在设置中关闭）颜色默认取 --gal-color-accent / --gal-color-accent-2，也可单独覆写 --gal-fx-accent、--gal-fx-glow、--gal-fx-soft、--gal-fx-ripple、--gal-fx-spark、--gal-fx-sheen。动效会在面板、底栏、选项卡内插入 .gal-fx-* 元素（<i> / <span>，仅装饰），皮肤不必为它们写样式；若给按钮、面板写了自己的 animation，以皮肤为准。
 - 允许使用 @media（窄屏适配）与 @keyframes（导入时会自动重命名防撞名）。
 - 无背景图时舞台显示 .gal-layer-bg::before 的默认纹理；有背景图时该纹理隐藏（模板控制条的"切换 · 演示背景"可预览两种状态）。
 

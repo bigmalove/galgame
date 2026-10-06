@@ -14,6 +14,9 @@ import {
   getTwilightOverlayClasses,
   isTwilightSkinSelected,
 } from './skin-twilight.js';
+import { playControlIntro, syncControlMotion } from './control-motion.js';
+import { syncTtsCue } from './tts-cue.js';
+import { getDefaultThemeClasses, isThemeManagedSkin, syncDefaultThemeClasses } from './default-theme.js';
 import { applyJrpgSkinAssets, clearJrpgSkinAssets, isJrpgSkinSelected } from './skin-jrpg-runtime.js';
 import { applyYanyunSkinAssets, clearYanyunSkinAssets, isYanyunSkinSelected } from './skin-yanyun-runtime.js';
 
@@ -67,9 +70,16 @@ function syncOverlaySkinClass($overlay) {
   BUILTIN_SKIN_CLASS_LIST.forEach(skinClass => $overlay.removeClass(skinClass));
   $overlay.removeClass(CUSTOM_SKIN_ID);
   $overlay.removeClass('html-skin');
+  // 默认皮肤家族 / 经典 Cyber Pop 挂主题类；旧版 / 未知皮肤值按默认（晴空）处理，HTML 皮肤与其他内置皮肤不挂
+  const isHtmlSkin = hasHtmlSkinId(rawSkin);
+  const themeSkin = isHtmlSkin ? null
+    : isThemeManagedSkin(rawSkin) ? rawSkin
+      : BUILTIN_SKIN_CLASS_LIST.includes(rawSkin) ? null : 'none';
+  syncDefaultThemeClasses($overlay, themeSkin ? getDefaultThemeClasses(themeSkin) : []);
+  syncControlMotion($overlay);
 
   if (!rawSkin || rawSkin === 'none' || rawSkin === 'skin-western') return;
-  if (hasHtmlSkinId(rawSkin)) {
+  if (isHtmlSkin) {
     $overlay.addClass('html-skin');
     return;
   }
@@ -303,6 +313,29 @@ function syncOverlayThemeAssets($overlay, rawSkin) {
   }
 }
 
+// 切换不同外壳的皮肤会整体重建覆盖层 DOM。舞台层（背景 / 特效宿主 / 立绘）两套外壳结构相同，
+// 原节点整体搬进新外壳：背景、所有在场立绘与正在播放的 Pixi 特效都不中断（否则背景要等换场景才回来）。
+// 先 detach 再重建，保留节点上的 jQuery 数据与事件；只同步外壳专属的结构 class
+const STAGE_LAYER_SELECTORS = ['.gal-layer-bg', '.gal-layer-effect-bg', '.gal-layer-character', '.gal-layer-effect-fg'];
+const SHELL_STAGE_LAYER_CLASS = 'gal-twilight-runtime-layer';
+
+function detachStageLayers($overlay) {
+  return STAGE_LAYER_SELECTORS.map(selector => {
+    const $layer = $overlay.find(selector).first();
+    return $layer.length ? $layer.detach()[0] : null;
+  });
+}
+
+function reattachStageLayers($overlay, layers) {
+  STAGE_LAYER_SELECTORS.forEach((selector, index) => {
+    const layer = layers[index];
+    const fresh = $overlay.find(selector)[0];
+    if (!layer || !fresh) return;
+    layer.classList.toggle(SHELL_STAGE_LAYER_CLASS, fresh.classList.contains(SHELL_STAGE_LAYER_CLASS));
+    fresh.replaceWith(layer);
+  });
+}
+
 function snapshotOverlayState($overlay) {
   if (!$overlay?.length) return null;
   return {
@@ -404,16 +437,19 @@ export function ensureGlobalOverlay() {
     const currentShell = String($overlay.find('.gal-game-container').attr('data-skin-shell') || 'default').trim() || 'default';
     if (currentShell !== shellType) {
       const overlayStateSnapshot = snapshotOverlayState($overlay);
+      const stageLayers = detachStageLayers($overlay);
       $overlay.html(buildOverlayInnerHtml({
         settings,
         locationIconClass,
         timeIconClass,
       }));
+      reattachStageLayers($overlay, stageLayers);
       restoreOverlayState($overlay, overlayStateSnapshot);
     }
   }
   syncOverlayThemeAssets($overlay, settings?.skin);
   syncOverlaySkinClass($overlay);
+  syncTtsCue($overlay);
   return $overlay;
 }
 
@@ -686,6 +722,7 @@ export function showGlobalOverlay() {
     const wasActive = $overlay.hasClass('active');
     syncOverlaySkinClass($overlay);
     $overlay.addClass('active');
+    if (!wasActive) playControlIntro($overlay[0]);
     resumePixiEffects();
     setChatScrollLock(true);
     startOverlayScrollPin();

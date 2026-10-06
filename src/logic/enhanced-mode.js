@@ -1,9 +1,19 @@
 import { SCRIPT_NAME } from '../core/constants.js';
-import { topWindow } from '../core/env.js';
+import { getTavernContext, topWindow } from '../core/env.js';
 import { ensureEnhancedModeSettings, getSettings, SYSTEM_PROMPT_FOR_SECOND_GENERATE } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
 import { generateCOTTemplate } from './cot-template.js';
+import {
+    clearStreamingDraft,
+    getEnhancedFormatRecord,
+    getEnhancedFormattedText,
+    getMessageSourceSnapshot,
+    hasStaleEnhancedFormatRecord,
+    saveEnhancedFormatRecord,
+    setStreamingDraft,
+} from './enhanced-format-store.js';
+import { describeLlmConfig, requestWithConnectionProfile } from './enhanced-llm.js';
 import {
     checkSillyTavernGenerating,
     getGenerationState,
@@ -15,12 +25,14 @@ import {
     startGenerationTimeout,
     stopGenerationTimeout,
 } from './generation-state.js';
-import { parseGalgameContent } from './parser.js';
 import { getPendingSpecialCg } from './special-cg-trigger.js';
 
 // ============================================
 // 加强模式
 // ============================================
+// 第一次生成：AI 专注创作，正文保持原样写入酒馆；
+// 第二次生成：把正文转换为 Galgame 格式，结果只存到楼层 extra（见 enhanced-format-store.js），
+// 仅在 Galgame 界面中显示，不修改酒馆正文和 swipe。
 
 const WORLDBOOK_NAME = 'galgame界面插件';
 const COT_ENTRY_NAME = 'Galgame输出格式规范';
@@ -30,23 +42,20 @@ const worldbookInjectionState = GalgameStore.worldbookInjection;
 
 // 延迟引用
 let _showToastRef = null;
-let _updateGlobalOverlayContentRef = null;
 let _updateNextBtnForGeneratingStateRef = null;
-let _updateGeneratingStatusRef = null;
 let _showGeneratingIndicatorRef = null;
+let _processNewMessageRef = null;
 
 export function setEnhancedModeRefs({
   showToast,
-  updateGlobalOverlayContent,
   updateNextBtnForGeneratingState,
-  updateGeneratingStatus,
   showGeneratingIndicator,
+  processNewMessage,
 }) {
   if (showToast) _showToastRef = showToast;
-  if (updateGlobalOverlayContent) _updateGlobalOverlayContentRef = updateGlobalOverlayContent;
   if (updateNextBtnForGeneratingState) _updateNextBtnForGeneratingStateRef = updateNextBtnForGeneratingState;
-  if (updateGeneratingStatus) _updateGeneratingStatusRef = updateGeneratingStatus;
   if (showGeneratingIndicator) _showGeneratingIndicatorRef = showGeneratingIndicator;
+  if (processNewMessage) _processNewMessageRef = processNewMessage;
 }
 
 export { COT_ENTRY_NAME, WORLDBOOK_NAME };
@@ -60,14 +69,23 @@ function showToast(msg, duration) {
 // ============================================
 export function isCotFormatted(content) {
   if (!content || typeof content !== 'string') return false;
-  const cotIndicators = [/<background\s+scene=/i, /<sprite\s+/i, /<bgm>/i, /<maintext>/i, /<p\s+tts=/i];
+  const cotIndicators = [/<background\b[^>]*\bscene=/i, /<sprite\s+/i, /<bgm>/i, /<maintext>/i, /<p\s+tts=/i];
   return cotIndicators.some(pattern => pattern.test(content));
 }
 
 /**
- * 获取格式化版本内容
+ * 获取格式化版本内容：优先读取加强模式保存在楼层 extra 上的记录（含第二次生成的流式草稿），
+ * 其次兼容旧版写入 swipe 的格式化版本
  */
 export function getFormattedContent(messageId) {
+  const enhancedText = getEnhancedFormattedText(messageId);
+  if (enhancedText) {
+    return { formatted: enhancedText, source: 'extra' };
+  }
+  return getLegacyFormattedSwipe(messageId);
+}
+
+function getLegacyFormattedSwipe(messageId) {
   const messages = getChatMessages(messageId, { include_swipes: true });
   const message = messages[0];
   if (!message || !message.swipes || message.swipes.length < 2) {
@@ -76,49 +94,13 @@ export function getFormattedContent(messageId) {
   const swipes = message.swipes;
   const swipesInfo = message.swipes_info || [];
 
-  // 策略1：优先检查swipe 1
-  const swipe1Info = swipesInfo[1] || {};
-  const swipe1Content = swipes[1];
-  if (swipe1Info.isEnhancedFormat === true) {
-    return {
-      original: swipes[0],
-      formatted: swipe1Content,
-      formattedIndex: 1,
-      originalIndex: 0,
-      currentSwipe: message.swipe_id,
-    };
-  }
-  if (swipe1Info.isEnhancedFormat !== false && isCotFormatted(swipe1Content)) {
-    return {
-      original: swipes[0],
-      formatted: swipe1Content,
-      formattedIndex: 1,
-      originalIndex: 0,
-      currentSwipe: message.swipe_id,
-      autoDetected: true,
-    };
-  }
-
-  // 策略2：遍历其他swipe查找
-  for (let i = 2; i < swipes.length; i++) {
+  for (let i = 1; i < swipes.length; i++) {
     const info = swipesInfo[i] || {};
-    if (info.isEnhancedFormat === true) {
+    if (info.isEnhancedFormat === true || (info.isEnhancedFormat !== false && isCotFormatted(swipes[i]))) {
       return {
-        original: swipes[0],
         formatted: swipes[i],
         formattedIndex: i,
-        originalIndex: 0,
-        currentSwipe: message.swipe_id,
-      };
-    }
-    if (info.isEnhancedFormat !== false && isCotFormatted(swipes[i])) {
-      return {
-        original: swipes[0],
-        formatted: swipes[i],
-        formattedIndex: i,
-        originalIndex: 0,
-        currentSwipe: message.swipe_id,
-        autoDetected: true,
+        source: 'swipe',
       };
     }
   }
@@ -126,54 +108,19 @@ export function getFormattedContent(messageId) {
 }
 
 /**
- * 将格式化版本保存到swipe
- */
-export async function saveFormatToSwipe(messageId, originalContent, formattedContent) {
-  const numericMessageId = Number(messageId);
-  console.log(`[${SCRIPT_NAME}] saveFormatToSwipe: 开始, messageId=${numericMessageId}`);
-
-  const msgs = getChatMessages(numericMessageId, { include_swipes: true });
-  if (!msgs || msgs.length === 0) {
-    throw new Error('未找到目标楼层');
-  }
-  const msg = msgs[0];
-  console.log(`[${SCRIPT_NAME}] saveFormatToSwipe: 当前 swipes=${msg.swipes?.length}, swipe_id=${msg.swipe_id}`);
-
-  const newSwipes = [...msg.swipes, ''];
-  const newSwipeId = newSwipes.length - 1;
-  await setChatMessages(
-    [{ message_id: numericMessageId, swipes: newSwipes, swipe_id: newSwipeId }],
-    { refresh: 'affected' },
-  );
-  console.log(`[${SCRIPT_NAME}] saveFormatToSwipe: 已添加空 swipe, swipe_id=${newSwipeId}`);
-
-  const updatedMsgs = getChatMessages(numericMessageId, { include_swipes: true });
-  if (updatedMsgs && updatedMsgs.length > 0) {
-    const updatedSwipes = [...updatedMsgs[0].swipes];
-    updatedSwipes[newSwipeId] = formattedContent;
-    await setChatMessages(
-      [{ message_id: numericMessageId, swipes: updatedSwipes, swipe_id: newSwipeId }],
-      { refresh: 'affected' },
-    );
-  }
-
-  console.log(`[${SCRIPT_NAME}] 格式化版本已保存到 swipe ${newSwipeId}`);
-}
-
-/**
  * 显示生成进度
  */
-function showEnhancedProgress(stage) {
+function showEnhancedProgress(stage, detail = '') {
   const messages = {
-    first_generating: { icon: 'fa-pen', text: '第一次生成（内容创作）', sub: '正在生成...' },
-    first_done: { icon: 'fa-check', text: '第一次完成', sub: '准备格式化...' },
-    second_generating: { icon: 'fa-wand-magic-sparkles', text: '第二次生成（COT格式化）', sub: '切换API中...' },
-    second_done: { icon: 'fa-check-double', text: '加强模式完成', sub: '已保存2个版本' },
+    first_done: { icon: 'fa-check', text: '第一次生成完成', sub: '准备格式化...' },
+    second_generating: { icon: 'fa-wand-magic-sparkles', text: '第二次生成（格式化）', sub: detail || '正在格式化...' },
+    second_done: { icon: 'fa-check-double', text: '加强模式完成', sub: '格式化文本仅在 Galgame 界面中显示' },
   };
   const msg = messages[stage];
   if (!msg) return;
+  const esc = str => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   showToast(
-    `<i class="fa-solid ${msg.icon}" style="color: #ff9800;"></i> <b>${msg.text}</b><br><small>${msg.sub}</small>`,
+    `<i class="fa-solid ${msg.icon}" style="color: #ff9800;"></i> <b>${msg.text}</b><br><small>${esc(msg.sub)}</small>`,
     3000,
   );
 }
@@ -187,172 +134,99 @@ export function resetEnhancedModeState() {
   enhancedModeState.firstResult = null;
   enhancedModeState.formattedResult = null;
   enhancedModeState.targetMessageId = null;
-  enhancedModeState.originalProfile = undefined;
-  enhancedModeState.originalModel = undefined;
-  enhancedModeState.originalPreset = undefined;
-  enhancedModeState.originalWorldbooks = null;
-  enhancedModeState.worldbooksModified = false;
-  enhancedModeState.originalConfigSaved = false;
-  enhancedModeState.isSecondGeneration = false;
 }
 
 // ============================================
-// 配置列表获取
+// COT 格式转换
 // ============================================
-export function getAvailablePresets() {
-  try {
-    if (typeof getPresetNames === 'function') {
-      return Promise.resolve(getPresetNames());
-    }
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取预设列表失败:`, e);
-  }
-  return Promise.resolve([]);
+function createGenerationId() {
+  return `galgame-cot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export async function getAvailableProfiles() {
+// 使用酒馆当前 API 生成（generate / generateRaw）
+async function generateWithTavern({ independent, systemPrompt, userPrompt, onStream, sendWorldbook }) {
+  const generationId = createGenerationId();
+  const previousSecondGenerationState = enhancedModeState.isSecondGeneration;
+  let stopStreamListener = null;
+
   try {
-    if (typeof triggerSlash === 'function') {
-      const result = await triggerSlash('/profile-list');
-      if (result) {
-        try {
-          const parsed = JSON.parse(result);
-          if (Array.isArray(parsed)) return parsed;
-        } catch (e) {
-          if (typeof result === 'string') {
-            return result.split(',').map(p => p.trim()).filter(p => p.length > 0);
-          }
-        }
+    // 让世界书注入 / 加强模式监听器忽略本次生成触发的酒馆事件
+    enhancedModeState.isSecondGeneration = true;
+
+    if (onStream && typeof eventOn === 'function' && typeof iframe_events !== 'undefined') {
+      const handle = eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, (text, id) => {
+        // 只接收本次请求的流式输出（旧版酒馆助手不传 generation_id 时不过滤）
+        if (id !== undefined && id !== generationId) return;
+        onStream(typeof text === 'string' ? text : '');
+      });
+      if (handle && typeof handle.stop === 'function') {
+        stopStreamListener = () => handle.stop();
       }
     }
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取连接配置列表失败:`, e);
-  }
-  return [];
-}
 
-export function getAvailableModels() {
-  try {
-    if (typeof getModelOptions === 'function') {
-      const models = getModelOptions();
-      if (Array.isArray(models)) {
-        return Promise.resolve(models.map(m => (typeof m === 'string' ? m : m.name || m.id || String(m))));
+    if (independent) {
+      // 独立模式：仅发送 system prompt + user input，完全不受预设/世界书/聊天历史影响
+      return await generateRaw({
+        generation_id: generationId,
+        user_input: userPrompt,
+        should_silence: true,
+        should_stream: true,
+        ordered_prompts: [
+          { role: 'system', content: systemPrompt },
+          'user_input',
+        ],
+      });
+    }
+
+    // 预设模式：使用当前预设，排除聊天历史与按深度插入的世界书条目；
+    // 不发送世界书时再清空「角色定义之前/之后」位置的世界书
+    return await generate({
+      generation_id: generationId,
+      user_input: userPrompt,
+      injects: [{ role: 'system', content: systemPrompt }],
+      should_silence: true,
+      should_stream: true,
+      max_chat_history: 0,
+      overrides: {
+        chat_history: {
+          prompts: [],
+          with_depth_entries: false,
+        },
+        dialogue_examples: '',
+        ...(sendWorldbook ? {} : { world_info_before: '', world_info_after: '' }),
+      },
+    });
+  } finally {
+    if (stopStreamListener) {
+      try {
+        stopStreamListener();
+      } catch (e) {
+        console.warn(`[${SCRIPT_NAME}] 移除流式监听失败:`, e);
       }
     }
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取模型列表失败:`, e);
-  }
-  return Promise.resolve([]);
-}
-
-export function getAvailableWorldbooks() {
-  try {
-    if (typeof getWorldbookNames === 'function') {
-      const worldbooks = getWorldbookNames();
-      if (Array.isArray(worldbooks)) {
-        return Promise.resolve(worldbooks);
-      }
-    }
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取世界书列表失败:`, e);
-  }
-  return Promise.resolve([]);
-}
-
-// ============================================
-// 配置保存/恢复
-// ============================================
-async function saveOriginalConfig() {
-  if (typeof triggerSlash !== 'function') return;
-
-  try {
-    if (typeof getGlobalWorldbookNames === 'function') {
-      enhancedModeState.originalWorldbooks = getGlobalWorldbookNames();
-      console.log(`[${SCRIPT_NAME}] 当前世界书:`, enhancedModeState.originalWorldbooks);
-    }
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取当前世界书失败:`, e);
-  }
-  try {
-    enhancedModeState.originalProfile = (await triggerSlash('/profile quiet=true')) || '';
-    console.log(`[${SCRIPT_NAME}] 当前连接配置: ${enhancedModeState.originalProfile}`);
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取当前连接配置失败:`, e);
-  }
-  try {
-    enhancedModeState.originalModel = (await triggerSlash('/model quiet=true')) || '';
-    console.log(`[${SCRIPT_NAME}] 当前模型: ${enhancedModeState.originalModel}`);
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取当前模型失败:`, e);
-  }
-  try {
-    enhancedModeState.originalPreset = (await triggerSlash('/preset quiet=true')) || '';
-    console.log(`[${SCRIPT_NAME}] 当前预设: ${enhancedModeState.originalPreset}`);
-  } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 获取当前预设失败:`, e);
+    enhancedModeState.isSecondGeneration = previousSecondGenerationState;
   }
 }
 
-async function restoreOriginalConfig() {
-  if (typeof triggerSlash !== 'function') return;
-
-  if (enhancedModeState.originalPreset !== undefined && enhancedModeState.originalPreset !== '') {
-    try {
-      await triggerSlash(`/preset quiet=true ${enhancedModeState.originalPreset}`);
-      console.log(`[${SCRIPT_NAME}] 已恢复预设: ${enhancedModeState.originalPreset}`);
-    } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 恢复预设失败:`, e);
-    }
+// 按原文扫描当前激活的世界书（dry run：不触发激活事件、不改变粘性/冷却计时）。
+// 只取「角色定义之前/之后」位置的条目，与跟随酒馆模式排除深度条目的行为一致，
+// 也避开了脚本世界书中按深度插入的格式规范条目
+async function collectWorldbookPrompt(sourceText) {
+  const ctx = getTavernContext();
+  if (typeof ctx?.getWorldInfoPrompt !== 'function') {
+    console.warn(`[${SCRIPT_NAME}] 当前酒馆版本不支持读取世界书，第二次生成不附带世界书`);
+    return '';
   }
-  if (enhancedModeState.originalModel !== undefined && enhancedModeState.originalModel !== '') {
-    try {
-      await triggerSlash(`/model quiet=true ${enhancedModeState.originalModel}`);
-      console.log(`[${SCRIPT_NAME}] 已恢复模型: ${enhancedModeState.originalModel}`);
-    } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 恢复模型失败:`, e);
-    }
-  }
-  if (enhancedModeState.originalProfile !== undefined && enhancedModeState.originalProfile !== '') {
-    try {
-      await triggerSlash(`/profile quiet=true ${enhancedModeState.originalProfile}`);
-      console.log(`[${SCRIPT_NAME}] 已恢复连接配置: ${enhancedModeState.originalProfile}`);
-    } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 恢复连接配置失败:`, e);
-    }
-  }
-  if (
-    enhancedModeState.worldbooksModified &&
-    enhancedModeState.originalWorldbooks !== null &&
-    typeof rebindGlobalWorldbooks === 'function'
-  ) {
-    try {
-      await rebindGlobalWorldbooks(enhancedModeState.originalWorldbooks);
-      console.log(`[${SCRIPT_NAME}] 已恢复世界书:`, enhancedModeState.originalWorldbooks);
-    } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] 恢复世界书失败:`, e);
-    }
-  }
-}
-
-// ============================================
-// 流式更新 swipe
-// ============================================
-async function updateStreamingSwipe(messageId, swipeId, text) {
   try {
-    const msgs = getChatMessages(messageId, { include_swipes: true });
-    if (!msgs || !msgs[0]) return;
-
-    const msg = msgs[0];
-    const newSwipes = [...msg.swipes];
-    newSwipes[swipeId] = text;
-
-    const updateData = { ...msg };
-    updateData.swipes = newSwipes;
-    updateData.swipe_id = swipeId;
-
-    await setChatMessages([updateData], { refresh: 'affected' });
+    const maxContext = Number(ctx.maxContext) > 0 ? Number(ctx.maxContext) : 8192;
+    const result = await ctx.getWorldInfoPrompt([sourceText], maxContext, true);
+    return [result?.worldInfoBefore, result?.worldInfoAfter]
+      .map(text => String(text || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
   } catch (e) {
-    console.warn(`[${SCRIPT_NAME}] 流式更新失败:`, e);
+    console.warn(`[${SCRIPT_NAME}] 读取世界书失败，第二次生成不附带世界书:`, e);
+    return '';
   }
 }
 
@@ -367,6 +241,9 @@ async function updateStreamingSwipe(messageId, swipeId, text) {
  *            不包含角色描述、世界书、预设、聊天历史等任何上下文。
  *   - false: 预设模式（加强模式第二次生成）。使用 generate，保留当前预设、世界书等设置，
  *            但强制排除聊天历史和深度注入条目，确保转换仅基于原文输入。
+ * @param {object|null} [options.llm] 使用酒馆连接配置独立请求（加强模式自定义 LLM），
+ *   `{ profileId, profileName, model, maxTokens }`；设置后忽略 independent，仅发送 system + user。
+ * @param {boolean} [options.sendWorldbook=false] 是否附带世界书内容（独立模式下忽略）
  */
 export async function convertTextToCotFormat(sourceText, options = {}) {
   const normalizedSource = String(sourceText || '').trim();
@@ -375,251 +252,229 @@ export async function convertTextToCotFormat(sourceText, options = {}) {
   }
 
   const independent = !!options.independent;
+  const llm = options.llm || null;
+  const sendWorldbook = !independent && !!options.sendWorldbook;
   const onStream = typeof options.onStream === 'function' ? options.onStream : null;
-  const streamState = { latestText: '' };
-  let stopStreamListener = null;
-  const previousSecondGenerationState = enhancedModeState.isSecondGeneration;
-
-  try {
-    enhancedModeState.isSecondGeneration = true;
-
-    if (onStream && typeof eventOn === 'function' && typeof iframe_events !== 'undefined') {
-      const handle = eventOn(iframe_events.STREAM_TOKEN_RECEIVED_FULLY, text => {
-        const safeText = typeof text === 'string' ? text : '';
-        streamState.latestText = safeText;
-        onStream(safeText);
-      });
-      if (handle && typeof handle.stop === 'function') {
-        stopStreamListener = () => handle.stop();
-      }
+  let latestStreamText = '';
+  const streamHandler = onStream
+    ? text => {
+      latestStreamText = text;
+      onStream(text);
     }
+    : null;
 
-    const pendingSpecialCg = await getPendingSpecialCg();
-    const cotTemplate = await generateCOTTemplate({ pendingSpecialCg });
-    const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}\n\n${cotTemplate}`;
-    const userPrompt = `请将以下内容转换为标准Galgame格式：\n\n${normalizedSource}`;
+  const pendingSpecialCg = await getPendingSpecialCg();
+  const cotTemplate = await generateCOTTemplate({ pendingSpecialCg });
+  const systemPrompt = `${SYSTEM_PROMPT_FOR_SECOND_GENERATE}\n\n${cotTemplate}`;
+  const userPrompt = `请将以下内容转换为标准Galgame格式：\n\n${normalizedSource}`;
+  const llmLabel = describeLlmConfig(llm);
+  const worldbookPrompt = llm && sendWorldbook ? await collectWorldbookPrompt(normalizedSource) : '';
 
-    enhancedModeState.lastPrompts = {
-      systemPrompt,
-      userPrompt,
-      firstResult: normalizedSource,
-      timestamp: new Date().toLocaleString('zh-CN'),
-    };
-    console.log(`[${SCRIPT_NAME}] COT转换: 模式=${independent ? '独立(开场白)' : '预设(加强模式)'}`);
+  enhancedModeState.lastPrompts = {
+    systemPrompt,
+    userPrompt,
+    firstResult: normalizedSource,
+    llmLabel,
+    sendWorldbook,
+    worldbookPrompt,
+    timestamp: new Date().toLocaleString('zh-CN'),
+  };
+  const modeLabel = llm ? '连接配置(加强模式)' : independent ? '独立(开场白)' : '预设(加强模式)';
+  console.log(`[${SCRIPT_NAME}] COT转换: 模式=${modeLabel}, LLM=${llmLabel}, 世界书=${sendWorldbook ? '发送' : '不发送'}`);
 
-    let formattedText;
+  const formattedText = llm
+    ? await requestWithConnectionProfile({
+      ...llm,
+      messages: [
+        ...(worldbookPrompt
+          ? [{ role: 'system', content: `【世界书参考资料】以下设定仅用于识别角色、地点等名称，不要据此添加任何剧情：\n${worldbookPrompt}` }]
+          : []),
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      onStream: streamHandler,
+    })
+    : await generateWithTavern({ independent, systemPrompt, userPrompt, onStream: streamHandler, sendWorldbook });
 
-    if (independent) {
-      // 独立模式：仅发送 system prompt + user input，完全不受预设/世界书/聊天历史影响
-      formattedText = await generateRaw({
-        user_input: userPrompt,
-        should_silence: true,
-        should_stream: true,
-        ordered_prompts: [
-          { role: 'system', content: systemPrompt },
-          'user_input',
-        ],
-      });
-    } else {
-      // 预设模式：使用当前预设和世界书，但排除聊天历史
-      formattedText = await generate({
-        user_input: userPrompt,
-        injects: [{ role: 'system', content: systemPrompt }],
-        should_silence: true,
-        should_stream: true,
-        max_chat_history: 0,
-        overrides: {
-          chat_history: {
-            prompts: [],
-            with_depth_entries: false,
-          },
-          dialogue_examples: '',
-        },
-      });
-    }
-
-    const safeFormattedText = typeof formattedText === 'string' ? formattedText : String(formattedText || '');
-    if (onStream && safeFormattedText && streamState.latestText !== safeFormattedText) {
-      onStream(safeFormattedText);
-    }
-
-    return {
-      formattedText: safeFormattedText,
-      systemPrompt,
-      userPrompt,
-    };
-  } finally {
-    if (stopStreamListener) {
-      try {
-        stopStreamListener();
-      } catch (e) {
-        console.warn(`[${SCRIPT_NAME}] 移除流式监听失败:`, e);
-      }
-    }
-    enhancedModeState.isSecondGeneration = previousSecondGenerationState;
+  const safeFormattedText = typeof formattedText === 'string' ? formattedText : String(formattedText || '');
+  if (onStream && safeFormattedText && latestStreamText !== safeFormattedText) {
+    onStream(safeFormattedText);
   }
+
+  return {
+    formattedText: safeFormattedText,
+    systemPrompt,
+    userPrompt,
+  };
 }
 
 // ============================================
 // 第二次生成
 // ============================================
-async function runSecondGeneration(messageId, firstResult) {
-  const config = ensureEnhancedModeSettings();
-  const secondGenerateConfig = config.secondGenerate;
-  const numericMessageId = Number(messageId);
+const STREAM_REFRESH_INTERVAL = 400;
 
-  let streamBuffer = '';
-  let lastStreamUpdate = 0;
-  const STREAM_INTERVAL = 100;
-
+async function refreshMessageInOverlay(messageId, options) {
+  if (!getIsEnabled() || !_processNewMessageRef) return;
+  const mesNode = topWindow.document.querySelector(`#chat > .mes[mesid="${messageId}"]`);
+  if (!mesNode) return;
   try {
-    if (!Number.isInteger(numericMessageId) || numericMessageId < 0) {
-      throw new Error('无效的消息ID，无法执行第二次生成');
+    await _processNewMessageRef(mesNode, options);
+  } catch (e) {
+    console.warn(`[${SCRIPT_NAME}] 加强模式: 刷新 Galgame 界面失败`, e);
+  }
+}
+
+function showFormattingIndicator() {
+  if (!getIsEnabled() || !_showGeneratingIndicatorRef) return;
+  if (!topWindow.document.querySelector('#gal-global-overlay.active')) return;
+  _showGeneratingIndicatorRef('正在进行格式化转换...');
+}
+
+// 流式期间节流刷新 Galgame 界面（正文不再随流式写入楼层，不会触发楼层 DOM 监听，需主动刷新）
+function createOverlayRefresher(messageId) {
+  let timer = null;
+  let inFlight = null;
+  let pending = false;
+  let stopped = false;
+  let lastRun = 0;
+
+  const run = async () => {
+    timer = null;
+    if (stopped) return;
+    if (inFlight) {
+      pending = true;
+      return;
     }
-    console.log(`[${SCRIPT_NAME}] 加强模式: 开始第二次生成（COT格式化-流式）`);
-    enhancedModeState.stage = 'second_generating';
-    showEnhancedProgress('second_generating');
+    lastRun = Date.now();
+    inFlight = refreshMessageInOverlay(messageId).then(() => {
+      // 渲染完成会收起「生成中」指示器，格式化仍在进行时重新打开
+      if (!stopped) showFormattingIndicator();
+    });
+    await inFlight;
+    inFlight = null;
+    if (pending && !stopped) {
+      pending = false;
+      schedule();
+    }
+  };
 
-    if (!enhancedModeState.originalConfigSaved) {
-      await saveOriginalConfig();
-      enhancedModeState.originalConfigSaved = true;
+  const schedule = () => {
+    if (timer || stopped) return;
+    timer = setTimeout(run, Math.max(0, STREAM_REFRESH_INTERVAL - (Date.now() - lastRun)));
+  };
+
+  const stop = () => {
+    stopped = true;
+    pending = false;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    return inFlight || Promise.resolve();
+  };
+
+  return { schedule, stop };
+}
+
+function resolveSecondGenerateLlm(secondGenerate) {
+  if (secondGenerate?.llmSource !== 'profile') return null;
+  if (!secondGenerate.profileId && !secondGenerate.profileName) {
+    throw new Error('已选择「使用酒馆连接配置」，但尚未选择连接配置');
+  }
+  return {
+    profileId: secondGenerate.profileId,
+    profileName: secondGenerate.profileName,
+    model: secondGenerate.model,
+    maxTokens: secondGenerate.maxTokens,
+  };
+}
+
+async function runSecondGeneration(messageId) {
+  const snapshot = getMessageSourceSnapshot(messageId);
+  if (!snapshot) return;
+
+  enhancedModeState.isActive = true;
+  enhancedModeState.stage = 'second_generating';
+  enhancedModeState.targetMessageId = snapshot.mesId;
+  enhancedModeState.firstResult = snapshot.text;
+
+  const refresher = createOverlayRefresher(snapshot.mesId);
+  try {
+    const secondGenerate = ensureEnhancedModeSettings().secondGenerate;
+    const llm = resolveSecondGenerateLlm(secondGenerate);
+    const llmLabel = describeLlmConfig(llm);
+    console.log(`[${SCRIPT_NAME}] 加强模式: 开始第二次生成（楼层 ${snapshot.mesId} swipe[${snapshot.swipeId}]，${llmLabel}）`);
+    showEnhancedProgress('second_generating', llmLabel);
+    showFormattingIndicator();
+
+    const { formattedText } = await convertTextToCotFormat(snapshot.text, {
+      llm,
+      sendWorldbook: secondGenerate.sendWorldbook,
+      onStream: text => {
+        setStreamingDraft(snapshot, text);
+        refresher.schedule();
+      },
+    });
+    if (!formattedText.trim()) {
+      throw new Error('格式化结果为空');
     }
 
-    try {
-      const originalGlobalWbs = getGlobalWorldbookNames();
-      enhancedModeState.originalWorldbooks = [...originalGlobalWbs];
-      enhancedModeState.worldbooksModified = true;
-
-      let targetWorldbooks = [...originalGlobalWbs];
-      if (!secondGenerateConfig.useWorldbooks) {
-        targetWorldbooks = [...originalGlobalWbs];
-        console.log(`[${SCRIPT_NAME}] 第二次生成使用当前全局世界书:`, targetWorldbooks);
-      } else if (secondGenerateConfig.worldbooks && secondGenerateConfig.worldbooks.length > 0) {
-        targetWorldbooks = [...secondGenerateConfig.worldbooks];
-        console.log(`[${SCRIPT_NAME}] 第二次生成使用用户指定世界书:`, secondGenerateConfig.worldbooks);
-      } else {
-        targetWorldbooks = [];
-        console.log(`[${SCRIPT_NAME}] 第二次生成清空用户世界书`);
-      }
-
-      if (!targetWorldbooks.includes(WORLDBOOK_NAME)) {
-        targetWorldbooks.push(WORLDBOOK_NAME);
-      }
-
-      await rebindGlobalWorldbooks(targetWorldbooks);
-      console.log(`[${SCRIPT_NAME}] 加强模式第二次生成: 已临时附加脚本世界书`, targetWorldbooks);
-
-      if (secondGenerateConfig.useProfile && secondGenerateConfig.profileName) {
-        await triggerSlash(`/profile quiet=true ${secondGenerateConfig.profileName}`);
-        console.log(`[${SCRIPT_NAME}] 已切换到连接配置: ${secondGenerateConfig.profileName}`);
-        await new Promise(r => setTimeout(r, 300));
-      }
-
-      if (secondGenerateConfig.useModel && secondGenerateConfig.modelName) {
-        await triggerSlash(`/model quiet=true ${secondGenerateConfig.modelName}`);
-        console.log(`[${SCRIPT_NAME}] 已切换到模型: ${secondGenerateConfig.modelName}`);
-        await new Promise(r => setTimeout(r, 300));
-      }
-
-      if (secondGenerateConfig.usePreset && secondGenerateConfig.presetName) {
-        await triggerSlash(`/preset quiet=true ${secondGenerateConfig.presetName}`);
-        console.log(`[${SCRIPT_NAME}] 已切换到预设: ${secondGenerateConfig.presetName}`);
-        await new Promise(r => setTimeout(r, 300));
-      }
-
-      enhancedModeState.isSecondGeneration = true;
-
-      if (_updateGeneratingStatusRef) _updateGeneratingStatusRef('正在进行格式化转换...');
-
-      const msgs = getChatMessages(numericMessageId, { include_swipes: true });
-      if (!msgs || !msgs[0]) {
-        throw new Error('无法获取目标消息');
-      }
-      const msg = msgs[0];
-      const originalSwipeId = typeof msg.swipe_id === 'number' ? msg.swipe_id : 0;
-      const currentSwipes = msg.swipes || [msg.message];
-      const newSwipes = [...currentSwipes, ''];
-      const newSwipeId = newSwipes.length - 1;
-
-      const updateData = { ...msg };
-      updateData.swipes = newSwipes;
-      updateData.swipe_id = newSwipeId;
-      await setChatMessages([updateData], { refresh: 'affected' });
-      console.log(`[${SCRIPT_NAME}] 加强模式: 已添加并切换到 swipe[${newSwipeId}]`);
-
-      const streamHandler = text => {
-        streamBuffer = text || '';
-        const now = Date.now();
-        if (now - lastStreamUpdate >= STREAM_INTERVAL) {
-          updateStreamingSwipe(numericMessageId, newSwipeId, streamBuffer);
-          lastStreamUpdate = now;
-        }
-      };
-
-      const { formattedText: formattedResult } = await convertTextToCotFormat(firstResult, {
-        onStream: streamHandler,
-      });
-
-      if (streamBuffer) {
-        await updateStreamingSwipe(numericMessageId, newSwipeId, streamBuffer);
-      }
-
-      console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成, 长度=${formattedResult?.length || 0}`);
-      enhancedModeState.formattedResult = formattedResult;
-
-      if (formattedResult) {
-        const updatedMsgs = getChatMessages(numericMessageId, { include_swipes: true });
-        if (updatedMsgs && updatedMsgs[0]) {
-          const updatedSwipes = [...updatedMsgs[0].swipes];
-          updatedSwipes[newSwipeId] = formattedResult;
-          const updatedSwipesInfo = [...(updatedMsgs[0].swipes_info || [])];
-          updatedSwipesInfo[newSwipeId] = {
-            ...(updatedSwipesInfo[newSwipeId] || {}),
-            isEnhancedFormat: true,
-            enhancedModeGeneratedAt: Date.now(),
-          };
-
-          const finalUpdateData = { ...updatedMsgs[0] };
-          finalUpdateData.swipes = updatedSwipes;
-          finalUpdateData.swipes_info = updatedSwipesInfo;
-          finalUpdateData.swipe_id = newSwipeId;
-
-          await setChatMessages([finalUpdateData], { refresh: 'affected' });
-          console.log(`[${SCRIPT_NAME}] 加强模式: 已最终更新 swipe[${newSwipeId}]`);
-        }
-      }
-
-      if (originalSwipeId !== newSwipeId) {
-        const currentMsgs = getChatMessages(numericMessageId, { include_swipes: true });
-        if (currentMsgs && currentMsgs[0]) {
-          const switchData = { ...currentMsgs[0] };
-          switchData.swipe_id = originalSwipeId;
-          await setChatMessages([switchData], { refresh: 'affected' });
-          console.log(`[${SCRIPT_NAME}] 加强模式: 已切回原始 swipe[${originalSwipeId}]`);
-        }
-      }
-
-      if (formattedResult && _updateGlobalOverlayContentRef) {
-        const parsedFormatted = parseGalgameContent(formattedResult);
-        if (parsedFormatted.segments.length > 0) {
-          await _updateGlobalOverlayContentRef(numericMessageId, parsedFormatted);
-          console.log(`[${SCRIPT_NAME}] 加强模式: 已显示格式化内容给用户`);
-        }
-      }
-
+    console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成, 长度=${formattedText.length}`);
+    enhancedModeState.formattedResult = formattedText;
+    const saved = await saveEnhancedFormatRecord(snapshot, formattedText, { llm: llmLabel });
+    if (saved) {
       enhancedModeState.stage = 'second_done';
       showEnhancedProgress('second_done');
-    } finally {
-      await restoreOriginalConfig();
-      console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成，已恢复原始配置`);
+    } else {
+      showToast('原文已变化或已切换到其他回复，本次格式化结果未保存');
     }
   } catch (e) {
     console.error(`[${SCRIPT_NAME}] 加强模式第二次生成失败:`, e);
-    showToast('格式化处理失败: ' + e.message);
-    await restoreOriginalConfig();
+    const reason = String(e?.message || e).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    showToast(`格式化处理失败: ${reason}`);
   } finally {
+    await refresher.stop();
+    clearStreamingDraft(snapshot.mesId);
+    // 成功则显示已保存的格式化文本；失败则回退显示原文，避免停留在半截的流式内容上
+    await refreshMessageInOverlay(snapshot.mesId, { forceRender: true });
     resetEnhancedModeState();
   }
+}
+
+// ============================================
+// 格式化任务队列（同一时间只跑一个第二次生成）
+// ============================================
+const formatQueue = [];
+
+function getFormatSkipReason(messageId) {
+  if (!getIsEnabled()) return 'Galgame模式关闭';
+  if (!ensureEnhancedModeSettings().enabled) return '加强模式未启用';
+  const snapshot = getMessageSourceSnapshot(messageId);
+  if (!snapshot) return '楼层不存在';
+  if (snapshot.role !== 'assistant') return '非 assistant 消息';
+  if (!snapshot.text.trim()) return '消息内容为空';
+  if (getEnhancedFormatRecord(messageId)) return '当前回复已有格式化结果';
+  return null;
+}
+
+function enqueueFormatJob(messageId) {
+  if (enhancedModeState.isActive) {
+    if (!formatQueue.includes(messageId)) formatQueue.push(messageId);
+    console.log(`[${SCRIPT_NAME}] 加强模式: 楼层 ${messageId} 已排队，等待当前格式化完成`);
+    return;
+  }
+
+  const skipReason = getFormatSkipReason(messageId);
+  if (skipReason) {
+    console.log(`[${SCRIPT_NAME}] 加强模式: 跳过楼层 ${messageId}（${skipReason}）`);
+    runNextQueuedFormatJob();
+    return;
+  }
+
+  runSecondGeneration(messageId).finally(runNextQueuedFormatJob);
+}
+
+function runNextQueuedFormatJob() {
+  const nextMessageId = formatQueue.shift();
+  if (nextMessageId !== undefined) enqueueFormatJob(nextMessageId);
 }
 
 // ============================================
@@ -829,6 +684,7 @@ async function getMessageByIdWithRetry(messageId, maxRetries = 8, retryDelayMs =
   return null;
 }
 
+
 export function initEnhancedModeListener() {
   if (enhancedModeListenerRegistered) {
     console.log(`[${SCRIPT_NAME}] 加强模式: 监听器已注册，跳过`);
@@ -837,82 +693,62 @@ export function initEnhancedModeListener() {
 
   if (typeof eventOn === 'function' && typeof tavern_events !== 'undefined' && tavern_events.GENERATION_ENDED) {
     eventOn(tavern_events.GENERATION_ENDED, async eventPayload => {
-      const messageId = resolveGenerationMessageId(eventPayload);
-      const isEnabled = getIsEnabled();
-      console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件, messageId=${messageId}`, eventPayload);
-      if (messageId === null) {
-        console.warn(`[${SCRIPT_NAME}] 加强模式: 无法解析 messageId，跳过本次`);
-        return;
-      }
-
-      const enhancedConfig = ensureEnhancedModeSettings();
-      if (!isEnabled || !enhancedConfig.enabled) {
+      console.log(`[${SCRIPT_NAME}] 加强模式: 收到 GENERATION_ENDED 事件`, eventPayload);
+      if (!getIsEnabled() || !ensureEnhancedModeSettings().enabled) {
         console.log(`[${SCRIPT_NAME}] 加强模式: 未启用或Galgame模式关闭，跳过`);
         return;
       }
 
       if (enhancedModeState.isSecondGeneration) {
-        console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成完成，清理状态`);
-        enhancedModeState.isSecondGeneration = false;
+        console.log(`[${SCRIPT_NAME}] 加强模式: 第二次生成自身触发的结束事件，跳过`);
         return;
       }
 
-      if (enhancedModeState.isActive && enhancedModeState.stage === 'second_generating') {
-        console.log(`[${SCRIPT_NAME}] 加强模式: 当前阶段=${enhancedModeState.stage}，跳过`);
+      const payloadMessageId = resolveGenerationMessageId(eventPayload);
+      if (payloadMessageId === null) {
+        console.warn(`[${SCRIPT_NAME}] 加强模式: 无法解析 messageId，跳过本次`);
         return;
       }
 
       try {
-        const message = await getMessageByIdWithRetry(messageId);
-        if (!message) {
-          console.warn(`[${SCRIPT_NAME}] 加强模式: 无法获取消息 ${messageId}`);
+        // 酒馆传入的是 chat.length；getChatMessages 会把越界楼层号钳到最后一楼，这里取其真实楼层号
+        const message = await getMessageByIdWithRetry(payloadMessageId);
+        const messageId = Number.isInteger(message?.message_id) ? message.message_id : null;
+        if (messageId === null) {
+          console.warn(`[${SCRIPT_NAME}] 加强模式: 无法获取消息 ${payloadMessageId}`);
           return;
         }
 
-        if (message.role && message.role !== 'assistant') {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 非 assistant 消息，跳过`);
+        const skipReason = getFormatSkipReason(messageId);
+        if (skipReason) {
+          console.log(`[${SCRIPT_NAME}] 加强模式: 跳过楼层 ${messageId}（${skipReason}）`);
           return;
         }
 
-        const hasEnhancedFormatSwipe = (message.swipes_info || []).some(info => info?.isEnhancedFormat === true);
-        if (hasEnhancedFormatSwipe) {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 已存在 isEnhancedFormat swipe，跳过`);
-          return;
-        }
-
-        const currentSwipeId = typeof message.swipe_id === 'number' ? message.swipe_id : 0;
-        const firstResult = message.swipes?.[currentSwipeId] || message.message;
-        if (!firstResult || !firstResult.trim()) {
-          console.warn(`[${SCRIPT_NAME}] 加强模式: 消息内容为空`);
-          return;
-        }
-
-        if (isCotFormatted(firstResult)) {
-          console.log(`[${SCRIPT_NAME}] 加强模式: 当前内容已是 COT，仍执行第二次生成`);
-        }
-
-        console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，内容长度=${firstResult.length}`);
-
-        enhancedModeState.isActive = true;
-        enhancedModeState.stage = 'first_done';
-        enhancedModeState.firstResult = firstResult;
-        enhancedModeState.targetMessageId = messageId;
-
+        console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，楼层 ${messageId} 准备第二次生成`);
         showEnhancedProgress('first_done');
 
-        console.log(`[${SCRIPT_NAME}] 加强模式: 第一次生成完成，准备第二次生成`);
-
+        // 留出时间给其他脚本完成对新楼层的后处理；原文快照在任务真正开始时才读取
         await new Promise(r => setTimeout(r, 500));
-
-        setTimeout(() => {
-          runSecondGeneration(messageId, firstResult);
-        }, 0);
+        enqueueFormatJob(messageId);
       } catch (e) {
         console.error(`[${SCRIPT_NAME}] 加强模式处理失败:`, e);
         showToast('加强模式失败: ' + e.message);
-        resetEnhancedModeState();
       }
     });
+
+    // 已格式化的回复被编辑后，旧的格式化结果失效，按新正文重新格式化
+    if (tavern_events.MESSAGE_EDITED) {
+      eventOn(tavern_events.MESSAGE_EDITED, messageId => {
+        const id = Number(messageId);
+        if (!Number.isInteger(id) || id < 0) return;
+        if (!getIsEnabled() || !ensureEnhancedModeSettings().enabled) return;
+        // 只处理编辑前已有格式化结果的回复，避免编辑未格式化的旧楼层时触发额外请求
+        if (!hasStaleEnhancedFormatRecord(id)) return;
+        console.log(`[${SCRIPT_NAME}] 加强模式: 楼层 ${id} 正文已编辑，重新格式化`);
+        enqueueFormatJob(id);
+      });
+    }
 
     enhancedModeListenerRegistered = true;
     console.log(`[${SCRIPT_NAME}] 加强模式: GENERATION_ENDED 事件监听已注册`);

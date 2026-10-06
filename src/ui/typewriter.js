@@ -1,5 +1,6 @@
-import { topWindow } from '../core/env.js';
+import { $, topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
+import { MOTION_CHAR_FADE_MS, isMotionNode, notifyDialogAdvance } from './control-motion.js';
 
 const DEFAULT_SPEED = 30;
 const MIN_SPEED = 5;
@@ -7,6 +8,17 @@ const MAX_SPEED = 60;
 const DEFAULT_SOUND_VOLUME = 35;
 const SOUND_MIN_INTERVAL_MS = 30;
 const TICK_MIN_DELAY_MS = 8;
+// 逐字淡入的过渡时长（与 数据库界面插件.css .gal-tw-ch 一致），自然打完后等它播完再收尾
+const CHAR_FADE_MS = 200;
+
+// 标点停顿（毫秒，以 30 字/秒为基准，随打字速度缩放）：句末长停、句中短停，模拟说话节奏
+const PUNCTUATION_PAUSE_MS = {
+  '。': 260, '！': 260, '？': 260, '!': 220, '?': 220, '.': 160,
+  '…': 120, '⋯': 120,
+  '，': 110, '、': 90, ',': 80, '；': 140, ';': 120, '：': 110, ':': 90,
+  '—': 45, '～': 60, '~': 50,
+  '」': 70, '』': 70, '”': 70, '）': 50, ')': 40,
+};
 
 let activeSession = null;
 let sessionSerial = 0;
@@ -76,6 +88,84 @@ function renderTextSlice(node, text) {
     .join('');
 }
 
+// 打字用结构：与 renderTextSlice 同构（段落 / 引号着色），每个字符包一层 .gal-tw-ch，
+// 一次性写入 DOM，之后只逐个加 .is-on（O(n)，且排版预先占位，换行不会在打字途中跳动）
+function wrapChars(text) {
+  let html = '';
+  for (const ch of String(text ?? '')) {
+    html += `<span class="gal-tw-ch">${escapeHtml(ch)}</span>`;
+  }
+  return html;
+}
+
+function renderLineTypingHtml(line, colorQuotes) {
+  if (!colorQuotes) return wrapChars(line);
+  let html = '';
+  let i = 0;
+  while (i < line.length) {
+    const close = QUOTE_PAIRS[line[i]];
+    if (close) {
+      let end = line.indexOf(close, i + 1);
+      if (end === -1) end = line.length - 1;
+      html += `<span class="gal-quote">${wrapChars(line.slice(i, end + 1))}</span>`;
+      i = end + 1;
+    } else {
+      let next = i;
+      while (next < line.length && !QUOTE_PAIRS[line[next]]) next++;
+      html += wrapChars(line.slice(i, next));
+      i = next;
+    }
+  }
+  return html;
+}
+
+function renderTypingMarkup(node, text) {
+  const raw = String(text ?? '');
+  const colorQuotes = getSettings()?.simpleStorybookMode === true;
+  const lines = raw.split('\n');
+  if (lines.length === 1) {
+    node.innerHTML = renderLineTypingHtml(raw, colorQuotes);
+  } else {
+    node.innerHTML = lines
+      .map(line => `<span class="gal-para">${renderLineTypingHtml(line, colorQuotes)}</span>`)
+      .join('');
+  }
+  return Array.from(node.querySelectorAll('.gal-tw-ch'));
+}
+
+// 文末「可继续」指示（样式由皮肤决定，默认皮肤显示闪烁的强调色箭头）
+function appendEndMarker(node) {
+  if (!node || !String(node.textContent || '').trim()) return;
+  const host = node.lastElementChild && node.lastElementChild.classList.contains('gal-para')
+    ? node.lastElementChild
+    : node;
+  const marker = node.ownerDocument.createElement('span');
+  marker.className = 'gal-tw-end';
+  marker.setAttribute('aria-hidden', 'true');
+  host.appendChild(marker);
+}
+
+function commitFinalText(node, text) {
+  renderTextSlice(node, text);
+  appendEndMarker(node);
+}
+
+// 文字区溢出时（分页估算偏差的兜底），打字过程中滚动跟随正在显示的字
+function keepCharVisible(node, charEl) {
+  if (node.scrollHeight <= node.clientHeight + 1) return;
+  const box = node.getBoundingClientRect();
+  const rect = charEl.getBoundingClientRect();
+  if (rect.bottom > box.bottom - 2) node.scrollTop += rect.bottom - box.bottom + 4;
+}
+
+function getPunctuationPause(ch, speed) {
+  const base = PUNCTUATION_PAUSE_MS[ch];
+  if (!base) return 0;
+  // 慢速时停顿略长、快速时收短（30 字/秒为 1 倍）
+  const factor = Math.max(0.45, Math.min(1.5, 30 / speed));
+  return Math.round(base * factor);
+}
+
 function getRuntimeSettings() {
   const settings = getSettings();
   const speed = clampNumber(settings?.typewriterSpeed, MIN_SPEED, MAX_SPEED, DEFAULT_SPEED);
@@ -85,6 +175,7 @@ function getRuntimeSettings() {
     speed,
     soundEnabled: settings?.typewriterSoundEnabled !== false,
     soundVolume,
+    punctuationPause: settings?.typewriterPunctuationPause !== false,
   };
 }
 
@@ -96,7 +187,21 @@ function completeSession(session, { commitText }) {
     session.timer = null;
   }
   if (commitText && session.node) {
-    renderTextSlice(session.node, session.fullText);
+    if (session.naturalEnd) {
+      // 自然打完：等最后几个字淡入结束再换成干净结构（期间若已切到下一段则跳过）
+      const node = session.node;
+      const serial = String(session.id);
+      node.dataset.galTwSerial = serial;
+      const expectedText = session.fullText.replace(/\n/g, '');
+      topWindow.setTimeout(() => {
+        // 期间被其他逻辑改写过内容（情境样式清空、CG 提示等）则放弃，避免把旧文本写回
+        if (!node.isConnected || node.dataset.galTwSerial !== serial) return;
+        if (node.textContent !== expectedText) return;
+        commitFinalText(node, session.fullText);
+      }, (isMotionNode(node) ? MOTION_CHAR_FADE_MS : CHAR_FADE_MS) + 40);
+    } else {
+      commitFinalText(session.node, session.fullText);
+    }
   }
   if (activeSession && activeSession.id === session.id) {
     activeSession = null;
@@ -175,26 +280,26 @@ function scheduleTyping(session) {
   }
 
   const runtime = getRuntimeSettings();
-  if (!runtime.enabled) {
+  if (!runtime.enabled || session.index >= session.chars.length) {
     completeSession(session, { commitText: true });
     return;
   }
 
-  if (session.index >= session.fullText.length) {
-    completeSession(session, { commitText: true });
-    return;
-  }
-
+  const charEl = session.chars[session.index];
   session.index += 1;
-  renderTextSlice(session.node, session.fullText.slice(0, session.index));
-  playTypeSound();
+  charEl.classList.add('is-on');
+  keepCharVisible(session.node, charEl);
+  const ch = charEl.textContent || '';
+  if (ch.trim()) playTypeSound();
 
-  if (session.index >= session.fullText.length) {
+  if (session.index >= session.chars.length) {
+    session.naturalEnd = true;
     completeSession(session, { commitText: true });
     return;
   }
 
-  const delay = Math.max(TICK_MIN_DELAY_MS, Math.round(1000 / runtime.speed));
+  const pause = runtime.punctuationPause ? getPunctuationPause(ch, runtime.speed) : 0;
+  const delay = Math.max(TICK_MIN_DELAY_MS, Math.round(1000 / runtime.speed)) + pause;
   session.timer = topWindow.setTimeout(() => scheduleTyping(session), delay);
 }
 
@@ -224,8 +329,13 @@ export function renderTypewriterText(target, text, options = {}) {
 
   if (!node) return Promise.resolve(fullText);
 
+  delete node.dataset.galTwSerial;
+  if (fullText.length) notifyDialogAdvance(node);
+  // 新的一页总是从顶部开始（文字区自身可滚动，上一页的滚动位置会残留）
+  node.scrollTop = 0;
   if (instant) {
-    renderTextSlice(node, fullText);
+    if (fullText.length) commitFinalText(node, fullText);
+    else renderTextSlice(node, fullText);
     return Promise.resolve(fullText);
   }
 
@@ -233,17 +343,23 @@ export function renderTypewriterText(target, text, options = {}) {
     id: ++sessionSerial,
     node,
     fullText,
+    chars: renderTypingMarkup(node, fullText),
     index: 0,
     timer: null,
     active: true,
+    naturalEnd: false,
     resolve: null,
   };
   session.promise = new Promise(resolve => {
     session.resolve = resolve;
   });
 
-  node.textContent = '';
   activeSession = session;
   scheduleTyping(session);
   return session.promise;
 }
+
+// 脚本卸载：打字定时器挂在酒馆主页面的 window 上，需显式停掉（直接落定全文，避免停在半句）
+$(window).on('pagehide', () => {
+  finishActiveTypewriter();
+});

@@ -56,7 +56,7 @@ import { SpriteManager, setSpriteManagerRefs } from './sprite/sprite-manager.js'
 import { generateCOTTemplate } from './logic/cot-template.js';
 import { getIsGeneratingResponse, setIsGeneratingResponse, getInitializationTime, getGenerationState, getGenerationTimeoutMs, getVerificationDelayMs, resetGenerationState, checkSillyTavernGenerating, verifyGenerationComplete, startGenerationTimeout, stopGenerationTimeout, setGenerationStateRefs } from './logic/generation-state.js';
 import { parseGalgameContent, EXPRESSION_LIST, EXPRESSION_TAG_MAP, getExpressionTag, setParserRefs } from './logic/parser.js';
-import { WORLDBOOK_NAME, COT_ENTRY_NAME, isCotFormatted, getFormattedContent, saveFormatToSwipe, resetEnhancedModeState, getAvailablePresets, getAvailableProfiles, getAvailableModels, getAvailableWorldbooks, initWorldbookInjectionListener, initEnhancedModeListener, registerTestFunctions, setEnhancedModeRefs } from './logic/enhanced-mode.js';
+import { getFormattedContent, setEnhancedModeRefs } from './logic/enhanced-mode.js';
 import { checkWorldbookExists, injectCOTToWorldbook, enableWorldbookGlobally, disableWorldbookGlobally, setWorldbookRefs } from './logic/worldbook.js';
 import { setSpriteAutoAssignRefs } from './logic/sprite-auto-assign.js';
 import { setupMessageObserver, setMessageObserverRefs } from './logic/message-observer.js';
@@ -104,6 +104,7 @@ import { showCharacterSpritesModal, showPackManagerModal, showTransferDialog, se
 import { showAssetManagerModal, setAssetManagerModalRefs, buildAssetManagerContent, bindAssetManagerContentEvents, buildAssetManagerStyles } from './ui/asset-manager-modal.js';
 import { setImageGenConfigRefs } from './ui/image-gen-config.js';
 import { startGalgamePlugin } from './init.js';
+import { resolveSpecialCgSceneAlias } from './logic/special-cg-trigger.js';
 
 // Phase 1 延迟引用: expressions -> toast + state + worldbook
 setExpressionsRefs({ showToast, getIsEnabled, injectCOTToWorldbook });
@@ -125,6 +126,7 @@ setSpriteManagerRefs({
   setBackgroundWithTransition,
   clearBackgroundLayers,
   BGMManager,
+  resolveSpecialCgScene: resolveSpecialCgSceneAlias,
 });
 
 // Phase 8 延迟引用: 各模块 -> showToast
@@ -170,8 +172,8 @@ setEventsRefs({ showSettingsPanel, showSpriteUploadDialog, updateGlobalOverlayCo
 // Phase 8 延迟引用: menu-button -> settings-panel
 setMenuButtonRefs({ showSettingsPanel });
 
-// Phase 8 延迟引用: enhanced-mode -> overlay-content
-setEnhancedModeRefs({ showToast, updateGlobalOverlayContent, updateNextBtnForGeneratingState, updateGeneratingStatus, showGeneratingIndicator });
+// Phase 8 延迟引用: enhanced-mode -> overlay + process-message
+setEnhancedModeRefs({ showToast, updateNextBtnForGeneratingState, showGeneratingIndicator, processNewMessage });
 
 // Phase 8 延迟引用: settings-panel -> asset-manager-modal (content builder)
 setSettingsPanelRefs({ buildAssetsPane: buildAssetManagerContent, bindAssetsPane: bindAssetManagerContentEvents, assetStyles: buildAssetManagerStyles });

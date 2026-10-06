@@ -58,6 +58,14 @@ export const YANYUN_SKIN_ID = 'skin-yanyun';
 export const YANYUN_XUEJI_SKIN_ID = 'skin-yanyun-xueji';
 export const YANYUN_FAMILY_SKIN_IDS = [YANYUN_SKIN_ID, YANYUN_XUEJI_SKIN_ID];
 export const DEFAULT_DARK_SKIN_ID = 'skin-default-dark';
+// 默认皮肤家族第三款「柔光」：overlay 上不挂同名类（见 ui/default-theme.js）
+export const DEFAULT_SOFT_SKIN_ID = 'skin-default-soft';
+// 经典 Cyber Pop（原默认皮肤，即基线样式）：overlay 上不挂同名类，挂 gal-theme-cyberpop（深色另挂 skin-default-dark）
+export const CYBERPOP_SKIN_ID = 'skin-cyberpop';
+export const CYBERPOP_DARK_SKIN_ID = 'skin-cyberpop-dark';
+// 默认皮肤家族作用域类：晴空（默认）/ 夜航（默认·深色）/ 柔光 时挂到 overlay 及选项层、历史弹窗，
+// 另挂一个款式类区分三款。类名刻意不含 "skin-"，避免命中各处 [class*="skin-"] 的「非默认皮肤」判断
+export const DEFAULT_THEME_CLASS = 'gal-theme-default';
 // HTML 模板皮肤
 export const HTML_SKIN_ID_PREFIX = 'html-skin::';
 export const HTML_SKIN_ACTIVE_CLASS = 'html-skin';
@@ -110,7 +118,7 @@ export const RE_CODE_CLOSE = /<\/code>/gi;
 export const RE_TAG_WHITESPACE = />\s+</g;
 export const RE_MAINTEXT_CLOSED = /<maintext>([\s\S]*?)<\/maintext>/i;
 export const RE_MAINTEXT_UNCLOSED = /<maintext>([\s\S]*)$/i;
-export const RE_BACKGROUND = /<background\s+scene="([^"]+)"\s*[\/]?>/i;
+export const RE_BACKGROUND = /<background\b[^>]*?\bscene\s*=\s*"([^"]+)"[^>]*?\/?>/i;
 export const RE_BGIMG = /<bgimg>(.*?)<\/bgimg>/i;
 export const RE_WHIMG = /<whimg>(.*?)<\/whimg>/i;
 export const RE_BNIMG = /<bnimg>([\s\S]*?)<\/bnimg>/i;

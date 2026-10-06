@@ -8,9 +8,9 @@ import { setBackgroundWithTransition } from '../db/image-packs.js';
 import { applyPixiEffectOps, clearAllPixiEffects, mountPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { Live2DPreloadManager } from '../live2d/preload.js';
 import { checkSillyTavernGenerating, getIsGeneratingResponse, resetGenerationState } from '../logic/generation-state.js';
-import { RE_GAL_TAGS, getMeasuredSegLength, parseGalgameContent, setMeasuredSegLength } from '../logic/parser.js';
+import { RE_GAL_TAGS, getMeasuredLayoutSignature, getMeasuredSegLength, parseGalgameContent, setMeasuredSegLength } from '../logic/parser.js';
 import { SpriteManager } from '../sprite/sprite-manager.js';
-import { resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
+import { getSegmentCharacterId, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 import { getFormattedSwipeContent, getMesTextContentForGalgame, getRawMessageContent } from '../utils/html.js';
 import { updateLocationTimeDisplay } from '../utils/location-time.js';
 import { stopNextBtnAnimation, updateNextBtnForGeneratingState } from './next-btn.js';
@@ -18,6 +18,8 @@ import { ensureGlobalOverlay, getCurrentDisplayMesId, hideGeneratingIndicator, n
 import { hideStyledStage, showStyledStage } from './styled-fx.js';
 import { showToast } from './toast.js';
 import { cancelTypewriter, renderTypewriterText } from './typewriter.js';
+import { setSpeakerBadge } from '../stage/choreography.js';
+import { shakeStage } from '../stage/camera.js';
 
 // ============================================
 // 覆盖层内容更新
@@ -36,6 +38,13 @@ function getSegmentVoiceHint(segment) {
   return null;
 }
 
+// 立绘目标：「显示名@角色名」临时指定立绘时用 @ 后的角色，名牌仍显示 resolvedSpeaker
+function getSpriteSpeaker(segment, resolvedSpeaker) {
+  if (!segment?.spriteCharacter) return resolvedSpeaker;
+  const characterId = getSegmentCharacterId(segment);
+  return resolveCharacterIdByKeywords(characterId) || characterId;
+}
+
 function shouldUseTypewriterForSegment(segment) {
   return segment?.type === 'dialogue' || segment?.type === 'narration';
 }
@@ -48,7 +57,8 @@ function isCgAsBackgroundEnabled() {
 function applyCgToBackground($overlay, cgSrc) {
   const $bgLayer = $overlay.find('.gal-layer-bg');
   $bgLayer.addClass('has-bg').removeClass('generating-bg');
-  setBackgroundWithTransition($bgLayer, cgSrc);
+  // CG 揭示：闪白 + 推远聚焦
+  setBackgroundWithTransition($bgLayer, cgSrc, { transition: 'flash' });
   // 背景层被 CG 覆写，清掉场景缓存，离开 CG 段后场景背景才能重新应用
   SpriteManager.currentScene = null;
 }
@@ -242,6 +252,16 @@ function renderStyledContent(segment) {
   return html;
 }
 
+// 震屏是一次性演出：只在推进到该段时触发，回放/回看历史段落不重播
+function triggerSegmentShake(state, currentIndex) {
+  const lastApplied = Number.isFinite(state.lastAppliedEffectIndex) ? state.lastAppliedEffectIndex : -1;
+  if (currentIndex === lastApplied) return;
+  const ops = Array.isArray(state.segments[currentIndex]?.effectOps) ? state.segments[currentIndex].effectOps : [];
+  if (ops.some(op => op?.action === 'perform' && String(op?.name || '').trim() === 'screenShake')) {
+    shakeStage({ power: 1 });
+  }
+}
+
 async function syncEffectsForSegmentDisplay($overlay, state, currentIndex, { isNewMessage = false } = {}) {
   if (!state) return;
   const settings = getSettings();
@@ -250,6 +270,7 @@ async function syncEffectsForSegmentDisplay($overlay, state, currentIndex, { isN
     state.lastAppliedEffectIndex = currentIndex;
     return;
   }
+  triggerSegmentShake(state, currentIndex);
 
   const mounted = await mountPixiEffects($overlay[0]);
   if (!mounted) return;
@@ -313,6 +334,15 @@ function queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, option
       ? state.effectSyncPromise
       : Promise.resolve();
   state.effectSyncPromise = basePromise.then(run, run);
+}
+
+// AI 在背景标签上指定的转场（<background scene="…" transition="black"/>），只在切换点所在段落生效
+function getSegmentBackgroundTransition(segment, scene) {
+  const commands = Array.isArray(segment?.backgroundCommands) ? segment.backgroundCommands : [];
+  for (let i = commands.length - 1; i >= 0; i--) {
+    if (commands[i]?.scene === scene && commands[i]?.transition) return commands[i].transition;
+  }
+  return null;
 }
 
 function clearSpritesOnBackgroundCommand($overlay, segment) {
@@ -422,8 +452,7 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   if (isCg) {
     setStyledPresentationMode($overlay, false);
     hideStyledStage($overlay);
-    $nameBadge.find('span').text('CG');
-    $nameBadge.removeClass('gal-narrator-label');
+    setSpeakerBadge($overlay, $nameBadge, 'CG');
     const cgSrc = getCapturedCgImage(mesId, displaySegment.cgIndex);
     cgAppliedAsBackground = renderCgSegment($overlay, cgSrc);
   } else if (isStyled) {
@@ -438,20 +467,17 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
       '日记': '📖 日记', 'diary': '📖 Diary', 'journal': '📖 Journal',
       '公告': '📢 公告', '通知': '📢 通知', 'bulletin': '📢 Bulletin', 'notice': '📢 Notice',
     }[displaySegment.styleType] || displaySegment.styleType;
-    $nameBadge.find('span').text(styledLabel);
-    $nameBadge.removeClass('gal-narrator-label');
+    setSpeakerBadge($overlay, $nameBadge, styledLabel);
     const styledHtml = renderStyledContent(displaySegment);
     $overlay.find('.gal-dialog-text').text('');
     showStyledStage($overlay, styledHtml, displaySegment.styleType);
   } else {
     setStyledPresentationMode($overlay, false);
     hideStyledStage($overlay);
-    $nameBadge.find('span').text(resolvedSpeaker || '旁白');
-    if (isNarration) {
-      $nameBadge.addClass('gal-narrator-label');
-    } else {
-      $nameBadge.removeClass('gal-narrator-label');
-    }
+    setSpeakerBadge($overlay, $nameBadge, resolvedSpeaker || '旁白', {
+      narration: isNarration,
+      speakerKey: isNarration ? null : (resolvedSpeaker || null),
+    });
     const enableTypewriter = shouldUseTypewriterForSegment(displaySegment);
     renderTypewriterText($overlay.find('.gal-dialog-text'), displayText, {
       instant: !enableTypewriter,
@@ -467,12 +493,12 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
     clearSpritesOnBackgroundCommand($overlay, displaySegment);
     const expression = displaySegment.expression || '默认';
     const voiceHint = getSegmentVoiceHint(displaySegment);
-    await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, renderToken, voiceHint);
+    await SpriteManager.updateSprite($overlay, getSpriteSpeaker(displaySegment, resolvedSpeaker), expression, renderToken, voiceHint);
   }
 
   const sceneToApply = displaySegment.backgroundScene || parsedContent.currentBackground?.scene;
   if (sceneToApply && !cgAppliedAsBackground) {
-    await SpriteManager.applySceneTint($overlay, sceneToApply);
+    await SpriteManager.applySceneTint($overlay, sceneToApply, { transition: getSegmentBackgroundTransition(displaySegment, sceneToApply) });
     console.log(`[${SCRIPT_NAME}] [DEBUG] 应用背景场景: "${sceneToApply}" (段落 ${currentIndex + 1}/${segments.length})`);
   }
 
@@ -518,12 +544,45 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
 // 实测容量明显大于本次分页字数时自动重排（首次渲染前测不到尺寸，只能渲染后补测重排）。
 // 只放大不缩小：面板高度随内容自适应时，内容少→面板矮→实测小，向下重排会形成恶性循环
 let _autoRepagInFlight = false;
+function isDialogTextOverflowing() {
+  const textEl = $('#gal-global-overlay .gal-dialog-text')[0];
+  return !!textEl && textEl.scrollHeight > textEl.clientHeight + 4;
+}
+
+// 页面加载 / 切换聊天时首条消息先渲染、后 showGlobalOverlay，渲染当下覆盖层不可见、测不到尺寸，
+// 只能按字数估算分页；等覆盖层可见后补测一次再判断是否重排（消息已切换或已重排则放弃）
+let _deferredRepagTimer = null;
+function scheduleDeferredRepaginateCheck(parsedContent, attempt = 0) {
+  clearTimeout(_deferredRepagTimer);
+  if (attempt >= 20) return;
+  _deferredRepagTimer = setTimeout(() => {
+    _deferredRepagTimer = null;
+    const state = messageSegmentState.get(String(getCurrentDisplayMesId()));
+    if (!state || state.parsedContent !== parsedContent) return;
+    refreshMeasuredDialogCapacity();
+    if (!getMeasuredSegLength()) {
+      scheduleDeferredRepaginateCheck(parsedContent, attempt + 1);
+      return;
+    }
+    maybeAutoRepaginate(parsedContent);
+  }, 100);
+}
+
 function maybeAutoRepaginate(parsedContent) {
   if (_autoRepagInFlight) return;
   const measured = getMeasuredSegLength();
   const usedLen = Number(parsedContent?.segLength) || 0;
-  if (!measured || !usedLen) return;
-  if (measured <= usedLen * 1.3) return;
+  if (!usedLen) return;
+  if (!measured) {
+    scheduleDeferredRepaginateCheck(parsedContent);
+    return;
+  }
+  const grew = measured > usedLen * 1.3;
+  // 当前页溢出、且分页时尚未用上实测版式（首次渲染只能按字数估算）→ 按实测版式重排一次。
+  // 重排后版式签名一致，不会循环触发
+  const layoutSig = getMeasuredLayoutSignature();
+  const layoutChanged = !!layoutSig && layoutSig !== (parsedContent?.segLayout || '');
+  if (!grew && !(layoutChanged && isDialogTextOverflowing())) return;
 
   _autoRepagInFlight = true;
   setTimeout(() => {
@@ -568,8 +627,7 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
   if (isCg) {
     setStyledPresentationMode($overlay, false);
     hideStyledStage($overlay);
-    $nameBadge.find('span').text('CG');
-    $nameBadge.removeClass('gal-narrator-label');
+    setSpeakerBadge($overlay, $nameBadge, 'CG');
     const mesId = $overlay.find('.gal-game-container').attr('data-mes-id');
     const cgSrc = getCapturedCgImage(mesId, segment.cgIndex);
     cgAppliedAsBackground = renderCgSegment($overlay, cgSrc);
@@ -585,20 +643,17 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
       '日记': '📖 日记', 'diary': '📖 Diary', 'journal': '📖 Journal',
       '公告': '📢 公告', '通知': '📢 通知', 'bulletin': '📢 Bulletin', 'notice': '📢 Notice',
     }[segment.styleType] || segment.styleType;
-    $nameBadge.find('span').text(styledLabel);
-    $nameBadge.removeClass('gal-narrator-label');
+    setSpeakerBadge($overlay, $nameBadge, styledLabel);
     const styledHtml = renderStyledContent(segment);
     $overlay.find('.gal-dialog-text').text('');
     showStyledStage($overlay, styledHtml, segment.styleType);
   } else {
     setStyledPresentationMode($overlay, false);
     hideStyledStage($overlay);
-    $nameBadge.find('span').text(resolvedSpeaker || '旁白');
-    if (isNarration) {
-      $nameBadge.addClass('gal-narrator-label');
-    } else {
-      $nameBadge.removeClass('gal-narrator-label');
-    }
+    setSpeakerBadge($overlay, $nameBadge, resolvedSpeaker || '旁白', {
+      narration: isNarration,
+      speakerKey: isNarration ? null : (resolvedSpeaker || null),
+    });
     renderTypewriterText($overlay.find('.gal-dialog-text'), segment.text || '', {
       instant: forceInstantRender || !shouldUseTypewriterForSegment(segment),
     });
@@ -657,13 +712,13 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
     clearSpritesOnBackgroundCommand($overlay, segment);
     const expression = segment.expression || '默认';
     const voiceHint = getSegmentVoiceHint(segment);
-    await SpriteManager.updateSprite($overlay, resolvedSpeaker, expression, expectedRenderToken, voiceHint);
+    await SpriteManager.updateSprite($overlay, getSpriteSpeaker(segment, resolvedSpeaker), expression, expectedRenderToken, voiceHint);
     if (isRenderTokenStale()) return false;
   }
 
   const sceneToApply = segment.backgroundScene || state.parsedContent?.currentBackground?.scene;
   if (sceneToApply && !cgAppliedAsBackground) {
-    await SpriteManager.applySceneTint($overlay, sceneToApply);
+    await SpriteManager.applySceneTint($overlay, sceneToApply, { transition: getSegmentBackgroundTransition(segment, sceneToApply) });
     if (isRenderTokenStale()) return false;
     console.log(`[${SCRIPT_NAME}] [DEBUG] updateOverlaySegmentDisplay 应用背景: "${sceneToApply}" (段落 ${currentIndex + 1}/${total})`);
   }
@@ -689,8 +744,10 @@ function measureDialogCapacityChars() {
   const textCs = win.getComputedStyle(textEl);
   const availW = panel.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
   // 可用高度还要扣掉文本区自身的上下 padding（皮肤自带 + 用户头/尾间距设置）
+  // 再扣掉文本区的上下外边距（酒馆样式给 <p> 加了 margin-bottom，皮肤也可能自定义）
   const availH = panel.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0)
-    - (parseFloat(textCs.paddingTop) || 0) - (parseFloat(textCs.paddingBottom) || 0);
+    - (parseFloat(textCs.paddingTop) || 0) - (parseFloat(textCs.paddingBottom) || 0)
+    - (parseFloat(textCs.marginTop) || 0) - (parseFloat(textCs.marginBottom) || 0);
   if (availW <= 0 || availH <= 0) return null;
 
   // 探针继承 .gal-dialog-text 的皮肤字体样式，在真实宽度下测量（padding 已在 availH 中扣除，探针清零以免混入行高）
@@ -720,8 +777,13 @@ function measureDialogCapacityChars() {
     }
     const charsPerLine = Math.max(4, lo);
 
+    // 段间距：两段各一行的实际高度减去两行行高，折算成行数（段落样式由皮肤 / 设置决定）
+    probe.innerHTML = `<span class="gal-para">${FILLER}</span><span class="gal-para">${FILLER}</span>`;
+    const twoParaH = probe.getBoundingClientRect().height;
+    const gapLines = Math.max(0, (twoParaH - lineH * 2) / lineH);
+
     // 0.9 安全系数：标点/换行/西文混排会让实际容纳量低于纯 CJK 理论值
-    return Math.floor(maxLines * charsPerLine * 0.9);
+    return { chars: Math.floor(maxLines * charsPerLine * 0.9), charsPerLine, maxLines, gapLines };
   } finally {
     probe.remove();
   }

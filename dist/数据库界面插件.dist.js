@@ -7643,7 +7643,7 @@
   // src/core/constants.js
   var SCRIPT_ID = "galgame-ui-plugin";
   var SCRIPT_NAME = "Galgame界面插件";
-  var VERSION = true ? "2.2.5" : "2.2.5";
+  var VERSION = true ? "2.5.0" : "2.5.0";
   var DB_NAME = "GalgameUIPluginDB";
   var DB_VERSION = 10;
   var STORE_SPRITES = "sprites";

@@ -10,6 +10,9 @@ hero:
       text: 开始使用 →
       link: /guide/introduction
     - theme: alt
+      text: 🎮 在线演示
+      link: https://bigmalove.github.io/galgame/demo/
+    - theme: alt
       text: 我是卡作者
       link: /card-author/overview
     - theme: alt

@@ -1,4 +1,3 @@
-"use strict";
 (() => {
   var __create = Object.create;
   var __defProp = Object.defineProperty;
@@ -29009,7 +29008,7 @@ ${lines.join("\n")}`;
         result.segments.push(item.data);
       }
     } else {
-      let parseTTSConfig2 = function(ttsString, defaultSpeaker) {
+      let parseTTSConfig = function(ttsString, defaultSpeaker) {
         if (!ttsString) return null;
         const config = {
           speaker: defaultSpeaker,
@@ -29028,7 +29027,7 @@ ${lines.join("\n")}`;
           }
         }
         return config;
-      }, parseSegmentText2 = function(text, ttsConfigString = null) {
+      }, parseSegmentText = function(text, ttsConfigString = null) {
         if (!text) return null;
         text = text.trim();
         if (!text) return null;
@@ -29094,7 +29093,7 @@ ${lines.join("\n")}`;
               segResult.ttsText = splitResult.ttsText;
             }
             if (ttsConfigString) {
-              segResult.tts = parseTTSConfig2(ttsConfigString, speaker);
+              segResult.tts = parseTTSConfig(ttsConfigString, speaker);
             }
             if (inlineVoiceTag) {
               if (!segResult.tts) {
@@ -29118,7 +29117,6 @@ ${lines.join("\n")}`;
         }
         return narrationResult;
       };
-      var parseTTSConfig = parseTTSConfig2, parseSegmentText = parseSegmentText2;
       const styledBlocks = collectStyledBlocks(content);
       const expressionNames = getAllExpressions();
       const expressionPattern = expressionNames.map((e2) => e2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
@@ -29128,7 +29126,7 @@ ${lines.join("\n")}`;
       let lastClosedPTagEnd = 0;
       while ((match2 = pTagRegex.exec(content)) !== null) {
         const ttsConfig = match2[1];
-        const seg = parseSegmentText2(match2[2], ttsConfig);
+        const seg = parseSegmentText(match2[2], ttsConfig);
         if (seg) {
           seg._sourcePos = match2.index;
           const bgAtThisPos = getBackgroundAtPosition(match2.index);
@@ -29172,7 +29170,7 @@ ${lines.join("\n")}`;
         const rawContent = unclosedPMatch[2];
         const ttsConfig = unclosedPMatch[1];
         if (rawContent && rawContent.trim()) {
-          const seg = parseSegmentText2(rawContent, ttsConfig);
+          const seg = parseSegmentText(rawContent, ttsConfig);
           if (seg) {
             const segPos = lastClosedPTagEnd + unclosedPMatch.index;
             seg._sourcePos = segPos;
@@ -29190,7 +29188,7 @@ ${lines.join("\n")}`;
         if (normalizedText) {
           const lines = normalizedText.split("\n").map((line) => line.trim()).filter(Boolean);
           for (const line of lines) {
-            const seg = parseSegmentText2(line);
+            const seg = parseSegmentText(line);
             if (!seg) continue;
             seg._sourcePos = content.length;
             if (backgroundChanges.length > 0) {

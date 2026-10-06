@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>在线演示 · Galgame 界面插件</title>
+<meta name="description" content="Galgame 界面插件在线演示：插件真实运行，背景转场、镜头、环境光、粒子特效、打字机与多款皮肤。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%8C%B8%3C/text%3E%3C/svg%3E">
+<!-- 酒馆页面自带的依赖：jQuery 与 Font Awesome 6 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<style>
+  :root { --demo-bar-h: 46px; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0d12; color: #e8eaf0; font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; overflow: hidden; }
+  a { color: inherit; }
+
+  #demo-topbar { position: fixed; inset: 0 0 auto 0; height: var(--demo-bar-h); z-index: 50; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: linear-gradient(180deg, rgba(18,20,28,.96), rgba(12,14,20,.92)); border-bottom: 1px solid rgba(255,255,255,.07); backdrop-filter: blur(10px); }
+  .demo-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; text-decoration: none; }
+  .demo-brand small { font-weight: 500; color: #9aa3b5; margin-left: 2px; }
+  .demo-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: #ffd9e6; background: rgba(255, 105, 160, .16); border: 1px solid rgba(255, 105, 160, .35); white-space: nowrap; }
+  .demo-spacer { flex: 1; }
+  .demo-field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #aab2c4; }
+  .demo-field select, .demo-btn { height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06); color: #e8eaf0; font: inherit; font-size: 13px; padding: 0 10px; cursor: pointer; }
+  .demo-field select { max-width: 220px; }
+  .demo-field select option { background: #1a1d26; }
+  .demo-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; transition: background .2s, border-color .2s; }
+  .demo-btn:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
+  .demo-btn.primary { background: linear-gradient(135deg, #ff6aa0, #a66bff); border-color: transparent; color: #fff; font-weight: 600; }
+  .demo-btn.primary:hover { filter: brightness(1.08); }
+
+  /* 酒馆页面骨架：插件挂载在 #chat 内 */
+  #sheld { position: fixed; top: var(--demo-bar-h); left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
+  #chat { position: relative; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+  #chat > .mes { padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 14px; line-height: 1.7; }
+  #chat > .mes .name_text { font-weight: 700; color: #ffb3cf; }
+  #chat > .mes[is_user="true"] .name_text { color: #9cc7ff; }
+  #chat > .mes .mes_text p { margin: 2px 0; }
+  #send_form, #extensionsMenu, #option_regenerate { display: none; }
+
+  /* 顶栏皮肤切换在后台驱动插件设置面板时不闪屏 */
+  .demo-silent-panel #gal-unified-panel { opacity: 0 !important; pointer-events: none !important; }
+
+  #demo-veil { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: radial-gradient(120% 90% at 50% 40%, #1d1630 0%, #0b0d12 65%); transition: opacity .6s ease; }
+  #demo-veil.is-done { opacity: 0; pointer-events: none; }
+  .demo-veil-title { font-size: 26px; font-weight: 800; letter-spacing: .12em; background: linear-gradient(90deg, #ffd1e3, #c8b4ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .demo-veil-text { font-size: 14px; color: #a7aec0; text-align: center; max-width: 80vw; line-height: 1.7; }
+  .demo-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.12); border-top-color: #ff8db8; animation: demo-spin .9s linear infinite; }
+  #demo-veil.is-error .demo-spinner { display: none; }
+  #demo-veil.is-error .demo-veil-text { color: #ffb4b4; }
+  @keyframes demo-spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 760px) {
+    :root { --demo-bar-h: 42px; }
+    #demo-topbar { gap: 6px; padding: 0 8px; }
+    .demo-brand small, .demo-badge, .demo-btn .demo-label { display: none; }
+    .demo-field > span { display: none; }
+    .demo-field select { max-width: 120px; }
+  }
+</style>
+</head>
+<body>
+  <header id="demo-topbar">
+    <a class="demo-brand" href="../" title="返回文档"><i class="fa-solid fa-gamepad" style="color:#ff8db8"></i><span>Galgame 界面插件<small>· 在线演示</small></span></a>
+    <span class="demo-badge" title="页面加载的是插件的真实构建产物，酒馆环境由演示页模拟">插件真实运行</span>
+    <span class="demo-spacer"></span>
+    <label class="demo-field"><span>皮肤</span><select id="demo-skin" aria-label="皮肤"></select></label>
+    <button type="button" class="demo-btn" id="demo-settings" title="打开插件设置面板（与酒馆里完全相同）"><i class="fa-solid fa-sliders"></i><span class="demo-label">插件设置</span></button>
+    <button type="button" class="demo-btn" id="demo-restart" title="新开聊天，从开场白重新开始"><i class="fa-solid fa-rotate-left"></i><span class="demo-label">重新开始</span></button>
+    <a class="demo-btn primary" href="../guide/getting-started.html" title="安装插件"><i class="fa-solid fa-download"></i><span class="demo-label">安装插件</span></a>
+  </header>
+
+  <!-- 以下为模拟的酒馆页面结构 -->
+  <div id="extensionsMenu"></div>
+  <div id="option_regenerate"></div>
+  <div id="sheld">
+    <div id="chat"></div>
+    <form id="send_form" onsubmit="return false"><textarea id="send_textarea"></textarea><div id="send_but"></div></form>
+  </div>
+
+  <div id="demo-veil">
+    <div class="demo-veil-title">樱落之时</div>
+    <div class="demo-spinner"></div>
+    <div class="demo-veil-text">正在加载…</div>
+  </div>
+
+  <script src="demo-host.js?v=e21e13f924"></script>
+</body>
+</html>

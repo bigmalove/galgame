@@ -18,6 +18,7 @@ export default defineConfig({
 
     // 顶部导航
     nav: [
+      { text: '在线演示', link: 'https://bigmalove.github.io/galgame/demo/', target: '_self' },
       { text: '使用指南', link: '/guide/introduction' },
       { text: '卡作者接入', link: '/card-author/overview' },
       { text: '标签速查', link: '/reference/tags' },

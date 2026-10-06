@@ -3,7 +3,8 @@
 // 插件自己的初始化 / 消息处理 / 渲染管线全部真实运行；这里只负责：
 //   1. 准备素材：把内置日式学园图包写进 IndexedDB（等同于在插件里点「一键导入」+ 套用立绘模板）
 //   2. 扮演酒馆：维护 chat 数组与 #chat 楼层 DOM，发出 MESSAGE_RECEIVED / GENERATION_ENDED 等事件
-//   3. 扮演 AI：用户发送后，按预置剧本（story.js）"生成"下一条回复
+//   3. 扮演 AI：用户发送后，按预置剧本"生成"下一条回复（页面 <html data-demo-scenario> 选择剧本：
+//      main → story.js 主演示，live2d → story-live2d.js Live2D 演示）
 //   4. 扮演数据库插件：通过 AutoCardUpdaterAPI 提供全局数据表、总结表与选项表
 //   5. 扮演小白X TTS：插件照常调用 xiaobaixTts.speak，宿主回放在真实酒馆里用小白X 录好的台词语音（见第 6 节）
 import { initDB } from '../../src/db/init.js';
@@ -14,14 +15,20 @@ import { DEFAULT_PACK_ID, SCRIPT_ID } from '../../src/core/constants.js';
 import { GalgameStore } from '../../src/core/store.js';
 import { LIVE2D_RUNTIME_TYPES } from '../../src/live2d/runtime-router.js';
 import { setCharacterUseLive2D, setLive2DConfig } from '../../src/live2d/render-mode.js';
-import { USER_NAME, CHAR_NAME, SPRITE_TEMPLATES, LIVE2D_CHARACTERS, NODES, resolveNextNode, renderNode, lineKey } from './story.js';
+import { SCENARIO as MAIN_SCENARIO } from './story.js';
+import { SCENARIO as LIVE2D_SCENARIO } from './story-live2d.js';
+import { lineKey } from './story-utils.js';
 
 const $ = window.jQuery;
+const SCENARIO = { main: MAIN_SCENARIO, live2d: LIVE2D_SCENARIO }[document.documentElement.dataset.demoScenario] || MAIN_SCENARIO;
+const { USER_NAME, CHAR_NAME, SPRITE_TEMPLATES, LIVE2D_CHARACTERS, NODES, resolveNextNode, renderNode } = SCENARIO;
+// 插件产物与台词语音都放在 demo-host.js 所在目录，各演示页（/demo/、/demo/live2d/）共用
+const ASSET_BASE = new URL('.', document.currentScript?.src || location.href);
 const JP_PACK = __DEMO_JP_PACK__; // 构建时从 src/ui/builtin-bg-packs.js 读取，保持与插件内置图包同版本
 const CDN_HOSTS = ['https://cdn.jsdelivr.net', 'https://gcore.jsdelivr.net'];
 const CHAR_SLOT_KEY = `${CHAR_NAME}::slot::0`;
 const DEMO_DEFAULTS_KEY = 'galgame-demo_defaults_v1';
-const PLUGIN_SRC = `galgame-plugin.js?v=${__DEMO_BUILD_ID__}`;
+const PLUGIN_SRC = new URL(`galgame-plugin.js?v=${__DEMO_BUILD_ID__}`, ASSET_BASE).href;
 const GENERATE_DELAY_MS = 1100;
 const OPTIONS_DELAY_MS = 700;
 // 台词语音清单（record-voices.js 生成）：{ speakers: 所用音色, bindings: 角色 → 音色名, lines: lineKey(台词) → 文件名 }
@@ -64,6 +71,7 @@ function prepareLocalSettings() {
   localStorage.setItem(`${SCRIPT_ID}_setup_wizard_optout`, '1');
   localStorage.setItem(GalgameStore.STORAGE_KEYS.TTS_ENABLED, String(HAS_VOICES));
   localStorage.setItem(GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE, JSON.stringify(VOICES.bindings || {}));
+  localStorage.setItem(GalgameStore.STORAGE_KEYS.CUSTOM_EXPRESSIONS, JSON.stringify(SCENARIO.CUSTOM_EXPRESSIONS || []));
   for (const { character, config } of LIVE2D_CHARACTERS) {
     setLive2DConfig(character, config);
     setCharacterUseLive2D(character, true);
@@ -100,7 +108,7 @@ async function prepareAssets() {
     .map(bg => ({ sceneName: String(bg.sceneName || '').trim(), imageBlob: null, imageUrl: fix(bg.url || bg.imageUrl) }))
     .filter(bg => bg.sceneName && bg.imageUrl);
   await saveBackgroundsBatch(backgrounds, DEFAULT_PACK_ID);
-  getCardTitleScreen().backgroundUrl = backgrounds.find(bg => bg.sceneName === '樱花道')?.imageUrl || '';
+  getCardTitleScreen().backgroundUrl = backgrounds.find(bg => bg.sceneName === SCENARIO.TITLE.scene)?.imageUrl || '';
 
   const sprites = Array.isArray(manifest.sprites) ? manifest.sprites : [];
   const records = [];
@@ -183,8 +191,8 @@ async function eventEmit(name, ...args) {
 
 const characterCard = {
   name: CHAR_NAME,
-  avatar: 'yuzu.png',
-  description: '放学路上总会追上来的学妹。',
+  avatar: `${SCENARIO.id}.png`,
+  description: SCENARIO.CARD_DESCRIPTION,
   data: {
     name: CHAR_NAME,
     // 角色卡内置的插件配置：标题画面（卡作者在卡里携带的真实用法）
@@ -192,8 +200,8 @@ const characterCard = {
       galgame_ui_plugin: {
         titleScreen: {
           enabled: true,
-          titleText: '樱落之时',
-          subtitleText: 'Galgame 界面插件 · 在线演示',
+          titleText: SCENARIO.TITLE.text,
+          subtitleText: SCENARIO.TITLE.subtitle,
           backgroundSource: 'url',
           backgroundUrl: '',
           backgroundFit: 'cover',
@@ -387,7 +395,7 @@ async function deliverAiMessage(node, { optionsOverride } = {}) {
   generating = false;
   context.generating = false;
   await eventEmit(tavern_events.GENERATION_ENDED, index);
-  if (['riverbank', 'festival', 'store'].includes(node.id)) lastRoute = node.id;
+  if (SCENARIO.ROUTE_NODES.includes(node.id)) lastRoute = node.id;
   setTimeout(() => setOptions(optionsOverride || nodeOptions(node) || []), OPTIONS_DELAY_MS);
 }
 
@@ -416,6 +424,10 @@ async function handleSend() {
   const next = picked ? resolveNextNode(picked[1], { lastRoute }) : { id: 'freeform', params: { input: choice } };
   if (next?.id === 'restart') {
     setTimeout(restartDemo, 400);
+    return;
+  }
+  if (next?.id === 'navigate') {
+    setTimeout(() => location.assign(new URL(next.params.href, location.href).href), 400);
     return;
   }
   generating = true;
@@ -481,7 +493,7 @@ function installXiaobaixTtsStub() {
 
   const audioUrlFor = text => {
     const file = VOICES.lines[lineKey(text)];
-    return file ? `voice/${file}` : null;
+    return file ? new URL(`voice/${file}`, ASSET_BASE).href : null;
   };
 
   window.xiaobaixTts = {

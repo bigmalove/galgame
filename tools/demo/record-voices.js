@@ -1,6 +1,6 @@
 // 录制在线演示的台词语音：docs/public/demo/voice/{<hash>.mp3, voices.json}
 // 打开真实酒馆，调用其中已配置好的小白X TTS（xiaobaixTts.synthesize，与插件朗读时走的是同一合成接口），
-// 按 story.js 的 VOICE_PREFERENCES 给每个角色选用「我的音色」里的音色，逐句合成并保存。
+// 按各剧本（story.js、story-live2d.js）的 VOICE_PREFERENCES 给每个角色选用「我的音色」里的音色，逐句合成并保存。
 // voices.json 只记录所用音色的名称 / 音色值 / resourceId（不含任何鉴权配置），供演示页模拟小白X 接口回放。
 //
 // 用法：ST_URL=http://酒馆地址:8000/ ST_USER=账号 ST_PASS=密码 npm run demo:voices
@@ -18,12 +18,19 @@ const root = path.resolve(__dirname, '../..');
 const outDir = path.join(root, 'docs/public/demo/voice');
 const manifestFile = path.join(outDir, 'voices.json');
 
-function loadStory() {
-  const outfile = path.join(os.tmpdir(), `galgame-demo-story-${process.pid}.cjs`);
-  esbuild.buildSync({ entryPoints: [path.join(__dirname, 'story.js')], bundle: true, format: 'cjs', platform: 'node', outfile, logLevel: 'error' });
+function loadScenarios() {
+  const entry = path.join(os.tmpdir(), `galgame-demo-stories-entry-${process.pid}.js`);
+  const outfile = path.join(os.tmpdir(), `galgame-demo-stories-${process.pid}.cjs`);
+  fs.writeFileSync(entry, [
+    `export { SCENARIO as main } from ${JSON.stringify(path.join(__dirname, 'story.js'))};`,
+    `export { SCENARIO as live2d } from ${JSON.stringify(path.join(__dirname, 'story-live2d.js'))};`,
+    `export { lineKey, collectDialogueLines } from ${JSON.stringify(path.join(__dirname, 'story-utils.js'))};`,
+  ].join('\n'));
+  esbuild.buildSync({ entryPoints: [entry], bundle: true, format: 'cjs', platform: 'node', outfile, logLevel: 'error' });
   try {
     return require(outfile);
   } finally {
+    fs.rmSync(entry, { force: true });
     fs.rmSync(outfile, { force: true });
   }
 }
@@ -36,8 +43,14 @@ function loadPuppeteer() {
   }
 }
 
-function resolveVoicePreferences(story) {
-  const prefs = { ...story.VOICE_PREFERENCES };
+function resolveVoicePreferences(scenarios) {
+  const prefs = {};
+  for (const scenario of scenarios) {
+    for (const [character, voice] of Object.entries(scenario.VOICE_PREFERENCES || {})) {
+      if (prefs[character] && prefs[character] !== voice) throw new Error(`角色「${character}」在不同剧本里指定了不同音色：${prefs[character]} / ${voice}`);
+      prefs[character] = voice;
+    }
+  }
   for (const pair of String(process.env.DEMO_VOICES || '').split(',')) {
     const [character, voice] = pair.split('=').map(v => v && v.trim());
     if (character && voice) prefs[character] = voice;
@@ -45,12 +58,14 @@ function resolveVoicePreferences(story) {
   return prefs;
 }
 
-function collectLines(story) {
+function collectLines(mod, scenarios) {
   const lines = new Map();
-  for (const variant of story.NODE_VARIANTS) {
-    for (const line of story.collectDialogueLines(story.renderNode(variant.id, variant.params || {}))) {
-      const key = story.lineKey(line.text);
-      if (!lines.has(key)) lines.set(key, { ...line, key });
+  for (const scenario of scenarios) {
+    for (const variant of scenario.NODE_VARIANTS) {
+      for (const line of mod.collectDialogueLines(scenario.renderNode(variant.id, variant.params || {}))) {
+        const key = mod.lineKey(line.text);
+        if (!lines.has(key)) lines.set(key, { ...line, key });
+      }
     }
   }
   return [...lines.values()];
@@ -67,9 +82,10 @@ function readManifest() {
 async function main() {
   const stUrl = process.env.ST_URL;
   if (!stUrl) throw new Error('请用 ST_URL 指定酒馆地址');
-  const story = loadStory();
-  const prefs = resolveVoicePreferences(story);
-  const lines = collectLines(story);
+  const mod = loadScenarios();
+  const scenarios = [mod.main, mod.live2d];
+  const prefs = resolveVoicePreferences(scenarios);
+  const lines = collectLines(mod, scenarios);
   const missingVoice = [...new Set(lines.map(l => l.speaker))].filter(name => !prefs[name]);
   if (missingVoice.length) throw new Error(`以下角色没有在 VOICE_PREFERENCES 中指定音色：${missingVoice.join('、')}`);
 

@@ -13,6 +13,9 @@ hero:
       text: 🎮 在线演示
       link: https://bigmalove.github.io/galgame/demo/
     - theme: alt
+      text: ✨ Live2D 演示
+      link: https://bigmalove.github.io/galgame/demo/live2d/
+    - theme: alt
       text: 我是卡作者
       link: /card-author/overview
     - theme: alt
@@ -28,7 +31,7 @@ features:
     details: 支持多角色同屏立绘、表情差分、说话者光晕、气泡指示器。背景图支持本地上传或 AI 实时生成（ComfyUI / 大香蕉 / NovelAI / Wallhaven）。
   - icon: 💃
     title: Live2D 角色模型
-    details: 直接在对话界面展示 Live2D 模型（Cubism 2/4/5），支持表情动作映射、口型同步，让角色真正"活"起来。
+    details: 直接在对话界面展示 Live2D 模型（Cubism 2/4/5），支持表情动作映射、口型同步，让角色真正"活"起来。<a href="https://bigmalove.github.io/galgame/demo/live2d/" target="_self">在线体验 →</a>
   - icon: 🔊
     title: 语音合成 (TTS)
     details: 内置小白X和 GPT-SoVITS v2ProPlus 两种语音引擎，支持多角色音色绑定、可视化模型管理，搭配 Live2D 口型同步。

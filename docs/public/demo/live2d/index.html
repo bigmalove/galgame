@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-demo-scenario="__SCENARIO__">
+<html lang="zh-CN" data-demo-scenario="live2d">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>__PAGE_TITLE__</title>
-<meta name="description" content="__DESCRIPTION__">
+<title>Live2D 演示 · Galgame 界面插件</title>
+<meta name="description" content="Galgame 界面插件 Live2D 演示：四个 Live2D 角色同台，Cubism 3 / 4 / 5 模型、表情映射、内置参数表情、自定义表情动作与语音口型同步，插件真实运行。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%8C%B8%3C/text%3E%3C/svg%3E">
 <!-- 酒馆页面自带的依赖：jQuery 与 Font Awesome 6 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
@@ -72,15 +72,15 @@
 </head>
 <body>
   <header id="demo-topbar">
-    <a class="demo-brand" href="__DOCS__" title="返回文档"><i class="fa-solid fa-gamepad" style="color:#ff8db8"></i><span>Galgame 界面插件<small>· 在线演示</small></span></a>
+    <a class="demo-brand" href="../../" title="返回文档"><i class="fa-solid fa-gamepad" style="color:#ff8db8"></i><span>Galgame 界面插件<small>· 在线演示</small></span></a>
     <span class="demo-badge" title="页面加载的是插件的真实构建产物，酒馆环境由演示页模拟">插件真实运行</span>
     <button type="button" class="demo-btn demo-icon-btn" id="demo-about" title="关于本演示与素材来源" aria-expanded="false"><i class="fa-solid fa-circle-info"></i></button>
-    <nav class="demo-switch" aria-label="切换演示"><a href="__BASE__./"__CURRENT_MAIN__>Galgame</a><a href="__BASE__live2d/"__CURRENT_LIVE2D__>Live2D</a></nav>
+    <nav class="demo-switch" aria-label="切换演示"><a href=".././">Galgame</a><a href="../live2d/" aria-current="page">Live2D</a></nav>
     <span class="demo-spacer"></span>
     <label class="demo-field"><span>皮肤</span><select id="demo-skin" aria-label="皮肤"></select></label>
     <button type="button" class="demo-btn" id="demo-settings" title="打开插件设置面板（与酒馆里完全相同）"><i class="fa-solid fa-sliders"></i><span class="demo-label">插件设置</span></button>
     <button type="button" class="demo-btn" id="demo-restart" title="新开聊天，从开场白重新开始"><i class="fa-solid fa-rotate-left"></i><span class="demo-label">重新开始</span></button>
-    <a class="demo-btn primary" href="__DOCS__guide/getting-started.html" title="安装插件"><i class="fa-solid fa-download"></i><span class="demo-label">安装插件</span></a>
+    <a class="demo-btn primary" href="../../guide/getting-started.html" title="安装插件"><i class="fa-solid fa-download"></i><span class="demo-label">安装插件</span></a>
   </header>
 
   <!-- 以下为模拟的酒馆页面结构 -->
@@ -92,15 +92,32 @@
   </div>
 
   <div id="demo-about-panel" hidden>
-__ABOUT__
+    <h3>关于本演示</h3>
+    <p>页面加载的是插件本体的真实构建产物，由演示页模拟酒馆、酒馆助手与数据库插件提供的接口，AI 回复为预置剧本。存档 / 读档 / 时间线需要酒馆后端，演示中不可用。</p>
+    <h3>语音与 Live2D</h3>
+    <p>角色语音走插件的小白X TTS 引擎：台词固定，语音是在真实酒馆里用小白X（火山引擎豆包语音）预先录制的，演示页模拟小白X 接口回放给插件；音色绑定、Live2D 口型同步、切换台词时打断等仍是插件原有逻辑。点「开始游戏」后才会出声。</p>
+    <h3>这一页看什么</h3>
+    <ul>
+      <li>小春（Haru · Cubism 3）：表情映射到模型自带表情</li>
+      <li>日和（Hiyori · Cubism 4）：模型没有表情文件，插件自动改用内置参数表情</li>
+      <li>真央（Mao · Cubism 5）：走插件的 Cubism 5 运行时；自定义表情「施法」映射到模型的魔法动作</li>
+      <li>夏目老师（Natori）：不做任何配置，按表情名自动匹配</li>
+      <li>说话人切换时非说话角色变暗失焦，口型随语音音量实时开合</li>
+    </ul>
+    <h3>素材来源</h3>
+    <ul>
+      <li>背景：插件内置图包「日式学园」</li>
+      <li>Live2D 模型：Live2D 官方示例模型 Haru / Hiyori / Mao / Natori，© Live2D Inc.，依 <a href="https://www.live2d.com/eula/live2d-free-material-license-agreement_en.html" target="_blank" rel="noopener">Free Material License</a> 使用，从 Live2D 官方仓库加载</li>
+      <li>语音：火山引擎豆包语音合成（小春：柔美女友 / 日和：爽快思思 / 真央：樱桃丸子 / 夏目：儒雅逸辰）</li>
+    </ul>
   </div>
 
   <div id="demo-veil">
-    <div class="demo-veil-title">__VEIL_TITLE__</div>
+    <div class="demo-veil-title">星见之夜</div>
     <div class="demo-spinner"></div>
     <div class="demo-veil-text">正在加载…</div>
   </div>
 
-  <script src="__BASE__demo-host.js?v=__BUILD_ID__"></script>
+  <script src="../demo-host.js?v=d776f40e24"></script>
 </body>
 </html>

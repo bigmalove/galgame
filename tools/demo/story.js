@@ -5,6 +5,10 @@
 // options 模拟「数据库」插件的选项表（AutoCardUpdaterAPI）：[选项文本, 去向]；选项值就是文本本身，
 // 和数据库插件一样由插件拼成「<user>选项。」填进输入框发送，宿主再按文本找回去向。
 
+import { LIVE2D_CAST, lineKey, collectDialogueLines, renderScenarioNode } from './story-utils.js';
+
+export { lineKey, collectDialogueLines };
+
 export const USER_NAME = '学长';
 export const CHAR_NAME = '柚';
 
@@ -14,20 +18,8 @@ export const SPRITE_TEMPLATES = [
   { character: '丽华', template: '金发大小姐' },
 ];
 
-// Live2D 角色：远程模型 URL 绑定到角色（等同于在「Live2D 模型来源 → 远程 URL」里填写），模型为 Live2D 官方示例 Haru。
-// expressionMapping / motionMapping 即 Live2D 设置弹窗里的「表情映射」：剧本表情标签 → 模型自带表情 / 动作
-export const LIVE2D_CHARACTERS = [
-  {
-    character: '小春',
-    modelUrl: 'https://cdn.jsdelivr.net/gh/Live2D/CubismWebSamples@develop/Samples/Resources/Haru/Haru.model3.json',
-    config: {
-      transform: { offsetX: 0, offsetY: 170, scale: 1.2, scaleBase: 'height' },
-      // Haru 自带表情：F01 微笑 / F02 柔和 / F03 严肃 / F04 担心 / F05 眯眼笑 / F06 平静睁眼 / F07 脸红 / F08 鼓气
-      expressionMapping: { '默认': 'F02', '微笑': 'F01', '大笑': 'F05', '害羞': 'F07', '思考': 'F04', '难过': 'F04', '惊讶': 'F06', '生气': 'F08', '嘲讽': 'F03' },
-      motionMapping: {},
-    },
-  },
-];
+// Live2D 角色（模型与表情映射见 story-utils.js）
+export const LIVE2D_CHARACTERS = [LIVE2D_CAST.小春];
 
 // TTS 配音：台词语音由 tools/demo/record-voices.js 在真实酒馆里调用小白X TTS（火山引擎豆包语音）录制，
 // 音色名取自酒馆中小白X 的「我的音色」，结果写入 docs/public/demo/voice/voices.json
@@ -256,20 +248,6 @@ export function resolveNextNode(target, { lastRoute } = {}) {
   return null;
 }
 
-// 录音查找键：台词只保留文字与数字（忽略标点、引号与空白的差异）；每句台词只属于一个角色，无需带上音色
-export function lineKey(text) {
-  return String(text || '').replace(/[^\p{L}\p{N}]/gu, '');
-}
-
-// 剧本中的角色台词：<p>角色名[表情]: "台词"</p>
-export function collectDialogueLines(nodeText) {
-  const lines = [];
-  const re = /<p>([^<\[\]:：]+)\[[^\]]*\]\s*[:：]\s*"([^"]+)"<\/p>/g;
-  let m;
-  while ((m = re.exec(String(nodeText || ''))) !== null) lines.push({ speaker: m[1].trim(), text: m[2].trim() });
-  return lines;
-}
-
 // 全部可能出现的「节点 + 参数」组合（record-voices.js 据此收集需要预合成语音的台词）
 export const NODE_VARIANTS = [
   { id: 'greeting' },
@@ -283,7 +261,23 @@ export const NODE_VARIANTS = [
 ];
 
 export function renderNode(id, params = {}) {
-  const node = NODES[id];
-  if (!node) return '';
-  return typeof node.text === 'function' ? node.text(params) : node.text;
+  return renderScenarioNode({ NODES }, id, params);
 }
+
+// 演示宿主读取的场景描述
+export const SCENARIO = {
+  id: 'main',
+  USER_NAME,
+  CHAR_NAME,
+  CARD_DESCRIPTION: '放学路上总会追上来的学妹。',
+  TITLE: { text: '樱落之时', subtitle: 'Galgame 界面插件 · 在线演示', scene: '樱花道' },
+  SPRITE_TEMPLATES,
+  LIVE2D_CHARACTERS,
+  VOICE_PREFERENCES,
+  CUSTOM_EXPRESSIONS: [],
+  NODES,
+  NODE_VARIANTS,
+  ROUTE_NODES: ['riverbank', 'festival', 'store', 'library'],
+  resolveNextNode,
+  renderNode,
+};

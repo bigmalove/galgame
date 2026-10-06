@@ -5,11 +5,16 @@
 //   2. 扮演酒馆：维护 chat 数组与 #chat 楼层 DOM，发出 MESSAGE_RECEIVED / GENERATION_ENDED 等事件
 //   3. 扮演 AI：用户发送后，按预置剧本（story.js）"生成"下一条回复
 //   4. 扮演数据库插件：通过 AutoCardUpdaterAPI 提供全局数据表、总结表与选项表
+//   5. 扮演小白X TTS：插件照常调用 xiaobaixTts.speak，宿主回放在真实酒馆里用小白X 录好的台词语音（见第 6 节）
 import { initDB } from '../../src/db/init.js';
 import { saveBackgroundsBatch } from '../../src/db/backgrounds.js';
 import { saveSpritesBatch } from '../../src/db/sprites.js';
+import { saveLive2DModel } from '../../src/db/live2d-models.js';
 import { DEFAULT_PACK_ID, SCRIPT_ID } from '../../src/core/constants.js';
-import { USER_NAME, CHAR_NAME, SPRITE_TEMPLATES, NODES, resolveNextNode, renderNode } from './story.js';
+import { GalgameStore } from '../../src/core/store.js';
+import { LIVE2D_RUNTIME_TYPES } from '../../src/live2d/runtime-router.js';
+import { setCharacterUseLive2D, setLive2DConfig } from '../../src/live2d/render-mode.js';
+import { USER_NAME, CHAR_NAME, SPRITE_TEMPLATES, LIVE2D_CHARACTERS, NODES, resolveNextNode, renderNode, lineKey } from './story.js';
 
 const $ = window.jQuery;
 const JP_PACK = __DEMO_JP_PACK__; // 构建时从 src/ui/builtin-bg-packs.js 读取，保持与插件内置图包同版本
@@ -19,11 +24,14 @@ const DEMO_DEFAULTS_KEY = 'galgame-demo_defaults_v1';
 const PLUGIN_SRC = `galgame-plugin.js?v=${__DEMO_BUILD_ID__}`;
 const GENERATE_DELAY_MS = 1100;
 const OPTIONS_DELAY_MS = 700;
+// 台词语音清单（record-voices.js 生成）：{ speakers: 所用音色, bindings: 角色 → 音色名, lines: lineKey(台词) → 文件名 }
+const VOICES = __DEMO_VOICES__;
+const HAS_VOICES = Object.keys(VOICES.lines || {}).length > 0;
 
 const log = (...args) => console.log('[demo-host]', ...args);
 
 // ============================================
-// 1. 本地设置：演示用的固定项（TTS/BGM/地图依赖外部服务，演示中关闭）
+// 1. 本地设置：演示用的固定项（BGM / 地图依赖外部服务，演示中关闭；TTS 用小白X + 角色音色绑定；Live2D 角色绑定）
 // ============================================
 function prepareLocalSettings() {
   const key = `${SCRIPT_ID}_settings`;
@@ -39,7 +47,10 @@ function prepareLocalSettings() {
   const firstRun = localStorage.getItem(DEMO_DEFAULTS_KEY) ? {} : { spriteSpacing: 2, effectsMaxActive: 3 };
   localStorage.setItem(DEMO_DEFAULTS_KEY, '1');
   const forced = {
-    ttsEnabled: false,
+    // TTS：小白X 引擎（与录音所用酒馆一致），进入新台词自动朗读
+    ttsEnabled: HAS_VOICES,
+    ttsProvider: 'littlewhitebox',
+    ttsAutoPlay: true,
     bgmEnabled: false,
     mapSystemEnabled: false,
     autoSpriteAssignEnabled: false,
@@ -51,10 +62,16 @@ function prepareLocalSettings() {
   localStorage.setItem(key, JSON.stringify(Object.assign({}, saved, firstRun, forced)));
   localStorage.setItem(`${SCRIPT_ID}_char_enabled`, JSON.stringify({ [CHAR_SLOT_KEY]: true }));
   localStorage.setItem(`${SCRIPT_ID}_setup_wizard_optout`, '1');
+  localStorage.setItem(GalgameStore.STORAGE_KEYS.TTS_ENABLED, String(HAS_VOICES));
+  localStorage.setItem(GalgameStore.STORAGE_KEYS.CHAR_TTS_VOICE, JSON.stringify(VOICES.bindings || {}));
+  for (const { character, config } of LIVE2D_CHARACTERS) {
+    setLive2DConfig(character, config);
+    setCharacterUseLive2D(character, true);
+  }
 }
 
 // ============================================
-// 2. 素材：内置日式学园图包（背景 + 路人剪影）与立绘模板
+// 2. 素材：内置日式学园图包（背景 + 路人剪影）、立绘模板与远程 Live2D 模型
 // ============================================
 function packUrl(hostIndex, relPath) {
   return `${CDN_HOSTS[hostIndex]}/gh/${JP_PACK.repo}@${JP_PACK.tag}/${relPath.split('/').map(encodeURIComponent).join('/')}`;
@@ -99,7 +116,28 @@ async function prepareAssets() {
     }
   }
   await saveSpritesBatch(records, DEFAULT_PACK_ID);
-  log(`素材就绪：${backgrounds.length} 个背景，${records.length} 张立绘`);
+
+  // Live2D：与「Live2D 模型来源 → 远程 URL」保存的记录相同（asset-manager-parts.js createRemoteLive2DModelData）
+  for (const { character, modelUrl } of LIVE2D_CHARACTERS) {
+    await saveLive2DModel({
+      modelId: character,
+      source: 'remote',
+      modelUrl,
+      cubismVersion: null,
+      runtimeType: LIVE2D_RUNTIME_TYPES.LEGACY,
+      modelJson: null,
+      moc3: null,
+      moc: null,
+      textures: [],
+      motions: {},
+      expressions: [],
+      physics: null,
+      pose: null,
+      uploadTime: Date.now(),
+      fileSize: 0,
+    });
+  }
+  log(`素材就绪：${backgrounds.length} 个背景，${records.length} 张立绘，${LIVE2D_CHARACTERS.length} 个 Live2D 模型`);
 }
 
 // ============================================
@@ -416,9 +454,70 @@ function restartDemo() {
 }
 
 // ============================================
-// 6. 全局接口（酒馆 / 酒馆助手在 iframe 里注入给脚本的那一套，演示只实现插件用到的部分）
+// 6. 小白X TTS：插件朗读时调用 xiaobaixTts.speak(台词, { speaker })，播放中的音频元素挂在 player.currentAudio
+//    （插件据此做 Live2D 口型同步），播完触发 tts_end。演示只有固定台词，回放在真实酒馆里用小白X 录好的音频
 // ============================================
-// 酒馆后端：演示页没有酒馆服务器，插件探测的酒馆文件 / 接口（如小白X TTS 配置）一律按「不存在」应答
+function installXiaobaixTtsStub() {
+  if (!HAS_VOICES) return;
+  const player = {
+    queue: [],
+    currentAudio: null,
+    isPlaying: false,
+    _stopCurrent() {
+      const audio = player.currentAudio;
+      if (audio) {
+        audio.onended = null;
+        try {
+          audio.pause();
+        } catch (_) {}
+      }
+      player.currentAudio = null;
+      player.isPlaying = false;
+    },
+    clear() {
+      player._stopCurrent();
+    },
+  };
+
+  const audioUrlFor = text => {
+    const file = VOICES.lines[lineKey(text)];
+    return file ? `voice/${file}` : null;
+  };
+
+  window.xiaobaixTts = {
+    player,
+    isEnabled: () => true,
+    async speak(text) {
+      player._stopCurrent();
+      const url = audioUrlFor(text);
+      if (!url) {
+        log('没有这句台词的录音，跳过朗读：', text);
+        $(window).trigger('tts_end');
+        return;
+      }
+      const audio = new Audio(url);
+      player.currentAudio = audio;
+      player.isPlaying = true;
+      audio.onended = () => {
+        if (player.currentAudio !== audio) return;
+        player.currentAudio = null;
+        player.isPlaying = false;
+        $(window).trigger('tts_end');
+      };
+      await audio.play();
+    },
+    async synthesize(text) {
+      const url = audioUrlFor(text);
+      if (!url) throw new Error('演示中只有剧本台词的录音');
+      return (await fetch(url)).blob();
+    },
+  };
+}
+
+// ============================================
+// 7. 全局接口（酒馆 / 酒馆助手在 iframe 里注入给脚本的那一套，演示只实现插件用到的部分）
+// ============================================
+// 酒馆后端：演示页没有酒馆服务器，除小白X 音色清单外，插件探测的酒馆文件 / 接口一律按「不存在」应答
 function installTavernServerStub() {
   const nativeFetch = window.fetch.bind(window);
   const isTavernEndpoint = url => {
@@ -431,6 +530,11 @@ function installTavernServerStub() {
   };
   window.fetch = (input, init) => {
     const url = typeof input === 'string' ? input : input?.url || String(input);
+    // 小白X 的「我的音色」配置：只给出演示所用音色（录音时从酒馆导出的名称 / 音色值，不含鉴权信息）
+    if (HAS_VOICES && isTavernEndpoint(url) && new URL(url, location.href).pathname === '/user/files/LittleWhiteBox_TTS.json') {
+      const body = JSON.stringify({ volc: { mySpeakers: VOICES.speakers || [] } });
+      return Promise.resolve(new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }
     if (isTavernEndpoint(url)) return Promise.resolve(new Response('Not Found', { status: 404, statusText: 'Not Found' }));
     return nativeFetch(input, init);
   };
@@ -438,6 +542,7 @@ function installTavernServerStub() {
 
 function installHostGlobals() {
   installTavernServerStub();
+  installXiaobaixTtsStub();
   const worldbooks = new Map();
   Object.assign(window, {
     SillyTavern: context,
@@ -474,7 +579,7 @@ function installHostGlobals() {
 }
 
 // ============================================
-// 7. 页面外壳：顶栏的皮肤切换走插件真实设置面板（打开 → 改下拉框 → 关闭）
+// 8. 页面外壳：顶栏的皮肤切换走插件真实设置面板（打开 → 改下拉框 → 关闭）
 // ============================================
 async function waitFor(check, timeout = 8000, interval = 50) {
   const start = Date.now();
@@ -552,6 +657,19 @@ function bindShell() {
   $('#option_regenerate').on('click', handleRegenerate);
   $('#demo-restart').on('click', restartDemo);
   $('#demo-settings').on('click', () => $(`#${SCRIPT_ID}-btn`).trigger('click'));
+  $('#demo-about').on('click', function (event) {
+    event.stopPropagation();
+    const $panel = $('#demo-about-panel');
+    const open = $panel.prop('hidden');
+    $panel.prop('hidden', !open);
+    $(this).attr('aria-expanded', String(open));
+  });
+  $(document).on('click', event => {
+    if (!$(event.target).closest('#demo-about-panel, #demo-about').length) {
+      $('#demo-about-panel').prop('hidden', true);
+      $('#demo-about').attr('aria-expanded', 'false');
+    }
+  });
 }
 
 function setVeil(text, isError = false) {

@@ -1,4 +1,4 @@
-// 构建在线演示：docs/public/demo/{index.html, demo-host.js, galgame-plugin.js}
+// 构建在线演示：docs/public/demo/{index.html, demo-host.js, galgame-plugin.js}（台词语音 voice/ 由 npm run demo:voices 生成）
 // - galgame-plugin.js：插件本体，入口与 esbuild 选项同 esbuild.config.js（仅额外压缩），CSS 同样内联
 // - demo-host.js：模拟酒馆宿主 + 预置剧本（tools/demo/host.js）
 // 用法：npm run demo:build
@@ -16,6 +16,16 @@ function readJpPack() {
   const m = src.match(/id:\s*'jp',[\s\S]*?repo:\s*'([^']+)',\s*tag:\s*'([^']+)'/);
   if (!m) throw new Error('无法从 builtin-bg-packs.js 读取日式学园图包信息');
   return { repo: m[1], tag: m[2] };
+}
+
+// 预合成台词语音清单（tools/demo/record-voices.js 生成），打进 demo-host.js
+function readVoiceManifest() {
+  const file = path.join(outDir, 'voice/voices.json');
+  if (!fs.existsSync(file)) {
+    console.warn('[demo] 未找到 docs/public/demo/voice/voices.json，演示中不启用 TTS（先运行 npm run demo:voices 录制台词语音）');
+    return {};
+  }
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
 function inlineCss(file) {
@@ -60,6 +70,7 @@ async function main() {
       __GALGAME_VERSION__: JSON.stringify(pkg.version),
       __DEMO_JP_PACK__: JSON.stringify(readJpPack()),
       __DEMO_BUILD_ID__: JSON.stringify(pluginHash),
+      __DEMO_VOICES__: JSON.stringify(readVoiceManifest()),
     },
     minify: true,
     logLevel: 'warning',

@@ -41,6 +41,12 @@
   /* 顶栏皮肤切换在后台驱动插件设置面板时不闪屏 */
   .demo-silent-panel #gal-unified-panel { opacity: 0 !important; pointer-events: none !important; }
 
+  .demo-icon-btn { padding: 0 9px; }
+  #demo-about-panel { position: fixed; top: calc(var(--demo-bar-h) + 8px); left: 14px; z-index: 60; width: min(420px, calc(100vw - 28px)); max-height: calc(100dvh - var(--demo-bar-h) - 24px); overflow-y: auto; padding: 14px 18px; border-radius: 12px; background: rgba(18,20,28,.97); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 18px 50px rgba(0,0,0,.5); font-size: 13px; line-height: 1.7; color: #c9cfdb; }
+  #demo-about-panel h3 { margin: 6px 0 4px; font-size: 14px; color: #fff; }
+  #demo-about-panel p, #demo-about-panel ul { margin: 0 0 8px; }
+  #demo-about-panel ul { padding-left: 18px; }
+  #demo-about-panel a { color: #ffb3cf; }
   #demo-veil { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: radial-gradient(120% 90% at 50% 40%, #1d1630 0%, #0b0d12 65%); transition: opacity .6s ease; }
   #demo-veil.is-done { opacity: 0; pointer-events: none; }
   .demo-veil-title { font-size: 26px; font-weight: 800; letter-spacing: .12em; background: linear-gradient(90deg, #ffd1e3, #c8b4ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -63,6 +69,7 @@
   <header id="demo-topbar">
     <a class="demo-brand" href="../" title="返回文档"><i class="fa-solid fa-gamepad" style="color:#ff8db8"></i><span>Galgame 界面插件<small>· 在线演示</small></span></a>
     <span class="demo-badge" title="页面加载的是插件的真实构建产物，酒馆环境由演示页模拟">插件真实运行</span>
+    <button type="button" class="demo-btn demo-icon-btn" id="demo-about" title="关于本演示与素材来源" aria-expanded="false"><i class="fa-solid fa-circle-info"></i></button>
     <span class="demo-spacer"></span>
     <label class="demo-field"><span>皮肤</span><select id="demo-skin" aria-label="皮肤"></select></label>
     <button type="button" class="demo-btn" id="demo-settings" title="打开插件设置面板（与酒馆里完全相同）"><i class="fa-solid fa-sliders"></i><span class="demo-label">插件设置</span></button>
@@ -76,6 +83,19 @@
   <div id="sheld">
     <div id="chat"></div>
     <form id="send_form" onsubmit="return false"><textarea id="send_textarea"></textarea><div id="send_but"></div></form>
+  </div>
+
+  <div id="demo-about-panel" hidden>
+    <h3>关于本演示</h3>
+    <p>页面加载的是插件本体的真实构建产物，由演示页模拟酒馆、酒馆助手与数据库插件提供的接口，AI 回复为预置剧本。存档 / 读档 / 时间线需要酒馆后端，演示中不可用。</p>
+    <h3>语音与 Live2D</h3>
+    <p>角色语音走插件的小白X TTS 引擎：台词固定，语音是在真实酒馆里用小白X（火山引擎豆包语音）预先录制的，演示页模拟小白X 接口回放给插件；音色绑定、Live2D 口型同步、切换台词时打断等仍是插件原有逻辑。点「开始游戏」后才会出声。</p>
+    <h3>素材来源</h3>
+    <ul>
+      <li>背景与立绘：插件内置图包「日式学园」</li>
+      <li>Live2D 模型（小春）：Live2D 官方示例模型 Haru，© Live2D Inc.，依 <a href="https://www.live2d.com/eula/live2d-free-material-license-agreement_en.html" target="_blank" rel="noopener">Free Material License</a> 使用，从 Live2D 官方仓库加载</li>
+      <li>语音：火山引擎豆包语音合成（柚：甜心小美 / 丽华：高冷御姐 / 小春：柔美女友）</li>
+    </ul>
   </div>
 
   <div id="demo-veil">

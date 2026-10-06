@@ -14,11 +14,34 @@ export const SPRITE_TEMPLATES = [
   { character: '丽华', template: '金发大小姐' },
 ];
 
+// Live2D 角色：远程模型 URL 绑定到角色（等同于在「Live2D 模型来源 → 远程 URL」里填写），模型为 Live2D 官方示例 Haru。
+// expressionMapping / motionMapping 即 Live2D 设置弹窗里的「表情映射」：剧本表情标签 → 模型自带表情 / 动作
+export const LIVE2D_CHARACTERS = [
+  {
+    character: '小春',
+    modelUrl: 'https://cdn.jsdelivr.net/gh/Live2D/CubismWebSamples@develop/Samples/Resources/Haru/Haru.model3.json',
+    config: {
+      transform: { offsetX: 0, offsetY: 170, scale: 1.2, scaleBase: 'height' },
+      // Haru 自带表情：F01 微笑 / F02 柔和 / F03 严肃 / F04 担心 / F05 眯眼笑 / F06 平静睁眼 / F07 脸红 / F08 鼓气
+      expressionMapping: { '默认': 'F02', '微笑': 'F01', '大笑': 'F05', '害羞': 'F07', '思考': 'F04', '难过': 'F04', '惊讶': 'F06', '生气': 'F08', '嘲讽': 'F03' },
+      motionMapping: {},
+    },
+  },
+];
+
+// TTS 配音：台词语音由 tools/demo/record-voices.js 在真实酒馆里调用小白X TTS（火山引擎豆包语音）录制，
+// 音色名取自酒馆中小白X 的「我的音色」，结果写入 docs/public/demo/voice/voices.json
+export const VOICE_PREFERENCES = {
+  柚: '甜心小美（多情感）',
+  丽华: '高冷御姐（多情感）',
+  小春: '柔美女友（多情感）',
+};
+
 const SMS = '丽华: 今晚的夜樱祭，你没忘吧？\n丽华: 七点，神社鸟居下。\n丽华: 迟到的话——后果自负哦。';
 
 export const NODES = {
   greeting: {
-    summary: '放学后的樱花道上，柚追上学长，邀他一起绕远路回家；丽华发来短信，约他七点去夜樱祭。',
+    summary: '放学后的樱花道上，柚追上学长，邀他一起绕远路回家；图书委员小春提醒他去图书馆取伞；丽华发来短信，约他七点去夜樱祭。',
     location: '樱花道',
     time: '四月 · 放学后 16:40',
     text: `<maintext>
@@ -32,14 +55,21 @@ export const NODES = {
 <p>柚[惊讶]: "学长——！等、等一下嘛！"</p>
 <p>柚[害羞]: "呼……总算追上了。今天的花开得这么好，一个人走回去的话，总觉得有点可惜呢。"</p>
 <p>柚[微笑]: "那个……如果学长不赶时间的话，要不要陪我绕一点远路？"</p>
+<p>话音刚落，一个抱着几本书的女生从樱花树下走来，在我们面前停下了脚步。</p>
+<p>小春[微笑]: "学长，找到你了。上周借走的那把伞，还挂在图书馆的伞架上哦。"</p>
+<p>小春[思考]: "天气预报说今晚会有雷阵雨……记得在闭馆前来拿。"</p>
+<sprite action="exit" character="小春" />
+<p>她朝柚轻轻点了点头，抱着书走回了校舍的方向。</p>
+<p>柚[生气]: "……图书委员的小春学姐？学长连伞都借到她那里去了呀。"</p>
 <p>就在这时，口袋里的手机震了一下。</p>
 <styled type="手机短信" from="丽华" to="${USER_NAME}">${SMS}</styled>
-<p>柚[思考]: "……是谁的消息呀？学长的表情，好像有点为难呢。"</p>
+<p>柚[思考]: "……又是谁的消息呀？学长今天可真受欢迎呢。"</p>
 </maintext>`,
     options: [
       ['陪柚绕远路，去河堤看夕阳', 'riverbank'],
       ['回复丽华：“我这就去夜樱祭”', 'festival'],
       ['先去便利店买两罐汽水，边走边想', 'store'],
+      ['回图书馆找小春拿伞', 'library'],
     ],
   },
 
@@ -117,6 +147,31 @@ export const NODES = {
     ],
   },
 
+  library: {
+    summary: '学长回图书馆找小春取伞；闭馆前雷雨骤至，小春提议两人撑同一把伞去车站。',
+    location: '图书馆',
+    time: '傍晚 17:05',
+    text: `<maintext>
+<background scene="图书馆" />
+<pixiPerform name="dust" />
+<弹窗一><b>图书馆</b><br>旧校舍顶层的图书馆，高窗朝西，闭馆时间 17:30。</弹窗一>
+<弹窗二><b>傍晚</b><br>17:05 · 阴 · 雷阵雨将至</弹窗二>
+<p>闭馆前的图书馆安静得只听得见翻书声。夕阳从高窗斜照进来，光柱里浮着细细的尘埃。</p>
+<p>小春[微笑]: "来得正好，再晚五分钟，我就要锁门了。"</p>
+<p>小春[默认]: "伞在这里。……伞柄上的挂坠是我顺手系上的，总觉得空着有点寂寞。"</p>
+<p>小春[害羞]: "不、不喜欢的话可以摘掉的！我真的只是……顺手而已。"</p>
+<p>窗外忽然暗了下来。远处滚过一声闷雷，玻璃窗上很快爬满了雨痕。</p>
+<pixiPerform name="rain" />
+<pixiPerform name="lightning" />
+<p>小春[惊讶]: "真的下起来了……比天气预报说的还要早。"</p>
+<p>小春[思考]: "这把伞，撑两个人应该够吧……我是说，学长要去车站的话，我们正好顺路。"</p>
+</maintext>`,
+    options: [
+      ['和小春撑同一把伞去车站', 'ending-koharu'],
+      ['把伞留给小春，自己冒雨跑去车站', 'ending-koharu-rain'],
+    ],
+  },
+
   station: {
     summary: '躲雨的车站里，柚和丽华撞了个正着，两人一齐逼问学长到底想和谁一起回家。',
     location: '车站',
@@ -164,10 +219,14 @@ ${{
 <p>柚[微笑]: "还有，下次绕远路的时候——也要叫上我哦。"</p>`,
     reika: `<p>丽华[害羞]: "昨天的伞……我会还你的。别误会，本小姐只是不喜欢欠人情。"</p>
 <p>丽华[微笑]: "顺便一提，下周的烟火大会，你没得选。"</p>`,
+    koharu: `<p>小春[微笑]: "昨天一起撑伞走到车站，学长的左肩全湿了吧？……我都看见了。"</p>
+<p>小春[害羞]: "所以今天的便当，多做了一份。伞上的挂坠，你也没有摘呢。"</p>`,
+    'koharu-rain': `<p>小春[生气]: "昨天明明说好顺路的，学长却一个人冲进了雨里……感冒了怎么办。"</p>
+<p>小春[微笑]: "伞我先替你保管着。下次下雨，要记得来图书馆找我哦。"</p>`,
     all: `<p>柚[大笑]: "结果昨天三个人挤在长椅上，一直等到了末班车……学长的外套，我已经洗干净啦！"</p>
 <p>丽华[害羞]: "……夜樱祭你欠我一次。下次，三个人一起去也……也不是不行。"</p>`,
   }[route] || ''}
-<styled type="便签" from="演示说明">这是 Galgame 界面插件的在线演示。\n画面全部由插件真实运行产生：背景转场、镜头运动、环境光、粒子特效、打字机与皮肤，和你在酒馆里看到的一模一样。\n点右上角「插件设置」可以切换皮肤、特效和演出选项。</styled>
+<styled type="便签" from="演示说明">这是 Galgame 界面插件的在线演示。\n画面与语音全部由插件真实运行产生：背景转场、镜头运动、环境光、粒子特效、打字机、Live2D 与口型同步、皮肤，和你在酒馆里看到的一模一样。\n点右上角「插件设置」可以切换皮肤、特效和演出选项。</styled>
 <p>—— 演示结束，感谢游玩 ——</p>
 </maintext>`,
     options: [
@@ -186,14 +245,42 @@ ${{
 
 // 选项去向 → 下一个节点与参数（lastRoute：上一个分支节点，用于车站开场白）
 export function resolveNextNode(target, { lastRoute } = {}) {
-  if (target === 'riverbank' || target === 'festival' || target === 'store') return { id: target, params: {} };
+  if (['riverbank', 'festival', 'store', 'library'].includes(target)) return { id: target, params: {} };
   if (target === 'station') return { id: 'station', params: { from: lastRoute === 'festival' ? 'festival' : 'riverbank' } };
   if (target === 'ending-yuzu') return { id: 'ending', params: { route: 'yuzu' } };
   if (target === 'ending-reika') return { id: 'ending', params: { route: 'reika' } };
   if (target === 'ending-all') return { id: 'ending', params: { route: 'all' } };
+  if (target === 'ending-koharu') return { id: 'ending', params: { route: 'koharu' } };
+  if (target === 'ending-koharu-rain') return { id: 'ending', params: { route: 'koharu-rain' } };
   if (target === 'restart') return { id: 'restart', params: {} };
   return null;
 }
+
+// 录音查找键：台词只保留文字与数字（忽略标点、引号与空白的差异）；每句台词只属于一个角色，无需带上音色
+export function lineKey(text) {
+  return String(text || '').replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+// 剧本中的角色台词：<p>角色名[表情]: "台词"</p>
+export function collectDialogueLines(nodeText) {
+  const lines = [];
+  const re = /<p>([^<\[\]:：]+)\[[^\]]*\]\s*[:：]\s*"([^"]+)"<\/p>/g;
+  let m;
+  while ((m = re.exec(String(nodeText || ''))) !== null) lines.push({ speaker: m[1].trim(), text: m[2].trim() });
+  return lines;
+}
+
+// 全部可能出现的「节点 + 参数」组合（record-voices.js 据此收集需要预合成语音的台词）
+export const NODE_VARIANTS = [
+  { id: 'greeting' },
+  { id: 'riverbank' },
+  { id: 'festival' },
+  { id: 'store' },
+  { id: 'library' },
+  { id: 'station', params: { from: 'riverbank' } },
+  { id: 'station', params: { from: 'festival' } },
+  ...['yuzu', 'reika', 'all', 'koharu', 'koharu-rain'].map(route => ({ id: 'ending', params: { route } })),
+];
 
 export function renderNode(id, params = {}) {
   const node = NODES[id];

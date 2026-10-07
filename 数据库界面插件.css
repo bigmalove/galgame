@@ -1537,7 +1537,7 @@
 }
 
 /* === TTS 配音标识：名牌右侧小胶囊（插入与定位见 src/ui/tts-cue.js） ===
-   说话者在场 + 开启 TTS + 气泡指示器时显示；颜色跟随角色色。
+   说话者在场 + 开启 TTS + 气泡指示器时显示；颜色跟随角色色。点击重播当前这句。
    静止：喇叭 + 四道矮音柱；合成中：音柱依次明灭；播放中：音柱跳动、外圈扩散 */
 .gal-tts-cue {
   --cue-color: var(--gal-speaker-color, var(--th-accent, var(--gal-accent, #1d9bff)));
@@ -1564,8 +1564,21 @@
   /* 不跟 --ui-scale：移动端它会被压得很小，各皮肤又各自覆写；只随用户的对话框缩放 */
   transform: translateY(-50%) scale(calc(var(--cue-scale, 1) * var(--gal-dialog-scale-user, 1)));
   transform-origin: left center;
-  pointer-events: none;
-  transition: border-color 0.3s ease, color 0.3s ease;
+  /* pointer-events 会继承，部分皮肤的名牌容器关闭了指针事件，这里显式打开 */
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.3s ease, color 0.3s ease, background-color 0.2s ease;
+}
+
+.gal-tts-cue:hover {
+  border-color: color-mix(in srgb, var(--cue-color) 70%, transparent);
+  background: color-mix(in srgb, var(--cue-color) 12%, var(--th-chip-bg, rgba(255, 255, 255, 0.92)));
+}
+
+.gal-tts-cue:active > i {
+  scale: 0.86;
 }
 
 #gal-global-overlay:has(.gal-layer-character.bubble-enabled.tts-mode-enabled .gal-char-container.speaking)
@@ -3769,6 +3782,180 @@
   padding: 3.125rem;
   color: #999;
   font-style: italic;
+}
+
+/* === 剧情回顾：页签（对话记录 / 剧情纪要） ===
+   颜色全部继承标题栏，各皮肤无需单独适配 */
+.gal-history-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  margin-right: 0.75rem;
+}
+
+.gal-history-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: inherit;
+  opacity: 0.6;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.gal-history-tab:hover {
+  opacity: 0.85;
+}
+
+.gal-history-tab.active {
+  opacity: 1;
+  border-bottom-color: currentColor;
+}
+
+/* === 对话记录（Backlog）：每楼层一张卡片，沿用 .gal-history-item / .gal-history-content 的皮肤配色 ===
+   角色名与语音按钮的强调色取 --gal-backlog-accent，各皮肤设为与标题图标一致 */
+.gal-history-modal {
+  --gal-backlog-accent: var(--gal-accent, #1d9bff);
+}
+
+.gal-history-modal.gal-theme-default {
+  --gal-backlog-accent: var(--th-accent, var(--gal-accent, #1d9bff));
+}
+
+.gal-backlog-list {
+  gap: 0.5rem;
+}
+
+.gal-history-item.gal-backlog-floor {
+  margin-bottom: 0;
+}
+
+.gal-history-item.gal-backlog-floor:hover {
+  transform: none;
+}
+
+.gal-history-content.gal-backlog-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.9rem 1.1rem;
+  white-space: normal;
+}
+
+.gal-backlog-line {
+  display: grid;
+  grid-template-columns: 1.9rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.gal-backlog-voice-slot {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.1rem;
+}
+
+.gal-backlog-speaker {
+  font-size: 0.85em;
+  font-weight: 700;
+  color: var(--gal-backlog-accent);
+  margin-bottom: 0.1rem;
+}
+
+.gal-backlog-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.gal-backlog-line.is-narration .gal-backlog-text,
+.gal-backlog-line.is-styled .gal-backlog-text {
+  opacity: 0.78;
+}
+
+.gal-backlog-floor.is-user .gal-backlog-text {
+  opacity: 0.85;
+}
+
+.gal-backlog-user-icon {
+  font-size: 0.85em;
+  opacity: 0.5;
+  padding-top: 0.25rem;
+}
+
+.gal-backlog-voice {
+  appearance: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--gal-backlog-accent) 45%, transparent);
+  background: transparent;
+  color: var(--gal-backlog-accent);
+  font-size: 0.78rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.gal-backlog-voice[data-state='cached'] {
+  opacity: 1;
+  background: color-mix(in srgb, var(--gal-backlog-accent) 14%, transparent);
+}
+
+.gal-backlog-voice:hover {
+  opacity: 1;
+}
+
+.gal-backlog-voice.is-playing {
+  opacity: 1;
+  background: var(--gal-backlog-accent);
+  color: #fff;
+  animation: gal-backlog-voice-pulse 1.4s ease-out infinite;
+}
+
+.gal-backlog-voice.is-loading i {
+  animation: gal-backlog-voice-wait 0.9s ease-in-out infinite;
+}
+
+@keyframes gal-backlog-voice-pulse {
+  from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gal-backlog-accent) 50%, transparent); }
+  to { box-shadow: 0 0 0 0.45rem transparent; }
+}
+
+@keyframes gal-backlog-voice-wait {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media screen and (max-width: 48rem) {
+  .gal-history-tabs {
+    margin-right: 0.25rem;
+  }
+
+  .gal-history-tab {
+    font-size: 0.82rem;
+    padding: 0.25rem 0.35rem;
+  }
+
+  .gal-history-content.gal-backlog-lines {
+    padding: 0.75rem 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gal-backlog-voice.is-playing,
+  .gal-backlog-voice.is-loading i {
+    animation: none;
+  }
 }
 
 .galgame-database-container {

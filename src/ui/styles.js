@@ -4526,6 +4526,7 @@ const skinCss = `
     letter-spacing: 0.42em;
 }
 .gal-history-modal[class*="skin-ancient"] .gal-history-title i { color: var(--ink-seal); }
+.gal-history-modal[class*="skin-ancient"] { --gal-backlog-accent: var(--ink-seal); }
 .gal-history-modal[class*="skin-ancient"] .gal-history-close { color: var(--ink-mid); }
 .gal-history-modal[class*="skin-ancient"] .gal-history-close:hover { color: var(--ink-seal); }
 .gal-history-modal[class*="skin-ancient"] .gal-history-body { background: transparent; }
@@ -5074,6 +5075,7 @@ const skinCss = `
     letter-spacing: 0.36em;
 }
 .gal-history-modal[class*="skin-persona"] .gal-history-title i { color: var(--p5-red); }
+.gal-history-modal[class*="skin-persona"] { --gal-backlog-accent: var(--p5-red); }
 .gal-history-modal[class*="skin-persona"] .gal-history-close { color: var(--p5-gray); }
 .gal-history-modal[class*="skin-persona"] .gal-history-close:hover { color: var(--p5-red); }
 .gal-history-modal[class*="skin-persona"] .gal-history-body { background: transparent; }
@@ -6153,6 +6155,7 @@ const skinCss = `
     text-shadow: 0 0 16px rgba(111, 212, 255, 0.55);
 }
 .skin-jrpg-dawn .gal-history-title { text-shadow: none; }
+.gal-history-modal[class*="skin-jrpg"] .gal-history-tab { color: var(--cts-white) !important; font-family: var(--cts-font) !important; }
 .gal-history-modal[class*="skin-jrpg"] .gal-history-close {
     background: none !important;
     border: 1px solid rgba(184, 237, 255, 0.4) !important;
@@ -6164,9 +6167,19 @@ const skinCss = `
     border-color: var(--cts-gold2) !important;
     color: #071028 !important;
 }
+.gal-history-modal[class*="skin-jrpg"] { --gal-backlog-accent: var(--cts-ice); }
+/* 正文与卡片透明，露出面板 ::before 的底色（基础样式的白底会把浅色文字盖得看不清） */
+.gal-history-modal[class*="skin-jrpg"] .gal-history-header,
+.gal-history-modal[class*="skin-jrpg"] .gal-history-body { background: transparent; }
 .gal-history-modal[class*="skin-jrpg"] .gal-history-item {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     border-bottom: 1px dashed rgba(184, 237, 255, 0.16) !important;
 }
+.gal-history-modal[class*="skin-jrpg"] .gal-history-item:hover { transform: none; box-shadow: none; }
+.gal-history-modal[class*="skin-jrpg"] .gal-history-header-row { background: transparent; border-bottom: none; }
 .gal-history-modal[class*="skin-jrpg"] .gal-history-name {
     color: var(--cts-ice) !important;
     font-family: var(--cts-font) !important;
@@ -7105,6 +7118,7 @@ const skinCss = `
     font-family: var(--yx-font) !important;
     letter-spacing: 0.44em !important;
 }
+.gal-history-modal[class*="skin-yanyun"] .gal-history-tab { color: var(--yx-text) !important; font-family: var(--yx-font) !important; }
 .gal-history-modal[class*="skin-yanyun"] .gal-history-close {
     background: none !important;
     border: 1px solid rgba(166, 124, 61, 0.45) !important;
@@ -7117,9 +7131,19 @@ const skinCss = `
     border-color: var(--yx-bronze-2) !important;
     color: #0d1117 !important;
 }
+.gal-history-modal[class*="skin-yanyun"] { --gal-backlog-accent: var(--yx-bronze-2); }
+/* 正文与卡片透明，露出面板 ::before 的底色（基础样式的白底会把浅色文字盖得看不清） */
+.gal-history-modal[class*="skin-yanyun"] .gal-history-header,
+.gal-history-modal[class*="skin-yanyun"] .gal-history-body { background: transparent; }
 .gal-history-modal[class*="skin-yanyun"] .gal-history-item {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     border-bottom: 1px dashed rgba(166, 124, 61, 0.22) !important;
 }
+.gal-history-modal[class*="skin-yanyun"] .gal-history-item:hover { transform: none; box-shadow: none; }
+.gal-history-modal[class*="skin-yanyun"] .gal-history-header-row { background: transparent; border-bottom: none; }
 .gal-history-modal[class*="skin-yanyun"] .gal-history-name {
     color: var(--yx-bronze-2) !important;
     font-family: var(--yx-font) !important;
@@ -8027,6 +8051,7 @@ const skinCss = `
     letter-spacing: 0.3em;
 }
 .gal-history-modal[class*="skin-shujian"] .gal-history-title i { color: var(--shu-vermilion); }
+.gal-history-modal[class*="skin-shujian"] { --gal-backlog-accent: var(--shu-vermilion); }
 .gal-history-modal[class*="skin-shujian"] .gal-history-close { color: var(--shu-ink-soft); }
 .gal-history-modal[class*="skin-shujian"] .gal-history-close:hover { color: var(--shu-vermilion); }
 .gal-history-modal[class*="skin-shujian"] .gal-history-body { background: transparent; }

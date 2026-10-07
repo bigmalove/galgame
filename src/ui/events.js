@@ -1,4 +1,5 @@
 import { TTSManager } from '../audio/tts-manager.js';
+import { getTTSEnabled } from '../audio/tts-config.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
 import { getMapSettings, getSettings, setCurrentCharEnabled } from '../core/settings.js';
@@ -553,6 +554,17 @@ export function setupGlobalEventListeners() {
     $viewer.on('click', function (ev) {
       if (ev.target === $viewer[0]) closeEmbeddedViewer();
     });
+  });
+
+  // 名牌旁 TTS 胶囊：重播当前这句（优先播放缓存，播放中再点一次则停止）
+  $(doc).on('click', '#gal-global-overlay [data-action="replay-voice"]', function (e) {
+    e.stopPropagation();
+    if (!getTTSEnabled() || !getSettings().ttsEnabled) return;
+    const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
+    const state = messageSegmentState.get(String(mesId));
+    const segment = state?.segments?.[state.currentIndex];
+    if (!segment || segment.type !== 'dialogue') return;
+    void TTSManager.replaySegment(segment, `${mesId}_${state.currentIndex}`);
   });
 
   // LOG按钮

@@ -6,9 +6,10 @@ import { topWindow } from '../core/env.js';
 // 作为名牌的兄弟节点插入（不放进名牌：部分皮肤给名牌加了 clip-path，伸出去的子元素会被裁掉），
 // 位置由 JS 按名牌实际外框计算。显隐与播放状态全部交给 CSS：
 //   说话者在场 + 开启 TTS + 气泡指示器 → 显示；#gal-global-overlay.gal-tts-playing → 均衡器跳动。
+// 点击重播当前这句（播放中点击则停止），事件委托见 events.js 的 data-action="replay-voice"。
 
 const CUE_CLASS = 'gal-tts-cue';
-const CUE_HTML = `<div class="${CUE_CLASS}" aria-hidden="true"><i class="fa-solid fa-volume-off"></i><span class="gal-tts-cue-bars"><b></b><b></b><b></b><b></b></span></div>`;
+const CUE_HTML = `<div class="${CUE_CLASS}" data-action="replay-voice" role="button" tabindex="-1" title="重播语音" aria-label="重播语音"><i class="fa-solid fa-volume-off"></i><span class="gal-tts-cue-bars"><b></b><b></b><b></b><b></b></span></div>`;
 const CUE_GAP = 10;
 // 名牌比名字宽出这么多以上，视为整行容器（天空 / 柔和主题），改为贴着名字本身
 const WIDE_BADGE_SLACK = 80;

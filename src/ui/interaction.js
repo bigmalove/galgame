@@ -4,6 +4,7 @@ import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
 import { getIsSkipping, setIsSkipping, getSkipTimer, setSkipTimer, getIsRewinding, setIsRewinding, getIsEnabled, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
 import { TTSManager } from '../audio/tts-manager.js';
+import { getTTSEnabled } from '../audio/tts-config.js';
 import { clearAllPixiEffects } from '../effects/pixi-effect-manager.js';
 import { parseGalgameContent, stripImagePlaceholders } from '../logic/parser.js';
 import { decodeHtml, getFormattedSwipeContent, getRawMessageContent } from '../utils/html.js';
@@ -85,7 +86,7 @@ function findNextAiMessage(currentMesId) {
   return $best;
 }
 
-function extractMessageContent($mes, mesId) {
+export function extractMessageContent($mes, mesId) {
   let contentToProcess = getFormattedSwipeContent(mesId);
   if (!contentToProcess) {
     contentToProcess = getRawMessageContent(mesId);
@@ -427,6 +428,15 @@ export function stopRewinding() {
   $('#gal-global-overlay [data-action="prev"]').removeClass('active');
 }
 
+// 倒退回看：只播放已缓存的语音，不触发新的合成（长按快退不走这里）
+function speakCachedSegmentOnRewind(state, mesId) {
+  const settings = getSettings();
+  if (!getTTSEnabled() || !settings.ttsEnabled || !settings.ttsAutoPlay || settings.ttsReplayCachedOnRewind === false) return;
+  const segment = state?.segments?.[state.currentIndex];
+  if (!segment || segment.type !== 'dialogue') return;
+  void TTSManager.speak(segment, `${mesId}_${state.currentIndex}`, { cacheOnly: true });
+}
+
 export async function triggerPrevSegment() {
   const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
   const state = messageSegmentState.get(String(mesId));
@@ -436,10 +446,13 @@ export async function triggerPrevSegment() {
     TTSManager.stop();
     state.currentIndex--;
     await scheduleOverlaySegmentDisplay(state, 'trigger-prev');
+    speakCachedSegmentOnRewind(state, mesId);
   } else {
     const switched = await switchToPreviousAiFloor({ suppressTTS: true });
     if (!switched.ok) {
       showToast('已是最早AI楼层');
+    } else {
+      speakCachedSegmentOnRewind(switched.state, switched.mesId);
     }
   }
 }

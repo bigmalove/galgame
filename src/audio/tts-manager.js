@@ -17,6 +17,7 @@ import { Live2DManager } from '../live2d/manager.js';
 import { LipSyncManager } from '../live2d/lip-sync.js';
 import { hasLive2DModel } from '../db/live2d-models.js';
 import { synthesizeToBlob } from './edge-tts-direct.js';
+import { buildTtsCacheKey, getCachedTtsAudio, getCachedTtsKeys, isTtsCacheEnabled, putCachedTtsAudio } from './tts-cache.js';
 import { getAllCharacterNameKeywords, getSegmentCharacterId, resolveCharacterIdByKeywords } from '../utils/character-name-keywords.js';
 
 // 延迟引用: showToast (来自 UI 层)
@@ -178,10 +179,10 @@ export const TTSManager = {
   _gptSoVitsFetchController: null,
   _gptSoVitsAbortController: null,
   _gptSoVitsAbortSessionId: 0,
-  _gptSoVitsCurrentObjectUrl: '',
+  // 以 blob 播放时（缓存命中 / EdgeTTS / 拿到完整音频的 GPT-SoVITS、小白X）当前音频的 object URL
+  _playbackObjectUrl: '',
   _edgeDirectFetchController: null,
   _edgeDirectSocket: null,
-  _edgeDirectObjectUrl: '',
 
   _refreshProviderState() {
     const provider = getTTSProvider();
@@ -229,7 +230,7 @@ export const TTSManager = {
     this.currentAudio = null;
     this.currentSegmentId = null;
     this.hideLoadingIndicator();
-    this._revokeGptSoVitsObjectUrl();
+    this._revokePlaybackObjectUrl();
     LipSyncManager.stopSync();
   },
 
@@ -237,6 +238,8 @@ export const TTSManager = {
     this._refreshProviderState();
 
     $(topWindow).on('tts_complete tts_end', () => {
+      // 正在由插件自己播放整段音频（缓存 / synthesize）时，小白X 的事件与本次播放无关
+      if (this._playbackObjectUrl && this.currentAudio) return;
       this._onPlaybackEnded('littlewhitebox_event');
     });
   },
@@ -283,13 +286,6 @@ export const TTSManager = {
       } catch (e) {}
       this._edgeDirectSocket = null;
     }
-
-    if (this._edgeDirectObjectUrl) {
-      try {
-        URL.revokeObjectURL(this._edgeDirectObjectUrl);
-      } catch (e) {}
-      this._edgeDirectObjectUrl = '';
-    }
   },
 
   _getOrCreateGptSoVitsAbortController(playbackSessionId) {
@@ -308,13 +304,13 @@ export const TTSManager = {
     return controller ? controller.signal : null;
   },
 
-  _revokeGptSoVitsObjectUrl() {
-    const url = String(this._gptSoVitsCurrentObjectUrl || '').trim();
+  _revokePlaybackObjectUrl() {
+    const url = String(this._playbackObjectUrl || '').trim();
     if (!url) return;
     try {
       URL.revokeObjectURL(url);
     } catch (e) {}
-    this._gptSoVitsCurrentObjectUrl = '';
+    this._playbackObjectUrl = '';
   },
 
   _forceStopAudioElement(audioElement) {
@@ -372,7 +368,7 @@ export const TTSManager = {
     this.currentAudio = null;
     this.currentSegmentId = null;
     this.hideLoadingIndicator();
-    this._revokeGptSoVitsObjectUrl();
+    this._revokePlaybackObjectUrl();
     LipSyncManager.stopSync();
   },
 
@@ -1676,7 +1672,27 @@ export const TTSManager = {
     return true;
   },
 
-  async _speakWithGptSoVits(segment, segmentId, resolvedVoice, playbackSessionId = null) {
+  _resolveGptSoVitsRefAudio(resolvedVoice, cfg = getGptSoVitsConfig()) {
+    const vcfg = resolvedVoice?.gptSoVits || {};
+    const modelCfg = resolvedVoice?.gptSoVitsModel || null;
+    const refs = _safeArray(modelCfg?.refAudios);
+    const defaultRefPath = String(modelCfg?.paths?.defaultRefAudioPath || '').trim();
+    const defaultRef =
+      refs.find(item => item.path === defaultRefPath) ||
+      refs.find(item => item.id === modelCfg?.defaultRefId) ||
+      refs[0] ||
+      null;
+    const refAudioRaw = String(defaultRef?.path || defaultRefPath || vcfg.refAudioPath || '').trim();
+    return { refAudioRaw, refAudioPath: this._resolveGptSoVitsServerPath(refAudioRaw, cfg) };
+  },
+
+  /**
+   * GPT-SoVITS 朗读
+   * @param {object} [options]
+   * @param {(blob: Blob) => void} [options.onBlob] 传入时（非流式）先完整取回音频再播放，并把音频交给回调写缓存；
+   *   取不到时回退为直接把地址交给 <audio> 播放（不缓存）
+   */
+  async _speakWithGptSoVits(segment, segmentId, resolvedVoice, playbackSessionId = null, options = {}) {
     const cfg = getGptSoVitsConfig();
     const vcfg = resolvedVoice?.gptSoVits || {};
     const modelCfg = resolvedVoice?.gptSoVitsModel || null;
@@ -1687,15 +1703,7 @@ export const TTSManager = {
       return false;
     }
 
-    const refs = _safeArray(modelCfg?.refAudios);
-    const defaultRefPath = String(modelCfg?.paths?.defaultRefAudioPath || '').trim();
-    const defaultRef =
-      refs.find(item => item.path === defaultRefPath) ||
-      refs.find(item => item.id === modelCfg?.defaultRefId) ||
-      refs[0] ||
-      null;
-    const refAudioRaw = String(defaultRef?.path || defaultRefPath || vcfg.refAudioPath || '').trim();
-    const refAudioPath = this._resolveGptSoVitsServerPath(refAudioRaw, cfg);
+    const { refAudioRaw, refAudioPath } = this._resolveGptSoVitsRefAudio(resolvedVoice, cfg);
     if (!refAudioPath) {
       showToast('GPT-SoVITS: 当前音色缺少 refAudioPath');
       return false;
@@ -1732,6 +1740,25 @@ export const TTSManager = {
     if (directUrlCandidates.length === 0) {
       showToast('GPT-SoVITS: 无法生成请求 URL');
       return false;
+    }
+
+    // 流式模式下保持边合成边播放，不走整段取回
+    if (typeof options.onBlob === 'function' && !cfg.streamingMode) {
+      let blob = null;
+      try {
+        for (const directUrl of directUrlCandidates) {
+          blob = await this._fetchGptSoVitsAudioBlobFromRef(directUrl, playbackSessionId);
+          if (blob || (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId))) break;
+        }
+      } catch (e) {
+        if (e?.name === 'AbortError') return false;
+        console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 取回完整音频失败`, e);
+      }
+      // 已取回的音频即使本句已被切走也照样写缓存，回看时可直接用
+      if (blob) options.onBlob(blob);
+      if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
+      if (blob) return this._playAudioBlob(blob, segment, segmentId, playbackSessionId, 'GPT-SoVITS');
+      console.warn(`[${SCRIPT_NAME}] GPT-SoVITS: 未能取回完整音频，改为直接播放（本句不缓存）`);
     }
 
     const audioUrlCandidates = directUrlCandidates.map(url => (cfg.useCorsProxy ? this._getProxiedAudioUrl(url) : url));
@@ -1813,7 +1840,7 @@ export const TTSManager = {
     return true;
   },
 
-  async _speakWithEdgeDirect(segment, segmentId, resolvedVoice, playbackSessionId = null) {
+  async _speakWithEdgeDirect(segment, segmentId, resolvedVoice, playbackSessionId = null, options = {}) {
     const voiceName = String(resolvedVoice.value || resolvedVoice.name || '').trim();
     if (!voiceName) {
       showToast('EdgeTTS 直连：无可用音色');
@@ -1857,6 +1884,7 @@ export const TTSManager = {
       this._edgeDirectSocket = null;
     }
 
+    if (blob && blob.size > 0 && typeof options.onBlob === 'function') options.onBlob(blob);
     if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) {
       return false;
     }
@@ -1865,26 +1893,41 @@ export const TTSManager = {
       return false;
     }
 
+    return this._playAudioBlob(blob, segment, segmentId, playbackSessionId, 'EdgeTTS 直连');
+  },
+
+  /**
+   * 播放一段完整音频（缓存命中 / EdgeTTS / 整段取回的 GPT-SoVITS、小白X 共用）
+   * 播放状态、结束回调、口型同步与原有直连播放保持一致
+   * @returns {Promise<boolean>} 是否开始播放
+   */
+  async _playAudioBlob(blob, segment, segmentId, playbackSessionId = null, label = 'TTS') {
+    if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
+
+    const previousAudio = this.currentAudio;
+    this._revokePlaybackObjectUrl();
     const objectUrl = URL.createObjectURL(blob);
-    this._edgeDirectObjectUrl = objectUrl;
+    this._playbackObjectUrl = objectUrl;
 
     const audio = new Audio();
-    audio.crossOrigin = 'anonymous';
     audio.src = objectUrl;
 
     this.currentAudio = audio;
     this.currentSegmentId = segmentId;
+    if (previousAudio && previousAudio !== audio) {
+      try { previousAudio.pause(); } catch (e) {}
+    }
 
     const onEnded = () => {
       if (this.currentAudio === audio) {
-        this._onPlaybackEnded('edge_direct_audio_ended');
+        this._onPlaybackEnded(`${label}_audio_ended`);
       }
     };
     const onError = err => {
       // 切到下一句 / 停止播放时会先回收这段 blob URL，元素随之报错，并非播放失败
-      if (this.currentAudio !== audio || this._edgeDirectObjectUrl !== objectUrl) return;
-      console.warn(`[${SCRIPT_NAME}] EdgeTTS 直连播放失败:`, err);
-      showToast('EdgeTTS 直连播放失败，可切换 Edge 浏览器复测');
+      if (this.currentAudio !== audio || this._playbackObjectUrl !== objectUrl) return;
+      console.warn(`[${SCRIPT_NAME}] ${label} 播放失败:`, err);
+      showToast(`${label} 播放失败`);
       onEnded();
     };
 
@@ -1895,8 +1938,9 @@ export const TTSManager = {
       if (Number(playbackSessionId) > 0 && !this._isPlaybackSessionActive(playbackSessionId)) return false;
       await audio.play();
     } catch (e) {
-      console.warn(`[${SCRIPT_NAME}] EdgeTTS 直连 play() 失败:`, e);
-      showToast('EdgeTTS 播放被浏览器拦截，请先进行一次页面交互');
+      if (this.currentAudio !== audio) return false;
+      console.warn(`[${SCRIPT_NAME}] ${label} play() 失败:`, e);
+      showToast(`${label} 播放被浏览器拦截，请先进行一次页面交互`);
       onEnded();
       return false;
     }
@@ -1912,7 +1956,7 @@ export const TTSManager = {
 
     this.isPlaying = true;
 
-    if (segment.speaker) {
+    if (segment?.speaker) {
       const resolvedSpeakerId = resolveTTSCharacterId(getSegmentCharacterId(segment));
       const hasLive2D = Live2DManager.models.has(resolvedSpeakerId);
       if (hasLive2D) this._startLipSyncOnPlay(resolvedSpeakerId);
@@ -2084,39 +2128,14 @@ export const TTSManager = {
     audioElement.addEventListener('pause', onEnd, { once: true });
   },
 
-  async speak(segment, segmentId) {
-    if (!segment || segment.type !== 'dialogue') {
-      if (segment && segment.type === 'narration') {
-        console.log(`[${SCRIPT_NAME}] TTS: 跳过旁白 - ${segment.text.substring(0, 30)}...`);
-      }
-      return;
-    }
-    const speakText = getSegmentSpeakText(segment);
-    if (!speakText) return;
-
-    // 每角色 TTS 开关：被禁用的角色直接跳过（在打断当前播放的副作用之前）
-    const gateSpeaker = getSegmentCharacterId(segment);
-    if (gateSpeaker && !getCharacterTTSEnabled(resolveTTSCharacterId(gateSpeaker))) {
-      console.log(`[${SCRIPT_NAME}] TTS: 角色已禁用配音，跳过 - ${gateSpeaker}`);
-      return;
-    }
-
-    const normalizedSegmentId = String(segmentId || '');
-    if ((this.isLoading || this.isPlaying) && normalizedSegmentId && this.currentSegmentId === normalizedSegmentId) {
-      return;
-    }
-
-    const playbackSessionId = Number(this._activePlaybackSessionId || 0) + 1;
-    this._activePlaybackSessionId = playbackSessionId;
-    this._abortGptSoVitsFetch('new-speak');
-    this._cleanupEdgeDirectResources();
-
+  /**
+   * 解析段落要用的音色
+   * @param {object} segment
+   * @param {{ allowAutoBind?: boolean }} [options] allowAutoBind=false 时不做随机分配 / 自动绑定，
+   *   未绑定角色的「男声 / 女声」结果不确定，直接返回 null（用于只查缓存、不朗读的场景）
+   */
+  async _resolveSegmentVoice(segment, { allowAutoBind = true } = {}) {
     const provider = getTTSProvider();
-    if (provider !== this.provider || !this.enabled) {
-      this._refreshProviderState();
-    }
-    if (!this.enabled) return;
-
     const settings = getSettings();
     const ttsConfig = segment.tts || {};
     const speakerName = getSegmentCharacterId(segment);
@@ -2139,6 +2158,7 @@ export const TTSManager = {
         console.warn(`[${SCRIPT_NAME}] TTS: 获取当前引擎音色列表失败，跳过性别候选过滤`, e);
       }
       const filteredVoicePool = _filterVoicePoolByProvider(voicePool, providerVoices);
+      if (!allowAutoBind && _normalizeVoiceNameList(filteredVoicePool).length > 0) return null;
       voiceName = _pickRandomVoiceName(filteredVoicePool);
 
       if (!voiceName && _normalizeVoiceNameList(voicePool).length > 0) {
@@ -2164,10 +2184,151 @@ export const TTSManager = {
       voiceName = provider === TTS_PROVIDER.GPT_SOVITS_V2 ? (resolvedSpeakerName || speakerName) : '桃夭';
     }
     if (!voiceName) voiceName = '桃夭';
-    const context = ttsConfig.context || '';
 
     const resolvedVoice = await resolveVoiceByName(voiceName);
+    return {
+      provider,
+      voiceName,
+      resolvedVoice,
+      context: ttsConfig.context || '',
+      speakerName,
+      resolvedSpeakerName,
+    };
+  },
+
+  /**
+   * 缓存键：只纳入影响合成结果的参数。返回空串表示本句不走缓存
+   * （缓存关闭 / GPT-SoVITS 流式模式 / 小白X 没有 synthesize 接口）
+   */
+  _buildSegmentCacheKey(segment, voiceInfo) {
+    if (!isTtsCacheEnabled() || !voiceInfo?.resolvedVoice) return '';
+    const { provider, resolvedVoice, context } = voiceInfo;
+    const speakText = getSegmentSpeakText(segment);
+    if (!speakText) return '';
+
+    if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
+      const cfg = getGptSoVitsConfig();
+      if (cfg.streamingMode) return '';
+      const vcfg = resolvedVoice.gptSoVits || {};
+      const modelPaths = _safeObject(resolvedVoice.gptSoVitsModel?.paths);
+      const { refAudioPath } = this._resolveGptSoVitsRefAudio(resolvedVoice, cfg);
+      if (!refAudioPath) return '';
+      const requestUrl = this._buildGptSoVitsTtsUrl(speakText, {
+        ...resolvedVoice,
+        gptSoVits: { ...vcfg, refAudioPath },
+      });
+      if (!requestUrl) return '';
+      return buildTtsCacheKey([
+        provider,
+        requestUrl,
+        String(vcfg.gptWeightsPath || modelPaths.gptWeightsPath || '').trim(),
+        String(vcfg.sovitsWeightsPath || modelPaths.sovitsWeightsPath || '').trim(),
+      ]);
+    }
+
+    if (provider === TTS_PROVIDER.EDGE_TTS_DIRECT) {
+      const voiceValue = String(resolvedVoice.value || resolvedVoice.name || '').trim();
+      return voiceValue ? buildTtsCacheKey([provider, voiceValue, speakText]) : '';
+    }
+
+    if (typeof this.xiaobaixTts?.synthesize !== 'function') return '';
+    const speakerValue = String(resolvedVoice.value || '').trim();
+    if (!speakerValue) return '';
+    return buildTtsCacheKey([provider, speakerValue, inferResourceId(speakerValue), context, speakText]);
+  },
+
+  _canSpeakSegment(segment) {
+    if (!segment || segment.type !== 'dialogue' || !getSegmentSpeakText(segment)) return false;
+    const gateSpeaker = getSegmentCharacterId(segment);
+    return !(gateSpeaker && !getCharacterTTSEnabled(resolveTTSCharacterId(gateSpeaker)));
+  },
+
+  /**
+   * 批量查询段落语音是否已缓存（对话记录面板用；不朗读、不触发音色自动绑定）
+   * @param {object[]} segments
+   * @returns {Promise<Array<boolean|null>>} true=已缓存，false=未缓存，null=该段不朗读
+   */
+  async getSegmentsCacheState(segments) {
+    const list = Array.isArray(segments) ? segments : [];
+    if (getTTSProvider() !== this.provider || !this.enabled) this._refreshProviderState();
+    // 逐段串行：音色列表首次获取可能要请求接口，并发会重复请求
+    const keys = [];
+    for (const segment of list) {
+      if (!this.enabled || !this._canSpeakSegment(segment)) {
+        keys.push(null);
+        continue;
+      }
+      try {
+        const voiceInfo = await this._resolveSegmentVoice(segment, { allowAutoBind: false });
+        keys.push(this._buildSegmentCacheKey(segment, voiceInfo));
+      } catch (e) {
+        keys.push('');
+      }
+    }
+    const cached = await getCachedTtsKeys(keys.filter(Boolean));
+    return keys.map(key => (key === null ? null : !!key && cached.has(key)));
+  },
+
+  /**
+   * 重播某一段：先停掉当前播放；正在播放的就是这一段时视为「停止」
+   * @returns {Promise<boolean>} 是否发起了播放
+   */
+  async replaySegment(segment, segmentId) {
+    const normalizedSegmentId = String(segmentId || '');
+    const isSame = !!normalizedSegmentId && this.currentSegmentId === normalizedSegmentId;
+    if (isSame && (this.isPlaying || this.isLoading)) {
+      this.stop();
+      return false;
+    }
+    this.stop();
+    await this.speak(segment, segmentId);
+    return true;
+  },
+
+  /**
+   * @param {object} segment
+   * @param {string} segmentId
+   * @param {{ cacheOnly?: boolean }} [options] cacheOnly：只播放已缓存的语音，未命中直接返回（倒退回看用）
+   */
+  async speak(segment, segmentId, options = {}) {
+    const { cacheOnly = false } = options;
+    if (!segment || segment.type !== 'dialogue') {
+      if (segment && segment.type === 'narration') {
+        console.log(`[${SCRIPT_NAME}] TTS: 跳过旁白 - ${segment.text.substring(0, 30)}...`);
+      }
+      return;
+    }
+    const speakText = getSegmentSpeakText(segment);
+    if (!speakText) return;
+
+    // 每角色 TTS 开关：被禁用的角色直接跳过（在打断当前播放的副作用之前）
+    if (!this._canSpeakSegment(segment)) {
+      console.log(`[${SCRIPT_NAME}] TTS: 角色已禁用配音，跳过 - ${getSegmentCharacterId(segment)}`);
+      return;
+    }
+
+    const normalizedSegmentId = String(segmentId || '');
+    if ((this.isLoading || this.isPlaying) && normalizedSegmentId && this.currentSegmentId === normalizedSegmentId) {
+      return;
+    }
+
+    const playbackSessionId = Number(this._activePlaybackSessionId || 0) + 1;
+    this._activePlaybackSessionId = playbackSessionId;
+    this._abortGptSoVitsFetch('new-speak');
+    this._cleanupEdgeDirectResources();
+
+    const provider = getTTSProvider();
+    if (provider !== this.provider || !this.enabled) {
+      this._refreshProviderState();
+    }
+    if (!this.enabled) return;
+
+    const voiceInfo = await this._resolveSegmentVoice(segment, { allowAutoBind: !cacheOnly });
+    if (!this._isPlaybackSessionActive(playbackSessionId)) return;
+    if (!voiceInfo) return;
+    const { voiceName, resolvedVoice, context, speakerName, resolvedSpeakerName } = voiceInfo;
     if (!resolvedVoice) {
+      if (cacheOnly) return;
       console.error(`[${SCRIPT_NAME}] TTS播放失败: 无法解析音色 "${voiceName}" (provider=${provider})`);
       if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
         if (_showToastRef) _showToastRef('GPT-SoVITS: 请先在设置中配置音色列表');
@@ -2175,23 +2336,38 @@ export const TTSManager = {
       return;
     }
 
+    const cacheKey = this._buildSegmentCacheKey(segment, voiceInfo);
+    const cachedBlob = cacheKey ? await getCachedTtsAudio(cacheKey) : null;
+    if (!this._isPlaybackSessionActive(playbackSessionId)) return;
+    if (!cachedBlob && cacheOnly) return;
+
     console.log(
-      `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, context=${context || '无'}, text=${speakText.substring(0, 30)}...`,
+      `[${SCRIPT_NAME}] TTS播放: provider=${provider}, voiceName=${voiceName}, context=${context || '无'}, cache=${cachedBlob ? 'hit' : cacheKey ? 'miss' : 'off'}, text=${speakText.substring(0, 30)}...`,
     );
 
     this.isLoading = true;
     if (normalizedSegmentId) this.currentSegmentId = normalizedSegmentId;
     this.showLoadingIndicator();
 
+    const onBlob = cacheKey
+      ? blob => {
+        void putCachedTtsAudio(cacheKey, blob, { provider, text: speakText });
+      }
+      : null;
+
     try {
       await this._waitForModelReadyBeforeTTS(resolvedSpeakerName || speakerName);
 
+      if (cachedBlob) {
+        await this._playAudioBlob(cachedBlob, segment, segmentId, playbackSessionId, '语音缓存');
+        return;
+      }
       if (provider === TTS_PROVIDER.GPT_SOVITS_V2) {
-        await this._speakWithGptSoVits(segment, segmentId, resolvedVoice, playbackSessionId);
+        await this._speakWithGptSoVits(segment, segmentId, resolvedVoice, playbackSessionId, { onBlob });
         return;
       }
       if (provider === TTS_PROVIDER.EDGE_TTS_DIRECT) {
-        await this._speakWithEdgeDirect(segment, segmentId, resolvedVoice, playbackSessionId);
+        await this._speakWithEdgeDirect(segment, segmentId, resolvedVoice, playbackSessionId, { onBlob });
         return;
       }
 
@@ -2199,13 +2375,32 @@ export const TTSManager = {
       const resourceId = inferResourceId(speakerValue);
       const live2DSpeakerId = resolvedSpeakerName || speakerName;
       const hasLive2D = Live2DManager.models.has(live2DSpeakerId);
+      const xiaobaixOptions = {
+        speaker: speakerValue,
+        resourceId: resourceId,
+        contextTexts: context ? [context] : [],
+      };
+
+      // 开启缓存时先用 synthesize 拿到完整音频自己播放；接口缺失或失败则回退到小白X 自己朗读（本句不缓存）
+      if (onBlob && typeof this.xiaobaixTts?.synthesize === 'function') {
+        let blob = null;
+        try {
+          blob = await this.xiaobaixTts.synthesize(speakText, xiaobaixOptions);
+        } catch (e) {
+          console.warn(`[${SCRIPT_NAME}] TTS: 小白X synthesize 失败，回退为直接朗读`, e);
+        }
+        const hasBlob = !!blob && typeof blob.size === 'number' && blob.size > 0;
+        // 合成无法中途取消：本句已被切走时音频照样写缓存，只是不再播放
+        if (hasBlob) onBlob(blob);
+        if (!this._isPlaybackSessionActive(playbackSessionId)) return;
+        if (hasBlob) {
+          await this._playAudioBlob(blob, segment, segmentId, playbackSessionId, '小白X');
+          return;
+        }
+      }
 
       if (this.xiaobaixTts && typeof this.xiaobaixTts.speak === 'function') {
-        await this.xiaobaixTts.speak(speakText, {
-          speaker: speakerValue,
-          resourceId: resourceId,
-          contextTexts: context ? [context] : [],
-        });
+        await this.xiaobaixTts.speak(speakText, xiaobaixOptions);
         this.isPlaying = true;
         this.currentSegmentId = segmentId;
         console.log(`[${SCRIPT_NAME}] TTS: 检查口型同步 - hasLive2D=${hasLive2D}, speaker=${segment.speaker}`);
@@ -2220,9 +2415,7 @@ export const TTSManager = {
       if (this.littleWhiteBox && typeof this.littleWhiteBox.callGenerate === 'function') {
         await this.littleWhiteBox.callGenerate({
           message: speakText,
-          speaker: speakerValue,
-          resourceId: resourceId,
-          contextTexts: context ? [context] : [],
+          ...xiaobaixOptions,
         });
         this.isPlaying = true;
         this.currentSegmentId = segmentId;

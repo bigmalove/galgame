@@ -1,6 +1,7 @@
 import { BGMManager } from '../audio/bgm-manager.js';
 import { TTS_PROVIDER, getGptSoVitsVoiceList, getTTSEnabled, getTTSProvider, getTTSVoiceListAsync, normalizeGptSoVitsVoicesForStore, pickFirstUsableGptSoVitsVoice, setTTSEnabled } from '../audio/tts-config.js';
 import { TTSManager } from '../audio/tts-manager.js';
+import { clearTtsAudioCache, getTtsAudioCacheStats, normalizeTtsCacheLimitMB, pruneTtsAudioCache } from '../audio/tts-cache.js';
 import { ANCIENT_QINGLV_SKIN_ID, ANCIENT_SKIN_ID, CUSTOM_SKIN_ID, CYBERPOP_DARK_SKIN_ID, CYBERPOP_SKIN_ID, DEFAULT_DARK_SKIN_ID, DEFAULT_SOFT_SKIN_ID, JRPG_DAWN_SKIN_ID, JRPG_SKIN_ID, PERSONA_SKIN_ID, PERSONA_VELVET_SKIN_ID, SCRIPT_NAME, SHUJIAN_NIGHT_SKIN_ID, SHUJIAN_SKIN_ID, THEME, YANYUN_SKIN_ID, YANYUN_XUEJI_SKIN_ID } from '../core/constants.js';
 import { setGlobalDebugEnabled } from '../core/debug.js';
 import { $, topWindow } from '../core/env.js';
@@ -1015,6 +1016,22 @@ export async function showSettingsPanel(topTab, subTab) {
               <span class="gal-settings-label">自动播放 <small style="color: var(--gal-text-3, #999);">(切段自动朗读)</small></span>
               <label class="gal-switch"><input type="checkbox" id="gal-tts-autoplay" ${settings.ttsAutoPlay ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">语音缓存</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-cache-enabled" ${settings.ttsAudioCacheEnabled !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">倒退时播放已缓存语音</span>
+              <label class="gal-switch"><input type="checkbox" id="gal-tts-replay-on-rewind" ${settings.ttsReplayCachedOnRewind !== false ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
+            </div>
+            <div class="gal-settings-row">
+              <span class="gal-settings-label">缓存上限 <small style="color: var(--gal-text-3, #999);">(MB)</small></span>
+              <div class="gal-settings-control">
+                <input type="number" id="gal-tts-cache-limit" class="gal-input" min="20" max="2048" step="10" value="${normalizeTtsCacheLimitMB(settings.ttsAudioCacheLimitMB)}" style="flex: 0 0 100px;">
+                <button class="gal-panel-btn secondary" id="gal-tts-cache-clear" style="flex: 0 0 auto; padding: 6px 12px;"><i class="fa-solid fa-trash-can"></i><span>清空</span></button>
+              </div>
+            </div>
+            <p class="gal-hint">合成过的台词会存到本地，点名牌旁的喇叭、剧情回顾的「对话记录」、倒退回看时直接播放，不再重复请求合成。<span id="gal-tts-cache-stats"></span><br>GPT-SoVITS 开启流式模式时不缓存；关闭缓存后小白X 恢复为由它自己朗读。</p>
             <div class="gal-settings-row">
               <span class="gal-settings-label">中日双语模式</span>
               <label class="gal-switch"><input type="checkbox" id="gal-tts-bilingual-zh-ja-enabled" ${settings.ttsBilingualZhJaEnabled ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
@@ -2136,6 +2153,30 @@ export async function showSettingsPanel(topTab, subTab) {
     injectCOTToWorldbook().then(() => showToast('TTS引擎已切换，COT已更新')).catch(() => showToast('TTS引擎已切换'));
   });
   $('#gal-tts-autoplay').on('change', function () { settings.ttsAutoPlay = $(this).is(':checked'); saveSettings(); });
+  const refreshTtsCacheStats = async () => {
+    const { count, bytes } = await getTtsAudioCacheStats();
+    $('#gal-tts-cache-stats').text(`当前已缓存 ${count} 句，约 ${(bytes / 1024 / 1024).toFixed(1)} MB。`);
+  };
+  void refreshTtsCacheStats();
+  $('#gal-tts-cache-enabled').on('change', function () { settings.ttsAudioCacheEnabled = $(this).is(':checked'); saveSettings(); });
+  $('#gal-tts-replay-on-rewind').on('change', function () { settings.ttsReplayCachedOnRewind = $(this).is(':checked'); saveSettings(); });
+  $('#gal-tts-cache-limit').on('change', async function () {
+    settings.ttsAudioCacheLimitMB = normalizeTtsCacheLimitMB($(this).val());
+    $(this).val(settings.ttsAudioCacheLimitMB);
+    saveSettings();
+    await pruneTtsAudioCache();
+    await refreshTtsCacheStats();
+  });
+  $('#gal-tts-cache-clear').on('click', async function () {
+    try {
+      await clearTtsAudioCache();
+      showToast('语音缓存已清空');
+    } catch (e) {
+      console.warn(`[${SCRIPT_NAME}] 清空语音缓存失败`, e);
+      showToast('清空语音缓存失败');
+    }
+    await refreshTtsCacheStats();
+  });
   $('#gal-tts-bilingual-zh-ja-enabled').on('change', function () {
     settings.ttsBilingualZhJaEnabled = $(this).is(':checked');
     saveSettings();

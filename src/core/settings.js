@@ -191,6 +191,11 @@ export const DEFAULT_SETTINGS = {
   // TTS 设置
   ttsEnabled: true,
   ttsAutoPlay: true,
+  // 语音缓存：合成过的台词存本地，重播 / 回看时不再请求合成
+  ttsAudioCacheEnabled: true,
+  ttsAudioCacheLimitMB: 200,
+  // 倒退回看时自动播放已缓存的语音（不会触发新的合成）
+  ttsReplayCachedOnRewind: true,
   ttsBilingualZhJaEnabled: false,
   situationalStyleEnabled: true,
   ttsDefaultSpeaker: '',

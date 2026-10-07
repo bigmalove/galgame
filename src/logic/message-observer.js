@@ -4,6 +4,7 @@ import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
+import { getIsGeneratingResponse } from './generation-state.js';
 
 // ============================================
 // 消息监听器
@@ -11,6 +12,8 @@ import { getIsEnabled } from '../core/state.js';
 
 const messageContentDebounceTimers = new Map();
 const MESSAGE_OBSERVER_BOUND_FLAG = '__galgame_message_observer_bound__';
+const CONTENT_DEBOUNCE_MS = 200;
+const CONTENT_MAX_WAIT_MS = 500;
 
 // 延迟引用: processNewMessage, injectGalgameButton
 let _processNewMessageRef = null;
@@ -106,29 +109,31 @@ function setupMessageContentObserver(mesNode) {
   if (mesNode.hasAttribute('data-gal-observer')) return;
   mesNode.setAttribute('data-gal-observer', 'true');
 
-  let rafId = null;
   let debounceTimer = null;
+  // 本轮变化中第一次未处理变化的时间：流式输出时变化持续不断，纯防抖会一直被推迟到生成结束，需设上限
+  let pendingSince = 0;
 
+  // 不用 requestAnimationFrame 合并：脚本运行在酒馆助手的隐藏 iframe 中，Firefox 不会触发其中的 rAF，
+  // 回调永不执行会让监听永久失效（流式期间界面不刷新）
   const contentObserver = new MutationObserver(() => {
-    if (rafId) return;
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
 
-    rafId = requestAnimationFrame(() => {
-      rafId = null;
+    const now = Date.now();
+    if (!pendingSince) pendingSince = now;
+    const delay = Math.max(0, Math.min(CONTENT_DEBOUNCE_MS, pendingSince + CONTENT_MAX_WAIT_MS - now));
 
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      pendingSince = 0;
+      messageContentDebounceTimers.delete(mesId);
+      if (getIsEnabled() && _processNewMessageRef) {
+        _processNewMessageRef(mesNode, { keepPresentedSegment: true, streaming: getIsGeneratingResponse() });
       }
+    }, delay);
 
-      debounceTimer = setTimeout(() => {
-        debounceTimer = null;
-        messageContentDebounceTimers.delete(mesId);
-        if (getIsEnabled() && _processNewMessageRef) {
-          _processNewMessageRef(mesNode);
-        }
-      }, 200);
-
-      messageContentDebounceTimers.set(mesId, debounceTimer);
-    });
+    messageContentDebounceTimers.set(mesId, debounceTimer);
   });
   contentObserver.observe(mesText, {
     childList: true,

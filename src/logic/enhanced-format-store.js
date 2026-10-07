@@ -13,23 +13,51 @@ import { getTavernContext } from '../core/env.js';
 // 记录携带原文指纹：消息被编辑 / 续写，或开新 swipe 时酒馆把上一页的 extra 原样带过来，指纹不匹配即视为失效。
 
 const EXTRA_KEY = 'galgame_enhanced_format';
-const RECORD_VERSION = 1;
+// v2：指纹忽略 st-chatu8（智绘姬）写入正文的生图块与空白差异；v1 记录仍按旧指纹校验
+const RECORD_VERSION = 2;
+
+// st-chatu8 开启「插入原文」时会在出图后改写 mes：删掉全部 image###提示词### 与旧 <image> 块，
+// 再在匹配位置插入 "\n\n<image>…</image>"（且不触发 MESSAGE_EDITED）。这些都不算正文变化。
+const RE_CHATU8_IMAGE_BLOCK = /<image>[\s\S]*?<\/image>/gi;
+const RE_CHATU8_PROMPT_MARKER = /image[ \t]*###[\s\S]*?###/gi;
 
 // 第二次生成流式输出期间的草稿（只存在内存，不落盘）
 let streamingDraft = null;
 
-function normalizeSourceText(text) {
-  return String(text ?? '').replace(/\r\n?/g, '\n').trim();
+/**
+ * 剥离 st-chatu8 写入正文的生图块 / 提示词标记（第二次生成的输入与原文指纹都用剥离后的文本）
+ */
+export function stripChatu8ImageMarkup(text) {
+  return String(text ?? '')
+    .replace(RE_CHATU8_IMAGE_BLOCK, '')
+    .replace(RE_CHATU8_PROMPT_MARKER, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
-export function hashSourceText(text) {
-  const source = normalizeSourceText(text);
+function fnv1a(source) {
   let hash = 2166136261;
   for (let i = 0; i < source.length; i++) {
     hash ^= source.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
   return `${source.length}_${(hash >>> 0).toString(36)}`;
+}
+
+export function hashSourceText(text) {
+  // 空白统一折叠：st-chatu8 插图 / 删标记会增减换行，不应使格式化结果失效
+  return fnv1a(stripChatu8ImageMarkup(text).replace(/\s+/g, ' '));
+}
+
+// v1 记录的指纹算法（仅统一换行 + trim），用于兼容升级前保存的格式化结果
+function hashSourceTextV1(text) {
+  return fnv1a(String(text ?? '').replace(/\r\n?/g, '\n').trim());
+}
+
+function matchesSourceText(record, text) {
+  if (record.sourceHash === hashSourceText(text)) return true;
+  return !(record.version >= 2) && record.sourceHash === hashSourceTextV1(text);
 }
 
 function getRawChatMessage(ctx, mesId) {
@@ -49,12 +77,12 @@ function getSwipeText(message, swipeId) {
   return String(message.swipes?.[swipeId] ?? '');
 }
 
-function isValidRecord(record, sourceHash) {
+function isValidRecord(record, sourceText) {
   return !!record
     && typeof record === 'object'
     && typeof record.formatted === 'string'
     && record.formatted.length > 0
-    && record.sourceHash === sourceHash;
+    && matchesSourceText(record, sourceText);
 }
 
 function collectRecordCandidates(message, swipeId) {
@@ -69,7 +97,7 @@ function collectRecordCandidates(message, swipeId) {
 }
 
 /**
- * 读取某楼层当前 swipe 的原文快照（加强模式第二次生成的输入）
+ * 读取某楼层当前 swipe 的原文快照（加强模式第二次生成的输入，已剥离智绘姬生图标记）
  * @returns {{ mesId: number, swipeId: number, chatId: string, text: string, sourceHash: string, role: 'user' | 'system' | 'assistant' } | null}
  */
 export function getMessageSourceSnapshot(mesId) {
@@ -77,7 +105,7 @@ export function getMessageSourceSnapshot(mesId) {
   const message = getRawChatMessage(ctx, mesId);
   if (!message) return null;
   const swipeId = getCurrentSwipeId(message);
-  const text = getSwipeText(message, swipeId);
+  const text = stripChatu8ImageMarkup(getSwipeText(message, swipeId));
   return {
     mesId: Number.parseInt(String(mesId), 10),
     swipeId,
@@ -95,8 +123,8 @@ export function getEnhancedFormatRecord(mesId) {
   const message = getRawChatMessage(getTavernContext(), mesId);
   if (!message || message.is_user) return null;
   const swipeId = getCurrentSwipeId(message);
-  const sourceHash = hashSourceText(getSwipeText(message, swipeId));
-  return collectRecordCandidates(message, swipeId).find(record => isValidRecord(record, sourceHash)) || null;
+  const sourceText = getSwipeText(message, swipeId);
+  return collectRecordCandidates(message, swipeId).find(record => isValidRecord(record, sourceText)) || null;
 }
 
 /**
@@ -106,9 +134,9 @@ export function hasStaleEnhancedFormatRecord(mesId) {
   const message = getRawChatMessage(getTavernContext(), mesId);
   if (!message || message.is_user) return false;
   const swipeId = getCurrentSwipeId(message);
-  const sourceHash = hashSourceText(getSwipeText(message, swipeId));
+  const sourceText = getSwipeText(message, swipeId);
   const candidates = collectRecordCandidates(message, swipeId).filter(record => record && typeof record === 'object');
-  return candidates.length > 0 && !candidates.some(record => isValidRecord(record, sourceHash));
+  return candidates.length > 0 && !candidates.some(record => isValidRecord(record, sourceText));
 }
 
 /**

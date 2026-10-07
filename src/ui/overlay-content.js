@@ -7,6 +7,7 @@ import { GalgameStore } from '../core/store.js';
 import { setBackgroundWithTransition } from '../db/image-packs.js';
 import { applyPixiEffectOps, clearAllPixiEffects, mountPixiEffects, syncPixiEffectsSettings } from '../effects/pixi-effect-manager.js';
 import { Live2DPreloadManager } from '../live2d/preload.js';
+import { getEnhancedFormattedText } from '../logic/enhanced-format-store.js';
 import { checkSillyTavernGenerating, getIsGeneratingResponse, resetGenerationState } from '../logic/generation-state.js';
 import { RE_GAL_TAGS, getMeasuredLayoutSignature, getMeasuredSegLength, parseGalgameContent, setMeasuredSegLength } from '../logic/parser.js';
 import { SpriteManager } from '../sprite/sprite-manager.js';
@@ -17,7 +18,7 @@ import { stopNextBtnAnimation, updateNextBtnForGeneratingState } from './next-bt
 import { ensureGlobalOverlay, getCurrentDisplayMesId, hideGeneratingIndicator, nextOverlayRenderToken, setCurrentDisplayMesId, showGlobalOverlay } from './overlay.js';
 import { hideStyledStage, showStyledStage } from './styled-fx.js';
 import { showToast } from './toast.js';
-import { cancelTypewriter, renderTypewriterText } from './typewriter.js';
+import { cancelTypewriter, getActiveTypewriterProgress, renderTypewriterText } from './typewriter.js';
 import { setSpeakerBadge } from '../stage/choreography.js';
 import { shakeStage } from '../stage/camera.js';
 
@@ -55,12 +56,39 @@ function isCgAsBackgroundEnabled() {
 
 // CG 直接铺到背景层（cgAsBackground 开启时）
 function applyCgToBackground($overlay, cgSrc) {
+  // 已经铺着同一张 CG（翻到 CG 之后的段落 / 重绘）时不再闪白重放
   const $bgLayer = $overlay.find('.gal-layer-bg');
+  if (
+    SpriteManager.currentCgBackground === cgSrc
+    && SpriteManager.currentScene === null
+    && $bgLayer.data('galCgSrc') === cgSrc
+  ) return;
+  $bgLayer.data('galCgSrc', cgSrc);
   $bgLayer.addClass('has-bg').removeClass('generating-bg');
   // CG 揭示：闪白 + 推远聚焦
   setBackgroundWithTransition($bgLayer, cgSrc, { transition: 'flash' });
   // 背景层被 CG 覆写，清掉场景缓存，离开 CG 段后场景背景才能重新应用
   SpriteManager.currentScene = null;
+  SpriteManager.currentCgBackground = cgSrc;
+}
+
+// CG 当背景时，CG 之后的段落在出现新背景前继续沿用这张 CG：
+// 从当前段往前找，遇到背景切换指令或场景变化就停止；返回应沿用的 CG 地址
+function findLingeringCgBackground(segments, index, mesId) {
+  if (!isCgAsBackgroundEnabled() || !Array.isArray(segments)) return null;
+  const currentScene = segments[index]?.backgroundScene || null;
+  for (let i = index; i >= 0; i--) {
+    const segment = segments[i];
+    if (!segment) continue;
+    if (segment.type === 'cg') {
+      const cgSrc = getCapturedCgImage(mesId, segment.cgIndex);
+      if (cgSrc) return cgSrc;
+      continue;
+    }
+    if (Array.isArray(segment.backgroundCommands) && segment.backgroundCommands.length > 0) return null;
+    if (currentScene && segment.backgroundScene && segment.backgroundScene !== currentScene) return null;
+  }
+  return null;
 }
 
 // 渲染 CG 段的对话框内容；返回是否已把 CG 应用为背景
@@ -71,6 +99,8 @@ function renderCgSegment($overlay, cgSrc) {
   }
   if (isCgAsBackgroundEnabled()) {
     $overlay.find('.gal-dialog-text').text('');
+    // 与情境样式演出同一套展示：收起对话框壳与立绘，只留底栏按钮，点击空白处继续
+    setStyledPresentationMode($overlay, true);
     applyCgToBackground($overlay, cgSrc);
     return true;
   }
@@ -358,6 +388,88 @@ function setStyledPresentationMode($overlay, enabled) {
   $overlay.toggleClass('gal-mode-styled', !!enabled);
 }
 
+// ---- 已上屏段落追踪 ----
+// 流式输出期间楼层每次变化都会重走 processNewMessage → updateGlobalOverlayContent。若每次都整段重绘，
+// 当前段的打字机会从头重放；而打字中点 NEXT 只会补完文字，紧接着下一次刷新又重放，读者就一直卡在这一段直到生成结束。
+// 记录最近一次上屏的段落，内容没变时跳过重绘（对话框 DOM 被重建时元素引用不同，自然失效）
+let presentedSegment = null; // { mesId, key, baseKey, text, dialogEl }
+
+// 除正文外的段落身份（说话人、表情、背景、指令等）
+function getSegmentBaseKey(segment) {
+  if (!segment) return '';
+  return JSON.stringify([
+    segment.type, segment.speaker, segment.expression, segment.backgroundScene, segment.cgIndex,
+    segment.styleType, segment.styledTitle, segment.styledFrom, segment.styledTo, segment.styledDate, segment.styledLines,
+    segment.spriteCommands, segment.backgroundCommands, segment.effectOps,
+  ]);
+}
+
+function getSegmentPresentKey(segment) {
+  return segment ? `${getSegmentBaseKey(segment)}\n${segment.text}` : '';
+}
+
+function markSegmentPresented($overlay, mesId, segment) {
+  const dialogEl = $overlay.find('.gal-dialog-text')[0];
+  presentedSegment = dialogEl && segment
+    ? { mesId: String(mesId), key: getSegmentPresentKey(segment), baseKey: getSegmentBaseKey(segment), text: String(segment.text || ''), dialogEl }
+    : null;
+}
+
+function isPresentedOn($overlay, mesId) {
+  return !!presentedSegment
+    && presentedSegment.mesId === String(mesId)
+    && presentedSegment.dialogEl.isConnected
+    && presentedSegment.dialogEl === $overlay.find('.gal-dialog-text')[0];
+}
+
+function isSegmentPresented($overlay, mesId, segment) {
+  return !!segment && isPresentedOn($overlay, mesId) && presentedSegment.key === getSegmentPresentKey(segment);
+}
+
+// 流式输出时分页会把新写完的短段落并进最后一页：同一页只是末尾追加了文字。
+// 返回已显示的字数（从这里接着打）；不是这种情况返回 -1
+function getPresentedTextExtension($overlay, mesId, segment) {
+  if (!segment || (segment.type !== 'narration' && segment.type !== 'dialogue')) return -1;
+  if (!isPresentedOn($overlay, mesId) || presentedSegment.baseKey !== getSegmentBaseKey(segment)) return -1;
+  const oldText = presentedSegment.text;
+  const newText = String(segment.text || '');
+  if (!oldText || newText.length <= oldText.length || !newText.startsWith(oldText)) return -1;
+  const progress = getActiveTypewriterProgress(presentedSegment.dialogEl);
+  // 与打字机的逐字结构一致：按码点计数，换行不占字
+  const shownChars = Array.from(oldText).filter(ch => ch !== '\n').length;
+  return progress === null ? shownChars : Math.min(progress, shownChars);
+}
+
+// 对话框被其他逻辑直接改写（兜底覆盖层等）后调用，确保下次渲染不会被跳过
+export function invalidatePresentedSegment() {
+  presentedSegment = null;
+}
+
+function syncProgressAndNextBtn($overlay, segments, currentIndex) {
+  const total = segments.length;
+  const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
+  $overlay.find('.gal-progress-bar').css('width', `${progressPercent}%`);
+
+  const $nextBtn = $overlay.find('[data-action="next"]');
+  const hasNextSegment = !!segments[currentIndex + 1];
+  console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - hasNextSegment=${hasNextSegment}, isGeneratingResponse=${getIsGeneratingResponse()}`);
+
+  if (!hasNextSegment) {
+    if (getIsGeneratingResponse()) {
+      console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 启动动画`);
+      updateNextBtnForGeneratingState();
+    } else {
+      console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 显示END`);
+      stopNextBtnAnimation();
+      $nextBtn.html('END <i class="fa-solid fa-check"></i>');
+    }
+  } else {
+    console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 显示NEXT`);
+    stopNextBtnAnimation();
+    $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
+  }
+}
+
 export async function updateGlobalOverlayContent(mesId, parsedContent, options = {}) {
   console.log(`[${SCRIPT_NAME}] [DEBUG] updateGlobalOverlayContent CALLED for mesId=${mesId}`);
   const $overlay = ensureGlobalOverlay();
@@ -426,6 +538,48 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   }
   setCurrentDisplayMesId(mesIdStr);
 
+  // 流式刷新：读者所在段落内容没变就原样保留（不重放打字机 / 立绘 / 背景 / 特效），只同步进度与按钮
+  if (
+    options.keepPresentedSegment
+    && !isNewMessage
+    && !options.preserveIndex
+    && isSegmentPresented($overlay, mesIdStr, segments[Math.min(state.currentIndex, segments.length - 1)])
+  ) {
+    const keptIndex = Math.min(state.currentIndex, segments.length - 1);
+    if (!simpleStorybookMode) {
+      Live2DPreloadManager.preloadFromSegments(segments, keptIndex, 'overlay-content');
+    }
+    syncProgressAndNextBtn($overlay, segments, keptIndex);
+    updateLocationTimeDisplay();
+    hideGeneratingIndicator();
+    refreshMeasuredDialogCapacity();
+    maybeAutoRepaginate(parsedContent);
+    return;
+  }
+
+  // 流式刷新：同一页只是末尾追加了文字（新写完的短段落并进了这一页），从已显示的位置接着打，不从头重打
+  if (options.keepPresentedSegment && !isNewMessage && !options.preserveIndex) {
+    const keptIndex = Math.min(state.currentIndex, segments.length - 1);
+    const keptSegment = segments[keptIndex];
+    const startAt = getPresentedTextExtension($overlay, mesIdStr, keptSegment);
+    if (startAt >= 0) {
+      renderTypewriterText($overlay.find('.gal-dialog-text'), keptSegment.text || '', {
+        instant: !shouldUseTypewriterForSegment(keptSegment),
+        startAt,
+      });
+      markSegmentPresented($overlay, mesIdStr, keptSegment);
+      if (!simpleStorybookMode) {
+        Live2DPreloadManager.preloadFromSegments(segments, keptIndex, 'overlay-content');
+      }
+      syncProgressAndNextBtn($overlay, segments, keptIndex);
+      updateLocationTimeDisplay();
+      hideGeneratingIndicator();
+      refreshMeasuredDialogCapacity();
+      maybeAutoRepaginate(parsedContent);
+      return;
+    }
+  }
+
   const renderToken = nextOverlayRenderToken(state);
   $overlay.attr('data-render-token', String(renderToken));
 
@@ -483,10 +637,8 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
       instant: !enableTypewriter,
     });
   }
-
-  const total = segments.length;
-  const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
-  $overlay.find('.gal-progress-bar').css('width', `${progressPercent}%`);
+  markSegmentPresented($overlay, mesIdStr, displaySegment);
+  syncProgressAndNextBtn($overlay, segments, currentIndex);
 
   if (!simpleStorybookMode) {
     await SpriteManager.applySpriteCommands($overlay, displaySegment.spriteCommands, renderToken);
@@ -497,31 +649,15 @@ export async function updateGlobalOverlayContent(mesId, parsedContent, options =
   }
 
   const sceneToApply = displaySegment.backgroundScene || parsedContent.currentBackground?.scene;
-  if (sceneToApply && !cgAppliedAsBackground) {
+  const lingeringCgSrc = cgAppliedAsBackground ? null : findLingeringCgBackground(segments, currentIndex, mesIdStr);
+  if (lingeringCgSrc) {
+    applyCgToBackground($overlay, lingeringCgSrc);
+  } else if (sceneToApply && !cgAppliedAsBackground) {
     await SpriteManager.applySceneTint($overlay, sceneToApply, { transition: getSegmentBackgroundTransition(displaySegment, sceneToApply) });
     console.log(`[${SCRIPT_NAME}] [DEBUG] 应用背景场景: "${sceneToApply}" (段落 ${currentIndex + 1}/${segments.length})`);
   }
 
   queueEffectsSyncForSegmentDisplay($overlay, state, currentIndex, { isNewMessage });
-
-  const $nextBtn = $overlay.find('[data-action="next"]');
-  const hasNextSegment = !!segments[currentIndex + 1];
-  console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - hasNextSegment=${hasNextSegment}, isGeneratingResponse=${getIsGeneratingResponse()}`);
-
-  if (!hasNextSegment) {
-    if (getIsGeneratingResponse()) {
-      console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 启动动画`);
-      updateNextBtnForGeneratingState();
-    } else {
-      console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 显示END`);
-      stopNextBtnAnimation();
-      $nextBtn.html('END <i class="fa-solid fa-check"></i>');
-    }
-  } else {
-    console.log(`[${SCRIPT_NAME}] updateGlobalOverlayContent - 显示NEXT`);
-    stopNextBtnAnimation();
-    $nextBtn.html('NEXT <i class="fa-solid fa-chevron-right"></i>');
-  }
 
   updateLocationTimeDisplay();
 
@@ -658,6 +794,7 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
       instant: forceInstantRender || !shouldUseTypewriterForSegment(segment),
     });
   }
+  markSegmentPresented($overlay, getCurrentDisplayMesId(), segment);
 
   const total = state.segments.length;
   const progressPercent = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
@@ -717,7 +854,12 @@ export async function updateOverlaySegmentDisplay(state, expectedRenderToken = n
   }
 
   const sceneToApply = segment.backgroundScene || state.parsedContent?.currentBackground?.scene;
-  if (sceneToApply && !cgAppliedAsBackground) {
+  const lingeringCgSrc = cgAppliedAsBackground
+    ? null
+    : findLingeringCgBackground(state.segments, currentIndex, getCurrentDisplayMesId());
+  if (lingeringCgSrc) {
+    applyCgToBackground($overlay, lingeringCgSrc);
+  } else if (sceneToApply && !cgAppliedAsBackground) {
     await SpriteManager.applySceneTint($overlay, sceneToApply, { transition: getSegmentBackgroundTransition(segment, sceneToApply) });
     if (isRenderTokenStale()) return false;
     console.log(`[${SCRIPT_NAME}] [DEBUG] updateOverlaySegmentDisplay 应用背景: "${sceneToApply}" (段落 ${currentIndex + 1}/${total})`);
@@ -955,6 +1097,89 @@ function collectChatu8CgEntries(mesTextNode) {
   return entries;
 }
 
+// ---- 加强模式 CG 定位 ----
+// 加强模式下 .mes_text 是第一次生成的原文，parsed 来自第二次生成的格式化文本：原文一段常被拆成多个对白 / 旁白段，
+// 按 <p> 计数会让 CG 偏前。改为取每张图之前的原文末尾片段，在格式化段落的拼接文本中定位插入点。
+const CG_ANCHOR_TAIL_LENGTHS = [20, 12, 8, 5];
+const CG_ANCHOR_MAX_OCCURRENCES = 200;
+
+// 只保留文字和数字：格式化会去掉引号 / 改标点 / 调整换行，比对时一律忽略
+function normalizeCgAnchorText(text) {
+  return String(text || '')
+    .replace(/image[ \t]*###[\s\S]*?###/gi, '')
+    .replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+// 在 combined 中 >= from 的出现位置里，选离 expected 最近的一处，返回匹配末尾位置
+function findCgAnchorEnd(combined, tail, from, expected) {
+  let best = -1;
+  let bestDistance = Infinity;
+  let idx = combined.indexOf(tail, from);
+  for (let n = 0; idx !== -1 && n < CG_ANCHOR_MAX_OCCURRENCES; n++) {
+    const end = idx + tail.length;
+    const distance = Math.abs(end - expected);
+    if (distance < bestDistance) {
+      best = end;
+      bestDistance = distance;
+    }
+    idx = combined.indexOf(tail, idx + 1);
+  }
+  return best;
+}
+
+/**
+ * 按原文文本位置计算每张 CG 应插在第几个格式化段落之后（返回值单调不减）；无法比对时返回 null。
+ */
+function resolveCgInsertIndexesByText(mesTextNode, cgEntries, baseSegments) {
+  let combined = '';
+  const segStarts = baseSegments.map(seg => {
+    const start = combined.length;
+    combined += normalizeCgAnchorText(String(seg?.text || '').replace(/<[^>]*>/g, ''));
+    return start;
+  });
+  if (!combined) return null;
+
+  // 原文文本节点（跳过 st-chatu8 容器内的提示词 / 按钮文字）
+  const textNodes = [];
+  const doc = mesTextNode.ownerDocument || document;
+  const walker = doc.createTreeWalker(mesTextNode, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.parentElement?.closest(CHATU8_CG_CONTAINER_SELECTOR)) continue;
+    const text = normalizeCgAnchorText(node.textContent);
+    if (text) textNodes.push({ node, text });
+  }
+  const domTotalLength = textNodes.reduce((sum, item) => sum + item.text.length, 0);
+  if (!domTotalLength) return null;
+
+  let minPos = 0;
+  return cgEntries.map(entry => {
+    const before = textNodes
+      .filter(item => entry.container.compareDocumentPosition(item.node) & Node.DOCUMENT_POSITION_PRECEDING)
+      .map(item => item.text)
+      .join('');
+
+    let pos = 0;
+    if (before) {
+      const expected = (before.length / domTotalLength) * combined.length;
+      pos = -1;
+      for (const len of new Set(CG_ANCHOR_TAIL_LENGTHS.map(l => Math.min(l, before.length)))) {
+        const tail = before.slice(-len);
+        pos = findCgAnchorEnd(combined, tail, Math.max(0, minPos - tail.length), expected);
+        if (pos !== -1) break;
+      }
+      // 原文被大幅改写、片段都找不到时按文本比例估算
+      if (pos === -1) pos = Math.round(expected);
+    }
+    pos = Math.max(pos, minPos);
+    minPos = pos;
+
+    // 插在所有起点早于锚点的段落之后（锚点落在段落中间时，图片跟在该段之后）
+    let insertAfter = 0;
+    while (insertAfter < segStarts.length && segStarts[insertAfter] < pos) insertAfter++;
+    return insertAfter;
+  });
+}
+
 export function getCapturedCgImage(mesId, cgIndex) {
   const images = capturedCgImages.get(String(mesId));
   return images ? images[cgIndex] || null : null;
@@ -1016,6 +1241,20 @@ function applyCgSegmentsToParsed(mesIdStr, mesText, parsed) {
     const prevScene = merged.length > 0 ? merged[merged.length - 1].backgroundScene : null;
     merged.push({ type: 'cg', speaker: null, text: '', expression: null, cgIndex: cgIdx++, backgroundScene: prevScene });
   };
+
+  // 加强模式：DOM 是原文、段落来自格式化文本，按文本位置对齐
+  if (getEnhancedFormattedText(mesIdStr)) {
+    const insertIndexes = resolveCgInsertIndexesByText(mesText, cgEntries, baseSegments);
+    if (insertIndexes) {
+      baseSegments.forEach((segment, segIdx) => {
+        while (cgIdx < insertIndexes.length && insertIndexes[cgIdx] <= segIdx) pushCgSegment();
+        merged.push(segment);
+      });
+      while (cgIdx < insertIndexes.length) pushCgSegment();
+      parsed.segments = merged;
+      return cgIdx;
+    }
+  }
   const pushRegularSegment = () => {
     if (regularIdx < baseSegments.length) {
       merged.push(baseSegments[regularIdx++]);

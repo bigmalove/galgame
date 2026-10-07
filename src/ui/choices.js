@@ -2,6 +2,7 @@ import { ANCIENT_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PE
 import { topWindow, $ } from '../core/env.js';
 import { GalgameStore } from '../core/store.js';
 import { getIsEnabled, getPendingOptions, setPendingOptions, getGalgameChoicesVisible, setGalgameChoicesVisible, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
+import { holdPixiEffects } from '../effects/pixi-effect-manager.js';
 import { MOTION_CHOICE_PICK_MS, MOTION_CLASS } from './control-motion.js';
 import { DEFAULT_THEME_CLASSES } from './default-theme.js';
 import { getModalMountRoot } from './fullscreen.js';
@@ -68,6 +69,19 @@ function getOverlayElement() {
   return $('#gal-global-overlay');
 }
 
+// 浮层打开期间舞台整个压在遮罩下：暂停粒子动画，overlay 挂 .gal-choices-open 停掉舞台内的毛玻璃与 CSS 动画
+// （见 数据库界面插件.css「选项浮层打开期间」）。不停的话，遮罩的全屏背景模糊每帧都要连同下层毛玻璃整屏重算
+function setChoicesLayerActive($layer, active) {
+  $layer.toggleClass('active', active);
+  getOverlayElement().toggleClass('gal-choices-open', active);
+  holdPixiEffects('choices', active);
+}
+
+// 脚本卸载：overlay 跨实例保留，摘掉暂停标记，免得重载后舞台一直停着
+$(window).on('pagehide', () => {
+  getOverlayElement().removeClass('gal-choices-open');
+});
+
 function getPendingChoicesButtons($overlay = getOverlayElement()) {
   const $scope = $overlay?.length ? $overlay : getOverlayElement();
   return $scope.find('.gal-pending-choices-btn');
@@ -116,7 +130,7 @@ export function renderGalgameChoices(options) {
   });
 
   syncChoicesLayerSkinClass($layer);
-  $layer.addClass('active');
+  setChoicesLayerActive($layer, true);
   setGalgameChoicesVisible(true);
 }
 
@@ -139,7 +153,7 @@ export function hideGalgameChoices(userDismissed = false) {
   const mountRoot = getModalMountRoot();
   const $layer = $(mountRoot).find('#gal-layer-choices');
   syncChoicesLayerSkinClass($layer);
-  $layer.removeClass('active');
+  setChoicesLayerActive($layer, false);
   setGalgameChoicesVisible(false);
 
   const pendingOptions = getPendingOptions();
@@ -154,7 +168,7 @@ function handleChoiceSelection(optionValue) {
   const mountRoot = getModalMountRoot();
   const $layer = $(mountRoot).find('#gal-layer-choices');
   syncChoicesLayerSkinClass($layer);
-  $layer.removeClass('active');
+  setChoicesLayerActive($layer, false);
   $('#gal-global-overlay .gal-pending-choices-btn').removeClass('show');
   setGalgameChoicesVisible(false);
 

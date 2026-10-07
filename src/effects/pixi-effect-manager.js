@@ -36,6 +36,9 @@ const effectState = {
   lastFlashAt: 0,
 };
 
+// 暂停原因（holdPixiEffects）：仍有原因未释放时不启动 ticker
+const pauseHolds = new Set();
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -369,6 +372,8 @@ export async function mountPixiEffects(overlayLike = null) {
     attachTickersIfNeeded();
     resizePixiEffects();
     syncPixiEffectsSettings();
+    // Application 创建即自动启动 ticker
+    if (pauseHolds.size) pausePixiEffects();
     ensureBloomRuntime();
     return true;
   } catch (error) {
@@ -445,8 +450,20 @@ export function pausePixiEffects() {
   effectState.fgApp?.ticker?.stop();
 }
 
+// 按原因暂停粒子动画（如选项浮层打开期间）
+export function holdPixiEffects(reason, held) {
+  if (held) {
+    pauseHolds.add(reason);
+    pausePixiEffects();
+    return;
+  }
+  if (!pauseHolds.delete(reason) || pauseHolds.size) return;
+  // overlay 已隐藏时保持暂停，等 showGlobalOverlay 再恢复
+  if (topWindow.document.getElementById('gal-global-overlay')?.classList.contains('active')) resumePixiEffects();
+}
+
 export function resumePixiEffects() {
-  if (!effectState.mounted) return;
+  if (!effectState.mounted || pauseHolds.size) return;
   const settings = getEffectSettings();
   if (!settings.effectsEnabled) return;
   effectState.bgApp?.ticker?.start();

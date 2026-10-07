@@ -1,4 +1,5 @@
 import { SCRIPT_NAME } from '../core/constants.js';
+import { topWindow } from '../core/env.js';
 import { Live2DLoader } from './loader.js';
 import { getLive2DModel } from '../db/live2d-models.js';
 import { getLive2DConfig, updateLive2DConfig, normalizeLive2DScaleBase, calculateLive2DBaseScale, getOverlayReferenceHeight } from './render-mode.js';
@@ -1178,7 +1179,7 @@ export const Live2DManager = {
           checkTextures();
         });
 
-        await new Promise(r => requestAnimationFrame(r));
+        await new Promise(r => topWindow.requestAnimationFrame(r));
         await new Promise(r => setTimeout(r, 100));
 
         // 不在这里主动调用 model.update(0)。

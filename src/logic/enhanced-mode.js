@@ -324,10 +324,10 @@ async function refreshMessageInOverlay(messageId, options) {
   }
 }
 
-function showFormattingIndicator() {
+function showFormattingIndicator(options) {
   if (!getIsEnabled() || !_showGeneratingIndicatorRef) return;
   if (!topWindow.document.querySelector('#gal-global-overlay.active')) return;
-  _showGeneratingIndicatorRef('正在进行格式化转换...');
+  _showGeneratingIndicatorRef('正在进行格式化转换...', options);
 }
 
 // 流式期间节流刷新 Galgame 界面（正文不再随流式写入楼层，不会触发楼层 DOM 监听，需主动刷新）
@@ -346,9 +346,9 @@ function createOverlayRefresher(messageId) {
       return;
     }
     lastRun = Date.now();
-    inFlight = refreshMessageInOverlay(messageId).then(() => {
-      // 渲染完成会收起「生成中」指示器，格式化仍在进行时重新打开
-      if (!stopped) showFormattingIndicator();
+    inFlight = refreshMessageInOverlay(messageId, { keepPresentedSegment: true, streaming: true }).then(() => {
+      // 渲染完成会收起「生成中」指示器，格式化仍在进行时重新打开；此时台词已是流式草稿，不再淡化
+      if (!stopped) showFormattingIndicator({ live: true });
     });
     await inFlight;
     inFlight = null;
@@ -434,7 +434,7 @@ async function runSecondGeneration(messageId) {
     await refresher.stop();
     clearStreamingDraft(snapshot.mesId);
     // 成功则显示已保存的格式化文本；失败则回退显示原文，避免停留在半截的流式内容上
-    await refreshMessageInOverlay(snapshot.mesId, { forceRender: true });
+    await refreshMessageInOverlay(snapshot.mesId, { forceRender: true, keepPresentedSegment: true });
     resetEnhancedModeState();
   }
 }

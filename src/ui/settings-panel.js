@@ -361,7 +361,8 @@ export function applySettingsToUI() {
   const $charLayer = $('.gal-layer-character');
   $charLayer.css({
     bottom: settings.spriteBottomOffset + '%',
-    gap: settings.spriteSpacing + '%',
+    // 三槽各 30% 宽，间距超过 5% 总宽就会超出画面、左右立绘被边缘裁掉；只限位置，不缩立绘
+    gap: `min(${settings.spriteSpacing}%, 5%)`,
   });
 
   const el = $charLayer.get(0);
@@ -973,7 +974,7 @@ export async function showSettingsPanel(topTab, subTab) {
               <label class="gal-switch"><input type="checkbox" id="gal-show-missing-sprite-placeholder" ${settings.showMissingSpritePlaceholder ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">
-              <span class="gal-settings-label">说话者光晕 <small style="color: var(--gal-text-3, #999);">(轮廓发光)</small></span>
+              <span class="gal-settings-label">说话者光晕 <small style="color: var(--gal-text-3, #999);">(背光 + 轮廓光)</small></span>
               <label class="gal-switch"><input type="checkbox" id="gal-speaker-glow" ${settings.speakerGlow ? 'checked' : ''}><span class="gal-switch-slider"></span></label>
             </div>
             <div class="gal-settings-row">

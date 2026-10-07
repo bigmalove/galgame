@@ -244,7 +244,12 @@ export function setupGlobalEventListeners() {
     console.log(`[${SCRIPT_NAME}] 点击【进入Galgame模式】按钮`);
     e.stopPropagation();
     const $btn = $(this);
-    const $mes = $btn.closest('.mes');
+    let $mes = $btn.closest('.mes');
+    // 用户楼层上的按钮：进入后显示最新的 AI 回复；聊天里还没有 AI 回复时才显示该楼层本身
+    if ($mes.attr('is_user') === 'true') {
+      const $lastAiMes = $('#chat > .mes[is_user!="true"]').last();
+      if ($lastAiMes.length) $mes = $lastAiMes;
+    }
     const mesId = $mes.attr('mesid');
     if (!mesId) return;
 

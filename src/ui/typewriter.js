@@ -313,26 +313,37 @@ export function cancelTypewriter() {
   return true;
 }
 
+// 当前在该节点上打字的进度（已显示的字数）；节点上没有进行中的打字时返回 null
+export function getActiveTypewriterProgress(target) {
+  const node = toDomNode(target);
+  if (!activeSession || !activeSession.active || !node || activeSession.node !== node) return null;
+  return activeSession.index;
+}
+
 export function finishActiveTypewriter() {
   if (!activeSession) return false;
   completeSession(activeSession, { commitText: true });
   return true;
 }
 
+// options.startAt：同一页在末尾追加了文字（流式输出），前 startAt 个字直接显示，从这里接着打
 export function renderTypewriterText(target, text, options = {}) {
   const node = toDomNode(target);
   const fullText = String(text || '');
   const runtime = getRuntimeSettings();
   const instant = options.instant === true || !runtime.enabled || fullText.length === 0;
+  const startAt = Math.max(0, Math.floor(Number(options.startAt) || 0));
 
   cancelTypewriter();
 
   if (!node) return Promise.resolve(fullText);
 
   delete node.dataset.galTwSerial;
-  if (fullText.length) notifyDialogAdvance(node);
-  // 新的一页总是从顶部开始（文字区自身可滚动，上一页的滚动位置会残留）
-  node.scrollTop = 0;
+  if (!startAt) {
+    if (fullText.length) notifyDialogAdvance(node);
+    // 新的一页总是从顶部开始（文字区自身可滚动，上一页的滚动位置会残留）
+    node.scrollTop = 0;
+  }
   if (instant) {
     if (fullText.length) commitFinalText(node, fullText);
     else renderTextSlice(node, fullText);
@@ -353,6 +364,10 @@ export function renderTypewriterText(target, text, options = {}) {
   session.promise = new Promise(resolve => {
     session.resolve = resolve;
   });
+
+  // 接着打：已显示的字在首帧样式计算前就加上 is-on，不会重放淡入
+  session.index = Math.min(startAt, session.chars.length);
+  for (let i = 0; i < session.index; i++) session.chars[i].classList.add('is-on');
 
   activeSession = session;
   scheduleTyping(session);

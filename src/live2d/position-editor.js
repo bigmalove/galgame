@@ -207,7 +207,7 @@ export const Live2DPositionEditor = {
       this._createGuide();
     }
 
-    await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => topWindow.requestAnimationFrame(r));
 
     model = Live2DManager.models.get(characterId);
     const container = Live2DManager.containers.get(characterId);

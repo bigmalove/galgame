@@ -776,7 +776,8 @@ export function toggleGlobalOverlay() {
 // 生成中指示器
 // ============================================
 
-export function showGeneratingIndicator(statusText = '正在生成内容...') {
+// live：对话框里已是本次生成的流式内容（不是即将被替换的旧台词），只显示胶囊、不淡化台词
+export function showGeneratingIndicator(statusText = '正在生成内容...', { live = false } = {}) {
   const $overlay = $('#gal-global-overlay');
   if ($overlay.length === 0) return;
 
@@ -785,7 +786,7 @@ export function showGeneratingIndicator(statusText = '正在生成内容...') {
 
   if ($indicator.length) {
     $status.text(statusText);
-    $indicator.addClass('active');
+    $indicator.toggleClass('is-live', !!live).addClass('active');
   }
 }
 
@@ -795,7 +796,7 @@ export function hideGeneratingIndicator() {
 
   const $indicator = $overlay.find('#gal-generating-indicator');
   if ($indicator.length) {
-    $indicator.removeClass('active');
+    $indicator.removeClass('active is-live');
   }
 }
 
@@ -841,7 +842,7 @@ export function setupGameContentResizeListener() {
         resizePixiEffects();
       }
 
-      requestAnimationFrame(() => {
+      topWindow.requestAnimationFrame(() => {
         isProcessing = false;
       });
     }, 200);

@@ -94,6 +94,7 @@ export const SpriteManager = {
   characterQueue: [],
   npcReplaceCursor: 0,
   currentScene: null,
+  currentCgBackground: null, // 当前铺在背景层上的 CG（CG 直接替换背景时）
   live2dRenderSeq: new Map(),
 
   emotionMap: {
@@ -918,6 +919,7 @@ export const SpriteManager = {
     }
     if (this.currentScene === scene) return;
     this.currentScene = scene;
+    this.currentCgBackground = null;
     const $charLayer = $overlay.find('.gal-layer-character');
     const $bgLayer = $overlay.find('.gal-layer-bg');
     $charLayer.removeClass('scene-night scene-indoor scene-outdoor');

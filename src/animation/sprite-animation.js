@@ -1,7 +1,12 @@
 // ============================================
 // GSAP 立绘动画管理器
 // ============================================
+import { topWindow } from '../core/env.js';
 import { getSettings } from '../core/settings.js';
+
+// GSAP 必须加载到酒馆主页面：脚本运行在酒馆助手的隐藏 iframe 中，GSAP 的计时器靠所在窗口的
+// requestAnimationFrame 驱动，Firefox 不会触发隐藏 iframe 里的 rAF——入场动画停在第一帧（透明），立绘闪一下就消失
+const gsapHost = topWindow;
 
 export const SpriteAnimationManager = {
   animations: new Map(),
@@ -15,18 +20,18 @@ export const SpriteAnimationManager = {
 
     this.isLoading = true;
     this.loadPromise = new Promise((resolve) => {
-      if (window.gsap) {
-        this.gsap = window.gsap;
+      if (gsapHost.gsap) {
+        this.gsap = gsapHost.gsap;
         this.isLoading = false;
         console.log('[SpriteAnimationManager] 检测到GSAP:', this.gsap.version);
         resolve(this.gsap);
         return;
       }
 
-      const script = document.createElement('script');
+      const script = gsapHost.document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js';
       script.onload = () => {
-        this.gsap = window.gsap;
+        this.gsap = gsapHost.gsap;
         this.isLoading = false;
         console.log('[SpriteAnimationManager] GSAP动态加载成功:', this.gsap.version);
         resolve(this.gsap);
@@ -37,13 +42,13 @@ export const SpriteAnimationManager = {
         this.loadPromise = null;
         resolve(null);
       };
-      document.head.appendChild(script);
+      gsapHost.document.head.appendChild(script);
     });
     return this.loadPromise;
   },
 
   init() {
-    this.gsap = window.gsap || (typeof gsap !== 'undefined' ? gsap : null);
+    this.gsap = gsapHost.gsap || null;
     if (!this.gsap) {
       console.log('[SpriteAnimationManager] GSAP未预装，正在从CDN加载...');
       this.loadGSAP();

@@ -9,7 +9,8 @@ import { getSettings } from '../core/settings.js';
 // 「车站」「天文台」这类夜景匹配不上，白天光照的立绘像贴在夜景上。
 // 这里在背景解码后把图缩到 32×18 采样：平均色（色相 → 染色）、平均亮度（→ 明暗/饱和）、
 // 最亮 10% 像素的颜色与重心（→ 轮廓光颜色与方向），写入 overlay 的 CSS 变量与
-// SVG feColorMatrix（真·乘法染色，保留 alpha，Live2D 画布同样生效）。
+// SVG feColorMatrix（真·乘法染色，保留 alpha）。滤镜挂在每张立绘图上，不挂全屏的立绘层
+// （层内一动就整屏重算，见 数据库界面插件.css「环境光」）。
 // 采样失败（跨域图未开 CORS）时移除 gal-ambient-on，回退旧的关键词滤镜。
 
 const topDoc = topWindow.document;
@@ -189,7 +190,7 @@ function applyLighting($overlay, state) {
 }
 
 function tweenTo($overlay, target, onDone) {
-  // Mobile 画质档去掉轮廓光的 drop-shadow（整层滤镜随 Live2D 每帧重绘，低端机开销明显）
+  // Mobile 画质档去掉轮廓光的 drop-shadow（立绘换表情 / 入场时要重算模糊，低端机开销明显）
   $overlay.toggleClass('gal-ambient-lite', getSettings()?.effectsQuality === 'mobile');
   const id = ++tweenId;
   const from = { ...current };

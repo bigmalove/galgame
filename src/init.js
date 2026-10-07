@@ -180,7 +180,7 @@ export async function init() {
                 const hasGalTags = RE_GAL_TAGS.test(content);
                 const simpleStorybookMode = getSettings().simpleStorybookMode === true;
                 if (hasGalTags || simpleStorybookMode) {
-                  processNewMessage(mesNode);
+                  processNewMessage(mesNode, { keepPresentedSegment: true });
                 } else if (mesNode.classList.contains('gal-hidden')) {
                   mesNode.classList.remove('gal-hidden');
                   console.log(`[${SCRIPT_NAME}] 消息 ${messageId} 非Galgame格式，已解除隐藏`);

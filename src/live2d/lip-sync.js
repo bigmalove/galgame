@@ -1,4 +1,5 @@
 import { SCRIPT_NAME } from '../core/constants.js';
+import { topWindow } from '../core/env.js';
 import { Live2DManager } from './manager.js';
 
 // 延迟引用: TTSManager._getProxiedAudioUrl (来自 audio/tts-manager.js，避免循环)
@@ -245,14 +246,14 @@ export const LipSyncManager = {
       }
 
       Live2DManager.setMouthOpen(this.currentCharacterId, volume);
-      this.animationFrameId = requestAnimationFrame(update);
+      this.animationFrameId = topWindow.requestAnimationFrame(update);
     };
     update();
   },
 
   stopSync() {
     if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
+      topWindow.cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
     const activeCharacterId = this.currentCharacterId;

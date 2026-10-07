@@ -80,6 +80,51 @@ export function preloadBackgroundImage(url, timeoutMs = DECODE_TIMEOUT_MS) {
   return task;
 }
 
+// ---------- data URL → blob URL ----------
+// Chrome 对 CSS 自定义属性值有约 2MB 上限，超长时 setProperty 静默失败、背景不变。
+// 智绘姬(st-chatu8) 的 CG 常是数 MB 的 base64 data URL，统一转成 blob URL 再写入 --gal-bg-url。
+// blob 建在顶层窗口（脚本 iframe 重载后仍有效）；当前图与待提交图总是最近两次使用，淘汰更早的不会影响显示
+const DATA_URL_BLOB_LIMIT = 4;
+const dataUrlBlobCache = new Map(); // dataUrl -> blobUrl
+
+function dataUrlToBlob(dataUrl) {
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) throw new Error('invalid data URL');
+  const meta = dataUrl.slice(5, comma);
+  const payload = dataUrl.slice(comma + 1);
+  const isBase64 = /;base64$/i.test(meta);
+  const mime = meta.split(';')[0] || 'application/octet-stream';
+  if (!isBase64) return new topWindow.Blob([decodeURIComponent(payload)], { type: mime });
+  const binary = topWindow.atob(payload.replace(/\s+/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new topWindow.Blob([bytes], { type: mime });
+}
+
+function toRenderableBgUrl(url) {
+  if (!/^data:/i.test(url)) return url;
+  const cached = dataUrlBlobCache.get(url);
+  if (cached) {
+    dataUrlBlobCache.delete(url);
+    dataUrlBlobCache.set(url, cached); // LRU
+    return cached;
+  }
+  let blobUrl;
+  try {
+    blobUrl = topWindow.URL.createObjectURL(dataUrlToBlob(url));
+  } catch (error) {
+    console.warn(`[${SCRIPT_NAME}] data URL 转 blob 失败，按原地址使用:`, error);
+    return url;
+  }
+  dataUrlBlobCache.set(url, blobUrl);
+  while (dataUrlBlobCache.size > DATA_URL_BLOB_LIMIT) {
+    const [oldKey, oldBlobUrl] = dataUrlBlobCache.entries().next().value;
+    dataUrlBlobCache.delete(oldKey);
+    topWindow.URL.revokeObjectURL(oldBlobUrl);
+  }
+  return blobUrl;
+}
+
 // ---------- 工具 ----------
 function toCssUrlValue(url) {
   const safe = String(url || '')
@@ -411,9 +456,10 @@ export function setBackgroundWithTransition($bgLayer, bgUrl, options = {}) {
   const token = `${Date.now()}_${Math.random()}`;
   $bgLayer.data('bgTransitionToken', token);
   const isAlive = () => $bgLayer.data('bgTransitionToken') === token;
-  const cssUrl = toCssUrlValue(bgUrl);
+  const renderUrl = toRenderableBgUrl(bgUrl);
+  const cssUrl = toCssUrlValue(renderUrl);
 
-  return preloadBackgroundImage(bgUrl).then(async img => {
+  return preloadBackgroundImage(renderUrl).then(async img => {
     if (!isAlive()) return false;
     if (img) updateAmbientLightFromImage(img, bgUrl, getOverlayOf($bgLayer));
 

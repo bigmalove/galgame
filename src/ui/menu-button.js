@@ -17,7 +17,7 @@ export function injectGalgameButton(mesNode) {
   const $mes = $(mesNode);
   const mesId = $mes.attr('mesid');
 
-  if ($mes.attr('is_user') === 'true') return;
+  // 所有楼层都挂按钮（含用户楼层），聊天里还没有 AI 回复时也能进入
   if ($mes.find('.gal-open-btn').length) return;
 
   console.log(`[${SCRIPT_NAME}] 正在给消息 ${mesId} 注入按钮`);

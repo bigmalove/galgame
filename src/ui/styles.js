@@ -849,24 +849,18 @@ const skinCss = `
     }
 }
 
+/* 生成中胶囊（布局见基线「生成中」段）：暗色玻璃；变体只覆写 bg / border / shadow / fg / dot，
+   状态文字、扫光、分隔线由 --gal-gen-fg 推出，浅色变体无需再单独配 */
 #gal-global-overlay.skin-twilight .gal-generating-indicator {
-    display: none !important;
-    margin-top: 14px !important;
-    padding: 10px 14px !important;
-    border-radius: 999px !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    background: rgba(255, 255, 255, 0.04) !important;
-    position: relative;
-    z-index: 1;
-    width: fit-content;
-    max-width: 100%;
-    align-items: center;
-    gap: 10px;
-    color: rgba(245, 239, 232, 0.82) !important;
-}
-
-#gal-global-overlay.skin-twilight .gal-generating-indicator.active {
-    display: inline-flex !important;
+    --gal-gen-bg: rgba(18, 19, 26, 0.82);
+    --gal-gen-border: 1px solid rgba(255, 255, 255, 0.1);
+    --gal-gen-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+    --gal-gen-font: var(--twilight-label);
+    --gal-gen-fg: rgba(245, 239, 232, 0.9);
+    --gal-gen-dim: color-mix(in srgb, var(--gal-gen-fg) 62%, transparent);
+    --gal-gen-hi: var(--gal-gen-fg);
+    --gal-gen-sep: color-mix(in srgb, var(--gal-gen-fg) 18%, transparent);
+    --gal-gen-dot: var(--twilight-accent);
 }
 
 #gal-global-overlay.skin-twilight .gal-progress-container {
@@ -1161,10 +1155,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-gilded-twilight .gal-generating-indicator {
-    border-color: rgba(176, 141, 87, 0.18) !important;
-    background: rgba(252, 247, 238, 0.86) !important;
-    color: rgba(47, 40, 34, 0.84) !important;
-    box-shadow: 0 12px 30px rgba(77, 58, 32, 0.08) !important;
+    --gal-gen-bg: rgba(252, 247, 238, 0.86);
+    --gal-gen-border: 1px solid rgba(176, 141, 87, 0.18);
+    --gal-gen-shadow: 0 12px 30px rgba(77, 58, 32, 0.08);
+    --gal-gen-fg: rgba(47, 40, 34, 0.84);
+    --gal-gen-dot: var(--gilded-gold);
 }
 
 #gal-global-overlay.skin-gilded-twilight .gal-bottom-toolbar {
@@ -1389,10 +1384,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-dawn-twilight .gal-generating-indicator {
-    border-color: rgba(120, 161, 187, 0.18) !important;
-    background: rgba(15, 23, 42, 0.86) !important;
-    color: rgba(226, 232, 240, 0.84) !important;
-    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.2) !important;
+    --gal-gen-bg: rgba(15, 23, 42, 0.86);
+    --gal-gen-border: 1px solid rgba(120, 161, 187, 0.18);
+    --gal-gen-shadow: 0 12px 30px rgba(2, 6, 23, 0.2);
+    --gal-gen-fg: rgba(226, 232, 240, 0.84);
+    --gal-gen-dot: #78a1bb;
 }
 
 #gal-global-overlay.skin-dawn-twilight .gal-bottom-toolbar {
@@ -1616,10 +1612,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-orchid-twilight .gal-generating-indicator {
-    border-color: rgba(183, 156, 237, 0.2) !important;
-    background: rgba(26, 22, 37, 0.88) !important;
-    color: rgba(247, 225, 215, 0.84) !important;
-    box-shadow: 0 12px 30px rgba(26, 22, 37, 0.2) !important;
+    --gal-gen-bg: rgba(26, 22, 37, 0.88);
+    --gal-gen-border: 1px solid rgba(183, 156, 237, 0.2);
+    --gal-gen-shadow: 0 12px 30px rgba(26, 22, 37, 0.2);
+    --gal-gen-fg: rgba(247, 225, 215, 0.84);
+    --gal-gen-dot: #ffbf69;
 }
 
 #gal-global-overlay.skin-orchid-twilight .gal-bottom-toolbar {
@@ -1852,10 +1849,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-neon-twilight .gal-generating-indicator {
-    border-color: rgba(0, 242, 255, 0.22) !important;
-    background: rgba(10, 10, 15, 0.9) !important;
-    color: rgba(240, 240, 255, 0.88) !important;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24), 0 0 22px rgba(0, 242, 255, 0.08) !important;
+    --gal-gen-bg: rgba(10, 10, 15, 0.9);
+    --gal-gen-border: 1px solid rgba(0, 242, 255, 0.22);
+    --gal-gen-shadow: 0 12px 30px rgba(0, 0, 0, 0.24), 0 0 22px rgba(0, 242, 255, 0.08);
+    --gal-gen-fg: rgba(240, 240, 255, 0.88);
+    --gal-gen-dot: #ff00e5;
 }
 
 #gal-global-overlay.skin-neon-twilight .gal-bottom-toolbar {
@@ -2081,10 +2079,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-clear-twilight .gal-generating-indicator {
-    border-color: rgba(0, 0, 0, 0.06) !important;
-    background: rgba(255, 255, 255, 0.9) !important;
-    color: rgba(26, 26, 28, 0.78) !important;
-    box-shadow: 0 12px 28px rgba(148, 163, 184, 0.1) !important;
+    --gal-gen-bg: rgba(255, 255, 255, 0.9);
+    --gal-gen-border: 1px solid rgba(0, 0, 0, 0.06);
+    --gal-gen-shadow: 0 12px 28px rgba(148, 163, 184, 0.1);
+    --gal-gen-fg: rgba(26, 26, 28, 0.78);
+    --gal-gen-dot: #0ea5e9;
 }
 
 #gal-global-overlay.skin-clear-twilight .gal-bottom-toolbar {
@@ -2309,10 +2308,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-forest-twilight .gal-generating-indicator {
-    border-color: rgba(212, 175, 55, 0.18) !important;
-    background: rgba(10, 31, 22, 0.9) !important;
-    color: rgba(243, 244, 246, 0.82) !important;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22) !important;
+    --gal-gen-bg: rgba(10, 31, 22, 0.9);
+    --gal-gen-border: 1px solid rgba(212, 175, 55, 0.18);
+    --gal-gen-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+    --gal-gen-fg: rgba(243, 244, 246, 0.82);
+    --gal-gen-dot: #d4af37;
 }
 
 #gal-global-overlay.skin-forest-twilight .gal-bottom-toolbar {
@@ -2541,10 +2541,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-cyber-twilight .gal-generating-indicator {
-    border-color: rgba(0, 243, 255, 0.22) !important;
-    background: rgba(26, 11, 46, 0.92) !important;
-    color: rgba(224, 242, 254, 0.86) !important;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24), 0 0 18px rgba(0, 243, 255, 0.08) !important;
+    --gal-gen-bg: rgba(26, 11, 46, 0.92);
+    --gal-gen-border: 1px solid rgba(0, 243, 255, 0.22);
+    --gal-gen-shadow: 0 12px 28px rgba(0, 0, 0, 0.24), 0 0 18px rgba(0, 243, 255, 0.08);
+    --gal-gen-fg: rgba(224, 242, 254, 0.86);
+    --gal-gen-dot: #39ff14;
 }
 
 #gal-global-overlay.skin-cyber-twilight .gal-bottom-toolbar {
@@ -2769,10 +2770,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-dream-twilight .gal-generating-indicator {
-    border-color: rgba(255, 255, 255, 0.72) !important;
-    background: rgba(255, 255, 255, 0.88) !important;
-    color: rgba(74, 59, 78, 0.8) !important;
-    box-shadow: 0 12px 28px rgba(243, 240, 255, 0.18) !important;
+    --gal-gen-bg: rgba(255, 255, 255, 0.88);
+    --gal-gen-border: 1px solid rgba(255, 255, 255, 0.72);
+    --gal-gen-shadow: 0 12px 28px rgba(243, 240, 255, 0.18);
+    --gal-gen-fg: rgba(74, 59, 78, 0.8);
+    --gal-gen-dot: #a48bc8;
 }
 
 #gal-global-overlay.skin-dream-twilight .gal-bottom-toolbar {
@@ -2997,10 +2999,11 @@ const skinCss = `
 }
 
 #gal-global-overlay.skin-rosy-twilight .gal-generating-indicator {
-    border-color: rgba(255, 255, 255, 0.72) !important;
-    background: rgba(255, 255, 255, 0.88) !important;
-    color: rgba(61, 59, 60, 0.8) !important;
-    box-shadow: 0 12px 28px rgba(255, 128, 171, 0.14) !important;
+    --gal-gen-bg: rgba(255, 255, 255, 0.88);
+    --gal-gen-border: 1px solid rgba(255, 255, 255, 0.72);
+    --gal-gen-shadow: 0 12px 28px rgba(255, 128, 171, 0.14);
+    --gal-gen-fg: rgba(61, 59, 60, 0.8);
+    --gal-gen-dot: #ff4f97;
 }
 
 #gal-global-overlay.skin-rosy-twilight .gal-bottom-toolbar {
@@ -3333,11 +3336,6 @@ const skinCss = `
 
     #gal-global-overlay.skin-twilight .gal-twilight-dialog-next-indicator[data-state="end"]::after {
         content: none;
-    }
-
-    #gal-global-overlay.skin-twilight .gal-generating-indicator {
-        margin-top: 8px !important;
-        padding: 8px 10px !important;
     }
 
     #gal-global-overlay.skin-twilight .gal-footer-btn-next.gal-twilight-mobile-next {
@@ -4407,36 +4405,25 @@ const skinCss = `
     color: var(--ink-on-ink) !important;
 }
 
-/* —— 生成中指示器：「运笔之中」——墨滴入水双圈涟漪 —— */
+/* —— 生成中胶囊：「运笔之中」——宣纸签条，左缘一道漆线（布局见基线「生成中」段）—— */
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator {
-    background: linear-gradient(178deg, var(--ink-paper) 0%, var(--ink-paper-warm) 100%);
-    border: none;
-    border-top: 4px solid var(--ink-lacquer);
-    border-bottom: 4px solid var(--ink-lacquer);
-    border-radius: 2px;
-    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7);
-}
-#gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-icon {
-    color: var(--ink-deep);
-    animation: galAncientInkCore 1.8s ease-in-out infinite !important;
-}
-@keyframes galAncientInkCore {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(0.82); opacity: 0.7; }
+    --gal-gen-bg: linear-gradient(178deg, var(--ink-paper) 0%, var(--ink-paper-warm) 100%);
+    --gal-gen-border: 1px solid color-mix(in srgb, var(--ink-deep) 22%, transparent);
+    --gal-gen-radius: 2px;
+    --gal-gen-shadow: 0 0.8rem 1.6rem -0.8rem rgba(5, 3, 1, 0.7);
+    --gal-gen-font: var(--ink-font-kai);
+    --gal-gen-fg: var(--ink-black);
+    --gal-gen-dim: var(--ink-mid);
+    --gal-gen-hi: var(--ink-black);
+    --gal-gen-sep: color-mix(in srgb, var(--ink-deep) 20%, transparent);
+    --gal-gen-dot: var(--ink-deep);
+    --gal-gen-dot-2: var(--ink-lacquer);
+    border-left: 3px solid var(--ink-lacquer);
 }
 #gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-text {
-    color: var(--ink-black);
-    font-family: var(--ink-font-kai);
-    letter-spacing: 0.5em;
-    text-indent: 0.5em;
     font-weight: 700;
-}
-#gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-status {
-    color: var(--ink-mid);
-    font-family: var(--ink-font-kai);
     letter-spacing: 0.24em;
 }
-#gal-global-overlay[class*="skin-ancient"] .gal-generating-indicator .gal-gen-dot { background: var(--ink-deep); }
 
 /* —— 选项浮层：挂轴自上垂落，悬停朱批圈点（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-ancient"] {
@@ -4950,29 +4937,34 @@ const skinCss = `
     color: #fff !important;
 }
 
-/* —— 生成中指示器：「潜入中」黑卡 —— */
+/* —— 生成中胶囊：「潜入中」黑签，红色硬投影、微微歪斜 —— */
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator {
-    background: var(--p5-black);
-    border: none;
-    border-radius: 0;
-    box-shadow: 8px 8px 0 var(--p5-red);
-    clip-path: polygon(1.5% 8%, 98% 1%, 99.5% 90%, 0.5% 97%);
-    transform: translate(-50%, -50%) rotate(-1deg);
+    --gal-gen-bg: var(--p5-black);
+    --gal-gen-border: none;
+    --gal-gen-radius: 0;
+    --gal-gen-shadow: 0.3rem 0.3rem 0 var(--p5-red);
+    --gal-gen-fg: var(--p5-white);
+    --gal-gen-dim: var(--p5-gray);
+    --gal-gen-hi: var(--p5-white);
+    --gal-gen-sep: var(--p5-red);
+    --gal-gen-dot: var(--p5-red);
+    --gal-gen-dot-2: var(--p5-white);
+    top: 0.3rem;
+    right: 1.6rem;
+    rotate: -2deg;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-icon { color: var(--p5-red); }
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-text {
-    color: var(--p5-white);
     font-family: var(--p5-font-cn);
     font-weight: 900;
-    letter-spacing: 0.5em;
-    text-indent: 0.5em;
+    letter-spacing: 0.3em;
 }
 #gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-status {
-    color: var(--p5-gray);
     font-family: var(--p5-font-impact);
-    letter-spacing: 0.2em;
+    letter-spacing: 0.12em;
 }
-#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-dot { background: var(--p5-red); }
+#gal-global-overlay[class*="skin-persona"] .gal-generating-indicator .gal-gen-dot { border-radius: 0; }
+/* 胶囊右移 + 硬投影，窄屏首行要多让一些 */
+#gal-global-overlay[class*="skin-persona"] { --gal-gen-reserve: 7.5rem; }
 
 /* —— 选项浮层：预告函名刺拍在放射漩涡上（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-persona"] {
@@ -6189,44 +6181,41 @@ const skinCss = `
 .gal-history-modal[class*="skin-jrpg"] .gal-history-empty { color: var(--cts-dim); }
 
 /* ============================================================
-   生成中指示器：星辰演算
+   生成中胶囊：星辰演算（六角签牌 + 金色菱形星点；布局见基线「生成中」段）
    ============================================================ */
 #gal-global-overlay[class*="skin-jrpg"] .gal-generating-indicator {
-    background:
+    --gal-gen-bg:
         radial-gradient(140% 100% at 50% 0%, rgba(111, 212, 255, 0.12) 0%, transparent 55%),
         linear-gradient(178deg, rgba(13, 24, 64, 0.97), rgba(5, 9, 26, 0.97));
-    border: none;
-    border-radius: 0;
-    clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0 calc(100% - 16px), 0 16px);
-    box-shadow: inset 0 0 0 1px rgba(217, 180, 92, 0.45);
+    --gal-gen-border: none;
+    --gal-gen-radius: 0;
+    --gal-gen-shadow: inset 0 0 0 1px rgba(217, 180, 92, 0.45);
+    --gal-gen-font: var(--cts-font);
+    --gal-gen-fg: var(--cts-white);
+    --gal-gen-dim: var(--cts-dim);
+    --gal-gen-hi: var(--cts-ice);
+    --gal-gen-sep: rgba(217, 180, 92, 0.35);
+    --gal-gen-dot: var(--cts-gold2);
+    padding-left: 1.15rem;
+    padding-right: 1.25rem;
+    clip-path: polygon(0.6rem 0, calc(100% - 0.6rem) 0, 100% 50%, calc(100% - 0.6rem) 100%, 0.6rem 100%, 0 50%);
 }
-.skin-jrpg-dawn .gal-generating-indicator {
-    background:
+#gal-global-overlay.skin-jrpg-dawn .gal-generating-indicator {
+    --gal-gen-bg:
         radial-gradient(140% 100% at 50% 0%, rgba(95, 168, 220, 0.14) 0%, transparent 55%),
         linear-gradient(178deg, rgba(250, 252, 255, 0.97), rgba(228, 240, 250, 0.97));
 }
-#gal-global-overlay[class*="skin-jrpg"] .gal-gen-icon {
-    color: var(--cts-ice);
-    text-shadow: 0 0 14px rgba(184, 237, 255, 1);
-    animation: galCtsGenPulse 1.8s ease-in-out infinite;
-}
-@keyframes galCtsGenPulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.35; transform: scale(0.82); }
-}
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-text {
-    color: var(--cts-white);
-    font-family: var(--cts-font);
-    letter-spacing: 0.4em;
-    text-shadow: 0 0 16px rgba(111, 212, 255, 0.55);
+    letter-spacing: 0.3em;
+    text-shadow: 0 0 12px rgba(111, 212, 255, 0.55);
 }
-.skin-jrpg-dawn .gal-gen-text { text-shadow: none; }
-#gal-global-overlay[class*="skin-jrpg"] .gal-gen-status { color: var(--cts-dim); }
+#gal-global-overlay.skin-jrpg-dawn .gal-gen-text { text-shadow: none; }
 #gal-global-overlay[class*="skin-jrpg"] .gal-gen-dot {
-    background: var(--cts-gold2);
+    width: 0.26rem;
+    height: 0.26rem;
     border-radius: 0;
-    transform: rotate(45deg);
-    box-shadow: 0 0 8px rgba(246, 227, 166, 0.8);
+    rotate: 45deg;
+    box-shadow: 0 0 6px rgba(246, 227, 166, 0.8);
 }
 
 /* ============================================================
@@ -7145,38 +7134,27 @@ const skinCss = `
 .gal-history-modal[class*="skin-yanyun"] .gal-history-empty { color: var(--yx-dim); }
 
 /* ============================================================
-   生成中指示器：听风（悬剑微颤，剑尖坠朱砂）
+   生成中胶囊：听风（切角签条，朱砂坠点；布局见基线「生成中」段）
    ============================================================ */
 #gal-global-overlay[class*="skin-yanyun"] .gal-generating-indicator {
-    background:
+    --gal-gen-bg:
         radial-gradient(140% 100% at 50% 0%, rgba(199, 222, 244, 0.06) 0%, transparent 55%),
         var(--yx-choice);
-    border: none;
-    border-radius: 0;
-    clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
-    box-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.4);
+    --gal-gen-border: none;
+    --gal-gen-radius: 0;
+    --gal-gen-shadow: inset 0 0 0 1px rgba(166, 124, 61, 0.4);
+    --gal-gen-font: var(--yx-font);
+    --gal-gen-fg: var(--yx-text);
+    --gal-gen-dim: var(--yx-dim);
+    --gal-gen-hi: var(--yx-text);
+    --gal-gen-sep: rgba(166, 124, 61, 0.35);
+    --gal-gen-dot: var(--yx-cinnabar);
+    clip-path: polygon(0 0, calc(100% - 0.6rem) 0, 100% 0.6rem, 100% 100%, 0.6rem 100%, 0 calc(100% - 0.6rem));
 }
-/* 魔杖图标改造为悬剑 */
-#gal-global-overlay[class*="skin-yanyun"] .gal-gen-icon {
-    color: var(--yx-blade);
-    text-shadow: 0 0 10px rgba(199, 222, 244, 0.6);
-    animation: galYxSwordSway 2.2s ease-in-out infinite alternate;
-}
-@keyframes galYxSwordSway {
-    from { transform: rotate(-4deg); }
-    to   { transform: rotate(4deg); }
-}
-#gal-global-overlay[class*="skin-yanyun"] .gal-gen-text {
-    color: var(--yx-text);
-    font-family: var(--yx-font);
-    letter-spacing: 0.4em;
-}
-#gal-global-overlay[class*="skin-yanyun"] .gal-gen-status { color: var(--yx-dim); }
+#gal-global-overlay[class*="skin-yanyun"] .gal-gen-text { letter-spacing: 0.3em; }
 #gal-global-overlay[class*="skin-yanyun"] .gal-gen-dot {
-    background: var(--yx-cinnabar);
     border-radius: 50% 50% 50% 4%;
-    transform: rotate(45deg);
-    box-shadow: none;
+    rotate: 45deg;
 }
 
 /* ============================================================
@@ -7604,19 +7582,20 @@ const skinCss = `
     font-family: var(--sk-sans);
     letter-spacing: 0.24em;
 }
-/* 生成中指示器 */
+/* 生成中胶囊（布局见基线「生成中」段）：樱色玻璃，扫光带一点樱粉 */
 #gal-global-overlay.skin-classic .gal-generating-indicator {
-    background: rgba(255, 250, 248, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.95);
-    border-radius: 18px;
-    box-shadow: 0 20px 50px rgba(222, 85, 133, 0.2);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    --gal-gen-bg: rgba(255, 250, 248, 0.9);
+    --gal-gen-border: 1px solid rgba(255, 255, 255, 0.95);
+    --gal-gen-shadow: 0 0.6rem 1.6rem -0.6rem rgba(222, 85, 133, 0.32);
+    --gal-gen-font: var(--sk-sans);
+    --gal-gen-fg: var(--sk-plum);
+    --gal-gen-dim: var(--sk-plum-soft);
+    --gal-gen-hi: var(--sk-sakura);
+    --gal-gen-sep: rgba(222, 85, 133, 0.2);
+    --gal-gen-dot: var(--sk-sakura);
+    --gal-gen-dot-2: var(--sk-lav);
 }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-icon   { color: var(--sk-sakura); }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-text   { color: var(--sk-plum); font-family: var(--sk-serif); letter-spacing: 0.18em; }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-status { color: var(--sk-plum-soft); }
-#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-dot    { background: var(--sk-sakura); }
+#gal-global-overlay.skin-classic .gal-generating-indicator .gal-gen-text { font-family: var(--sk-serif); letter-spacing: 0.18em; }
 
 /* =========================================================
    6. 朱笺 (Shujian / Vermilion Letter) — 宣纸 × 墨 × 朱砂印章
@@ -7944,26 +7923,21 @@ const skinCss = `
     color: var(--shu-on-seal) !important;
 }
 
-/* —— 生成中指示器：「研墨之中」纸卡 —— */
+/* —— 生成中胶囊：「研墨之中」纸签，扫光是一道朱批 —— */
 #gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator {
-    background: linear-gradient(178deg, var(--shu-paper) 0%, var(--shu-paper-warm) 100%);
-    border: 1px solid var(--shu-hairline);
-    border-radius: 4px;
-    box-shadow: 0 1.8rem 3.5rem -1.4rem rgba(5, 3, 1, 0.7);
+    --gal-gen-bg: linear-gradient(178deg, var(--shu-paper) 0%, var(--shu-paper-warm) 100%);
+    --gal-gen-border: 1px solid var(--shu-hairline);
+    --gal-gen-radius: 4px;
+    --gal-gen-shadow: 0 0.8rem 1.6rem -0.8rem rgba(5, 3, 1, 0.7);
+    --gal-gen-font: var(--shu-font-serif);
+    --gal-gen-fg: var(--shu-ink);
+    --gal-gen-dim: var(--shu-ink-soft);
+    --gal-gen-hi: var(--shu-vermilion);
+    --gal-gen-sep: var(--shu-hairline);
+    --gal-gen-dot: var(--shu-vermilion);
+    --gal-gen-dot-2: var(--shu-ink);
 }
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-icon { color: var(--shu-vermilion); }
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-text {
-    color: var(--shu-ink);
-    font-family: var(--shu-font-serif);
-    letter-spacing: 0.4em;
-}
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-status {
-    color: var(--shu-ink-soft);
-    font-family: var(--shu-font-latin);
-    font-style: italic;
-    letter-spacing: 0.14em;
-}
-#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-dot { background: var(--shu-vermilion); }
+#gal-global-overlay[class*="skin-shujian"] .gal-generating-indicator .gal-gen-text { letter-spacing: 0.3em; }
 
 /* —— 选项浮层：纸签 + 汉字序号，悬停朱批（class 由 choices.js 同步）—— */
 #gal-layer-choices[class*="skin-shujian"] {

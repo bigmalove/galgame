@@ -3,7 +3,7 @@
 // ============================================
 export const SCRIPT_ID = 'galgame-ui-plugin';
 export const SCRIPT_NAME = 'Galgame界面插件';
-export const VERSION = typeof __GALGAME_VERSION__ !== 'undefined' ? __GALGAME_VERSION__ : '2.5.0';
+export const VERSION = typeof __GALGAME_VERSION__ !== 'undefined' ? __GALGAME_VERSION__ : '2.5.1';
 export const DB_NAME = 'GalgameUIPluginDB';
 export const DB_VERSION = 10;
 export const STORE_SPRITES = 'sprites';

@@ -1,5 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
+import { claimPageBinding } from '../core/page-bindings.js';
 import { resizePixiEffects } from '../effects/pixi-effect-manager.js';
 
 // ============================================
@@ -91,7 +92,7 @@ export function setupFullscreenChangeListener() {
     console.log(`[${SCRIPT_NAME}] 全屏状态监听已存在，跳过重复注册`);
     return;
   }
-  topWindow[FULLSCREEN_CHANGE_LISTENER_BOUND_FLAG] = true;
+  claimPageBinding(FULLSCREEN_CHANGE_LISTENER_BOUND_FLAG);
 
   const handleFullscreenChange = () => {
     const overlay = topWindow.document.getElementById('gal-global-overlay');

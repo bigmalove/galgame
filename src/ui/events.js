@@ -2,6 +2,7 @@ import { TTSManager } from '../audio/tts-manager.js';
 import { getTTSEnabled } from '../audio/tts-config.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { $, topWindow } from '../core/env.js';
+import { claimPageBinding } from '../core/page-bindings.js';
 import { getMapSettings, getSettings, setCurrentCharEnabled } from '../core/settings.js';
 import { getIsRewinding, getPendingOptions, REWIND_HOLD_DELAY, setIsEnabled } from '../core/state.js';
 import { GalgameStore } from '../core/store.js';
@@ -60,7 +61,8 @@ export function setupGlobalEventListeners() {
     console.log(`[${SCRIPT_NAME}] 全局事件委托已存在，跳过重复注册`);
     return;
   }
-  topWindow[GLOBAL_EVENT_DELEGATION_BOUND_FLAG] = true;
+  // 以下委托事件由主页面 jQuery 持有，iframe 销毁后仍会触发；统一带 .galgameDelegation 命名空间，卸载时一并撤销
+  claimPageBinding(GLOBAL_EVENT_DELEGATION_BOUND_FLAG, () => $(topWindow.document).off('.galgameDelegation'));
 
   console.log(`[${SCRIPT_NAME}] 设置全局事件委托...`);
   const doc = topWindow.document;
@@ -125,7 +127,7 @@ export function setupGlobalEventListeners() {
   }
 
   // 弹窗一图标：始终显示地点弹窗内容
-  $(doc).on('click', '#gal-location-popup-trigger', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-location-popup-trigger', function (e) {
     e.stopPropagation();
     const popupHtml = getLocationPopupHtml();
     if (popupHtml) {
@@ -136,7 +138,7 @@ export function setupGlobalEventListeners() {
   });
 
   // 地点栏：地图系统入口（保留失败回退到弹窗一）
-  $(doc).on('click', '#gal-location-bar', async function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-location-bar', async function (e) {
     e.stopPropagation();
     try {
       const mapSettings = getMapSettings();
@@ -155,7 +157,7 @@ export function setupGlobalEventListeners() {
     showToast('未找到 <弹窗一> 标签内容');
   });
 
-  $(doc).on('click', '#gal-time-popup-trigger', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-time-popup-trigger', function (e) {
     e.stopPropagation();
     const popupHtml = getTimePopupHtml();
     if (popupHtml) {
@@ -166,7 +168,7 @@ export function setupGlobalEventListeners() {
   });
 
   // PREV按钮长按快退
-  $(doc).on('mousedown touchstart', '#gal-global-overlay [data-action="prev"]', function (e) {
+  $(doc).on('mousedown.galgameDelegation touchstart.galgameDelegation', '#gal-global-overlay [data-action="prev"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
     closeMobileMenu();
@@ -177,7 +179,7 @@ export function setupGlobalEventListeners() {
     );
   });
 
-  $(doc).on('mouseup touchend', '#gal-global-overlay [data-action="prev"]', function (e) {
+  $(doc).on('mouseup.galgameDelegation touchend.galgameDelegation', '#gal-global-overlay [data-action="prev"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
     clearRewindHoldTimer();
@@ -188,7 +190,7 @@ export function setupGlobalEventListeners() {
     }
   });
 
-  $(doc).on('mouseleave', '#gal-global-overlay [data-action="prev"]', function (e) {
+  $(doc).on('mouseleave.galgameDelegation', '#gal-global-overlay [data-action="prev"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
     clearRewindHoldTimer();
@@ -198,19 +200,19 @@ export function setupGlobalEventListeners() {
   });
 
   // 自由输入
-  $(doc).on('click', '#gal-global-overlay [data-action="free-input"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="free-input"]', function (e) {
     e.stopPropagation();
     showFreeInputModal();
   });
 
   // 重新Roll
-  $(doc).on('click', '#gal-global-overlay [data-action="reroll"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="reroll"]', function (e) {
     e.stopPropagation();
     triggerReroll();
   });
 
   // 退出 Galgame 模式
-  $(doc).on('click', '#gal-global-overlay [data-action="close-mode"]', async function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="close-mode"]', async function (e) {
     e.stopPropagation();
     closeMobileMenu();
     setIsEnabled(false);
@@ -241,7 +243,7 @@ export function setupGlobalEventListeners() {
   });
 
   // 进入 Galgame 模式
-  $(doc).on('click', '.gal-open-btn', async function (e) {
+  $(doc).on('click.galgameDelegation', '.gal-open-btn', async function (e) {
     console.log(`[${SCRIPT_NAME}] 点击【进入Galgame模式】按钮`);
     e.stopPropagation();
     const $btn = $(this);
@@ -316,26 +318,26 @@ export function setupGlobalEventListeners() {
   });
 
   // 快进按钮
-  $(doc).on('mousedown touchstart', '#gal-global-overlay [data-action="skip"]', function (e) {
+  $(doc).on('mousedown.galgameDelegation touchstart.galgameDelegation', '#gal-global-overlay [data-action="skip"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
     closeMobileMenu();
     startSkipping();
   });
-  $(doc).on('mouseup touchend mouseleave', '#gal-global-overlay [data-action="skip"]', function (e) {
+  $(doc).on('mouseup.galgameDelegation touchend.galgameDelegation mouseleave.galgameDelegation', '#gal-global-overlay [data-action="skip"]', function (e) {
     e.stopPropagation();
     e.preventDefault();
     stopSkipping();
   });
 
   // 全屏切换
-  $(doc).on('click', '#gal-global-overlay [data-action="toggle-fullscreen"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="toggle-fullscreen"]', function (e) {
     e.stopPropagation();
     toggleFullscreen();
   });
 
   // 立绘显示/隐藏
-  $(doc).on('click', '#gal-global-overlay .gal-sprite-toggle', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay .gal-sprite-toggle', function (e) {
     e.stopPropagation();
     const $overlay = $('#gal-global-overlay');
     const $characterLayer = $overlay.find('.gal-layer-character');
@@ -382,7 +384,7 @@ export function setupGlobalEventListeners() {
   }
 
   // 设置按钮
-  $(doc).on('click', '#gal-global-overlay [data-action="config"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="config"]', function (e) {
     e.stopPropagation();
     if (shouldOpenConfigMenu()) {
       const $menu = $('#gal-mobile-menu');
@@ -405,36 +407,36 @@ export function setupGlobalEventListeners() {
     if (_showSettingsPanelRef) _showSettingsPanelRef();
   });
 
-  $(doc).on('click', '#gal-global-overlay [data-action="open-settings"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="open-settings"]', function (e) {
     e.stopPropagation();
     closeMobileMenu();
     showToast('正在打开设置...');
     if (_showSettingsPanelRef) _showSettingsPanelRef();
   });
 
-  $(doc).on('click', '#gal-global-overlay [data-action="save"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="save"]', function (e) {
     e.stopPropagation();
     closeMobileMenu();
     showSaveLoadModal('save');
   });
 
-  $(doc).on('click', '#gal-global-overlay [data-action="load"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="load"]', function (e) {
     e.stopPropagation();
     closeMobileMenu();
     showSaveLoadModal('load');
   });
 
-  $(doc).on('click', '#gal-global-overlay [data-action="timeline"]', async function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="timeline"]', async function (e) {
     e.stopPropagation();
     closeMobileMenu();
     await showTimelineModal();
   });
 
-  $(doc).on('click', '#gal-mobile-menu .gal-menu-btn', function () {
+  $(doc).on('click.galgameDelegation', '#gal-mobile-menu .gal-menu-btn', function () {
     closeMobileMenu();
   });
 
-  $(doc).on('click', function (e) {
+  $(doc).on('click.galgameDelegation', function (e) {
     if (!$(e.target).closest('#gal-mobile-menu, [data-action="config"]').length) {
       closeMobileMenu();
     }
@@ -469,7 +471,7 @@ export function setupGlobalEventListeners() {
     embeddedViewerState = null;
   }
 
-  $(doc).on('click', '#gal-global-overlay [data-action="view-original"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="view-original"]', function (e) {
     e.stopPropagation();
     closeMobileMenu();
 
@@ -557,7 +559,7 @@ export function setupGlobalEventListeners() {
   });
 
   // 名牌旁 TTS 胶囊：重播当前这句（优先播放缓存，播放中再点一次则停止）
-  $(doc).on('click', '#gal-global-overlay [data-action="replay-voice"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="replay-voice"]', function (e) {
     e.stopPropagation();
     if (!getTTSEnabled() || !getSettings().ttsEnabled) return;
     const mesId = $('#gal-global-overlay .gal-game-container').attr('data-mes-id');
@@ -568,7 +570,7 @@ export function setupGlobalEventListeners() {
   });
 
   // LOG按钮
-  $(doc).on('click', '#gal-global-overlay [data-action="log"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="log"]', function (e) {
     e.stopPropagation();
     closeMobileMenu();
     const history = getHistoryFromDatabase();
@@ -576,7 +578,7 @@ export function setupGlobalEventListeners() {
   });
 
   // 待选择选项按钮
-  $(doc).on('click', '#gal-global-overlay [data-action="show-choices"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="show-choices"]', function (e) {
     e.stopPropagation();
     closeMobileMenu();
     const pending = getPendingOptions();
@@ -588,13 +590,13 @@ export function setupGlobalEventListeners() {
   });
 
   // NEXT按钮
-  $(doc).on('click', '#gal-global-overlay [data-action="next"]', async function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="next"]', async function (e) {
     e.stopPropagation();
     closeMobileMenu();
     await triggerNextSegmentFromOverlay();
   });
 
-  $(doc).on('click', '#gal-global-overlay.skin-twilight .gal-text-panel', async function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay.skin-twilight .gal-text-panel', async function (e) {
     const $target = $(e.target);
     if ($target.closest('.gal-generating-indicator, a, button, input, textarea, select').length) return;
     e.stopPropagation();
@@ -603,7 +605,7 @@ export function setupGlobalEventListeners() {
   });
 
   // Styled 显示时：点击空白区域等于 NEXT
-  $(doc).on('click', '#gal-global-overlay', async function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay', async function (e) {
     const $overlay = $('#gal-global-overlay');
     if (!$overlay.hasClass('gal-mode-styled')) return;
 
@@ -625,7 +627,7 @@ export function setupGlobalEventListeners() {
   // 不再单独注册 click，避免 mouseup + click 双重触发导致退两段
 
   // AUTO按钮
-  $(doc).on('click', '#gal-global-overlay [data-action="auto"]', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay [data-action="auto"]', function (e) {
     e.stopPropagation();
     closeMobileMenu();
     const $btn = $(this);
@@ -694,7 +696,7 @@ export function setupGlobalEventListeners() {
   });
 
   // 立绘占位符上传
-  $(doc).on('click', '#gal-global-overlay .gal-char-placeholder', async function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay .gal-char-placeholder', async function (e) {
     if (!settings.showMissingSpritePlaceholder) return;
     e.stopPropagation();
     const $container = $(this).closest('.gal-char-container');
@@ -704,7 +706,7 @@ export function setupGlobalEventListeners() {
   });
 
   // 点击 CG 缩略图查看大图
-  $(doc).on('click', '#gal-global-overlay .gal-cg-thumbnail', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay .gal-cg-thumbnail', function (e) {
     e.stopPropagation();
     const src = $(this).attr('src');
     if (!src) return;
@@ -715,25 +717,25 @@ export function setupGlobalEventListeners() {
   });
 
   // CG 查看器关闭
-  $(doc).on('click', '#gal-global-overlay .gal-cg-viewer', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay .gal-cg-viewer', function (e) {
     e.stopPropagation();
     $(this).hide();
   });
 
   // 特殊 CG 叠层关闭
-  $(doc).on('click', '#gal-global-overlay .gal-special-cg-overlay-close', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay .gal-special-cg-overlay-close', function (e) {
     e.stopPropagation();
     clearSpecialCgOverlayAndQueue();
   });
 
-  $(doc).on('click', '#gal-global-overlay .gal-special-cg-overlay', function (e) {
+  $(doc).on('click.galgameDelegation', '#gal-global-overlay .gal-special-cg-overlay', function (e) {
     if ($(e.target).closest('.gal-special-cg-overlay-image, .gal-special-cg-overlay-close').length) return;
     e.stopPropagation();
     clearSpecialCgOverlayAndQueue();
   });
 
   // 双击立绘修改
-  $(doc).on('dblclick', '#gal-global-overlay .gal-char-img', async function (e) {
+  $(doc).on('dblclick.galgameDelegation', '#gal-global-overlay .gal-char-img', async function (e) {
     e.stopPropagation();
     const $container = $(this).closest('.gal-char-container');
     const character = $container.data('character') || 'default';

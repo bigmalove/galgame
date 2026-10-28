@@ -3,6 +3,7 @@ import { TTSManager } from './audio/tts-manager.js';
 import { ANCIENT_FAMILY_SKIN_IDS, CUSTOM_SKIN_ID, CYBERPOP_DARK_SKIN_ID, CYBERPOP_SKIN_ID, DEFAULT_DARK_SKIN_ID, DEFAULT_SOFT_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, TWILIGHT_FAMILY_SKIN_IDS, VERSION, YANYUN_FAMILY_SKIN_IDS } from './core/constants.js';
 import { setGlobalDebugEnabled } from './core/debug.js';
 import { $, topWindow } from './core/env.js';
+import { claimPageBinding, releasePageBindings } from './core/page-bindings.js';
 import { ensureTitleScreenSettings, getCurrentCharId, getSettings, isCurrentCharEnabled, loadSettings, saveSettings, setCurrentCharEnabled } from './core/settings.js';
 import { getIsEnabled, getIsLoadingSave, setHideOtherFloors, setIsEnabled } from './core/state.js';
 import { loadAllBackgroundsToCache } from './db/backgrounds.js';
@@ -307,7 +308,7 @@ export async function init() {
 
       // 兜底：当 ST 未按预期触发 CHAT_CHANGED 时，轮询检测角色卡变化
       if (!topWindow[CHAR_POLLING_BOUND_FLAG]) {
-        topWindow[CHAR_POLLING_BOUND_FLAG] = true;
+        claimPageBinding(CHAR_POLLING_BOUND_FLAG);
         let lastObservedCharKey = String(getCurrentCharId() || 'default').trim() || 'default';
         let charPollingSeq = 0;
         setInterval(() => {
@@ -462,9 +463,10 @@ export function installGalgameGlobals() {
   console.log(`[${SCRIPT_NAME}] 全局导出完成: window.galgame.{LipSyncManager, Live2DManager, TTSManager, BGMManager, effects}`);
 }
 
-// 酒馆助手脚本卸载（关闭脚本 / 实时修改热重载）时回收挂在酒馆主页面上的资源。
+// 酒馆助手脚本卸载（关闭脚本 / 实时修改热重载；角色脚本在切换角色卡时也会卸载重建）时回收挂在酒馆主页面上的资源。
 // 实测每次重载会遗留：两个 Pixi 应用（各自的 ticker 持续空转渲染，交互管理器在 window/document 上
-// 留下 pointermove/pointerup/pointercancel/keydown 监听）与 #chat 的滚动锁定监听。
+// 留下 pointermove/pointerup/pointercancel/keydown 监听）、#chat 的滚动锁定监听，
+// 以及各 setupXxx 的页面级注册标记与经主页面 jQuery 绑定的事件（见 core/page-bindings.js）。
 // 酒馆事件经 eventOn 订阅，由酒馆助手在卸载时自动退订，无需在此处理。
 function installUnloadCleanup() {
   $(window).on('pagehide', () => {
@@ -474,6 +476,7 @@ function installUnloadCleanup() {
       console.warn(`[${SCRIPT_NAME}] 卸载时销毁 Pixi 特效失败`, error);
     }
     stopOverlayScrollPin();
+    releasePageBindings();
   });
 }
 

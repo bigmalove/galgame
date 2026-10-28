@@ -2,6 +2,7 @@ import { BGMManager } from '../audio/bgm-manager.js';
 import { TTSManager } from '../audio/tts-manager.js';
 import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow } from '../core/env.js';
+import { claimPageBinding } from '../core/page-bindings.js';
 import { getSettings } from '../core/settings.js';
 import { getIsEnabled } from '../core/state.js';
 import { getIsGeneratingResponse } from './generation-state.js';
@@ -91,7 +92,8 @@ export function setupMessageObserver() {
     }
   });
   chatObserver.observe(chatContainer, { childList: true, subtree: false });
-  topWindow[MESSAGE_OBSERVER_BOUND_FLAG] = true;
+  // 上面 TTSManager.init() 在主页面 window 上挂了事件，随本标记一起撤销
+  claimPageBinding(MESSAGE_OBSERVER_BOUND_FLAG, () => TTSManager.dispose());
 
   chatContainer.querySelectorAll('.mes').forEach(mes => {
     setupMessageContentObserver(mes);

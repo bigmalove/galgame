@@ -1,5 +1,6 @@
 import { SCRIPT_NAME } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
+import { claimPageBinding } from '../core/page-bindings.js';
 import { GalgameStore } from '../core/store.js';
 import { getSettings } from '../core/settings.js';
 import { getIsSkipping, setIsSkipping, getSkipTimer, setSkipTimer, getIsRewinding, setIsRewinding, getIsEnabled, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
@@ -484,11 +485,12 @@ export function setupKeyboardShortcuts() {
     console.log(`[${SCRIPT_NAME}] 快捷键监听已存在，跳过重复注册`);
     return;
   }
-  topWindow[KEYBOARD_SHORTCUTS_BOUND_FLAG] = true;
+  // 快捷键挂在主页面 document 上、由主页面 jQuery 持有，带 .galgameShortcuts 命名空间，卸载时撤销
+  claimPageBinding(KEYBOARD_SHORTCUTS_BOUND_FLAG, () => $(topWindow.document).off('.galgameShortcuts'));
 
   const settings = getSettings();
 
-  $(topWindow.document).on('keydown', function (e) {
+  $(topWindow.document).on('keydown.galgameShortcuts', function (e) {
     if (!getIsEnabled()) return;
     const activeEl = topWindow.document.activeElement;
     if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
@@ -507,7 +509,7 @@ export function setupKeyboardShortcuts() {
     }
   });
 
-  $(topWindow.document).on('keyup', function (e) {
+  $(topWindow.document).on('keyup.galgameShortcuts', function (e) {
     if (e.key === 'Control' && settings.ctrlKeySkip) {
       stopSkipping();
     }

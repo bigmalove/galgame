@@ -1,5 +1,6 @@
 import { ANCIENT_FAMILY_SKIN_IDS, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, YANYUN_FAMILY_SKIN_IDS } from '../core/constants.js';
 import { topWindow, $ } from '../core/env.js';
+import { claimPageBinding } from '../core/page-bindings.js';
 import { GalgameStore } from '../core/store.js';
 import { getIsEnabled, getPendingOptions, setPendingOptions, getGalgameChoicesVisible, setGalgameChoicesVisible, getLastGalgameOptionHash, setLastGalgameOptionHash } from '../core/state.js';
 import { holdPixiEffects } from '../effects/pixi-effect-manager.js';
@@ -197,7 +198,7 @@ export function setupOptionsPanelObserver() {
     console.log(`[${SCRIPT_NAME}] 选项表监控已存在，跳过重复注册`);
     return;
   }
-  topWindow[OPTIONS_OBSERVER_BOUND_FLAG] = true;
+  claimPageBinding(OPTIONS_OBSERVER_BOUND_FLAG);
 
   setInterval(() => {
     if (!getIsEnabled()) return;

@@ -2,6 +2,7 @@ import { getTTSEnabled } from '../audio/tts-config.js';
 import { ANCIENT_FAMILY_SKIN_IDS, CUSTOM_SKIN_ID, DEFAULT_DARK_SKIN_ID, JRPG_FAMILY_SKIN_IDS, PERSONA_FAMILY_SKIN_IDS, SCRIPT_NAME, SHUJIAN_FAMILY_SKIN_IDS, TWILIGHT_FAMILY_SKIN_IDS, YANYUN_FAMILY_SKIN_IDS } from '../core/constants.js';
 import { buildGalMobileMenuButtonsHtml, DEFAULT_GAL_MOBILE_MENU_ACTIONS } from '../core/custom-skin-footer-buttons.js';
 import { $, topWindow } from '../core/env.js';
+import { claimPageBinding } from '../core/page-bindings.js';
 import { getSettings } from '../core/settings.js';
 import { GalgameStore } from '../core/store.js';
 import { hasHtmlSkinId } from '../db/html-skins.js';
@@ -820,7 +821,7 @@ export function setupGameContentResizeListener() {
     console.log(`[${SCRIPT_NAME}] 窗口 resize 监听已存在，跳过重复注册`);
     return;
   }
-  topWindow[RESIZE_LISTENER_BOUND_FLAG] = true;
+  claimPageBinding(RESIZE_LISTENER_BOUND_FLAG);
 
   let resizeTimer = null;
   let isProcessing = false;

@@ -237,11 +237,16 @@ export const TTSManager = {
   init() {
     this._refreshProviderState();
 
-    $(topWindow).on('tts_complete tts_end', () => {
+    $(topWindow).on('tts_complete.galgameTts tts_end.galgameTts', () => {
       // 正在由插件自己播放整段音频（缓存 / synthesize）时，小白X 的事件与本次播放无关
       if (this._playbackObjectUrl && this.currentAudio) return;
       this._onPlaybackEnded('littlewhitebox_event');
     });
+  },
+
+  // 撤销 init() 挂在主页面 window 上的事件（脚本卸载时调用，见 core/page-bindings.js）
+  dispose() {
+    $(topWindow).off('.galgameTts');
   },
 
   showLoadingIndicator() {
